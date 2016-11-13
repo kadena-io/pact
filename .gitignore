@@ -1,0 +1,12 @@
+.stack-work
+/TAGS
+/repl.prof
+/benchy
+.cabal-sandbox
+/cabal.sandbox.config
+dist
+dist-newstyle
+docs/_build
+/web/pact.js
+/web/pact.min.js
+/web/npm-debug.log

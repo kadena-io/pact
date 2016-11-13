@@ -1,0 +1,2 @@
+(load "bench.repl")
+(bench (bench.bench))

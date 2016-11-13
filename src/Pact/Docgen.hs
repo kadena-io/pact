@@ -1,0 +1,115 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+-- |
+-- Module      :  Pact.Docgen
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Generate function reference pandoc markdown.
+--
+
+module Pact.Docgen where
+
+import Data.Text (unpack,pack,replace)
+import qualified Data.Text as T
+import Text.Trifecta hiding (err)
+import System.IO
+import Control.Monad
+import Data.List (sortBy)
+import Data.Function
+import Control.Monad.Catch
+import Data.Monoid
+import Control.Lens
+
+import Pact.Types
+import Pact.Native
+import Pact.Repl
+import Pact.Repl.Lib
+
+main :: IO ()
+main = funDocs
+
+data ExampleType = Exec|ExecErr|Lit
+
+funDocs :: IO ()
+funDocs = do
+  (Right nns,_) <- runEval undefined undefined nativesForDocs
+  h <- openFile "docs/pact-functions.md" WriteMode
+  let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h (firstOf tDefData t)
+  forM_ nns $ \(sect,ns) -> do
+    hPutStrLn h $ "## " ++ sect ++ " {#" ++ sect ++ "}"
+    renderSection ns
+  (Right rds,_) <- runEval undefined undefined replDefs
+  hPutStrLn h "## REPL-only functions {#repl-lib}"
+  hPutStrLn h ""
+  hPutStrLn h "The following functions are loaded magically in the interactive REPL, or in script files \
+               \with a `.repl` extension. They are not available for blockchain-based execution."
+  hPutStrLn h ""
+  renderSection rds
+  hClose h
+
+renderDocs :: Handle -> Maybe DefData -> IO ()
+renderDocs _ Nothing = return ()
+renderDocs h (Just (dd@DefData {..})) = do
+      hPutStrLn h ""
+      hPutStrLn h $ "### " ++ escapeIfNecc _dName ++ " {#" ++ sanitize _dName ++ "}"
+      hPutStrLn h ""
+      unless (null _dArgs) $ do
+         hPutStrLn h $ "Args: `" ++ unwords _dArgs ++ "`"
+         hPutStrLn h ""
+      let (Just docs) = _dDocs
+          noexs = hPutStrLn stderr $ "No examples for " ++ show dd
+      case parseString parseDocs mempty docs of
+        Success (t,es) -> do
+             hPutStrLn h t
+             if null es then noexs
+             else do
+               hPutStrLn h "```lisp"
+               forM_ es $ \e -> do
+                 let (et,e') = case head e of
+                                 '!' -> (ExecErr,drop 1 e)
+                                 '$' -> (Lit,drop 1 e)
+                                 _ -> (Exec,e)
+                 case et of
+                   Lit -> hPutStrLn h e'
+                   _ -> do
+                     hPutStrLn h $ "pact> " ++ e'
+                     r <- evalRepl FailureTest e'
+                     case (r,et) of
+                       (Right r',_) -> hPrint h r'
+                       (Left err,ExecErr) -> hPutStrLn h err
+                       (Left err,_) -> throwM (userError err)
+               hPutStrLn h "```"
+        _ -> hPutStrLn h docs >> noexs
+      hPutStrLn h ""
+
+escapeIfNecc :: String -> String
+escapeIfNecc n | n == "+" || n == "-" = "\\" ++ n
+               | otherwise = n
+
+sanitize :: String -> String
+sanitize = unpack .
+           replace "=" "eq" .
+           replace "<" "lt" .
+           replace ">" "gt" .
+           replace "!" "bang" .
+           replace "*" "star" .
+           replace "+" "plus" .
+           replace "/" "slash" .
+           replace "^" "hat" .
+           (\t -> if T.take 1 t == "-"
+                  then "minus" <> T.drop 1 t else t) .
+           pack
+
+parseDocs :: Parser (String,[String])
+parseDocs = do
+  t <- many (satisfy (/= '`'))
+  es <- many (do
+               _ <- char '`'
+               e <- some (satisfy (/= '`'))
+               _ <- char '`'
+               _ <- optional spaces
+               return e)
+  return (t,es)

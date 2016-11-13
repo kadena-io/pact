@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+
+    <script language="javascript" src="pact.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.20.2/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.20.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.20.2/mode/clojure/clojure.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.20.2/addon/edit/matchbrackets.min.js"></script>
+    <script src="codemirror-pact.js"></script>
+  </head>
+  <body>
+    <h2>Pact Code (hit Ctrl-Enter to execute)</h2>
+
+    <div><textarea id="code-pact">;setup environment: module is submitted with keyset definition ...
+(env-data { "keyset": { "keys": ["ABCD"] , "pred": "keys-all" } })
+;... and is signed by ABCD key
+(env-keys "ABCD")
+
+;define keyset to guard module
+(begin-tx "keyset")
+(define-keyset 'module-keyset (read-keyset "keyset"))
+(commit-tx)
+
+;define smart-contract code
+(begin-tx "module")
+(module payments 'module-keyset
+
+  (defun create-account (id initial-balance)
+    "Create a new account for ID with INITIAL-BALANCE funds"
+    (insert 'payments-table id { "balance": initial-balance }))
+
+  (defun get-balance (id) (read 'payments-table id 'balance))
+
+  (defun pay (from to amount)
+    (with-read 'payments-table from { "balance":= from-bal }
+      (with-read 'payments-table to { "balance":= to-bal }
+        (enforce (>= from-bal amount) "Insufficient Funds")
+        (update 'payments-table from
+                { "balance": (- from-bal amount) })
+        (update 'payments-table to
+                { "balance": (+ to-bal amount) })
+        (format "{} paid {} {}" from to amount))))
+
+)
+(commit-tx)
+
+;define table and "guard" with module
+(create-table 'payments-table 'payments)
+
+;create accounts
+(create-account "Sarah" 100.25)
+(create-account "James" 250.0)
+
+(pay "Sarah" "James" 25.0)
+
+
+</textarea></div>
+    <div><pre id="repl-output">&nbsp;</pre></div>
+
+  </body>
+  <script language="javascript" src="index.js" defer></script>
+</html>

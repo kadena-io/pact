@@ -1,0 +1,29 @@
+# stack yaml for ghcjs builds
+
+resolver: lts-6.19
+compiler: ghcjs-0.2.0.9006019_ghc-7.10.3
+compiler-check: match-exact
+
+setup-info:
+  ghcjs:
+    source:
+      ghcjs-0.2.0.9006019_ghc-7.10.3:
+        url: http://ghcjs.tolysz.org/lts-6.19-9006019.tar.gz
+        sha1: ef4264d5a93b269ee4ec8f9d5139da030331d65a
+
+
+packages:
+- '.'
+- location:
+    git: git@github.com:kadena-io/thyme.git
+    commit: a7046f53cdae22ee87691938c789dcaa3bfb596c
+  extra-dep: true
+
+extra-deps:
+- trifecta-1.6
+
+flags:
+  thyme:
+    ghcjs: true
+
+extra-package-dbs: []

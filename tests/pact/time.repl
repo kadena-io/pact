@@ -1,0 +1,16 @@
+;; time.repl: time unit tests
+
+(expect "parse-time YMD"
+  (time "2016-07-22T00:00:00Z") (parse-time "%Y-%m-%d" "2016-07-22"))
+
+(expect "add 1 day" (time "2016-07-23T00:00:00Z")
+  (add-time (time "2016-07-22T00:00:00Z") (days 1)))
+
+(expect "diff-time 1hr" (hours 1)
+  (diff-time (time "2016-07-22T11:26:35Z") (time "2016-07-22T10:26:35Z")))
+
+(expect "day=24h" (hours 24) (days 1))
+
+(expect "hour=60m" (minutes 60) (hours 1))
+
+(expect "minutes=60.0" 60.0 (minutes 1))

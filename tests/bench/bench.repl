@@ -1,0 +1,4 @@
+(env-data { "keyset": { "keys": ["benchadmin"], "pred": ">" } })
+(begin-tx)
+(load "bench.pact")
+(commit-tx)
