@@ -1,6 +1,8 @@
 The Pact Programming Language
 ===
 
+[![Build Status](https://travis-ci.org/slpopejoy/pact.svg?branch=master)](https://travis-ci.org/slpopejoy/pact)
+
 This is the source code repository for [Pact](http://kadena.io/pact), a language for developing
 smart contracts to run on a [fast deterministic blockchain](http://kadena.io).
 
@@ -62,4 +64,3 @@ License
 ---
 
 This code is distributed under the terms of the BSD3 license. See [LICENSE](LICENSE) for details.
- 
