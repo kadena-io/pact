@@ -18,14 +18,8 @@ To start writing
 smart contracts, the best way to go is to use the [Atom editor](https://atom.io) and install
 `language-pact` using the [package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
 
-You'll then need to install the Pact binary. Prebuilt binaries are available for the following OSs:
-
-| OS | Download |
-| --- | -------- |
-| Mac OS 10.10 (Yosemite) | http://kadena.io/pact/download/osx1010/pact |
-| | md5: sdkjfhsdhjf |
-| Mac OS 10.11 (El Capitan) | http://kadena.io/pact/download/osx1011/pact |
-| | md5: sdkjhsdkjdgsh |
+You'll then need to install the Pact interpreter/REPL. [Prebuilt binaries](http://kadena.io/pact/downloads.html) are
+available, or see [building](#Building) below.
 
 Once you have downloaded the binary, put it somewhere in your PATH.
 
@@ -56,7 +50,7 @@ To build pact for browser use, add `--stack-yaml stack-ghcjs.yaml` to your stack
 More information
 ---
 
-[Pact Reference Docs](http://pact.readthedocs.io/en/latest/)
+[Pact Reference Docs](http://pact-language.readthedocs.io)
 
 [Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf)
 
