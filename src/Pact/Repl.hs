@@ -117,7 +117,7 @@ repl = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-    OVersion -> putStrLn "pact version 0.0.3"
+    OVersion -> putStrLn "pact version 1.0.0"
     OBuiltins -> echoBuiltins
     OLoad findScript fp
         | isPactFile fp -> do
