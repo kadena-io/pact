@@ -74,7 +74,7 @@ matrix:
       apt: {packages: [libgmp-dev]}
       artifacts:
         paths:
-          - .stack-work/dist
+          - .stack-work/dist/x86_64-linux/Cabal-1.22.5.0/build/pact/pact
 
 
   # - env: BUILD=stack ARGS="--resolver lts-2"

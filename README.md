@@ -52,7 +52,7 @@ More information
 
 [Pact Reference Docs](http://pact-language.readthedocs.io)
 
-[Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf)
+[Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)
 
 License
 ---
