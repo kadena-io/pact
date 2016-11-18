@@ -997,6 +997,11 @@ Create list from ELEMS.
     pact> (list 1 2 3)
     [1 2 3]
 
+list-modules
+~~~~~~~~~~~~
+
+List modules available for loading.
+
 map
 ~~~
 
@@ -1830,9 +1835,10 @@ Evaluate ACTUAL and succeed only if it throws an error.
 load
 ~~~~
 
-Args: ``file``
+Args: ``file reset``
 
-Load and evaluate FILE.
+Load and evaluate FILE, resetting repl state beforehand if optional
+NO-RESET is true.
 
 .. code:: lisp
 

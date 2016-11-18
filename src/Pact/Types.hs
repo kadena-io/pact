@@ -68,6 +68,7 @@ import Data.Ratio
 import qualified Data.Vector as V
 import Data.Hashable
 import Control.Concurrent.MVar
+import Data.Foldable
 
 
 import Data.Serialize (Serialize)
@@ -401,6 +402,9 @@ instance ToTerm PactKeySet where toTerm = (`TKeySet` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
+
+toTermList :: (ToTerm a,Foldable f) => f a -> Term b
+toTermList = (`TList` def) . map toTerm . toList
 
 typeof :: Term a -> String
 typeof t = case t of

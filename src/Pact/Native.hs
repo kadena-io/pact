@@ -126,6 +126,7 @@ langDefs = foldDefs
      "Evaluate SRC which must return an object, using BINDINGS to bind variables to values in the result. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof' ["a"] "Returns type of A as string. `(typeof \"hello\")`"
+    ,defRNative "list-modules" listModules [] "List modules available for loading."
     ]
 
 -- | Symbol map must be made within target monad
@@ -310,3 +311,8 @@ bind i as = argsError' i as
 typeof' :: RNativeFun e
 typeof' _ [t] = return $ tStr $ typeof t
 typeof' i as = argsError i as
+
+listModules :: RNativeFun e
+listModules _ _ = do
+  mods <- view $ eeRefStore.rsModules
+  return $ toTermList $ map asString $ M.keys mods

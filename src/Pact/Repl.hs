@@ -28,6 +28,7 @@ module Pact.Repl
     ,execScript,execScript'
     ,initEvalEnv
     ,evalString
+    ,pactVersion
     ) where
 
 import Control.Applicative
@@ -57,6 +58,10 @@ import Pact.Eval
 import Pact.Types
 import Pact.Native
 import Pact.Repl.Lib
+
+
+pactVersion :: String
+pactVersion = "1.0.1"
 
 data Option =
     OVersion |
@@ -117,7 +122,7 @@ repl = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-    OVersion -> putStrLn "pact version 1.0.0"
+    OVersion -> putStrLn $ "pact version " ++ pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript fp
         | isPactFile fp -> do
@@ -297,13 +302,16 @@ renderErr a = do
 updateForOp :: a -> Repl (Either String a)
 updateForOp a = do
   mv <- use (rEnv.eePactDbVar)
+  mode <- use rMode
   op <- liftIO $ modifyMVar mv $ \v -> return (set rlsOp Noop v,view rlsOp v)
   case op of
     Noop -> return (Right a)
     UpdateEnv e -> do
       rEnv %= appEndo e
       return (Right a)
-    Load fp -> (a <$) <$> loadFile fp
+    Load fp reset -> do
+                  when reset (initReplState mode >>= put >> void useReplLib)
+                  (a <$) <$> loadFile fp
 
 
 

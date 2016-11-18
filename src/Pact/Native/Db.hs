@@ -23,6 +23,7 @@ import Prelude hiding (exp)
 import Bound
 import Pact.Types
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import Data.String
 import Data.Default
 import Control.Arrow hiding (app)
@@ -68,7 +69,7 @@ dbDefs = do
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
     ,defRNative "describe-table" descTable ["table"] "Get metadata for TABLE"
     ,defRNative "describe-keyset" descKeySet ["keyset"] "Get metadata for KEYSET"
-    ,defRNative "describe-module" descModule ["module"] "Get metadata for MODULE"
+    ,defRNative "describe-module" descModule ["module"] "List defs in MODULE"
     ]
 
 descTable :: RNativeFun e
@@ -87,10 +88,10 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  r <- readRow Modules (fromString t)
-  case r of
-    Just v -> return (toTerm (toJSON v))
-    Nothing -> evalError' i $ "Keyset not found: " ++ t
+  mods <- view (eeRefStore.rsModules.at (fromString t))
+  case mods of
+    Just m -> (`TList` def) <$> mapM deref (HM.elems m)
+    Nothing -> evalError' i $ "Module not found: " ++ t
 descModule i as = argsError i as
 
 
