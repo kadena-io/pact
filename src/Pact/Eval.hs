@@ -173,7 +173,9 @@ reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
 reduce (TConst _ t _) = reduce t
 reduce (TObject ps i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' i
-reduce (TBinding ps bod i) = reduceLet ps bod i
+reduce (TBinding ps bod c i) = case c of
+  BindLet -> reduceLet ps bod i
+  BindKV -> evalError i "Unexpected key-value binding"
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"

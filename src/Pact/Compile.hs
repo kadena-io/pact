@@ -195,7 +195,7 @@ doLet (bindings:body) i = do
       t -> throwError (_eInfo t,"Invalid let bindings")
   let bNames = map (Name . fst) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
-  return $ TBinding bPairs bs i
+  return $ TBinding bPairs bs BindLet i
 doLet _ i = throwError (i,"Invalid let declaration")
 
 -- | let* is a macro to nest a bunch of lets
@@ -241,7 +241,7 @@ run l@(EList (EAtom a q ai:rest) li) =
               bs' <- mapNonEmpty "binding" mkPairs bs li
               let ks = map (Name . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
-                   (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure bi
+                   (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure BindKV <*> pure bi
               return $ TApp (mkVar a q ai) (as ++ [bdg]) li
 
           _ -> TApp <$> pure (mkVar a q ai) <*> mapM run rest <*> pure li

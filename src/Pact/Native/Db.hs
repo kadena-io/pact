@@ -117,7 +117,7 @@ read' i as = argsError i as
 
 
 withDefaultRead :: NativeFun e
-withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd _)] = do
+withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
   !tkd <- (,,) <$> reduce table' <*> reduce key' <*> reduce defaultRow'
   case tkd of
     (TLitString table,TLitString key,TObject defaultRow _) -> do
@@ -130,7 +130,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd _)] = do
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
-withRead fi as@[table',key',b@(TBinding ps bd _)] = do
+withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
   !tk <- (,) <$> reduce table' <*> reduce key'
   case tk of
     (TLitString table,TLitString key) -> do

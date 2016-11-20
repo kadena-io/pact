@@ -273,6 +273,8 @@ data NativeDFun = NativeDFun {
 instance Eq NativeDFun where a == b = _nativeDefName a == _nativeDefName b
 instance Show NativeDFun where show a = show $ _nativeDefName a
 
+data BindCtx = BindLet | BindKV deriving (Eq,Show)
+
 
 data Term n =
     TModule {
@@ -312,6 +314,7 @@ data Term n =
     TBinding {
       _tBindPairs :: ![(String,Term n)]
     , _tBindBody :: !(Scope Int Term n)
+    , _tBindCtx :: BindCtx
     , _tInfo :: !Info } |
     TObject { _tObject :: ![(Term n,Term n)], _tInfo :: !Info } |
     TLiteral { _tLiteral :: !Literal, _tInfo :: !Info } |
@@ -336,7 +339,7 @@ instance Show n => Show (Term n) where
     show (TConst di _ _) = show di
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
-    show (TBinding bs b _) = "(TBinding " ++ show bs ++ " " ++ show b ++ ")"
+    show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
     show (TObject bs _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
@@ -362,7 +365,7 @@ instance Monad Term where
     TConst d c i >>= f = TConst d (c >>= f) i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
-    TBinding bs b i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f)  i
+    TBinding bs b c i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f) c i
     TObject bs i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i

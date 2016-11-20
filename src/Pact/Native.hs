@@ -298,7 +298,7 @@ pactTxId _ [] = do
 pactTxId i as = argsError i as
 
 bind :: NativeFun e
-bind i [src,TBinding ps bd bi] = reduce src >>= \st -> case st of
+bind i [src,TBinding ps bd BindKV bi] = reduce src >>= \st -> case st of
   TObject o _ -> do
     !m <- fmap M.fromList $ forM o $ \(k,v) -> case k of
              TLitString k' -> return (k',liftTerm v)
