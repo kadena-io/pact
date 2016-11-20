@@ -28,6 +28,7 @@ module Pact.Repl
     ,execScript,execScript'
     ,initEvalEnv
     ,evalString
+    ,ReplState(..),rEnv,rEvalState,rMode,rOut,rLine
     ) where
 
 import Control.Applicative
@@ -353,12 +354,12 @@ rSuccess :: Monad m => m (Either a (Term Name))
 rSuccess = return $ Right $ toTerm True
 
 execScript :: FilePath -> IO (Either () (Term Name))
-execScript f = execScript' (Script f) f
+execScript f = errToUnit (fst <$> execScript' (Script f) f)
 
-execScript' :: ReplMode -> FilePath -> IO (Either () (Term Name))
+execScript' :: ReplMode -> FilePath -> IO (Either String (Term Name),ReplState)
 execScript' m fp = do
   s <- initReplState m
-  errToUnit $ evalStateT (useReplLib >> loadFile fp) s
+  runStateT (useReplLib >> loadFile fp) s
 
 
 useReplLib :: Repl (Either String (Term Name))
