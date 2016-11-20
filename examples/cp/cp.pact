@@ -19,9 +19,9 @@
           {
             "ticker": (is-string ticker),
             "issuer": issuer,
-            "future-value": (is-decimal future-value),
-            "discount-rate": (is-decimal discount-rate),
-            "maturity": (is-integer days-to-maturity),
+            "future-value": future-value,
+            "discount-rate": discount-rate,
+            "maturity": days-to-maturity,
             "par": (is-decimal par),
             "discount": discount,
             "cost": cost,

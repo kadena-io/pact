@@ -98,14 +98,13 @@ defCmp o f = let o' = asString o
              ex "5.24" "2.52" ++
              ex "\"abc\"" "\"def\""
 
+-- | Monomorphic compare.
 cmp :: (Ordering -> Bool) -> RNativeFun e
 cmp cmpFun fi as@[TLiteral a _,TLiteral b _] = do
     c <- case (a,b) of
            (LInteger i,LInteger j) -> return $ i `compare` j
            (LDecimal i,LDecimal j) -> return $ i `compare` j
            (LString i,LString j) -> return $ i `compare` j
-           (LInteger i,LDecimal j) -> return $ fromIntegral i `compare` j
-           (LDecimal i,LInteger j) -> return $ i `compare` fromIntegral j
            (LTime i,LTime j) -> return $ i `compare` j
            _ -> argsError fi as
     return $ toTerm (cmpFun c)

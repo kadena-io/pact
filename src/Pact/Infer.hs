@@ -42,7 +42,7 @@ data Type =
 
 data InferState = InferState {
       _isTypes :: M.Map IName (S.Set Type)
-    , _isEqualities :: M.Map IName (S.Set IName)
+    , _isEquiv :: M.Map IName (S.Set IName)
     , _isFresh :: Int
     } deriving (Eq,Show)
 makeLenses ''InferState
@@ -54,15 +54,14 @@ newtype TC a = TC { unTC :: StateT InferState IO a }
 runTC :: TC a -> IO (a, InferState)
 runTC a = runStateT (unTC a) def
 
-type Returns = [IVar] -> TC IVar
+type FunInfer = [IVar] -> TC IVar
 
 data FunSpec = FunSpec {
     _fsInfo :: Info
   , _fsName :: String
   , _fsRequired :: [ArgSpec]
   , _fsOptional :: [ArgSpec]
-  , _fsEquivalences :: [[Int]]
-  , _fsReturns :: Returns
+  , _fsInfer :: FunInfer
   }
 
 data ArgSpec = ArgSpec {
@@ -83,6 +82,9 @@ _loadIssue = do
   either (die def) (const (return ())) r
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at "cp" . _Just . at "issue") s
   return d
+
+_inferIssue :: IO (IVar, InferState)
+_inferIssue = _loadIssue >>= \d -> runTC (infer d Nothing)
 
 infer :: Term Ref -> Maybe [IVar] -> TC IVar
 infer (TDef dd db _ i) vargs = do
@@ -118,41 +120,87 @@ mkFresh i as = do
       Just _ -> die i $ "Duplicate name: " ++ show n
     return $ IVar i n
 
+mkFresh1 :: Info -> String -> S.Set Type -> TC IVar
+mkFresh1 i n ts = head <$> mkFresh i [(n,ts)]
+
 
 inferApp :: Info -> Term IVar -> [Term IVar] -> TC IVar
 inferApp i (TVar (IRef d) _) as = inferAppRef i d as
 inferApp i v _ = die i $ "inferApp: applying non-ref: " ++ show v
 
-mkSpec :: Info -> DefData -> [[Type]] -> [[Type]] -> [[Int]] -> Returns -> TC FunSpec
-mkSpec i dd@DefData {..} req opt equivs ret
+mkSpec :: Info -> DefData -> [[Type]] -> [[Type]] -> FunInfer -> TC FunSpec
+mkSpec i dd@DefData {..} req opt ret
   | length _dArgs /= length (req ++ opt) = die def $ "mkSpec: argnames do not match spec: " ++
                                            show (dd,req,opt)
   | otherwise = return $ FunSpec i _dName
                 (zipWith ArgSpec _dArgs (map S.fromList req))
                 (zipWith ArgSpec (drop (length req) _dArgs) (map S.fromList opt))
-                equivs
                 ret
 
+asSingleton :: S.Set a -> Maybe a
+asSingleton s | S.size s == 1 = Just (head (S.toList s))
+              | otherwise = Nothing
 
-returnMono :: Type -> Returns
-returnMono ty = const (return (ILit ty))
+funMono :: Type -> FunInfer
+funMono ty = const (return (ILit ty))
 
-returnBinMono :: Info -> Returns
-returnBinMono _ [a@ILit {},_] = return a
-returnBinMono _ [_,b@ILit {}] = return b
-returnBinMono _ [a@IRef {},_] = return a -- assuming const here TODO
-returnBinMono _ [_,b@IRef {}] = return b -- assuming const here TODO
-returnBinMono i [IVar ai ats,IVar bi bts] = do
-  a' <- lookupVar ai ats
-  b' <- lookupVar bi bts
-  case () of
-    _ | S.size a' == 1 -> return $ ILit (head (S.toList a'))
-      | S.size b' == 1 -> return $ ILit (head (S.toList b'))
-      | otherwise -> do
-          [f] <- mkFresh i [("return",S.intersection a' b')]
-          return f
+type FunInferBin = Info -> IVar -> IVar -> TC IVar
 
-returnBinMono i as = die i $ "returnBinMono: Bad specification: more than two args: " ++ show as
+funBin :: Info -> FunInferBin -> FunInfer
+funBin i f [a,b] = f i a b
+funBin i _ as = die i $ "Expected two arguments, received: " ++ show as
+
+funBinEquiv :: Bool -> FunInferBin
+funBinEquiv _ i v@(ILit a) (ILit b) | a == b = return v
+                                    | otherwise = die i $ "Typecheck error, expecting equal types: " ++ show (a,b)
+funBinEquiv _ i (ILit ty) (IVar vi n) = setMono i ty vi n
+funBinEquiv _ i (IVar vi n) (ILit ty) = setMono i ty vi n
+funBinEquiv mkF i a@(IVar ai an) (IVar bi bn) = do
+  atys <- lookupVar ai an
+  btys <- lookupVar bi bn
+  let int = S.intersection atys btys
+  when (not (S.null atys) && not (S.null btys) && S.null int) $
+    die i $ "Typecheck error: equivalent variables have incompatible types: " ++ show (an,atys) ++ " <> " ++ show (bn,btys)
+  isTypes %= M.insert an int . M.insert bn int
+  case asSingleton int of
+    Just ty -> return $ ILit ty
+    Nothing -> do
+      isEquiv %= M.insertWith S.union an (S.singleton bn)
+      if mkF
+        then mkFresh1 i "return" int
+        else return a
+funBinEquiv _ i a b = die i $ "funBinEquiv: unsupported IVars: " ++ show (a,b)
+
+binNumCoercions :: Info -> Type -> Type -> TC Type
+binNumCoercions _ TyDecimal TyInteger = return TyDecimal
+binNumCoercions _ TyInteger TyDecimal = return TyDecimal
+binNumCoercions _ TyDecimal TyDecimal = return TyDecimal
+binNumCoercions _ TyInteger TyInteger = return TyInteger
+binNumCoercions i a b = die i $ "Typecheck error, expected numeric types: " ++ show (a,b)
+
+binNumOneVar :: Info -> Info -> IName -> Type -> TC IVar
+binNumOneVar i vi n x = do
+  vtys <- lookupVar vi n
+  case asSingleton vtys of
+    Just ty -> ILit <$> binNumCoercions i ty x
+    Nothing | x == TyDecimal -> return (ILit TyDecimal)
+            | otherwise -> mkFresh1 i "return" (S.fromList [TyInteger,TyDecimal])
+
+funBinNum :: FunInferBin
+funBinNum i (ILit x) (ILit y) = ILit <$> binNumCoercions i x y
+funBinNum i (IVar vi n) (ILit x) = binNumOneVar i vi n x
+funBinNum i (ILit x) (IVar vi n) = binNumOneVar i vi n x
+funBinNum i IVar {} IVar {} = mkFresh1 i "return" (S.fromList [TyInteger,TyDecimal])
+funBinNum i a b = die i $ "funBinNum: unsupported: " ++ show (a,b)
+
+
+setMono :: Info -> Type -> Info -> IName -> TC IVar
+setMono i ty vi n = do
+  vtys <- lookupVar vi n
+  unless (not (S.null vtys) && ty `S.member` vtys)
+          (die i $ "Typecheck failure: expected " ++ show ty ++ ", found " ++ show vtys ++ " for " ++ show n)
+  isTypes %= M.insert n (S.singleton ty)
+  return (ILit ty)
 
 inferAppRef :: Info -> Ref -> [Term IVar] -> TC IVar
 inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
@@ -160,15 +208,16 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
   -- Note that this should also check type information already present to perhaps conclude already.
   -- 2. Return result type for use in other apps.
   as' <- mapM inferTerm as
-  let binMono tys = mkSpec ni dd [tys,tys] [] [[0,1]] (returnBinMono i)
-      cmp = let tys = [TyInteger,TyString,TyTime,TyDecimal] in mkSpec ni dd [tys,tys] [] [[0,1]] (returnMono TyBool)
+  let binF fi tys = mkSpec ni dd [tys,tys] [] (funBin i fi)
+      binMono = binF (funBinEquiv True)
+      cmp = binF (\_ a b -> funBinEquiv False i a b >> return (ILit TyBool)) [TyInteger,TyString,TyTime,TyDecimal]
       binBool = binMono [TyBool]
-      binNum = binMono [TyInteger,TyDecimal]
-      timeM = mkSpec ni dd [[TyInteger,TyDecimal]] [] [] (returnMono TyDecimal)
-      endo ty = mkSpec ni dd [[ty]] [] [] (returnMono ty)
-      write = mkSpec ni dd [[TyString],[TyString],[TyObject]] [] [] (returnMono TyString)
+      binNum = binF funBinNum [TyInteger,TyDecimal]
+      timeM = mkSpec ni dd [[TyInteger,TyDecimal]] []  (funMono TyDecimal)
+      endo ty = mkSpec ni dd [[ty]] []  (funMono ty)
+      write = mkSpec ni dd [[TyString],[TyString],[TyObject]] []  (funMono TyString)
   case nn of
-    "enforce" -> mkSpec ni dd [[],[TyString]] [] [] (returnMono TyBool) >>= check i as'
+    "enforce" -> mkSpec ni dd [[],[TyString]] [] (funMono TyBool) >>= check i as'
     ">" -> cmp >>= check i as'
     "<" -> cmp >>= check i as'
     ">=" -> cmp  >>= check i as'
@@ -182,7 +231,7 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
     "and" -> binBool >>= check i as'
     "or" -> binBool >>= check i as'
     "days" -> timeM >>= check i as'
-    "add-time" -> mkSpec ni dd [[TyTime],[TyDecimal,TyInteger]] [] [] (returnMono TyTime) >>= check i as'
+    "add-time" -> mkSpec ni dd [[TyTime],[TyDecimal,TyInteger]] [] (funMono TyTime) >>= check i as'
     "is-string" -> endo TyString >>= check i as'
     "is-integer" -> endo TyInteger >>= check i as'
     "is-decimal" -> endo TyDecimal >>= check i as'
@@ -191,7 +240,7 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
     "insert" -> write >>= check i as'
     "update" -> write >>= check i as'
     "write" -> write >>= check i as'
-    "format" -> mkSpec ni dd [[TyString],[]] [] [] (returnMono TyString) >>= check i as'
+    "format" -> mkSpec ni dd [[TyString],[]] [] (funMono TyString) >>= check i as'
     _ -> die i $ "Unspecified native: " ++ show nn
 inferAppRef i (Direct t) _ = die i $ "inferAppRef: non-native ref: " ++ show t
 inferAppRef i (Ref r) as = inferAppCode i r as
@@ -206,8 +255,8 @@ inferAppCode i t _ = die i $ "inferAppCode: unexpected: " ++ show t
 inferBinding :: Info -> [(String,Term IVar)] -> Scope Int Term IVar -> BindCtx -> TC IVar
 inferBinding i as bd bc = do
   args <- case bc of
-    BindKV -> mkFresh i (map ((,def) . fst) as) -- no way to introspect on object bindings atm
-    BindLet -> mapM (inferTerm . snd) as
+    BindKV -> mkFresh i (map ((,def) . fst) as) -- TODO how to introspect on KV bindings??
+    BindLet -> mapM (inferTerm . snd) as -- directly substitute values
   s <- traverseBound (bindArgs i args) bd
   inferBody i s
 
@@ -223,9 +272,13 @@ inferTerm t = case t of
       LDecimal {} -> TyDecimal
       LTime {} -> TyTime
       LString {} -> TyString
+    TObject {..} -> do
+      forM_ _tObject $ \(k,v) -> inferTerm k >> inferTerm v
+      return $ ILit TyObject
+    TList {..} -> do
+      forM_ _tList inferTerm
+      return $ ILit TyList
     TKeySet {} -> return $ ILit TyKeySet
-    TObject {} -> return $ ILit TyObject
-    TList {} -> return $ ILit TyList
     TValue {} -> return $ ILit TyValue
     s -> return $ ILit (TySpecial (typeof s))
 
@@ -246,15 +299,12 @@ check i args FunSpec {..}
               Nothing -> die vi $ "Untracked variable: " ++ show a
               Just tys -> do
                 ttys <- typecheck i tys spec
-                liftIO $ print (i,arg,ttys)
+                -- liftIO $ print (i,arg,ttys)
                 isTypes %= M.insert a ttys -- substitute narrowed types
                 return arg
-      as'' <- handleEquivs i as' _fsEquivalences
-      _fsReturns as''
+      _fsInfer as'
 
-handleEquivs :: Info -> [IVar] -> [[Int]] -> TC [IVar]
-handleEquivs _ args [] = return args
-handleEquivs i args (eq:eqs) = return args -- TODO
+
 
 typecheck :: Info -> S.Set Type -> ArgSpec -> TC (S.Set Type)
 typecheck i tys (ArgSpec an atys)
