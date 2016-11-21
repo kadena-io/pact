@@ -35,7 +35,7 @@
 
   (defun inventory-key (owner cusip)
     "Make composite key from OWNER and CUSIP"
-    (format "{}:{}" owner cusip)
+    (format "{}:{}" (is-string owner) (is-string cusip))
   )
 
   (defun issue-inventory (owner cusip qty price date)
@@ -56,14 +56,14 @@
         { "qty" := owner-owned,
           "price" := owner-price
         }
-        (enforce (>= owner-owned qty) "Owner has inventory")
-        (enforce (= owner-price price) "Price matches inventory")
+        (enforce (>= owner-owned (is-integer qty)) "Owner has inventory")
+        (enforce (= owner-price (is-decimal price)) "Price matches inventory")
         (with-default-read 'cp-inventory transferee-key
           { "qty": 0 }
           { "qty" := transferee-owned }
           (update 'cp-inventory owner-key
             { "qty": (- owner-owned qty),
-              "date": date })
+              "date": (is-time date) })
           (write 'cp-inventory transferee-key
             { "qty": (+ transferee-owned qty),
               "date": date }))))

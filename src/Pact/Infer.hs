@@ -76,15 +76,21 @@ data IVar =
     deriving (Eq,Show)
 
 
-_loadIssue :: IO (Term Ref)
-_loadIssue = do
-  (r,s) <- execScript' (Script "s") "examples/cp/cp.repl"
+_loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
+_loadFun fp mn fn = do
+  (r,s) <- execScript' (Script fp) fp
   either (die def) (const (return ())) r
-  let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at "cp" . _Just . at "issue") s
+  let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . at fn) s
   return d
 
+_infer :: FilePath -> ModuleName -> String -> IO (IVar, InferState)
+_infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d Nothing)
+
 _inferIssue :: IO (IVar, InferState)
-_inferIssue = _loadIssue >>= \d -> runTC (infer d Nothing)
+_inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
+
+_inferTransferInv :: IO (IVar, InferState)
+_inferTransferInv = _infer "examples/cp/cp.repl" "cp" "transfer-inventory"
 
 infer :: Term Ref -> Maybe [IVar] -> TC IVar
 infer (TDef dd db _ i) vargs = do
@@ -193,6 +199,10 @@ funBinNum i (ILit x) (IVar vi n) = binNumOneVar i vi n x
 funBinNum i IVar {} IVar {} = mkFresh1 i "return" (S.fromList [TyInteger,TyDecimal])
 funBinNum i a b = die i $ "funBinNum: unsupported: " ++ show (a,b)
 
+funKVBind :: Info -> FunInfer
+funKVBind i [] = die i "Expected at least a binding in last arg position"
+funKVBind _ as = return (last as)
+
 
 setMono :: Info -> Type -> Info -> IName -> TC IVar
 setMono i ty vi n = do
@@ -210,8 +220,9 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
   as' <- mapM inferTerm as
   let binF fi tys = mkSpec ni dd [tys,tys] [] (funBin i fi)
       binMono = binF (funBinEquiv True)
-      cmp = binF (\_ a b -> funBinEquiv False i a b >> return (ILit TyBool)) [TyInteger,TyString,TyTime,TyDecimal]
-      binBool = binMono [TyBool]
+      binEquivConstReturn tys rty = binF (\_ a b -> funBinEquiv False i a b >> return (ILit rty)) tys
+      cmp = binEquivConstReturn [TyInteger,TyString,TyTime,TyDecimal] TyBool
+      eq = binEquivConstReturn [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList,TyObject,TyKeySet] TyBool
       binNum = binF funBinNum [TyInteger,TyDecimal]
       timeM = mkSpec ni dd [[TyInteger,TyDecimal]] []  (funMono TyDecimal)
       endo ty = mkSpec ni dd [[ty]] []  (funMono ty)
@@ -222,14 +233,14 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
     "<" -> cmp >>= check i as'
     ">=" -> cmp  >>= check i as'
     "<=" -> cmp >>= check i as'
-    "=" -> binMono [] >>= check i as'
-    "!=" -> binMono [] >>= check i as'
+    "=" -> eq >>= check i as'
+    "!=" -> eq >>= check i as'
     "+" -> binMono [TyString,TyInteger,TyDecimal,TyObject,TyList] >>= check i as'
     "-" -> binNum >>= check i as'
     "*" -> binNum >>= check i as'
     "/" -> binNum >>= check i as'
-    "and" -> binBool >>= check i as'
-    "or" -> binBool >>= check i as'
+    "and" -> binMono [TyBool] >>= check i as'
+    "or" -> binMono [TyBool] >>= check i as'
     "days" -> timeM >>= check i as'
     "add-time" -> mkSpec ni dd [[TyTime],[TyDecimal,TyInteger]] [] (funMono TyTime) >>= check i as'
     "is-string" -> endo TyString >>= check i as'
@@ -241,6 +252,8 @@ inferAppRef i (Direct (TNative dd (NativeDFun nn _) ni) ) as = do
     "update" -> write >>= check i as'
     "write" -> write >>= check i as'
     "format" -> mkSpec ni dd [[TyString],[]] [] (funMono TyString) >>= check i as'
+    "with-default-read" -> mkSpec ni dd [[TyString],[TyString],[TyObject],[]] [] (funKVBind i) >>= check i as'
+    "with-read" -> mkSpec ni dd [[TyString],[TyString],[]] [] (funKVBind i) >>= check i as'
     _ -> die i $ "Unspecified native: " ++ show nn
 inferAppRef i (Direct t) _ = die i $ "inferAppRef: non-native ref: " ++ show t
 inferAppRef i (Ref r) as = inferAppCode i r as
