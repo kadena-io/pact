@@ -134,11 +134,11 @@ binop _ _ fi as = argsError fi as
 
 plus :: RNativeFun e
 plus _ [TLitString a,TLitString b] = return (tStr $ a ++ b)
-plus _ [TList a _,TList b _] = return (TList (a ++ b) def)
-plus _ [TObject as _,TObject bs _] =
+plus _ [TList a _ _,TList b _ _] = return (TList (a ++ b) def def)
+plus _ [TObject as _ _,TObject bs _ _] =
   let reps (a,b) = (abbrev a,(a,b))
       mapit = M.fromList . map reps
-  in return $ TObject (M.elems $ M.union (mapit as) (mapit bs)) def
+  in return $ TObject (M.elems $ M.union (mapit as) (mapit bs)) def def
 plus i as = binop' (+) (+) i as
 {-# INLINE plus #-}
 

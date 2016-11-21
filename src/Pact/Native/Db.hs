@@ -108,8 +108,8 @@ read' i (TLitString table:TLitString key:cs) = do
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
-        [] -> return $ (`TObject` def) $ map (toTerm *** toTerm) $ M.toList m
-        _ -> (`TObject` def) <$> forM cols (\col ->
+        [] -> return $ (\ps -> TObject ps def def) $ map (toTerm *** toTerm) $ M.toList m
+        _ -> (\ps -> TObject ps def def) <$> forM cols (\col ->
                 case M.lookup col m of
                   Nothing -> evalError' i $ "read: invalid column: " ++ show col
                   Just v -> return (toTerm col,toTerm v))
@@ -120,7 +120,7 @@ withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
   !tkd <- (,,) <$> reduce table' <*> reduce key' <*> reduce defaultRow'
   case tkd of
-    (TLitString table,TLitString key,TObject defaultRow _) -> do
+    (TLitString table,TLitString key,TObject defaultRow _ _) -> do
       guardTable fi table
       mrow <- readRow (userTable table) (fromString key)
       case mrow of
@@ -149,14 +149,14 @@ bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> 
 keys' :: RNativeFun e
 keys' i [TLitString table] = do
     guardTable i table
-    (`TList` def) . map toTerm <$> keys (fromString table)
+    (\b -> TList b (Just TyString) def) . map toTerm <$> keys (fromString table)
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
 txids' i [TLitString table,TLitInteger key] = do
   guardTable i table
-  (`TList` def) . map toTerm <$> txids (fromString table) (fromIntegral key)
+  (\b -> TList b (Just TyInteger) def) . map toTerm <$> txids (fromString table) (fromIntegral key)
 txids' i as = argsError i as
 
 
@@ -167,7 +167,7 @@ txlog i [TLitString table,TLitInteger tid] = do
 txlog i as = argsError i as
 
 write :: WriteType -> RNativeFun e
-write wt i [TLitString table,TLitString key,TObject ps _] = do
+write wt i [TLitString table,TLitString key,TObject ps _ _] = do
   guardTable i table
   success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
@@ -176,7 +176,7 @@ toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where
     conv (TLitString k, TLiteral v _) = return (fromString k,PLiteral v)
     conv (TLitString k, TKeySet ks _) = return (fromString k,PKeySet ks)
-    conv (TLitString k, TObject ks _) = toColumns i ks >>= \o' -> return (fromString k,PValue $ toJSON o')
+    conv (TLitString k, TObject ks _ _) = toColumns i ks >>= \o' -> return (fromString k,PValue $ toJSON o')
     conv (TLitString k, TValue v _) = return (fromString k,PValue v)
     conv p = evalError' i $ "Invalid types in object pair: " ++ show p
 

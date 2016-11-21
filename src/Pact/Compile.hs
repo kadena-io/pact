@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
@@ -66,14 +67,15 @@ expr = do
    <|>
    do
      a <- ident style
-     TF.try (char '.' >> ident style >>= \q -> return (EAtom a (Just q) inf) <?> "qualified atom") <|>
-       (return (EAtom a Nothing inf) <?> "bare atom")
+     TF.try (typed >>= \t -> return (EAtom a Nothing (Just t) inf) <?> "typed atom") <|>
+       TF.try (qualified >>= \q -> return (EAtom a (Just q) Nothing inf) <?> "qual atom") <|>
+       (return (EAtom a Nothing Nothing inf) <?> "bare atom")
    <|>
    (EList <$> parens (sepBy expr spaces) <*> pure inf <?> "sexp")
    <|>
    do
      is <- brackets (sepBy expr spaces) <?> "list literal"
-     return $ EList (EAtom "list" Nothing def:is) inf
+     return $ EList (EAtom "list" Nothing Nothing def:is) inf
    <|> do
      ps <- pairs
      let ops = map fst ps
@@ -81,6 +83,31 @@ expr = do
      if all (== ":") ops then return $ EObject kvs inf
      else if all (== ":=") ops then return $ EBinding kvs inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
+
+qualified :: (Monad m,TokenParsing m) => m String
+qualified = char '.' *> ident style
+
+typed :: (Monad m,TokenParsing m) => m Type
+typed = do
+  _ <- char ':'
+  spaces
+  parseType
+
+parseType :: (Monad m,TokenParsing m) => m Type
+parseType =
+  (char '[' >> parseType >>= \t -> char ']' >> return (TyList (Just t)) <?> "typed list") <|>
+  (char '{' >> ident style >>= \t -> char '}' >> return (TyObject (Just (fromString t))) <?> "user type") <|>
+  symbol tyInteger *> return TyInteger <|>
+  symbol tyDecimal *> return TyDecimal <|>
+  symbol tyTime *> return TyTime <|>
+  symbol tyBool *> return TyBool <|>
+  symbol tyString *> return TyString <|>
+  symbol tyList *> return (TyList Nothing) <|>
+  symbol tyObject *> return (TyObject Nothing) <|>
+  symbol tyValue *> return TyValue <|>
+  symbol tyKeySet *> return TyKeySet
+
+
 
 -- | Skip spaces or one-line comments
 spaces :: CharParsing m => m ()
@@ -141,7 +168,7 @@ doUse [ESymbol s _] i = return $ TUse (fromString s) i
 doUse _ i = throwError (i,"Use only takes a module symbol name")
 
 doModule :: [Exp] -> Info -> Info -> Exp -> Compile (Term Name)
-doModule (EAtom n Nothing _:ESymbol k _:es) li ai mc =
+doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
     case es of
       [] -> throwError (ai,"Empty module")
       (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
@@ -154,24 +181,24 @@ doModule (EAtom n Nothing _:ESymbol k _:es) li ai mc =
         mkModule docs body = do
               bd <- mapNonEmpty "module" (run >=> defOnly) body li
               TModule <$> pure (fromString n) <*> pure (fromString k) <*> pure docs <*>
-                      abstract (const Nothing) <$> pure (TList bd li) <*> pure mc <*> pure li
+                      abstract (const Nothing) <$> pure (TList bd Nothing li) <*> pure mc <*> pure li
 doModule _ li _ _ = throwError (li,"Invalid module definition")
 
 doDef :: [Exp] -> DefType -> Info -> Exp -> Info -> Compile (Term Name)
 doDef es defType ai d i =
     case es of
-      (EAtom dn Nothing _:EList args _:ELiteral (LString docs) _:body) ->
+      (EAtom dn Nothing _type _:EList args _:ELiteral (LString docs) _:body) ->
           mkDef dn args (Just docs) body
-      (EAtom dn Nothing _:EList args _:body) ->
+      (EAtom dn Nothing _type _:EList args _:body) ->
           mkDef dn args Nothing body
       _ -> throwError (ai,"Invalid def")
       where
         mkDef dn dargs ddocs body = do
-          args <- mapM atomText dargs
+          args <- mapM atomVar dargs
           let argsn = map Name args
               defBody = abstract (`elemIndex` argsn) <$> runBody body i
           TDef <$> pure (DefData dn defType Nothing args ddocs)
-                   <*> defBody <*> pure d <*> pure i
+                   <*> defBody <*> pure d <*> pure def <*> pure i
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
 doStep [entity,exp] i =
@@ -184,7 +211,7 @@ doStepRollback [entity,exp,rb] i =
 doStepRollback _ i = throwError (i,"Invalid step-with-rollback definition")
 
 letPair :: Exp -> Compile (String, Term Name)
-letPair (EList [EAtom s Nothing _,v] _) = (,) <$> pure s <*> run v
+letPair (EList [EAtom s Nothing _type _,v] _) = (,) <$> pure s <*> run v
 letPair t = throwError (_eInfo t,"Invalid let pair")
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
@@ -205,23 +232,23 @@ doLets (bindings:body) i =
       e@(EList [_] _) -> doLet (e:body) i
       (EList (e:es) _) -> let e' = head es in
                           doLet [EList [e] (_eInfo e),
-                                 EList (EAtom "let*" Nothing (_eInfo e'):
+                                 EList (EAtom "let*" Nothing Nothing (_eInfo e'):
                                         EList es (_eInfo e'):body)
                                  (_eInfo e')] i
       e -> throwError (_eInfo e,"Invalid let* binding")
 doLets _ i = throwError (i,"Invalid let declaration")
 
 doConst :: [Exp] -> Info -> Compile (Term Name)
-doConst [EAtom dn Nothing _,t] i =
-    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] Nothing) t' i)
-doConst [EAtom dn Nothing _,t,ELiteral (LString docs) _] i =
-    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] (Just docs)) t' i)
+doConst [EAtom dn Nothing Nothing _,t] i =
+    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] Nothing) t' Nothing i)
+doConst [EAtom dn Nothing Nothing _,t,ELiteral (LString docs) _] i =
+    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] (Just docs)) t' Nothing i)
 doConst _ i = throwError (i,"Invalid defconst")
 
 
 run :: Exp -> Compile (Term Name)
 
-run l@(EList (EAtom a q ai:rest) li) =
+run l@(EList (EAtom a q Nothing ai:rest) li) =
     case (a,q) of
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai l
@@ -237,26 +264,26 @@ run l@(EList (EAtom a q ai:rest) li) =
           (preArgs@(_:_),EBinding bs bi:bbody) ->
             do
               as <- mapM run preArgs
-              let mkPairs (v,k) = (,) <$> atomText k <*> run v
+              let mkPairs (v,k) = (,) <$> atomVar k <*> run v
               bs' <- mapNonEmpty "binding" mkPairs bs li
               let ks = map (Name . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
                    (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure BindKV <*> pure bi
-              return $ TApp (mkVar a q ai) (as ++ [bdg]) li
+              return $ TApp (mkVar a q Nothing ai) (as ++ [bdg]) li
 
-          _ -> TApp <$> pure (mkVar a q ai) <*> mapM run rest <*> pure li
+          _ -> TApp <$> pure (mkVar a q Nothing ai) <*> mapM run rest <*> pure li
 
-run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure i
+run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure def <*> pure i
 run (EBinding _ i) = throwError (i,"Unexpected binding")
 run (ESymbol s i) = return $ TLiteral (LString s) i
 run (ELiteral l i) = return $ TLiteral l i
-run (EAtom s q i) | s `elem` reserved = throwError (i,"Unexpected reserved word: " ++ s)
-                  | otherwise = return $ mkVar s q i
+run (EAtom s q t i) | s `elem` reserved = throwError (i,"Unexpected reserved word: " ++ s)
+                  | otherwise = return $ mkVar s q t i
 run e = throwError (_eInfo e,"Unexpected expression: " ++ show e)
 {-# INLINE run #-}
 
-mkVar :: String -> Maybe String -> Info -> Term Name
-mkVar s q i = TVar (maybe (Name s) (QName $ fromString s) q) i
+mkVar :: String -> Maybe String -> Maybe Type -> Info -> Term Name
+mkVar s q t i = TVar (maybe (Name s) (QName $ fromString s) q) t i -- TODO resolve type
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]
@@ -268,13 +295,13 @@ runNonEmpty :: String -> [Exp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
-atomText :: Exp -> Compile String
-atomText (EAtom a Nothing _) = return a
-atomText e = throwError (_eInfo e,"Expected unqualified atom")
-{-# INLINE atomText #-}
+atomVar :: Exp -> Compile String
+atomVar (EAtom a Nothing _type _) = return a
+atomVar e = throwError (_eInfo e,"Expected unqualified atom")
+{-# INLINE atomVar #-}
 
 runBody :: [Exp] -> Info -> Compile (Term Name)
-runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure i
+runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure def <*> pure i
 {-# INLINE runBody #-}
 
 

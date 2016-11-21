@@ -48,7 +48,7 @@
       })
   )
 
-  (defun transfer-inventory (owner cusip transferee qty price date)
+  (defun transfer-inventory: string (owner:string cusip transferee qty price date)
     "Transfer CUSIP QTY from OWNER to TRANSFEREE, confirming PRICE"
     (let ((owner-key (inventory-key owner cusip))
           (transferee-key (inventory-key transferee cusip)))

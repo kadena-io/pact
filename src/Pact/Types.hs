@@ -169,9 +169,67 @@ instance ToJSON Literal where
     toJSON (LTime t) = toJSON (formatLTime t)
     {-# INLINE toJSON #-}
 
+
+newtype TypeName = TypeName String
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+instance Show TypeName where show (TypeName s) = show s
+
+data FunArg = FunArg {
+  _faName :: String,
+  _faType :: Type
+  } deriving (Eq,Show,Ord)
+
+
+data FunType = FunType {
+  _ftArgs :: [FunArg],
+  _ftReturn :: Type
+  } deriving (Eq,Show,Ord)
+
+data Type =
+    TyInteger |
+    TyDecimal |
+    TyTime |
+    TyBool |
+    TyString |
+    TyList { _tlType :: Maybe Type } |
+    TyObject { _toType :: Maybe TypeName } |
+    TyValue |
+    TyKeySet |
+    TyFun { _tfType :: [FunType] }
+    deriving (Eq,Ord)
+
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet :: String
+tyInteger = "integer"
+tyDecimal = "decimal"
+tyTime = "time"
+tyBool = "bool"
+tyString = "string"
+tyList = "list"
+tyObject = "object"
+tyValue = "value"
+tyKeySet = "keyset"
+
+instance Show Type where
+  show TyInteger = tyInteger
+  show TyDecimal = tyDecimal
+  show TyTime = tyTime
+  show TyBool = tyBool
+  show TyString = tyString
+  show TyList {..} = maybe tyList (\t -> "[" ++ show t ++ "]") _tlType
+  show TyObject {..} = maybe tyObject (\t -> "{" ++ asString t ++ "}") _toType
+  show TyValue = tyValue
+  show TyKeySet = tyKeySet
+  show TyFun {..} = if null _tfType then "function" else "function: " ++ show _tfType
+
+
+
+
 data Exp = ELiteral { _eLiteral :: !Literal, _eInfo :: !Info }
            | ESymbol { _eSymbol :: !String, _eInfo :: !Info }
-           | EAtom { _eAtom :: !String, _eQualifier :: !(Maybe String), _eInfo :: !Info }
+           | EAtom { _eAtom :: !String
+                   , _eQualifier :: !(Maybe String)
+                   , _eType :: !(Maybe Type)
+                   , _eInfo :: !Info }
            | EList { _eList :: ![Exp], _eInfo :: !Info }
            | EObject { _eObject :: ![(Exp,Exp)], _eInfo :: !Info }
            | EBinding { _eBinding :: ![(Exp,Exp)], _eInfo :: !Info }
@@ -181,7 +239,7 @@ makePrisms ''Exp
 instance Show Exp where
     show (ELiteral i _) = show i
     show (ESymbol s _) = '\'':s
-    show (EAtom t q _) = maybe t (\s -> t ++ "." ++ s) q
+    show (EAtom a q t _) =  a ++ maybe "" ("." ++) q ++ maybe "" ((": " ++) . show) t
     show (EList ls _) = "(" ++ unwords (map show ls) ++ ")"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
@@ -287,22 +345,26 @@ data Term n =
     } |
     TList {
       _tList :: ![Term n]
+    , _tType :: Maybe Type
     , _tInfo :: !Info
     } |
     TDef {
       _tDefData :: !DefData
     , _tDefBody :: !(Scope Int Term n)
     , _tDefExp :: Exp
+    , _tFunType :: [FunType]
     , _tInfo :: !Info
     } |
     TNative {
       _tDefData :: !DefData
     , _tDefNative :: !NativeDFun
+    , _tFunType :: [FunType]
     , _tInfo :: !Info
     } |
     TConst {
       _tDefData :: !DefData
     , _tDefConst :: !(Term n)
+    , _tType :: Maybe Type
     , _tInfo :: !Info
     } |
     TApp {
@@ -310,14 +372,26 @@ data Term n =
     , _tAppArgs :: ![Term n]
     , _tInfo :: !Info
     } |
-    TVar { _tVar :: !n, _tInfo :: !Info } |
+    TVar {
+      _tVar :: !n
+    , _tType :: Maybe Type
+    , _tInfo :: !Info
+    } |
     TBinding {
       _tBindPairs :: ![(String,Term n)]
     , _tBindBody :: !(Scope Int Term n)
     , _tBindCtx :: BindCtx
-    , _tInfo :: !Info } |
-    TObject { _tObject :: ![(Term n,Term n)], _tInfo :: !Info } |
-    TLiteral { _tLiteral :: !Literal, _tInfo :: !Info } |
+    , _tInfo :: !Info
+    } |
+    TObject {
+      _tObject :: ![(Term n,Term n)]
+    , _tUserType :: Maybe TypeName
+    , _tInfo :: !Info
+    } |
+    TLiteral {
+      _tLiteral :: !Literal
+    , _tInfo :: !Info
+    } |
     TKeySet { _tKeySet :: !PactKeySet, _tInfo :: !Info } |
     TUse { _tModuleName :: !ModuleName, _tInfo :: !Info } |
     TValue { _tValue :: !Value, _tInfo :: !Info } |
@@ -333,14 +407,15 @@ data Term n =
 instance Show n => Show (Term n) where
     show (TModule n k d b _ _) =
         "(TModule " ++ show n ++ " " ++ show k ++ " " ++ show d ++ " " ++ show b ++ ")"
-    show (TList bs _) = "[" ++ unwords (map show bs) ++ "]"
-    show (TDef di _ _ _) = show di
-    show (TNative di _ _) = show di
-    show (TConst di _ _) = show di
+    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybe "" ((":" ++) . show) t
+    show (TDef di _ _ ft _) = show di ++ intercalate "," (map ((":" ++) . show) ft )
+    show (TNative di _ ft _) = show di ++ intercalate "," (map ((":" ++) . show) ft )
+    show (TConst di _ t _) = show di ++ maybe "" ((":" ++) . show) t
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
-    show (TVar n _) = "(TVar " ++ show n ++ ")"
+    show (TVar n t _) = "(TVar " ++ show n ++ maybe "" ((":" ++) . show) t ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
-    show (TObject bs _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
+    show (TObject bs ot _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
+                             maybe "" ((":" ++) . show) ot ++ ")"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m _) = "(TUse " ++ show m ++ ")"
@@ -357,16 +432,16 @@ instance Applicative Term where
     (<*>) = ap
 
 instance Monad Term where
-    return a = TVar a def
+    return a = TVar a def def
     TModule n k ds b c i >>= f = TModule n k ds (b >>>= f) c i
-    TList bs i >>= f = TList (map (>>= f) bs) i
-    TDef d b e i >>= f = TDef d (b >>>= f) e i
-    TNative d n i >>= _ = TNative d n i
-    TConst d c i >>= f = TConst d (c >>= f) i
+    TList bs t i >>= f = TList (map (>>= f) bs) t i
+    TDef d b e t i >>= f = TDef d (b >>>= f) e t i
+    TNative d n t i >>= _ = TNative d n t i
+    TConst d c t i >>= f = TConst d (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
-    TVar n i >>= f = (f n) { _tInfo = i }
+    TVar n _ i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f) c i
-    TObject bs i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) i
+    TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) t i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
     TUse m i >>= _ = TUse m i
@@ -385,11 +460,11 @@ instance Show n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
     toJSON (TKeySet k _) = toJSON k
-    toJSON (TObject kvs _) =
+    toJSON (TObject kvs _ _) =
         object $ map (kToJSON *** toJSON) kvs
             where kToJSON (TLitString s) = pack s
                   kToJSON t = pack (abbrev t)
-    toJSON (TList ts _) = toJSON ts
+    toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (abbrev t)
     {-# INLINE toJSON #-}
 
@@ -405,28 +480,28 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
-typeof :: Term a -> String
+typeof :: Term a -> Either String Type
 typeof t = case t of
       TLiteral l _ ->
           case l of
-            LInteger {} -> "integer"
-            LDecimal {} -> "decimal"
-            LString {} -> "string"
-            LBool {} -> "bool"
-            LTime {} -> "time"
-      TModule {} -> "module"
-      TList {} -> "list"
-      TDef {} -> "def"
-      TNative {} -> "native"
-      TConst {} -> "const"
-      TApp {} -> "app"
-      TVar {} -> "var"
-      TBinding {} -> "binding"
-      TObject {} -> "object"
-      TKeySet {} -> "keyset"
-      TUse {} -> "use"
-      TValue {} -> "value"
-      TStep {} -> "step"
+            LInteger {} -> Right TyInteger
+            LDecimal {} -> Right TyDecimal
+            LString {} -> Right TyString
+            LBool {} -> Right TyBool
+            LTime {} -> Right TyTime
+      TModule {} -> Left "module"
+      TList {..} -> Right $ TyList _tType
+      TDef {..} -> Right $ TyFun _tFunType
+      TNative {..} -> Right $ TyFun _tFunType
+      TConst {..} -> maybe (Left "const") Right _tType
+      TApp {..} -> Left "app"
+      TVar {..} -> maybe (Left "var") Right _tType
+      TBinding {} -> Left "binding"
+      TObject {..} -> Right $ TyObject _tUserType
+      TKeySet {} -> Right TyKeySet
+      TUse {} -> Left "use"
+      TValue {} -> Right TyValue
+      TStep {} -> Left "step"
 
 
 
@@ -445,8 +520,8 @@ tStr = toTerm
 
 -- | Support pact `=`, only for list, object, literal, keyset
 termEq :: Eq n => Term n -> Term n -> Bool
-termEq (TList a _) (TList b _) = length a == length b && and (zipWith termEq a b)
-termEq (TObject a _) (TObject b _) = length a == length b && all (lkpEq b) a
+termEq (TList a _ _) (TList b _ _) = length a == length b && and (zipWith termEq a b)
+termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
     where lkpEq [] _ = False
           lkpEq ((k',v'):ts) p@(k,v) | termEq k k' && termEq v v' = True
                                      | otherwise = lkpEq ts p
@@ -459,7 +534,7 @@ termEq _ _ = False
 
 abbrev :: Show t => Term t -> String
 abbrev t@TModule {} = "<module " ++ show (_tModuleName t) ++ ">"
-abbrev (TList bs _) = concatMap abbrev bs
+abbrev (TList bs _ _) = concatMap abbrev bs
 abbrev t@TDef {} = "<defun " ++ _dName (_tDefData t) ++ ">"
 abbrev t@TNative {} = "<native " ++ _dName (_tDefData t) ++ ">"
 abbrev t@TConst {} = "<defconst " ++ _dName (_tDefData t) ++ ">"
@@ -469,7 +544,7 @@ abbrev TObject {} = "<object>"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
 abbrev (TUse m _) = "<use '" ++ show m ++ ">"
-abbrev (TVar s _) = show s
+abbrev (TVar s _ _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -70,7 +69,7 @@ enforceKeySet i ksn ks = do
   sigs <- view eeMsgSigs
   let keys' = _pksKeys ks
       matched = S.size $ S.intersection (S.fromList keys') sigs
-      app = TApp (TVar (Name $ _pksPredFun ks) def) [toTerm (length keys'),toTerm matched] i
+      app = TApp (TVar (Name $ _pksPredFun ks) def def) [toTerm (length keys'),toTerm matched] i
   app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
   r <- reduce app'
   case r of
@@ -110,12 +109,12 @@ loadModule :: ModuleName -> Scope n Term Name -> Info ->
 loadModule mn bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
-      (TList bd _bi) ->
+      (TList bd _ _bi) ->
         M.fromList <$> forM bd (\t ->
             case t of
-              TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TConst dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TDef dd _ _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TNative dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TConst dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
               _ -> evalError (_tInfo t) "Non-def in module body")
       t -> evalError (_tInfo t) "Malformed module"
   cs <-
@@ -165,14 +164,14 @@ unify m (Left f) = m M.! f
 -- | Recursive reduction.
 reduce ::  Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
-reduce (TVar t _) = case t of Direct n -> return n; Ref r -> reduce r
+reduce (TVar t _ _) = case t of Direct n -> return n; Ref r -> reduce r
 reduce (TLiteral l i) = return $ TLiteral l i
 reduce (TKeySet k i) = return $ TKeySet k i
-reduce (TList bs _) = last <$> mapM reduce bs
+reduce (TList bs _ _) = last <$> mapM reduce bs
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
-reduce (TConst _ t _) = reduce t
-reduce (TObject ps i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' i
+reduce (TConst _ t _ _) = reduce t
+reduce (TObject ps t i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' t i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindKV -> evalError i "Unexpected key-value binding"
@@ -190,9 +189,9 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
                      as `atMay` i
 
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceApp (TVar (Direct t) _) as ai = reduceDef t as ai
-reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
-reduceApp (TDef dd@(DefData _ dt dm dargs _) bod _exp _di) as ai = do
+reduceApp (TVar (Direct t) _ _) as ai = reduceDef t as ai
+reduceApp (TVar (Ref r) _ _) as ai = reduceApp r as ai
+reduceApp (TDef dd@(DefData _ dt dm dargs _) bod _exp _ty _di) as ai = do
       let bod' = instantiate (resolveArg ai as) bod
       call (StackFrame dm ai (defName dd) (zip dargs (map abbrev as))) $
                      case dt of
@@ -203,14 +202,14 @@ reduceApp (TLitString errMsg) _ i = evalError i errMsg
 reduceApp r _ ai = evalError ai $ "Can only apply defs: " ++ show r
 
 reduceDef ::  Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceDef (TNative dd (NativeDFun _ ndd) _di) as ai = ndd (FunApp ai dd) as
+reduceDef (TNative dd (NativeDFun _ ndd) _ _di) as ai = ndd (FunApp ai dd) as
 reduceDef (TLitString errMsg) _ i = evalError i errMsg
 reduceDef r _ ai = evalError ai $ "Can only apply defs: " ++ show r
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
 applyPact ::  Term Ref ->  Eval e (Term Name)
-applyPact (TList ss i) = do
+applyPact (TList ss _ i) = do
   steps <- forM ss $ \s ->
            case s of
              (TStep ent e r si) -> return (ent,e,r,si)

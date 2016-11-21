@@ -86,7 +86,7 @@ bindReduce ps bd bi lkpFun = do
 defNative :: NativeDefName -> NativeFun e -> [String] -> String -> Eval e (String,Term Name)
 defNative pactName fun args docs =
     return (asString pactName,
-     TNative (DefData (asString pactName) Defun Nothing args (Just docs)) (NativeDFun pactName (unsafeCoerce fun)) def)
+     TNative (DefData (asString pactName) Defun Nothing args (Just docs)) (NativeDFun pactName (unsafeCoerce fun)) def def)
 
 defRNative :: NativeDefName -> RNativeFun e -> [String] -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)

@@ -143,19 +143,20 @@ apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
 
 map' :: NativeFun e
 map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ -> (`TList` def) <$> forM ls (apply af as ai . pure)
+           TList ls _ _ -> (\b -> TList b def def) <$> forM ls (apply af as ai . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as (_faInfo i)
+list i as = return $ TList as def (_faInfo i) -- TODO can supply type here if homogenous
 
 liftTerm :: Term Name -> Term Ref
-liftTerm a = TVar (Direct a) def
+liftTerm a = TVar (Direct a) (either (const Nothing) Just (typeof a)) def
+
 
 fold' :: NativeFun e
 fold' i [TApp af as ai,initv,l] = reduce l >>= \l' -> case l' of
-           TList ls _ -> reduce initv >>= \initv' ->
+           TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a -> apply af as ai [r,a]) initv' ls
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
@@ -163,7 +164,7 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ -> ((`TList` def) . concat) <$>
+           TList ls _ _ -> ((\b -> TList b def def) . concat) <$>
                          forM ls (\a -> do
                            t <- apply af as ai [a]
                            case t of
@@ -173,18 +174,18 @@ filter' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
 filter' i as = argsError' i as
 
 length' :: RNativeFun e
-length' _ [TList ls _] = return $ toTerm (length ls)
+length' _ [TList ls _ _] = return $ toTerm (length ls)
 length' _ [TLitString s] = return $ toTerm (length s)
-length' _ [TObject ps _] = return $ toTerm (length ps)
+length' _ [TObject ps _ _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
-take' _ [TLitInteger c,TList l _] = return $ (`TList` def) $ tord take c l
+take' _ [TLitInteger c,TList l t _] = return $ TList (tord take c l) t def
 take' _ [TLitInteger c,TLitString l] = return $ toTerm $ tord take c l
 take' i as = argsError i as
 
 drop' :: RNativeFun e
-drop' _ [TLitInteger c,TList l _] = return $ (`TList` def) $ tord drop c l
+drop' _ [TLitInteger c,TList l t _] = return $ TList (tord drop c l) t def
 drop' _ [TLitInteger c,TLitString l] = return $ toTerm $ tord drop c l
 drop' i as = argsError i as
 
@@ -193,18 +194,18 @@ tord f c l | c >= 0 = f (fromIntegral c) l
            | otherwise = reverse $ f (fromIntegral (negate c)) (reverse l)
 
 at' :: RNativeFun e
-at' i [TLitInteger idx,TList ls _] =
+at' i [TLitInteger idx,TList ls _ _] =
     case ls `atMay` fromIntegral idx of
       Just t -> return t
       Nothing -> evalError' i $ "at: bad index " ++ show idx ++ ", length " ++ show (length ls)
-at' i [idx,TObject ls _] =
+at' i [idx,TObject ls _ _] =
     case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
       Just v -> return v
       Nothing -> evalError' i $ "at: key not found: " ++ show idx
 at' i as = argsError i as
 
 remove :: RNativeFun e
-remove _ [key,TObject ps _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) def
+remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) t def
 remove i as = argsError i as
 
 compose :: NativeFun e
@@ -299,7 +300,7 @@ pactTxId i as = argsError i as
 
 bind :: NativeFun e
 bind i [src,TBinding ps bd BindKV bi] = reduce src >>= \st -> case st of
-  TObject o _ -> do
+  TObject o _ _ -> do
     !m <- fmap M.fromList $ forM o $ \(k,v) -> case k of
              TLitString k' -> return (k',liftTerm v)
              tk -> evalError' i $ "Bad object (non-string key) in bind: " ++ show tk
@@ -308,5 +309,5 @@ bind i [src,TBinding ps bd BindKV bi] = reduce src >>= \st -> case st of
 bind i as = argsError' i as
 
 typeof' :: RNativeFun e
-typeof' _ [t] = return $ tStr $ typeof t
+typeof' _ [t] = return $ tStr $ either id show $ typeof t
 typeof' i as = argsError i as

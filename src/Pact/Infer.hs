@@ -27,19 +27,6 @@ die i s = throwM $ CheckerException i s
 
 newtype IName = IName (Int,String) deriving (Eq,Show,Ord)
 
-data Type =
-    TyInteger |
-    TyDecimal |
-    TyTime |
-    TyBool |
-    TyString |
-    TyList |
-    TyObject |
-    TyValue |
-    TyKeySet |
-    TySpecial String
-    deriving (Eq,Show,Ord)
-
 data InferState = InferState {
       _isTypes :: M.Map IName (S.Set Type)
     , _isEquiv :: M.Map IName (S.Set IName)
