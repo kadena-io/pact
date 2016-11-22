@@ -67,26 +67,37 @@ replDefsMap = HM.map Direct . HM.fromList <$> replDefs
 replDefs :: Eval LibState NativeDef
 replDefs = foldDefs
      [
-      defRNative "load" load ["file"] "Load and evaluate FILE. `$(load \"accounts.repl\")`"
-     ,defRNative "env-keys" setsigs ["keys..."]
-      "Set transaction signature KEYS. `(env-keys \"my-key\" \"admin-key\")`"
-     ,defRNative "env-data" setmsg ["json"] $
+      defRNative "load" load [funType TyString [("file",TyString)]]
+      "Load and evaluate FILE. `$(load \"accounts.repl\")`"
+
+     ,defRNative "env-keys" setsigs [funType TyString [("keys",TyList (Just TyString))]]
+      "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
+     ,defRNative "env-data" setmsg [funType TyString [("json",json)]] $
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " ++
       "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
-     ,defRNative "env-step" setstep ["step-idx","rollback"]
+     ,defRNative "env-step" setstep [funType TyString [],
+                                     funType TyString [("step-idx",TyInteger)],
+                                     funType TyString [("step-idx",TyInteger),("rollback",TyBool)]]
       ("Modify pact step state. With no arguments, unset step. STEP-IDX sets step index for " ++
        "current pact execution, ROLLBACK defaults to false. `$(env-step 1)` `$(env-step 0 true)`")
-     ,defRNative "env-entity" setentity ["entity"] "Set environment confidential ENTITY id. `$(env-entity \"my-org\")`"
-     ,defRNative "begin-tx" (tx Begin) ["name"] "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
-     ,defRNative "commit-tx" (tx Commit) [] "Commit transaction. `$(commit-tx)`"
-     ,defRNative "rollback-tx" (tx Rollback) [] "Rollback transaction. `$(rollback-tx)`"
-     ,defRNative "expect" expect ["doc","expected","actual"]
+     ,defRNative "env-entity" setentity [funType TyString [("entity",TyString)]]
+      "Set environment confidential ENTITY id. `$(env-entity \"my-org\")`"
+     ,defRNative "begin-tx" (tx Begin) [funType TyString [],
+                                        funType TyString [("name",TyString)]]
+       "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
+     ,defRNative "commit-tx" (tx Commit) [funType TyString []] "Commit transaction. `$(commit-tx)`"
+     ,defRNative "rollback-tx" (tx Rollback) [funType TyString []] "Rollback transaction. `$(rollback-tx)`"
+     ,defRNative "expect" expect [funType TyString [("doc",TyString),("expected",a),("actual",a)]]
       "Evaluate ACTUAL and verify that it equals EXPECTED. `(expect \"Sanity prevails.\" 4 (+ 2 2))`"
-     ,defNative "expect-failure" expectFail ["doc","actual"] $
-      "Evaluate ACTUAL and succeed only if it throws an error. " ++
+     ,defNative "expect-failure" expectFail [funType TyString [("doc",TyString),("exp",a)]] $
+      "Evaluate EXP and succeed only if it throws an error. " ++
       "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
-     ,defNative "bench" bench' ["exprs"] "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
+     ,defNative "bench" bench' [funType TyString [("exprs",TyRest)]]
+      "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
      ]
+     where
+       json = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList Nothing,TyObject Nothing,TyKeySet,TyValue]
+       a = TyVar "a" []
 
 invokeEnv :: (MVar PureState -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! _rlsPure ls

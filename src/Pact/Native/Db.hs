@@ -35,27 +35,40 @@ import Pact.Eval
 
 dbDefs :: Eval e NativeDef
 dbDefs = do
-  let writeArgs = ["table","key","object"]
+  let writeArgs = [funType TyString [("table",TyString),("key",TyString),("object",TyObject Nothing)]]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
 
   foldDefs
-    [defRNative "create-table" createTable' ["table","module"]
+    [defRNative "create-table" createTable'
+     [funType TyString [("table",TyString),("module",TyString)]]
      "Create table TABLE guarded by module MODULE. `$(create-table 'accounts 'accounts-admin)`"
-    ,defNative "with-read" withRead ["table","key","bindings"]
+
+    ,defNative "with-read" withRead
+     [funType TyString [("table",TyString),("key",TyString),("bindings",TyBinding)]]
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
-    ,defNative "with-default-read" withDefaultRead ["table","key","defaults","bindings"]
+
+    ,defNative "with-default-read" withDefaultRead
+     [funType TyString [("table",TyString),("key",TyString),("defaults",TyObject Nothing),("bindings",TyBinding)]]
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
-    ,defRNative "read" read' ["table","key","colnames..."]
-     "Read row from TABLE for KEY returning object of COLNAMES mapped to values, or entire record if not specified. \
+
+    ,defRNative "read" read'
+     [funType (TyObject Nothing) [("table",TyString),("key",TyString),("cols",TyList (Just TyString))]]
+     "Read row from TABLE for KEY returning object of COLS mapped to values, or entire record if empty. \
      \`$(read 'accounts id 'balance 'ccy)`"
-    ,defRNative "keys" keys' ["table"] "Return all keys in TABLE. `$(keys 'accounts)`"
-    ,defRNative "txids" txids' ["table","txid"]
+
+    ,defRNative "keys" keys'
+     [funType (TyList (Just TyString)) [("table",TyString)]]
+     "Return all keys in TABLE. `$(keys 'accounts)`"
+
+    ,defRNative "txids" txids'
+     [funType (TyList (Just TyInteger)) [("table",TyString),("txid",TyInteger)]]
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
+
     ,defRNative "write" (write Write) writeArgs
      (writeDocs "." "(write 'accounts { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert) writeArgs
@@ -64,11 +77,17 @@ dbDefs = do
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
-    ,defRNative "txlog" txlog ["table","txid"]
+
+    ,defRNative "txlog" txlog
+     [funType (TyList (Just TyValue)) [("table",TyString),("txid",TyInteger)]]
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
-    ,defRNative "describe-table" descTable ["table"] "Get metadata for TABLE"
-    ,defRNative "describe-keyset" descKeySet ["keyset"] "Get metadata for KEYSET"
-    ,defRNative "describe-module" descModule ["module"] "Get metadata for MODULE"
+
+    ,defRNative "describe-table" descTable
+     [funType TyValue [("table",TyString)]] "Get metadata for TABLE"
+    ,defRNative "describe-keyset" descKeySet
+     [funType TyValue [("keyset",TyString)]] "Get metadata for KEYSET"
+    ,defRNative "describe-module" descModule
+     [funType TyValue [("module",TyString)]] "Get metadata for MODULE"
     ]
 
 descTable :: RNativeFun e

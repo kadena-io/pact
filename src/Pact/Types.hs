@@ -195,7 +195,10 @@ data Type =
     TyObject { _toType :: Maybe TypeName } |
     TyValue |
     TyKeySet |
-    TyFun { _tfType :: [FunType] }
+    TyFun { _tfType :: [FunType] } |
+    TyBinding |
+    TyRest |
+    TyVar { _tvId :: String, _tvConstraint :: [Type] }
     deriving (Eq,Ord)
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet :: String
@@ -220,7 +223,9 @@ instance Show Type where
   show TyValue = tyValue
   show TyKeySet = tyKeySet
   show TyFun {..} = if null _tfType then "function" else "function: " ++ show _tfType
-
+  show TyBinding = "binding"
+  show TyRest = "@rest"
+  show TyVar {..} = "<" ++ _tvId ++ (if null _tvConstraint then "" else ":" ++ show _tvConstraint) ++ ">"
 
 
 

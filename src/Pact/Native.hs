@@ -65,68 +65,101 @@ nativesForDocs = do
 langDefs :: Eval e NativeDef
 langDefs = foldDefs
     [
-     defNative "if" if' ["cond","then","else"]
+     defNative "if" if' [funType a [("cond",TyBool),("then",a),("else",a)]]
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
-    ,defNative "map" map' ["app","list"]
+
+    ,defNative "map" map'
+     [funType (TyList (Just a)) [("app",lam b a),("list",TyList (Just b))]]
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
-    ,defNative "fold" fold' ["app","init","list"]
+
+    ,defNative "fold" fold'
+     [funType a [("app",lam2 b b a),("init",a),("list",TyList (Just b))]]
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
-    ,defRNative "list" list ["elems"]
+
+    ,defRNative "list" list
+     [funType (TyList Nothing) [("elems",TyRest)]]
      "Create list from ELEMS. `(list 1 2 3)`"
-    ,defNative "filter" filter' ["app","list"]
+
+    ,defNative "filter" filter'
+     [funType (TyList (Just a)) [("app",lam a TyBool),("list",TyList (Just a))]]
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
-    ,defNative "compose" compose ["apps","value"]
-     "Compose APPS left-to-right, such that element 1 operates on VALUE, 2 on the result, etc.\
+
+     ,defNative "compose" compose [funType c [("x",lam a b),("y", lam b c),("value",a)]]
+     "Compose X and Y left-to-right, such that element 1 operates on VALUE, 2 on the result, etc.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
-     ,defRNative "length" length' ["a"]
+
+     ,defRNative "length" length' [funType TyInteger [("a",listA)]]
      "Compute length of A, which can be a list, a string, or an object.\
      \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
-    ,defRNative "take" take' ["count", "list"]
+
+    ,defRNative "take" take' takeDrop
      "Take COUNT values from LIST (or string). If negative, take from end. \
      \`(take 2 \"abcd\")` `(take (- 3) [1 2 3 4 5])`"
-    ,defRNative "drop" drop' ["count", "list"]
+
+    ,defRNative "drop" drop' takeDrop
      "Drop COUNT values from LIST (or string). If negative, drop from end.\
      \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
-    ,defRNative "remove" remove ["key","object"]
+
+    ,defRNative "remove" remove [funType (TyObject Nothing) [("key",TyString),("object",TyObject Nothing)]]
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
-    ,defRNative "at" at' ["idx","a"]
+
+    ,defRNative "at" at' [funType (TyList (Just a)) [("idx",TyInteger),("a",TyList (Just a))]
+                         ,funType (TyObject Nothing) [("idx",TyString),("a",TyObject Nothing)]]
      "Index list A at IDX, or get value with key IDX from object A. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
-    ,defRNative "enforce" enforce ["test","msg"]
+
+    ,defRNative "enforce" enforce [funType TyBool [("test",TyBool),("msg",TyString)]]
      "Fail transaction with MSG if TEST fails, or returns true. \
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
-    ,defRNative "format" format ["template","vars"]
+
+    ,defRNative "format" format [funType TyString [("template",TyString),("vars",TyRest)]]
      "Interpolate VARS into TEMPLATE using {}. \
      \`(format \"My {} has {}\" \"dog\" \"fleas\")`"
-    ,defRNative "is-string" (isX isString) ["val"]
+
+    ,defRNative "is-string" (isX isString) [isTy TyString]
      "Return VAL, enforcing string type. `!(is-string 123)` `(is-string \"abc\")`"
-    ,defRNative "is-integer" (isX isInteger) ["val"]
+    ,defRNative "is-integer" (isX isInteger) [isTy TyInteger]
      "Return VAL, enforcing integer type `(is-integer 123)` `!(is-integer \"abc\")`"
-    ,defRNative "is-bool" (isX isBool) ["val"]
+    ,defRNative "is-bool" (isX isBool) [isTy TyBool]
      "Return VAL, enforcing boolean type. `(is-bool true)`"
-    ,defRNative "is-decimal" (isX isDecimal) ["val"]
+    ,defRNative "is-decimal" (isX isDecimal) [isTy TyDecimal]
      "Return VAL, enforcing decimal type. `(is-decimal 123.45)`"
-    ,defRNative "is-time" (isX isTime) ["val"]
+    ,defRNative "is-time" (isX isTime) [isTy TyTime]
      "Return VAL, enforcing time type. `(is-time (time \"2016-07-22T11:26:35Z\"))`"
-    ,defRNative "pact-txid" pactTxId []
+
+    ,defRNative "pact-txid" pactTxId [funType TyInteger []]
      "Return reference tx id for pact execution."
-    ,defRNative "read-decimal" readDecimal ["key"]
+
+    ,defRNative "read-decimal" readDecimal [funType TyDecimal [("key",TyString)]]
      "Parse KEY string value from message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
-    ,defRNative "read-integer" readInteger ["key"]
+    ,defRNative "read-integer" readInteger [funType TyInteger [("key",TyString)]]
      "Parse KEY string value from message data body as integer. `$(read-integer \"age\")`"
-    ,defRNative "read-msg" readMsg ["key"]
+    ,defRNative "read-msg" readMsg [funType a [("key",TyString)]]
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
-    ,defNative "bind" bind ["src","bindings","body"]
-     "Evaluate SRC which must return an object, using BINDINGS to bind variables to values in the result. \
+
+    ,defNative "bind" bind [funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)]]
+     "Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
-    ,defRNative "typeof" typeof' ["a"] "Returns type of A as string. `(typeof \"hello\")`"
+
+    ,defRNative "typeof" typeof' [funType TyString [("a",a)]]
+     "Returns type of A as string. `(typeof \"hello\")`"
     ]
+    where a = TyVar "a" []
+          b = TyVar "b" []
+          c = TyVar "c" []
+          listA = TyVar "a" [TyList Nothing,TyString,TyObject Nothing]
+          listStringA = TyVar "a" [TyList Nothing,TyString]
+          takeDrop = [funType listStringA [("count",TyInteger),("list",listStringA)]]
+          lam x y = TyFun [funType y [("a",x)]]
+          lam2 x y z = TyFun [funType z [("a",x),("b",y)]]
+          isTy t = funType t [("val",t)]
+
 
 -- | Symbol map must be made within target monad
 nativeDefs :: Eval e (M.HashMap String Ref)

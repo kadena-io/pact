@@ -80,17 +80,19 @@ bindReduce ps bd bi lkpFun = do
   call (StackFrame Nothing bi "<binding>" (map (second abbrev) vs)) $! reduce bd''
 
 
-
--- TODO: call stack??
-
-defNative :: NativeDefName -> NativeFun e -> [String] -> String -> Eval e (String,Term Name)
-defNative pactName fun args docs =
+defNative :: NativeDefName -> NativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
+defNative pactName fun ftype docs =
     return (asString pactName,
-     TNative (DefData (asString pactName) Defun Nothing args (Just docs)) (NativeDFun pactName (unsafeCoerce fun)) def def)
+     TNative (DefData (asString pactName) Defun Nothing (map _faName $ _ftArgs $ head ftype) (Just docs))
+             (NativeDFun pactName (unsafeCoerce fun))
+             ftype def)
 
-defRNative :: NativeDefName -> RNativeFun e -> [String] -> String -> Eval e (String,Term Name)
+defRNative :: NativeDefName -> RNativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= \as' -> f fi as'
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
+
+funType :: Type -> [(String,Type)] -> FunType
+funType t as = FunType (map (uncurry FunArg) as) t

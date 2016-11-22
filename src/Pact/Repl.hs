@@ -399,3 +399,6 @@ _testAccounts = void $ execScript "examples/accounts/accounts.repl"
 
 _testBench :: IO ()
 _testBench = void $ execScript "tests/bench/bench"
+
+_testCP :: IO ()
+_testCP = void $ execScript "examples/cp/cp.repl"
