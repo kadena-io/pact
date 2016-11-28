@@ -25,6 +25,7 @@ import Control.Applicative
 import Data.List
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.State
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -187,18 +188,26 @@ doModule _ li _ _ = throwError (li,"Invalid module definition")
 doDef :: [Exp] -> DefType -> Info -> Exp -> Info -> Compile (Term Name)
 doDef es defType ai d i =
     case es of
-      (EAtom dn Nothing _type _:EList args _:ELiteral (LString docs) _:body) ->
-          mkDef dn args (Just docs) body
-      (EAtom dn Nothing _type _:EList args _:body) ->
-          mkDef dn args Nothing body
+      (EAtom dn Nothing ty _:EList args _:ELiteral (LString docs) _:body) ->
+          mkDef dn ty args (Just docs) body
+      (EAtom dn Nothing ty _:EList args _:body) ->
+          mkDef dn ty args Nothing body
       _ -> throwError (ai,"Invalid def")
       where
-        mkDef dn dargs ddocs body = do
+        mkDef dn ty dargs ddocs body = do
           args <- mapM atomVar dargs
-          let argsn = map Name args
+          let argsn = map (Name . fst) args
               defBody = abstract (`elemIndex` argsn) <$> runBody body i
-          TDef <$> pure (DefData dn defType Nothing args ddocs)
-                   <*> defBody <*> pure d <*> pure def <*> pure i
+              ftype :: State Char [FunType]
+              ftype = do
+                let fresh = do c <- get; modify succ; return $ TyVar [c] []
+                    mayV Nothing = fresh
+                    mayV (Just t) = return t
+                rty <- mayV ty
+                argsTys <- forM args $ \(n,t) -> mayV t >>= \v -> return (FunArg n v)
+                return [FunType argsTys rty]
+          TDef <$> pure (DefData dn defType Nothing (map fst args) ddocs)
+                   <*> defBody <*> pure d <*> pure (evalState ftype 'a') <*> pure i
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
 doStep [entity,exp] i =
@@ -264,7 +273,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
           (preArgs@(_:_),EBinding bs bi:bbody) ->
             do
               as <- mapM run preArgs
-              let mkPairs (v,k) = (,) <$> atomVar k <*> run v
+              let mkPairs (v,k) = (,) <$> (fst <$> atomVar k) <*> run v
               bs' <- mapNonEmpty "binding" mkPairs bs li
               let ks = map (Name . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
@@ -295,8 +304,8 @@ runNonEmpty :: String -> [Exp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
-atomVar :: Exp -> Compile String
-atomVar (EAtom a Nothing _type _) = return a
+atomVar :: Exp -> Compile (String, Maybe Type)
+atomVar (EAtom a Nothing ty _) = return (a,ty)
 atomVar e = throwError (_eInfo e,"Expected unqualified atom")
 {-# INLINE atomVar #-}
 
