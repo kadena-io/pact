@@ -17,11 +17,12 @@ import qualified Data.Text as T
 import Text.Trifecta hiding (err)
 import System.IO
 import Control.Monad
-import Data.List (sortBy)
+import Data.List
 import Data.Function
 import Control.Monad.Catch
 import Data.Monoid
 import Control.Lens
+
 
 import Pact.Types
 import Pact.Native
@@ -56,9 +57,11 @@ renderDocs h (Just (dd@DefData {..})) = do
       hPutStrLn h ""
       hPutStrLn h $ "### " ++ escapeIfNecc _dName ++ " {#" ++ sanitize _dName ++ "}"
       hPutStrLn h ""
-      unless (null _dArgs) $ do
-         hPutStrLn h $ "Args: `" ++ unwords _dArgs ++ "`"
-         hPutStrLn h ""
+      forM_ _dType $ \FunType {..} -> do
+        hPutStrLn h $ unwords (map (\(Arg n t) -> "*" ++ n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
+          " *&rarr;*&nbsp;`" ++ show _ftReturn ++ "`"
+        hPutStrLn h ""
+      hPutStrLn h ""
       let (Just docs) = _dDocs
           noexs = hPutStrLn stderr $ "No examples for " ++ show dd
       case parseString parseDocs mempty docs of

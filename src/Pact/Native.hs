@@ -89,11 +89,11 @@ langDefs = foldDefs
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
      ,defNative "compose" compose [funType c [("x",lam a b),("y", lam b c),("value",a)]]
-     "Compose X and Y left-to-right, such that element 1 operates on VALUE, 2 on the result, etc.\
+     "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defRNative "length" length' [funType TyInteger [("a",listA)]]
-     "Compute length of A, which can be a list, a string, or an object.\
+     ,defRNative "length" length' [funType TyInteger [("x",listA)]]
+     "Compute length of X, which can be a list, a string, or an object.\
      \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
     ,defRNative "take" take' takeDrop
@@ -107,9 +107,9 @@ langDefs = foldDefs
     ,defRNative "remove" remove [funType (TyObject Nothing) [("key",TyString),("object",TyObject Nothing)]]
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' [funType (TyList (Just a)) [("idx",TyInteger),("a",TyList (Just a))]
-                         ,funType (TyObject Nothing) [("idx",TyString),("a",TyObject Nothing)]]
-     "Index list A at IDX, or get value with key IDX from object A. \
+    ,defRNative "at" at' [funType a [("idx",TyInteger),("list",TyList (Just a))]
+                         ,funType a [("idx",TyString),("object",TyObject Nothing)]]
+     "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
     ,defRNative "enforce" enforce [funType TyBool [("test",TyBool),("msg",TyString)]]
@@ -147,8 +147,8 @@ langDefs = foldDefs
      "Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
 
-    ,defRNative "typeof" typeof' [funType TyString [("a",a)]]
-     "Returns type of A as string. `(typeof \"hello\")`"
+    ,defRNative "typeof" typeof' [funType TyString [("x",a)]]
+     "Returns type of X as string. `(typeof \"hello\")`"
     ]
     where a = TyVar "a" []
           b = TyVar "b" []
@@ -156,9 +156,9 @@ langDefs = foldDefs
           listA = TyVar "a" [TyList Nothing,TyString,TyObject Nothing]
           listStringA = TyVar "a" [TyList Nothing,TyString]
           takeDrop = [funType listStringA [("count",TyInteger),("list",listStringA)]]
-          lam x y = TyFun [funType y [("a",x)]]
-          lam2 x y z = TyFun [funType z [("a",x),("b",y)]]
-          isTy t = funType t [("val",t)]
+          lam x y = TyFun [funType y [("x",x)]]
+          lam2 x y z = TyFun [funType z [("x",x),("y",y)]]
+          isTy t = funType t [("val",a)]
 
 
 -- | Symbol map must be made within target monad
@@ -181,10 +181,10 @@ map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as def (_faInfo i) -- TODO can supply type here if homogenous
+list i as = return $ TList as def (_faInfo i) -- runtime bottom list type OK
 
 liftTerm :: Term Name -> Term Ref
-liftTerm a = TVar (Direct a) (either (const Nothing) Just (typeof a)) def
+liftTerm a = TVar (Direct a) (either def id (typeof a)) def -- runtime bottom type OK
 
 
 fold' :: NativeFun e
@@ -242,14 +242,12 @@ remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo ke
 remove i as = argsError i as
 
 compose :: NativeFun e
-compose i as@[] = argsError' i as
-compose i as@[_] = argsError' i as
-compose i as@[_,_] = argsError' i as
-compose _ fs = do
-  initv' <- reduce (last fs)
-  let comp v (TApp af as ai) = apply af as ai [v]
-      comp _ t = evalError (_tInfo t) $ "compose: expecting app: " ++ show t
-  foldM comp initv' (init fs)
+compose _ [TApp af as ai,TApp bf bs bi,v] = do
+  v' <- reduce v
+  a <- apply af as ai [v']
+  apply bf bs bi [a]
+compose i as = argsError' i as
+
 
 
 format :: RNativeFun e

@@ -69,7 +69,8 @@ enforceKeySet i ksn ks = do
   sigs <- view eeMsgSigs
   let keys' = _pksKeys ks
       matched = S.size $ S.intersection (S.fromList keys') sigs
-      app = TApp (TVar (Name $ _pksPredFun ks) def def) [toTerm (length keys'),toTerm matched] i
+      app = TApp (TVar (Name $ _pksPredFun ks) def def) -- runtime bottom type OK
+            [toTerm (length keys'),toTerm matched] i
   app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
   r <- reduce app'
   case r of
@@ -98,7 +99,7 @@ eval t@(TModule mn mksn _md bod mc mi) = do
   -- enforce new module keyset
   enforceKeySetName mi mksn
   -- build/install module from defs
-  _defs <- call (StackFrame Nothing mi (abbrev t) []) $ loadModule mn bod mi
+  _defs <- call (StackFrame (abbrev t) mi Nothing) $ loadModule mn bod mi
   writeRow Write Modules mn (Module mn mksn (show mc))
   return $ msg $ "Loaded module " ++ show mn
 
@@ -112,14 +113,14 @@ loadModule mn bod1 mi = do
       (TList bd _ _bi) ->
         M.fromList <$> forM bd (\t ->
             case t of
-              TDef dd _ _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TNative dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TConst dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
+              TConst dd _ _ _ -> return (_aName dd,set (tDefData.dModule) (Just mn) t)
               _ -> evalError (_tInfo t) "Non-def in module body")
       t -> evalError (_tInfo t) "Malformed module"
   cs <-
     fmap stronglyConnCompR $ forM (M.toList modDefs1) $ \(dn,d) ->
-      call (StackFrame Nothing (_tInfo d) (abbrev d) []) $
+      call (StackFrame (abbrev d) (_tInfo d) Nothing) $
       do
         d' <- forM d $ \f -> do
                 dm <- resolveRef f
@@ -180,7 +181,7 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce (TValue v i) = return $ TValue v i
 
-reduceLet :: [(String,Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = reduce (instantiate (resolveArg i (map snd ps)) bod)
 
 {-# INLINE resolveArg #-}
@@ -191,9 +192,9 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceApp (TVar (Direct t) _ _) as ai = reduceDef t as ai
 reduceApp (TVar (Ref r) _ _) as ai = reduceApp r as ai
-reduceApp (TDef dd@(DefData _ dt dm dargs _) bod _exp _ty _di) as ai = do
+reduceApp (TDef dd@(DefData _ dt _ _ _) bod _exp _di) as ai = do
       let bod' = instantiate (resolveArg ai as) bod
-      call (StackFrame dm ai (defName dd) (zip dargs (map abbrev as))) $
+      call (StackFrame (defName dd) ai (Just (dd,map abbrev as))) $
                      case dt of
                        Defun -> reduce bod'
                        Defpact -> applyPact bod'
@@ -202,7 +203,7 @@ reduceApp (TLitString errMsg) _ i = evalError i errMsg
 reduceApp r _ ai = evalError ai $ "Can only apply defs: " ++ show r
 
 reduceDef ::  Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceDef (TNative dd (NativeDFun _ ndd) _ _di) as ai = ndd (FunApp ai dd) as
+reduceDef (TNative dd (NativeDFun _ ndd) _di) as ai = ndd (FunApp ai dd) as
 reduceDef (TLitString errMsg) _ i = evalError i errMsg
 reduceDef r _ ai = evalError ai $ "Can only apply defs: " ++ show r
 

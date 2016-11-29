@@ -158,32 +158,35 @@ parseF p fp = parseS p <$> readFile fp
 reserved :: [String]
 reserved = words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-compile :: Exp -> Either (Info,String) (Term Name)
-compile = runExcept . run
+compile :: Exp -> Either SyntaxError (Term Name)
+compile e = runExcept (evalStateT (run e) 0)
 
 
-type Compile a = Except (Info,String) a
+type Compile a = StateT Int (Except SyntaxError) a
+
+syntaxError :: Info -> String -> Compile a
+syntaxError i s = throwError $ SyntaxError i s
 
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse [ESymbol s _] i = return $ TUse (fromString s) i
-doUse _ i = throwError (i,"Use only takes a module symbol name")
+doUse _ i = syntaxError i "Use only takes a module symbol name"
 
 doModule :: [Exp] -> Info -> Info -> Exp -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
     case es of
-      [] -> throwError (ai,"Empty module")
+      [] -> syntaxError ai "Empty module"
       (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
       body -> mkModule Nothing body
       where
         defOnly d@TDef {} = return d
         defOnly d@TNative {} = return d
         defOnly d@TConst {} = return d
-        defOnly t = throwError (_tInfo t,"Only defun/defpact/defconst allowed in module")
+        defOnly t = syntaxError (_tInfo t) "Only defun/defpact/defconst allowed in module"
         mkModule docs body = do
               bd <- mapNonEmpty "module" (run >=> defOnly) body li
               TModule <$> pure (fromString n) <*> pure (fromString k) <*> pure docs <*>
                       abstract (const Nothing) <$> pure (TList bd Nothing li) <*> pure mc <*> pure li
-doModule _ li _ _ = throwError (li,"Invalid module definition")
+doModule _ li _ _ = syntaxError li "Invalid module definition"
 
 doDef :: [Exp] -> DefType -> Info -> Exp -> Info -> Compile (Term Name)
 doDef es defType ai d i =
@@ -192,47 +195,60 @@ doDef es defType ai d i =
           mkDef dn ty args (Just docs) body
       (EAtom dn Nothing ty _:EList args _:body) ->
           mkDef dn ty args Nothing body
-      _ -> throwError (ai,"Invalid def")
+      _ -> syntaxError ai "Invalid def"
       where
         mkDef dn ty dargs ddocs body = do
           args <- mapM atomVar dargs
-          let argsn = map (Name . fst) args
+          let argsn = map (Name . _aName) args
               defBody = abstract (`elemIndex` argsn) <$> runBody body i
-              ftype :: State Char [FunType]
-              ftype = do
-                let fresh = do c <- get; modify succ; return $ TyVar [c] []
-                    mayV Nothing = fresh
-                    mayV (Just t) = return t
-                rty <- mayV ty
-                argsTys <- forM args $ \(n,t) -> mayV t >>= \v -> return (FunArg n v)
-                return [FunType argsTys rty]
-          TDef <$> pure (DefData dn defType Nothing (map fst args) ddocs)
-                   <*> defBody <*> pure d <*> pure (evalState ftype 'a') <*> pure i
+          dty <- FunType <$> pure args <*> maybeTyVar ty
+          TDef <$> pure (DefData dn defType Nothing [dty] ddocs)
+                   <*> defBody <*> pure d <*> pure i
+
+freshTyVar :: Compile Type
+freshTyVar = do
+  c <- state (\i -> (i,succ i))
+  return $ TyVar (cToTV c) []
+
+cToTV :: Int -> String
+cToTV n | n < 26 = [toC n]
+        | n <= 26 * 26 = [toC (pred (n `div` 26)), toC (n `mod` 26)]
+        | otherwise = toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
+  where toC i = toEnum (fromEnum 'a' + i)
+
+_testCToTV :: Bool
+_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
+
+
+maybeTyVar :: Maybe Type -> Compile Type
+maybeTyVar Nothing = freshTyVar
+maybeTyVar (Just t) = return t
+
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
 doStep [entity,exp] i =
     TStep <$> run entity <*> run exp <*> pure Nothing <*> pure i
-doStep _ i = throwError (i,"Invalid step definition")
+doStep _ i = syntaxError i "Invalid step definition"
 
 doStepRollback :: [Exp] -> Info -> Compile (Term Name)
 doStepRollback [entity,exp,rb] i =
     TStep <$> run entity <*> run exp <*> (Just <$> run rb) <*> pure i
-doStepRollback _ i = throwError (i,"Invalid step-with-rollback definition")
+doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
-letPair :: Exp -> Compile (String, Term Name)
-letPair (EList [EAtom s Nothing _type _,v] _) = (,) <$> pure s <*> run v
-letPair t = throwError (_eInfo t,"Invalid let pair")
+letPair :: Exp -> Compile (Arg, Term Name)
+letPair (EList [EAtom s Nothing ty _,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty) <*> run v
+letPair t = syntaxError (_eInfo t) "Invalid let pair"
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
 doLet (bindings:body) i = do
   bPairs <-
     case bindings of
       (EList es _) -> forM es letPair
-      t -> throwError (_eInfo t,"Invalid let bindings")
-  let bNames = map (Name . fst) bPairs
+      t -> syntaxError (_eInfo t) "Invalid let bindings"
+  let bNames = map (Name . _aName . fst) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
   return $ TBinding bPairs bs BindLet i
-doLet _ i = throwError (i,"Invalid let declaration")
+doLet _ i = syntaxError i "Invalid let declaration"
 
 -- | let* is a macro to nest a bunch of lets
 doLets :: [Exp] -> Info -> Compile (Term Name)
@@ -244,15 +260,19 @@ doLets (bindings:body) i =
                                  EList (EAtom "let*" Nothing Nothing (_eInfo e'):
                                         EList es (_eInfo e'):body)
                                  (_eInfo e')] i
-      e -> throwError (_eInfo e,"Invalid let* binding")
-doLets _ i = throwError (i,"Invalid let declaration")
+      e -> syntaxError (_eInfo e) "Invalid let* binding"
+doLets _ i = syntaxError i "Invalid let declaration"
 
 doConst :: [Exp] -> Info -> Compile (Term Name)
-doConst [EAtom dn Nothing Nothing _,t] i =
-    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] Nothing) t' Nothing i)
-doConst [EAtom dn Nothing Nothing _,t,ELiteral (LString docs) _] i =
-    run t >>= \t' -> return (TConst (DefData dn Defconst Nothing [] (Just docs)) t' Nothing i)
-doConst _ i = throwError (i,"Invalid defconst")
+doConst es i = case es of
+  [EAtom dn Nothing ct _,t] -> mkConst dn ct t Nothing
+  [EAtom dn Nothing ct _,t,ELiteral (LString docs) _] -> mkConst dn ct t (Just docs)
+  _ -> syntaxError i "Invalid defconst"
+  where
+    mkConst dn ty v docs = do
+      v' <- run v
+      a <- Arg <$> pure dn <*> maybeTyVar ty
+      return $ TConst a v' docs i
 
 
 run :: Exp -> Compile (Term Name)
@@ -273,30 +293,29 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
           (preArgs@(_:_),EBinding bs bi:bbody) ->
             do
               as <- mapM run preArgs
-              let mkPairs (v,k) = (,) <$> (fst <$> atomVar k) <*> run v
+              let mkPairs (v,k) = (,) <$> atomVar k <*> run v
               bs' <- mapNonEmpty "binding" mkPairs bs li
-              let ks = map (Name . fst) bs'
+              let ks = map (Name . _aName . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
                    (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure BindKV <*> pure bi
-              return $ TApp (mkVar a q Nothing ai) (as ++ [bdg]) li
-
-          _ -> TApp <$> pure (mkVar a q Nothing ai) <*> mapM run rest <*> pure li
+              TApp <$> mkVar a q Nothing ai <*> pure (as ++ [bdg]) <*> pure li
+          _ -> TApp <$> mkVar a q Nothing ai <*> mapM run rest <*> pure li
 
 run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure def <*> pure i
-run (EBinding _ i) = throwError (i,"Unexpected binding")
+run (EBinding _ i) = syntaxError i "Unexpected binding"
 run (ESymbol s i) = return $ TLiteral (LString s) i
 run (ELiteral l i) = return $ TLiteral l i
-run (EAtom s q t i) | s `elem` reserved = throwError (i,"Unexpected reserved word: " ++ s)
-                  | otherwise = return $ mkVar s q t i
-run e = throwError (_eInfo e,"Unexpected expression: " ++ show e)
+run (EAtom s q t i) | s `elem` reserved = syntaxError i $ "Unexpected reserved word: " ++ s
+                  | otherwise = mkVar s q t i
+run e = syntaxError (_eInfo e) $ "Unexpected expression: " ++ show e
 {-# INLINE run #-}
 
-mkVar :: String -> Maybe String -> Maybe Type -> Info -> Term Name
-mkVar s q t i = TVar (maybe (Name s) (QName $ fromString s) q) t i -- TODO resolve type
+mkVar :: String -> Maybe String -> Maybe Type -> Info -> Compile (Term Name)
+mkVar s q t i = TVar <$> pure (maybe (Name s) (QName $ fromString s) q) <*> maybeTyVar t <*> pure i
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]
-mapNonEmpty s _ [] i = throwError (i,"Empty " ++ s)
+mapNonEmpty s _ [] i = syntaxError i $ "Empty " ++ s
 mapNonEmpty _ act body _ = mapM act body
 {-# INLINE mapNonEmpty #-}
 
@@ -304,9 +323,9 @@ runNonEmpty :: String -> [Exp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
-atomVar :: Exp -> Compile (String, Maybe Type)
-atomVar (EAtom a Nothing ty _) = return (a,ty)
-atomVar e = throwError (_eInfo e,"Expected unqualified atom")
+atomVar :: Exp -> Compile Arg
+atomVar (EAtom a Nothing ty _) = Arg <$> pure a <*> maybeTyVar ty
+atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
 runBody :: [Exp] -> Info -> Compile (Term Name)
@@ -316,11 +335,11 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure def <*> pure i
 
 
 _parseAccounts :: IO (Result [Exp])
-_parseAccounts = parseF (exprs <* TF.eof) "tests/accounts.pact"
+_parseAccounts = parseF (exprs <* TF.eof) "examples/accounts/accounts.pact"
 
 -- in GHCI:
 -- _parseAccounts >>= _compile
-_compile :: Result Exp -> IO (Either (Info,String) (Term Name))
+_compile :: Result Exp -> IO (Either SyntaxError (Term Name))
 _compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
 _compile (Success a) = return $ compile a
 

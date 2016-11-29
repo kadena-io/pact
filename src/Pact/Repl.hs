@@ -243,7 +243,7 @@ handleCompile :: Exp -> (Term Name -> Repl (Either String a)) -> Repl (Either St
 handleCompile exp a =
     case compile exp of
       Right t -> a t
-      Left (i@Info {..},e) -> do
+      Left (SyntaxError i@Info {..} e) -> do
           case _iInfo of
             Just (_,d) -> do
                         mode <- use rMode

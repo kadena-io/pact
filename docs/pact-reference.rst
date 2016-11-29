@@ -792,9 +792,11 @@ General
 at
 ~~
 
-Args: ``idx a``
+*idx* ``integer`` *list* ``[<a>]`` *→* ``<a>``
 
-Index list A at IDX, or get value with key IDX from object A.
+*idx* ``string`` *object* ``object`` *→* ``<a>``
+
+Index LIST at IDX, or get value with key IDX from OBJECT.
 
 .. code:: lisp
 
@@ -806,10 +808,10 @@ Index list A at IDX, or get value with key IDX from object A.
 bind
 ~~~~
 
-Args: ``src bindings body``
+*src* ``object`` *bindings* ``binding`` *body* ``@rest`` *→* ``<a>``
 
 Evaluate SRC which must return an object, using BINDINGS to bind
-variables to values in the result.
+variables to values used in BODY.
 
 .. code:: lisp
 
@@ -819,10 +821,11 @@ variables to values in the result.
 compose
 ~~~~~~~
 
-Args: ``apps value``
+*x* ``function: [(x:<a>) -> <b>]`` *y* ``function: [(x:<b>) -> <c>]``
+*value* ``<a>`` *→* ``<c>``
 
-Compose APPS left-to-right, such that element 1 operates on VALUE, 2 on
-the result, etc.
+Compose X and Y, such that X operates on VALUE, and Y on the results of
+X.
 
 .. code:: lisp
 
@@ -832,7 +835,8 @@ the result, etc.
 drop
 ~~~~
 
-Args: ``count list``
+*count* ``integer`` *list* ``<a => (list|string)>``
+*→* ``<a => (list|string)>``
 
 Drop COUNT values from LIST (or string). If negative, drop from end.
 
@@ -846,7 +850,7 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
 enforce
 ~~~~~~~
 
-Args: ``test msg``
+*test* ``bool`` *msg* ``string`` *→* ``bool``
 
 Fail transaction with MSG if TEST fails, or returns true.
 
@@ -858,7 +862,7 @@ Fail transaction with MSG if TEST fails, or returns true.
 filter
 ~~~~~~
 
-Args: ``app list``
+*app* ``function: [(x:<a>) -> bool]`` *list* ``[<a>]`` *→* ``[<a>]``
 
 Filter LIST by applying APP to each element to get a boolean determining
 inclusion.
@@ -871,7 +875,8 @@ inclusion.
 fold
 ~~~~
 
-Args: ``app init list``
+*app* ``function: [(x:<b> y:<b>) -> <a>]`` *init* ``<a>``
+*list* ``[<b>]`` *→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
 starting with INIT.
@@ -884,7 +889,7 @@ starting with INIT.
 format
 ~~~~~~
 
-Args: ``template vars``
+*template* ``string`` *vars* ``@rest`` *→* ``string``
 
 Interpolate VARS into TEMPLATE using {}.
 
@@ -896,7 +901,7 @@ Interpolate VARS into TEMPLATE using {}.
 if
 ~~
 
-Args: ``cond then else``
+*cond* ``bool`` *then* ``<a>`` *else* ``<a>`` *→* ``<a>``
 
 Test COND, if true evaluate THEN, otherwise evaluate ELSE.
 
@@ -908,7 +913,7 @@ Test COND, if true evaluate THEN, otherwise evaluate ELSE.
 is-bool
 ~~~~~~~
 
-Args: ``val``
+*val* ``<a>`` *→* ``bool``
 
 Return VAL, enforcing boolean type.
 
@@ -920,7 +925,7 @@ Return VAL, enforcing boolean type.
 is-decimal
 ~~~~~~~~~~
 
-Args: ``val``
+*val* ``<a>`` *→* ``decimal``
 
 Return VAL, enforcing decimal type.
 
@@ -932,7 +937,7 @@ Return VAL, enforcing decimal type.
 is-integer
 ~~~~~~~~~~
 
-Args: ``val``
+*val* ``<a>`` *→* ``integer``
 
 Return VAL, enforcing integer type
 
@@ -946,7 +951,7 @@ Return VAL, enforcing integer type
 is-string
 ~~~~~~~~~
 
-Args: ``val``
+*val* ``<a>`` *→* ``string``
 
 Return VAL, enforcing string type.
 
@@ -960,7 +965,7 @@ Return VAL, enforcing string type.
 is-time
 ~~~~~~~
 
-Args: ``val``
+*val* ``<a>`` *→* ``time``
 
 Return VAL, enforcing time type.
 
@@ -972,9 +977,9 @@ Return VAL, enforcing time type.
 length
 ~~~~~~
 
-Args: ``a``
+*x* ``<a => (list|string|object)>`` *→* ``integer``
 
-Compute length of A, which can be a list, a string, or an object.
+Compute length of X, which can be a list, a string, or an object.
 
 .. code:: lisp
 
@@ -988,7 +993,7 @@ Compute length of A, which can be a list, a string, or an object.
 list
 ~~~~
 
-Args: ``elems``
+*elems* ``@rest`` *→* ``list``
 
 Create list from ELEMS.
 
@@ -1000,7 +1005,7 @@ Create list from ELEMS.
 map
 ~~~
 
-Args: ``app list``
+*app* ``function: [(x:<b>) -> <a>]`` *list* ``[<b>]`` *→* ``[<a>]``
 
 Apply elements in LIST as last arg to APP, returning list of results.
 
@@ -1012,12 +1017,14 @@ Apply elements in LIST as last arg to APP, returning list of results.
 pact-txid
 ~~~~~~~~~
 
+*→* ``integer``
+
 Return reference tx id for pact execution.
 
 read-decimal
 ~~~~~~~~~~~~
 
-Args: ``key``
+*key* ``string`` *→* ``decimal``
 
 Parse KEY string value from message data body as decimal.
 
@@ -1029,7 +1036,7 @@ Parse KEY string value from message data body as decimal.
 read-integer
 ~~~~~~~~~~~~
 
-Args: ``key``
+*key* ``string`` *→* ``integer``
 
 Parse KEY string value from message data body as integer.
 
@@ -1040,7 +1047,7 @@ Parse KEY string value from message data body as integer.
 read-msg
 ~~~~~~~~
 
-Args: ``key``
+*key* ``string`` *→* ``<a>``
 
 Read KEY from message data body. Will recognize JSON types as
 corresponding Pact type.
@@ -1053,19 +1060,20 @@ corresponding Pact type.
 remove
 ~~~~~~
 
-Args: ``key object``
+*key* ``string`` *object* ``object`` *→* ``object``
 
 Remove entry for KEY from OBJECT.
 
 .. code:: lisp
 
     pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1}
+    {"foo": 1})
 
 take
 ~~~~
 
-Args: ``count list``
+*count* ``integer`` *list* ``<a => (list|string)>``
+*→* ``<a => (list|string)>``
 
 Take COUNT values from LIST (or string). If negative, take from end.
 
@@ -1079,9 +1087,9 @@ Take COUNT values from LIST (or string). If negative, take from end.
 typeof
 ~~~~~~
 
-Args: ``a``
+*x* ``<a>`` *→* ``string``
 
-Returns type of A as string.
+Returns type of X as string.
 
 .. code:: lisp
 
@@ -1094,7 +1102,7 @@ Database
 create-table
 ~~~~~~~~~~~~
 
-Args: ``table module``
+*table* ``string`` *module* ``string`` *→* ``string``
 
 Create table TABLE guarded by module MODULE.
 
@@ -1105,28 +1113,28 @@ Create table TABLE guarded by module MODULE.
 describe-keyset
 ~~~~~~~~~~~~~~~
 
-Args: ``keyset``
+*keyset* ``string`` *→* ``value``
 
 Get metadata for KEYSET
 
 describe-module
 ~~~~~~~~~~~~~~~
 
-Args: ``module``
+*module* ``string`` *→* ``value``
 
 Get metadata for MODULE
 
 describe-table
 ~~~~~~~~~~~~~~
 
-Args: ``table``
+*table* ``string`` *→* ``value``
 
 Get metadata for TABLE
 
 insert
 ~~~~~~
 
-Args: ``table key object``
+*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data
 already exists for KEY.
@@ -1138,7 +1146,7 @@ already exists for KEY.
 keys
 ~~~~
 
-Args: ``table``
+*table* ``string`` *→* ``[string]``
 
 Return all keys in TABLE.
 
@@ -1149,19 +1157,19 @@ Return all keys in TABLE.
 read
 ~~~~
 
-Args: ``table key colnames...``
+*table* ``string`` *key* ``string`` *cols* ``[string]`` *→* ``object``
 
-Read row from TABLE for KEY returning object of COLNAMES mapped to
-values, or entire record if not specified.
+Read row from TABLE for KEY returning object of COLS mapped to values,
+or entire record if empty.
 
 .. code:: lisp
 
-    (read 'accounts id 'balance 'ccy)
+    (read 'accounts id ['balance 'ccy])
 
 txids
 ~~~~~
 
-Args: ``table txid``
+*table* ``string`` *txid* ``integer`` *→* ``[integer]``
 
 Return all txid values greater than or equal to TXID in TABLE.
 
@@ -1172,7 +1180,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 txlog
 ~~~~~
 
-Args: ``table txid``
+*table* ``string`` *txid* ``integer`` *→* ``[value]``
 
 Return all updates to TABLE performed in transaction TXID.
 
@@ -1183,7 +1191,7 @@ Return all updates to TABLE performed in transaction TXID.
 update
 ~~~~~~
 
-Args: ``table key object``
+*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does
 not exist for KEY.
@@ -1195,11 +1203,12 @@ not exist for KEY.
 with-default-read
 ~~~~~~~~~~~~~~~~~
 
-Args: ``table key defaults bindings body``
+*table* ``string`` *key* ``string`` *defaults* ``object``
+*bindings* ``binding`` *→* ``string``
 
-Read row from TABLE for KEY and bind columns per BINDINGS over BODY. If
-row not found, read columns from DEFAULTS, an object with matching key
-names.
+Special form to read row from TABLE for KEY and bind columns per
+BINDINGS over subsequent body statements. If row not found, read columns
+from DEFAULTS, an object with matching key names.
 
 .. code:: lisp
 
@@ -1209,9 +1218,11 @@ names.
 with-read
 ~~~~~~~~~
 
-Args: ``table key bindings body``
+*table* ``string`` *key* ``string`` *bindings* ``binding``
+*→* ``string``
 
-Read row from TABLE for KEY and bind columns per BINDINGS over BODY.
+Special form to read row from TABLE for KEY and bind columns per
+BINDINGS over subsequent body statements.
 
 .. code:: lisp
 
@@ -1221,7 +1232,7 @@ Read row from TABLE for KEY and bind columns per BINDINGS over BODY.
 write
 ~~~~~
 
-Args: ``table key object``
+*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data.
 
@@ -1235,7 +1246,9 @@ Time
 add-time
 ~~~~~~~~
 
-Args: ``time seconds``
+*time* ``time`` *seconds* ``decimal`` *→* ``time``
+
+*time* ``time`` *seconds* ``integer`` *→* ``time``
 
 Add SECONDS to TIME; SECONDS can be integer or decimal.
 
@@ -1247,7 +1260,9 @@ Add SECONDS to TIME; SECONDS can be integer or decimal.
 days
 ~~~~
 
-Args: ``n``
+*n* ``decimal`` *→* ``decimal``
+
+*n* ``integer`` *→* ``decimal``
 
 N days, for use with 'add-time'
 
@@ -1259,7 +1274,7 @@ N days, for use with 'add-time'
 diff-time
 ~~~~~~~~~
 
-Args: ``time1 time2``
+*time1* ``time`` *time2* ``time`` *→* ``decimal``
 
 Compute difference between TIME1 and TIME2 in seconds.
 
@@ -1271,7 +1286,9 @@ Compute difference between TIME1 and TIME2 in seconds.
 hours
 ~~~~~
 
-Args: ``n``
+*n* ``decimal`` *→* ``decimal``
+
+*n* ``integer`` *→* ``decimal``
 
 N hours, for use with 'add-time'
 
@@ -1283,7 +1300,9 @@ N hours, for use with 'add-time'
 minutes
 ~~~~~~~
 
-Args: ``n``
+*n* ``decimal`` *→* ``decimal``
+
+*n* ``integer`` *→* ``decimal``
 
 N minutes, for use with 'add-time'.
 
@@ -1295,7 +1314,7 @@ N minutes, for use with 'add-time'.
 parse-time
 ~~~~~~~~~~
 
-Args: ``format utcval``
+*format* ``string`` *utcval* ``string`` *→* ``time``
 
 Construct time from UTCVAL using FORMAT. See `strftime
 docs <https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html#index-strftime>`__
@@ -1309,7 +1328,7 @@ for format info.
 time
 ~~~~
 
-Args: ``utcval``
+*utcval* ``string`` *→* ``time``
 
 Construct time from UTCVAL using ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 
@@ -1324,9 +1343,11 @@ Operators
 !=
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*y* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*→* ``bool``
 
-True if a does not equal b.
+True if X does not equal Y.
 
 .. code:: lisp
 
@@ -1336,9 +1357,13 @@ True if a does not equal b.
 \*
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
 
-Multiply A by B.
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+Multiply X by Y.
 
 .. code:: lisp
 
@@ -1350,7 +1375,14 @@ Multiply A by B.
 \+
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
+
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+*x* ``<a => (string|list|object)>`` *y* ``<a => (string|list|object)>``
+*→* ``<a => (string|list|object)>``
 
 Add numbers, concatenate strings/lists, or merge objects.
 
@@ -1365,14 +1397,20 @@ Add numbers, concatenate strings/lists, or merge objects.
     pact> (+ [1 2] [3 4])
     [1 2 3 4]
     pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100}
+    {"bar": 2, "foo": 100})
 
 \-
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
 
-Negate A, or subtract A from B.
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
+
+Negate X, or subtract Y from X.
 
 .. code:: lisp
 
@@ -1384,9 +1422,13 @@ Negate A, or subtract A from B.
 /
 ~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
 
-Divide A by B.
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+Divide X by Y.
 
 .. code:: lisp
 
@@ -1398,9 +1440,10 @@ Divide A by B.
 <
 ~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal|string|time)>``
+*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
 
-True if A < B.
+True if X < Y.
 
 .. code:: lisp
 
@@ -1414,9 +1457,10 @@ True if A < B.
 <=
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal|string|time)>``
+*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
 
-True if A <= B.
+True if X <= Y.
 
 .. code:: lisp
 
@@ -1430,9 +1474,11 @@ True if A <= B.
 =
 ~
 
-Args: ``a b``
+*x* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*y* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*→* ``bool``
 
-True if a equals b.
+True if X equals Y.
 
 .. code:: lisp
 
@@ -1446,9 +1492,10 @@ True if a equals b.
 >
 ~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal|string|time)>``
+*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
 
-True if A > B.
+True if X > Y.
 
 .. code:: lisp
 
@@ -1462,9 +1509,10 @@ True if A > B.
 >=
 ~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal|string|time)>``
+*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
 
-True if A >= B.
+True if X >= Y.
 
 .. code:: lisp
 
@@ -1478,9 +1526,13 @@ True if A >= B.
 ^
 ~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
 
-Raise A to B power.
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+Raise X to Y power.
 
 .. code:: lisp
 
@@ -1490,9 +1542,11 @@ Raise A to B power.
 abs
 ~~~
 
-Args: ``a``
+*x* ``decimal`` *→* ``decimal``
 
-Absolute value of A.
+*x* ``integer`` *→* ``integer``
+
+Absolute value of X.
 
 .. code:: lisp
 
@@ -1502,7 +1556,7 @@ Absolute value of A.
 and
 ~~~
 
-Args: ``a b``
+*x* ``bool`` *y* ``bool`` *→* ``bool``
 
 Boolean logic.
 
@@ -1514,9 +1568,11 @@ Boolean logic.
 ceiling
 ~~~~~~~
 
-Args: ``a prec``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-Rounds up value of decimal A as integer, or to PREC precision as
+*x* ``decimal`` *→* ``integer``
+
+Rounds up value of decimal X as integer, or to PREC precision as
 decimal.
 
 .. code:: lisp
@@ -1529,9 +1585,9 @@ decimal.
 exp
 ~~~
 
-Args: ``a``
+*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
 
-Exp of A
+Exp of X
 
 .. code:: lisp
 
@@ -1541,9 +1597,11 @@ Exp of A
 floor
 ~~~~~
 
-Args: ``a prec``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-Rounds down value of decimal A as integer, or to PREC precision as
+*x* ``decimal`` *→* ``integer``
+
+Rounds down value of decimal X as integer, or to PREC precision as
 decimal.
 
 .. code:: lisp
@@ -1556,9 +1614,9 @@ decimal.
 ln
 ~~
 
-Args: ``a``
+*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
 
-Natural log of A.
+Natural log of X.
 
 .. code:: lisp
 
@@ -1568,9 +1626,13 @@ Natural log of A.
 log
 ~~~
 
-Args: ``a b``
+*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
+*→* ``<a => (integer|decimal)>``
 
-Log of B base A.
+*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*→* ``decimal``
+
+Log of Y base X.
 
 .. code:: lisp
 
@@ -1580,9 +1642,9 @@ Log of B base A.
 mod
 ~~~
 
-Args: ``a b``
+*x* ``integer`` *y* ``integer`` *→* ``integer``
 
-A modulo B.
+X modulo Y.
 
 .. code:: lisp
 
@@ -1592,7 +1654,7 @@ A modulo B.
 not
 ~~~
 
-Args: ``a``
+*x* ``bool`` *→* ``bool``
 
 Boolean logic.
 
@@ -1604,7 +1666,7 @@ Boolean logic.
 or
 ~~
 
-Args: ``a b``
+*x* ``bool`` *y* ``bool`` *→* ``bool``
 
 Boolean logic.
 
@@ -1616,9 +1678,11 @@ Boolean logic.
 round
 ~~~~~
 
-Args: ``a prec``
+*x* ``decimal`` *prec* ``integer`` *→* ``decimal``
 
-Performs Banker's rounding value of decimal A as integer, or to PREC
+*x* ``decimal`` *→* ``integer``
+
+Performs Banker's rounding value of decimal X as integer, or to PREC
 precision as decimal.
 
 .. code:: lisp
@@ -1631,9 +1695,9 @@ precision as decimal.
 sqrt
 ~~~~
 
-Args: ``a``
+*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
 
-Square root of A.
+Square root of X.
 
 .. code:: lisp
 
@@ -1646,7 +1710,7 @@ KeySets
 define-keyset
 ~~~~~~~~~~~~~
 
-Args: ``name keyset``
+*name* ``string`` *keyset* ``string`` *→* ``string``
 
 Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset
 will be enforced before updating to new value.
@@ -1658,7 +1722,7 @@ will be enforced before updating to new value.
 keys-2
 ~~~~~~
 
-Args: ``count matched``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 Keyset predicate function to match at least 2 keys in keyset.
 
@@ -1670,7 +1734,7 @@ Keyset predicate function to match at least 2 keys in keyset.
 keys-all
 ~~~~~~~~
 
-Args: ``count matched``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 Keyset predicate function to match all keys in keyset.
 
@@ -1682,7 +1746,7 @@ Keyset predicate function to match all keys in keyset.
 keys-any
 ~~~~~~~~
 
-Args: ``count matched``
+*count* ``integer`` *matched* ``integer`` *→* ``bool``
 
 Keyset predicate function to match all keys in keyset.
 
@@ -1694,7 +1758,7 @@ Keyset predicate function to match all keys in keyset.
 read-keyset
 ~~~~~~~~~~~
 
-Args: ``key``
+*key* ``string`` *→* ``keyset``
 
 Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred":
 PREDFUN }). PREDFUN should resolve to a keys predicate.
@@ -1706,7 +1770,7 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 with-keyset
 ~~~~~~~~~~~
 
-Args: ``keyset-or-name body``
+*keyset-or-name* ``string`` *body* ``@rest`` *→* ``<a>``
 
 Enforce KEYSET-OR-NAME against message keys to run BODY. KEYSET-OR-NAME
 can be a symbol of a keyset name or a keyset object.
@@ -1726,7 +1790,9 @@ blockchain-based execution.
 begin-tx
 ~~~~~~~~
 
-Args: ``name``
+*→* ``string``
+
+*name* ``string`` *→* ``string``
 
 Begin transaction with optional NAME.
 
@@ -1737,7 +1803,7 @@ Begin transaction with optional NAME.
 bench
 ~~~~~
 
-Args: ``exprs``
+*exprs* ``@rest`` *→* ``string``
 
 Benchmark execution of EXPRS.
 
@@ -1748,6 +1814,8 @@ Benchmark execution of EXPRS.
 commit-tx
 ~~~~~~~~~
 
+*→* ``string``
+
 Commit transaction.
 
 .. code:: lisp
@@ -1757,7 +1825,8 @@ Commit transaction.
 env-data
 ~~~~~~~~
 
-Args: ``json``
+*json* ``<a => (integer|string|time|decimal|bool|list|object|keyset|value)>``
+*→* ``string``
 
 Set transaction JSON data, either as encoded string, or as pact types
 coerced to JSON.
@@ -1770,7 +1839,7 @@ coerced to JSON.
 env-entity
 ~~~~~~~~~~
 
-Args: ``entity``
+*entity* ``string`` *→* ``string``
 
 Set environment confidential ENTITY id.
 
@@ -1781,19 +1850,23 @@ Set environment confidential ENTITY id.
 env-keys
 ~~~~~~~~
 
-Args: ``keys...``
+*keys* ``[string]`` *→* ``string``
 
 Set transaction signature KEYS.
 
 .. code:: lisp
 
-    pact> (env-keys "my-key" "admin-key")
+    pact> (env-keys ["my-key" "admin-key"])
     "Setting transaction keys"
 
 env-step
 ~~~~~~~~
 
-Args: ``step-idx rollback``
+*→* ``string``
+
+*step-idx* ``integer`` *→* ``string``
+
+*step-idx* ``integer`` *rollback* ``bool`` *→* ``string``
 
 Modify pact step state. With no arguments, unset step. STEP-IDX sets
 step index for current pact execution, ROLLBACK defaults to false.
@@ -1806,7 +1879,7 @@ step index for current pact execution, ROLLBACK defaults to false.
 expect
 ~~~~~~
 
-Args: ``doc expected actual``
+*doc* ``string`` *expected* ``<a>`` *actual* ``<a>`` *→* ``string``
 
 Evaluate ACTUAL and verify that it equals EXPECTED.
 
@@ -1818,9 +1891,9 @@ Evaluate ACTUAL and verify that it equals EXPECTED.
 expect-failure
 ~~~~~~~~~~~~~~
 
-Args: ``doc actual``
+*doc* ``string`` *exp* ``<a>`` *→* ``string``
 
-Evaluate ACTUAL and succeed only if it throws an error.
+Evaluate EXP and succeed only if it throws an error.
 
 .. code:: lisp
 
@@ -1830,7 +1903,7 @@ Evaluate ACTUAL and succeed only if it throws an error.
 load
 ~~~~
 
-Args: ``file``
+*file* ``string`` *→* ``string``
 
 Load and evaluate FILE.
 
@@ -1840,6 +1913,8 @@ Load and evaluate FILE.
 
 rollback-tx
 ~~~~~~~~~~~
+
+*→* ``string``
 
 Rollback transaction.
 

@@ -1,5 +1,5 @@
 (env-data { "module-admin-keyset": { "keys": ["admin"], "pred": "keys-all"}})
-(env-keys "admin")
+(env-keys ["admin"])
 (begin-tx)
 (load "auth.pact")
 (load "cash.pact")

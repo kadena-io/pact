@@ -174,16 +174,18 @@ newtype TypeName = TypeName String
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 instance Show TypeName where show (TypeName s) = show s
 
-data FunArg = FunArg {
-  _faName :: String,
-  _faType :: Type
-  } deriving (Eq,Show,Ord)
+data Arg = Arg {
+  _aName :: String,
+  _aType :: Type
+  } deriving (Eq,Ord)
+instance Show Arg where show (Arg n t) = n ++ ":" ++ show t
 
 
 data FunType = FunType {
-  _ftArgs :: [FunArg],
+  _ftArgs :: [Arg],
   _ftReturn :: Type
-  } deriving (Eq,Show,Ord)
+  } deriving (Eq,Ord)
+instance Show FunType where show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
 
 data Type =
     TyInteger |
@@ -200,6 +202,8 @@ data Type =
     TyRest |
     TyVar { _tvId :: String, _tvConstraint :: [Type] }
     deriving (Eq,Ord)
+
+instance Default Type where def = TyVar "_" []
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet :: String
 tyInteger = "integer"
@@ -225,7 +229,9 @@ instance Show Type where
   show TyFun {..} = if null _tfType then "function" else "function: " ++ show _tfType
   show TyBinding = "binding"
   show TyRest = "@rest"
-  show TyVar {..} = "<" ++ _tvId ++ (if null _tvConstraint then "" else ":" ++ show _tvConstraint) ++ ">"
+  show TyVar {..} = "<" ++ _tvId ++
+                    (if null _tvConstraint then ""
+                     else " => (" ++ intercalate "|" (map show _tvConstraint) ++ ")") ++ ">"
 
 
 
@@ -292,9 +298,9 @@ defTypeRep Defconst = "defconst"
 
 data DefData = DefData {
       _dName :: !String
-    , _dType :: !DefType
+    , _dDefType :: !DefType
     , _dModule :: !(Maybe ModuleName)
-    , _dArgs :: ![String]
+    , _dType :: [FunType]
     , _dDocs :: !(Maybe String)
 } deriving (Eq)
 
@@ -302,8 +308,10 @@ instance Show DefData where
     show (DefData n Defconst _ _ d) =
         "(defconst " ++ n ++ maybe "" ((" " ++) . show) d ++ ")"
     show (DefData n t _ as d) =
-              "(" ++ defTypeRep t ++ " " ++ n ++
-              " (" ++ intercalate "," as ++ ")" ++ maybe "" ((" " ++) . show) d ++ ")"
+      "(" ++ defTypeRep t ++ " " ++ n ++ ft as ++ maybe "" ((" " ++) . show) d ++ ")"
+      where ft [] = ""
+            ft [t'] = " " ++ show t'
+            ft ts = " " ++ show ts
 
 defName :: DefData -> String
 defName (DefData n _ (Just mn) _ _) = asString mn ++ "." ++ n
@@ -350,26 +358,24 @@ data Term n =
     } |
     TList {
       _tList :: ![Term n]
-    , _tType :: Maybe Type
+    , _tListType :: Maybe Type
     , _tInfo :: !Info
     } |
     TDef {
       _tDefData :: !DefData
     , _tDefBody :: !(Scope Int Term n)
     , _tDefExp :: Exp
-    , _tFunType :: [FunType]
     , _tInfo :: !Info
     } |
     TNative {
       _tDefData :: !DefData
     , _tDefNative :: !NativeDFun
-    , _tFunType :: [FunType]
     , _tInfo :: !Info
     } |
     TConst {
-      _tDefData :: !DefData
-    , _tDefConst :: !(Term n)
-    , _tType :: Maybe Type
+      _tConstName :: !Arg
+    , _tConstVal :: !(Term n)
+    , _tConstDocs :: !(Maybe String)
     , _tInfo :: !Info
     } |
     TApp {
@@ -379,11 +385,11 @@ data Term n =
     } |
     TVar {
       _tVar :: !n
-    , _tType :: Maybe Type
+    , _tType :: Type
     , _tInfo :: !Info
     } |
     TBinding {
-      _tBindPairs :: ![(String,Term n)]
+      _tBindPairs :: ![(Arg,Term n)]
     , _tBindBody :: !(Scope Int Term n)
     , _tBindCtx :: BindCtx
     , _tInfo :: !Info
@@ -413,11 +419,11 @@ instance Show n => Show (Term n) where
     show (TModule n k d b _ _) =
         "(TModule " ++ show n ++ " " ++ show k ++ " " ++ show d ++ " " ++ show b ++ ")"
     show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybe "" ((":" ++) . show) t
-    show (TDef di _ _ ft _) = show di ++ intercalate "," (map ((":" ++) . show) ft )
-    show (TNative di _ ft _) = show di ++ intercalate "," (map ((":" ++) . show) ft )
-    show (TConst di _ t _) = show di ++ maybe "" ((":" ++) . show) t
+    show (TDef di _ _ _) = "(TDef " ++ show di ++ ")"
+    show (TNative di _ _ ) = "(TNative " ++ show di ++ ")"
+    show (TConst n _ _ _) = "(TConst " ++ show n ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
-    show (TVar n t _) = "(TVar " ++ show n ++ maybe "" ((":" ++) . show) t ++ ")"
+    show (TVar n t _) = "(TVar " ++ show n ++ ":" ++ show t ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
     show (TObject bs ot _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
                              maybe "" ((":" ++) . show) ot ++ ")"
@@ -440,8 +446,8 @@ instance Monad Term where
     return a = TVar a def def
     TModule n k ds b c i >>= f = TModule n k ds (b >>>= f) c i
     TList bs t i >>= f = TList (map (>>= f) bs) t i
-    TDef d b e t i >>= f = TDef d (b >>>= f) e t i
-    TNative d n t i >>= _ = TNative d n t i
+    TDef d b e i >>= f = TDef d (b >>>= f) e i
+    TNative d n i >>= _ = TNative d n i
     TConst d c t i >>= f = TConst d (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n _ i >>= f = (f n) { _tInfo = i }
@@ -495,12 +501,12 @@ typeof t = case t of
             LBool {} -> Right TyBool
             LTime {} -> Right TyTime
       TModule {} -> Left "module"
-      TList {..} -> Right $ TyList _tType
-      TDef {..} -> Right $ TyFun _tFunType
-      TNative {..} -> Right $ TyFun _tFunType
-      TConst {..} -> maybe (Left "const") Right _tType
+      TList {..} -> Right $ TyList _tListType
+      TDef {..} -> Right $ TyFun (_dType _tDefData)
+      TNative {..} -> Right $ TyFun (_dType _tDefData)
+      TConst {..} -> Right (_aType _tConstName)
       TApp {..} -> Left "app"
-      TVar {..} -> maybe (Left "var") Right _tType
+      TVar {..} -> Right _tType
       TBinding {} -> Left "binding"
       TObject {..} -> Right $ TyObject _tUserType
       TKeySet {} -> Right TyKeySet
@@ -559,6 +565,8 @@ abbrev TStep {} = "<step>"
 makeLenses ''DefData
 makeLenses ''Term
 
+data SyntaxError = SyntaxError Info String
+instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax error: " ++ s
 
 data PactError =
     EvalError Info String |
@@ -567,9 +575,8 @@ data PactError =
 
 instance Show PactError where
     show (EvalError i s) = show i ++ ": " ++ s
-    show (ArgsError (FunApp i (DefData fn _ _ as _)) args s) =
-        show i ++ ": " ++ show fn ++ ": " ++ s ++ ", expected [" ++ intercalate "," as ++ "]" ++
-                 if null args then "" else ", received [" ++ intercalate "," (map abbrev args) ++ "]"
+    show (ArgsError (FunApp i dd) args s) =
+        show i ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ show (_dType dd)
     show (TxFailure s) = "Failure: " ++ s
 
 evalError :: MonadError PactError m => Info -> String -> m a
@@ -757,15 +764,14 @@ maybeModuleName :: Term n -> Maybe ModuleName
 maybeModuleName = firstOf (tDefData.dModule._Just)
 
 data StackFrame = StackFrame {
-      _sTermModule :: Maybe ModuleName
-    , _sLoc :: !Info
-    , _sName :: !String
-    , _sArgs :: ![(String, String)]
+      _sfName :: !String
+    , _sfLoc :: !Info
+    , _sfApp :: Maybe (DefData,[String])
     }
 instance Show StackFrame where
-    show (StackFrame _ i n as) = renderInfo i ++ ": " ++ n ++ args
-        where args | null as = ""
-                   | otherwise = " [" ++ intercalate "," (map (\(k,v) -> k ++ "=" ++ v) as) ++ "]"
+    show (StackFrame n i a) = renderInfo i ++ ": " ++ n ++ f a
+        where f Nothing = ""
+              f (Just (dd,as)) = ", " ++ show dd ++ ", values=" ++ show as
 makeLenses ''StackFrame
 
 

@@ -48,8 +48,8 @@ void' = fmap . const . toTerm
 success :: Functor m => String -> m a -> m (Term Name)
 success = void'
 
-callNative :: Term Ref -> FunApp -> [Term Name] -> Eval e a -> Eval e a
-callNative t (FunApp i d) as = call (StackFrame (maybeModuleName t) i (defName d) (zip (_dArgs d) (map abbrev as)))
+callNative :: FunApp -> [Term Name] -> Eval e a -> Eval e a
+callNative (FunApp i d) as = call (StackFrame (defName d) i (Just (d,map abbrev as)))
 
 
 unsetInfo :: Term a -> Term a
@@ -67,9 +67,9 @@ parseMsgKey i msg key = do
                 Error e -> evalError' i $ msg ++ ": parse failed: " ++ e ++ ": " ++ show v
 
 
-bindReduce :: [(String,Term Ref)] -> Scope Int Term Ref -> Info -> (String -> Maybe (Term Ref)) -> Eval e (Term Name)
+bindReduce :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> (String -> Maybe (Term Ref)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
-  !(vs :: [(String,Term Ref)]) <- forM ps $ \(k,var) -> do
+  !(vs :: [(Arg,Term Ref)]) <- forM ps $ \(k,var) -> do
           var' <- reduce var
           case var' of
             (TLitString s) -> case lkpFun s of
@@ -77,15 +77,16 @@ bindReduce ps bd bi lkpFun = do
                                 Just v -> return $! (k,v)
             t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
-  call (StackFrame Nothing bi "<binding>" (map (second abbrev) vs)) $! reduce bd''
+  call (StackFrame ("(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
 
 
 defNative :: NativeDefName -> NativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
 defNative pactName fun ftype docs =
     return (asString pactName,
-     TNative (DefData (asString pactName) Defun Nothing (map _faName $ _ftArgs $ head ftype) (Just docs))
+     TNative (DefData (asString pactName) Defun Nothing ftype (Just docs))
              (NativeDFun pactName (unsafeCoerce fun))
-             ftype def)
+             def)
+
 
 defRNative :: NativeDefName -> RNativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)
@@ -95,4 +96,4 @@ foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
 funType :: Type -> [(String,Type)] -> FunType
-funType t as = FunType (map (uncurry FunArg) as) t
+funType t as = FunType (map (uncurry Arg) as) t

@@ -59,7 +59,7 @@ dbDefs = do
     ,defRNative "read" read'
      [funType (TyObject Nothing) [("table",TyString),("key",TyString),("cols",TyList (Just TyString))]]
      "Read row from TABLE for KEY returning object of COLS mapped to values, or entire record if empty. \
-     \`$(read 'accounts id 'balance 'ccy)`"
+     \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defRNative "keys" keys'
      [funType (TyList (Just TyString)) [("table",TyString)]]
@@ -117,7 +117,7 @@ userTable :: String -> Domain RowKey (Columns Persistable)
 userTable = UserTables . fromString
 
 read' :: RNativeFun e
-read' i (TLitString table:TLitString key:cs) = do
+read' i [TLitString table,TLitString key,TList cs _ _] = do
   cols <- forM cs $ \c ->
           case c of
             TLitString col -> return $ fromString col
@@ -161,7 +161,7 @@ withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
-bindToRow :: [(String,Term Ref)] ->
+bindToRow :: [(Arg,Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
 bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (fromString s) row)
 
@@ -213,7 +213,7 @@ guardTable :: FunApp -> String -> Eval e ()
 guardTable i table = do
   (tm,tk) <- getUserTableInfo (fromString table)
   let findMod _ r@Just {} = r
-      findMod sf _ = _sTermModule sf
+      findMod sf _ = firstOf (sfApp . _Just . _1 . dModule . _Just) sf
   r <- foldr findMod Nothing <$> use evalCallStack
   case r of
     (Just mn) | mn == tm -> return ()

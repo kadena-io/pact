@@ -135,12 +135,13 @@ setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 
 setsigs :: RNativeFun LibState
-setsigs i ts = do
+setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i ts
   setenv eeMsgSigs (S.fromList (map (PublicKey . BS.fromString) ks))
   return $ tStr "Setting transaction keys"
+setsigs i as = argsError i as
 
 setmsg :: RNativeFun LibState
 setmsg i [TLitString j] =

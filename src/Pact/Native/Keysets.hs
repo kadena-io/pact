@@ -67,7 +67,7 @@ defineKeyset i as = argsError i as
 
 
 withKeyset :: NativeFun e
-withKeyset i (k:bs) = reduce k >>= \t -> callNative k i [t] $ do
+withKeyset i (k:bs) = reduce k >>= \t -> callNative i [t] $ do
   (ksn,ks) <-
       case t of
           TLitString name -> do

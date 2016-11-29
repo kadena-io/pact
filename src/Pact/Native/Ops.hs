@@ -33,30 +33,30 @@ opDefs = foldDefs
     ,defCmp ">=" (cmp (`elem` [GT,EQ]))
     ,defCmp "<=" (cmp (`elem` [LT,EQ]))
     ,defRNative "=" (eq id) eqTy
-     "True if a equals b. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
+     "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
     ,defRNative "!=" (eq not) eqTy
-     "True if a does not equal b. `(!= \"hello\" \"goodbye\")`"
+     "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
     ,defLogic "or" (||)
     ,defLogic "and" (&&)
     ,defRNative "not" not' [unaryTy TyBool TyBool] "Boolean logic. `(not (> 1 2))`"
     ,defRNative "-" minus (coerceBinNum ++ unaryNumTys)
-     "Negate A, or subtract A from B. `(- 1.0)` `(- 3 2)`"
+     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
     ,defRNative "+" plus plusTy
      "Add numbers, concatenate strings/lists, or merge objects. \
      \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
      \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
     ,defRNative "*" (binop' (*) (*)) coerceBinNum
-     "Multiply A by B. `(* 0.5 10.0)` `(* 3 5)`"
+     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
     ,defRNative "/" divide' coerceBinNum
-     "Divide A by B. `(/ 10.0 2.0)` `(/ 8 3)`"
-    ,defRNative "^" pow coerceBinNum "Raise A to B power. `(^ 2 3)`"
-    ,defRNative "sqrt" (unopd sqrt) unopTy "Square root of A. `(sqrt 25)`"
-    ,defRNative "mod" mod' [binTy TyInteger TyInteger TyInteger] "A modulo B. `(mod 13 8)`"
-    ,defRNative "log" log' coerceBinNum "Log of B base A. `(log 2 256)`"
-    ,defRNative "ln" (unopd log) unopTy "Natural log of A. `(round (ln 60) 6)`"
-    ,defRNative "exp" (unopd exp) unopTy "Exp of A `(round (exp 3) 6)`"
+     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
+    ,defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
+    ,defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
+    ,defRNative "mod" mod' [binTy TyInteger TyInteger TyInteger] "X modulo Y. `(mod 13 8)`"
+    ,defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
+    ,defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
+    ,defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
     ,defRNative "abs" abs' [unaryTy TyDecimal TyDecimal,unaryTy TyInteger TyInteger]
-     "Absolute value of A. `(abs (- 10 23))`"
+     "Absolute value of X. `(abs (- 10 23))`"
     ,defTrunc "round" "Performs Banker's rounding" round
     ,defTrunc "ceiling" "Rounds up" ceiling
     ,defTrunc "floor" "Rounds down" floor
@@ -73,9 +73,9 @@ opDefs = foldDefs
           unopTy = [unaryTy numA numA]
 
 defTrunc :: NativeDefName -> String -> (Decimal -> Integer) -> Eval e (String,Term Name)
-defTrunc n desc op = defRNative n fun [funType TyDecimal [("a",TyDecimal),("prec",TyInteger)]
+defTrunc n desc op = defRNative n fun [funType TyDecimal [("x",TyDecimal),("prec",TyInteger)]
                                       ,unaryTy TyInteger TyDecimal]
-                     (desc ++ " value of decimal A as integer, or to PREC precision as decimal. " ++
+                     (desc ++ " value of decimal X as integer, or to PREC precision as decimal. " ++
                      "`(" ++ asString n ++ " 3.5)` `(" ++ asString n ++ " 100.15234 2)`")
     where fun :: RNativeFun e
           fun _ [TLiteral (LDecimal d) _] = return $ toTerm $ op d
@@ -101,9 +101,9 @@ eq _ i as = argsError i as
 {-# INLINE eq #-}
 
 unaryTy :: Type -> Type -> FunType
-unaryTy rt ta = funType rt [("a",ta)]
+unaryTy rt ta = funType rt [("x",ta)]
 binTy :: Type -> Type -> Type -> FunType
-binTy rt ta tb = funType rt [("a",ta),("b",tb)]
+binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> Eval e (String,Term Name)
 defCmp o f = let o' = asString o
@@ -111,7 +111,7 @@ defCmp o f = let o' = asString o
                  a = TyVar "a" [TyInteger,TyDecimal,TyString,TyTime]
              in
              defRNative o f [binTy TyBool a a] $
-             "True if A " ++ o' ++ " B." ++
+             "True if X " ++ o' ++ " Y." ++
              ex "1" "3" ++
              ex "5.24" "2.52" ++
              ex "\"abc\"" "\"def\""
