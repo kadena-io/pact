@@ -29,8 +29,9 @@ import Text.Parser.Token (natural)
 import Safe
 import Control.Arrow
 import Data.Foldable
-import Data.Monoid
 import Control.Applicative
+import Data.Semigroup ((<>))
+
 
 import Pact.Eval
 import Pact.Native.Db
@@ -65,34 +66,34 @@ nativesForDocs = do
 langDefs :: Eval e NativeDef
 langDefs = foldDefs
     [
-     defNative "if" if' [funType a [("cond",TyBool),("then",a),("else",a)]]
+     defNative "if" if' (funType a [("cond",TyBool),("then",a),("else",a)])
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
     ,defNative "map" map'
-     [funType (TyList (Just a)) [("app",lam b a),("list",TyList (Just b))]]
+     (funType (TyList (Just a)) [("app",lam b a),("list",TyList (Just b))])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
-     [funType a [("app",lam2 b b a),("init",a),("list",TyList (Just b))]]
+     (funType a [("app",lam2 b b a),("init",a),("list",TyList (Just b))])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
 
     ,defRNative "list" list
-     [funType (TyList Nothing) [("elems",TyRest)]]
+     (funType (TyList Nothing) [("elems",TyRest)])
      "Create list from ELEMS. `(list 1 2 3)`"
 
     ,defNative "filter" filter'
-     [funType (TyList (Just a)) [("app",lam a TyBool),("list",TyList (Just a))]]
+     (funType (TyList (Just a)) [("app",lam a TyBool),("list",TyList (Just a))])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defNative "compose" compose [funType c [("x",lam a b),("y", lam b c),("value",a)]]
+     ,defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defRNative "length" length' [funType TyInteger [("x",listA)]]
+     ,defRNative "length" length' (funType TyInteger [("x",listA)])
      "Compute length of X, which can be a list, a string, or an object.\
      \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
@@ -104,50 +105,50 @@ langDefs = foldDefs
      "Drop COUNT values from LIST (or string). If negative, drop from end.\
      \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
 
-    ,defRNative "remove" remove [funType (TyObject Nothing) [("key",TyString),("object",TyObject Nothing)]]
+    ,defRNative "remove" remove (funType (TyObject Nothing) [("key",TyString),("object",TyObject Nothing)])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' [funType a [("idx",TyInteger),("list",TyList (Just a))]
-                         ,funType a [("idx",TyString),("object",TyObject Nothing)]]
+    ,defRNative "at" at' (funType a [("idx",TyInteger),("list",TyList (Just a))] <>
+                          funType a [("idx",TyString),("object",TyObject Nothing)])
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "enforce" enforce [funType TyBool [("test",TyBool),("msg",TyString)]]
+    ,defRNative "enforce" enforce (funType TyBool [("test",TyBool),("msg",TyString)])
      "Fail transaction with MSG if TEST fails, or returns true. \
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
 
-    ,defRNative "format" format [funType TyString [("template",TyString),("vars",TyRest)]]
+    ,defRNative "format" format (funType TyString [("template",TyString),("vars",TyRest)])
      "Interpolate VARS into TEMPLATE using {}. \
      \`(format \"My {} has {}\" \"dog\" \"fleas\")`"
 
-    ,defRNative "is-string" (isX isString) [isTy TyString]
+    ,defRNative "is-string" (isX isString) (isTy TyString)
      "Return VAL, enforcing string type. `!(is-string 123)` `(is-string \"abc\")`"
-    ,defRNative "is-integer" (isX isInteger) [isTy TyInteger]
+    ,defRNative "is-integer" (isX isInteger) (isTy TyInteger)
      "Return VAL, enforcing integer type `(is-integer 123)` `!(is-integer \"abc\")`"
-    ,defRNative "is-bool" (isX isBool) [isTy TyBool]
+    ,defRNative "is-bool" (isX isBool) (isTy TyBool)
      "Return VAL, enforcing boolean type. `(is-bool true)`"
-    ,defRNative "is-decimal" (isX isDecimal) [isTy TyDecimal]
+    ,defRNative "is-decimal" (isX isDecimal) (isTy TyDecimal)
      "Return VAL, enforcing decimal type. `(is-decimal 123.45)`"
-    ,defRNative "is-time" (isX isTime) [isTy TyTime]
+    ,defRNative "is-time" (isX isTime) (isTy TyTime)
      "Return VAL, enforcing time type. `(is-time (time \"2016-07-22T11:26:35Z\"))`"
 
-    ,defRNative "pact-txid" pactTxId [funType TyInteger []]
+    ,defRNative "pact-txid" pactTxId (funType TyInteger [])
      "Return reference tx id for pact execution."
 
-    ,defRNative "read-decimal" readDecimal [funType TyDecimal [("key",TyString)]]
+    ,defRNative "read-decimal" readDecimal (funType TyDecimal [("key",TyString)])
      "Parse KEY string value from message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
-    ,defRNative "read-integer" readInteger [funType TyInteger [("key",TyString)]]
+    ,defRNative "read-integer" readInteger (funType TyInteger [("key",TyString)])
      "Parse KEY string value from message data body as integer. `$(read-integer \"age\")`"
-    ,defRNative "read-msg" readMsg [funType a [("key",TyString)]]
+    ,defRNative "read-msg" readMsg (funType a [("key",TyString)])
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative "bind" bind [funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)]]
+    ,defNative "bind" bind (funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)])
      "Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
 
-    ,defRNative "typeof" typeof' [funType TyString [("x",a)]]
+    ,defRNative "typeof" typeof' (funType TyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ]
     where a = TyVar "a" []
@@ -155,9 +156,9 @@ langDefs = foldDefs
           c = TyVar "c" []
           listA = TyVar "a" [TyList Nothing,TyString,TyObject Nothing]
           listStringA = TyVar "a" [TyList Nothing,TyString]
-          takeDrop = [funType listStringA [("count",TyInteger),("list",listStringA)]]
-          lam x y = TyFun [funType y [("x",x)]]
-          lam2 x y z = TyFun [funType z [("x",x),("y",y)]]
+          takeDrop = funType listStringA [("count",TyInteger),("list",listStringA)]
+          lam x y = TyFun $ funType' y [("x",x)]
+          lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
           isTy t = funType t [("val",a)]
 
 
@@ -181,10 +182,10 @@ map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as def (_faInfo i) -- runtime bottom list type OK
+list i as = return $ TList as def (_faInfo i)
 
 liftTerm :: Term Name -> Term Ref
-liftTerm a = TVar (Direct a) (either def id (typeof a)) def -- runtime bottom type OK
+liftTerm a = TVar (Direct a) def
 
 
 fold' :: NativeFun e

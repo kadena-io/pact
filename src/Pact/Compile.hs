@@ -38,6 +38,7 @@ import Control.Lens (firstOf)
 import Data.Maybe
 import Data.Default
 import Data.Decimal
+import Data.List.NonEmpty (NonEmpty (..))
 
 symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"
@@ -202,7 +203,7 @@ doDef es defType ai d i =
           let argsn = map (Name . _aName) args
               defBody = abstract (`elemIndex` argsn) <$> runBody body i
           dty <- FunType <$> pure args <*> maybeTyVar ty
-          TDef <$> pure (DefData dn defType Nothing [dty] ddocs)
+          TDef <$> pure (DefData dn defType Nothing (dty :| []) ddocs)
                    <*> defBody <*> pure d <*> pure i
 
 freshTyVar :: Compile Type
@@ -298,20 +299,21 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
               let ks = map (Name . _aName . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
                    (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure BindKV <*> pure bi
-              TApp <$> mkVar a q Nothing ai <*> pure (as ++ [bdg]) <*> pure li
-          _ -> TApp <$> mkVar a q Nothing ai <*> mapM run rest <*> pure li
+              TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
+          _ -> TApp <$> mkVar a q ai <*> mapM run rest <*> pure li
 
 run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure def <*> pure i
 run (EBinding _ i) = syntaxError i "Unexpected binding"
 run (ESymbol s i) = return $ TLiteral (LString s) i
 run (ELiteral l i) = return $ TLiteral l i
 run (EAtom s q t i) | s `elem` reserved = syntaxError i $ "Unexpected reserved word: " ++ s
-                  | otherwise = mkVar s q t i
+                    | isNothing t = mkVar s q i
+                    | otherwise = syntaxError i "Invalid typed var"
 run e = syntaxError (_eInfo e) $ "Unexpected expression: " ++ show e
 {-# INLINE run #-}
 
-mkVar :: String -> Maybe String -> Maybe Type -> Info -> Compile (Term Name)
-mkVar s q t i = TVar <$> pure (maybe (Name s) (QName $ fromString s) q) <*> maybeTyVar t <*> pure i
+mkVar :: String -> Maybe String -> Info -> Compile (Term Name)
+mkVar s q i = TVar <$> pure (maybe (Name s) (QName $ fromString s) q) <*> pure i
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]

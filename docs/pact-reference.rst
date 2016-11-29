@@ -821,7 +821,7 @@ variables to values used in BODY.
 compose
 ~~~~~~~
 
-*x* ``function: [(x:<a>) -> <b>]`` *y* ``function: [(x:<b>) -> <c>]``
+*x* ``function: (x:<a>) -> <b>`` *y* ``function: (x:<b>) -> <c>``
 *value* ``<a>`` *→* ``<c>``
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of
@@ -862,7 +862,7 @@ Fail transaction with MSG if TEST fails, or returns true.
 filter
 ~~~~~~
 
-*app* ``function: [(x:<a>) -> bool]`` *list* ``[<a>]`` *→* ``[<a>]``
+*app* ``function: (x:<a>) -> bool`` *list* ``[<a>]`` *→* ``[<a>]``
 
 Filter LIST by applying APP to each element to get a boolean determining
 inclusion.
@@ -875,8 +875,8 @@ inclusion.
 fold
 ~~~~
 
-*app* ``function: [(x:<b> y:<b>) -> <a>]`` *init* ``<a>``
-*list* ``[<b>]`` *→* ``<a>``
+*app* ``function: (x:<b> y:<b>) -> <a>`` *init* ``<a>`` *list* ``[<b>]``
+*→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
 starting with INIT.
@@ -1005,7 +1005,7 @@ Create list from ELEMS.
 map
 ~~~
 
-*app* ``function: [(x:<b>) -> <a>]`` *list* ``[<b>]`` *→* ``[<a>]``
+*app* ``function: (x:<b>) -> <a>`` *list* ``[<b>]`` *→* ``[<a>]``
 
 Apply elements in LIST as last arg to APP, returning list of results.
 
@@ -1157,10 +1157,13 @@ Return all keys in TABLE.
 read
 ~~~~
 
-*table* ``string`` *key* ``string`` *cols* ``[string]`` *→* ``object``
+*table* ``string`` *key* ``string`` *→* ``object``
 
-Read row from TABLE for KEY returning object of COLS mapped to values,
-or entire record if empty.
+*table* ``string`` *key* ``string`` *columns* ``[string]``
+*→* ``object``
+
+Read row from TABLE for KEY returning database record object, or just
+COLUMNS if specified.
 
 .. code:: lisp
 

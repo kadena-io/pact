@@ -30,43 +30,45 @@ import Pact.Native.Internal
 import Control.Lens hiding (from,to,(.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
+import Data.Semigroup ((<>))
 
 
 
 dbDefs :: Eval e NativeDef
 dbDefs = do
-  let writeArgs = [funType TyString [("table",TyString),("key",TyString),("object",TyObject Nothing)]]
+  let writeArgs = funType TyString [("table",TyString),("key",TyString),("object",TyObject Nothing)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
 
   foldDefs
     [defRNative "create-table" createTable'
-     [funType TyString [("table",TyString),("module",TyString)]]
+     (funType TyString [("table",TyString),("module",TyString)])
      "Create table TABLE guarded by module MODULE. `$(create-table 'accounts 'accounts-admin)`"
 
     ,defNative "with-read" withRead
-     [funType TyString [("table",TyString),("key",TyString),("bindings",TyBinding)]]
+     (funType TyString [("table",TyString),("key",TyString),("bindings",TyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defNative "with-default-read" withDefaultRead
-     [funType TyString [("table",TyString),("key",TyString),("defaults",TyObject Nothing),("bindings",TyBinding)]]
+     (funType TyString [("table",TyString),("key",TyString),("defaults",TyObject Nothing),("bindings",TyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defRNative "read" read'
-     [funType (TyObject Nothing) [("table",TyString),("key",TyString),("cols",TyList (Just TyString))]]
-     "Read row from TABLE for KEY returning object of COLS mapped to values, or entire record if empty. \
+     (funType (TyObject Nothing) [("table",TyString),("key",TyString)] <>
+      funType (TyObject Nothing) [("table",TyString),("key",TyString),("columns",TyList (Just TyString))])
+     "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
      \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defRNative "keys" keys'
-     [funType (TyList (Just TyString)) [("table",TyString)]]
+     (funType (TyList (Just TyString)) [("table",TyString)])
      "Return all keys in TABLE. `$(keys 'accounts)`"
 
     ,defRNative "txids" txids'
-     [funType (TyList (Just TyInteger)) [("table",TyString),("txid",TyInteger)]]
+     (funType (TyList (Just TyInteger)) [("table",TyString),("txid",TyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
@@ -79,15 +81,15 @@ dbDefs = do
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
 
     ,defRNative "txlog" txlog
-     [funType (TyList (Just TyValue)) [("table",TyString),("txid",TyInteger)]]
+     (funType (TyList (Just TyValue)) [("table",TyString),("txid",TyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
 
     ,defRNative "describe-table" descTable
-     [funType TyValue [("table",TyString)]] "Get metadata for TABLE"
+     (funType TyValue [("table",TyString)]) "Get metadata for TABLE"
     ,defRNative "describe-keyset" descKeySet
-     [funType TyValue [("keyset",TyString)]] "Get metadata for KEYSET"
+     (funType TyValue [("keyset",TyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
-     [funType TyValue [("module",TyString)]] "Get metadata for MODULE"
+     (funType TyValue [("module",TyString)]) "Get metadata for MODULE"
     ]
 
 descTable :: RNativeFun e
@@ -117,11 +119,14 @@ userTable :: String -> Domain RowKey (Columns Persistable)
 userTable = UserTables . fromString
 
 read' :: RNativeFun e
-read' i [TLitString table,TLitString key,TList cs _ _] = do
-  cols <- forM cs $ \c ->
+read' i as@(TLitString table:TLitString key:rest) = do
+  cols <- case rest of
+    [] -> return []
+    [TList cs _ _] -> forM cs $ \c ->
           case c of
             TLitString col -> return $ fromString col
             _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
+    _ -> argsError i as
   guardTable i table
   mrow <- readRow (userTable table) (fromString key)
   case mrow of

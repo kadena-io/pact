@@ -30,7 +30,7 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### compose {#compose}
 
-*x*&nbsp;`function: [(x:<a>) -> <b>]` *y*&nbsp;`function: [(x:<b>) -> <c>]` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
+*x*&nbsp;`function: (x:<a>) -> <b>` *y*&nbsp;`function: (x:<b>) -> <c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
 
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of X. 
@@ -68,7 +68,7 @@ pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 
 ### filter {#filter}
 
-*app*&nbsp;`function: [(x:<a>) -> bool]` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`function: (x:<a>) -> bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Filter LIST by applying APP to each element to get a boolean determining inclusion.
@@ -80,7 +80,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 
 ### fold {#fold}
 
-*app*&nbsp;`function: [(x:<b> y:<b>) -> <a>]` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`function: (x:<b> y:<b>) -> <a>` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
 Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 
@@ -208,7 +208,7 @@ pact> (list 1 2 3)
 
 ### map {#map}
 
-*app*&nbsp;`function: [(x:<b>) -> <a>]` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`function: (x:<b>) -> <a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Apply elements in LIST as last arg to APP, returning list of results. 
@@ -359,10 +359,12 @@ Return all keys in TABLE.
 
 ### read {#read}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *cols*&nbsp;`[string]` *&rarr;*&nbsp;`object`
+*table*&nbsp;`string` *key*&nbsp;`string` *&rarr;*&nbsp;`object`
+
+*table*&nbsp;`string` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object`
 
 
-Read row from TABLE for KEY returning object of COLS mapped to values, or entire record if empty. 
+Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. 
 ```lisp
 (read 'accounts id ['balance 'ccy])
 ```

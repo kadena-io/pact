@@ -80,7 +80,7 @@ bindReduce ps bd bi lkpFun = do
   call (StackFrame ("(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
 
 
-defNative :: NativeDefName -> NativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
+defNative :: NativeDefName -> NativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
 defNative pactName fun ftype docs =
     return (asString pactName,
      TNative (DefData (asString pactName) Defun Nothing ftype (Just docs))
@@ -88,12 +88,16 @@ defNative pactName fun ftype docs =
              def)
 
 
-defRNative :: NativeDefName -> RNativeFun e -> [FunType] -> String -> Eval e (String,Term Name)
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= \as' -> f fi as'
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
-funType :: Type -> [(String,Type)] -> FunType
-funType t as = FunType (map (uncurry Arg) as) t
+funType :: Type -> [(String,Type)] -> FunTypes
+funType t as = funTypes $ funType' t as
+
+
+funType' :: Type -> [(String,Type)] -> FunType
+funType' t as = FunType (map (uncurry Arg) as) t

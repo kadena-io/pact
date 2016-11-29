@@ -67,6 +67,8 @@ import Data.Decimal
 import Data.Ratio
 import qualified Data.Vector as V
 import Data.Hashable
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Foldable
 import Control.Concurrent.MVar
 
 
@@ -187,6 +189,10 @@ data FunType = FunType {
   } deriving (Eq,Ord)
 instance Show FunType where show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
 
+type FunTypes = NonEmpty FunType
+funTypes :: FunType -> FunTypes
+funTypes ft = ft :| []
+
 data Type =
     TyInteger |
     TyDecimal |
@@ -197,7 +203,7 @@ data Type =
     TyObject { _toType :: Maybe TypeName } |
     TyValue |
     TyKeySet |
-    TyFun { _tfType :: [FunType] } |
+    TyFun { _tfType :: FunType } |
     TyBinding |
     TyRest |
     TyVar { _tvId :: String, _tvConstraint :: [Type] }
@@ -226,7 +232,7 @@ instance Show Type where
   show TyObject {..} = maybe tyObject (\t -> "{" ++ asString t ++ "}") _toType
   show TyValue = tyValue
   show TyKeySet = tyKeySet
-  show TyFun {..} = if null _tfType then "function" else "function: " ++ show _tfType
+  show TyFun {..} = "function: " ++ show _tfType
   show TyBinding = "binding"
   show TyRest = "@rest"
   show TyVar {..} = "<" ++ _tvId ++
@@ -300,7 +306,7 @@ data DefData = DefData {
       _dName :: !String
     , _dDefType :: !DefType
     , _dModule :: !(Maybe ModuleName)
-    , _dType :: [FunType]
+    , _dType :: !FunTypes
     , _dDocs :: !(Maybe String)
 } deriving (Eq)
 
@@ -309,9 +315,8 @@ instance Show DefData where
         "(defconst " ++ n ++ maybe "" ((" " ++) . show) d ++ ")"
     show (DefData n t _ as d) =
       "(" ++ defTypeRep t ++ " " ++ n ++ ft as ++ maybe "" ((" " ++) . show) d ++ ")"
-      where ft [] = ""
-            ft [t'] = " " ++ show t'
-            ft ts = " " ++ show ts
+      where ft (t' :| []) = " " ++ show t'
+            ft ts = " " ++ show (toList ts)
 
 defName :: DefData -> String
 defName (DefData n _ (Just mn) _ _) = asString mn ++ "." ++ n
@@ -385,7 +390,6 @@ data Term n =
     } |
     TVar {
       _tVar :: !n
-    , _tType :: Type
     , _tInfo :: !Info
     } |
     TBinding {
@@ -423,7 +427,7 @@ instance Show n => Show (Term n) where
     show (TNative di _ _ ) = "(TNative " ++ show di ++ ")"
     show (TConst n _ _ _) = "(TConst " ++ show n ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
-    show (TVar n t _) = "(TVar " ++ show n ++ ":" ++ show t ++ ")"
+    show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
     show (TObject bs ot _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
                              maybe "" ((":" ++) . show) ot ++ ")"
@@ -443,14 +447,14 @@ instance Applicative Term where
     (<*>) = ap
 
 instance Monad Term where
-    return a = TVar a def def
+    return a = TVar a def
     TModule n k ds b c i >>= f = TModule n k ds (b >>>= f) c i
     TList bs t i >>= f = TList (map (>>= f) bs) t i
     TDef d b e i >>= f = TDef d (b >>>= f) e i
     TNative d n i >>= _ = TNative d n i
     TConst d c t i >>= f = TConst d (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
-    TVar n _ i >>= f = (f n) { _tInfo = i }
+    TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f) c i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) t i
     TLiteral l i >>= _ = TLiteral l i
@@ -502,11 +506,11 @@ typeof t = case t of
             LTime {} -> Right TyTime
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Right $ TyFun (_dType _tDefData)
-      TNative {..} -> Right $ TyFun (_dType _tDefData)
+      TDef {..} -> Left (defTypeRep $ _dDefType _tDefData)
+      TNative {..} -> Left "defun"
       TConst {..} -> Right (_aType _tConstName)
       TApp {..} -> Left "app"
-      TVar {..} -> Right _tType
+      TVar {..} -> Left "var"
       TBinding {} -> Left "binding"
       TObject {..} -> Right $ TyObject _tUserType
       TKeySet {} -> Right TyKeySet
@@ -555,7 +559,7 @@ abbrev TObject {} = "<object>"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
 abbrev (TUse m _) = "<use '" ++ show m ++ ">"
-abbrev (TVar s _ _) = show s
+abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 

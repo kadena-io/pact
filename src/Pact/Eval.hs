@@ -69,7 +69,7 @@ enforceKeySet i ksn ks = do
   sigs <- view eeMsgSigs
   let keys' = _pksKeys ks
       matched = S.size $ S.intersection (S.fromList keys') sigs
-      app = TApp (TVar (Name $ _pksPredFun ks) def def) -- runtime bottom type OK
+      app = TApp (TVar (Name $ _pksPredFun ks) def)
             [toTerm (length keys'),toTerm matched] i
   app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
   r <- reduce app'
@@ -118,11 +118,11 @@ loadModule mn bod1 mi = do
               TConst dd _ _ _ -> return (_aName dd,set (tDefData.dModule) (Just mn) t)
               _ -> evalError (_tInfo t) "Non-def in module body")
       t -> evalError (_tInfo t) "Malformed module"
-  cs <-
+  cs :: [SCC (Term (Either String Ref), String, [String])] <-
     fmap stronglyConnCompR $ forM (M.toList modDefs1) $ \(dn,d) ->
       call (StackFrame (abbrev d) (_tInfo d) Nothing) $
       do
-        d' <- forM d $ \f -> do
+        d' <- forM d $ \(f :: Name) -> do
                 dm <- resolveRef f
                 case (dm,f) of
                   (Just t,_) -> return (Right t)
@@ -165,7 +165,7 @@ unify m (Left f) = m M.! f
 -- | Recursive reduction.
 reduce ::  Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
-reduce (TVar t _ _) = case t of Direct n -> return n; Ref r -> reduce r
+reduce (TVar t _) = case t of Direct n -> return n; Ref r -> reduce r
 reduce (TLiteral l i) = return $ TLiteral l i
 reduce (TKeySet k i) = return $ TKeySet k i
 reduce (TList bs _ _) = last <$> mapM reduce bs
@@ -190,8 +190,8 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
                      as `atMay` i
 
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceApp (TVar (Direct t) _ _) as ai = reduceDef t as ai
-reduceApp (TVar (Ref r) _ _) as ai = reduceApp r as ai
+reduceApp (TVar (Direct t) _) as ai = reduceDef t as ai
+reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp (TDef dd@(DefData _ dt _ _ _) bod _exp _di) as ai = do
       let bod' = instantiate (resolveArg ai as) bod
       call (StackFrame (defName dd) ai (Just (dd,map abbrev as))) $

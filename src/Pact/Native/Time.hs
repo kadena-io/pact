@@ -25,22 +25,23 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
+import Data.Semigroup
 
 
 timeDefs :: Eval e NativeDef
 timeDefs = foldDefs
-    [defRNative "time" time [funType TyTime [("utcval",TyString)]] $
+    [defRNative "time" time (funType TyTime [("utcval",TyString)]) $
      "Construct time from UTCVAL using ISO8601 format (" ++ simpleISO8601 ++ "). " ++
      "`(time \"2016-07-22T11:26:35Z\")`"
-    ,defRNative "parse-time" parseTime' [funType TyTime [("format",TyString),("utcval",TyString)]]
+    ,defRNative "parse-time" parseTime' (funType TyTime [("format",TyString),("utcval",TyString)])
      "Construct time from UTCVAL using FORMAT. \
      \See [strftime docs](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html#index-strftime) \
      \for format info. `(parse-time \"%F\" \"2016-09-12\")`"
-    ,defRNative "add-time" addTime [funType TyTime [("time",TyTime),("seconds",TyDecimal)],
-                                    funType TyTime [("time",TyTime),("seconds",TyInteger)]]
+    ,defRNative "add-time" addTime (funType TyTime [("time",TyTime),("seconds",TyDecimal)] <>
+                                    funType TyTime [("time",TyTime),("seconds",TyInteger)])
      "Add SECONDS to TIME; SECONDS can be integer or decimal. \
      \`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
-    ,defRNative "diff-time" diffTime [funType TyDecimal [("time1",TyTime),("time2",TyTime)]]
+    ,defRNative "diff-time" diffTime (funType TyDecimal [("time1",TyTime),("time2",TyTime)])
      "Compute difference between TIME1 and TIME2 in seconds. \
      \`(diff-time (parse-time \"%T\" \"16:00:00\") (parse-time \"%T\" \"09:30:00\"))`"
     ,defRNative "minutes" (timeMult 60) multType
@@ -51,8 +52,8 @@ timeDefs = foldDefs
     ,defRNative "days" (timeMult $ 60 * 60 * 24) multType "N days, for use with 'add-time' \
      \`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
     ]
-    where multType = [funType TyDecimal [("n",TyDecimal)],
-                      funType TyDecimal [("n",TyInteger)]]
+    where multType = funType TyDecimal [("n",TyDecimal)] <>
+                     funType TyDecimal [("n",TyInteger)]
 
 
 time :: RNativeFun e

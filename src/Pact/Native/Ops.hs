@@ -24,6 +24,7 @@ import Pact.Native.Internal
 import Pact.Types
 import Data.Default
 import qualified Data.Map.Strict as M
+import Data.Semigroup
 
 
 opDefs :: Eval e NativeDef
@@ -38,8 +39,8 @@ opDefs = foldDefs
      "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
     ,defLogic "or" (||)
     ,defLogic "and" (&&)
-    ,defRNative "not" not' [unaryTy TyBool TyBool] "Boolean logic. `(not (> 1 2))`"
-    ,defRNative "-" minus (coerceBinNum ++ unaryNumTys)
+    ,defRNative "not" not' (unaryTy TyBool TyBool) "Boolean logic. `(not (> 1 2))`"
+    ,defRNative "-" minus (coerceBinNum <> unaryNumTys)
      "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
     ,defRNative "+" plus plusTy
      "Add numbers, concatenate strings/lists, or merge objects. \
@@ -51,30 +52,29 @@ opDefs = foldDefs
      "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
     ,defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
     ,defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
-    ,defRNative "mod" mod' [binTy TyInteger TyInteger TyInteger] "X modulo Y. `(mod 13 8)`"
+    ,defRNative "mod" mod' (binTy TyInteger TyInteger TyInteger) "X modulo Y. `(mod 13 8)`"
     ,defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
     ,defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
     ,defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
-    ,defRNative "abs" abs' [unaryTy TyDecimal TyDecimal,unaryTy TyInteger TyInteger]
+    ,defRNative "abs" abs' (unaryTy TyDecimal TyDecimal <> unaryTy TyInteger TyInteger)
      "Absolute value of X. `(abs (- 10 23))`"
     ,defTrunc "round" "Performs Banker's rounding" round
     ,defTrunc "ceiling" "Rounds up" ceiling
     ,defTrunc "floor" "Rounds down" floor
     ]
-    where eqTy = [binTy TyBool eqA eqA]
+    where eqTy = binTy TyBool eqA eqA
           eqA = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList Nothing,TyObject Nothing,TyKeySet]
           numA = numV "a"
           numV a = TyVar a [TyInteger,TyDecimal]
-          coerceBinNum = [binTy numA numA numA
-                         ,binTy TyDecimal numA (numV "b")]
-          unaryNumTys = [unaryTy numA numA]
+          coerceBinNum = binTy numA numA numA <> binTy TyDecimal numA (numV "b")
+          unaryNumTys = unaryTy numA numA
           plusA = TyVar "a" [TyString,TyList Nothing,TyObject Nothing]
-          plusTy = coerceBinNum ++ [binTy plusA plusA plusA]
-          unopTy = [unaryTy numA numA]
+          plusTy = coerceBinNum <> binTy plusA plusA plusA
+          unopTy = unaryTy numA numA
 
 defTrunc :: NativeDefName -> String -> (Decimal -> Integer) -> Eval e (String,Term Name)
-defTrunc n desc op = defRNative n fun [funType TyDecimal [("x",TyDecimal),("prec",TyInteger)]
-                                      ,unaryTy TyInteger TyDecimal]
+defTrunc n desc op = defRNative n fun (funType TyDecimal [("x",TyDecimal),("prec",TyInteger)] <>
+                                      unaryTy TyInteger TyDecimal)
                      (desc ++ " value of decimal X as integer, or to PREC precision as decimal. " ++
                      "`(" ++ asString n ++ " 3.5)` `(" ++ asString n ++ " 100.15234 2)`")
     where fun :: RNativeFun e
@@ -86,7 +86,7 @@ defTrunc n desc op = defRNative n fun [funType TyDecimal [("x",TyDecimal),("prec
           fun i as = argsError i as
 
 defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Eval e (String,Term Name)
-defLogic n bop = defRNative n fun [binTy TyBool TyBool TyBool] $
+defLogic n bop = defRNative n fun (binTy TyBool TyBool TyBool) $
                  "Boolean logic. `(" ++ asString n ++ " true false)`"
     where fun _ [TLiteral (LBool a) _,TLiteral (LBool b) _] = return $ toTerm $ a `bop` b
           fun i as = argsError i as
@@ -100,9 +100,9 @@ eq f _ [a,b] = return $ toTerm $ f (a `termEq` b)
 eq _ i as = argsError i as
 {-# INLINE eq #-}
 
-unaryTy :: Type -> Type -> FunType
+unaryTy :: Type -> Type -> FunTypes
 unaryTy rt ta = funType rt [("x",ta)]
-binTy :: Type -> Type -> Type -> FunType
+binTy :: Type -> Type -> Type -> FunTypes
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> Eval e (String,Term Name)
@@ -110,7 +110,7 @@ defCmp o f = let o' = asString o
                  ex a' b = " `(" ++ o' ++ " " ++ a' ++ " " ++ b ++ ")`"
                  a = TyVar "a" [TyInteger,TyDecimal,TyString,TyTime]
              in
-             defRNative o f [binTy TyBool a a] $
+             defRNative o f (binTy TyBool a a) $
              "True if X " ++ o' ++ " Y." ++
              ex "1" "3" ++
              ex "5.24" "2.52" ++
