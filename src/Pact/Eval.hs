@@ -171,7 +171,7 @@ reduce (TKeySet k i) = return $ TKeySet k i
 reduce (TList bs _ _) = last <$> mapM reduce bs
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
-reduce (TConst _ _ Rt _ _) = reduce t
+reduce (TConst _ _ t _ _) = reduce t
 reduce (TObject ps t i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' t i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
