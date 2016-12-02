@@ -33,9 +33,9 @@
             ticker cusip discount cost settlement-date)
         ))
 
-  (defun inventory-key (owner cusip)
+  (defun inventory-key (owner:string cusip:string)
     "Make composite key from OWNER and CUSIP"
-    (format "{}:{}" (is-string owner) (is-string cusip))
+    (format "{}:{}" owner cusip)
   )
 
   (defun issue-inventory (owner cusip qty price date)

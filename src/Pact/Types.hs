@@ -379,6 +379,7 @@ data Term n =
     } |
     TConst {
       _tConstName :: !Arg
+    , _tConstModule :: Maybe ModuleName
     , _tConstVal :: !(Term n)
     , _tConstDocs :: !(Maybe String)
     , _tInfo :: !Info
@@ -425,7 +426,7 @@ instance Show n => Show (Term n) where
     show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybe "" ((":" ++) . show) t
     show (TDef di _ _ _) = "(TDef " ++ show di ++ ")"
     show (TNative di _ _ ) = "(TNative " ++ show di ++ ")"
-    show (TConst n _ _ _) = "(TConst " ++ show n ++ ")"
+    show (TConst n _ _ _ _) = "(TConst " ++ show n ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
@@ -452,7 +453,7 @@ instance Monad Term where
     TList bs t i >>= f = TList (map (>>= f) bs) t i
     TDef d b e i >>= f = TDef d (b >>>= f) e i
     TNative d n i >>= _ = TNative d n i
-    TConst d c t i >>= f = TConst d (c >>= f) t i
+    TConst d m c t i >>= f = TConst d m (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f) c i

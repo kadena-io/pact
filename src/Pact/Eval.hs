@@ -115,7 +115,7 @@ loadModule mn bod1 mi = do
             case t of
               TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
               TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TConst dd _ _ _ -> return (_aName dd,set (tDefData.dModule) (Just mn) t)
+              TConst n _ _ _ _ -> return (_aName n,set tConstModule (Just mn) t)
               _ -> evalError (_tInfo t) "Non-def in module body")
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either String Ref), String, [String])] <-
@@ -171,7 +171,7 @@ reduce (TKeySet k i) = return $ TKeySet k i
 reduce (TList bs _ _) = last <$> mapM reduce bs
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
-reduce (TConst _ t _ _) = reduce t
+reduce (TConst _ _ Rt _ _) = reduce t
 reduce (TObject ps t i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' t i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i

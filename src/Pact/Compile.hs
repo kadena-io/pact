@@ -273,7 +273,7 @@ doConst es i = case es of
     mkConst dn ty v docs = do
       v' <- run v
       a <- Arg <$> pure dn <*> maybeTyVar ty
-      return $ TConst a v' docs i
+      return $ TConst a Nothing v' docs i
 
 
 run :: Exp -> Compile (Term Name)
