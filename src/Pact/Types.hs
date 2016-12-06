@@ -209,6 +209,10 @@ data Type =
     TyVar { _tvId :: String, _tvConstraint :: [Type] }
     deriving (Eq,Ord)
 
+makeLenses ''Type
+makeLenses ''FunType
+makeLenses ''Arg
+
 instance Default Type where def = TyVar "_" []
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet :: String

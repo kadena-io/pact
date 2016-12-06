@@ -15,21 +15,17 @@ import Control.Lens
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
-import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Set (Set)
 import qualified Data.Set as S
 import Control.Monad
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.List
 import Control.Arrow hiding ((<+>))
 import Data.Aeson
-import Data.Data
-import Data.Data.Lens
-import Data.Maybe
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Data.String
+import Data.Maybe
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 data CheckerException = CheckerException Info String deriving (Eq)
@@ -39,10 +35,14 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
 
+newtype TcName = TcName String deriving (Eq,IsString,Pretty,Ord)
+instance Show TcName where show (TcName s) = show s
+
 data TcState = TcState {
-  _tcBind :: Int
+  _tcBind :: Int,
+  _tcVars :: M.Map TcName (S.Set Type)
   } deriving (Eq,Show)
-instance Default TcState where def = TcState 0
+instance Default TcState where def = TcState 0 def
 makeLenses ''TcState
 
 newtype TC a = TC { unTC :: StateT TcState IO a }
@@ -70,13 +70,13 @@ data Fun t =
     _fInfo :: Info,
     _fName :: String,
     _fType :: FunType,
-    _fArgs :: [t], -- Just names not values. Need to track Arg metadata.
-    _fBody :: [TcTerm t] } -- these are AST entries
+    _fArgs :: [t],
+    _fBody :: [TcTerm t] }
   deriving (Eq,Functor,Foldable)
 
 instance Show t => Show (Fun t) where
-  show (FNative _ a b) = pwords ["Native",show a]
-  show (FDefun _ a b c d) = pwords ["Defun",show a,show c,show d]
+  show (FNative _ a _b) = pwords ["Native",show a]
+  show (FDefun _ a _b c d) = pwords ["Defun",show a,show c,show d]
 
 ind :: Doc
 ind = string " "
@@ -94,22 +94,22 @@ data TcTerm t =
   TcApp {
   _tcInfo :: Info,
   _tcAppFun :: Fun t,
-  _tcAppArgs :: [TcTerm t] -- these are AST entries: apps, bindings, lists, objects, lits, or vars/refs.
+  _tcAppArgs :: [TcTerm t]
   } |
   TcBinding {
   _tcInfo :: Info,
-  _tcBindings :: [(t,TcTerm t)], -- names and values, need to track Arg metadata.
-  _tcBody :: [TcTerm t], -- AST
+  _tcBindings :: [(t,TcTerm t)],
+  _tcBody :: [TcTerm t],
   _tcBindCtx :: BindCtx
   } |
   TcList {
   _tcInfo :: Info,
-  _tcList :: [TcTerm t], -- AST
+  _tcList :: [TcTerm t],
   _tcListType :: Maybe Type
   } |
   TcObject {
   _tcInfo :: Info,
-  _tcObject :: [(TcTerm t,TcTerm t)], -- AST
+  _tcObject :: [(TcTerm t,TcTerm t)],
   _tcUserType :: Maybe TypeName
   } |
   TcLit {
@@ -127,7 +127,7 @@ instance Show t => Show (TcTerm t) where
   show (TcBinding _ a b c) = pwords ["Binding",show a,show b,show c]
   show (TcList _ a b) = pwords ["List",show a,show b]
   show (TcObject _ a b) = pwords ["Object",show a,show b]
-  show (TcLit _ a b) = pwords ["Lit",show a]
+  show (TcLit _ a _b) = pwords ["Lit",show a]
   show (TcVar _ a) = pwords ["Var",show a]
 
 instance Pretty t => Pretty (TcTerm t) where
@@ -144,10 +144,10 @@ instance Pretty t => Pretty (TcTerm t) where
     indent 4 (case _tcAppFun of
        FNative {..} -> vsep (map (text . show) (toList _fTypes))
        FDefun {..} -> text (show _fType)) PP.<$>
-    ((case _tcAppFun of
+    (case _tcAppFun of
         FNative {} -> (<> empty)
         FDefun {..} -> (PP.<$> indent 4 (vsep (map pretty _fBody))))
-     (indent 2 (vsep (map pretty _tcAppArgs))))
+    (indent 2 (vsep (map pretty _tcAppArgs)))
 
 
 
@@ -157,7 +157,52 @@ makeLenses ''Fun
 runTC :: TC a -> IO (a, TcState)
 runTC a = runStateT (unTC a) def
 
-type TcName = String
+
+doNatArgs :: TcTerm TcName -> TC (TcTerm TcName)
+doNatArgs TcApp {..} = case _tcAppFun of
+  FNative {..} -> do
+    undefined
+
+
+substApp :: Maybe (TcName,TcTerm TcName) -> TcTerm TcName -> TC (TcTerm TcName)
+substApp _ t@TcLit {} = return t
+substApp nr t@TcVar {..} = case nr of
+  Nothing -> return t
+  Just (n,r) | n == _tcVar -> do
+                 rTy <- tcToTy r
+                 tcVars %= M.insertWith S.union n rTy -- may want to typecheck here for locality ...
+                 return r
+             | otherwise -> return t
+substApp r TcObject {..} =
+  TcObject _tcInfo <$>
+    forM _tcObject (\(k,v) -> (,) <$> substApp r k <*> substApp r v) <*>
+    pure _tcUserType
+substApp r TcList {..} = TcList _tcInfo <$> mapM (substApp r) _tcList <*> pure _tcListType
+substApp r TcBinding {..} =
+  TcBinding _tcInfo <$>
+    forM _tcBindings (\(k,v) -> (k,) <$> substApp r v) <*>
+    mapM (substApp r) _tcBody <*>
+    pure _tcBindCtx
+substApp r TcApp {..} = do
+  as <- mapM (substApp r) _tcAppArgs
+  af <- case _tcAppFun of
+    f@FNative {} -> return f
+    f@FDefun {..} -> do
+      fb' <- forM _fBody $ \bt -> do
+        bt' <- substApp r bt
+        foldM (\b fa -> substApp (Just fa) b) bt' (zip _fArgs as) -- this zip might need a typecheck
+      return $ set fBody fb' f
+  return (TcApp _tcInfo af as)
+
+tcToTy :: TcTerm TcName -> TC (S.Set Type)
+tcToTy TcLit {..} = return $ S.singleton _tcType
+tcToTy TcVar {..} = (fromMaybe S.empty . M.lookup _tcVar) <$> use tcVars
+tcToTy TcObject {..} = return $ S.singleton $ TyObject _tcUserType
+tcToTy TcList {..} = return $ S.singleton $ TyList _tcListType
+tcToTy TcApp {..} = return S.empty -- opportunity to capture app return types here?
+tcToTy TcBinding {..} = return S.empty -- ^^ same
+
+
 
 
 scopeToBody :: Info -> [TcTerm TcName] -> Scope Int Term (Either Ref (TcTerm TcName)) -> TC [TcTerm TcName]
@@ -167,6 +212,12 @@ scopeToBody i args bod = do
     (TList ts@(_:_) _ _) -> mapM asValue ts
     _ -> die i "Malformed def body"
 
+mangleType :: (String -> String) -> Type -> Type
+mangleType f t@TyVar {} = over tvId f t
+mangleType f t@TyList {} = over (tlType . _Just) (mangleType f) t
+mangleType f t@TyFun {} = over tfType (over ftReturn (mangleType f) .
+                                       over (ftArgs.traverse.aType) (mangleType f)) t
+mangleType _ t = t
 
 
 asFun :: Term (Either Ref (TcTerm TcName)) -> TC (Fun TcName)
@@ -178,9 +229,13 @@ asFun (TDef DefData {..} bod _ i) = do
     t :| [] -> return t
     _ -> die i "Multiple def types not allowed"
   let fn = maybe _dName ((++ ('.':_dName)) . asString) _dModule
-      args = map (\a@(Arg n _) -> (a,fn ++ "_" ++ n)) (_ftArgs ty)
-  tcs <- scopeToBody i (map (TcVar def . snd) args) bod
-  return $ FDefun i fn ty (map snd args) tcs -- TODO track Arg metadata
+  args <- forM (_ftArgs ty) $ \(Arg n t) -> do
+    let an = fromString $ fn ++ "_" ++ n
+        t' = mangleType ((fn ++ "_") ++) t
+    tcVars %= M.insertWith S.union an (S.singleton t')
+    return an
+  tcs <- scopeToBody i (map (TcVar def) args) bod
+  return $ FDefun i fn ty args tcs
 asFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -194,8 +249,12 @@ asValue (TVar v i) = case v of -- value position only, TApp has its own resolver
 asValue (TApp tf tas ti) = TcApp ti <$> asFun tf <*> mapM asValue tas
 asValue TBinding {..} = do
   bi <- state (_tcBind &&& over tcBind succ)
-  let bindName a = "bind" ++ show bi ++ "_" ++ (_aName a)
-  bs <- forM _tBindPairs $ \(a,v) -> (,) <$> return (bindName a) <*> asValue v
+  let bindName a = "bind" ++ show bi ++ "_" ++ a
+  bs <- forM _tBindPairs $ \(Arg n t,v) -> do
+    let an = fromString $ bindName n
+        t' = mangleType bindName t
+    tcVars %= M.insertWith S.union an (S.singleton t')
+    (an,) <$> asValue v
   TcBinding <$> pure _tInfo <*> pure bs <*> scopeToBody _tInfo (map (TcVar def . fst) bs) _tBindBody <*> pure _tBindCtx
 
 asValue TList {..} = TcList _tInfo <$> mapM asValue _tList <*> pure _tListType
@@ -214,8 +273,6 @@ asValue TUse {..} = die _tInfo "Use not supported"
 asValue TStep {..} = die _tInfo "TODO steps/pacts"
 
 
-
-
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
   case args `atMay` b of
@@ -228,7 +285,13 @@ infer t@TDef {..} = asFun (fmap Left t)
 infer t = die (_tInfo t) "Non-def"
 
 
-_loadFun :: FilePath -> ModuleName -> TcName -> IO (Term Ref)
+substFun :: Fun TcName -> TC (Fun TcName)
+substFun f@FNative {} = return f
+substFun f@FDefun {..} = do
+  b' <- mapM (substApp Nothing) _fBody
+  return $ set fBody b' f
+
+_loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
 _loadFun fp mn fn = do
   (r,s) <- execScript' (Script fp) fp
   either (die def) (const (return ())) r
@@ -236,7 +299,7 @@ _loadFun fp mn fn = do
   return d
 
 _infer :: FilePath -> ModuleName -> String -> IO (Fun TcName, TcState)
-_infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d)
+_infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 _inferIssue :: IO (Fun TcName, TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
