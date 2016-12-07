@@ -70,6 +70,7 @@ import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
 import Control.Concurrent.MVar
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 
 import Data.Serialize (Serialize)
@@ -242,6 +243,7 @@ instance Show Type where
   show TyVar {..} = "<" ++ _tvId ++
                     (if null _tvConstraint then ""
                      else " => (" ++ intercalate "|" (map show _tvConstraint) ++ ")") ++ ">"
+instance PP.Pretty Type where pretty = PP.string . show
 
 
 
