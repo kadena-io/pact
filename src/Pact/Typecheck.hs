@@ -11,7 +11,7 @@ module Pact.Typecheck where
 import Pact.Repl
 import Pact.Types
 import Control.Monad.Catch
-import Control.Lens
+import Control.Lens hiding (pre)
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
@@ -157,42 +157,64 @@ makeLenses ''Fun
 runTC :: TC a -> IO (a, TcState)
 runTC a = runStateT (unTC a) def
 
+data Visit = Pre | Post deriving (Eq,Show)
+type Visitor n = Visit -> TcTerm n -> TC (TcTerm n)
+
+-- | Walk the AST, performing function both before and after descent into child elements.
+walkAST :: Visitor n -> TcTerm n -> TC (TcTerm n)
+walkAST f t@TcLit {} = f Pre t -- lit, var should ignore Visit
+walkAST f t@TcVar {} = f Pre t -- lit, var should ignore Visit
+walkAST f t@TcObject {} = do
+  TcObject {..} <- f Pre t
+  t' <- TcObject _tcInfo <$>
+         forM _tcObject (\(k,v) -> (,) <$> walkAST f k <*> walkAST f v) <*>
+         pure _tcUserType
+  f Post t'
+walkAST f t@TcList {} = do
+  TcList {..} <- f Pre t
+  t' <- TcList _tcInfo <$> mapM (walkAST f) _tcList <*> pure _tcListType
+  f Post t'
+walkAST f t@TcBinding {} = do
+  TcBinding {..} <- f Pre t
+  t' <- TcBinding _tcInfo <$>
+        forM _tcBindings (\(k,v) -> (k,) <$> walkAST f v) <*>
+        mapM (walkAST f) _tcBody <*> pure _tcBindCtx
+  f Post t'
+walkAST f t@TcApp {} = do
+  TcApp {..} <- f Pre t
+  t' <- TcApp _tcInfo <$>
+        (case _tcAppFun of fun@FNative {} -> return fun
+                           fun@FDefun {..} -> do
+                             db <- mapM (walkAST f) _fBody
+                             return $ set fBody db fun) <*>
+        mapM (walkAST f) _tcAppArgs
+  f Post t'
+
 
 doNatArgs :: TcTerm TcName -> TC (TcTerm TcName)
 doNatArgs TcApp {..} = case _tcAppFun of
   FNative {..} -> do
     undefined
 
+-- | substitute app args into vars for FDefuns
+substAppDefun :: Maybe (TcName, TcTerm TcName) -> Visitor TcName
+substAppDefun nr _ t@TcVar {..} = case nr of
+    Nothing -> return t
+    Just (n,r) | n == _tcVar -> do
+                   rTy <- tcToTy r
+                   tcVars %= M.insertWith S.union n rTy -- may want to typecheck here for locality ...
+                   return r
+               | otherwise -> return t
+substAppDefun _ Post TcApp {..} = do
+    af <- case _tcAppFun of
+      f@FNative {} -> return f
+      f@FDefun {..} -> do
+        fb' <- forM _fBody $ \bt ->
+          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bt (zip _fArgs _tcAppArgs) -- this zip might need a typecheck
+        return $ set fBody fb' f
+    return (TcApp _tcInfo af _tcAppArgs)
+substAppDefun _ _ t = return t
 
-substApp :: Maybe (TcName,TcTerm TcName) -> TcTerm TcName -> TC (TcTerm TcName)
-substApp _ t@TcLit {} = return t
-substApp nr t@TcVar {..} = case nr of
-  Nothing -> return t
-  Just (n,r) | n == _tcVar -> do
-                 rTy <- tcToTy r
-                 tcVars %= M.insertWith S.union n rTy -- may want to typecheck here for locality ...
-                 return r
-             | otherwise -> return t
-substApp r TcObject {..} =
-  TcObject _tcInfo <$>
-    forM _tcObject (\(k,v) -> (,) <$> substApp r k <*> substApp r v) <*>
-    pure _tcUserType
-substApp r TcList {..} = TcList _tcInfo <$> mapM (substApp r) _tcList <*> pure _tcListType
-substApp r TcBinding {..} =
-  TcBinding _tcInfo <$>
-    forM _tcBindings (\(k,v) -> (k,) <$> substApp r v) <*>
-    mapM (substApp r) _tcBody <*>
-    pure _tcBindCtx
-substApp r TcApp {..} = do
-  as <- mapM (substApp r) _tcAppArgs
-  af <- case _tcAppFun of
-    f@FNative {} -> return f
-    f@FDefun {..} -> do
-      fb' <- forM _fBody $ \bt -> do
-        bt' <- substApp r bt
-        foldM (\b fa -> substApp (Just fa) b) bt' (zip _fArgs as) -- this zip might need a typecheck
-      return $ set fBody fb' f
-  return (TcApp _tcInfo af as)
 
 tcToTy :: TcTerm TcName -> TC (S.Set Type)
 tcToTy TcLit {..} = return $ S.singleton _tcType
@@ -288,7 +310,7 @@ infer t = die (_tInfo t) "Non-def"
 substFun :: Fun TcName -> TC (Fun TcName)
 substFun f@FNative {} = return f
 substFun f@FDefun {..} = do
-  b' <- mapM (substApp Nothing) _fBody
+  b' <- mapM (walkAST $ substAppDefun Nothing) _fBody
   return $ set fBody b' f
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
