@@ -21,7 +21,7 @@ import Control.Monad
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty (..))
 import Control.Arrow hiding ((<+>))
-import Data.Aeson hiding (Object)
+import Data.Aeson hiding (Object, (.=))
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 -- import Data.String
@@ -46,23 +46,26 @@ instance Show VarType where
   show (Overload r ts) =
     show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
 
+instance Pretty VarType where pretty = string . show
+
 data TcState = TcState {
   _tcSupply :: Int,
   _tcVars :: M.Map TcId (S.Set VarType),
-  _tcOverloads :: M.Map TcId FunTypes
+  _tcOverloads :: M.Map TcId FunTypes,
+  _tcPivot :: M.Map VarType (S.Set VarType)
   } deriving (Eq,Show)
 
 
-instance Default TcState where def = TcState 0 def def
+instance Default TcState where def = TcState 0 def def def
 instance Pretty TcState where
   pretty TcState {..} = string "Vars:" PP.<$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) PP.<$>
     string "Overloads:" PP.<$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
-                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads)
-
-
-
+                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) PP.<$>
+    string "Pivot:" PP.<$>
+    indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon PP.<$>
+                           indent 4 (hsep (map (string . show) (toList v)))) $ M.toList _tcPivot)
 
 newtype TC a = TC { unTC :: StateT TcState IO a }
   deriving (Functor,Applicative,Monad,MonadState TcState,MonadIO,MonadThrow,MonadCatch)
@@ -216,6 +219,27 @@ walkAST f t@App {} = do
   f Post t'
 
 
+pivot :: TC ()
+pivot = do
+  m <- use tcVars
+  let isVar (Spec TyVar {}) = True
+      isVar Overload {} = True
+      isVar _ = False
+      initP = (`execState` M.empty) $
+        forM_ (M.elems m) $ \vts ->
+          forM_ vts $ \vt ->
+            when (isVar vt) $ modify $ M.insertWith S.union vt vts
+      rinse = execState lather
+      lather = do
+        p <- get
+        forM_ (M.elems p) $ \vts ->
+          forM_ vts $ \vt ->
+            when (isVar vt) $ modify $ M.insertWith S.union vt vts
+      rpt p = let p' = rinse p in if p' == p then p else rpt p'
+  tcPivot .= rpt initP
+
+
+
 processNatives :: Visitor TcId
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
@@ -337,9 +361,10 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left Direct {}) -> die i "Native in value context"
   (Right t) -> return t
 toAST TApp {..} = do
-  i <- freshId' _tInfo "app"
-  trackVar i (Spec $ idTyVar i)
   fun <- toFun _tAppFun
+  i <- freshId' _tInfo $
+       "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
+  trackVar i (Spec $ idTyVar i)
   as <- mapM toAST _tAppArgs
   case fun of
     FDefun {..} -> assoc i (last _fBody)
@@ -399,6 +424,7 @@ substFun :: Fun TcId -> TC (Fun TcId)
 substFun f@FNative {} = return f
 substFun f@FDefun {..} = do
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
+  pivot
   return $ set fBody b' f
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
