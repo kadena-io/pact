@@ -35,14 +35,32 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
 
+data VarRole = ArgVar Int | RetVar deriving (Eq,Show,Ord)
+
+data VarType = Spec { _vtType :: Type } |
+               Overload { _vtRole :: VarRole, _vtOverApp :: TcId }
+               deriving (Eq,Ord)
+
+instance Show VarType where
+  show (Spec t) = show t
+  show (Overload r ts) =
+    show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
+
 data TcState = TcState {
   _tcSupply :: Int,
-  _tcVars :: M.Map TcId (S.Set Type)
+  _tcVars :: M.Map TcId (S.Set VarType),
+  _tcOverloads :: M.Map TcId FunTypes
   } deriving (Eq,Show)
-instance Default TcState where def = TcState 0 def
+
+
+instance Default TcState where def = TcState 0 def def
 instance Pretty TcState where
   pretty TcState {..} = string "Vars:" PP.<$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars)
+    indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) PP.<$>
+    string "Overloads:" PP.<$>
+    indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
+                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads)
+
 
 
 
@@ -60,6 +78,7 @@ instance Eq TcId where
   a == b = _tiId a == _tiId b && _tiName a == _tiName b
 instance Ord TcId where
   a <= b = _tiId a < _tiId b || (_tiId a == _tiId b && _tiName a <= _tiName b)
+-- show instance is important, used as variable name
 instance Show TcId where show TcId {..} = _tiName ++ show _tiId
 instance Pretty TcId where pretty = string . show
 
@@ -142,11 +161,11 @@ instance Pretty t => Pretty (AST t) where
   pretty Object {..} = "{" <+> align (sep (map (\(k,v) -> pretty k <> text ":" <+> pretty v) _aObject)) <+> "}"
   pretty List {..} = list (map pretty _aList)
   pretty Binding {..} =
-    (case _aBindCtx of BindLet -> "Let"; BindKV -> "Bind") PP.<$>
+    pretty _aId PP.<$>
     indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" PP.<$> indent 4 (pretty v)) _aBindings)) PP.<$>
     indent 4 (vsep (map pretty _aBody))
   pretty App {..} =
-    "App" <+> text (_fName _aAppFun) PP.<$>
+    pretty _aId <+> text (_fName _aAppFun) PP.<$>
     indent 4 (case _aAppFun of
        FNative {..} -> vsep (map (text . show) (toList _fTypes))
        FDefun {..} -> text (show _fType)) PP.<$>
@@ -198,7 +217,20 @@ walkAST f t@App {} = do
 
 
 processNatives :: Visitor TcId
-processNatives _ (App i FNative {..} as) = undefined
+processNatives Pre a@(App i FNative {..} as) = do
+  case _fTypes of
+    -- single funtype
+    ft@FunType {} :| [] -> do
+      let FunType {..} = mangleFunType i ft
+      zipWithM_ (\(Arg _ t) aa -> trackVar (_aId aa) (Spec t)) _ftArgs as
+      trackVar i (Spec _ftReturn)
+    -- multiple funtypes
+    fts -> do
+      let fts' = fmap (mangleFunType i) fts
+      tcOverloads %= M.insert i fts'
+      zipWithM_ (\ai aa -> trackVar (_aId aa) (Overload (ArgVar ai) i)) [0..] as
+      trackVar i (Overload RetVar i)
+  return a
   -- need to track return types here too.
   -- a following pass can "push up" return types as necessary, just needs to be created and associated strongly
   -- with the app here.
@@ -214,16 +246,13 @@ processNatives _ (App i FNative {..} as) = undefined
   -- track arg/app/funtype: for a single ftype makes sense to simply mangle the typevar and track.
   --   note the return type will need to be tracked as well at this point.
   -- for multiple ftypes,
-processNatives _ t = return t
+processNatives _ a = return a
 
 -- | substitute app args into vars for FDefuns
 substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TcId
 substAppDefun nr Pre t@Var {..} = case nr of
     Nothing -> return t
-    Just (n,r) | n == _aVar -> do
-                   rTy <- tcToTy r
-                   trackVar' n rTy -- may want to typecheck here for locality ...
-                   return r
+    Just (n,r) | n == _aVar -> assoc n r >> return r -- might need a typecheck here
                | otherwise -> return t
 substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out first.
     af <- case _aAppFun of
@@ -235,19 +264,22 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
 
+-- | associate this Id with the type/typevar corresponding to another term
+assoc :: TcId -> AST TcId -> TC ()
+assoc n r = tcToTy r >>= trackVar' n -- might want to typecheck here?
 
-tcToTy :: AST TcId -> TC (S.Set Type)
-tcToTy Lit {..} = return $ S.singleton _aLitType
+tcToTy :: AST TcId -> TC (S.Set VarType)
+tcToTy Lit {..} = return $ S.singleton $ Spec $ _aLitType
 tcToTy Var {..} = (fromMaybe S.empty . M.lookup _aVar) <$> use tcVars
-tcToTy Object {..} = return $ S.singleton $ TyObject _aUserType
-tcToTy List {..} = return $ S.singleton $ TyList _aListType
-tcToTy App {..} = return S.empty -- opportunity to capture app return types here?
-tcToTy Binding {..} = return S.empty -- ^^ same
+tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
+tcToTy List {..} = return $ S.singleton $ Spec $ TyList _aListType
+tcToTy App {..} = (fromMaybe S.empty . M.lookup _aId) <$> use tcVars
+tcToTy Binding {..} = (fromMaybe S.empty . M.lookup _aId) <$> use tcVars
 
-trackVar :: TcId -> Type -> TC ()
+trackVar :: TcId -> VarType -> TC ()
 trackVar i t = trackVar' i (S.singleton t)
 
-trackVar' :: TcId -> S.Set Type -> TC ()
+trackVar' :: TcId -> S.Set VarType -> TC ()
 trackVar' i ts = tcVars %= M.insertWith S.union i ts
 
 
@@ -255,15 +287,24 @@ scopeToBody :: Info -> [AST TcId] -> Scope Int Term (Either Ref (AST TcId)) -> T
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
-    (TList ts@(_:_) _ _) -> mapM toAST ts
+    (TList ts@(_:_) _ _) -> mapM toAST ts -- verifies non-empty body.
     _ -> die i "Malformed def body"
 
-mangleType :: (String -> String) -> Type -> Type
-mangleType f t@TyVar {} = over tvId f t
+pfx :: String -> String -> String
+pfx s = ((s ++ "_") ++)
+
+idTyVar :: TcId -> Type
+idTyVar i = TyVar (show i) []
+
+mangleType :: TcId -> Type -> Type
+mangleType f t@TyVar {} = over tvId (pfx (show f)) t
 mangleType f t@TyList {} = over (tlType . _Just) (mangleType f) t
-mangleType f t@TyFun {} = over tfType (over ftReturn (mangleType f) .
-                                       over (ftArgs.traverse.aType) (mangleType f)) t
+mangleType f t@TyFun {} = over tfType (mangleFunType f) t
 mangleType _ t = t
+
+mangleFunType :: TcId -> FunType -> FunType
+mangleFunType f = over ftReturn (mangleType f) .
+                  over (ftArgs.traverse.aType) (mangleType f)
 
 
 toFun :: Term (Either Ref (AST TcId)) -> TC (Fun TcId)
@@ -276,9 +317,9 @@ toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every
     _ -> die i "Multiple def types not allowed"
   let fn = maybe _dName ((++ ('.':_dName)) . asString) _dModule
   args <- forM (_ftArgs ty) $ \(Arg n t) -> do
-    an <- freshId Nothing $ fn ++ "_" ++ n
-    let t' = mangleType (const (show an)) t
-    trackVar an t'
+    an <- freshId Nothing $ pfx fn n
+    let t' = mangleType an t
+    trackVar an (Spec t')
     return an
   tcs <- mkVars "arg" args >>= \as -> scopeToBody i as bod
   return $ FDefun i fn ty args tcs
@@ -297,37 +338,50 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Right t) -> return t
 toAST TApp {..} = do
   i <- freshId' _tInfo "app"
-  trackVar i $ TyVar (show i) []
-  App i <$> toFun _tAppFun <*> mapM toAST _tAppArgs
+  trackVar i (Spec $ idTyVar i)
+  fun <- toFun _tAppFun
+  as <- mapM toAST _tAppArgs
+  case fun of
+    FDefun {..} -> assoc i (last _fBody)
+    FNative {} -> return ()
+  return $ App i fun as
 
 toAST TBinding {..} = do
   bi <- freshId' _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
-  trackVar bi $ case _tBindCtx of BindLet -> TyVar (show bi) []; BindKV -> TyObject Nothing
+  trackVar bi $ Spec $ case _tBindCtx of BindLet -> idTyVar bi; BindKV -> TyObject Nothing
   bs <- forM _tBindPairs $ \(Arg n t,v) -> do
-    an <- freshId Nothing (show bi ++ "_" ++ n)
-    let t' = mangleType (const (show an)) t
-    trackVar an t'
-    (an,) <$> toAST v
+    an <- freshId Nothing (pfx (show bi) n)
+    let t' = mangleType an t
+    trackVar an $ Spec t'
+    v' <- toAST v
+    assoc an v'
+    return (an,v')
   as <- mkVars (case _tBindCtx of BindLet -> "larg"; BindKV -> "barg") (map fst bs)
-  Binding <$> freshId' _tInfo "bind" <*> pure bs <*>
-    scopeToBody _tInfo as _tBindBody <*> pure _tBindCtx
+  bb <- scopeToBody _tInfo as _tBindBody
+  assoc bi (last bb)
+  return $ Binding bi bs bb _tBindCtx
 
 toAST TList {..} = List <$> freshId' _tInfo "list" <*> mapM toAST _tList <*> pure _tListType
 toAST TObject {..} = Object <$> freshId' _tInfo "object" <*>
                        mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> pure _tUserType
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
-toAST TKeySet {..} = freshId' _tInfo "KeySet" >>= \i -> return $ Lit i TyKeySet (LVKeySet _tKeySet)
-toAST TValue {..} = freshId' _tInfo "Value" >>= \i -> return $ Lit i TyValue (LVValue _tValue)
-toAST TLiteral {..} = freshId' _tInfo "Literal" >>= \i -> return $ Lit i (ty _tLiteral) (LVLit _tLiteral)
-  where ty LInteger {} = TyInteger
-        ty LDecimal {} = TyDecimal
-        ty LString {} = TyString
-        ty LBool {} = TyBool
-        ty LTime {} = TyTime
+toAST TKeySet {..} = freshId' _tInfo "keyset" >>= \i -> return $ Lit i TyKeySet (LVKeySet _tKeySet)
+toAST TValue {..} = freshId' _tInfo "value" >>= \i -> return $ Lit i TyValue (LVValue _tValue)
+toAST TLiteral {..} = do
+  let ty = l2ty _tLiteral
+  i <- freshId' _tInfo (show ty)
+  trackVar i (Spec ty)
+  return $ Lit i ty (LVLit _tLiteral)
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = die _tInfo "TODO steps/pacts"
 
+l2ty :: Literal -> Type
+l2ty LInteger {} = TyInteger
+l2ty LDecimal {} = TyDecimal
+l2ty LString {} = TyString
+l2ty LBool {} = TyBool
+l2ty LTime {} = TyTime
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
@@ -344,7 +398,7 @@ infer t = die (_tInfo t) "Non-def"
 substFun :: Fun TcId -> TC (Fun TcId)
 substFun f@FNative {} = return f
 substFun f@FDefun {..} = do
-  b' <- mapM (walkAST $ substAppDefun Nothing) _fBody
+  b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
   return $ set fBody b' f
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
