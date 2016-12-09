@@ -159,7 +159,7 @@ langDefs = foldDefs
           takeDrop = funType listStringA [("count",TyInteger),("list",listStringA)]
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
-          isTy t = funType t [("val",a)]
+          isTy t = funType t [("val",t)]
 
 
 -- | Symbol map must be made within target monad

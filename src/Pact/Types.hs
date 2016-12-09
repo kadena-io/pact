@@ -97,6 +97,11 @@ instance Eq Info where
     Info Nothing == Info Nothing = True
     Info (Just (_,d)) == Info (Just (_,e)) = d == e
     _ == _ = False
+instance Ord Info where
+  Info Nothing <= Info Nothing = True
+  Info (Just (_,d)) <= Info (Just (_,e)) = d <= e
+  Info Nothing <= _ = True
+  _ <= Info Nothing = False
 
 -- renderer is for line numbers and such
 renderInfo :: Info -> String
@@ -200,14 +205,15 @@ data Type =
     TyTime |
     TyBool |
     TyString |
-    TyList { _tlType :: Maybe Type } |
-    TyObject { _toType :: Maybe TypeName } |
     TyValue |
     TyKeySet |
+    TyList { _tlType :: Maybe Type } |
+    TyObject { _toType :: Maybe TypeName } |
     TyFun { _tfType :: FunType } |
+    TyVar { _tvId :: String, _tvConstraint :: [Type] } |
     TyBinding |
-    TyRest |
-    TyVar { _tvId :: String, _tvConstraint :: [Type] }
+    TyRest
+
     deriving (Eq,Ord)
 
 makeLenses ''Type
@@ -559,7 +565,7 @@ abbrev t@TModule {} = "<module " ++ show (_tModuleName t) ++ ">"
 abbrev (TList bs _ _) = concatMap abbrev bs
 abbrev t@TDef {} = "<defun " ++ _dName (_tDefData t) ++ ">"
 abbrev t@TNative {} = "<native " ++ _dName (_tDefData t) ++ ">"
-abbrev t@TConst {} = "<defconst " ++ _dName (_tDefData t) ++ ">"
+abbrev TConst {..} = "<defconst " ++ show _tConstName ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
 abbrev TBinding {} = "<binding>"
 abbrev TObject {} = "<object>"

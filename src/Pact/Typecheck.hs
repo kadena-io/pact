@@ -28,7 +28,8 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Data.Maybe
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-data CheckerException = CheckerException Info String deriving (Eq)
+data CheckerException = CheckerException Info String deriving (Eq,Ord)
+
 instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
@@ -52,20 +53,29 @@ data TcState = TcState {
   _tcSupply :: Int,
   _tcVars :: M.Map TcId (S.Set VarType),
   _tcOverloads :: M.Map TcId FunTypes,
-  _tcPivot :: M.Map VarType (S.Set VarType)
+  _tcPivot :: M.Map VarType (S.Set VarType),
+  _tcFailures :: S.Set CheckerException
   } deriving (Eq,Show)
 
 
-instance Default TcState where def = TcState 0 def def def
+instance Default TcState where def = TcState 0 def def def def
 instance Pretty TcState where
   pretty TcState {..} = string "Vars:" PP.<$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) PP.<$>
     string "Overloads:" PP.<$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
                            align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) PP.<$>
-    string "Pivot:" PP.<$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon PP.<$>
-                           indent 4 (hsep (map (string . show) (toList v)))) $ M.toList _tcPivot)
+    prettyPivot _tcPivot PP.<$>
+    string "Failures:" PP.<$> indent 2 (hsep $ map (string.show) (toList _tcFailures))
+    <> hardline
+
+prettyPivot :: M.Map VarType (S.Set VarType) -> Doc
+prettyPivot p =
+  string "Pivot:" PP.<$>
+  indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon PP.<$>
+                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList p)
+
+
 
 newtype TC a = TC { unTC :: StateT TcState IO a }
   deriving (Functor,Applicative,Monad,MonadState TcState,MonadIO,MonadThrow,MonadCatch)
@@ -86,6 +96,8 @@ instance Show TcId where show TcId {..} = _tiName ++ show _tiId
 instance Pretty TcId where pretty = string . show
 
 makeLenses ''TcState
+makeLenses ''VarType
+
 
 
 freshId :: Maybe Info -> String -> TC TcId
@@ -218,26 +230,91 @@ walkAST f t@App {} = do
         mapM (walkAST f) _aAppArgs
   f Post t'
 
+isVar :: VarType -> Bool
+isVar (Spec TyVar {}) = True
+isVar Overload {} = True
+isVar _ = False
 
+
+isConcrete :: VarType -> Bool
+isConcrete (Spec ty) = case ty of
+  TyVar {} -> False
+  TyRest -> False
+  TyFun {} -> False
+  _ -> True
+isConcrete _ = False
+
+isRestOrUnconstrained :: VarType -> Bool
+isRestOrUnconstrained (Spec ty) = case ty of
+  TyVar _ [] -> True
+  TyRest -> True
+  _ -> False
+isRestOrUnconstrained _ = False
+
+isTyVar :: VarType -> Bool
+isTyVar (Spec TyVar {}) = True
+isTyVar _ = False
+
+-- | take vars map of thing->{typevars} to
+-- typevar->{typevars}, where for each typevar, build the
+-- set of all types that refer to it, such that each of those
+-- types are in turn indexed to this same set.
 pivot :: TC ()
 pivot = do
   m <- use tcVars
-  let isVar (Spec TyVar {}) = True
-      isVar Overload {} = True
-      isVar _ = False
+  forM_ (M.elems m) typecheckSet -- TODO track infos for errors
+  let
       initP = (`execState` M.empty) $
         forM_ (M.elems m) $ \vts ->
           forM_ vts $ \vt ->
             when (isVar vt) $ modify $ M.insertWith S.union vt vts
-      rinse = execState lather
-      lather = do
+      lather = execState rinse
+      rinse = do
         p <- get
         forM_ (M.elems p) $ \vts ->
           forM_ vts $ \vt ->
             when (isVar vt) $ modify $ M.insertWith S.union vt vts
-      rpt p = let p' = rinse p in if p' == p then p else rpt p'
+      rpt p = let p' = lather p in if p' == p then p else rpt p'
   tcPivot .= rpt initP
 
+failEx :: a -> TC a -> TC a
+failEx a = handle (\(e :: CheckerException) -> tcFailures %= S.insert e >> return a)
+
+
+eliminate :: TC ()
+eliminate = do
+  vsets <- S.fromList . M.elems <$> use tcPivot
+  forM_ vsets $ \vset -> do
+    final <- typecheckSet vset
+    tcPivot %= M.map (\s -> if s == vset then final else s)
+
+typecheckSet :: S.Set VarType -> TC (S.Set VarType)
+typecheckSet vset = failEx vset $ do
+    let (_rocs,v1) = S.partition isRestOrUnconstrained vset
+        (concs,v2) = S.partition isConcrete v1
+    conc <- case toList concs of
+      [] -> return Nothing
+      [c] -> return $ Just c
+      _cs -> die def $ "Multiple concrete types in set:" ++ show vset
+    let (tvs,rest) = S.partition isTyVar v2
+        constraintsHaveType c t = case t of
+          (Spec (TyVar _ es)) -> c `elem` es
+          _ -> False
+    case conc of
+      Just c@(Spec concTy) -> do
+        unless (all (constraintsHaveType concTy) tvs) $
+          die def $ "Constraints incompatible with concrete type: " ++ show vset
+        return $ S.insert c rest -- constraints good with concrete, so we can get rid of them
+      Just c -> die def $ "Internal error, expected concrete type: " ++ show c
+      Nothing ->
+        if S.null tvs then return rest -- no conc, no tvs, just leftovers
+        else do
+          let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtType.tvConstraint)) (toList tvs)
+          case inter of
+            [] -> die def $ "Incommensurate constraints in set: " ++ show vset
+            _ -> do
+              let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
+              return $ S.insert (Spec (TyVar uname inter)) rest
 
 
 processNatives :: Visitor TcId
@@ -255,21 +332,6 @@ processNatives Pre a@(App i FNative {..} as) = do
       zipWithM_ (\ai aa -> trackVar (_aId aa) (Overload (ArgVar ai) i)) [0..] as
       trackVar i (Overload RetVar i)
   return a
-  -- need to track return types here too.
-  -- a following pass can "push up" return types as necessary, just needs to be created and associated strongly
-  -- with the app here.
-  -- interestingly, we can now say that every ctor in AST is tracked, and therefore needs a stable name.
-  -- concrete, single ftype: track concrete type
-  -- concrete, same in multiple ftypes: track concrete type
-  -- concrete, different in multiple ftypes: track arg/app/funtypes
-  -- var, not used in other slots, single ftype: ignore
-  -- var, not used in other slots, multiple ftypes: ignore
-  -- var used in other slots, single ftype: track arg/app/funtypes
-  -- var used in other slots, multiple ftype: track arg/app/funtypes
-  --
-  -- track arg/app/funtype: for a single ftype makes sense to simply mangle the typevar and track.
-  --   note the return type will need to be tracked as well at this point.
-  -- for multiple ftypes,
 processNatives _ a = return a
 
 -- | substitute app args into vars for FDefuns
@@ -345,7 +407,7 @@ toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every
     let t' = mangleType an t
     trackVar an (Spec t')
     return an
-  tcs <- mkVars "arg" args >>= \as -> scopeToBody i as bod
+  tcs <- scopeToBody i (map (\ai -> Var ai ai) args) bod
   return $ FDefun i fn ty args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
@@ -381,8 +443,7 @@ toAST TBinding {..} = do
     v' <- toAST v
     assoc an v'
     return (an,v')
-  as <- mkVars (case _tBindCtx of BindLet -> "larg"; BindKV -> "barg") (map fst bs)
-  bb <- scopeToBody _tInfo as _tBindBody
+  bb <- scopeToBody _tInfo (map ((\ai -> Var ai ai).fst) bs) _tBindBody
   assoc bi (last bb)
   return $ Binding bi bs bb _tBindCtx
 
@@ -423,8 +484,12 @@ infer t = die (_tInfo t) "Non-def"
 substFun :: Fun TcId -> TC (Fun TcId)
 substFun f@FNative {} = return f
 substFun f@FDefun {..} = do
+  -- make fake App for top-level fun
+  -- app <- App <$> freshId Nothing "_top_" <*> pure f <*>
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
   pivot
+  use tcPivot >>= liftIO . putDoc . prettyPivot
+  eliminate
   return $ set fBody b' f
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
@@ -438,4 +503,4 @@ _infer :: FilePath -> ModuleName -> String -> IO (Fun TcId, TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 _inferIssue :: IO (Fun TcId, TcState)
-_inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
+_inferIssue = _infer "examples/cp/cp-notest.repl" "cp" "issue"
