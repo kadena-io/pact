@@ -82,7 +82,7 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 
 
 data TcId = TcId {
-  _tiInfo :: Maybe Info, -- info not used for Eq/Ord, but implies a code (non-var) asset
+  _tiInfo :: Info,
   _tiName :: String,
   _tiId :: Int
   }
@@ -100,11 +100,8 @@ makeLenses ''VarType
 
 
 
-freshId :: Maybe Info -> String -> TC TcId
+freshId :: Info -> String -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
-
-freshId' :: Info -> String -> TC TcId
-freshId' i = freshId (Just i)
 
 data LitValue =
   LVLit Literal |
@@ -230,11 +227,9 @@ walkAST f t@App {} = do
         mapM (walkAST f) _aAppArgs
   f Post t'
 
-isVar :: VarType -> Bool
-isVar (Spec TyVar {}) = True
-isVar Overload {} = True
-isVar _ = False
-
+isOverload :: VarType -> Bool
+isOverload Overload {} = True
+isOverload _ = False
 
 isConcrete :: VarType -> Bool
 isConcrete (Spec ty) = case ty of
@@ -262,20 +257,16 @@ isTyVar _ = False
 pivot :: TC ()
 pivot = do
   m <- use tcVars
-  forM_ (M.elems m) typecheckSet -- TODO track infos for errors
   let
-      initP = (`execState` M.empty) $
-        forM_ (M.elems m) $ \vts ->
-          forM_ vts $ \vt ->
-            when (isVar vt) $ modify $ M.insertWith S.union vt vts
-      lather = execState rinse
-      rinse = do
-        p <- get
-        forM_ (M.elems p) $ \vts ->
-          forM_ vts $ \vt ->
-            when (isVar vt) $ modify $ M.insertWith S.union vt vts
-      rpt p = let p' = lather p in if p' == p then p else rpt p'
-  tcPivot .= rpt initP
+    initPivot = execState (rinse m) M.empty
+    lather = execState (get >>= rinse)
+    rinse :: M.Map a (S.Set VarType) -> State (M.Map VarType (S.Set VarType)) ()
+    rinse p =
+      forM_ (M.elems p) $ \vts ->
+        forM_ vts $ \vt ->
+          when (isTyVar vt || isOverload vt) $ modify $ M.insertWith S.union vt vts
+    rpt p = let p' = lather p in if p' == p then p else rpt p'
+  tcPivot .= rpt initPivot
 
 failEx :: a -> TC a -> TC a
 failEx a = handle (\(e :: CheckerException) -> tcFailures %= S.insert e >> return a)
@@ -285,36 +276,37 @@ eliminate :: TC ()
 eliminate = do
   vsets <- S.fromList . M.elems <$> use tcPivot
   forM_ vsets $ \vset -> do
-    final <- typecheckSet vset
+    final <- typecheckSet def vset
     tcPivot %= M.map (\s -> if s == vset then final else s)
 
-typecheckSet :: S.Set VarType -> TC (S.Set VarType)
-typecheckSet vset = failEx vset $ do
-    let (_rocs,v1) = S.partition isRestOrUnconstrained vset
-        (concs,v2) = S.partition isConcrete v1
-    conc <- case toList concs of
-      [] -> return Nothing
-      [c] -> return $ Just c
-      _cs -> die def $ "Multiple concrete types in set:" ++ show vset
-    let (tvs,rest) = S.partition isTyVar v2
-        constraintsHaveType c t = case t of
-          (Spec (TyVar _ es)) -> c `elem` es
-          _ -> False
-    case conc of
-      Just c@(Spec concTy) -> do
-        unless (all (constraintsHaveType concTy) tvs) $
-          die def $ "Constraints incompatible with concrete type: " ++ show vset
-        return $ S.insert c rest -- constraints good with concrete, so we can get rid of them
-      Just c -> die def $ "Internal error, expected concrete type: " ++ show c
-      Nothing ->
-        if S.null tvs then return rest -- no conc, no tvs, just leftovers
-        else do
-          let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtType.tvConstraint)) (toList tvs)
-          case inter of
-            [] -> die def $ "Incommensurate constraints in set: " ++ show vset
-            _ -> do
-              let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
-              return $ S.insert (Spec (TyVar uname inter)) rest
+-- | Typechecks set and eliminates matched type vars.
+typecheckSet :: Info -> S.Set VarType -> TC (S.Set VarType)
+typecheckSet inf vset = failEx vset $ do
+  let (_rocs,v1) = S.partition isRestOrUnconstrained vset
+      (concs,v2) = S.partition isConcrete v1
+  conc <- case toList concs of
+    [] -> return Nothing
+    [c] -> return $ Just c
+    _cs -> die inf $ "Multiple concrete types in set:" ++ show vset
+  let (tvs,rest) = S.partition isTyVar v2
+      constraintsHaveType c t = case t of
+        (Spec (TyVar _ es)) -> c `elem` es
+        _ -> False
+  case conc of
+    Just c@(Spec concTy) -> do
+      unless (all (constraintsHaveType concTy) tvs) $
+        die inf $ "Constraints incompatible with concrete type: " ++ show vset
+      return $ S.insert c rest -- constraints good with concrete, so we can get rid of them
+    Just c -> die inf $ "Internal error, expected concrete type: " ++ show c
+    Nothing ->
+      if S.null tvs then return rest -- no conc, no tvs, just leftovers
+      else do
+        let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtType.tvConstraint)) (toList tvs)
+        case inter of
+          [] -> die inf $ "Incommensurate constraints in set: " ++ show vset
+          _ -> do
+            let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
+            return $ S.insert (Spec (TyVar uname inter)) rest
 
 
 processNatives :: Visitor TcId
@@ -323,14 +315,14 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let FunType {..} = mangleFunType i ft
-      zipWithM_ (\(Arg _ t) aa -> trackVar (_aId aa) (Spec t)) _ftArgs as
-      trackVar i (Spec _ftReturn)
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t)) _ftArgs as
+      assocTy i (Spec _ftReturn)
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType i) fts
       tcOverloads %= M.insert i fts'
-      zipWithM_ (\ai aa -> trackVar (_aId aa) (Overload (ArgVar ai) i)) [0..] as
-      trackVar i (Overload RetVar i)
+      zipWithM_ (\ai aa -> assocTy (_aId aa) (Overload (ArgVar ai) i)) [0..] as
+      assocTy i (Overload RetVar i)
   return a
 processNatives _ a = return a
 
@@ -338,7 +330,7 @@ processNatives _ a = return a
 substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TcId
 substAppDefun nr Pre t@Var {..} = case nr of
     Nothing -> return t
-    Just (n,r) | n == _aVar -> assoc n r >> return r -- might need a typecheck here
+    Just (n,r) | n == _aVar -> assocAST n r >> return r -- might need a typecheck here
                | otherwise -> return t
 substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out first.
     af <- case _aAppFun of
@@ -350,24 +342,42 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
 
--- | associate this Id with the type/typevar corresponding to another term
-assoc :: TcId -> AST TcId -> TC ()
-assoc n r = tcToTy r >>= trackVar' n -- might want to typecheck here?
+lookupIdTys :: TcId -> TC (S.Set VarType)
+lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
+
+
 
 tcToTy :: AST TcId -> TC (S.Set VarType)
-tcToTy Lit {..} = return $ S.singleton $ Spec $ _aLitType
-tcToTy Var {..} = (fromMaybe S.empty . M.lookup _aVar) <$> use tcVars
+tcToTy Lit {..} = return $ S.singleton $ Spec _aLitType
+tcToTy Var {..} = lookupIdTys _aVar
 tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
 tcToTy List {..} = return $ S.singleton $ Spec $ TyList _aListType
-tcToTy App {..} = (fromMaybe S.empty . M.lookup _aId) <$> use tcVars
-tcToTy Binding {..} = (fromMaybe S.empty . M.lookup _aId) <$> use tcVars
+tcToTy App {..} = lookupIdTys _aId
+tcToTy Binding {..} = lookupIdTys _aId
 
+-- | Track type to id
 trackVar :: TcId -> VarType -> TC ()
-trackVar i t = trackVar' i (S.singleton t)
+trackVar i t = do
+  old <- M.lookup i <$> use tcVars
+  case old of
+    Nothing -> return ()
+    Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
+  tcVars %= M.insert i (S.singleton t)
 
-trackVar' :: TcId -> S.Set VarType -> TC ()
-trackVar' i ts = tcVars %= M.insertWith S.union i ts
+-- | Track type to id with typechecking
+assocTy :: TcId -> VarType -> TC ()
+assocTy i ty = assocTys i (S.singleton ty)
 
+-- | Track ast type to id with typechecking
+assocAST :: TcId -> AST TcId -> TC ()
+assocAST i a = tcToTy a >>= assocTys i
+
+-- | Track types to id with typechecking
+assocTys :: TcId -> S.Set VarType -> TC ()
+assocTys i tys = do
+  tys' <- S.union tys <$> lookupIdTys i
+  void $ typecheckSet (_tiInfo i) tys'
+  tcVars %= M.insert i tys'
 
 scopeToBody :: Info -> [AST TcId] -> Scope Int Term (Either Ref (AST TcId)) -> TC [AST TcId]
 scopeToBody i args bod = do
@@ -402,17 +412,14 @@ toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every
     t :| [] -> return t
     _ -> die i "Multiple def types not allowed"
   let fn = maybe _dName ((++ ('.':_dName)) . asString) _dModule
-  args <- forM (_ftArgs ty) $ \(Arg n t) -> do
-    an <- freshId Nothing $ pfx fn n
+  args <- forM (_ftArgs ty) $ \(Arg n t ai) -> do
+    an <- freshId ai $ pfx fn n
     let t' = mangleType an t
     trackVar an (Spec t')
     return an
   tcs <- scopeToBody i (map (\ai -> Var ai ai) args) bod
   return $ FDefun i fn ty args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
-
-mkVars :: String -> [n] -> TC [AST n]
-mkVars s as = zipWithM (\n i -> Var <$> freshId Nothing (s ++ show i) <*> pure n) as [(0::Int)..]
 
 
 toAST :: Term (Either Ref (AST TcId)) -> TC (AST TcId)
@@ -424,38 +431,38 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Right t) -> return t
 toAST TApp {..} = do
   fun <- toFun _tAppFun
-  i <- freshId' _tInfo $
+  i <- freshId _tInfo $
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
   trackVar i (Spec $ idTyVar i)
   as <- mapM toAST _tAppArgs
   case fun of
-    FDefun {..} -> assoc i (last _fBody)
+    FDefun {..} -> assocAST i (last _fBody)
     FNative {} -> return ()
   return $ App i fun as
 
 toAST TBinding {..} = do
-  bi <- freshId' _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
+  bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
   trackVar bi $ Spec $ case _tBindCtx of BindLet -> idTyVar bi; BindKV -> TyObject Nothing
-  bs <- forM _tBindPairs $ \(Arg n t,v) -> do
-    an <- freshId Nothing (pfx (show bi) n)
+  bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
+    an <- freshId ai (pfx (show bi) n)
     let t' = mangleType an t
     trackVar an $ Spec t'
     v' <- toAST v
-    assoc an v'
+    assocAST an v'
     return (an,v')
   bb <- scopeToBody _tInfo (map ((\ai -> Var ai ai).fst) bs) _tBindBody
-  assoc bi (last bb)
+  assocAST bi (last bb)
   return $ Binding bi bs bb _tBindCtx
 
-toAST TList {..} = List <$> freshId' _tInfo "list" <*> mapM toAST _tList <*> pure _tListType
-toAST TObject {..} = Object <$> freshId' _tInfo "object" <*>
+toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> pure _tListType
+toAST TObject {..} = Object <$> freshId _tInfo "object" <*>
                        mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> pure _tUserType
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
-toAST TKeySet {..} = freshId' _tInfo "keyset" >>= \i -> return $ Lit i TyKeySet (LVKeySet _tKeySet)
-toAST TValue {..} = freshId' _tInfo "value" >>= \i -> return $ Lit i TyValue (LVValue _tValue)
+toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Lit i TyKeySet (LVKeySet _tKeySet)
+toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Lit i TyValue (LVValue _tValue)
 toAST TLiteral {..} = do
   let ty = l2ty _tLiteral
-  i <- freshId' _tInfo (show ty)
+  i <- freshId _tInfo (show ty)
   trackVar i (Spec ty)
   return $ Lit i ty (LVLit _tLiteral)
 toAST TModule {..} = die _tInfo "Modules not supported"

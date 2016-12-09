@@ -237,7 +237,7 @@ doStepRollback [entity,exp,rb] i =
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
 letPair :: Exp -> Compile (Arg, Term Name)
-letPair (EList [EAtom s Nothing ty _,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty) <*> run v
+letPair (EList [EAtom s Nothing ty i,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> pure i) <*> run v
 letPair t = syntaxError (_eInfo t) "Invalid let pair"
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
@@ -272,7 +272,7 @@ doConst es i = case es of
   where
     mkConst dn ty v docs = do
       v' <- run v
-      a <- Arg <$> pure dn <*> maybeTyVar ty
+      a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
       return $ TConst a Nothing v' docs i
 
 
@@ -326,7 +326,7 @@ runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
 atomVar :: Exp -> Compile Arg
-atomVar (EAtom a Nothing ty _) = Arg <$> pure a <*> maybeTyVar ty
+atomVar (EAtom a Nothing ty i) = Arg <$> pure a <*> maybeTyVar ty <*> pure i
 atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
 {-# INLINE atomVar #-}
 

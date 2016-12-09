@@ -184,9 +184,10 @@ instance Show TypeName where show (TypeName s) = show s
 
 data Arg = Arg {
   _aName :: String,
-  _aType :: Type
+  _aType :: Type,
+  _aInfo :: Info
   } deriving (Eq,Ord)
-instance Show Arg where show (Arg n t) = n ++ ":" ++ show t
+instance Show Arg where show (Arg n t _) = n ++ ":" ++ show t
 
 
 data FunType = FunType {

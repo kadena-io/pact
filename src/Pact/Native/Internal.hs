@@ -100,4 +100,4 @@ funType t as = funTypes $ funType' t as
 
 
 funType' :: Type -> [(String,Type)] -> FunType
-funType' t as = FunType (map (uncurry Arg) as) t
+funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
