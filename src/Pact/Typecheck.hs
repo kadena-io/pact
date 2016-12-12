@@ -19,13 +19,15 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty (..))
 import Control.Arrow hiding ((<+>))
 import Data.Aeson hiding (Object, (.=))
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
--- import Data.String
+import Data.String
 import Data.Maybe
+import Data.List
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 data CheckerException = CheckerException Info String deriving (Eq,Ord)
@@ -42,6 +44,17 @@ data VarType = Spec { _vtType :: Type } |
                Overload { _vtRole :: VarRole, _vtOverApp :: TcId }
                deriving (Eq,Ord)
 
+type TypeSet = S.Set VarType
+newtype TypeSetId = TypeSetId String
+  deriving (Eq,Ord,IsString,AsString)
+instance Show TypeSetId where show (TypeSetId i) = show i
+
+data SolverEdge = SolverEdge {
+  _seTypeSet :: TypeSetId,
+  _seVarRole :: VarRole,
+  _seOverload :: TcId
+  } deriving (Eq,Show,Ord)
+
 instance Show VarType where
   show (Spec t) = show t
   show (Overload r ts) =
@@ -49,11 +62,13 @@ instance Show VarType where
 
 instance Pretty VarType where pretty = string . show
 
+type Pivot = M.Map VarType TypeSet
+
 data TcState = TcState {
   _tcSupply :: Int,
-  _tcVars :: M.Map TcId (S.Set VarType),
+  _tcVars :: M.Map TcId TypeSet,
   _tcOverloads :: M.Map TcId FunTypes,
-  _tcPivot :: M.Map VarType (S.Set VarType),
+  _tcPivot :: Pivot,
   _tcFailures :: S.Set CheckerException
   } deriving (Eq,Show)
 
@@ -69,11 +84,13 @@ instance Pretty TcState where
     string "Failures:" PP.<$> indent 2 (hsep $ map (string.show) (toList _tcFailures))
     <> hardline
 
-prettyPivot :: M.Map VarType (S.Set VarType) -> Doc
+prettyPivot :: M.Map VarType TypeSet -> Doc
 prettyPivot p =
   string "Pivot:" PP.<$>
   indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon PP.<$>
-                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList p)
+                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList p) PP.<$>
+  string "Sets:" PP.<$>
+  indent 2 (vsep (map (\v -> hsep (map (string . show) (toList v))) $ nub (M.elems p)))
 
 
 
@@ -257,16 +274,20 @@ isTyVar _ = False
 pivot :: TC ()
 pivot = do
   m <- use tcVars
-  let
+  tcPivot .= pivot' m
+
+pivot' :: M.Map a TypeSet -> Pivot
+pivot' m = rpt initPivot
+  where
     initPivot = execState (rinse m) M.empty
     lather = execState (get >>= rinse)
-    rinse :: M.Map a (S.Set VarType) -> State (M.Map VarType (S.Set VarType)) ()
+    rinse :: M.Map a TypeSet -> State (M.Map VarType TypeSet) ()
     rinse p =
       forM_ (M.elems p) $ \vts ->
         forM_ vts $ \vt ->
           when (isTyVar vt || isOverload vt) $ modify $ M.insertWith S.union vt vts
     rpt p = let p' = lather p in if p' == p then p else rpt p'
-  tcPivot .= rpt initPivot
+
 
 failEx :: a -> TC a -> TC a
 failEx a = handle (\(e :: CheckerException) -> tcFailures %= S.insert e >> return a)
@@ -279,9 +300,21 @@ eliminate = do
     final <- typecheckSet def vset
     tcPivot %= M.map (\s -> if s == vset then final else s)
 
+eliminate' :: MonadThrow m => Pivot -> m Pivot
+eliminate' p = (`execStateT` p) $ do
+  let vsets = S.fromList $ M.elems p
+  forM_ vsets $ \vset -> do
+    final <- typecheckSet' def vset
+    modify $ M.map (\s -> if s == vset then final else s)
+
+
+
 -- | Typechecks set and eliminates matched type vars.
-typecheckSet :: Info -> S.Set VarType -> TC (S.Set VarType)
-typecheckSet inf vset = failEx vset $ do
+typecheckSet :: Info -> TypeSet -> TC TypeSet
+typecheckSet inf vset = failEx vset $ typecheckSet' inf vset
+
+typecheckSet' :: MonadThrow m => Info -> TypeSet -> m TypeSet
+typecheckSet' inf vset = do
   let (_rocs,v1) = S.partition isRestOrUnconstrained vset
       (concs,v2) = S.partition isConcrete v1
   conc <- case toList concs of
@@ -307,6 +340,114 @@ typecheckSet inf vset = failEx vset $ do
           _ -> do
             let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
             return $ S.insert (Spec (TyVar uname inter)) rest
+
+data SolverState = SolverState {
+  _funMap :: M.Map TcId (FunTypes,M.Map VarRole Type,Maybe FunType),
+  _tsetMap :: M.Map TypeSetId (TypeSet,Maybe Type)
+} deriving (Eq,Show)
+makeLenses ''SolverState
+data SolverEnv = SolverEnv {
+  _graph :: M.Map (Either TypeSetId TcId) [SolverEdge]
+  }
+makeLenses ''SolverEnv
+
+type Solver = StateT SolverState (ReaderT SolverEnv IO)
+
+runSolver :: SolverState -> SolverEnv -> Solver a -> IO (a, SolverState)
+runSolver s e a = runReaderT (runStateT a s) e
+
+buildSolverGraph :: TC ()
+buildSolverGraph = do
+  tss <- nub . M.elems <$> use tcPivot
+  (oMap :: M.Map TcId (FunTypes,M.Map VarRole Type,Maybe FunType)) <- M.map (,def,Nothing) <$> use tcOverloads
+  (stuff :: [((TypeSetId,(TypeSet,Maybe Type)),[SolverEdge])]) <- fmap catMaybes $ forM tss $ \ts -> do
+    let tid = TypeSetId (show (toList ts))
+        es = (`map` toList ts) $ \v -> case v of
+               Overload r i -> Right (SolverEdge tid r i)
+               Spec t | isConcrete v -> Left (Just t)
+               _ -> Left Nothing
+    concrete <- case (`mapMaybe` es) (either id (const Nothing)) of
+      [] -> return Nothing
+      [a] -> return (Just a)
+      _ -> die def $ "Internal error: more than one concrete type in set: " ++ show ts
+    let ses = mapMaybe (either (const Nothing) Just) es
+    if null ses then return Nothing else
+      return $ Just ((tid,(ts,concrete)),mapMaybe (either (const Nothing) Just) es)
+  let tsMap :: M.Map TypeSetId (TypeSet,Maybe Type)
+      tsMap = M.fromList $ map fst stuff
+      initState = SolverState oMap tsMap
+      concretes :: [TypeSetId]
+      concretes = (`mapMaybe` stuff) $ \((tid,(_,t)),_) -> tid <$ t
+      edges :: [SolverEdge]
+      edges = concatMap snd stuff
+      edgeMap :: M.Map (Either TypeSetId TcId) [SolverEdge]
+      edgeMap = M.fromListWith (++) $ (`concatMap` edges) $ \s@(SolverEdge t _ i) -> [(Left t,[s]),(Right i,[s])]
+
+  let
+      doFuns :: [TcId] -> Solver [TypeSetId]
+      doFuns ovs = fmap concat $ forM ovs $ \ov -> do
+        fr <- M.lookup ov <$> use funMap
+        er <- M.lookup (Right ov) <$> view graph
+        case (fr,er) of
+          (Just (fTys,mems,Nothing),Just es) -> undefined
+
+
+  r <- liftIO $ runSolver initState (SolverEnv edgeMap) $ subArgs concretes
+  liftIO $ print r
+
+subArgs :: [TypeSetId] -> Solver [TcId]
+subArgs cs = fmap (nub . concat) $ forM cs $ \c -> do
+  cr <- M.lookup c <$> use tsetMap
+  er <- M.lookup (Left c) <$> view graph
+  case (cr,er) of
+    (Just (_, Just ct),Just es) -> forM es $ \(SolverEdge _ r ov) -> do
+      funMap %= M.adjust (over _2 (M.insert r ct)) ov
+      return ov
+    (_,_) -> return []
+
+tryFunType :: MonadCatch m => FunType -> M.Map VarRole Type -> m (Maybe (M.Map VarRole Type))
+tryFunType (FunType as rt) vMap = do
+  let ars = zipWith (\(Arg _ t _) i -> (ArgVar i,t)) as [0..]
+      fMap = M.fromList $ (RetVar,rt):ars
+      toSets = M.map (S.singleton . Spec)
+      setsMap = M.unionWith S.union (toSets vMap) (toSets fMap)
+      piv = pivot' setsMap
+  handle (\(_ :: CheckerException) -> return Nothing) $ do
+    elim <- eliminate' piv
+    let remapped :: M.Map VarRole TypeSet
+        remapped = (`M.map` setsMap) $ \s -> mconcat $ (`map` toList s) $ \t ->
+          if isTyVar t then fromMaybe S.empty $ M.lookup t elim
+          else S.singleton t
+        justConcs = (`map` M.toList remapped) $ \(vr,s) ->
+          if S.size s == 1 then
+            let h = head (toList s) in
+              if isConcrete h then Just (vr,_vtType h) else Nothing
+          else Nothing
+    case sequence justConcs of
+      Nothing -> return Nothing
+      Just ps -> return (Just (M.fromList ps))
+
+_ftaaa :: FunType
+_ftaaa = let a = TyVar "a" [TyInteger,TyDecimal]
+         in FunType [Arg "x" a def,Arg "y" a def] a
+_ftabD :: FunType
+_ftabD = let v n = TyVar n [TyInteger,TyDecimal]
+         in FunType [Arg "x" (v "a") def,Arg "y" (v "b") def] TyDecimal
+
+{-
+
+λ> tryFunType _ftaaa (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyInteger)])
+Nothing
+λ> tryFunType _ftaaa (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyDecimal)])
+Just (fromList [(ArgVar 0,decimal),(ArgVar 1,decimal),(RetVar,decimal)])
+λ> tryFunType _ftabD (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyInteger)])
+Just (fromList [(ArgVar 0,decimal),(ArgVar 1,integer),(RetVar,decimal)])
+λ> tryFunType _ftabD (M.fromList [(ArgVar 0,TyDecimal)])
+Nothing
+λ>
+
+-}
+
 
 
 processNatives :: Visitor TcId
@@ -342,12 +483,12 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
 
-lookupIdTys :: TcId -> TC (S.Set VarType)
+lookupIdTys :: TcId -> TC (TypeSet)
 lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
 
 
-tcToTy :: AST TcId -> TC (S.Set VarType)
+tcToTy :: AST TcId -> TC (TypeSet)
 tcToTy Lit {..} = return $ S.singleton $ Spec _aLitType
 tcToTy Var {..} = lookupIdTys _aVar
 tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
@@ -373,7 +514,10 @@ assocAST :: TcId -> AST TcId -> TC ()
 assocAST i a = tcToTy a >>= assocTys i
 
 -- | Track types to id with typechecking
-assocTys :: TcId -> S.Set VarType -> TC ()
+-- TODO figure out better error messages. The type being added
+-- is at least in App case the specified type to the arg type,
+-- meaning the already-tracked type is the unexpected one.
+assocTys :: TcId -> TypeSet -> TC ()
 assocTys i tys = do
   tys' <- S.union tys <$> lookupIdTys i
   void $ typecheckSet (_tiInfo i) tys'
@@ -495,8 +639,9 @@ substFun f@FDefun {..} = do
   -- app <- App <$> freshId Nothing "_top_" <*> pure f <*>
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
   pivot
-  use tcPivot >>= liftIO . putDoc . prettyPivot
+  --use tcPivot >>= liftIO . putDoc . prettyPivot
   eliminate
+  buildSolverGraph
   return $ set fBody b' f
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
