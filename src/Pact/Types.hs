@@ -509,6 +509,9 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
+toTermList :: (ToTerm a,Foldable f) => f a -> Term b
+toTermList l = TList (map toTerm (toList l)) def def
+
 typeof :: Term a -> Either String Type
 typeof t = case t of
       TLiteral l _ ->

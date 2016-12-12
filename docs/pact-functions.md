@@ -116,7 +116,7 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 
 ### is-bool {#is-bool}
 
-*val*&nbsp;`<a>` *&rarr;*&nbsp;`bool`
+*val*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
 Return VAL, enforcing boolean type. 
@@ -128,7 +128,7 @@ true
 
 ### is-decimal {#is-decimal}
 
-*val*&nbsp;`<a>` *&rarr;*&nbsp;`decimal`
+*val*&nbsp;`decimal` *&rarr;*&nbsp;`decimal`
 
 
 Return VAL, enforcing decimal type. 
@@ -140,7 +140,7 @@ pact> (is-decimal 123.45)
 
 ### is-integer {#is-integer}
 
-*val*&nbsp;`<a>` *&rarr;*&nbsp;`integer`
+*val*&nbsp;`integer` *&rarr;*&nbsp;`integer`
 
 
 Return VAL, enforcing integer type 
@@ -154,7 +154,7 @@ pact> (is-integer "abc")
 
 ### is-string {#is-string}
 
-*val*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+*val*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
 Return VAL, enforcing string type. 
@@ -168,7 +168,7 @@ pact> (is-string "abc")
 
 ### is-time {#is-time}
 
-*val*&nbsp;`<a>` *&rarr;*&nbsp;`time`
+*val*&nbsp;`time` *&rarr;*&nbsp;`time`
 
 
 Return VAL, enforcing time type. 
@@ -204,6 +204,14 @@ Create list from ELEMS.
 pact> (list 1 2 3)
 [1 2 3]
 ```
+
+
+### list-modules {#list-modules}
+
+ *&rarr;*&nbsp;`[string]`
+
+
+List modules available for loading.
 
 
 ### map {#map}
@@ -1061,8 +1069,10 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 
 *file*&nbsp;`string` *&rarr;*&nbsp;`string`
 
+*file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
-Load and evaluate FILE. 
+
+Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. 
 ```lisp
 (load "accounts.repl")
 ```

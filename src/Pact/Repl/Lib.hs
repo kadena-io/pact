@@ -46,7 +46,7 @@ import Data.Semigroup
 data LibOp =
     Noop |
     UpdateEnv (Endo (EvalEnv LibState)) |
-    Load FilePath
+    Load FilePath Bool
 instance Default LibOp where def = Noop
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
@@ -66,9 +66,10 @@ replDefsMap = HM.map Direct . HM.fromList <$> replDefs
 replDefs :: Eval LibState NativeDef
 replDefs = foldDefs
      [
-      defRNative "load" load (funType TyString [("file",TyString)])
-      "Load and evaluate FILE. `$(load \"accounts.repl\")`"
-
+      defRNative "load" load (funType TyString [("file",TyString)] <>
+                              funType TyString [("file",TyString),("reset",TyBool)]) $
+      "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " ++
+      "`$(load \"accounts.repl\")`"
      ,defRNative "env-keys" setsigs (funType TyString [("keys",TyList (Just TyString))])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defRNative "env-data" setmsg (funType TyString [("json",json)]) $
@@ -120,7 +121,8 @@ repldb = PactDb {
 
 
 load :: RNativeFun LibState
-load _ [TLitString fn] = setop (Load fn) >> return (tStr $ "Loading " ++ fn ++ "...")
+load _ [TLitString fn] = setop (Load fn False) >> return (tStr $ "Loading " ++ fn ++ "...")
+load _ [TLitString fn, TLiteral (LBool r) _] = setop (Load fn r) >> return (tStr $ "Loading " ++ fn ++ "...")
 load i as = argsError i as
 
 

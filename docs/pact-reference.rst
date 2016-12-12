@@ -913,7 +913,7 @@ Test COND, if true evaluate THEN, otherwise evaluate ELSE.
 is-bool
 ~~~~~~~
 
-*val* ``<a>`` *→* ``bool``
+*val* ``bool`` *→* ``bool``
 
 Return VAL, enforcing boolean type.
 
@@ -925,7 +925,7 @@ Return VAL, enforcing boolean type.
 is-decimal
 ~~~~~~~~~~
 
-*val* ``<a>`` *→* ``decimal``
+*val* ``decimal`` *→* ``decimal``
 
 Return VAL, enforcing decimal type.
 
@@ -937,7 +937,7 @@ Return VAL, enforcing decimal type.
 is-integer
 ~~~~~~~~~~
 
-*val* ``<a>`` *→* ``integer``
+*val* ``integer`` *→* ``integer``
 
 Return VAL, enforcing integer type
 
@@ -951,7 +951,7 @@ Return VAL, enforcing integer type
 is-string
 ~~~~~~~~~
 
-*val* ``<a>`` *→* ``string``
+*val* ``string`` *→* ``string``
 
 Return VAL, enforcing string type.
 
@@ -965,7 +965,7 @@ Return VAL, enforcing string type.
 is-time
 ~~~~~~~
 
-*val* ``<a>`` *→* ``time``
+*val* ``time`` *→* ``time``
 
 Return VAL, enforcing time type.
 
@@ -1001,6 +1001,13 @@ Create list from ELEMS.
 
     pact> (list 1 2 3)
     [1 2 3]
+
+list-modules
+~~~~~~~~~~~~
+
+*→* ``[string]``
+
+List modules available for loading.
 
 map
 ~~~
@@ -1908,7 +1915,10 @@ load
 
 *file* ``string`` *→* ``string``
 
-Load and evaluate FILE.
+*file* ``string`` *reset* ``bool`` *→* ``string``
+
+Load and evaluate FILE, resetting repl state beforehand if optional
+NO-RESET is true.
 
 .. code:: lisp
 

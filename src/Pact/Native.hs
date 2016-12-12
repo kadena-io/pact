@@ -147,9 +147,9 @@ langDefs = foldDefs
     ,defNative "bind" bind (funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)])
      "Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
-
     ,defRNative "typeof" typeof' (funType TyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
+    ,defRNative "list-modules" listModules (funType (TyList (Just TyString)) []) "List modules available for loading."
     ]
     where a = TyVar "a" []
           b = TyVar "b" []
@@ -343,3 +343,8 @@ bind i as = argsError' i as
 typeof' :: RNativeFun e
 typeof' _ [t] = return $ tStr $ either id show $ typeof t
 typeof' i as = argsError i as
+
+listModules :: RNativeFun e
+listModules _ _ = do
+  mods <- view $ eeRefStore.rsModules
+  return $ toTermList $ map asString $ M.keys mods

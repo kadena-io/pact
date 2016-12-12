@@ -20,6 +20,7 @@ module Pact.Eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,resolveFreeVars,resolveArg
     ,enforceKeySet,enforceKeySetName
+    ,deref
     ) where
 
 import Control.Lens hiding (op)
@@ -161,11 +162,14 @@ unify :: M.HashMap String Ref -> Either String Ref -> Ref
 unify _ (Right d) = d
 unify m (Left f) = m M.! f
 
+deref :: Ref -> Eval e (Term Name)
+deref (Direct n) = return n
+deref (Ref r) = reduce r
 
 -- | Recursive reduction.
 reduce ::  Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
-reduce (TVar t _) = case t of Direct n -> return n; Ref r -> reduce r
+reduce (TVar t _) = deref t
 reduce (TLiteral l i) = return $ TLiteral l i
 reduce (TKeySet k i) = return $ TKeySet k i
 reduce (TList bs _ _) = last <$> mapM reduce bs

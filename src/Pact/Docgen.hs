@@ -58,7 +58,7 @@ renderDocs h (Just (dd@DefData {..})) = do
       hPutStrLn h $ "### " ++ escapeIfNecc _dName ++ " {#" ++ sanitize _dName ++ "}"
       hPutStrLn h ""
       forM_ _dType $ \FunType {..} -> do
-        hPutStrLn h $ unwords (map (\(Arg n t) -> "*" ++ n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
+        hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
           " *&rarr;*&nbsp;`" ++ show _ftReturn ++ "`"
         hPutStrLn h ""
       hPutStrLn h ""
