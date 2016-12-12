@@ -746,8 +746,8 @@ allVarsCheck = do
 
 
 
-substFun :: Fun TcId -> TC (Either String (Fun Type))
-substFun f@FNative {} = return $ Right $ fmap (const TyRest) f
+substFun :: Fun TcId -> TC (Either String (Fun (TcId,Type)))
+substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
 substFun f@FDefun {..} = do
   -- make fake App for top-level fun
   -- app <- App <$> freshId Nothing "_top_" <*> pure f <*>
@@ -761,7 +761,7 @@ substFun f@FDefun {..} = do
   let f' = set fBody b' f
   case result of
     Left m -> return $ Left $ "Failed to typecheck: " ++ show m
-    Right vs -> return $ Right $ fmap (vs M.!) f'
+    Right vs -> return $ Right $ fmap (\v -> (v,vs M.! v)) f'
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
 _loadFun fp mn fn = do
@@ -770,8 +770,8 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Either String (Fun Type), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Either String (Fun (TcId,Type)), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
-_inferIssue :: IO (Either String (Fun Type), TcState)
+_inferIssue :: IO (Either String (Fun (TcId,Type)), TcState)
 _inferIssue = _infer "examples/cp/cp-notest.repl" "cp" "issue"
