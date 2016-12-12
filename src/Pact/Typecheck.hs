@@ -284,10 +284,6 @@ isTyVar :: VarType -> Bool
 isTyVar (Spec TyVar {}) = True
 isTyVar _ = False
 
--- | take vars map of thing->{typevars} to
--- typevar->{typevars}, where for each typevar, build the
--- set of all types that refer to it, such that each of those
--- types are in turn indexed to this same set.
 pivot :: TC ()
 pivot = do
   m <- use tcVars
@@ -338,8 +334,6 @@ modifying' l f = use l >>= f >>= assign l
 -- | Eliminate/reduce sets and accumulate errors.
 eliminate :: TC ()
 eliminate = modifying' (tcPivot . pSetMap) $ mapM (typecheckSet def)
---  tsets' <- forM tsets $ typecheckSet def
---  tcPivot . pSetMap .= tsets'
 
 -- | Typecheck and monadically accumulate errors
 typecheckSet :: Info -> TypeSet -> TC TypeSet
@@ -749,16 +743,14 @@ allVarsCheck = do
 substFun :: Fun TcId -> TC (Either String (Fun (TcId,Type)))
 substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
 substFun f@FDefun {..} = do
-  -- make fake App for top-level fun
-  -- app <- App <$> freshId Nothing "_top_" <*> pure f <*>
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
   pivot
-  --use tcPivot >>= liftIO . putDoc . prettyPivot
   eliminate
   solveOverloads
   use tcPivot >>= unPivot >>= assign tcVars
   result <- allVarsCheck
   let f' = set fBody b' f
+  -- TODO need to bail on any errors accumulated up to here
   case result of
     Left m -> return $ Left $ "Failed to typecheck: " ++ show m
     Right vs -> return $ Right $ fmap (\v -> (v,vs M.! v)) f'
@@ -774,4 +766,4 @@ _infer :: FilePath -> ModuleName -> String -> IO (Either String (Fun (TcId,Type)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 _inferIssue :: IO (Either String (Fun (TcId,Type)), TcState)
-_inferIssue = _infer "examples/cp/cp-notest.repl" "cp" "issue"
+_inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
