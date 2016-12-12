@@ -24,7 +24,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Control.Arrow hiding ((<+>))
 import Data.Aeson hiding (Object, (.=))
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>))
 import Data.String
 import Data.Maybe
 import Data.List
@@ -49,12 +49,6 @@ newtype TypeSetId = TypeSetId String
   deriving (Eq,Ord,IsString,AsString)
 instance Show TypeSetId where show (TypeSetId i) = show i
 
-data SolverEdge = SolverEdge {
-  _seTypeSet :: TypeSetId,
-  _seVarRole :: VarRole,
-  _seOverload :: TcId
-  } deriving (Eq,Show,Ord)
-
 instance Show VarType where
   show (Spec t) = show t
   show (Overload r ts) =
@@ -72,24 +66,30 @@ data TcState = TcState {
   _tcFailures :: S.Set CheckerException
   } deriving (Eq,Show)
 
+infixr 5 <$$>
+(<$$>) :: Doc -> Doc -> Doc
+(<$$>) = (PP.<$>)
+
+for :: [a] -> (a -> b) -> [b]
+for = flip map
 
 instance Default TcState where def = TcState 0 def def def def
 instance Pretty TcState where
-  pretty TcState {..} = string "Vars:" PP.<$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) PP.<$>
-    string "Overloads:" PP.<$>
+  pretty TcState {..} = string "Vars:" <$$>
+    indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) <$$>
+    string "Overloads:" <$$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
-                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) PP.<$>
-    prettyPivot _tcPivot PP.<$>
-    string "Failures:" PP.<$> indent 2 (hsep $ map (string.show) (toList _tcFailures))
+                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
+    prettyPivot _tcPivot <$$>
+    string "Failures:" <$$> indent 2 (hsep $ map (string.show) (toList _tcFailures))
     <> hardline
 
 prettyPivot :: M.Map VarType TypeSet -> Doc
 prettyPivot p =
-  string "Pivot:" PP.<$>
-  indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon PP.<$>
-                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList p) PP.<$>
-  string "Sets:" PP.<$>
+  string "Pivot:" <$$>
+  indent 2 (vsep $ map (\(k,v) -> pretty k  <+> colon <$$>
+                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList p) <$$>
+  string "Sets:" <$$>
   indent 2 (vsep (map (\v -> hsep (map (string . show) (toList v))) $ nub (M.elems p)))
 
 
@@ -144,10 +144,10 @@ data Fun t =
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (Fun t) where
-  pretty FNative {..} = text ("Native: " ++ show _fName) PP.<$>
+  pretty FNative {..} = text ("Native: " ++ show _fName) <$$>
     indent 2 (vsep (map (text.show) (toList _fTypes)))
-  pretty FDefun {..} = text ("Defun: " ++ show _fName) <+> text (show _fType) PP.<$>
-    sep (map pretty _fArgs) PP.<$>
+  pretty FDefun {..} = text ("Defun: " ++ show _fName) <+> text (show _fType) <$$>
+    sep (map pretty _fArgs) <$$>
     vsep (map pretty _fBody)
 
 
@@ -190,17 +190,17 @@ instance Pretty t => Pretty (AST t) where
   pretty Object {..} = "{" <+> align (sep (map (\(k,v) -> pretty k <> text ":" <+> pretty v) _aObject)) <+> "}"
   pretty List {..} = list (map pretty _aList)
   pretty Binding {..} =
-    pretty _aId PP.<$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" PP.<$> indent 4 (pretty v)) _aBindings)) PP.<$>
+    pretty _aId <$$>
+    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aBindings)) <$$>
     indent 4 (vsep (map pretty _aBody))
   pretty App {..} =
-    pretty _aId <+> text (_fName _aAppFun) PP.<$>
+    pretty _aId <+> text (_fName _aAppFun) <$$>
     indent 4 (case _aAppFun of
        FNative {..} -> vsep (map (text . show) (toList _fTypes))
-       FDefun {..} -> text (show _fType)) PP.<$>
+       FDefun {..} -> text (show _fType)) <$$>
     (case _aAppFun of
         FNative {} -> (<> empty)
-        FDefun {..} -> (PP.<$> indent 4 (vsep (map pretty _fBody))))
+        FDefun {..} -> (<$$> indent 4 (vsep (map pretty _fBody))))
     (indent 2 (vsep (map pretty _aAppArgs)))
 
 
@@ -341,11 +341,32 @@ typecheckSet' inf vset = do
             let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
             return $ S.insert (Spec (TyVar uname inter)) rest
 
+
+data SolverEdge = SolverEdge {
+  _seTypeSet :: TypeSetId,
+  _seVarRole :: VarRole,
+  _seOverload :: TcId
+  } deriving (Eq,Show,Ord)
+
 data SolverState = SolverState {
   _funMap :: M.Map TcId (FunTypes,M.Map VarRole Type,Maybe FunType),
   _tsetMap :: M.Map TypeSetId (TypeSet,Maybe Type)
 } deriving (Eq,Show)
 makeLenses ''SolverState
+instance Pretty SolverState where
+  pretty SolverState {..} =
+    text "Funs:" <$$>
+    indent 2 (vsep $ for (M.toList _funMap) $ \(k,(fts,mems,mft)) ->
+                 text (show k) <> colon <+> align (text (show mems) <$$>
+                                                   text (show mft) <$$>
+                                                   indent 2 (vsep (map (text . show) $ toList fts))))
+    <$$>
+    text "Typesets:" <$$>
+    indent 2 (vsep $ for (M.toList _tsetMap) $ \(k,(_,mt)) ->
+                 text (show k) <> colon <+> text (show mt))
+
+
+
 data SolverEnv = SolverEnv {
   _graph :: M.Map (Either TypeSetId TcId) [SolverEdge]
   }
@@ -383,26 +404,50 @@ buildSolverGraph = do
       edgeMap :: M.Map (Either TypeSetId TcId) [SolverEdge]
       edgeMap = M.fromListWith (++) $ (`concatMap` edges) $ \s@(SolverEdge t _ i) -> [(Left t,[s]),(Right i,[s])]
 
-  let
-      doFuns :: [TcId] -> Solver [TypeSetId]
-      doFuns ovs = fmap concat $ forM ovs $ \ov -> do
-        fr <- M.lookup ov <$> use funMap
-        er <- M.lookup (Right ov) <$> view graph
-        case (fr,er) of
-          (Just (fTys,mems,Nothing),Just es) -> undefined
+  r <- liftIO $ runSolver initState (SolverEnv edgeMap) (solve concretes)
+  liftIO $ putDoc $ pretty (snd r) <$$> hardline
 
+solve :: [TypeSetId] -> Solver ()
+solve initTypes = run initTypes (0 :: Int) where
+  run ts i = do
+    ovs <- doTypesets ts
+    unless (null ovs) $ do
+      ts' <- doFuns ovs
+      unless (null ts') $ run ts' (succ i)
 
-  r <- liftIO $ runSolver initState (SolverEnv edgeMap) $ subArgs concretes
-  liftIO $ print r
+doFuns :: [TcId] -> Solver [TypeSetId]
+doFuns ovs = fmap (nub . concat) $ forM ovs $ \ov -> do
+  fr <- M.lookup ov <$> use funMap
+  er <- M.lookup (Right ov) <$> view graph
+  case (fr,er) of
+    (Just (fTys,mems,Nothing),Just es) -> do
+      ftym <- foldM (\r f -> maybe (fmap (f,) <$> tryFunType f mems) (return . Just) r) Nothing fTys
+      case ftym of
+        Nothing -> return []
+        Just (fty,mems') -> do
+          funMap %= M.adjust (set _3 (Just fty) . set _2 mems') ov
+          let newmems = M.difference mems' mems
+              findEdge vr = filter ((== vr) . _seVarRole) es
+          fmap concat $ forM (M.toList newmems) $ \(vr,ty) -> case findEdge vr of
+            [SolverEdge ts _ _] -> do
+              tsetMap %= M.adjust (set _2 (Just ty)) ts
+              return [ts]
+            _ -> return [] -- need more error reporting
+    _ -> return []
 
-subArgs :: [TypeSetId] -> Solver [TcId]
-subArgs cs = fmap (nub . concat) $ forM cs $ \c -> do
+doTypesets :: [TypeSetId] -> Solver [TcId]
+doTypesets cs = fmap (nub . concat) $ forM cs $ \c -> do
   cr <- M.lookup c <$> use tsetMap
   er <- M.lookup (Left c) <$> view graph
   case (cr,er) of
-    (Just (_, Just ct),Just es) -> forM es $ \(SolverEdge _ r ov) -> do
-      funMap %= M.adjust (over _2 (M.insert r ct)) ov
-      return ov
+    (Just (_, Just ct),Just es) -> fmap concat $ forM es $ \(SolverEdge _ r ov) -> do
+      fm <- M.lookup ov <$> use funMap
+      case fm of
+        Nothing -> return []
+        Just (_,_,Just _) -> return []
+        _ -> do
+          funMap %= M.adjust (over _2 (M.insert r ct)) ov
+          return [ov]
     (_,_) -> return []
 
 tryFunType :: MonadCatch m => FunType -> M.Map VarRole Type -> m (Maybe (M.Map VarRole Type))
@@ -483,12 +528,12 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
 
-lookupIdTys :: TcId -> TC (TypeSet)
+lookupIdTys :: TcId -> TC TypeSet
 lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
 
 
-tcToTy :: AST TcId -> TC (TypeSet)
+tcToTy :: AST TcId -> TC TypeSet
 tcToTy Lit {..} = return $ S.singleton $ Spec _aLitType
 tcToTy Var {..} = lookupIdTys _aVar
 tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
