@@ -746,7 +746,7 @@ substFun f@FDefun {..} = do
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
   pivot
   eliminate
-  solveOverloads
+  failEx () solveOverloads
   use tcPivot >>= unPivot >>= assign tcVars
   result <- allVarsCheck
   let f' = set fBody b' f
