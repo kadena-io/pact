@@ -740,7 +740,7 @@ allVarsCheck = do
 
 
 
-substFun :: Fun TcId -> TC (Either String (Fun (TcId,Type)))
+substFun :: Fun TcId -> TC (Either (Fun TcId) (Fun (TcId,Type)))
 substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
 substFun f@FDefun {..} = do
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
@@ -752,7 +752,7 @@ substFun f@FDefun {..} = do
   let f' = set fBody b' f
   -- TODO need to bail on any errors accumulated up to here
   case result of
-    Left m -> return $ Left $ "Failed to typecheck: " ++ show m
+    Left m -> return $ Left $ f'
     Right vs -> return $ Right $ fmap (\v -> (v,vs M.! v)) f'
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
@@ -762,8 +762,8 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Either String (Fun (TcId,Type)), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Either (Fun TcId) (Fun (TcId,Type)), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
-_inferIssue :: IO (Either String (Fun (TcId,Type)), TcState)
+_inferIssue :: IO (Either (Fun TcId) (Fun (TcId,Type)), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
