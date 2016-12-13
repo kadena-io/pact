@@ -767,3 +767,7 @@ _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 _inferIssue :: IO (Either (Fun TcId) (Fun (TcId,Type)), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
+
+_pretty :: (Either (Fun TcId) (Fun (TcId,Type)), TcState) -> IO ()
+_pretty (Left f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
+_pretty (Right f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
