@@ -11,6 +11,7 @@ module Pact.Typecheck where
 
 import Pact.Repl
 import Pact.Types
+import Pact.Native.Internal
 import Control.Monad.Catch
 import Control.Lens hiding (pre,List)
 import Bound.Scope
@@ -29,9 +30,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>))
 import Data.String
 import Data.Maybe
 import Data.List
-import Data.Hashable
-import Numeric
-import Data.Word
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 data CheckerException = CheckerException Info String deriving (Eq,Ord)
@@ -41,6 +39,10 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
+
+debug :: MonadIO m => String -> m ()
+debug = liftIO . putStrLn
+
 
 data VarRole = ArgVar Int | RetVar deriving (Eq,Show,Ord)
 
@@ -55,7 +57,7 @@ instance Show TypeSetId where show (TypeSetId i) = show i
 
 -- | Hex-Hash-Show
 haxow :: Show a => a -> String
-haxow a = showHex (fromIntegral (hash (show a)) :: Word64) ""
+haxow a = show a -- showHex (fromIntegral (hash (show a)) :: Word64) ""
 
 instance Show VarType where
   show (Spec t) = show t
@@ -105,7 +107,7 @@ instance Pretty TcState where
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
                            align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
     pretty _tcPivot <$$>
-    string "Failures:" <$$> indent 2 (hsep $ map (string.show) (toList _tcFailures))
+    string "Failures:" <$$> indent 2 (vsep $ map (string.show) (toList _tcFailures))
     <> hardline
 
 
@@ -147,11 +149,15 @@ instance Pretty LitValue where
   pretty (LVKeySet k) = text (show k)
   pretty (LVValue v) = text (show v)
 
+
+
 data Fun t =
   FNative {
     _fInfo :: Info,
     _fName :: String,
-    _fTypes :: FunTypes } |
+    _fTypes :: FunTypes,
+    _fSpecial :: Maybe (SpecialForm,[AST t])
+    } |
   FDefun {
     _fInfo :: Info,
     _fName :: String,
@@ -161,11 +167,15 @@ data Fun t =
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (Fun t) where
-  pretty FNative {..} = text ("Native: " ++ show _fName) <$$>
-    indent 2 (vsep (map (text.show) (toList _fTypes)))
-  pretty FDefun {..} = text ("Defun: " ++ show _fName) <+> text (show _fType) <$$>
-    hsep (map pretty _fArgs) <$$>
-    vsep (map pretty _fBody)
+  pretty FNative {..} = text (show _fName) <$$>
+    indent 4 (vsep (map (text.show) (toList _fTypes))) <>
+      (case _fSpecial of
+         Nothing -> mempty
+         Just (_,bod) -> mempty <$$> indent 2 (vsep (map pretty bod)))
+  pretty FDefun {..} = text (show _fName) <$$>
+    indent 4 (text (show _fType)) <$$>
+    indent 4 (text "Args:") <+> hsep (map pretty _fArgs) <$$>
+    indent 2 (vsep (map pretty _fBody))
 
 
 
@@ -204,21 +214,18 @@ data AST t =
 instance Pretty t => Pretty (AST t) where
   pretty Lit {..} = pretty _aLitType <> equals <> pretty _aLitValue
   pretty Var {..} = pretty _aVar
-  pretty Object {..} = "{" <+> align (sep (map (\(k,v) -> pretty k <> text ":" <+> pretty v) _aObject)) <+> "}"
+  pretty Object {..} =
+    "{" <$$>
+    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$> "}"
   pretty List {..} = list (map pretty _aList)
   pretty Binding {..} =
     pretty _aId <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aBindings)) <$$>
+    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":=" <$$> indent 4 (pretty v)) _aBindings)) <$$>
     indent 4 (vsep (map pretty _aBody))
   pretty App {..} =
-    pretty _aId <+> text (_fName _aAppFun) <$$>
-    indent 4 (case _aAppFun of
-       FNative {..} -> vsep (map (text . show) (toList _fTypes))
-       FDefun {..} -> text (show _fType)) <$$>
-    (case _aAppFun of
-        FNative {} -> (<> empty)
-        FDefun {..} -> (<$$> indent 4 (vsep (map pretty _fBody))))
-    (indent 2 (vsep (map pretty _aAppArgs)))
+    pretty _aId <$$>
+    pretty _aAppFun <$$>
+    indent 2 (vsep (map pretty _aAppArgs))
 
 
 
@@ -254,10 +261,16 @@ walkAST f t@Binding {} = do
 walkAST f t@App {} = do
   App {..} <- f Pre t
   t' <- App _aId <$>
-        (case _aAppFun of fun@FNative {} -> return fun
-                          fun@FDefun {..} -> do
-                             db <- mapM (walkAST f) _fBody
-                             return $ set fBody db fun) <*>
+        (case _aAppFun of
+           fun@FNative {..} -> case _fSpecial of
+             Nothing -> return fun
+             Just (fs,bod) -> do
+               bod' <- mapM (walkAST f) bod
+               return (set fSpecial (Just (fs,bod')) fun)
+           fun@FDefun {..} -> do
+             db <- mapM (walkAST f) _fBody
+             return $ set fBody db fun
+        ) <*>
         mapM (walkAST f) _aAppArgs
   f Post t'
 
@@ -326,7 +339,10 @@ unPivot Pivot {..} = forM _pRevMap $ \v -> case v of
     Just s -> return s
 
 failEx :: a -> TC a -> TC a
-failEx a = handle (\(e :: CheckerException) -> tcFailures %= S.insert e >> return a)
+failEx a = handle (\(e :: CheckerException) -> do
+                      tcFailures %= S.insert e
+                      debug $ "Failure: " ++ show e
+                      return a)
 
 modifying' :: MonadState s m => Lens' s a -> (a -> m a) -> m ()
 modifying' l f = use l >>= f >>= assign l
@@ -432,7 +448,7 @@ solveOverloads = do
     concrete <- case (`mapMaybe` es) (either id (const Nothing)) of
       [] -> return Nothing
       [a] -> return (Just a)
-      _ -> die def $ "Internal error: more than one concrete type in set: " ++ show ts
+      _ -> die def $ "Cannot solve: more than one concrete type in set: " ++ show ts
     let ses = mapMaybe (either (const Nothing) Just) es
     if null ses then return Nothing else
       return $ Just ((tid,(ts,concrete)),mapMaybe (either (const Nothing) Just) es)
@@ -495,22 +511,16 @@ doTypesets cs = fmap (nub . concat) $ forM cs $ \c -> do
     (_,_) -> return []
 
 tryFunType :: (MonadIO m,MonadCatch m) => FunType -> M.Map VarRole Type -> m (Maybe (M.Map VarRole Type))
-tryFunType ft@(FunType as rt) vMap = do
+tryFunType (FunType as rt) vMap = do
   let ars = zipWith (\(Arg _ t _) i -> (ArgVar i,t)) as [0..]
       fMap = M.fromList $ (RetVar,rt):ars
       toSets = M.map (S.singleton . Spec)
       setsMap = M.unionWith S.union (toSets vMap) (toSets fMap)
       piv = pivot' setsMap
   handle (\(_ :: CheckerException) -> return Nothing) $ do
-    liftIO $ print ft
-    liftIO $ print setsMap
     elim <- eliminate' piv
     remapped <- unPivot elim
-    let justConcs = (`map` M.toList remapped) $ \(vr,s) -> fmap (vr,) $ asConcreteSingleton s
-{-          if S.size s == 1 then
-            let h = head (toList s) in
-              if isConcrete h then Just (vr,_vtType h) else Nothing
-          else Nothing -}
+    let justConcs = (`map` M.toList remapped) $ \(vr,s) -> ((vr,) <$> asConcreteSingleton s)
     case sequence justConcs of
       Nothing -> return Nothing
       Just ps -> return (Just (M.fromList ps))
@@ -545,7 +555,8 @@ Nothing
 -}
 
 
-
+-- | Native funs get processed on their own walk.
+-- 'assocAST' associates the app arg's ID with the fun ty.
 processNatives :: Visitor TcId
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
@@ -554,27 +565,36 @@ processNatives Pre a@(App i FNative {..} as) = do
       let FunType {..} = mangleFunType i ft
       zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t)) _ftArgs as
       assocTy i (Spec _ftReturn)
+      -- the following assumes that special forms are never overloaded!
+      case _fSpecial of
+        -- with-read et al have a single Binding body, associate this with return type
+        Just (_,[Binding {..}]) -> assocTy _aId (Spec _ftReturn)
+        -- WithKeyset just returns a string
+        Just (WithKeyset,_) -> assocTy i (Spec TyString)
+        _ -> return ()
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType i) fts
       tcOverloads %= M.insert i fts'
-      zipWithM_ (\ai aa -> assocTy (_aId aa) (Overload (ArgVar ai) i)) [0..] as
+      zipWithM_ (\ai aa -> assocTy (_aId aa) (Overload (ArgVar ai) i)) [0..] as -- this assoc's the funty with the app ty.
       assocTy i (Overload RetVar i)
   return a
 processNatives _ a = return a
 
--- | substitute app args into vars for FDefuns
+-- | Walk to substitute app args into vars for FDefuns
+-- 'assocAST' associates the defun's arg with the app arg type.
 substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TcId
-substAppDefun nr Pre t@Var {..} = case nr of
+substAppDefun sub Pre t@Var {..} = case sub of
     Nothing -> return t
-    Just (n,r) | n == _aVar -> assocAST n r >> return r -- might need a typecheck here
-               | otherwise -> return t
+    Just (defArg,appAst)
+      | defArg == _aVar -> assocAST defArg appAst >> return appAst
+      | otherwise -> return t
 substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out first.
     af <- case _aAppFun of
       f@FNative {} -> return f
       f@FDefun {..} -> do
-        fb' <- forM _fBody $ \bt ->
-          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bt (zip _fArgs _aAppArgs) -- this zip might need a typecheck
+        fb' <- forM _fBody $ \bAst ->
+          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip _fArgs _aAppArgs) -- this zip might need a typecheck
         return $ set fBody fb' f
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
@@ -642,9 +662,9 @@ mangleFunType :: TcId -> FunType -> FunType
 mangleFunType f = over ftReturn (mangleType f) .
                   over (ftArgs.traverse.aType) (mangleType f)
 
-
 toFun :: Term (Either Ref (AST TcId)) -> TC (Fun TcId)
-toFun (TVar (Left (Direct (TNative DefData {..} _ i))) _) = return $ FNative i _dName _dType
+toFun (TVar (Left (Direct (TNative DefData {..} _ i))) _) =
+  return $ FNative i _dName _dType ((,[]) <$> isSpecialForm _dName)
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every time, is this ideal?
@@ -661,6 +681,9 @@ toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every
   return $ FDefun i fn ty args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
+notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
+notEmpty i msg [] = die i msg
+notEmpty _ _ as = return as
 
 toAST :: Term (Either Ref (AST TcId)) -> TC (AST TcId)
 toAST TNative {..} = die _tInfo "Native in value position"
@@ -675,23 +698,32 @@ toAST TApp {..} = do
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
   trackVar i (Spec $ idTyVar i)
   as <- mapM toAST _tAppArgs
-  case fun of
-    FDefun {..} -> assocAST i (last _fBody)
-    FNative {} -> return ()
-  return $ App i fun as
+  (as',fun') <- case fun of
+    FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
+    FNative {..} -> case _fSpecial of
+      Nothing -> return (as,fun)
+      Just (f@WithKeyset,_) -> return (take 1 as,set fSpecial (Just (f,drop 1 as)) fun)
+      Just (f,_) -> (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
+                    <*> pure (set fSpecial (Just (f,[last as])) fun)
+  return $ App i fun' as'
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
-  trackVar bi $ Spec $ case _tBindCtx of BindLet -> idTyVar bi; BindKV -> TyObject Nothing
+  trackVar bi $ Spec $ idTyVar bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     an <- freshId ai (pfx (show bi) n)
     let t' = mangleType an t
     trackVar an $ Spec t'
-    v' <- toAST v
-    assocAST an v'
-    return (an,v')
+    case _tBindCtx of
+      BindLet -> do
+        v' <- toAST v
+        assocAST an v'
+        return (an,v')
+      BindKV -> return (an,Var an an) -- KV bind punts and simply creates a var
   bb <- scopeToBody _tInfo (map ((\ai -> Var ai ai).fst) bs) _tBindBody
-  assocAST bi (last bb)
+  case _tBindCtx of
+    BindLet -> assocAST bi (last bb)
+    BindKV -> return () -- TODO check it out
   return $ Binding bi bs bb _tBindCtx
 
 toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> pure _tListType
@@ -739,20 +771,23 @@ allVarsCheck = do
     Right ps -> return (Right (M.fromList ps))
 
 
-
-substFun :: Fun TcId -> TC (Either (Fun TcId) (Fun (TcId,Type)))
+substFun :: Fun TcId -> TC (Either (String,Fun TcId) (Fun (TcId,Type)))
 substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
 substFun f@FDefun {..} = do
+  debug "Substitution"
   b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
+  debug "Pivot"
   pivot
+  debug "Eliminate"
   eliminate
+  debug "Solve overloads"
   failEx () solveOverloads
   use tcPivot >>= unPivot >>= assign tcVars
   result <- allVarsCheck
   let f' = set fBody b' f
   -- TODO need to bail on any errors accumulated up to here
   case result of
-    Left m -> return $ Left $ f'
+    Left _ -> return $ Left ("Failed to unify all types",f')
     Right vs -> return $ Right $ fmap (\v -> (v,vs M.! v)) f'
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
@@ -762,12 +797,12 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Either (Fun TcId) (Fun (TcId,Type)), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
-_inferIssue :: IO (Either (Fun TcId) (Fun (TcId,Type)), TcState)
+_inferIssue :: IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
-_pretty :: (Either (Fun TcId) (Fun (TcId,Type)), TcState) -> IO ()
-_pretty (Left f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
+_pretty :: (Either (String,Fun TcId) (Fun (TcId,Type)), TcState) -> IO ()
+_pretty (Left (m,f),tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc <$$> text m <> hardline)
 _pretty (Right f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)

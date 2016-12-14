@@ -37,8 +37,8 @@ keyDefs =
      "Define keyset as NAME with KEYSET. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value.\
      \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
-    ,defNative "with-keyset" withKeyset (funType (TyVar "a" []) [("keyset-or-name",TyString),("body",TyRest)])
-     "Enforce KEYSET-OR-NAME against message keys to run BODY. \
+    ,defNative (specialForm WithKeyset) withKeyset (funType (TyVar "a" []) [("keyset-or-name",TyString),("body",TyRest)])
+     "Special form to enforce KEYSET-OR-NAME against message keys before running BODY. \
      \KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. \
      \`$(with-keyset 'admin-keyset ...)` `$(with-keyset (read-keyset \"keyset\") ...)`"
     ,defRNative "keys-all" (keyPred (==)) keyPredArgs

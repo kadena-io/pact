@@ -45,13 +45,13 @@ dbDefs = do
      (funType TyString [("table",TyString),("module",TyString)])
      "Create table TABLE guarded by module MODULE. `$(create-table 'accounts 'accounts-admin)`"
 
-    ,defNative "with-read" withRead
+    ,defNative (specialForm WithRead) withRead
      (funType TyString [("table",TyString),("key",TyString),("bindings",TyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
-    ,defNative "with-default-read" withDefaultRead
+    ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType TyString [("table",TyString),("key",TyString),("defaults",TyObject Nothing),("bindings",TyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \

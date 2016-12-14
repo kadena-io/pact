@@ -144,8 +144,8 @@ langDefs = foldDefs
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative "bind" bind (funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)])
-     "Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. \
+    ,defNative (specialForm Bind) bind (funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)])
+     "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof' (funType TyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"

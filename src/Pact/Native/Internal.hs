@@ -30,6 +30,30 @@ import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import qualified Data.Text as T
 import Bound
+import Data.String
+import qualified Data.Map.Strict as M
+
+data SpecialForm =
+  WithRead |
+  WithDefaultRead |
+  WithKeyset |
+  Bind deriving (Eq,Enum,Ord,Bounded)
+
+instance AsString SpecialForm where
+  asString WithRead = "with-read"
+  asString WithDefaultRead = "with-default-read"
+  asString WithKeyset = "with-keyset"
+  asString Bind = "bind"
+instance Show SpecialForm where show = show . asString
+
+specialForm :: SpecialForm -> NativeDefName
+specialForm = fromString . asString
+
+sfLookup :: M.Map String SpecialForm
+sfLookup = M.fromList $ map (asString &&& id) [minBound .. maxBound]
+
+isSpecialForm :: String -> Maybe SpecialForm
+isSpecialForm = (`M.lookup` sfLookup)
 
 
 -- | Native function with un-reduced arguments. Must fire call stack.
