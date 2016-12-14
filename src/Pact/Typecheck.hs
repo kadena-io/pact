@@ -569,8 +569,8 @@ processNatives Pre a@(App i FNative {..} as) = do
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
         Just (_,[Binding {..}]) -> assocTy _aId (Spec _ftReturn)
-        -- WithKeyset just returns a string
-        Just (WithKeyset,_) -> assocTy i (Spec TyString)
+        -- WithKeyset is a body form
+        Just (WithKeyset,bod) -> notEmpty (_tiInfo i) "Expected non-empty body" bod >>= (assocAST i . last)
         _ -> return ()
     -- multiple funtypes
     fts -> do
