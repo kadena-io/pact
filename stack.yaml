@@ -42,7 +42,7 @@ packages:
 extra-deps:
 - z3-4.1.0
 - z3-encoding-0.3.0.0
-
+- hsc2hs-0.68.1
 
 
 # Override default flag values for local packages and extra-deps
