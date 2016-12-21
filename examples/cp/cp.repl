@@ -33,27 +33,47 @@
 (use 'orders)
 (use 'cp-test)
 
+; Issue new CUSIP
 (issue "agent" "cusip1" "GE CP" 100000.0 7.35 30 1000.0 t1)
+
+; Verify inventory
 (expect "agent has inventory" 1 (at "qty" (cp.read-inventory "agent" "cusip1")))
 
+; trader sends order, agent fills
 (new-order "order1" "cusip1" "trader" "agent" 1 99387.5 "USD" t1)
 
 (fill-order-transfer "order1" "agent" t2)
 
+; verify order state
 (expect "order record correct"
-  {"cusip": "cusip1", "buyer": "trader", "seller": "agent", "price": 99387.5,
-  "qty": 1, "ccy": "USD", "order-date": t1,
-  "status": ORDER_FILLED, "modify-date": t2}
+  {
+  "price": 99387.5,
+  "qty": 1,
+  "status": ORDER_FILLED,
+  "ccy": "USD", "order-date": t1,
+  "cusip": "cusip1", "buyer": "trader", "seller": "agent",
+  "modify-date": t2
+  }
   (read-order "order1"))
 
+; verify inventory has transferred
 (expect "agent inventory" 0 (at "qty" (read-inventory "agent" "cusip1")))
 (expect "trader inventory" 1 (at "qty" (read-inventory "trader" "cusip1")))
 
+; trader settles
 (settle-order "order1" "cusip1" "trader" "agent" t3)
+
+; verify cash
 (expect "trader balance" 612.5 (at "balance" (read-account "trader")))
 (expect "agent balance" 99387.5 (at "balance" (read-account "agent")))
+
+; verify order status
 (expect "order paid" ORDER_PAID (at "status" (read-order "order1")))
 
+
+
+;;
+;;
 (rollback-tx)
 
 (use 'cp)

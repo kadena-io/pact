@@ -55,9 +55,6 @@ newtype TypeSetId = TypeSetId String
   deriving (Eq,Ord,IsString,AsString)
 instance Show TypeSetId where show (TypeSetId i) = show i
 
--- | Hex-Hash-Show
-haxow :: Show a => a -> String
-haxow a = show a -- showHex (fromIntegral (hash (show a)) :: Word64) ""
 
 instance Show VarType where
   show (Spec t) = show t
@@ -236,10 +233,10 @@ runTC :: TC a -> IO (a, TcState)
 runTC a = runStateT (unTC a) def
 
 data Visit = Pre | Post deriving (Eq,Show)
-type Visitor n = Visit -> AST n -> TC (AST n)
+type Visitor m n = Visit -> AST n -> m (AST n)
 
 -- | Walk the AST, performing function both before and after descent into child elements.
-walkAST :: Visitor n -> AST n -> TC (AST n)
+walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
 walkAST f t@Lit {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
@@ -317,7 +314,7 @@ pivot' m = mkPivot m $ rpt initPivot
 mkPivot :: forall a . Ord a => M.Map a TypeSet -> M.Map VarType TypeSet -> Pivot a
 mkPivot org m =
   let lkps = concatMap mk $ nub $ M.elems m
-      mk v = let tid = TypeSetId (haxow v)
+      mk v = let tid = TypeSetId (show v)
              in [((tid,v),(v,tid),map (,tid) (toList v))]
       tsMap = M.fromList $ map (view _1) lkps
       revLkp = M.fromList $ map (view _2) lkps
@@ -557,7 +554,7 @@ Nothing
 
 -- | Native funs get processed on their own walk.
 -- 'assocAST' associates the app arg's ID with the fun ty.
-processNatives :: Visitor TcId
+processNatives :: Visitor TC TcId
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
     -- single funtype
@@ -583,7 +580,7 @@ processNatives _ a = return a
 
 -- | Walk to substitute app args into vars for FDefuns
 -- 'assocAST' associates the defun's arg with the app arg type.
-substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TcId
+substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TC TcId
 substAppDefun sub Pre t@Var {..} = case sub of
     Nothing -> return t
     Just (defArg,appAst)
@@ -800,9 +797,15 @@ _loadFun fp mn fn = do
 _infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
+-- _pretty =<< _inferIssue
 _inferIssue :: IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
+-- _pretty =<< _inferTransfer
+_inferTransfer :: IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)
+_inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
+
+-- prettify output of '_infer' runs
 _pretty :: (Either (String,Fun TcId) (Fun (TcId,Type)), TcState) -> IO ()
 _pretty (Left (m,f),tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc <$$> text m <> hardline)
 _pretty (Right f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)

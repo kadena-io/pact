@@ -3,18 +3,27 @@
 
 (module cp 'cp-module-admin
 
+  "Commercial paper demonstration smart contract."
+
+
   (defun issue (issuer cusip ticker future-value discount-rate
                 days-to-maturity par date)
-    "ISSUER issues CUSIP with specified values, computing discount, cost, settlement date"
+
+    "ISSUER issues CUSIP, computing discount, cost, settlement date"
+
     (enforce (> future-value 0.0) "Valid future-value")
+
     (enforce (and (>= discount-rate 0.0)
                 (< discount-rate 100.0))
               "Valid discount-rate")
+
     (enforce (> days-to-maturity 0) "Valid days-to-maturity")
+
     (let* ((discount (calculate-discount future-value
                         discount-rate days-to-maturity))
            (cost (- future-value discount))
            (settlement-date (add-time date (days days-to-maturity))))
+
         (insert 'cp-master (is-string cusip)
           {
             "ticker": (is-string ticker),
@@ -28,10 +37,15 @@
             "trade-date": date,
             "settlement-date": settlement-date
           })
+
         (issue-inventory issuer cusip 1 cost date)
+
         (format "Issued {}/{} with discount {}, cost {}, settlement date {}"
             ticker cusip discount cost settlement-date)
-        ))
+        )
+  )
+
+
 
   (defun inventory-key (owner:string cusip:string)
     "Make composite key from OWNER and CUSIP"
@@ -48,22 +62,30 @@
       })
   )
 
-  (defun transfer-inventory: string (owner:string cusip transferee qty price date)
+
+  (defun transfer-inventory (owner:string cusip transferee qty price date)
+
     "Transfer CUSIP QTY from OWNER to TRANSFEREE, confirming PRICE"
+
     (let ((owner-key (inventory-key owner cusip))
           (transferee-key (inventory-key transferee cusip)))
+
       (with-read 'cp-inventory owner-key
         { "qty" := owner-owned,
           "price" := owner-price
         }
+
         (enforce (>= owner-owned (is-integer qty)) "Owner has inventory")
         (enforce (= owner-price (is-decimal price)) "Price matches inventory")
+
         (with-default-read 'cp-inventory transferee-key
           { "qty": 0 }
           { "qty" := transferee-owned }
+
           (update 'cp-inventory owner-key
             { "qty": (- owner-owned qty),
               "date": (is-time date) })
+
           (write 'cp-inventory transferee-key
             { "qty": (+ transferee-owned qty),
               "date": date }))))
