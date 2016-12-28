@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -30,7 +32,8 @@ import Control.Monad
 import Prelude hiding (exp,mod)
 import Bound
 import Pact.Types
-import qualified Data.HashMap.Strict as M
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import Safe
 import Data.Default
 import Control.Arrow hiding (app)
@@ -85,7 +88,7 @@ enforceKeySet i ksn ks = do
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn i) = do
-  mm <- M.lookup mn <$> view (eeRefStore.rsModules)
+  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just m -> installModule m >> return (tStr $ "Using " ++ show mn)
@@ -106,13 +109,22 @@ eval t@(TModule mn mksn _md bod mc mi) = do
 
 eval t = enscope t >>= reduce
 
+-- | Make table of module definitions for storage in namespace/RefStore.
+--
+-- Definitions are transformed such that all free variables are resolved either to
+-- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
+-- resolve to a definition in the module ('Left String'). A graph is formed from
+-- all 'Left String' entries and enforced as acyclic, proving the definitions
+-- to be non-recursive. The graph is walked to unify the Either to
+-- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
+-- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: ModuleName -> Scope n Term Name -> Info ->
-              Eval e (M.HashMap String (Term Name))
+              Eval e (HM.HashMap String (Term Name))
 loadModule mn bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
       (TList bd _ _bi) ->
-        M.fromList <$> forM bd (\t ->
+        HM.fromList <$> forM bd (\t ->
             case t of
               TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
               TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
@@ -120,7 +132,7 @@ loadModule mn bod1 mi = do
               _ -> evalError (_tInfo t) "Non-def in module body")
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either String Ref), String, [String])] <-
-    fmap stronglyConnCompR $ forM (M.toList modDefs1) $ \(dn,d) ->
+    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
       call (StackFrame (abbrev d) (_tInfo d) Nothing) $
       do
         d' <- forM d $ \(f :: Name) -> do
@@ -128,7 +140,7 @@ loadModule mn bod1 mi = do
                 case (dm,f) of
                   (Just t,_) -> return (Right t)
                   (Nothing,Name fn) ->
-                      case M.lookup fn modDefs1 of
+                      case HM.lookup fn modDefs1 of
                         Just _ -> return (Left fn)
                         Nothing -> evalError (_tInfo d) ("Cannot resolve \"" ++ show f ++ "\"")
                   (Nothing,_) -> evalError (_tInfo d) ("Cannot resolve \"" ++ show f ++ "\"")
@@ -136,9 +148,10 @@ loadModule mn bod1 mi = do
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
               CyclicSCC vs -> evalError mi $ "Recursion detected: " ++ show vs
-  let defs :: M.HashMap String Ref
-      defs = foldl dresolve M.empty sorted
-      dresolve m (d,dn,_) = M.insert dn (Ref (fmap (unify m) d)) m
+  let defs :: HM.HashMap String Ref
+      defs = foldl dresolve HM.empty sorted
+      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
+      dresolve m (d,dn,_) = HM.insert dn (Ref (fmap (unify m) d)) m
   installModule defs
   (evalRefs.rsNew) %= ((mn,defs):)
   return modDefs1
@@ -158,16 +171,16 @@ resolveRef nn@(Name n) = do
             Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
-unify :: M.HashMap String Ref -> Either String Ref -> Ref
+unify :: HM.HashMap String Ref -> Either String Ref -> Ref
 unify _ (Right d) = d
-unify m (Left f) = m M.! f
+unify m (Left f) = m HM.! f
 
 deref :: Ref -> Eval e (Term Name)
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
--- | Recursive reduction.
-reduce ::  Term Ref ->  Eval e (Term Name)
+-- | Main function for reduction/evaluation.
+reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
 reduce (TVar t _) = deref t
 reduce (TLiteral l i) = return $ TLiteral l i
@@ -185,8 +198,15 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce (TValue v i) = return $ TValue v i
 
+mkDirect :: Term Name -> Term Ref
+mkDirect = (`TVar` def) . Direct
+
 reduceLet :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
-reduceLet ps bod i = reduce (instantiate (resolveArg i (map snd ps)) bod)
+reduceLet ps bod i = do
+  ps' <- mapM (\(a,t) -> (a,) <$> reduce t) ps
+  typecheck ps'
+  reduce (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
+
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
@@ -194,22 +214,25 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
                      as `atMay` i
 
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceApp (TVar (Direct t) _) as ai = reduceDef t as ai
+reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
-reduceApp (TDef dd@(DefData _ dt _ _ _) bod _exp _di) as ai = do
-      let bod' = instantiate (resolveArg ai as) bod
-      call (StackFrame (defName dd) ai (Just (dd,map abbrev as))) $
-                     case dt of
-                       Defun -> reduce bod'
-                       Defpact -> applyPact bod'
-                       Defconst -> evalError ai "Defconst in apply"
+reduceApp (TDef dd@DefData {..} bod _exp _di) as ai = do
+  as' <- mapM reduce as
+  let FunType {..} = head (toList _dType)
+  typecheck (zip _ftArgs as')
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) bod
+  call (StackFrame _dName ai (Just (dd,map abbrev as))) $
+    case _dDefType of
+      Defun -> reduce bod'
+      Defpact -> applyPact bod'
+      Defconst -> evalError ai "Defconst in apply"
 reduceApp (TLitString errMsg) _ i = evalError i errMsg
-reduceApp r _ ai = evalError ai $ "Can only apply defs: " ++ show r
+reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
-reduceDef ::  Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceDef (TNative dd (NativeDFun _ ndd) _di) as ai = ndd (FunApp ai dd) as
-reduceDef (TLitString errMsg) _ i = evalError i errMsg
-reduceDef r _ ai = evalError ai $ "Can only apply defs: " ++ show r
+reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
+reduceDirect (TNative dd (NativeDFun _ ndd) _di) as ai = ndd (FunApp ai dd) as
+reduceDirect (TLitString errMsg) _ i = evalError i errMsg
+reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
@@ -261,8 +284,8 @@ resolveFreeVars i b = traverse r b where
 
 
 
-installModule ::  M.HashMap String Ref ->  Eval e ()
-installModule defs = (evalRefs.rsLoaded) %= M.union (M.fromList . map (first Name) . M.toList $ defs)
+installModule ::  HM.HashMap String Ref ->  Eval e ()
+installModule defs = (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first Name) . HM.toList $ defs)
 
 msg :: String -> Term n
 msg = toTerm
@@ -272,6 +295,35 @@ enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothi
 
 instantiate' :: Scope n Term a -> Term a
 instantiate' = instantiate1 (toTerm ("No bindings" :: String))
+
+
+typecheck :: [(Arg,Term Name)] -> Eval e ()
+typecheck ps = do
+  let tcheck :: Info -> Type -> Term Name -> Eval e (Maybe (String,Type))
+      tcheck i ty t = do
+        tty <- case typeof t of
+          Left s -> evalError i $ "Invalid type in value location: " ++ s
+          Right r -> return r
+        let tcFail = evalError i $ "Runtime typecheck failure: expected " ++ show ty ++ ", found " ++ show tty
+        case ty of
+          TyRest -> return Nothing
+          TyVar {..} -> if null _tvConstraint || tty `elem` _tvConstraint
+                        then return $ Just (_tvId,tty)
+                        else tcFail
+          TyFun {} -> evalError i "User function type spec not supported"
+          TyBinding -> evalError i "User binding type spec not supported"
+          _ -> if ty == tty then return Nothing else tcFail
+      tvarCheck m (Arg {..},t) = do
+        r <- tcheck _aInfo _aType t
+        case r of
+          Nothing -> return m
+          Just (v,ty) -> case M.lookup v m of
+            Nothing -> return $ M.insert v ty m
+            Just prevTy | prevTy == ty -> return m
+                        | otherwise ->
+                            evalError (_tInfo t) $ "Runtime typecheck failure: values specified by " ++ show _aType ++
+                            " do not match: " ++ show (prevTy,ty)
+  void $ foldM tvarCheck M.empty ps
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s

@@ -347,9 +347,12 @@ data FunApp = FunApp {
 funAppInfo :: FunApp -> Info
 funAppInfo = _faInfo
 
-
-data Ref = Direct (Term Name) |
-           Ref (Term Ref)
+-- | Variable type for an evaluable 'Term'.
+data Ref =
+  -- | "Reduced" (evaluated) or native (irreducible) term.
+  Direct (Term Name) |
+  -- | Unevaulated/un-reduced term, never a native.
+  Ref (Term Ref)
                deriving (Eq)
 instance Show Ref where
     show (Direct t) = abbrev t
@@ -528,7 +531,7 @@ typeof t = case t of
       TConst {..} -> Right (_aType _tConstName)
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
-      TBinding {} -> Left "binding"
+      TBinding {} -> Right TyBinding
       TObject {..} -> Right $ TyObject _tUserType
       TKeySet {} -> Right TyKeySet
       TUse {} -> Left "use"
