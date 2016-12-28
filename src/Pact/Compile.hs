@@ -55,9 +55,9 @@ expr :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Exp
 expr = do
   (!r,!p) <- (,) <$> rend <*> position
   let inf = Info (Just (r,p))
-  TF.try (ELiteral . LDecimal <$> dec <*> pure inf <?> "Decimal literal")
+  TF.try (ELiteral . LDecimal <$> neg dec <*> pure inf <?> "Decimal literal")
    <|>
-   (ELiteral . LInteger <$> natural <*> pure inf <?> "Integer literal")
+   (ELiteral . LInteger <$> neg natural <*> pure inf <?> "Integer literal")
    <|>
    (ELiteral . LString <$> stringLiteral <*> pure inf <?> "String literal")
    <|>
@@ -124,7 +124,8 @@ spaces = skipMany (skipSome space <|> oneLineComment)
 exprs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
 exprs = some (spaces *> expr <* spaces)
 
-
+neg :: (Monad m,CharParsing m,Num n) => m n -> m n
+neg p = TF.try (char '-' >> (negate <$> p)) <|> p
 
 dec :: (Monad m,CharParsing m) => m Decimal
 dec = do

@@ -18,6 +18,8 @@
 "===== -"
 (expect "- integer, - integer integer" (- 2) (- 0 2))
 (expect "- decimal, - decimal decimal" (- 4.5) (- 3.5 8))
+(expect "neg integer lit, - integer integer" -2 (- 0 2))
+(expect "neg dec lit, - decimal decimal" -4.5 (- 3.5 8))
 (expect "- integer decimal" 2.0 (- 3.0 1))
 (expect "- decimal integer" 3.5 (- 4 0.5))
 
