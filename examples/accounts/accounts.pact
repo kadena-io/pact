@@ -9,6 +9,18 @@
 \ Tables used: 'accounts        \
 \ Version: 0.1                  \
 \ Author: Stuart Popejoy"
+
+  (defobject account
+    "Row type for accounts table."
+     balance:decimal
+     amount:decimal
+     ccy:string
+     keyset:keyset
+     date:time
+     data
+     )
+
+
   (defun create-account (address keyset ccy date)
     (insert 'accounts address
       { "balance": 0.0

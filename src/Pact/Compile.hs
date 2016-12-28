@@ -183,6 +183,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
         defOnly d@TDef {} = return d
         defOnly d@TNative {} = return d
         defOnly d@TConst {} = return d
+        defOnly d@TUserType {} = return d
         defOnly t = syntaxError (_tInfo t) "Only defun/defpact/defconst allowed in module"
         mkModule docs body = do
               bd <- mapNonEmpty "module" (run >=> defOnly) body li
@@ -276,6 +277,21 @@ doConst es i = case es of
       a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
       return $ TConst a Nothing v' docs i
 
+doUserType :: [Exp] -> Info -> Compile (Term Name)
+doUserType es i = case es of
+  (EAtom utn Nothing _ _:ELiteral (LString docs) _:as) -> mkUT utn (Just docs) as
+  (EAtom utn Nothing _ _:as) -> mkUT utn Nothing as
+  _ -> syntaxError i "Invalid object definition"
+  where
+    mkUT utn docs as = do
+      fs <- forM as $ \a -> case a of
+        EAtom an Nothing ty ai -> Arg an <$> maybeTyVar ty <*> pure ai
+        _ -> syntaxError i "Invalid object field definition"
+      return $ TUserType (fromString utn) docs fs i
+
+
+
+
 
 run :: Exp -> Compile (Term Name)
 
@@ -290,6 +306,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
       ("let",Nothing) -> doLet rest li
       ("let*",Nothing) -> doLets rest li
       ("defconst",Nothing) -> doConst rest li
+      ("defobject",Nothing) -> doUserType rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
           (preArgs@(_:_),EBinding bs bi:bbody) ->
@@ -340,16 +357,16 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure def <*> pure i
 _parseAccounts :: IO (Result [Exp])
 _parseAccounts = parseF (exprs <* TF.eof) "examples/accounts/accounts.pact"
 
--- in GHCI:
--- _parseAccounts >>= _compile
-_compile :: Result Exp -> IO (Either SyntaxError (Term Name))
+-- GHCI: _parseAccounts >>= _compile
+
+_compile :: Result [Exp] -> IO (Either SyntaxError [Term Name])
 _compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
-_compile (Success a) = return $ compile a
+_compile (Success a) = return $ mapM compile a
 
 
-_compileStr :: String -> IO (Term Name)
+_compileStr :: String -> IO [Term Name]
 _compileStr code = do
-    r <- _compile (parseS expr code)
+    r <- _compile (parseS exprs code)
     case r of Left e -> throwIO $ userError (show e)
               Right t -> return t
 

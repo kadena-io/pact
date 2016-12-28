@@ -372,7 +372,7 @@ data Term n =
     TModule {
       _tModuleName :: !ModuleName
     , _tModuleKeySet :: !KeySetName
-    , _tModuleDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe String)
     , _tModuleBody :: !(Scope () Term n)
     , _tCode :: Exp
     , _tInfo :: !Info
@@ -397,7 +397,7 @@ data Term n =
       _tConstName :: !Arg
     , _tConstModule :: Maybe ModuleName
     , _tConstVal :: !(Term n)
-    , _tConstDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe String)
     , _tInfo :: !Info
     } |
     TApp {
@@ -418,6 +418,12 @@ data Term n =
     TObject {
       _tObject :: ![(Term n,Term n)]
     , _tUserType :: Maybe TypeName
+    , _tInfo :: !Info
+    } |
+    TUserType {
+      _tUserTypeName :: !TypeName
+    , _tDocs :: !(Maybe String)
+    , _tFields :: ![Arg]
     , _tInfo :: !Info
     } |
     TLiteral {
@@ -454,6 +460,7 @@ instance Show n => Show (Term n) where
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
         "(TStep " ++ show ent ++ " " ++ show e ++ maybe "" ((" " ++) . show) r ++ ")"
+    show TUserType {..} = "(TUserType " ++ show _tUserTypeName ++ " " ++ show _tFields ++ ")"
 
 
 instance Show1 Term
@@ -479,6 +486,7 @@ instance Monad Term where
     TUse m i >>= _ = TUse m i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
+    TUserType {..} >>= _ = TUserType _tUserTypeName _tDocs _tFields _tInfo
 
 
 instance FromJSON (Term n) where
@@ -537,6 +545,7 @@ typeof t = case t of
       TUse {} -> Left "use"
       TValue {} -> Right TyValue
       TStep {} -> Left "step"
+      TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
 
 
 
@@ -582,6 +591,7 @@ abbrev (TUse m _) = "<use '" ++ show m ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
+abbrev TUserType {..} = "<defobject " ++ asString _tUserTypeName ++ ">"
 
 
 
