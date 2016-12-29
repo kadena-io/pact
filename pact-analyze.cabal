@@ -15,13 +15,13 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Pact.Analyze.Types,
-                       Pact.Analyze.Integer
+  exposed-modules:     Pact.Analyze.Types
   build-depends:       base >= 4.7 && < 5,
                        mtl >= 2.2.1,
                        pact,
                        containers,
-                       lattices
+                       lattices,
+                       Hsmtlib
 
   default-language:    Haskell2010
 
