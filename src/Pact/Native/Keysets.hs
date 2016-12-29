@@ -37,7 +37,7 @@ keyDefs =
      "Define keyset as NAME with KEYSET. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value.\
      \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
-    ,defNative (specialForm WithKeyset) withKeyset (funType (TyVar "a" []) [("keyset-or-name",TyString),("body",TyRest)])
+    ,defNative "enforce-keyset" enforceKeyset' (funType TyBool [("keyset-or-name",TyString)])
      "Special form to enforce KEYSET-OR-NAME against message keys before running BODY. \
      \KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. \
      \`$(with-keyset 'admin-keyset ...)` `$(with-keyset (read-keyset \"keyset\") ...)`"
@@ -66,8 +66,8 @@ defineKeyset i [TLitString name,TKeySet ks _] = do
 defineKeyset i as = argsError i as
 
 
-withKeyset :: NativeFun e
-withKeyset i (k:bs) = do
+enforceKeyset' :: NativeFun e
+enforceKeyset' i [k] = do
   t <- reduce k
   (ksn,ks) <- case t of
     TLitString name -> do
@@ -79,8 +79,8 @@ withKeyset i (k:bs) = do
     TKeySet ks _ -> return (Nothing,ks)
     _ -> argsError i [t,toTerm ("[body...]" :: String)]
   enforceKeySet (_faInfo i) ksn ks
-  last <$> mapM reduce bs
-withKeyset i _as = argsError i []
+  return $ toTerm True
+enforceKeyset' i _as = argsError i []
 
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e

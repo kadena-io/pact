@@ -38,13 +38,11 @@ import qualified Data.HashMap.Strict as HM
 data SpecialForm =
   WithRead |
   WithDefaultRead |
-  WithKeyset |
   Bind deriving (Eq,Enum,Ord,Bounded)
 
 instance AsString SpecialForm where
   asString WithRead = "with-read"
   asString WithDefaultRead = "with-default-read"
-  asString WithKeyset = "with-keyset"
   asString Bind = "bind"
 instance Show SpecialForm where show = show . asString
 

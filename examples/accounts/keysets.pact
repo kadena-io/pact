@@ -18,7 +18,7 @@
  (defun keys-3 (c m) "Match at least 3 keys" (keys-n 3 c m))
 
  (defun update-keyset (keyset-name new-keyset)
-   (with-keyset keyset-name
-     (define-keyset keyset-name new-keyset)))
+   (enforce-keyset keyset-name)
+   (define-keyset keyset-name new-keyset))
 
 )

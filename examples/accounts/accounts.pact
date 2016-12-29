@@ -41,23 +41,23 @@
     (with-read accounts src { "balance":= src-balance
                             , "keyset" := src-ks }
       (check-balance src-balance amount)
-      (with-keyset src-ks
-        (with-read accounts dest
-                   { "balance":= dest-balance }
-          (update accounts src
-                  { "balance": (- src-balance amount)
-                  , "amount": (- amount)
-                  , "date": (is-time date)
-                  , "data": { "transfer-to": dest }
-                  }
-          )
-          (update accounts dest
-                  { "balance": (+ dest-balance amount)
-                  , "amount": amount
-                  , "date": (is-time date)
-                  , "data": { "transfer-from": src }
-                  }
-          )))))
+      (enforce-keyset src-ks)
+      (with-read accounts dest
+                 { "balance":= dest-balance }
+        (update accounts src
+                { "balance": (- src-balance amount)
+                , "amount": (- amount)
+                , "date": (is-time date)
+                , "data": { "transfer-to": dest }
+                }
+        )
+        (update accounts dest
+                { "balance": (+ dest-balance amount)
+                , "amount": amount
+                , "date": (is-time date)
+                , "data": { "transfer-from": src }
+                }
+        ))))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -65,31 +65,32 @@
               { "balance":= b
               , "ccy":= c
               , "keyset" := ks }
-      (with-keyset ks
-        { "balance": b, "ccy": c }
-        )))
+      (enforce-keyset ks)
+      { "balance": b, "ccy": c }
+      ))
 
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
-    (with-keyset 'accounts-admin-keyset
-      (read accounts id 'balance 'ccy 'keyset 'data 'date 'amount)))
+    (enforce-keyset 'accounts-admin-keyset)
+    (read accounts id 'balance 'ccy 'keyset 'data 'date 'amount))
 
 
   (defun account-keys (from)
     "Get account keys after FROM txid"
-    (with-keyset 'accounts-admin-keyset (keys 'accounts from)))
+    (enforce-keyset 'accounts-admin-keyset)
+    (keys 'accounts from))
 
   (defun check-balance (balance amount)
     (enforce (<= (is-decimal amount) balance) "Insufficient funds"))
 
   (defun fund-account (address amount date)
-    (with-keyset 'accounts-admin-keyset
-      (update accounts address
-              { "balance": (is-decimal amount)
-              , "amount": amount
-              , "date": (is-time date)
-              , "data": "Admin account funding" }
-      )))
+    (enforce-keyset 'accounts-admin-keyset)
+    (update accounts address
+            { "balance": (is-decimal amount)
+            , "amount": amount
+            , "date": (is-time date)
+            , "data": "Admin account funding" }
+      ))
 
   (defun read-all ()
     (map (read-account-admin) (keys accounts)))
@@ -121,14 +122,14 @@
               , "keyset" := ks
               }
       (check-balance balance amount)
-        (with-keyset ks
-          (update accounts acct
+      (enforce-keyset ks)
+      (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
                 , "date": (is-time date)
                 , "data": data
                 }
-          ))))
+          )))
 
  (defun credit (acct amount date data)
    "Credit AMOUNT to ACCT balance recording DATE and DATA"
