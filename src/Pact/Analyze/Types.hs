@@ -32,6 +32,12 @@ getGtTenFun = do
   (Right f, _) <- _inferGtTen
   return f
 
+-- (module analyze-tests 'analyze-admin-keyset
+--   (defun gt-ten (a:integer)
+--     (if (> a 10) "more than ten" "less than ten")
+--   )
+-- )
+--
 -- FDefun
 --   { _fInfo = (defun gt-ten (a:integer)
 --   , _fName = "analyze-tests.gt-ten"
