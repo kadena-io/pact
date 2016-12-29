@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 
 -- |
 -- Module      :  Pact.Native.Db
@@ -115,6 +116,10 @@ descModule i [TLitString t] = do
     Nothing -> evalError' i $ "Module not found: " ++ t
 descModule i as = argsError i as
 
+-- | unsafe function to create domain from TTable.
+userTable :: Show n => Term n -> Domain RowKey (Columns Persistable)
+userTable TTable {..} = UserTables $ fromString $ asString _tModule ++ "." ++ asString _tTableName
+userTable t = error $ "creating user table from non-TTable: " ++ show t
 
 read' :: RNativeFun e
 read' i as@(table@TTable {}:TLitString key:rest) = do
@@ -126,7 +131,7 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
             _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
     _ -> argsError i as
   guardTable i table
-  mrow <- readRow (UserTables (_tTableName table)) (fromString key)
+  mrow <- readRow (userTable table) (fromString key)
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
@@ -144,7 +149,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
   case tkd of
     (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
       guardTable fi table
-      mrow <- readRow (UserTables _tTableName) (fromString key)
+      mrow <- readRow (userTable table) (fromString key)
       case mrow of
         Nothing -> bindToRow ps bd b =<< toColumns fi defaultRow
         (Just row) -> bindToRow ps bd b row
@@ -157,7 +162,7 @@ withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
   case tk of
     (table@TTable {..},TLitString key) -> do
       guardTable fi table
-      mrow <- readRow (UserTables _tTableName) (fromString key)
+      mrow <- readRow (userTable table) (fromString key)
       case mrow of
         Nothing -> failTx $ "with-read: row not found: " ++ show key
         (Just row) -> bindToRow ps bd b row
@@ -185,13 +190,13 @@ txids' i as = argsError i as
 txlog :: RNativeFun e
 txlog i [table@TTable {..},TLitInteger tid] = do
   guardTable i table
-  (`TValue` def) . toJSON <$> getTxLog (UserTables _tTableName) (fromIntegral tid)
+  (`TValue` def) . toJSON <$> getTxLog (userTable table) (fromIntegral tid)
 txlog i as = argsError i as
 
 write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
-  success "Write succeeded" . writeRow wt (UserTables _tTableName) (fromString key) =<< toColumns i ps
+  success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
@@ -207,7 +212,8 @@ createTable' :: RNativeFun e
 createTable' i [t@TTable {..}] = do
   guardTable i t
   m <- getModule (_faInfo i) _tModule
-  success "TableCreated" $ createUserTable _tTableName _tModule (_mKeySet m)
+  let (UserTables tn) = userTable t
+  success "TableCreated" $ createUserTable tn _tModule (_mKeySet m)
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
