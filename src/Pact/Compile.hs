@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -26,6 +27,7 @@ import Data.List
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Arrow
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -34,7 +36,7 @@ import Control.Exception
 import Data.String
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
-import Control.Lens (firstOf)
+import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
 import Data.Decimal
@@ -157,14 +159,22 @@ parseS p = TF.parseString p mempty
 parseF :: TF.Parser a -> FilePath -> IO (TF.Result a)
 parseF p fp = parseS p <$> readFile fp
 
+
+data CompileState = CompileState {
+  _csFresh :: Int,
+  _csModule :: Maybe ModuleName
+  }
+instance Default CompileState where def = CompileState 0 def
+makeLenses ''CompileState
+
+type Compile a = StateT CompileState (Except SyntaxError) a
+
 reserved :: [String]
 reserved = words "use module defun defpact step step-with-rollback true false let let* defconst"
 
 compile :: Exp -> Either SyntaxError (Term Name)
-compile e = runExcept (evalStateT (run e) 0)
+compile e = runExcept (evalStateT (run e) def)
 
-
-type Compile a = StateT Int (Except SyntaxError) a
 
 syntaxError :: Info -> String -> Compile a
 syntaxError i s = throwError $ SyntaxError i s
@@ -175,20 +185,29 @@ doUse _ i = syntaxError i "Use only takes a module symbol name"
 
 doModule :: [Exp] -> Info -> Info -> Exp -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
-    case es of
-      [] -> syntaxError ai "Empty module"
-      (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
-      body -> mkModule Nothing body
-      where
-        defOnly d@TDef {} = return d
-        defOnly d@TNative {} = return d
-        defOnly d@TConst {} = return d
-        defOnly d@TUserType {} = return d
-        defOnly t = syntaxError (_tInfo t) "Only defun/defpact/defconst allowed in module"
-        mkModule docs body = do
-              bd <- mapNonEmpty "module" (run >=> defOnly) body li
-              TModule <$> pure (fromString n) <*> pure (fromString k) <*> pure docs <*>
-                      abstract (const Nothing) <$> pure (TList bd Nothing li) <*> pure mc <*> pure li
+  case es of
+    [] -> syntaxError ai "Empty module"
+    (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
+    body -> mkModule Nothing body
+    where
+      defOnly d = case d of
+        TDef {} -> return d
+        TNative {} -> return d
+        TConst {} -> return d
+        TUserType {} -> return d
+        TTable {} -> return d
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable allowed in module"
+      mkModule docs body = do
+        cm <- use csModule
+        case cm of
+          Just _ -> syntaxError li "Invalid nested module"
+          Nothing -> do
+            csModule .= Just (fromString n)
+            bd <- mapNonEmpty "module" (run >=> defOnly) body li
+            m <- TModule <$> pure (fromString n) <*> pure (fromString k) <*> pure docs <*>
+                   abstract (const Nothing) <$> pure (TList bd Nothing li) <*> pure mc <*> pure li
+            csModule .= Nothing
+            return m
 doModule _ li _ _ = syntaxError li "Invalid module definition"
 
 doDef :: [Exp] -> DefType -> Info -> Exp -> Info -> Compile (Term Name)
@@ -205,12 +224,13 @@ doDef es defType ai d i =
           let argsn = map (Name . _aName) args
               defBody = abstract (`elemIndex` argsn) <$> runBody body i
           dty <- FunType <$> pure args <*> maybeTyVar ty
-          TDef <$> pure (DefData dn defType Nothing (dty :| []) ddocs)
+          cm <- use csModule
+          TDef <$> pure (DefData dn defType cm (dty :| []) ddocs)
                    <*> defBody <*> pure d <*> pure i
 
 freshTyVar :: Compile Type
 freshTyVar = do
-  c <- state (\i -> (i,succ i))
+  c <- state (view csFresh &&& over csFresh succ)
   return $ TyVar (cToTV c) []
 
 cToTV :: Int -> String
@@ -274,13 +294,14 @@ doConst es i = case es of
   where
     mkConst dn ty v docs = do
       v' <- run v
+      cm <- use csModule
       a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
-      return $ TConst a Nothing v' docs i
+      return $ TConst a cm v' docs i
 
 doUserType :: [Exp] -> Info -> Compile (Term Name)
 doUserType es i = case es of
-  (EAtom utn Nothing _ _:ELiteral (LString docs) _:as) -> mkUT utn (Just docs) as
-  (EAtom utn Nothing _ _:as) -> mkUT utn Nothing as
+  (EAtom utn Nothing Nothing _:ELiteral (LString docs) _:as) -> mkUT utn (Just docs) as
+  (EAtom utn Nothing Nothing _:as) -> mkUT utn Nothing as
   _ -> syntaxError i "Invalid object definition"
   where
     mkUT utn docs as = do
@@ -289,9 +310,18 @@ doUserType es i = case es of
         _ -> syntaxError i "Invalid object field definition"
       return $ TUserType (fromString utn) docs fs i
 
-
-
-
+doTable :: [Exp] -> Info -> Compile (Term Name)
+doTable es i = case es of
+  [EAtom tn Nothing ty _] -> mkT tn ty Nothing
+  [EAtom tn Nothing ty _,ELiteral (LString docs) _] -> mkT tn ty (Just docs)
+  _ -> syntaxError i "Invalid table definition"
+  where
+    mkT tn ty docs = do
+      tty <- case ty of
+        Just (TyObject ut@Just {}) -> return ut
+        Nothing -> return Nothing
+        _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
+      return $ TTable (fromString tn) tty docs i
 
 run :: Exp -> Compile (Term Name)
 
@@ -307,6 +337,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
       ("let*",Nothing) -> doLets rest li
       ("defconst",Nothing) -> doConst rest li
       ("defobject",Nothing) -> doUserType rest li
+      ("deftable",Nothing) -> doTable rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
           (preArgs@(_:_),EBinding bs bi:bbody) ->

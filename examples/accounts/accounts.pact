@@ -1,4 +1,5 @@
-;stuff
+;; accounts module, admin keyset, and table
+
 (use 'keysets)
 
 (define-keyset 'accounts-admin-keyset
@@ -20,9 +21,11 @@
      data
      )
 
+  (deftable accounts:{account}
+    "Main table for accounts module.")
 
   (defun create-account (address keyset ccy date)
-    (insert 'accounts address
+    (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
       , "ccy": ccy
@@ -35,20 +38,20 @@
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
     ;read balance and row-level keyset from src
-    (with-read 'accounts src { "balance":= src-balance
-                             , "keyset" := src-ks }
+    (with-read accounts src { "balance":= src-balance
+                            , "keyset" := src-ks }
       (check-balance src-balance amount)
       (with-keyset src-ks
-        (with-read 'accounts dest
+        (with-read accounts dest
                    { "balance":= dest-balance }
-          (update 'accounts src
+          (update accounts src
                   { "balance": (- src-balance amount)
                   , "amount": (- amount)
                   , "date": (is-time date)
                   , "data": { "transfer-to": dest }
                   }
           )
-          (update 'accounts dest
+          (update accounts dest
                   { "balance": (+ dest-balance amount)
                   , "amount": amount
                   , "date": (is-time date)
@@ -58,7 +61,7 @@
 
   (defun read-account-user (id)
     "Read data for account ID"
-    (with-read 'accounts id
+    (with-read accounts id
               { "balance":= b
               , "ccy":= c
               , "keyset" := ks }
@@ -69,7 +72,7 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (with-keyset 'accounts-admin-keyset
-      (read 'accounts id 'balance 'ccy 'keyset 'data 'date 'amount)))
+      (read accounts id 'balance 'ccy 'keyset 'data 'date 'amount)))
 
 
   (defun account-keys (from)
@@ -81,7 +84,7 @@
 
   (defun fund-account (address amount date)
     (with-keyset 'accounts-admin-keyset
-      (update 'accounts address
+      (update accounts address
               { "balance": (is-decimal amount)
               , "amount": amount
               , "date": (is-time date)
@@ -89,7 +92,7 @@
       )))
 
   (defun read-all ()
-    (map (read-account-admin) (keys 'accounts)))
+    (map (read-account-admin) (keys accounts)))
 
   (defpact payment (payer payer-entity payee payee-entity amount date)
     "Debit PAYER at PAYER-ENTITY then credit PAYEE at PAYEE-ENTITY for AMOUNT on DATE"
@@ -113,13 +116,13 @@
 
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
-    (with-read 'accounts acct
+    (with-read accounts acct
               { "balance":= balance
               , "keyset" := ks
               }
       (check-balance balance amount)
         (with-keyset ks
-          (update 'accounts acct
+          (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
                 , "date": (is-time date)
@@ -129,9 +132,9 @@
 
  (defun credit (acct amount date data)
    "Credit AMOUNT to ACCT balance recording DATE and DATA"
-   (with-read 'accounts acct
+   (with-read accounts acct
               { "balance":= balance }
-     (update 'accounts acct
+     (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
             , "date": (is-time date)
@@ -143,5 +146,5 @@
 
 )
 
-(create-table 'accounts 'accounts)
+(create-table accounts)
 ;done

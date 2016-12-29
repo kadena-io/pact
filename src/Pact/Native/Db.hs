@@ -42,8 +42,8 @@ dbDefs = do
 
   foldDefs
     [defRNative "create-table" createTable'
-     (funType TyString [("table",TyString),("module",TyString)])
-     "Create table TABLE guarded by module MODULE. `$(create-table 'accounts 'accounts-admin)`"
+     (funType TyString [("table",TyTable)])
+     "Create table TABLE. `$(create-table accounts)`"
 
     ,defNative (specialForm WithRead) withRead
      (funType TyString [("table",TyString),("key",TyString),("bindings",TyBinding)])

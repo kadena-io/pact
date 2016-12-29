@@ -129,7 +129,9 @@ loadModule mn bod1 mi = do
               TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
               TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
               TConst n _ _ _ _ -> return (_aName n,set tConstModule (Just mn) t)
-              _ -> evalError (_tInfo t) "Non-def in module body")
+              TUserType {..} -> return (asString _tUserTypeName,t)
+              TTable {..} -> return (asString _tTableName,t)
+              _ -> evalError (_tInfo t) "Invalid module member")
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either String Ref), String, [String])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
@@ -179,13 +181,18 @@ deref :: Ref -> Eval e (Term Name)
 deref (Direct n) = return n
 deref (Ref r) = reduce r
 
+-- | Only can be used by "static" terms with no refs/variables in them
+unsafeReduce :: Term Ref -> Eval e (Term Name)
+unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static term"))
+
+
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
 reduce (TVar t _) = deref t
-reduce (TLiteral l i) = return $ TLiteral l i
-reduce (TKeySet k i) = return $ TKeySet k i
-reduce (TList bs _ _) = last <$> mapM reduce bs
+reduce t@TLiteral {} = unsafeReduce t
+reduce t@TKeySet {} = unsafeReduce t
+reduce (TList bs _ _) = last <$> mapM reduce bs -- note "body" usage here, bug?
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
 reduce (TConst _ _ t _ _) = reduce t
@@ -196,7 +203,9 @@ reduce (TBinding ps bod c i) = case c of
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce (TValue v i) = return $ TValue v i
+reduce t@TUserType {} = return $ toTerm $ show t
+reduce t@TValue {} = unsafeReduce t
+reduce t@TTable {} = unsafeReduce t
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

@@ -213,6 +213,7 @@ data Type =
     TyFun { _tfType :: FunType } |
     TyVar { _tvId :: String, _tvConstraint :: [Type] } |
     TyBinding |
+    TyTable |
     TyRest
 
     deriving (Eq,Ord)
@@ -246,6 +247,7 @@ instance Show Type where
   show TyKeySet = tyKeySet
   show TyFun {..} = "function: " ++ show _tfType
   show TyBinding = "binding"
+  show TyTable = "table"
   show TyRest = "@rest"
   show TyVar {..} = "<" ++ _tvId ++
                     (if null _tvConstraint then ""
@@ -368,6 +370,11 @@ instance Show NativeDFun where show a = show $ _nativeDefName a
 data BindCtx = BindLet | BindKV deriving (Eq,Show)
 
 
+newtype TableName = TableName String
+    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
+instance Show TableName where show (TableName s) = show s
+
+
 data Term n =
     TModule {
       _tModuleName :: !ModuleName
@@ -438,14 +445,23 @@ data Term n =
     , _tStepExec :: !(Term n)
     , _tStepRollback :: !(Maybe (Term n))
     , _tInfo :: !Info
+    } |
+    TTable {
+      _tTableName :: !TableName
+    , _tModule :: ModuleName
+    , _tTableType :: !(Maybe TypeName)
+    , _tDocs :: !(Maybe String)
+    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
+maybeShowType :: Show a => Maybe a -> String
+maybeShowType t = maybe "" ((":" ++) . show) t
 
 instance Show n => Show (Term n) where
     show (TModule n k d b _ _) =
         "(TModule " ++ show n ++ " " ++ show k ++ " " ++ show d ++ " " ++ show b ++ ")"
-    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybe "" ((":" ++) . show) t
+    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybeShowType t
     show (TDef di _ _ _) = "(TDef " ++ show di ++ ")"
     show (TNative di _ _ ) = "(TNative " ++ show di ++ ")"
     show (TConst n _ _ _ _) = "(TConst " ++ show n ++ ")"
@@ -453,7 +469,7 @@ instance Show n => Show (Term n) where
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
     show (TObject bs ot _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
-                             maybe "" ((":" ++) . show) ot ++ ")"
+                             maybeShowType ot ++ ")"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m _) = "(TUse " ++ show m ++ ")"
@@ -461,6 +477,7 @@ instance Show n => Show (Term n) where
     show (TStep ent e r _) =
         "(TStep " ++ show ent ++ " " ++ show e ++ maybe "" ((" " ++) . show) r ++ ")"
     show TUserType {..} = "(TUserType " ++ show _tUserTypeName ++ " " ++ show _tFields ++ ")"
+    show TTable {..} = "(TTable " ++ show _tTableName ++ maybeShowType _tTableType ++ ")"
 
 
 instance Show1 Term
@@ -487,6 +504,7 @@ instance Monad Term where
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
     TUserType {..} >>= _ = TUserType _tUserTypeName _tDocs _tFields _tInfo
+    TTable {..} >>= _ = TTable _tTableName _tModule _tTableType _tDocs _tInfo
 
 
 instance FromJSON (Term n) where
@@ -546,6 +564,7 @@ typeof t = case t of
       TValue {} -> Right TyValue
       TStep {} -> Left "step"
       TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
+      TTable {..} -> Right TyTable
 
 
 
@@ -592,6 +611,7 @@ abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TUserType {..} = "<defobject " ++ asString _tUserTypeName ++ ">"
+abbrev TTable {..} = "<deftable " ++ asString _tTableName ++ ">"
 
 
 
@@ -677,9 +697,6 @@ instance Show ColumnId where show (ColumnId s) = show s
 
 type PactObject = [(ColumnId,Persistable)]
 
-newtype TableName = TableName String
-    deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
-instance Show TableName where show (TableName s) = show s
 newtype RowKey = RowKey String
     deriving (Eq,Ord,IsString,ToTerm,AsString)
 instance Show RowKey where show (RowKey s) = show s
