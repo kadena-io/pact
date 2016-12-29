@@ -94,18 +94,18 @@ eval (TUse mn i) = do
     Just m -> installModule m >> return (tStr $ "Using " ++ show mn)
 
 
-eval t@(TModule mn mksn _md bod mc mi) = do
+eval t@(TModule m bod i) = do
   -- enforce old module keysets
-  oldM <- readRow Modules mn
+  oldM <- readRow Modules (_mName m)
   case oldM of
     Nothing -> return ()
-    Just (Module _ omksn _) -> enforceKeySetName mi omksn
+    Just om -> enforceKeySetName i (_mKeySet om)
   -- enforce new module keyset
-  enforceKeySetName mi mksn
+  enforceKeySetName i (_mKeySet m)
   -- build/install module from defs
-  _defs <- call (StackFrame (abbrev t) mi Nothing) $ loadModule mn bod mi
-  writeRow Write Modules mn (Module mn mksn (show mc))
-  return $ msg $ "Loaded module " ++ show mn
+  _defs <- call (StackFrame (abbrev t) i Nothing) $ loadModule m bod i
+  writeRow Write Modules (_mName m) m
+  return $ msg $ "Loaded module " ++ show (_mName m)
 
 eval t = enscope t >>= reduce
 
@@ -118,20 +118,22 @@ eval t = enscope t >>= reduce
 -- to be non-recursive. The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-loadModule :: ModuleName -> Scope n Term Name -> Info ->
+loadModule :: Module -> Scope n Term Name -> Info ->
               Eval e (HM.HashMap String (Term Name))
-loadModule mn bod1 mi = do
+loadModule m bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
       (TList bd _ _bi) ->
-        HM.fromList <$> forM bd (\t ->
-            case t of
-              TDef dd _ _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TNative dd _ _ -> return (_dName dd,set (tDefData.dModule) (Just mn) t)
-              TConst n _ _ _ _ -> return (_aName n,set tConstModule (Just mn) t)
-              TUserType {..} -> return (asString _tUserTypeName,t)
-              TTable {..} -> return (asString _tTableName,t)
-              _ -> evalError (_tInfo t) "Invalid module member")
+        HM.fromList <$> forM bd
+          (\t -> do
+              dn <- case t of
+                TDef {..} -> return _tDefName
+                TNative {..} -> return $ asString _tNativeName
+                TConst {..} -> return $ _aName _tConstArg
+                TUserType {..} -> return $ asString _tUserTypeName
+                TTable {..} -> return $ asString _tTableName
+                _ -> evalError (_tInfo t) "Invalid module member"
+              return (dn,t))
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either String Ref), String, [String])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
@@ -153,16 +155,16 @@ loadModule mn bod1 mi = do
   let defs :: HM.HashMap String Ref
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve m (d,dn,_) = HM.insert dn (Ref (fmap (unify m) d)) m
-  installModule defs
-  (evalRefs.rsNew) %= ((mn,defs):)
+      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
+  installModule (m,defs)
+  (evalRefs.rsNew) %= ((_mName m,(m,defs)):)
   return modDefs1
 
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n) = do
-          dsm <- firstOf (eeRefStore.rsModules.ix q.ix n) <$> ask
+          dsm <- firstOf (eeRefStore.rsModules.ix q._2.ix n) <$> ask
           case dsm of
             d@Just {} -> return d
             Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
@@ -225,21 +227,22 @@ resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index "
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
-reduceApp (TDef dd@DefData {..} bod _exp _di) as ai = do
+reduceApp TDef {..} as ai = do
   as' <- mapM reduce as
-  let FunType {..} = head (toList _dType)
-  typecheck (zip _ftArgs as')
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) bod
-  call (StackFrame _dName ai (Just (dd,map abbrev as))) $
-    case _dDefType of
+  typecheck (zip (_ftArgs _tFunType) as')
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
+      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes _tFunType) _tDocs
+  call (StackFrame _tDefName ai (Just (fa,map abbrev as))) $
+    case _tDefType of
       Defun -> reduce bod'
       Defpact -> applyPact bod'
-      Defconst -> evalError ai "Defconst in apply"
 reduceApp (TLitString errMsg) _ i = evalError i errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceDirect (TNative dd (NativeDFun _ ndd) _di) as ai = ndd (FunApp ai dd) as
+reduceDirect TNative {..} as ai =
+  _nativeFun _tNativeFun
+  (FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)) as
 reduceDirect (TLitString errMsg) _ i = evalError i errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r
 
@@ -291,10 +294,10 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " ++ show fv
              Just d -> return d
 
-
-
-installModule ::  HM.HashMap String Ref ->  Eval e ()
-installModule defs = (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first Name) . HM.toList $ defs)
+installModule :: ModuleData ->  Eval e ()
+installModule (m,defs) = do
+  (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first Name) . HM.toList $ defs)
+  (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
 
 msg :: String -> Term n
 msg = toTerm

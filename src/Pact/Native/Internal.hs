@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
@@ -32,6 +33,7 @@ import qualified Data.Text as T
 import Bound
 import Data.String
 import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 
 data SpecialForm =
   WithRead |
@@ -72,10 +74,6 @@ void' = fmap . const . toTerm
 success :: Functor m => String -> m a -> m (Term Name)
 success = void'
 
-callNative :: FunApp -> [Term Name] -> Eval e a -> Eval e a
-callNative (FunApp i d) as = call (StackFrame (defName d) i (Just (d,map abbrev as)))
-
-
 unsetInfo :: Term a -> Term a
 unsetInfo a = set tInfo def a
 {-# INLINE unsetInfo #-}
@@ -105,12 +103,8 @@ bindReduce ps bd bi lkpFun = do
 
 
 defNative :: NativeDefName -> NativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
-defNative pactName fun ftype docs =
-    return (asString pactName,
-     TNative (DefData (asString pactName) Defun Nothing ftype (Just docs))
-             (NativeDFun pactName (unsafeCoerce fun))
-             def)
-
+defNative n fun ftype docs =
+  return (asString n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
 
 defRNative :: NativeDefName -> RNativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)
@@ -125,3 +119,15 @@ funType t as = funTypes $ funType' t as
 
 funType' :: Type -> [(String,Type)] -> FunType
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
+
+
+getModule :: Info -> ModuleName -> Eval e Module
+getModule i n = do
+  lm <- HM.lookup n <$> use (evalRefs.rsLoadedModules)
+  case lm of
+    Just m -> return m
+    Nothing -> do
+      rm <- HM.lookup n <$> view (eeRefStore.rsModules)
+      case rm of
+        Just (m,_) -> return m
+        Nothing -> evalError i $ "Unable to resolve module " ++ show n

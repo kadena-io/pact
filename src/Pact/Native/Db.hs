@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
@@ -110,16 +111,13 @@ descModule :: RNativeFun e
 descModule i [TLitString t] = do
   mods <- view (eeRefStore.rsModules.at (fromString t))
   case mods of
-    Just m -> (\l -> TList l def def) <$> mapM deref (HM.elems m)
+    Just (_,m) -> (\l -> TList l def def) <$> mapM deref (HM.elems m)
     Nothing -> evalError' i $ "Module not found: " ++ t
 descModule i as = argsError i as
 
 
-userTable :: String -> Domain RowKey (Columns Persistable)
-userTable = UserTables . fromString
-
 read' :: RNativeFun e
-read' i as@(TLitString table:TLitString key:rest) = do
+read' i as@(table@TTable {}:TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
     [TList cs _ _] -> forM cs $ \c ->
@@ -128,7 +126,7 @@ read' i as@(TLitString table:TLitString key:rest) = do
             _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
     _ -> argsError i as
   guardTable i table
-  mrow <- readRow (userTable table) (fromString key)
+  mrow <- readRow (UserTables (_tTableName table)) (fromString key)
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
@@ -144,9 +142,9 @@ withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
   !tkd <- (,,) <$> reduce table' <*> reduce key' <*> reduce defaultRow'
   case tkd of
-    (TLitString table,TLitString key,TObject defaultRow _ _) -> do
+    (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (fromString key)
+      mrow <- readRow (UserTables _tTableName) (fromString key)
       case mrow of
         Nothing -> bindToRow ps bd b =<< toColumns fi defaultRow
         (Just row) -> bindToRow ps bd b row
@@ -157,9 +155,9 @@ withRead :: NativeFun e
 withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
   !tk <- (,) <$> reduce table' <*> reduce key'
   case tk of
-    (TLitString table,TLitString key) -> do
+    (table@TTable {..},TLitString key) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (fromString key)
+      mrow <- readRow (UserTables _tTableName) (fromString key)
       case mrow of
         Nothing -> failTx $ "with-read: row not found: " ++ show key
         (Just row) -> bindToRow ps bd b row
@@ -171,29 +169,29 @@ bindToRow :: [(Arg,Term Ref)] ->
 bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (fromString s) row)
 
 keys' :: RNativeFun e
-keys' i [TLitString table] = do
+keys' i [table@TTable {..}] = do
     guardTable i table
-    (\b -> TList b (Just TyString) def) . map toTerm <$> keys (fromString table)
+    (\b -> TList b (Just TyString) def) . map toTerm <$> keys _tTableName
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
-txids' i [TLitString table,TLitInteger key] = do
+txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
-  (\b -> TList b (Just TyInteger) def) . map toTerm <$> txids (fromString table) (fromIntegral key)
+  (\b -> TList b (Just TyInteger) def) . map toTerm <$> txids _tTableName (fromIntegral key)
 txids' i as = argsError i as
 
 
 txlog :: RNativeFun e
-txlog i [TLitString table,TLitInteger tid] = do
+txlog i [table@TTable {..},TLitInteger tid] = do
   guardTable i table
-  (`TValue` def) . toJSON <$> getTxLog (userTable table) (fromIntegral tid)
+  (`TValue` def) . toJSON <$> getTxLog (UserTables _tTableName) (fromIntegral tid)
 txlog i as = argsError i as
 
 write :: WriteType -> RNativeFun e
-write wt i [TLitString table,TLitString key,TObject ps _ _] = do
+write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
-  success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
+  success "Write succeeded" . writeRow wt (UserTables _tTableName) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
@@ -206,20 +204,20 @@ toColumns i = fmap (Columns . M.fromList) . mapM conv where
 
 
 createTable' :: RNativeFun e
-createTable' i [TLitString table,TLitString mn] = do
-  mm <- readRow Modules (fromString mn)
-  case mm of
-    Nothing -> evalError' i $ "create-table: module not found: " ++ show mn
-    Just m ->
-        success "TableCreated" $ createUserTable (fromString table) (_modName m) (_modKeySet m)
+createTable' i [t@TTable {..}] = do
+  guardTable i t
+  m <- getModule (_faInfo i) _tModule
+  success "TableCreated" $ createUserTable _tTableName _tModule (_mKeySet m)
 createTable' i as = argsError i as
 
-guardTable :: FunApp -> String -> Eval e ()
-guardTable i table = do
-  (tm,tk) <- getUserTableInfo (fromString table)
+guardTable :: Show n => FunApp -> Term n -> Eval e ()
+guardTable i TTable {..} = do
   let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . dModule . _Just) sf
+      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
   r <- foldr findMod Nothing <$> use evalCallStack
   case r of
-    (Just mn) | mn == tm -> return ()
-    _ -> enforceKeySetName (_faInfo i) tk
+    (Just mn) | mn == _tModule -> return ()
+    _ -> do
+      m <- getModule (_faInfo i) _tModule
+      enforceKeySetName (_faInfo i) (_mKeySet m)
+guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t

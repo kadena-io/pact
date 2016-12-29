@@ -33,6 +33,7 @@ module Pact.Repl
     ) where
 
 import Control.Applicative
+import Control.Arrow (first)
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
@@ -172,9 +173,8 @@ initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
   ls <- initLibState
-  e <- initEvalEnv ls repldb
-  (Right rds,_) <- runEval undefined undefined replDefsMap
-  return $ over (eeRefStore.rsModules) (HM.insert "repl" rds) e
+  initEvalEnv ls repldb
+
 
 initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
 initEvalEnv e b = do
@@ -370,13 +370,11 @@ execScript' m fp = do
   runStateT (useReplLib >> loadFile fp) s
 
 
-useReplLib :: Repl (Either String (Term Name))
+useReplLib :: Repl ()
 useReplLib = do
-  om <- use rMode
-  rMode .= Quiet
-  r <- pureEval (eval (TUse "repl" def))
-  rMode .= om
-  return r
+  (Right rds,_) <- liftIO $ runEval undefined undefined replDefsMap
+  rEvalState.evalRefs.rsLoaded %= HM.union (HM.fromList . map (first Name) . HM.toList $ rds)
+
 
 evalRepl' :: String -> Repl (Either String (Term Name))
 evalRepl' cmd = useReplLib >> parsedCompileEval (TF.parseString exprsOnly mempty cmd)

@@ -5,6 +5,8 @@
 
   "Commercial paper demonstration smart contract."
 
+  (deftable cp-master)
+  (deftable cp-inventory)
 
   (defun issue (issuer cusip ticker future-value discount-rate
                 days-to-maturity par date)
@@ -24,7 +26,7 @@
            (cost (- future-value discount))
            (settlement-date (add-time date (days days-to-maturity))))
 
-        (insert 'cp-master (is-string cusip)
+        (insert cp-master (is-string cusip)
           {
             "ticker": (is-string ticker),
             "issuer": issuer,
@@ -54,7 +56,7 @@
 
   (defun issue-inventory (owner cusip qty price date)
     "Issue inventory for CUSIP recording QTY and PRICE held by OWNER"
-    (insert 'cp-inventory (inventory-key owner cusip)
+    (insert cp-inventory (inventory-key owner cusip)
       {
         "qty": qty,
         "price": price,
@@ -70,7 +72,7 @@
     (let ((owner-key (inventory-key owner cusip))
           (transferee-key (inventory-key transferee cusip)))
 
-      (with-read 'cp-inventory owner-key
+      (with-read cp-inventory owner-key
         { "qty" := owner-owned,
           "price" := owner-price
         }
@@ -78,15 +80,15 @@
         (enforce (>= owner-owned (is-integer qty)) "Owner has inventory")
         (enforce (= owner-price (is-decimal price)) "Price matches inventory")
 
-        (with-default-read 'cp-inventory transferee-key
+        (with-default-read cp-inventory transferee-key
           { "qty": 0 }
           { "qty" := transferee-owned }
 
-          (update 'cp-inventory owner-key
+          (update cp-inventory owner-key
             { "qty": (- owner-owned qty),
               "date": (is-time date) })
 
-          (write 'cp-inventory transferee-key
+          (write cp-inventory transferee-key
             { "qty": (+ transferee-owned qty),
               "date": date }))))
   )
@@ -141,10 +143,10 @@
       (update-order-status order-id ORDER_PAID date)))
 
 
-  (defun read-cp-master (cusip) (read 'cp-master cusip))
+  (defun read-cp-master (cusip) (read cp-master cusip))
 
   (defun read-inventory (owner cusip)
-    (read 'cp-inventory (inventory-key owner cusip)))
+    (read cp-inventory (inventory-key owner cusip)))
 
   ;; scenario1
   (defpact issue-order-fill-settle (agent-entity trader-entity
@@ -179,5 +181,5 @@
 
 )
 
-(create-table 'cp-master 'cp)
-(create-table 'cp-inventory 'cp)
+(create-table cp-master)
+(create-table cp-inventory)

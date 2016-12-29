@@ -21,25 +21,25 @@
 (use 'accounts)
 (transfer "123" "456" 5.0 (time "2016-07-22T11:26:35Z"))
 (commit-tx)
-(expect "balance of 123 after transfer" 229.0 (with-read 'accounts "123" { "balance" := b } b))
-(expect "balance of 456 after transfer" 5.0 (with-read 'accounts "456" { "balance" := b } b))
+(expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
+(expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
 
 (env-keys ["user123" "user456"])
-(expect-failure "should not allow read" (with-read 'accounts "123" { "balance" := b } b))
+(expect-failure "should not allow read" (with-read accounts "123" { "balance" := b } b))
 
 (env-keys ["user123" "accountadmin"])
 (env-entity "us")
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
-(expect "balance of 123 after debit step" 217.0 (with-read 'accounts "123" { "balance" := b } b))
+(expect "balance of 123 after debit step" 217.0 (with-read accounts "123" { "balance" := b } b))
 
 (env-step 0 true)
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
-(expect "balance of 123 after rollback" 229.0 (with-read 'accounts "123" { "balance" := b } b))
+(expect "balance of 123 after rollback" 229.0 (with-read accounts "123" { "balance" := b } b))
 
 (env-step 1)
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
-(expect "balance of 456 unchanged" 5.0 (with-read 'accounts "456" { "balance" := b } b))
+(expect "balance of 456 unchanged" 5.0 (with-read accounts "456" { "balance" := b } b))
 
 (env-entity "them")
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
-(expect "balance of 456 after credit step" 17.0 (with-read 'accounts "456" { "balance" := b } b))
+(expect "balance of 456 after credit step" 17.0 (with-read accounts "456" { "balance" := b } b))

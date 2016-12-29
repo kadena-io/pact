@@ -199,6 +199,9 @@ instance Show FunType where show (FunType as t) = "(" ++ unwords (map show as) +
 type FunTypes = NonEmpty FunType
 funTypes :: FunType -> FunTypes
 funTypes ft = ft :| []
+showFunTypes :: FunTypes -> String
+showFunTypes (t :| []) = show t
+showFunTypes ts = show (toList ts)
 
 data Type =
     TyInteger |
@@ -265,13 +268,18 @@ data Exp = ELiteral { _eLiteral :: !Literal, _eInfo :: !Info }
            | EList { _eList :: ![Exp], _eInfo :: !Info }
            | EObject { _eObject :: ![(Exp,Exp)], _eInfo :: !Info }
            | EBinding { _eBinding :: ![(Exp,Exp)], _eInfo :: !Info }
-           deriving (Eq)
+           deriving (Eq,Generic)
 makePrisms ''Exp
+
+
+maybeDelim :: Show a => String -> Maybe a -> String
+maybeDelim d t = maybe "" ((d ++) . show) t
+
 
 instance Show Exp where
     show (ELiteral i _) = show i
     show (ESymbol s _) = '\'':s
-    show (EAtom a q t _) =  a ++ maybe "" ("." ++) q ++ maybe "" ((": " ++) . show) t
+    show (EAtom a q t _) =  a ++ maybeDelim "."  q ++ maybeDelim ": " t
     show (EList ls _) = "(" ++ unwords (map show ls) ++ ")"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
@@ -311,31 +319,10 @@ newtype KeySetName = KeySetName String
 instance Show KeySetName where show (KeySetName s) = show s
 
 
-data DefType = Defun | Defpact | Defconst deriving (Eq,Show)
+data DefType = Defun | Defpact deriving (Eq,Show)
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
-defTypeRep Defconst = "defconst"
-
-data DefData = DefData {
-      _dName :: !String
-    , _dDefType :: !DefType
-    , _dModule :: !(Maybe ModuleName)
-    , _dType :: !FunTypes
-    , _dDocs :: !(Maybe String)
-} deriving (Eq)
-
-instance Show DefData where
-    show (DefData n Defconst _ _ d) =
-        "(defconst " ++ n ++ maybe "" ((" " ++) . show) d ++ ")"
-    show (DefData n t _ as d) =
-      "(" ++ defTypeRep t ++ " " ++ n ++ ft as ++ maybe "" ((" " ++) . show) d ++ ")"
-      where ft (t' :| []) = " " ++ show t'
-            ft ts = " " ++ show (toList ts)
-
-defName :: DefData -> String
-defName (DefData n _ (Just mn) _ _) = asString mn ++ "." ++ n
-defName (DefData n _ _ _ _) = n
 
 newtype NativeDefName = NativeDefName String
     deriving (Eq,Ord,IsString,ToJSON,AsString)
@@ -343,11 +330,19 @@ instance Show NativeDefName where show (NativeDefName s) = show s
 
 data FunApp = FunApp {
       _faInfo :: !Info
-    , _faDef :: !DefData
+    , _faName :: !String
+    , _faModule :: !(Maybe ModuleName)
+    , _faDefType :: !DefType
+    , _faTypes :: !FunTypes
+    , _faDocs :: !(Maybe String)
     }
 
-funAppInfo :: FunApp -> Info
-funAppInfo = _faInfo
+instance Show FunApp where
+  show FunApp {..} =
+    "(" ++ defTypeRep _faDefType ++ " " ++ maybeDelim "." _faModule ++
+    _faName ++ " " ++ showFunTypes _faTypes ++ ")"
+
+
 
 -- | Variable type for an evaluable 'Term'.
 data Ref =
@@ -361,11 +356,11 @@ instance Show Ref where
     show (Ref t) = abbrev t
 
 data NativeDFun = NativeDFun {
-      _nativeDefName :: NativeDefName,
-      _nativeDef :: forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name)
+      _nativeName :: NativeDefName,
+      _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name)
     }
-instance Eq NativeDFun where a == b = _nativeDefName a == _nativeDefName b
-instance Show NativeDFun where show a = show $ _nativeDefName a
+instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
+instance Show NativeDFun where show a = show $ _nativeName a
 
 data BindCtx = BindLet | BindKV deriving (Eq,Show)
 
@@ -374,14 +369,28 @@ newtype TableName = TableName String
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
+data Module = Module {
+    _mName :: !ModuleName
+  , _mKeySet :: !KeySetName
+  , _mDocs :: !(Maybe String)
+  , _mCode :: !Exp
+  } deriving (Eq)
+instance Show Module where
+  show Module {..} =
+    "(Module " ++ asString _mName ++ " '" ++ asString _mKeySet ++ maybeDelim " " _mDocs ++ ")"
+instance ToJSON Module where
+  toJSON Module {..} = object $
+    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= show _mCode ]
+    ++ maybe [] (return . ("docs" .=)) _mDocs
+instance FromJSON Module where
+  parseJSON = withObject "Module" $ \o -> Module <$>
+    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> pure (ELiteral (LString "Code persist TODO") def)
+
 
 data Term n =
     TModule {
-      _tModuleName :: !ModuleName
-    , _tModuleKeySet :: !KeySetName
-    , _tDocs :: !(Maybe String)
+      _tModuleDef :: Module
     , _tModuleBody :: !(Scope () Term n)
-    , _tCode :: Exp
     , _tInfo :: !Info
     } |
     TList {
@@ -390,19 +399,24 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDefData :: !DefData
+      _tDefName :: !String
+    , _tModule :: !ModuleName
+    , _tDefType :: !DefType
+    , _tFunType :: !FunType
     , _tDefBody :: !(Scope Int Term n)
-    , _tDefExp :: Exp
+    , _tDocs :: !(Maybe String)
     , _tInfo :: !Info
     } |
     TNative {
-      _tDefData :: !DefData
-    , _tDefNative :: !NativeDFun
+      _tNativeName :: !NativeDefName
+    , _tNativeFun :: !NativeDFun
+    , _tFunTypes :: FunTypes
+    , _tNativeDocs :: String
     , _tInfo :: !Info
     } |
     TConst {
-      _tConstName :: !Arg
-    , _tConstModule :: Maybe ModuleName
+      _tConstArg :: !Arg
+    , _tModule :: !ModuleName
     , _tConstVal :: !(Term n)
     , _tDocs :: !(Maybe String)
     , _tInfo :: !Info
@@ -429,6 +443,7 @@ data Term n =
     } |
     TUserType {
       _tUserTypeName :: !TypeName
+    , _tModule :: !ModuleName
     , _tDocs :: !(Maybe String)
     , _tFields :: ![Arg]
     , _tInfo :: !Info
@@ -437,9 +452,18 @@ data Term n =
       _tLiteral :: !Literal
     , _tInfo :: !Info
     } |
-    TKeySet { _tKeySet :: !PactKeySet, _tInfo :: !Info } |
-    TUse { _tModuleName :: !ModuleName, _tInfo :: !Info } |
-    TValue { _tValue :: !Value, _tInfo :: !Info } |
+    TKeySet {
+      _tKeySet :: !PactKeySet
+    , _tInfo :: !Info
+    } |
+    TUse {
+      _tModuleName :: !ModuleName
+    , _tInfo :: !Info
+    } |
+    TValue {
+      _tValue :: !Value
+    , _tInfo :: !Info
+    } |
     TStep {
       _tStepEntity :: !(Term n)
     , _tStepExec :: !(Term n)
@@ -455,29 +479,35 @@ data Term n =
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
-maybeShowType :: Show a => Maybe a -> String
-maybeShowType t = maybe "" ((":" ++) . show) t
-
 instance Show n => Show (Term n) where
-    show (TModule n k d b _ _) =
-        "(TModule " ++ show n ++ " " ++ show k ++ " " ++ show d ++ " " ++ show b ++ ")"
-    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybeShowType t
-    show (TDef di _ _ _) = "(TDef " ++ show di ++ ")"
-    show (TNative di _ _ ) = "(TNative " ++ show di ++ ")"
-    show (TConst n _ _ _ _) = "(TConst " ++ show n ++ ")"
+    show TModule {..} =
+      "(TModule " ++ show _tModuleDef ++ " " ++ show _tModuleBody ++ ")"
+    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybeDelim ":" t
+    show TDef {..} =
+      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString _tModule ++ "." ++ _tDefName ++ " " ++
+      show _tFunType ++ maybeDelim " " _tDocs ++ ")"
+    show TNative {..} =
+      "(TNative " ++ asString _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ _tNativeDocs ++ ")"
+    show TConst {..} =
+      "(TConst " ++ asString _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tDocs ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
-    show (TObject bs ot _) = "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
-                             maybeShowType ot ++ ")"
+    show (TObject bs ot _) =
+      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
+      maybeDelim ":" ot ++ ")"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m _) = "(TUse " ++ show m ++ ")"
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
-        "(TStep " ++ show ent ++ " " ++ show e ++ maybe "" ((" " ++) . show) r ++ ")"
-    show TUserType {..} = "(TUserType " ++ show _tUserTypeName ++ " " ++ show _tFields ++ ")"
-    show TTable {..} = "(TTable " ++ show _tTableName ++ maybeShowType _tTableType ++ ")"
+      "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
+    show TUserType {..} =
+      "(TUserType " ++ asString _tModule ++ "." ++ asString _tUserTypeName ++ " " ++
+      show _tFields ++ maybeDelim " " _tDocs ++ ")"
+    show TTable {..} =
+      "(TTable " ++ asString _tModule ++ "." ++ asString _tTableName ++
+      maybe "" (\t -> ":{" ++ asString t ++ "}") _tTableType ++ maybeDelim " " _tDocs ++ ")"
 
 
 instance Show1 Term
@@ -489,10 +519,10 @@ instance Applicative Term where
 
 instance Monad Term where
     return a = TVar a def
-    TModule n k ds b c i >>= f = TModule n k ds (b >>>= f) c i
+    TModule m b i >>= f = TModule m (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) t i
-    TDef d b e i >>= f = TDef d (b >>>= f) e i
-    TNative d n i >>= _ = TNative d n i
+    TDef n m dt ft b d i >>= f = TDef n m dt ft (b >>>= f) d i
+    TNative n f t d i >>= _ = TNative n f t d i
     TConst d m c t i >>= f = TConst d m (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
@@ -503,7 +533,7 @@ instance Monad Term where
     TUse m i >>= _ = TUse m i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
-    TUserType {..} >>= _ = TUserType _tUserTypeName _tDocs _tFields _tInfo
+    TUserType {..} >>= _ = TUserType _tUserTypeName _tModule _tDocs _tFields _tInfo
     TTable {..} >>= _ = TTable _tTableName _tModule _tTableType _tDocs _tInfo
 
 
@@ -552,9 +582,9 @@ typeof t = case t of
             LTime {} -> Right TyTime
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left (defTypeRep $ _dDefType _tDefData)
+      TDef {..} -> Left $ defTypeRep _tDefType
       TNative {..} -> Left "defun"
-      TConst {..} -> Right (_aType _tConstName)
+      TConst {..} -> Right (_aType _tConstArg)
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
       TBinding {} -> Right TyBinding
@@ -598,9 +628,9 @@ termEq _ _ = False
 abbrev :: Show t => Term t -> String
 abbrev t@TModule {} = "<module " ++ show (_tModuleName t) ++ ">"
 abbrev (TList bs _ _) = concatMap abbrev bs
-abbrev t@TDef {} = "<defun " ++ _dName (_tDefData t) ++ ">"
-abbrev t@TNative {} = "<native " ++ _dName (_tDefData t) ++ ">"
-abbrev TConst {..} = "<defconst " ++ show _tConstName ++ ">"
+abbrev TDef {..} = "<defun " ++ _tDefName ++ ">"
+abbrev TNative {..} = "<native " ++ asString _tNativeName ++ ">"
+abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
 abbrev TBinding {} = "<binding>"
 abbrev TObject {} = "<object>"
@@ -616,8 +646,8 @@ abbrev TTable {..} = "<deftable " ++ asString _tTableName ++ ">"
 
 
 
-makeLenses ''DefData
 makeLenses ''Term
+makeLenses ''FunApp
 
 data SyntaxError = SyntaxError Info String
 instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax error: " ++ s
@@ -629,15 +659,15 @@ data PactError =
 
 instance Show PactError where
     show (EvalError i s) = show i ++ ": " ++ s
-    show (ArgsError (FunApp i dd) args s) =
-        show i ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ show (_dType dd)
+    show (ArgsError FunApp {..} args s) =
+        show _faInfo ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
     show (TxFailure s) = "Failure: " ++ s
 
 evalError :: MonadError PactError m => Info -> String -> m a
 evalError i = throwError . EvalError i
 
 evalError' :: MonadError PactError m => FunApp -> String -> m a
-evalError' = evalError . funAppInfo
+evalError' = evalError . _faInfo
 
 failTx :: MonadError PactError m => String -> m a
 failTx = throwError . TxFailure
@@ -700,24 +730,6 @@ type PactObject = [(ColumnId,Persistable)]
 newtype RowKey = RowKey String
     deriving (Eq,Ord,IsString,ToTerm,AsString)
 instance Show RowKey where show (RowKey s) = show s
-
-data Module = Module {
-      _modName :: !ModuleName
-    , _modKeySet :: !KeySetName
-    , _modCode :: !String
-    } deriving (Eq)
-instance Show Module where
-    show (Module n ks ds) = "Module " ++ show n ++ " " ++ show ks ++ " " ++ show ds
-instance ToJSON Module where
-    toJSON (Module n k ds) =
-        object [ "name" .= n, "keyset" .= k,
-                 "code" .= toJSON ds ]
-instance FromJSON Module where
-    parseJSON = withObject "Module" $ \o ->
-                Module <$> o .: "name" <*> o .: "keyset" <*> o .: "code"
-
-
-makeLenses ''Module
 
 
 newtype Columns v = Columns { _columns :: M.Map ColumnId v }
@@ -791,10 +803,11 @@ data PactStep = PactStep {
     , _psTxId :: !TxId
 } deriving (Eq,Show)
 
+type ModuleData = (Module,HM.HashMap String Ref)
 
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap String Ref
-    , _rsModules :: HM.HashMap ModuleName (HM.HashMap String Ref)
+    , _rsModules :: HM.HashMap ModuleName ModuleData
     } deriving (Eq,Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
@@ -811,13 +824,10 @@ data EvalEnv e = EvalEnv {
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
-maybeModuleName :: Term n -> Maybe ModuleName
-maybeModuleName = firstOf (tDefData.dModule._Just)
-
 data StackFrame = StackFrame {
       _sfName :: !String
     , _sfLoc :: !Info
-    , _sfApp :: Maybe (DefData,[String])
+    , _sfApp :: Maybe (FunApp,[String])
     }
 instance Show StackFrame where
     show (StackFrame n i a) = renderInfo i ++ ": " ++ n ++ f a
@@ -835,11 +845,12 @@ instance Default PactYield where def = PactYield def def
 
 data RefState = RefState {
       _rsLoaded :: HM.HashMap Name Ref
-    , _rsNew :: [(ModuleName,HM.HashMap String Ref)]
+    , _rsLoadedModules :: HM.HashMap ModuleName Module
+    , _rsNew :: [(ModuleName,ModuleData)]
     }
                 deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty def
+instance Default RefState where def = RefState HM.empty HM.empty def
 
 data EvalState = EvalState {
       _evalRefs :: !RefState

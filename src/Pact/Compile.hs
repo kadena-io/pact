@@ -40,7 +40,6 @@ import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
 import Data.Decimal
-import Data.List.NonEmpty (NonEmpty (..))
 
 symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"
@@ -204,14 +203,20 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
           Nothing -> do
             csModule .= Just (fromString n)
             bd <- mapNonEmpty "module" (run >=> defOnly) body li
-            m <- TModule <$> pure (fromString n) <*> pure (fromString k) <*> pure docs <*>
-                   abstract (const Nothing) <$> pure (TList bd Nothing li) <*> pure mc <*> pure li
             csModule .= Nothing
-            return m
+            return $ TModule
+              (Module (fromString n) (fromString k) docs mc)
+              (abstract (const Nothing) (TList bd Nothing li)) li
+
 doModule _ li _ _ = syntaxError li "Invalid module definition"
 
-doDef :: [Exp] -> DefType -> Info -> Exp -> Info -> Compile (Term Name)
-doDef es defType ai d i =
+currentModule :: Info -> Compile ModuleName
+currentModule i = use csModule >>= \m -> case m of
+  Just cm -> return cm
+  Nothing -> syntaxError i "Must be declared within module"
+
+doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
+doDef es defType ai i =
     case es of
       (EAtom dn Nothing ty _:EList args _:ELiteral (LString docs) _:body) ->
           mkDef dn ty args (Just docs) body
@@ -222,11 +227,10 @@ doDef es defType ai d i =
         mkDef dn ty dargs ddocs body = do
           args <- mapM atomVar dargs
           let argsn = map (Name . _aName) args
-              defBody = abstract (`elemIndex` argsn) <$> runBody body i
           dty <- FunType <$> pure args <*> maybeTyVar ty
-          cm <- use csModule
-          TDef <$> pure (DefData dn defType cm (dty :| []) ddocs)
-                   <*> defBody <*> pure d <*> pure i
+          cm <- currentModule i
+          db <- abstract (`elemIndex` argsn) <$> runBody body i
+          return $ TDef dn cm defType dty db ddocs i
 
 freshTyVar :: Compile Type
 freshTyVar = do
@@ -294,7 +298,7 @@ doConst es i = case es of
   where
     mkConst dn ty v docs = do
       v' <- run v
-      cm <- use csModule
+      cm <- currentModule i
       a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
       return $ TConst a cm v' docs i
 
@@ -305,10 +309,11 @@ doUserType es i = case es of
   _ -> syntaxError i "Invalid object definition"
   where
     mkUT utn docs as = do
+      cm <- currentModule i
       fs <- forM as $ \a -> case a of
         EAtom an Nothing ty ai -> Arg an <$> maybeTyVar ty <*> pure ai
         _ -> syntaxError i "Invalid object field definition"
-      return $ TUserType (fromString utn) docs fs i
+      return $ TUserType (fromString utn) cm docs fs i
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
@@ -317,11 +322,12 @@ doTable es i = case es of
   _ -> syntaxError i "Invalid table definition"
   where
     mkT tn ty docs = do
+      cm <- currentModule i
       tty <- case ty of
         Just (TyObject ut@Just {}) -> return ut
         Nothing -> return Nothing
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
-      return $ TTable (fromString tn) tty docs i
+      return $ TTable (fromString tn) cm tty docs i
 
 run :: Exp -> Compile (Term Name)
 
@@ -329,8 +335,8 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
     case (a,q) of
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai l
-      ("defun",Nothing) -> doDef rest Defun ai l li
-      ("defpact",Nothing) -> doDef rest Defpact ai l li
+      ("defun",Nothing) -> doDef rest Defun ai li
+      ("defpact",Nothing) -> doDef rest Defpact ai li
       ("step",Nothing) -> doStep rest li
       ("step-with-rollback",Nothing) -> doStepRollback rest li
       ("let",Nothing) -> doLet rest li
@@ -388,7 +394,8 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure def <*> pure i
 _parseAccounts :: IO (Result [Exp])
 _parseAccounts = parseF (exprs <* TF.eof) "examples/accounts/accounts.pact"
 
--- GHCI: _parseAccounts >>= _compile
+_compileAccounts :: IO (Either SyntaxError [Term Name])
+_compileAccounts = _parseAccounts >>= _compile
 
 _compile :: Result [Exp] -> IO (Either SyntaxError [Term Name])
 _compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
