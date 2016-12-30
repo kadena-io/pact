@@ -19,6 +19,7 @@ packages:
 
 extra-deps:
 - trifecta-1.6
+- show-prettyprint-0.1.2
 
 flags: {}
 
