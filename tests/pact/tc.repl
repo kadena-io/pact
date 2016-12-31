@@ -1,0 +1,24 @@
+(env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
+(begin-tx)
+(define-keyset 'keyset (read-keyset "msgkeys"))
+(module tctest 'keyset
+
+  (defobject person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defun add-person (p:{person})
+    (insert persons (at 'name p) p))
+  )
+
+
+(create-table persons)
+
+(commit-tx)
+
+(use 'tctest)
+(expect-failure "missing fields" (add-person { "name": "Mary" }))
+(add-person { "name": "Mary", "age": 20, "dob": (parse-time "%F" "1996-12-31") })

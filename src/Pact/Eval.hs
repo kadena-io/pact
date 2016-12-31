@@ -205,7 +205,7 @@ reduce (TBinding ps bod c i) = case c of
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce t@TUserType {} = return $ toTerm $ show t
+reduce t@TUserType {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce t@TTable {} = unsafeReduce t
 
@@ -308,34 +308,81 @@ enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothi
 instantiate' :: Scope n Term a -> Term a
 instantiate' = instantiate1 (toTerm ("No bindings" :: String))
 
-
+-- | Runtime input typecheck -- let bindings and defuns.
+-- Output checking -- defconsts, function return values -- left to static TC.
+-- Native funs TC via pattern-matching etc.
 typecheck :: [(Arg,Term Name)] -> Eval e ()
-typecheck ps = do
-  let tcheck :: Info -> Type -> Term Name -> Eval e (Maybe (String,Type))
-      tcheck i ty t = do
-        tty <- case typeof t of
-          Left s -> evalError i $ "Invalid type in value location: " ++ s
-          Right r -> return r
-        let tcFail = evalError i $ "Runtime typecheck failure: expected " ++ show ty ++ ", found " ++ show tty
-        case ty of
-          TyRest -> return Nothing
-          TyVar {..} -> if null _tvConstraint || tty `elem` _tvConstraint
-                        then return $ Just (_tvId,tty)
-                        else tcFail
-          TyFun {} -> evalError i "User function type spec not supported"
-          TyBinding -> evalError i "User binding type spec not supported"
-          _ -> if ty == tty then return Nothing else tcFail
-      tvarCheck m (Arg {..},t) = do
-        r <- tcheck _aInfo _aType t
-        case r of
-          Nothing -> return m
-          Just (v,ty) -> case M.lookup v m of
-            Nothing -> return $ M.insert v ty m
-            Just prevTy | prevTy == ty -> return m
-                        | otherwise ->
-                            evalError (_tInfo t) $ "Runtime typecheck failure: values specified by " ++ show _aType ++
-                            " do not match: " ++ show (prevTy,ty)
-  void $ foldM tvarCheck M.empty ps
+typecheck ps = void $ foldM tvarCheck M.empty ps where
+  tvarCheck m (Arg {..},t) = do
+    r <- check1 _aInfo _aType t
+    case r of
+      Nothing -> return m
+      Just (v,ty) -> case M.lookup v m of
+        Nothing -> return $ M.insert v ty m
+        Just prevTy | prevTy == ty -> return m
+                    | otherwise ->
+                        evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
+                        " do not match: " ++ show (prevTy,ty)
+
+check1 :: forall e . Info -> Type -> Term Name -> Eval e (Maybe (String,Type))
+check1 i spec t = do
+  ty <- case typeof t of
+    Left s -> evalError i $ "Invalid type in value location: " ++ s
+    Right r -> return r
+  let
+    tcFail :: Show a => a -> Eval e (Maybe (String,Type))
+    tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
+    tcOK = return Nothing
+    paramCheck :: Eq t => Maybe t -> Maybe t -> (t -> Eval e Type) -> Eval e (Maybe (String,Type))
+    paramCheck Nothing _ _ = tcOK
+    paramCheck (Just pspec) (Just pty) _
+      | pspec == pty = tcOK -- dupe check, oh well
+      | otherwise = tcFail ty
+    paramCheck (Just pspec) Nothing check = do
+      checked <- check pspec
+      if checked == spec then tcOK else tcFail checked
+    checkList [] lty = return lty
+    checkList es lty = return $ TyList $
+                    case nub (map typeof es) of
+                      [] -> Just lty
+                      [Right a] -> Just a
+                      _ -> Nothing
+  case (spec,ty,t) of
+    (_,_,_) | spec == ty -> tcOK -- identical types always OK
+    (TyRest,_,_) -> tcOK -- var args are untyped
+    (TyVar {..},_,_) ->
+      if null _tvConstraint || ty `elem` _tvConstraint
+      then return $ Just (_tvId,ty) -- collect found types under vars
+      else tcFail ty -- constraint failed
+    (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
+    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
+    _ -> tcFail ty
+
+
+resolveUserType :: Info -> TypeName -> Eval e [Arg]
+resolveUserType i oty = do
+  rm <- resolveRef (Name (asString oty)) -- TODO, qualified types???
+  case rm of
+    Nothing -> evalError i $ "Could not resolve user type: " ++ show oty
+    Just r -> do
+      ut <- deref r
+      case ut of
+        TUserType {..} -> return _tFields
+        _ -> evalError i $ "Invalid user type: " ++ show oty
+
+checkUserType :: Bool -> Info -> [(Term Name,Term Name)] -> TypeName -> Eval e Type
+checkUserType total i ps oty = do
+  uty <- M.fromList . map (_aName &&& id) <$> resolveUserType i oty
+  aps <- forM ps $ \(k,v) -> case k of
+    TLitString ks -> case M.lookup ks uty of
+      Nothing -> evalError i $ "Invalid field in user type: " ++ show (ks,oty)
+      Just a -> return (a,v)
+    t -> evalError i $ "Invalid object for user type, non-String key found: " ++ show t
+  when total $ do
+    let missing = M.difference uty (M.fromList (map (first _aName) aps))
+    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString oty ++ "}: " ++ show (M.elems missing)
+  typecheck aps
+  return $ TyObject $ Just oty
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s
