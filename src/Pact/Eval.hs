@@ -22,6 +22,7 @@ module Pact.Eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,resolveFreeVars,resolveArg
     ,enforceKeySet,enforceKeySetName
+    ,checkUserType
     ,deref
     ) where
 
@@ -375,9 +376,9 @@ checkUserType total i ps oty = do
   uty <- M.fromList . map (_aName &&& id) <$> resolveUserType i oty
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
-      Nothing -> evalError i $ "Invalid field in user type: " ++ show (ks,oty)
+      Nothing -> evalError i $ "Invalid field for {" ++ asString oty ++ "}: " ++ ks
       Just a -> return (a,v)
-    t -> evalError i $ "Invalid object for user type, non-String key found: " ++ show t
+    t -> evalError i $ "Invalid object, non-String key found: " ++ show t
   when total $ do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
     unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString oty ++ "}: " ++ show (M.elems missing)

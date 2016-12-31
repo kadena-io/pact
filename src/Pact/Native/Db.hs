@@ -196,6 +196,9 @@ txlog i as = argsError i as
 write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
+  case _tTableType of
+    Nothing -> return ()
+    Just tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
   success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 
