@@ -203,6 +203,18 @@ showFunTypes :: FunTypes -> String
 showFunTypes (t :| []) = show t
 showFunTypes ts = show (toList ts)
 
+data TypeParam t =
+  ParamVar { _tpVar :: String } |
+  ParamSpec { _tpSpec :: t } |
+  ParamAny
+  deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show t => Show (TypeParam t) where
+  show ParamVar {..} = "<" ++ _tpVar ++ ">"
+  show ParamSpec {..} = show _tpSpec
+  show ParamAny = "*"
+
+
 data Type =
     TyInteger |
     TyDecimal |
@@ -211,12 +223,12 @@ data Type =
     TyString |
     TyValue |
     TyKeySet |
-    TyList { _tlType :: Maybe Type } |
-    TyObject { _toType :: Maybe TypeName } |
+    TyList { _tlType :: TypeParam Type } |
+    TyObject { _toType :: TypeParam TypeName } |
     TyFun { _tfType :: FunType } |
     TyVar { _tvId :: String, _tvConstraint :: [Type] } |
     TyBinding |
-    TyTable { _ttType :: Maybe TypeName } |
+    TyTable { _ttType :: TypeParam TypeName } |
     TyRest
 
     deriving (Eq,Ord)
@@ -227,7 +239,7 @@ makeLenses ''Arg
 
 instance Default Type where def = TyVar "_" []
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet :: String
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: String
 tyInteger = "integer"
 tyDecimal = "decimal"
 tyTime = "time"
@@ -237,6 +249,7 @@ tyList = "list"
 tyObject = "object"
 tyValue = "value"
 tyKeySet = "keyset"
+tyTable = "table"
 
 instance Show Type where
   show TyInteger = tyInteger
@@ -244,13 +257,13 @@ instance Show Type where
   show TyTime = tyTime
   show TyBool = tyBool
   show TyString = tyString
-  show TyList {..} = maybe tyList (\t -> "[" ++ show t ++ "]") _tlType
-  show TyObject {..} = maybe tyObject (\t -> "{" ++ asString t ++ "}") _toType
+  show TyList {..} = tyList ++ ":" ++ show _tlType
+  show TyObject {..} = tyObject ++ ":" ++ show _toType
   show TyValue = tyValue
   show TyKeySet = tyKeySet
   show TyFun {..} = "function: " ++ show _tfType
   show TyBinding = "binding"
-  show TyTable {..} = maybe "table" (\t -> "{" ++ asString t ++ "}") _ttType
+  show TyTable {..} = tyTable ++ ":" ++ show _ttType
   show TyRest = "@rest"
   show TyVar {..} = "<" ++ _tvId ++
                     (if null _tvConstraint then ""
@@ -395,7 +408,7 @@ data Term n =
     } |
     TList {
       _tList :: ![Term n]
-    , _tListType :: Maybe Type
+    , _tListType :: TypeParam Type
     , _tInfo :: !Info
     } |
     TDef {
@@ -438,7 +451,7 @@ data Term n =
     } |
     TObject {
       _tObject :: ![(Term n,Term n)]
-    , _tUserType :: Maybe TypeName
+    , _tUserType :: TypeParam (Term n)
     , _tInfo :: !Info
     } |
     TUserType {
@@ -473,7 +486,7 @@ data Term n =
     TTable {
       _tTableName :: !TableName
     , _tModule :: ModuleName
-    , _tTableType :: !(Maybe TypeName)
+    , _tTableType :: !(TypeParam (Term n))
     , _tDocs :: !(Maybe String)
     , _tInfo :: !Info
     }
@@ -482,7 +495,7 @@ data Term n =
 instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show _tModuleBody ++ ")"
-    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]" ++ maybeDelim ":" t
+    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]:" ++ show t
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString _tModule ++ "." ++ _tDefName ++ " " ++
       show _tFunType ++ maybeDelim " " _tDocs ++ ")"
@@ -494,8 +507,7 @@ instance Show n => Show (Term n) where
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
     show (TObject bs ot _) =
-      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}" ++
-      maybeDelim ":" ot ++ ")"
+      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}:" ++ show ot
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m _) = "(TUse " ++ show m ++ ")"
@@ -506,8 +518,8 @@ instance Show n => Show (Term n) where
       "(TUserType " ++ asString _tModule ++ "." ++ asString _tUserTypeName ++ " " ++
       show _tFields ++ maybeDelim " " _tDocs ++ ")"
     show TTable {..} =
-      "(TTable " ++ asString _tModule ++ "." ++ asString _tTableName ++
-      maybe "" (\t -> ":{" ++ asString t ++ "}") _tTableType ++ maybeDelim " " _tDocs ++ ")"
+      "(TTable " ++ asString _tModule ++ "." ++ asString _tTableName ++ ":" ++ show _tTableType
+      ++ maybeDelim " " _tDocs ++ ")"
 
 
 instance Show1 Term
@@ -527,14 +539,14 @@ instance Monad Term where
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (second (>>= f)) bs) (b >>>= f) c i
-    TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) t i
+    TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
     TUse m i >>= _ = TUse m i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
     TUserType {..} >>= _ = TUserType _tUserTypeName _tModule _tDocs _tFields _tInfo
-    TTable {..} >>= _ = TTable _tTableName _tModule _tTableType _tDocs _tInfo
+    TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
 
 
 instance FromJSON (Term n) where
@@ -568,8 +580,11 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
-toTermList :: (ToTerm a,Foldable f) => f a -> Term b
-toTermList l = TList (map toTerm (toList l)) def def
+toTermList :: (ToTerm a,Foldable f) => Type -> f a -> Term b
+toTermList ty l = TList (map toTerm (toList l)) (ParamSpec ty) def
+
+
+
 
 typeof :: Term a -> Either String Type
 typeof t = case t of
@@ -588,13 +603,18 @@ typeof t = case t of
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
       TBinding {} -> Right TyBinding
-      TObject {..} -> Right $ TyObject _tUserType
+      TObject {..} -> Right $ TyObject $ convUTParam _tUserType
       TKeySet {} -> Right TyKeySet
       TUse {} -> Left "use"
       TValue {} -> Right TyValue
       TStep {} -> Left "step"
       TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
-      TTable {..} -> Right $ TyTable _tTableType
+      TTable {..} -> Right $ TyTable $ convUTParam _tTableType
+  where convUTParam ParamVar {..} = ParamVar _tpVar
+        convUTParam ParamAny = ParamAny
+        convUTParam (ParamSpec TUserType {..}) = ParamSpec _tUserTypeName
+        convUTParam (ParamSpec _) = ParamAny
+
 
 
 

@@ -98,15 +98,15 @@ typed = do
 
 parseType :: (Monad m,TokenParsing m) => m Type
 parseType =
-  (char '[' >> parseType >>= \t -> char ']' >> return (TyList (Just t)) <?> "typed list") <|>
-  (char '{' >> ident style >>= \t -> char '}' >> return (TyObject (Just (fromString t))) <?> "user type") <|>
+  (char '[' >> parseType >>= \t -> char ']' >> return (TyList (ParamSpec t)) <?> "typed list") <|>
+  (char '{' >> ident style >>= \t -> char '}' >> return (TyObject (ParamSpec (fromString t))) <?> "user type") <|>
   symbol tyInteger *> return TyInteger <|>
   symbol tyDecimal *> return TyDecimal <|>
   symbol tyTime *> return TyTime <|>
   symbol tyBool *> return TyBool <|>
   symbol tyString *> return TyString <|>
-  symbol tyList *> return (TyList Nothing) <|>
-  symbol tyObject *> return (TyObject Nothing) <|>
+  symbol tyList *> return (TyList ParamAny) <|>
+  symbol tyObject *> return (TyObject ParamAny) <|>
   symbol tyValue *> return TyValue <|>
   symbol tyKeySet *> return TyKeySet
 
@@ -206,7 +206,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
             csModule .= Nothing
             return $ TModule
               (Module (fromString n) (fromString k) docs mc)
-              (abstract (const Nothing) (TList bd Nothing li)) li
+              (abstract (const Nothing) (TList bd ParamAny li)) li
 
 doModule _ li _ _ = syntaxError li "Invalid module definition"
 
@@ -323,9 +323,9 @@ doTable es i = case es of
   where
     mkT tn ty docs = do
       cm <- currentModule i
-      tty <- case ty of
-        Just (TyObject ut@Just {}) -> return ut
-        Nothing -> return Nothing
+      tty :: TypeParam (Term Name) <- case ty of
+        Just (TyObject ot) -> return (fmap (return . Name . asString) ot)
+        Nothing -> return ParamAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (fromString tn) cm tty docs i
 
@@ -357,7 +357,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
               TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
           _ -> TApp <$> mkVar a q ai <*> mapM run rest <*> pure li
 
-run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure def <*> pure i
+run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure ParamAny <*> pure i
 run (EBinding _ i) = syntaxError i "Unexpected binding"
 run (ESymbol s i) = return $ TLiteral (LString s) i
 run (ELiteral l i) = return $ TLiteral l i
@@ -386,7 +386,7 @@ atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
 runBody :: [Exp] -> Info -> Compile (Term Name)
-runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure def <*> pure i
+runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure ParamAny <*> pure i
 {-# INLINE runBody #-}
 
 

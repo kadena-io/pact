@@ -199,7 +199,8 @@ reduce (TList bs _ _) = last <$> mapM reduce bs -- note "body" usage here, bug?
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
 reduce (TConst _ _ t _ _) = reduce t
-reduce (TObject ps t i) = forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) >>= \ps' -> return $ TObject ps' t i
+reduce (TObject ps t i) =
+  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> reduceTP t <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindKV -> evalError i "Unexpected key-value binding"
@@ -212,6 +213,11 @@ reduce t@TTable {} = unsafeReduce t
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
+
+reduceTP :: TypeParam (Term Ref) -> Eval e (TypeParam (Term Name))
+reduceTP (ParamSpec t) = ParamSpec <$> reduce t
+reduceTP ParamAny = return ParamAny
+reduceTP (ParamVar v) = return $ ParamVar v
 
 reduceLet :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
@@ -334,20 +340,21 @@ check1 i spec t = do
     tcFail :: Show a => a -> Eval e (Maybe (String,Type))
     tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
     tcOK = return Nothing
-    paramCheck :: Eq t => Maybe t -> Maybe t -> (t -> Eval e Type) -> Eval e (Maybe (String,Type))
-    paramCheck Nothing _ _ = tcOK
-    paramCheck (Just pspec) (Just pty) _
+    paramCheck :: Eq t => TypeParam t -> TypeParam t -> (t -> Eval e Type) -> Eval e (Maybe (String,Type))
+    paramCheck ParamAny _ _ = tcOK
+    paramCheck ParamVar {} _ _ = tcOK
+    paramCheck (ParamSpec pspec) (ParamSpec pty) _
       | pspec == pty = tcOK -- dupe check, oh well
       | otherwise = tcFail ty
-    paramCheck (Just pspec) Nothing check = do
+    paramCheck (ParamSpec pspec) _ check = do
       checked <- check pspec
       if checked == spec then tcOK else tcFail checked
     checkList [] lty = return lty
     checkList es lty = return $ TyList $
                     case nub (map typeof es) of
-                      [] -> Just lty
-                      [Right a] -> Just a
-                      _ -> Nothing
+                      [] -> ParamSpec lty
+                      [Right a] -> ParamSpec a
+                      _ -> ParamAny
   case (spec,ty,t) of
     (_,_,_) | spec == ty -> tcOK -- identical types always OK
     (TyRest,_,_) -> tcOK -- var args are untyped
@@ -356,7 +363,7 @@ check1 i spec t = do
       then return $ Just (_tvId,ty) -- collect found types under vars
       else tcFail ty -- constraint failed
     (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
-    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
+    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tUserType _tObject)
     _ -> tcFail ty
 
 
@@ -371,8 +378,8 @@ resolveUserType i oty = do
         TUserType {..} -> return _tFields
         _ -> evalError i $ "Invalid user type: " ++ show oty
 
-checkUserType :: Bool -> Info -> [(Term Name,Term Name)] -> TypeName -> Eval e Type
-checkUserType total i ps oty = do
+checkUserType :: Bool -> Info -> TypeParam (Term Name) -> [(Term Name,Term Name)] -> TypeName -> Eval e Type
+checkUserType total i oty ps _ = do
   uty <- M.fromList . map (_aName &&& id) <$> resolveUserType i oty
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
@@ -383,7 +390,7 @@ checkUserType total i ps oty = do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
     unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString oty ++ "}: " ++ show (M.elems missing)
   typecheck aps
-  return $ TyObject $ Just oty
+  return $ TyObject $ ParamSpec oty
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s
