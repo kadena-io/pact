@@ -216,7 +216,7 @@ data Type =
     TyFun { _tfType :: FunType } |
     TyVar { _tvId :: String, _tvConstraint :: [Type] } |
     TyBinding |
-    TyTable |
+    TyTable { _ttType :: Maybe TypeName } |
     TyRest
 
     deriving (Eq,Ord)
@@ -250,7 +250,7 @@ instance Show Type where
   show TyKeySet = tyKeySet
   show TyFun {..} = "function: " ++ show _tfType
   show TyBinding = "binding"
-  show TyTable = "table"
+  show TyTable {..} = maybe "table" (\t -> "{" ++ asString t ++ "}") _ttType
   show TyRest = "@rest"
   show TyVar {..} = "<" ++ _tvId ++
                     (if null _tvConstraint then ""
@@ -594,7 +594,7 @@ typeof t = case t of
       TValue {} -> Right TyValue
       TStep {} -> Left "step"
       TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
-      TTable {..} -> Right TyTable
+      TTable {..} -> Right $ TyTable _tTableType
 
 
 

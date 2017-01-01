@@ -205,7 +205,13 @@ data AST t =
   } |
   Var {
   _aId :: TcId,
-  _aVar :: t }
+  _aVar :: t
+  } |
+  Table {
+  _aId :: TcId,
+  _aUserType :: Maybe TypeName
+  }
+
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (AST t) where
@@ -223,6 +229,7 @@ instance Pretty t => Pretty (AST t) where
     pretty _aId <$$>
     pretty _aAppFun <$$>
     indent 2 (vsep (map pretty _aAppArgs))
+  pretty Table {..} = text "table" <> maybe empty (\t -> colon <> braces (text (asString t))) _aUserType
 
 
 
@@ -239,6 +246,7 @@ type Visitor m n = Visit -> AST n -> m (AST n)
 walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
 walkAST f t@Lit {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
+walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   Object {..} <- f Pre t
   t' <- Object _aId <$>
@@ -566,8 +574,6 @@ processNatives Pre a@(App i FNative {..} as) = do
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
         Just (_,[Binding {..}]) -> assocTy _aId (Spec _ftReturn)
-        -- WithKeyset is a body form
-        Just (WithKeyset,bod) -> notEmpty (_tiInfo i) "Expected non-empty body" bod >>= (assocAST i . last)
         _ -> return ()
     -- multiple funtypes
     fts -> do
@@ -608,6 +614,7 @@ tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
 tcToTy List {..} = return $ S.singleton $ Spec $ TyList _aListType
 tcToTy App {..} = lookupIdTys _aId
 tcToTy Binding {..} = lookupIdTys _aId
+tcToTy Table {..} = return $ S.singleton $ Spec $ TyObject _aUserType
 
 -- | Track type to id
 trackVar :: TcId -> VarType -> TC ()
@@ -660,22 +667,19 @@ mangleFunType f = over ftReturn (mangleType f) .
                   over (ftArgs.traverse.aType) (mangleType f)
 
 toFun :: Term (Either Ref (AST TcId)) -> TC (Fun TcId)
-toFun (TVar (Left (Direct (TNative DefData {..} _ i))) _) =
-  return $ FNative i _dName _dType ((,[]) <$> isSpecialForm _dName)
+toFun (TVar (Left (Direct TNative {..})) _) =
+  return $ FNative _tInfo (asString _tNativeName) _tFunTypes ((,[]) <$> isSpecialForm _tNativeName)
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
-toFun (TDef DefData {..} bod _ i) = do -- TODO currently creating new vars every time, is this ideal?
-  ty <- case _dType of
-    t :| [] -> return t
-    _ -> die i "Multiple def types not allowed"
-  let fn = maybe _dName ((++ ('.':_dName)) . asString) _dModule
-  args <- forM (_ftArgs ty) $ \(Arg n t ai) -> do
+toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
+  let fn = asString _tModule ++ "." ++ asString _tDefName
+  args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     let t' = mangleType an t
     trackVar an (Spec t')
     return an
-  tcs <- scopeToBody i (map (\ai -> Var ai ai) args) bod
-  return $ FDefun i fn ty args tcs
+  tcs <- scopeToBody _tInfo (map (\ai -> Var ai ai) args) _tDefBody
+  return $ FDefun _tInfo fn _tFunType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
@@ -685,6 +689,7 @@ notEmpty _ _ as = return as
 toAST :: Term (Either Ref (AST TcId)) -> TC (AST TcId)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
+toAST TUserType {..} = die _tInfo "User type in value position"
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left Direct {}) -> die i "Native in value context"
@@ -699,7 +704,6 @@ toAST TApp {..} = do
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
     FNative {..} -> case _fSpecial of
       Nothing -> return (as,fun)
-      Just (f@WithKeyset,_) -> return (take 1 as,set fSpecial (Just (f,drop 1 as)) fun)
       Just (f,_) -> (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
                     <*> pure (set fSpecial (Just (f,[last as])) fun)
   return $ App i fun' as'
@@ -734,6 +738,8 @@ toAST TLiteral {..} = do
   i <- freshId _tInfo (show ty)
   trackVar i (Spec ty)
   return $ Lit i ty (LVLit _tLiteral)
+toAST TTable {..} = freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName) >>=
+                    \i -> return $ Table i _tTableType
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = die _tInfo "TODO steps/pacts"
@@ -791,7 +797,7 @@ _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
 _loadFun fp mn fn = do
   (r,s) <- execScript' (Script fp) fp
   either (die def) (const (return ())) r
-  let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . at fn) s
+  let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . _2 . at fn) s
   return d
 
 _infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type)), TcState)

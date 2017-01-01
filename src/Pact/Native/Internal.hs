@@ -49,10 +49,10 @@ instance Show SpecialForm where show = show . asString
 specialForm :: SpecialForm -> NativeDefName
 specialForm = fromString . asString
 
-sfLookup :: M.Map String SpecialForm
-sfLookup = M.fromList $ map (asString &&& id) [minBound .. maxBound]
+sfLookup :: M.Map NativeDefName SpecialForm
+sfLookup = M.fromList $ map (specialForm &&& id) [minBound .. maxBound]
 
-isSpecialForm :: String -> Maybe SpecialForm
+isSpecialForm :: NativeDefName -> Maybe SpecialForm
 isSpecialForm = (`M.lookup` sfLookup)
 
 

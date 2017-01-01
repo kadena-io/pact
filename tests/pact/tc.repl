@@ -10,8 +10,8 @@
 
   (deftable persons:{person})
 
-  (defun add-person (p)
-    (insert persons (at 'name p) p))
+  (defun add-person (person)
+    (insert persons (at 'name person) person))
 
   (defun update-age (name age)
     (update persons name { "age": age }))
