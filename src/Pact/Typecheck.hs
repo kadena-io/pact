@@ -312,6 +312,12 @@ isTyVar :: VarType -> Bool
 isTyVar (Spec TyVar {}) = True
 isTyVar _ = False
 
+isParamVar :: VarType -> Bool
+isParamVar (Spec (TyObject ParamVar {})) = True
+isParamVar (Spec (TyList ParamVar {})) = True
+isParamVar (Spec (TyTable ParamVar {})) = True
+isParamVar _ = False
+
 pivot :: TC ()
 pivot = do
   m <- use tcVars
@@ -326,7 +332,7 @@ pivot' m = mkPivot m $ rpt initPivot
     rinse p =
       forM_ (M.elems p) $ \vts ->
         forM_ vts $ \vt ->
-          when (isTyVar vt || isOverload vt) $ modify $ M.insertWith S.union vt vts
+          when (isTyVar vt || isOverload vt || isParamVar vt) $ modify $ M.insertWith S.union vt vts
     rpt p = let p' = lather p in if p' == p then p else rpt p'
 
 mkPivot :: forall a . Ord a => M.Map a TypeSet -> M.Map VarType TypeSet -> Pivot a
@@ -667,11 +673,20 @@ pfx s = ((s ++ "_") ++)
 idTyVar :: TcId -> Type UserType
 idTyVar i = TyVar (show i) []
 
+mangle :: TcId -> String -> String
+mangle f = pfx (show f)
+
 mangleType :: TcId -> Type UserType -> Type UserType
-mangleType f t@TyVar {} = over tvId (pfx (show f)) t
-mangleType f t@TyList {} = over (tlType . mapped) (mangleType f) t
+mangleType f t@TyVar {} = over tvId (mangle f) t
+mangleType f t@TyList {} = over (tlType . mapped) (mangleType f) $
+                           over tlType (mangleTypeParam f) t
 mangleType f t@TyFun {} = over tfType (mangleFunType f) t
+mangleType f t@TyObject {} = over toType (mangleTypeParam f) t
+mangleType f t@TyTable {} = over ttType (mangleTypeParam f) t
 mangleType _ t = t
+
+mangleTypeParam :: TcId -> TypeParam t -> TypeParam t
+mangleTypeParam f = over tpVar (mangle f)
 
 mangleFunType :: TcId -> FunType UserType -> FunType UserType
 mangleFunType f = over ftReturn (mangleType f) .

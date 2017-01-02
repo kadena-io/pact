@@ -267,6 +267,7 @@ liftTy f t = case t of
 makeLenses ''Type
 makeLenses ''FunType
 makeLenses ''Arg
+makeLenses ''TypeParam
 
 instance Default (Type o) where def = TyVar "_" []
 
