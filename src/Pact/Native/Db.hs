@@ -41,7 +41,7 @@ dbDefs :: Eval e NativeDef
 dbDefs = do
   let writeArgs = funType TyString [("table",tableTy),("key",TyString),("object",rowTy)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
-      rt = Just "row"
+      rt = ParamVar "r"
       tableTy = TyTable rt
       rowTy = TyObject rt
 
@@ -66,16 +66,16 @@ dbDefs = do
 
     ,defRNative "read" read'
      (funType rowTy [("table",tableTy),("key",TyString)] <>
-      funType rowTy [("table",tableTy),("key",TyString),("columns",TyList (Just TyString))])
+      funType rowTy [("table",tableTy),("key",TyString),("columns",TyList (ParamSpec TyString))])
      "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
      \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defRNative "keys" keys'
-     (funType (TyList (Just TyString)) [("table",tableTy)])
+     (funType (TyList (ParamSpec TyString)) [("table",tableTy)])
      "Return all keys in TABLE. `$(keys 'accounts)`"
 
     ,defRNative "txids" txids'
-     (funType (TyList (Just TyInteger)) [("table",tableTy),("txid",TyInteger)])
+     (funType (TyList (ParamSpec TyInteger)) [("table",tableTy),("txid",TyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
@@ -88,7 +88,7 @@ dbDefs = do
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
 
     ,defRNative "txlog" txlog
-     (funType (TyList (Just TyValue)) [("table",tableTy),("txid",TyInteger)])
+     (funType (TyList (ParamSpec TyValue)) [("table",tableTy),("txid",TyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
     ,defRNative "describe-table" descTable
      (funType TyValue [("table",TyString)]) "Get metadata for TABLE"
@@ -116,7 +116,7 @@ descModule :: RNativeFun e
 descModule i [TLitString t] = do
   mods <- view (eeRefStore.rsModules.at (fromString t))
   case mods of
-    Just (_,m) -> (\l -> TList l def def) <$> mapM deref (HM.elems m)
+    Just (_,m) -> (\l -> TList l ParamAny def) <$> mapM deref (HM.elems m)
     Nothing -> evalError' i $ "Module not found: " ++ t
 descModule i as = argsError i as
 
@@ -139,8 +139,8 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
-        [] -> return $ (\ps -> TObject ps def def) $ map (toTerm *** toTerm) $ M.toList m
-        _ -> (\ps -> TObject ps def def) <$> forM cols (\col ->
+        [] -> return $ (\ps -> TObject ps (_tTableType table) def) $ map (toTerm *** toTerm) $ M.toList m
+        _ -> (\ps -> TObject ps (_tTableType table) def) <$> forM cols (\col ->
                 case M.lookup col m of
                   Nothing -> evalError' i $ "read: invalid column: " ++ show col
                   Just v -> return (toTerm col,toTerm v))
@@ -173,21 +173,21 @@ withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
-bindToRow :: [(Arg,Term Ref)] ->
+bindToRow :: [(Arg (Term Ref),Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
 bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (fromString s) row)
 
 keys' :: RNativeFun e
 keys' i [table@TTable {..}] = do
     guardTable i table
-    (\b -> TList b (Just TyString) def) . map toTerm <$> keys _tTableName
+    (\b -> TList b (ParamSpec TyString) def) . map toTerm <$> keys _tTableName
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
 txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
-  (\b -> TList b (Just TyInteger) def) . map toTerm <$> txids _tTableName (fromIntegral key)
+  (\b -> TList b (ParamSpec TyInteger) def) . map toTerm <$> txids _tTableName (fromIntegral key)
 txids' i as = argsError i as
 
 
@@ -201,8 +201,9 @@ write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
   case _tTableType of
-    Nothing -> return ()
-    Just tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+    ParamAny -> return ()
+    ParamVar {} -> return ()
+    ParamSpec tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
   success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 

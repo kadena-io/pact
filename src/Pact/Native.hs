@@ -71,21 +71,21 @@ langDefs = foldDefs
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
     ,defNative "map" map'
-     (funType (TyList (Just a)) [("app",lam b a),("list",TyList (Just b))])
+     (funType (TyList (ParamSpec a)) [("app",lam b a),("list",TyList (ParamSpec b))])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
-     (funType a [("app",lam2 b b a),("init",a),("list",TyList (Just b))])
+     (funType a [("app",lam2 b b a),("init",a),("list",TyList (ParamSpec b))])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
 
     ,defRNative "list" list
-     (funType (TyList Nothing) [("elems",TyRest)])
+     (funType (TyList ParamAny) [("elems",TyRest)])
      "Create list from ELEMS. `(list 1 2 3)`"
 
     ,defNative "filter" filter'
-     (funType (TyList (Just a)) [("app",lam a TyBool),("list",TyList (Just a))])
+     (funType (TyList (ParamSpec a)) [("app",lam a TyBool),("list",TyList (ParamSpec a))])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
@@ -105,11 +105,11 @@ langDefs = foldDefs
      "Drop COUNT values from LIST (or string). If negative, drop from end.\
      \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
 
-    ,defRNative "remove" remove (funType (TyObject Nothing) [("key",TyString),("object",TyObject Nothing)])
+    ,defRNative "remove" remove (funType (TyObject (ParamVar "o")) [("key",TyString),("object",TyObject (ParamVar "o"))])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' (funType a [("idx",TyInteger),("list",TyList (Just a))] <>
-                          funType a [("idx",TyString),("object",TyObject Nothing)])
+    ,defRNative "at" at' (funType a [("idx",TyInteger),("list",TyList (ParamVar "l"))] <>
+                          funType a [("idx",TyString),("object",TyObject (ParamVar "o"))])
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
@@ -144,18 +144,18 @@ langDefs = foldDefs
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative (specialForm Bind) bind (funType a [("src",TyObject Nothing),("bindings",TyBinding),("body",TyRest)])
+    ,defNative (specialForm Bind) bind (funType a [("src",TyObject (ParamVar "o")),("bindings",TyBinding),("body",TyRest)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof' (funType TyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
-    ,defRNative "list-modules" listModules (funType (TyList (Just TyString)) []) "List modules available for loading."
+    ,defRNative "list-modules" listModules (funType (TyList (ParamSpec TyString)) []) "List modules available for loading."
     ]
     where a = TyVar "a" []
           b = TyVar "b" []
           c = TyVar "c" []
-          listA = TyVar "a" [TyList Nothing,TyString,TyObject Nothing]
-          listStringA = TyVar "a" [TyList Nothing,TyString]
+          listA = TyVar "a" [TyList (ParamVar "l"),TyString,TyObject (ParamVar "o")]
+          listStringA = TyVar "a" [TyList (ParamVar "l"),TyString]
           takeDrop = funType listStringA [("count",TyInteger),("list",listStringA)]
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
@@ -177,12 +177,12 @@ apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
 
 map' :: NativeFun e
 map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b def def) <$> forM ls (apply af as ai . pure)
+           TList ls _ _ -> (\b -> TList b ParamAny def) <$> forM ls (apply af as ai . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as def (_faInfo i)
+list i as = return $ TList as ParamAny (_faInfo i) -- TODO, could set type here
 
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
@@ -198,7 +198,7 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ _ -> ((\b -> TList b def def) . concat) <$>
+           TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
                          forM ls (\a -> do
                            t <- apply af as ai [a]
                            case t of
@@ -347,4 +347,4 @@ typeof' i as = argsError i as
 listModules :: RNativeFun e
 listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
-  return $ toTermList $ map asString $ M.keys mods
+  return $ toTermList TyString $ map asString $ M.keys mods

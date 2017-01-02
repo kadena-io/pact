@@ -90,13 +90,13 @@ expr = do
 qualified :: (Monad m,TokenParsing m) => m String
 qualified = char '.' *> ident style
 
-typed :: (Monad m,TokenParsing m) => m Type
+typed :: (Monad m,TokenParsing m) => m (Type TypeName)
 typed = do
   _ <- char ':'
   spaces
   parseType
 
-parseType :: (Monad m,TokenParsing m) => m Type
+parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
 parseType =
   (char '[' >> parseType >>= \t -> char ']' >> return (TyList (ParamSpec t)) <?> "typed list") <|>
   (char '{' >> ident style >>= \t -> char '}' >> return (TyObject (ParamSpec (fromString t))) <?> "user type") <|>
@@ -232,7 +232,7 @@ doDef es defType ai i =
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn cm defType dty db ddocs i
 
-freshTyVar :: Compile Type
+freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
   c <- state (view csFresh &&& over csFresh succ)
   return $ TyVar (cToTV c) []
@@ -246,10 +246,9 @@ cToTV n | n < 26 = [toC n]
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
-
-maybeTyVar :: Maybe Type -> Compile Type
+maybeTyVar :: Maybe (Type TypeName) -> Compile (Type (Term Name))
 maybeTyVar Nothing = freshTyVar
-maybeTyVar (Just t) = return t
+maybeTyVar (Just t) = return (fmap (return . Name . asString) t)
 
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
@@ -262,7 +261,7 @@ doStepRollback [entity,exp,rb] i =
     TStep <$> run entity <*> run exp <*> (Just <$> run rb) <*> pure i
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
-letPair :: Exp -> Compile (Arg, Term Name)
+letPair :: Exp -> Compile (Arg (Term Name), Term Name)
 letPair (EList [EAtom s Nothing ty i,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> pure i) <*> run v
 letPair t = syntaxError (_eInfo t) "Invalid let pair"
 
@@ -380,7 +379,7 @@ runNonEmpty :: String -> [Exp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
-atomVar :: Exp -> Compile Arg
+atomVar :: Exp -> Compile (Arg (Term Name))
 atomVar (EAtom a Nothing ty i) = Arg <$> pure a <*> maybeTyVar ty <*> pure i
 atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
 {-# INLINE atomVar #-}

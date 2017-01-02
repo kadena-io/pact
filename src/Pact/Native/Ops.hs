@@ -63,12 +63,12 @@ opDefs = foldDefs
     ,defTrunc "floor" "Rounds down" floor
     ]
     where eqTy = binTy TyBool eqA eqA
-          eqA = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList Nothing,TyObject Nothing,TyKeySet]
+          eqA = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList (ParamVar "l"),TyObject (ParamVar "o"),TyKeySet]
           numA = numV "a"
           numV a = TyVar a [TyInteger,TyDecimal]
           coerceBinNum = binTy numA numA numA <> binTy TyDecimal numA (numV "b")
           unaryNumTys = unaryTy numA numA
-          plusA = TyVar "a" [TyString,TyList Nothing,TyObject Nothing]
+          plusA = TyVar "a" [TyString,TyList (ParamVar "l"),TyObject (ParamVar "o")]
           plusTy = coerceBinNum <> binTy plusA plusA plusA
           unopTy = unaryTy numA numA
 
@@ -100,9 +100,9 @@ eq f _ [a,b] = return $ toTerm $ f (a `termEq` b)
 eq _ i as = argsError i as
 {-# INLINE eq #-}
 
-unaryTy :: Type -> Type -> FunTypes
+unaryTy :: Type n -> Type n -> FunTypes n
 unaryTy rt ta = funType rt [("x",ta)]
-binTy :: Type -> Type -> Type -> FunTypes
+binTy :: Type n -> Type n -> Type n -> FunTypes n
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> Eval e (String,Term Name)
@@ -152,11 +152,11 @@ binop _ _ fi as = argsError fi as
 
 plus :: RNativeFun e
 plus _ [TLitString a,TLitString b] = return (tStr $ a ++ b)
-plus _ [TList a _ _,TList b _ _] = return (TList (a ++ b) def def)
-plus _ [TObject as _ _,TObject bs _ _] =
+plus _ [TList a aty _,TList b bty _] = return (TList (a ++ b) (if aty == bty then aty else ParamAny) def)
+plus _ [TObject as aty _,TObject bs bty _] =
   let reps (a,b) = (abbrev a,(a,b))
       mapit = M.fromList . map reps
-  in return $ TObject (M.elems $ M.union (mapit as) (mapit bs)) def def
+  in return $ TObject (M.elems $ M.union (mapit as) (mapit bs)) (if aty == bty then aty else ParamAny) def
 plus i as = binop' (+) (+) i as
 {-# INLINE plus #-}
 

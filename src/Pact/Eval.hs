@@ -195,33 +195,28 @@ reduce (TApp f as ai) = reduceApp f as ai
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TKeySet {} = unsafeReduce t
+reduce t@TValue {} = unsafeReduce t
 reduce (TList bs _ _) = last <$> mapM reduce bs -- note "body" usage here, bug?
 reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
 reduce (TConst _ _ t _ _) = reduce t
 reduce (TObject ps t i) =
-  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> reduceTP t <*> pure i
+  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> liftTypeParam reduce t <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindKV -> evalError i "Unexpected key-value binding"
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce t@TUserType {} = unsafeReduce t
-reduce t@TValue {} = unsafeReduce t
-reduce t@TTable {} = unsafeReduce t
+reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> mapM (liftArg reduce) _tFields <*> pure _tInfo
+reduce TTable {..} = TTable _tTableName _tModule <$> liftTypeParam reduce _tTableType <*> pure _tDocs <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
 
-reduceTP :: TypeParam (Term Ref) -> Eval e (TypeParam (Term Name))
-reduceTP (ParamSpec t) = ParamSpec <$> reduce t
-reduceTP ParamAny = return ParamAny
-reduceTP (ParamVar v) = return $ ParamVar v
-
-reduceLet :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
+reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (a,) <$> reduce t) ps
+  ps' <- mapM (\(a,t) -> (,) <$> liftArg reduce a <*> reduce t) ps
   typecheck ps'
   reduce (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -236,9 +231,10 @@ reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp TDef {..} as ai = do
   as' <- mapM reduce as
-  typecheck (zip (_ftArgs _tFunType) as')
+  ft' <- liftFunType reduce _tFunType
+  typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes _tFunType) _tDocs
+      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
   call (StackFrame _tDefName ai (Just (fa,map abbrev as))) $
     case _tDefType of
       Defun -> reduce bod'
@@ -318,7 +314,7 @@ instantiate' = instantiate1 (toTerm ("No bindings" :: String))
 -- | Runtime input typecheck -- let bindings and defuns.
 -- Output checking -- defconsts, function return values -- left to static TC.
 -- Native funs TC via pattern-matching etc.
-typecheck :: [(Arg,Term Name)] -> Eval e ()
+typecheck :: [(Arg (Term Name),Term Name)] -> Eval e ()
 typecheck ps = void $ foldM tvarCheck M.empty ps where
   tvarCheck m (Arg {..},t) = do
     r <- check1 _aInfo _aType t
@@ -331,16 +327,16 @@ typecheck ps = void $ foldM tvarCheck M.empty ps where
                         evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
                         " do not match: " ++ show (prevTy,ty)
 
-check1 :: forall e . Info -> Type -> Term Name -> Eval e (Maybe (String,Type))
+check1 :: forall e . Info -> Type (Term Name) -> Term Name -> Eval e (Maybe (String,Type (Term Name)))
 check1 i spec t = do
   ty <- case typeof t of
     Left s -> evalError i $ "Invalid type in value location: " ++ s
     Right r -> return r
   let
-    tcFail :: Show a => a -> Eval e (Maybe (String,Type))
+    tcFail :: Show a => a -> Eval e (Maybe (String,Type (Term Name)))
     tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
     tcOK = return Nothing
-    paramCheck :: Eq t => TypeParam t -> TypeParam t -> (t -> Eval e Type) -> Eval e (Maybe (String,Type))
+    paramCheck :: Eq t => TypeParam t -> TypeParam t -> (t -> Eval e (Type (Term Name))) -> Eval e (Maybe (String,Type (Term Name)))
     paramCheck ParamAny _ _ = tcOK
     paramCheck ParamVar {} _ _ = tcOK
     paramCheck (ParamSpec pspec) (ParamSpec pty) _
@@ -363,34 +359,24 @@ check1 i spec t = do
       then return $ Just (_tvId,ty) -- collect found types under vars
       else tcFail ty -- constraint failed
     (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
-    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tUserType _tObject)
+    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
     _ -> tcFail ty
 
 
-resolveUserType :: Info -> TypeName -> Eval e [Arg]
-resolveUserType i oty = do
-  rm <- resolveRef (Name (asString oty)) -- TODO, qualified types???
-  case rm of
-    Nothing -> evalError i $ "Could not resolve user type: " ++ show oty
-    Just r -> do
-      ut <- deref r
-      case ut of
-        TUserType {..} -> return _tFields
-        _ -> evalError i $ "Invalid user type: " ++ show oty
-
-checkUserType :: Bool -> Info -> TypeParam (Term Name) -> [(Term Name,Term Name)] -> TypeName -> Eval e Type
-checkUserType total i oty ps _ = do
-  uty <- M.fromList . map (_aName &&& id) <$> resolveUserType i oty
+checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Term Name -> Eval e (Type (Term Name))
+checkUserType total i ps tu@TUserType {..} =  do
+  let uty = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
-      Nothing -> evalError i $ "Invalid field for {" ++ asString oty ++ "}: " ++ ks
+      Nothing -> evalError i $ "Invalid field for {" ++ asString _tUserTypeName ++ "}: " ++ ks
       Just a -> return (a,v)
     t -> evalError i $ "Invalid object, non-String key found: " ++ show t
   when total $ do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
-    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString oty ++ "}: " ++ show (M.elems missing)
+    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tUserTypeName ++ "}: " ++ show (M.elems missing)
   typecheck aps
-  return $ TyObject $ ParamSpec oty
+  return $ TyObject $ ParamSpec tu
+checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s

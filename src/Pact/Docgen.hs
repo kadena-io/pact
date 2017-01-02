@@ -21,7 +21,6 @@ import Data.List
 import Data.Function
 import Control.Monad.Catch
 import Data.Monoid
-import Control.Lens
 
 
 import Pact.Types
@@ -38,7 +37,7 @@ funDocs :: IO ()
 funDocs = do
   (Right nns,_) <- runEval undefined undefined nativesForDocs
   h <- openFile "docs/pact-functions.md" WriteMode
-  let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h (firstOf tDefData t)
+  let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h t
   forM_ nns $ \(sect,ns) -> do
     hPutStrLn h $ "## " ++ sect ++ " {#" ++ sect ++ "}"
     renderSection ns
@@ -51,20 +50,18 @@ funDocs = do
   renderSection rds
   hClose h
 
-renderDocs :: Handle -> Maybe DefData -> IO ()
-renderDocs _ Nothing = return ()
-renderDocs h (Just (dd@DefData {..})) = do
+renderDocs :: Show n => Handle -> Term n -> IO ()
+renderDocs h TNative {..} = do
       hPutStrLn h ""
-      hPutStrLn h $ "### " ++ escapeIfNecc _dName ++ " {#" ++ sanitize _dName ++ "}"
+      hPutStrLn h $ "### " ++ escapeIfNecc (asString _tNativeName) ++ " {#" ++ sanitize (asString _tNativeName) ++ "}"
       hPutStrLn h ""
-      forM_ _dType $ \FunType {..} -> do
+      forM_ _tFunTypes $ \FunType {..} -> do
         hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
           " *&rarr;*&nbsp;`" ++ show _ftReturn ++ "`"
         hPutStrLn h ""
       hPutStrLn h ""
-      let (Just docs) = _dDocs
-          noexs = hPutStrLn stderr $ "No examples for " ++ show dd
-      case parseString parseDocs mempty docs of
+      let noexs = hPutStrLn stderr $ "No examples for " ++ show _tNativeName
+      case parseString parseDocs mempty _tNativeDocs of
         Success (t,es) -> do
              hPutStrLn h t
              if null es then noexs
@@ -85,8 +82,10 @@ renderDocs h (Just (dd@DefData {..})) = do
                        (Left err,ExecErr) -> hPutStrLn h err
                        (Left err,_) -> throwM (userError err)
                hPutStrLn h "```"
-        _ -> hPutStrLn h docs >> noexs
+        _ -> hPutStrLn h _tNativeDocs >> noexs
       hPutStrLn h ""
+renderDocs _ _ = return ()
+
 
 escapeIfNecc :: String -> String
 escapeIfNecc n | n == "+" || n == "-" = "\\" ++ n

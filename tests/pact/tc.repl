@@ -19,6 +19,8 @@
   (defun bad-update (name handle)
     (update persons name { "handle": handle }))
 
+  (defun addToAll (i vals:[integer]) (map (+ i) vals))
+
 )
 
 (create-table persons)
@@ -33,3 +35,5 @@
 (update-age "Mary" 25)
 (expect-failure "bad update"
                 (bad-update "Mary" "@mary123"))
+(expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
+(expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))

@@ -70,7 +70,7 @@ replDefs = foldDefs
                               funType TyString [("file",TyString),("reset",TyBool)]) $
       "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " ++
       "`$(load \"accounts.repl\")`"
-     ,defRNative "env-keys" setsigs (funType TyString [("keys",TyList (Just TyString))])
+     ,defRNative "env-keys" setsigs (funType TyString [("keys",TyList (ParamSpec TyString))])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defRNative "env-data" setmsg (funType TyString [("json",json)]) $
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " ++
@@ -96,7 +96,7 @@ replDefs = foldDefs
       "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
      ]
      where
-       json = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList Nothing,TyObject Nothing,TyKeySet,TyValue]
+       json = TyVar "a" [TyInteger,TyString,TyTime,TyDecimal,TyBool,TyList (ParamVar "l"),TyObject (ParamVar "o"),TyKeySet,TyValue]
        a = TyVar "a" []
 
 invokeEnv :: (MVar PureState -> IO b) -> MVar LibState -> IO b

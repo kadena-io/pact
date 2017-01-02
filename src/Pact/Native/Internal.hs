@@ -87,9 +87,9 @@ parseMsgKey i msg key = do
                 Error e -> evalError' i $ msg ++ ": parse failed: " ++ e ++ ": " ++ show v
 
 
-bindReduce :: [(Arg,Term Ref)] -> Scope Int Term Ref -> Info -> (String -> Maybe (Term Ref)) -> Eval e (Term Name)
+bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (String -> Maybe (Term Ref)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
-  !(vs :: [(Arg,Term Ref)]) <- forM ps $ \(k,var) -> do
+  !(vs :: [(Arg (Term Ref),Term Ref)]) <- forM ps $ \(k,var) -> do
           var' <- reduce var
           case var' of
             (TLitString s) -> case lkpFun s of
@@ -100,22 +100,22 @@ bindReduce ps bd bi lkpFun = do
   call (StackFrame ("(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
 
 
-defNative :: NativeDefName -> NativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
+defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> String -> Eval e (String,Term Name)
 defNative n fun ftype docs =
   return (asString n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
 
-defRNative :: NativeDefName -> RNativeFun e -> FunTypes -> String -> Eval e (String,Term Name)
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> String -> Eval e (String,Term Name)
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= \as' -> f fi as'
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
-funType :: Type -> [(String,Type)] -> FunTypes
+funType :: Type n -> [(String,Type n)] -> FunTypes n
 funType t as = funTypes $ funType' t as
 
 
-funType' :: Type -> [(String,Type)] -> FunType
+funType' :: Type n -> [(String,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 

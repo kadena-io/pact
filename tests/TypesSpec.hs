@@ -14,7 +14,7 @@ spec :: Spec
 spec = do
   describe "JSONPersistables" testJSONPersist
   describe "JSONColumns "testJSONColumns
-  describe "JSONModules" testJSONModules
+-- describe "JSONModules" testJSONModules
 
 rt :: (FromJSON a,ToJSON a,Show a,Eq a) => a -> Spec
 rt p = it ("roundtrips " ++ show p) $ decode (encode p) `shouldBe` Just p
@@ -33,6 +33,8 @@ testJSONColumns :: Spec
 testJSONColumns =
   rt (Columns (fromList [("A",PLiteral (LInteger 123)),("B",PLiteral (LBool False))]))
 
+{- major TODO for module code!
 testJSONModules :: Spec
 testJSONModules =
   rt (Module "mname" "mk" "code!")
+-}
