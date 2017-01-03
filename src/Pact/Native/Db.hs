@@ -39,43 +39,43 @@ import Data.Semigroup ((<>))
 
 dbDefs :: Eval e NativeDef
 dbDefs = do
-  let writeArgs = funType TyString [("table",tableTy),("key",TyString),("object",rowTy)]
+  let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
-      rt = ParamVar "r"
-      tableTy = TyTable rt
-      rowTy = TyObject rt
+      rt = TyVar "r" []
+      tableTy = TySpec $ TySchema TyTable rt
+      rowTy = TySpec $ TySchema TyObject rt
 
   foldDefs
     [defRNative "create-table" createTable'
-     (funType TyString [("table",tableTy)])
+     (funType tTyString [("table",tableTy)])
      "Create table TABLE. `$(create-table accounts)`"
 
     ,defNative (specialForm WithRead) withRead
-     (funType TyString [("table",tableTy),("key",TyString),("bindings",TyBinding)])
+     (funType tTyString [("table",tableTy),("key",tTyString),("bindings",tTyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
-     (funType TyString
-      [("table",tableTy),("key",TyString),("defaults",rowTy),("bindings",TyBinding)])
+     (funType tTyString
+      [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",tTyBinding)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defRNative "read" read'
-     (funType rowTy [("table",tableTy),("key",TyString)] <>
-      funType rowTy [("table",tableTy),("key",TyString),("columns",TyList (ParamSpec TyString))])
+     (funType rowTy [("table",tableTy),("key",tTyString)] <>
+      funType rowTy [("table",tableTy),("key",tTyString),("columns",tTyList tTyString)])
      "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
      \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defRNative "keys" keys'
-     (funType (TyList (ParamSpec TyString)) [("table",tableTy)])
+     (funType (tTyList tTyString) [("table",tableTy)])
      "Return all keys in TABLE. `$(keys 'accounts)`"
 
     ,defRNative "txids" txids'
-     (funType (TyList (ParamSpec TyInteger)) [("table",tableTy),("txid",TyInteger)])
+     (funType (tTyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
@@ -88,14 +88,14 @@ dbDefs = do
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
 
     ,defRNative "txlog" txlog
-     (funType (TyList (ParamSpec TyValue)) [("table",tableTy),("txid",TyInteger)])
+     (funType (tTyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
     ,defRNative "describe-table" descTable
-     (funType TyValue [("table",TyString)]) "Get metadata for TABLE"
+     (funType tTyValue [("table",tTyString)]) "Get metadata for TABLE"
     ,defRNative "describe-keyset" descKeySet
-     (funType TyValue [("keyset",TyString)]) "Get metadata for KEYSET"
+     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
-     (funType TyValue [("module",TyString)]) "Get metadata for MODULE"
+     (funType tTyValue [("module",tTyString)]) "Get metadata for MODULE"
     ]
 
 descTable :: RNativeFun e
@@ -116,7 +116,7 @@ descModule :: RNativeFun e
 descModule i [TLitString t] = do
   mods <- view (eeRefStore.rsModules.at (fromString t))
   case mods of
-    Just (_,m) -> (\l -> TList l ParamAny def) <$> mapM deref (HM.elems m)
+    Just (_,m) -> (\l -> TList l TyAny def) <$> mapM deref (HM.elems m)
     Nothing -> evalError' i $ "Module not found: " ++ t
 descModule i as = argsError i as
 
@@ -180,14 +180,14 @@ bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> 
 keys' :: RNativeFun e
 keys' i [table@TTable {..}] = do
     guardTable i table
-    (\b -> TList b (ParamSpec TyString) def) . map toTerm <$> keys _tTableName
+    (\b -> TList b tTyString def) . map toTerm <$> keys _tTableName
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
 txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
-  (\b -> TList b (ParamSpec TyInteger) def) . map toTerm <$> txids _tTableName (fromIntegral key)
+  (\b -> TList b tTyInteger def) . map toTerm <$> txids _tTableName (fromIntegral key)
 txids' i as = argsError i as
 
 
@@ -201,9 +201,9 @@ write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   guardTable i table
   case _tTableType of
-    ParamAny -> return ()
-    ParamVar {} -> return ()
-    ParamSpec tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+    TyAny -> return ()
+    TyVar {} -> return ()
+    TySpec tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
   success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 

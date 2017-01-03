@@ -66,26 +66,26 @@ nativesForDocs = do
 langDefs :: Eval e NativeDef
 langDefs = foldDefs
     [
-     defNative "if" if' (funType a [("cond",TyBool),("then",a),("else",a)])
+     defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
     ,defNative "map" map'
-     (funType (TyList (ParamSpec a)) [("app",lam b a),("list",TyList (ParamSpec b))])
+     (funType (tTyList a) [("app",lam b a),("list",tTyList a)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
-     (funType a [("app",lam2 b b a),("init",a),("list",TyList (ParamSpec b))])
+     (funType a [("app",lam2 b b a),("init",a),("list",tTyList b)])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
 
     ,defRNative "list" list
-     (funType (TyList ParamAny) [("elems",TyRest)])
+     (funType (tTyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. `(list 1 2 3)`"
 
     ,defNative "filter" filter'
-     (funType (TyList (ParamSpec a)) [("app",lam a TyBool),("list",TyList (ParamSpec a))])
+     (funType (tTyList a) [("app",lam a tTyBool),("list",tTyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
@@ -93,7 +93,7 @@ langDefs = foldDefs
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defRNative "length" length' (funType TyInteger [("x",listA)])
+     ,defRNative "length" length' (funType tTyInteger [("x",listA)])
      "Compute length of X, which can be a list, a string, or an object.\
      \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
@@ -105,60 +105,60 @@ langDefs = foldDefs
      "Drop COUNT values from LIST (or string). If negative, drop from end.\
      \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
 
-    ,defRNative "remove" remove (funType (TyObject (ParamVar "o")) [("key",TyString),("object",TyObject (ParamVar "o"))])
+    ,defRNative "remove" remove (funType (tTyObject (TyVar "o" [])) [("key",tTyString),("object",tTyObject (TyVar "o" []))])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' (funType a [("idx",TyInteger),("list",TyList (ParamVar "l"))] <>
-                          funType a [("idx",TyString),("object",TyObject (ParamVar "o"))])
+    ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",tTyList (TyVar "l" []))] <>
+                          funType a [("idx",tTyString),("object",tTyObject (TyVar "o" []))])
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "enforce" enforce (funType TyBool [("test",TyBool),("msg",TyString)])
+    ,defRNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
      "Fail transaction with MSG if TEST fails, or returns true. \
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
 
-    ,defRNative "format" format (funType TyString [("template",TyString),("vars",TyRest)])
+    ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyAny)])
      "Interpolate VARS into TEMPLATE using {}. \
      \`(format \"My {} has {}\" \"dog\" \"fleas\")`"
 
-    ,defRNative "is-string" (isX isString) (isTy TyString)
+    ,defRNative "is-string" (isX isString) (isTy tTyString)
      "Return VAL, enforcing string type. `!(is-string 123)` `(is-string \"abc\")`"
-    ,defRNative "is-integer" (isX isInteger) (isTy TyInteger)
+    ,defRNative "is-integer" (isX isInteger) (isTy tTyInteger)
      "Return VAL, enforcing integer type `(is-integer 123)` `!(is-integer \"abc\")`"
-    ,defRNative "is-bool" (isX isBool) (isTy TyBool)
+    ,defRNative "is-bool" (isX isBool) (isTy tTyBool)
      "Return VAL, enforcing boolean type. `(is-bool true)`"
-    ,defRNative "is-decimal" (isX isDecimal) (isTy TyDecimal)
+    ,defRNative "is-decimal" (isX isDecimal) (isTy tTyDecimal)
      "Return VAL, enforcing decimal type. `(is-decimal 123.45)`"
-    ,defRNative "is-time" (isX isTime) (isTy TyTime)
+    ,defRNative "is-time" (isX isTime) (isTy tTyTime)
      "Return VAL, enforcing time type. `(is-time (time \"2016-07-22T11:26:35Z\"))`"
 
-    ,defRNative "pact-txid" pactTxId (funType TyInteger [])
+    ,defRNative "pact-txid" pactTxId (funType tTyInteger [])
      "Return reference tx id for pact execution."
 
-    ,defRNative "read-decimal" readDecimal (funType TyDecimal [("key",TyString)])
+    ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
      "Parse KEY string value from message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
-    ,defRNative "read-integer" readInteger (funType TyInteger [("key",TyString)])
+    ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string value from message data body as integer. `$(read-integer \"age\")`"
-    ,defRNative "read-msg" readMsg (funType a [("key",TyString)])
+    ,defRNative "read-msg" readMsg (funType a [("key",tTyString)])
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative (specialForm Bind) bind (funType a [("src",TyObject (ParamVar "o")),("bindings",TyBinding),("body",TyRest)])
+    ,defNative (specialForm Bind) bind (funType a [("src",tTyObject (TyVar "o" [])),("bindings",tTyBinding),("body",TyAny)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
-    ,defRNative "typeof" typeof' (funType TyString [("x",a)])
+    ,defRNative "typeof" typeof' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
-    ,defRNative "list-modules" listModules (funType (TyList (ParamSpec TyString)) []) "List modules available for loading."
+    ,defRNative "list-modules" listModules (funType (tTyList tTyString) []) "List modules available for loading."
     ]
     where a = TyVar "a" []
           b = TyVar "b" []
           c = TyVar "c" []
-          listA = TyVar "a" [TyList (ParamVar "l"),TyString,TyObject (ParamVar "o")]
-          listStringA = TyVar "a" [TyList (ParamVar "l"),TyString]
-          takeDrop = funType listStringA [("count",TyInteger),("list",listStringA)]
-          lam x y = TyFun $ funType' y [("x",x)]
-          lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
+          listA = TyVar "a" [TyList (TyVar "l" []),TyPrim TyString,TySchema TyObject (TyVar "o" [])]
+          listStringA = TyVar "a" [TyList (TyVar "l" []),TyPrim TyString]
+          takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
+          lam x y = TySpec $ TyFun $ funType' y [("x",x)]
+          lam2 x y z = TySpec $ TyFun $ funType' z [("x",x),("y",y)]
           isTy t = funType t [("val",t)]
 
 
@@ -177,12 +177,12 @@ apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
 
 map' :: NativeFun e
 map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b ParamAny def) <$> forM ls (apply af as ai . pure)
+           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply af as ai . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
 list :: RNativeFun e
-list i as = return $ TList as ParamAny (_faInfo i) -- TODO, could set type here
+list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
@@ -347,4 +347,4 @@ typeof' i as = argsError i as
 listModules :: RNativeFun e
 listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
-  return $ toTermList TyString $ map asString $ M.keys mods
+  return $ toTermList tTyString $ map asString $ M.keys mods

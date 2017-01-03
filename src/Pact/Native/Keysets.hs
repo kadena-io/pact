@@ -25,19 +25,19 @@ import Pact.Types
 
 keyDefs :: Eval e NativeDef
 keyDefs =
-    let keyPredArgs = funType TyBool [("count",TyInteger),("matched",TyInteger)]
+    let keyPredArgs = funType tTyBool [("count",tTyInteger),("matched",tTyInteger)]
         keysN n _ m = m >= n
     in
     foldDefs
     [
-     defRNative "read-keyset" readKeySet (funType TyKeySet [("key",TyString)]) $
+     defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
          "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " ++
          "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
-    ,defRNative "define-keyset" defineKeyset (funType TyString [("name",TyString),("keyset",TyString)])
+    ,defRNative "define-keyset" defineKeyset (funType tTyString [("name",tTyString),("keyset",tTyString)])
      "Define keyset as NAME with KEYSET. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value.\
      \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
-    ,defNative "enforce-keyset" enforceKeyset' (funType TyBool [("keyset-or-name",TyString)])
+    ,defNative "enforce-keyset" enforceKeyset' (funType tTyBool [("keyset-or-name",tTyString)])
      "Special form to enforce KEYSET-OR-NAME against message keys before running BODY. \
      \KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. \
      \`$(with-keyset 'admin-keyset ...)` `$(with-keyset (read-keyset \"keyset\") ...)`"

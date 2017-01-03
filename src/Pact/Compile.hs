@@ -90,25 +90,26 @@ expr = do
 qualified :: (Monad m,TokenParsing m) => m String
 qualified = char '.' *> ident style
 
-typed :: (Monad m,TokenParsing m) => m (Type TypeName)
+typed :: (Monad m,TokenParsing m) => m (Type (TermType TypeName))
 typed = do
   _ <- char ':'
   spaces
-  parseType
+  TySpec <$> parseType
 
-parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
+parseType :: (Monad m,TokenParsing m) => m (TermType TypeName)
 parseType =
-  (char '[' >> parseType >>= \t -> char ']' >> return (TyList (ParamSpec t)) <?> "typed list") <|>
-  (char '{' >> ident style >>= \t -> char '}' >> return (TyObject (ParamSpec (fromString t))) <?> "user type") <|>
-  symbol tyInteger *> return TyInteger <|>
-  symbol tyDecimal *> return TyDecimal <|>
-  symbol tyTime *> return TyTime <|>
-  symbol tyBool *> return TyBool <|>
-  symbol tyString *> return TyString <|>
-  symbol tyList *> return (TyList ParamAny) <|>
-  symbol tyObject *> return (TyObject ParamAny) <|>
-  symbol tyValue *> return TyValue <|>
-  symbol tyKeySet *> return TyKeySet
+  (char '[' >> parseType >>= \t -> char ']' >> return (TyList $ TySpec t) <?> "typed list") <|>
+  (char '{' >> ident style >>= \t -> char '}' >> return (TySchema TyObject (TySpec (fromString t))) <?> "user type") <|>
+  symbol tyInteger *> return (TyPrim TyInteger) <|>
+  symbol tyDecimal *> return (TyPrim TyDecimal) <|>
+  symbol tyTime *> return (TyPrim TyTime) <|>
+  symbol tyBool *> return (TyPrim TyBool) <|>
+  symbol tyString *> return (TyPrim TyString) <|>
+  symbol tyList *> return (TyList TyAny) <|>
+  symbol tyObject *> return (TySchema TyObject TyAny) <|>
+  symbol tyValue *> return (TyPrim TyValue) <|>
+  symbol tyKeySet *> return (TyPrim TyKeySet) <|>
+  symbol tyTable *> return (TySchema TyTable TyAny) -- TODO no way to specify table schema
 
 
 
@@ -206,7 +207,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
             csModule .= Nothing
             return $ TModule
               (Module (fromString n) (fromString k) docs mc)
-              (abstract (const Nothing) (TList bd ParamAny li)) li
+              (abstract (const Nothing) (TList bd TyAny li)) li
 
 doModule _ li _ _ = syntaxError li "Invalid module definition"
 
@@ -232,7 +233,7 @@ doDef es defType ai i =
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn cm defType dty db ddocs i
 
-freshTyVar :: Compile (Type (Term Name))
+freshTyVar :: Compile (Type (TermType (Term Name)))
 freshTyVar = do
   c <- state (view csFresh &&& over csFresh succ)
   return $ TyVar (cToTV c) []
@@ -246,9 +247,9 @@ cToTV n | n < 26 = [toC n]
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
-maybeTyVar :: Maybe (Type TypeName) -> Compile (Type (Term Name))
+maybeTyVar :: Maybe (Type (TermType TypeName)) -> Compile (Type (TermType (Term Name)))
 maybeTyVar Nothing = freshTyVar
-maybeTyVar (Just t) = return (fmap (return . Name . asString) t)
+maybeTyVar (Just t) = return (fmap (fmap (return . Name . asString)) t)
 
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
@@ -322,9 +323,9 @@ doTable es i = case es of
   where
     mkT tn ty docs = do
       cm <- currentModule i
-      tty :: TypeParam (Term Name) <- case ty of
-        Just (TyObject ot) -> return (fmap (return . Name . asString) ot)
-        Nothing -> return ParamAny
+      tty :: Type (Term Name) <- case ty of
+        Just (TySpec (TySchema _ (TySpec ot))) -> return $ TySpec (return (Name (asString ot)))
+        Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (fromString tn) cm tty docs i
 
@@ -356,7 +357,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
               TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
           _ -> TApp <$> mkVar a q ai <*> mapM run rest <*> pure li
 
-run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure ParamAny <*> pure i
+run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure TyAny <*> pure i
 run (EBinding _ i) = syntaxError i "Unexpected binding"
 run (ESymbol s i) = return $ TLiteral (LString s) i
 run (ELiteral l i) = return $ TLiteral l i
@@ -385,7 +386,7 @@ atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
 runBody :: [Exp] -> Info -> Compile (Term Name)
-runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure ParamAny <*> pure i
+runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 {-# INLINE runBody #-}
 
 

@@ -184,20 +184,23 @@ instance Show TypeName where show (TypeName s) = show s
 
 data Arg o = Arg {
   _aName :: String,
-  _aType :: Type o,
+  _aType :: Type (TermType o),
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (Arg o) where show (Arg n t _) = n ++ ":" ++ show t
 
-liftArg :: Monad m => (a -> m b) -> Arg a -> m (Arg b)
-liftArg f (Arg n t i) = Arg n <$> liftTy f t <*> pure i
+traverseArg :: Applicative m => (a -> m b) -> Arg a -> m (Arg b)
+traverseArg f (Arg a t i) = Arg a <$> traverse (traverseTermType f) t <*> pure i
 
 data FunType o = FunType {
   _ftArgs :: [Arg o],
-  _ftReturn :: Type o
+  _ftReturn :: Type (TermType o)
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
+
+traverseFunType :: Applicative m => (a -> m b) -> FunType a -> m (FunType b)
+traverseFunType f (FunType as r) = FunType <$> traverse (traverseArg f) as <*> traverse (traverseTermType f) r
 
 type FunTypes o = NonEmpty (FunType o)
 funTypes :: FunType o -> FunTypes o
@@ -206,70 +209,23 @@ showFunTypes :: Show o => FunTypes o -> String
 showFunTypes (t :| []) = show t
 showFunTypes ts = show (toList ts)
 
-liftFunType :: Monad m => (a -> m b) -> FunType a -> m (FunType b)
-liftFunType f FunType {..} = FunType <$> mapM (liftArg f) _ftArgs <*> liftTy f _ftReturn
+data PrimType =
+  TyInteger |
+  TyDecimal |
+  TyTime |
+  TyBool |
+  TyString |
+  TyValue |
+  TyKeySet |
+  TyBinding -- ugly but no use for this yet
+  deriving (Eq,Ord)
 
--- | Parameterized type for lists and objects.
-data TypeParam t =
-  ParamVar { _tpVar :: String } |
-  ParamSpec { _tpSpec :: t } |
-  ParamAny
-  deriving (Eq,Ord,Functor,Foldable,Traversable)
-
-instance Show t => Show (TypeParam t) where
-  show ParamVar {..} = "<" ++ _tpVar ++ ">"
-  show ParamSpec {..} = show _tpSpec
-  show ParamAny = "*"
-
-
-liftTypeParam :: Monad m => (a -> m b) -> TypeParam a -> m (TypeParam b)
-liftTypeParam f (ParamSpec t) = ParamSpec <$> f t
-liftTypeParam _ ParamAny = return ParamAny
-liftTypeParam _ (ParamVar v) = return $ ParamVar v
-
-
-data Type o =
-    TyInteger |
-    TyDecimal |
-    TyTime |
-    TyBool |
-    TyString |
-    TyValue |
-    TyKeySet |
-    TyList { _tlType :: TypeParam (Type o) } |
-    TyObject { _toType :: TypeParam o } |
-    TyFun { _tfType :: FunType o } |
-    TyVar { _tvId :: String, _tvConstraint :: [Type o] } |
-    TyBinding |
-    TyTable { _ttType :: TypeParam o } |
-    TyRest
-
-    deriving (Eq,Ord,Functor,Foldable,Traversable)
-
-liftTy :: Monad m => (a -> m b) -> Type a -> m (Type b)
-liftTy f t = case t of
-  TyList p -> TyList <$> liftTypeParam (liftTy f) p
-  TyTable tp -> TyTable <$> liftTypeParam f tp
-  TyObject tp -> TyObject <$> liftTypeParam f tp
-  TyFun ft -> TyFun <$> liftFunType f ft
-  TyVar {..} -> TyVar _tvId <$> mapM (liftTy f) _tvConstraint
-  TyInteger -> return TyInteger
-  TyDecimal -> return TyDecimal
-  TyTime -> return TyTime
-  TyBool -> return TyBool
-  TyString -> return TyString
-  TyValue -> return TyValue
-  TyKeySet -> return TyKeySet
-  TyBinding -> return TyBinding
-  TyRest -> return TyRest
-
-
-makeLenses ''Type
-makeLenses ''FunType
-makeLenses ''Arg
-makeLenses ''TypeParam
-
-instance Default (Type o) where def = TyVar "_" []
+litToPrim :: Literal -> PrimType
+litToPrim LString {} = TyString
+litToPrim LInteger {} = TyInteger
+litToPrim LDecimal {} = TyDecimal
+litToPrim LBool {} = TyBool
+litToPrim LTime {} = TyTime
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: String
 tyInteger = "integer"
@@ -283,23 +239,70 @@ tyValue = "value"
 tyKeySet = "keyset"
 tyTable = "table"
 
-instance Show o => Show (Type o) where
+instance Show PrimType where
   show TyInteger = tyInteger
   show TyDecimal = tyDecimal
   show TyTime = tyTime
   show TyBool = tyBool
   show TyString = tyString
-  show TyList {..} = tyList ++ ":" ++ show _tlType
-  show TyObject {..} = tyObject ++ ":" ++ show _toType
   show TyValue = tyValue
   show TyKeySet = tyKeySet
-  show TyFun {..} = "function: " ++ show _tfType
   show TyBinding = "binding"
-  show TyTable {..} = tyTable ++ ":" ++ show _ttType
-  show TyRest = "@rest"
-  show TyVar {..} = "<" ++ _tvId ++
-                    (if null _tvConstraint then ""
-                     else " => (" ++ intercalate "|" (map show _tvConstraint) ++ ")") ++ ">"
+
+data SchemaType =
+  TyTable |
+  TyObject
+  deriving (Eq,Ord)
+instance Show SchemaType where
+  show TyTable = tyTable
+  show TyObject = tyObject
+
+data Type o =
+  TyAny |
+  TySpec { _tySpec :: o } |
+  TyVar { _tyId :: String, _tyConstraint :: [o] }
+     deriving (Eq,Ord,Functor,Foldable,Traversable)
+instance Show o => Show (Type o) where
+  show TyAny = "*"
+  show (TySpec o) = show o
+  show (TyVar i []) = "<" ++ i ++ ">"
+  show (TyVar i c) = "<" ++ i ++ "=(" ++ intercalate "|" (map show c) ++ ")>"
+instance Default (Type o) where def = TyAny
+
+isAnyTy :: Type n -> Bool
+isAnyTy TyAny = True
+isAnyTy _ = False
+
+data TermType v =
+  TyPrim PrimType |
+  TyList { _ttListType :: Type (TermType v) } |
+  TySchema { _ttSchema :: SchemaType, _ttSchemaType :: Type v } |
+  TyFun { _ttFunType :: FunType (TermType v) } |
+  TyUser v -- reserved for enums etc
+    deriving (Eq,Ord,Functor,Foldable,Traversable)
+instance (Show v) => Show (TermType v) where
+  show (TyPrim t) = show t
+  show (TyList t) | isAnyTy t = tyList
+                  | otherwise = "[" ++ show t ++ "]"
+  show (TySchema s t) | isAnyTy t = show s
+                      | otherwise = case s of
+                          TyTable -> "table:" ++ show t
+                          TyObject -> "{" ++ show t ++ "}"
+  show (TyFun f) = show f
+  show (TyUser v) = show v
+
+traverseTermType :: Applicative m => (a -> m b) -> TermType a -> m (TermType b)
+traverseTermType _ (TyPrim t) = pure $ TyPrim t
+traverseTermType f (TyList l) = TyList <$> traverse (traverseTermType f) l
+traverseTermType f (TySchema s t) = TySchema s <$> traverse f t
+traverseTermType f (TyFun ft) = TyFun <$> traverseFunType (traverseTermType f) ft
+traverseTermType f t@TyUser {} = traverse f t
+
+makeLenses ''Type
+makeLenses ''FunType
+makeLenses ''Arg
+makeLenses ''TermType
+
 instance Show o => PP.Pretty (Type o) where pretty = PP.string . show
 
 
@@ -308,7 +311,7 @@ data Exp = ELiteral { _eLiteral :: !Literal, _eInfo :: !Info }
            | ESymbol { _eSymbol :: !String, _eInfo :: !Info }
            | EAtom { _eAtom :: !String
                    , _eQualifier :: !(Maybe String)
-                   , _eType :: !(Maybe (Type TypeName))
+                   , _eType :: !(Maybe (Type (TermType TypeName)))
                    , _eInfo :: !Info }
            | EList { _eList :: ![Exp], _eInfo :: !Info }
            | EObject { _eObject :: ![(Exp,Exp)], _eInfo :: !Info }
@@ -440,7 +443,7 @@ data Term n =
     } |
     TList {
       _tList :: ![Term n]
-    , _tListType :: TypeParam (Type (Term n))
+    , _tListType :: Type (TermType (Term n))
     , _tInfo :: !Info
     } |
     TDef {
@@ -483,7 +486,7 @@ data Term n =
     } |
     TObject {
       _tObject :: ![(Term n,Term n)]
-    , _tUserType :: TypeParam (Term n)
+    , _tUserType :: !(Type (Term n))
     , _tInfo :: !Info
     } |
     TUserType {
@@ -518,7 +521,7 @@ data Term n =
     TTable {
       _tTableName :: !TableName
     , _tModule :: ModuleName
-    , _tTableType :: !(TypeParam (Term n))
+    , _tTableType :: !(Type (Term n))
     , _tDocs :: !(Maybe String)
     , _tInfo :: !Info
     }
@@ -612,39 +615,30 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
-toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
-toTermList ty l = TList (map toTerm (toList l)) (ParamSpec ty) def
+toTermList :: (ToTerm a,Foldable f) => Type (TermType (Term b)) -> f a -> Term b
+toTermList ty l = TList (map toTerm (toList l)) ty def
 
 
 
 
-typeof :: Term a -> Either String (Type (Term a))
+typeof :: Term a -> Either String (TermType (Term a))
 typeof t = case t of
-      TLiteral l _ ->
-          case l of
-            LInteger {} -> Right TyInteger
-            LDecimal {} -> Right TyDecimal
-            LString {} -> Right TyString
-            LBool {} -> Right TyBool
-            LTime {} -> Right TyTime
+      TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ defTypeRep _tDefType
       TNative {..} -> Left "defun"
-      TConst {..} -> Right (_aType _tConstArg)
+      TConst {..} -> Left $ "const:" ++ _aName _tConstArg
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
-      TBinding {} -> Right TyBinding
-      TObject {..} -> Right $ TyObject _tUserType
-      TKeySet {} -> Right TyKeySet
+      TBinding {} -> Right $ TyPrim TyBinding
+      TObject {..} -> Right $ TySchema TyObject _tUserType
+      TKeySet {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"
-      TValue {} -> Right TyValue
+      TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
-      TTable {..} -> Right $ TyTable _tTableType
-
-
-
+      TTable {..} -> Right $ TySchema TyTable _tTableType
 
 
 

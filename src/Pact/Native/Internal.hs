@@ -111,11 +111,11 @@ defRNative name fun = defNative name (reduced fun)
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
-funType :: Type n -> [(String,Type n)] -> FunTypes n
+funType :: Type (TermType n) -> [(String,Type (TermType n))] -> FunTypes n
 funType t as = funTypes $ funType' t as
 
 
-funType' :: Type n -> [(String,Type n)] -> FunType n
+funType' :: Type (TermType n) -> [(String,Type (TermType n))] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 
@@ -129,3 +129,18 @@ getModule i n = do
       case rm of
         Just (m,_) -> return m
         Nothing -> evalError i $ "Unable to resolve module " ++ show n
+
+primTy :: PrimType -> Type (TermType v)
+primTy = TySpec . TyPrim
+
+tTyInteger :: Type (TermType n); tTyInteger = primTy TyInteger
+tTyDecimal :: Type (TermType n); tTyDecimal = primTy TyDecimal
+tTyTime :: Type (TermType n); tTyTime = primTy TyTime
+tTyBool :: Type (TermType n); tTyBool = primTy TyBool
+tTyString :: Type (TermType n); tTyString = primTy TyString
+tTyValue :: Type (TermType n); tTyValue = primTy TyValue
+tTyKeySet :: Type (TermType n); tTyKeySet = primTy TyKeySet
+tTyBinding :: Type (TermType n); tTyBinding = primTy TyBinding
+tTyList :: Type (TermType n) -> Type (TermType n)
+tTyList t = TySpec $ TyList t
+tTyObject :: Type n -> Type (TermType n); tTyObject o = TySpec $ TySchema TyObject o

@@ -201,22 +201,22 @@ reduce t@TDef {} = return $ toTerm $ show t
 reduce t@TNative {} = return $ toTerm $ show t
 reduce (TConst _ _ t _ _) = reduce t
 reduce (TObject ps t i) =
-  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> liftTypeParam reduce t <*> pure i
+  TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> traverse reduce t <*> pure i
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindKV -> evalError i "Unexpected key-value binding"
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> mapM (liftArg reduce) _tFields <*> pure _tInfo
-reduce TTable {..} = TTable _tTableName _tModule <$> liftTypeParam reduce _tTableType <*> pure _tDocs <*> pure _tInfo
+reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> traverse (traverseArg reduce) _tFields <*> pure _tInfo
+reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
 
 reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> liftArg reduce a <*> reduce t) ps
+  ps' <- mapM (\(a,t) -> (,) <$> traverseArg reduce a <*> reduce t) ps
   typecheck ps'
   reduce (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -231,7 +231,7 @@ reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp TDef {..} as ai = do
   as' <- mapM reduce as
-  ft' <- liftFunType reduce _tFunType
+  ft' <- traverseFunType reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
@@ -327,44 +327,45 @@ typecheck ps = void $ foldM tvarCheck M.empty ps where
                         evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
                         " do not match: " ++ show (prevTy,ty)
 
-check1 :: forall e . Info -> Type (Term Name) -> Term Name -> Eval e (Maybe (String,Type (Term Name)))
+check1 :: forall e . Info -> Type (TermType (Term Name)) -> Term Name -> Eval e (Maybe (String,Type (TermType (Term Name))))
 check1 i spec t = do
   ty <- case typeof t of
     Left s -> evalError i $ "Invalid type in value location: " ++ s
     Right r -> return r
   let
-    tcFail :: Show a => a -> Eval e (Maybe (String,Type (Term Name)))
+    tcFail :: Show a => a -> Eval e b
     tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
     tcOK = return Nothing
-    paramCheck :: Eq t => TypeParam t -> TypeParam t -> (t -> Eval e (Type (Term Name))) -> Eval e (Maybe (String,Type (Term Name)))
-    paramCheck ParamAny _ _ = tcOK
-    paramCheck ParamVar {} _ _ = tcOK
-    paramCheck (ParamSpec pspec) (ParamSpec pty) _
+    paramCheck :: Eq t => Type t -> Type t -> (t -> Eval e (Type (TermType (Term Name)))) ->
+                  Eval e (Maybe (String,Type (TermType (Term Name))))
+    paramCheck TyAny _ _ = tcOK
+    paramCheck TyVar {} _ _ = tcOK
+    paramCheck (TySpec pspec) (TySpec pty) _
       | pspec == pty = tcOK -- dupe check, oh well
       | otherwise = tcFail ty
-    paramCheck (ParamSpec pspec) _ check = do
+    paramCheck (TySpec pspec) _ check = do
       checked <- check pspec
       if checked == spec then tcOK else tcFail checked
-    checkList [] lty = return lty
-    checkList es lty = return $ TyList $
+    checkList [] lty = return $ TySpec lty
+    checkList es lty = return $ TySpec $ TyList $
                     case nub (map typeof es) of
-                      [] -> ParamSpec lty
-                      [Right a] -> ParamSpec a
-                      _ -> ParamAny
+                      [] -> TySpec lty
+                      [Right a] -> TySpec a
+                      _ -> TyAny
   case (spec,ty,t) of
-    (_,_,_) | spec == ty -> tcOK -- identical types always OK
-    (TyRest,_,_) -> tcOK -- var args are untyped
+    (_,_,_) | spec == TySpec ty -> tcOK -- identical types always OK
+    (TyAny,_,_) -> tcOK -- var args are untyped
     (TyVar {..},_,_) ->
-      if null _tvConstraint || ty `elem` _tvConstraint
-      then return $ Just (_tvId,ty) -- collect found types under vars
+      if null _tyConstraint || ty `elem` _tyConstraint
+      then return $ Just (_tyId,TySpec ty) -- collect found types under vars
       else tcFail ty -- constraint failed
-    (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
-    (TyObject ospec,TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
+    (TySpec (TyList lspec),TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
+    (TySpec (TySchema TyObject ospec),TySchema TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
     _ -> tcFail ty
 
 
-checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Term Name -> Eval e (Type (Term Name))
-checkUserType total i ps tu@TUserType {..} =  do
+checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Term Name -> Eval e (Type (TermType (Term Name)))
+checkUserType total i ps tu@TUserType {..} = do
   let uty = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
@@ -375,8 +376,9 @@ checkUserType total i ps tu@TUserType {..} =  do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
     unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tUserTypeName ++ "}: " ++ show (M.elems missing)
   typecheck aps
-  return $ TyObject $ ParamSpec tu
+  return $ TySpec $ TySchema TyObject $ TySpec tu
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
+
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s
