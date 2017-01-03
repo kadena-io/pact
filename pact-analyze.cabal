@@ -16,16 +16,21 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Pact.Analyze.Types
-  build-depends:       Hsmtlib
+  build-depends:       Decimal
+                     , Hsmtlib
+                     , SmtLib
+                     , aeson
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , base >= 4.7 && < 5
+                     , bytestring
                      , containers
-                     , Decimal
                      , lens
                      , mtl >= 2.2.1
                      , pact
+                     , parsec
                      , show-prettyprint
                      , transformers
+                     , yaml
 
   default-language:    Haskell2010
 
