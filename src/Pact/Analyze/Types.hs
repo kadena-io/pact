@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Pact.Analyze.Types where
 
@@ -119,9 +120,6 @@ instance ToJSON SymAst where
 ppSymAst :: SymAst -> IO ()
 ppSymAst = BS8.putStrLn . Yaml.encode
 
-parseSmtCmd :: String -> Smt.Command
-parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
-
 type PactAnalysis a = ReaderT ProverState IO a
 
 data LitVal =
@@ -129,24 +127,6 @@ data LitVal =
   | LVBool Bool
   | LVInteger Integer
 
-pattern NativeFunc f <- (FNative _ f _ _)
-
-pattern Args_Var var <- [(Var _ var)]
-pattern Args_Lit lit <- [(Lit _ _ (LVLit (lit)))]
-pattern Args_Var_Var var1 var2 <- [(Var _ var1),(Var _ var2)]
-pattern Args_Var_Lit var lit <- [(Var _ var),(Lit _ _ (LVLit (lit)))]
-pattern Args_Lit_Var lit var <- [(Lit _ _ (LVLit (lit))),(Var _ var)]
-pattern Args_App_Lit_Var app' lit var <- [app',(Lit _ _ (LVLit (lit))),(Var _ var)]
-pattern Args_App_Lit_Lit app' lit1 lit2 <- [app',(Lit _ _ (LVLit (lit1))),(Lit _ _ (LVLit (lit2)))]
-
-pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
-pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
-pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
-
--- parseTest parseCommand "(assert (> a 1))"
--- Assert (TermQualIdentifierT (QIdentifier (ISymbol ">")) [TermQualIdentifier (QIdentifier (ISymbol "a")),TermSpecConstant (SpecConstantNumeral 1)])
--- parseTest parseCommand "(assert (not (> a 1)))"
--- Assert (TermQualIdentifierT (QIdentifier (ISymbol "not")) [TermQualIdentifierT (QIdentifier (ISymbol ">")) [TermQualIdentifier (QIdentifier (ISymbol "a")),TermSpecConstant (SpecConstantNumeral 1)]])
 
 isCmpOperator :: String -> Bool
 isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "="]
@@ -169,6 +149,26 @@ basicOperatorToQualId o
   | o == "not" = Right $ QIdentifier $ ISymbol "not"
   | otherwise = Left $ "Operator " ++ o ++ " is not yet supported!"
 
+isAppView :: AST (TcId, Type) -> (Bool, AST (TcId, Type))
+isAppView app@(App _ _ _) = (True, app)
+isAppView _ = (False, undefined)
+
+pattern NativeFunc f <- (FNative _ f _ _)
+
+pattern Args_Var var <- [(Var _ var)]
+pattern Args_Lit lit <- [(Lit _ _ (LVLit (lit)))]
+pattern Args_Var_Var var1 var2 <- [(Var _ var1),(Var _ var2)]
+pattern Args_Var_Lit var lit <- [(Var _ var),(Lit _ _ (LVLit (lit)))]
+pattern Args_Lit_Var lit var <- [(Lit _ _ (LVLit (lit))),(Var _ var)]
+pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (True, app2))]
+pattern Args_App_Lit_Var app' lit var <- [app',(Lit _ _ (LVLit (lit))),(Var _ var)]
+pattern Args_App_Lit_Lit app' lit1 lit2 <- [app',(Lit _ _ (LVLit (lit1))),(Lit _ _ (LVLit (lit2)))]
+
+pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
+pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
+pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
+pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
+
 varToTerm :: TcId -> PactAnalysis (Either String Smt.Term)
 varToTerm n = do
   sVar <- Map.lookup n <$> view psVars
@@ -180,7 +180,7 @@ varToTerm n = do
 
 literalToTerm :: Literal -> Either String Smt.Term
 literalToTerm (LBool v) = Right $ TermQualIdentifier $ QIdentifier $ ISymbol (if v then "true" else "false")
-literalToTerm (LString v) = Right $ TermSpecConstant $ SpecConstantString v
+literalToTerm (LString v) = Right $ TermSpecConstant $ SpecConstantString $ show v
 literalToTerm (LInteger v) = Right $ TermSpecConstant $ SpecConstantNumeral v
 literalToTerm (LDecimal v) = Right $ TermSpecConstant $ SpecConstantDecimal $ show v
 literalToTerm (LTime _) = Left $ "Time base proving is currently unsupported"
@@ -204,6 +204,14 @@ booleanAstToTerm (NativeFunc_Lit_Var f l v@(name', _))
         (Right op', Right l', Right v') -> return $ Right $ TermQualIdentifierT op' [l',v']
         err -> return $ Left $ "unable to analyze: " ++ show err
   | otherwise = return $ Left $ "Function " ++ show f ++ " is unsupported"
+booleanAstToTerm (NativeFunc_App_App f app1 app2)
+  | isLogicalOperator f = do
+      app1' <- booleanAstToTerm app1
+      app2' <- booleanAstToTerm app2
+      op <- return $ basicOperatorToQualId f
+      case (op, app1', app2') of
+        (Right op', Right app1'', Right app2'') -> return $ Right $ TermQualIdentifierT op' [app1'', app2'']
+        err -> return $ Left $ "unable to analyze: " ++ show err
 booleanAstToTerm err = return $ Left "Unsupported construct found when constructing boolean-expr node"
 
 negateBoolAstTerm :: Smt.Term -> Smt.Term
@@ -229,8 +237,7 @@ symTypeToSortId :: SymType -> Either String Sort
 symTypeToSortId SymInteger = Right $ SortId $ ISymbol "Int"
 symTypeToSortId SymBool = Right $ SortId $ ISymbol "Bool"
 symTypeToSortId SymDecimal = Right $ SortId $ ISymbol "Real"
-symTypeToSortId SymString = Right $ SortId $ ISymbol "Real"
-symTypeToSortId err = Left $ "Unsupported Type: " ++ show err
+symTypeToSortId SymString = Right $ SortId $ ISymbol "String"
 
 constructSymVar :: (TcId, Type) -> SymVar
 constructSymVar (name', type') = newVar
@@ -273,63 +280,28 @@ analyze ((IF_App_Lit_Lit app' lit1 lit2):rest) = do
 appendSmtCmds :: [Command] -> ProverState -> ProverState
 appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 
--- getSymVar :: TcId -> PactAnalysis SymVar
--- getSymVar name' = do
---   sv2 <- Map.lookup name' <$> use psVars
---   case sv2 of
---     Just sv' -> return sv'
---     Nothing -> do
---       reader' <- ask
---       error $ "unable to lookup variable: " ++ show name'
---         ++ "\n### context ###\n" ++ show reader'
---
--- isTracked :: SymVar -> Bool
--- isTracked (SymVar _ _ Tracked) = True
--- isTracked _ = False
--- (module analyze-tests 'analyze-admin-keyset
---   (defun gt-ten (a:integer)
---     (if (> a 10) "more than ten" "less than ten")
---   )
--- )
---
--- FDefun
---   { _fInfo = (defun gt-ten (a:integer)
---   , _fName = "analyze-tests.gt-ten"
---   , _fType = (a:integer) -> <a>
---   , _fArgs = [ (analyze-tests.gt-ten_a0,integer) ]
---   , _fBody = [
---       App { _aId = appNif1
---           , _aAppFun = FNative { _fInfo = ""
---                                , _fName = "if"
---                                , _fTypes = (cond:bool then:<a> else:<a>) -> <a> :| []
---                                , _fSpecial = Nothing
---                                }
---           , _aAppArgs = [
---               App { _aId = appN>2
---                   , _aAppFun = FNative { _fInfo = ""
---                                        , _fName = ">"
---                                        , _fTypes = (x:<a => (integer|decimal|string|time)> y:<a => (integer|decimal|string|time)>) -> bool :| []
---                                        , _fSpecial = Nothing}
---                   , _aAppArgs =
---                        [ Var { _aId = analyze-tests.gt-ten_a0
---                              , _aVar = (analyze-tests.gt-ten_a0,integer)}
---                        , Lit {_aId = integer3, _aLitType = integer, _aLitValue = LVLit 10}]}
---              , Lit { _aId = string4
---                    , _aLitType = string
---                    , _aLitValue = LVLit "more than ten"}
---              , Lit {_aId = string5
---                    , _aLitType = string
---                    , _aLitValue = LVLit "less than ten"}]}]}
+-- helper stuff
+_parseSmtCmd :: String -> Smt.Command
+_parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
+
 
 _inferGtTen :: IO (Either (String, Fun TcId) (Fun (TcId, Type)), TcState)
 _inferGtTen = _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" "gt-ten"
 
-getGtTenFun :: IO (Fun (TcId, Type))
-getGtTenFun = do
+_getGtTenFun :: IO (Fun (TcId, Type))
+_getGtTenFun = do
   (Right f, _) <- _inferGtTen
   return f
 
-getSampFunc :: String -> IO (Fun (TcId, Type))
-getSampFunc s = do
+_getSampFunc :: String -> IO (Fun (TcId, Type))
+_getSampFunc s = do
   (Right f, _) <- _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
   return f
+
+_analyzeSampFunc :: String -> IO ()
+_analyzeSampFunc s = do
+  a <- _getSampFunc s
+  b <- analyzeFunction a
+  case b of
+    Left err -> putStrLn $ "Analysis Failed: " ++ show err
+    Right v -> ppSymAst v
