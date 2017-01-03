@@ -30,6 +30,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>))
 import Data.String
 import Data.Maybe
 import Data.List
+import Data.Either
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 data CheckerException = CheckerException Info String deriving (Eq,Ord)
@@ -56,19 +57,30 @@ instance Show UserType where
 data VarRole = ArgVar Int | RetVar deriving (Eq,Show,Ord)
 
 data VarType = Spec { _vtType :: Type UserType } |
-               Overload { _vtRole :: VarRole, _vtOverApp :: TcId }
+               Overload { _vtRole :: VarRole, _vtOverApp :: TcId } |
+               User { _vtUser :: TypeParam UserType }
                deriving (Eq,Ord)
 
 type TypeSet = S.Set VarType
 newtype TypeSetId = TypeSetId String
   deriving (Eq,Ord,IsString,AsString)
-instance Show TypeSetId where show (TypeSetId i) = show i
+instance Show TypeSetId where show (TypeSetId i) = i
 
+
+showTPUser :: TypeParam UserType -> String
+showTPUser (ParamSpec UserType {..}) = "{" ++ asString _utName ++ "." ++ asString _utModule ++ "}"
+showTPUser t = "{" ++ show t ++ "}"
+
+showTypeUser :: Type UserType -> String
+showTypeUser (TyTable t) = "table:" ++ showTPUser t
+showTypeUser (TyObject t) = "object:" ++ showTPUser t
+showTypeUser t = show t
 
 instance Show VarType where
-  show (Spec t) = show t
+  show (Spec t) = showTypeUser t
   show (Overload r ts) =
     show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
+  show (User t) = showTPUser t
 
 instance Pretty VarType where pretty = string . show
 
@@ -239,7 +251,7 @@ instance Pretty t => Pretty (AST t) where
     pretty _aId <$$>
     pretty _aAppFun <$$>
     indent 2 (vsep (map pretty _aAppArgs))
-  pretty Table {..} = text "table" <> colon <> sshow _aUserType
+  pretty Table {..} = text "table" <> colon <> text (showTPUser _aUserType)
 
 
 
@@ -294,11 +306,11 @@ isOverload Overload {} = True
 isOverload _ = False
 
 isConcrete :: VarType -> Bool
-isConcrete (Spec ty) = case ty of
+isConcrete v@(Spec ty) = case ty of
   TyVar {} -> False
   TyRest -> False
   TyFun {} -> False
-  _ -> True
+  _ -> not (isParamVar v)
 isConcrete _ = False
 
 isRestOrUnconstrained :: VarType -> Bool
@@ -313,9 +325,10 @@ isTyVar (Spec TyVar {}) = True
 isTyVar _ = False
 
 isParamVar :: VarType -> Bool
-isParamVar (Spec (TyObject ParamVar {})) = True
-isParamVar (Spec (TyList ParamVar {})) = True
-isParamVar (Spec (TyTable ParamVar {})) = True
+--isParamVar (Spec (TyObject ParamVar {})) = True
+--isParamVar (Spec (TyList ParamVar {})) = True
+--isParamVar (Spec (TyTable ParamVar {})) = True
+isParamVar (User ParamVar {}) = True
 isParamVar _ = False
 
 pivot :: TC ()
@@ -338,7 +351,7 @@ pivot' m = mkPivot m $ rpt initPivot
 mkPivot :: forall a . Ord a => M.Map a TypeSet -> M.Map VarType TypeSet -> Pivot a
 mkPivot org m =
   let lkps = concatMap mk $ nub $ M.elems m
-      mk v = let tid = TypeSetId (show v)
+      mk v = let tid = TypeSetId (show (toList v))
              in [((tid,v),(v,tid),map (,tid) (toList v))]
       tsMap = M.fromList $ map (view _1) lkps
       revLkp = M.fromList $ map (view _2) lkps
@@ -399,7 +412,8 @@ typecheckSet' inf vset = do
     [] -> return Nothing
     [c] -> return $ Just c
     _cs -> die inf $ "Multiple concrete types in set:" ++ show vset
-  let (tvs,rest) = S.partition isTyVar v2
+  let (tvs,v3) = S.partition isTyVar v2
+      (uts,rest) = S.partition isParamVar v3
       constraintsHaveType c t = case t of
         (Spec (TyVar _ es)) -> c `elem` es
         _ -> False
@@ -585,7 +599,7 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let FunType {..} = mangleFunType i ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t)) _ftArgs as
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t) >> assocAST (_aId aa) aa) _ftArgs as
       assocTy i (Spec _ftReturn)
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
@@ -627,24 +641,30 @@ lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 tcToTy :: AST TcId -> TC TypeSet
 tcToTy Lit {..} = return $ S.singleton $ Spec _aLitType
 tcToTy Var {..} = lookupIdTys _aVar
-tcToTy Object {..} = return $ S.singleton $ Spec $ TyObject _aUserType
+tcToTy Object {..} = return $ tyToTyset $ TyObject _aUserType
 tcToTy List {..} = return $ S.singleton $ Spec $ TyList _aListType
 tcToTy App {..} = lookupIdTys _aId
 tcToTy Binding {..} = lookupIdTys _aId
-tcToTy Table {..} = return $ S.singleton $ Spec $ TyObject _aUserType
+tcToTy Table {..} = return $ tyToTyset $ TyTable _aUserType
 
 -- | Track type to id
-trackVar :: TcId -> VarType -> TC ()
+trackVar :: TcId -> Type UserType -> TC ()
 trackVar i t = do
   old <- M.lookup i <$> use tcVars
   case old of
     Nothing -> return ()
     Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
-  tcVars %= M.insert i (S.singleton t)
+  tcVars %= M.insert i (tyToTyset t)
 
 -- | Track type to id with typechecking
 assocTy :: TcId -> VarType -> TC ()
-assocTy i ty = assocTys i (S.singleton ty)
+assocTy i (Spec ty) = assocTys i (tyToTyset ty)
+assocTy i vt = assocTys i (S.singleton vt)
+
+tyToTyset :: Type UserType -> TypeSet
+tyToTyset t@(TyObject p) = S.fromList [Spec t,User p]
+tyToTyset t@(TyTable p) = S.fromList [Spec t,User p]
+tyToTyset t = S.singleton $ Spec t
 
 -- | Track ast type to id with typechecking
 assocAST :: TcId -> AST TcId -> TC ()
@@ -703,7 +723,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> liftTy toUserType t
-    trackVar an (Spec t')
+    trackVar an t'
     return an
   tcs <- scopeToBody _tInfo (map (\ai -> Var ai ai) args) _tDefBody
   ft' <- liftFunType toUserType _tFunType
@@ -726,7 +746,7 @@ toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
-  trackVar i (Spec $ idTyVar i)
+  trackVar i $ idTyVar i
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
@@ -738,11 +758,11 @@ toAST TApp {..} = do
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
-  trackVar bi $ Spec $ idTyVar bi
+  trackVar bi $ idTyVar bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     an <- freshId ai (pfx (show bi) n)
     t' <- mangleType an <$> liftTy toUserType t
-    trackVar an $ Spec t'
+    trackVar an t'
     case _tBindCtx of
       BindLet -> do
         v' <- toAST v
@@ -764,7 +784,7 @@ toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Lit i TyValue (LVV
 toAST TLiteral {..} = do
   let ty = l2ty _tLiteral
   i <- freshId _tInfo (show ty)
-  trackVar i (Spec ty)
+  trackVar i ty
   return $ Lit i ty (LVLit _tLiteral)
 toAST TTable {..} = do
   i <- freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName)
@@ -812,17 +832,25 @@ allVarsCheck = do
         Nothing -> Left (tid,s)
         Just ty -> Right (tid,ty)
   case sequence vs' of
-    Left _ -> return (Left $ M.fromList $ concatMap (either pure (const [])) vs')
+    Left _ -> do
+      debug $ "Unification failed on: " ++ show (map (\(Left l) -> l) $ filter isLeft vs')
+      return (Left $ M.fromList $ concatMap (either pure (const [])) vs')
     Right ps -> return (Right (M.fromList ps))
+
+debugState :: TC ()
+debugState = liftIO . putDoc . pretty =<< get
 
 
 substFun :: Fun TcId -> TC (Either (String,Fun TcId) (Fun (TcId,Type UserType)))
 substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
 substFun f@FDefun {..} = do
+  debug "Transform"
+  b'' <- mapM (walkAST $ substAppDefun Nothing) _fBody
   debug "Substitution"
-  b' <- mapM (walkAST processNatives) =<< mapM (walkAST $ substAppDefun Nothing) _fBody
+  b' <- mapM (walkAST processNatives) b''
   debug "Pivot"
   pivot
+  debugState
   debug "Eliminate"
   eliminate
   debug "Solve overloads"
