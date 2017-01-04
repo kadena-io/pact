@@ -297,29 +297,36 @@ isOverload Overload {} = True
 isOverload _ = False
 
 isConcrete :: VarType -> Bool
-isConcrete v@(Spec ty) = case ty of
-  TyVar {} -> False
-  TyAny -> False
-  _ -> True
+isConcrete (Spec ty) = isTySpec ty
+isConcrete (User ty) = isTySpec ty
 isConcrete _ = False
 
+isUser :: VarType -> Bool
+isUser User {} = True
+isUser _ = False
+
 isRestOrUnconstrained :: VarType -> Bool
-isRestOrUnconstrained (Spec ty) = case ty of
-  TyVar _ [] -> True
-  TyAny -> True
-  _ -> False
+isRestOrUnconstrained (Spec ty) = isTyAnyOpen ty
+isRestOrUnconstrained (User ty) = isTyAnyOpen ty
 isRestOrUnconstrained _ = False
 
-isTyVar :: VarType -> Bool
-isTyVar (Spec TyVar {}) = True
+isTyVarType :: VarType -> Bool
+isTyVarType (Spec v) = isTyVar v
+isTyVarType (User v) = isTyVar v
+isTyVarType _ = False
+
+isTyVar :: Type n -> Bool
+isTyVar TyVar {} = True
 isTyVar _ = False
 
-isParamVar :: VarType -> Bool
---isParamVar (Spec (TyObject ParamVar {})) = True
---isParamVar (Spec (TyList ParamVar {})) = True
---isParamVar (Spec (TyTable ParamVar {})) = True
-isParamVar (User TyVar {}) = True
-isParamVar _ = False
+isTySpec :: Type n -> Bool
+isTySpec TySpec {} = True
+isTySpec _ = False
+
+isTyAnyOpen :: Type n -> Bool
+isTyAnyOpen (TyVar _ []) = True
+isTyAnyOpen TyAny = True
+isTyAnyOpen _ = False
 
 pivot :: TC ()
 pivot = do
@@ -334,8 +341,12 @@ pivot' m = mkPivot m $ rpt initPivot
     rinse :: M.Map a TypeSet -> State (M.Map VarType TypeSet) ()
     rinse p =
       forM_ (M.elems p) $ \vts ->
-        forM_ vts $ \vt ->
-          when (isTyVar vt || isOverload vt || isParamVar vt) $ modify $ M.insertWith S.union vt vts
+        forM_ vts $ \vt' -> walkVarType vt' $ \vt -> do
+          let vts' = S.insert vt vts
+          when (isTyVarType vt || isOverload vt) $
+            modify $ M.insertWith S.union vt $ case vt of
+              User {} -> S.filter isUser vts'
+              _ -> vts'
     rpt p = let p' = lather p in if p' == p then p else rpt p'
 
 mkPivot :: forall a . Ord a => M.Map a TypeSet -> M.Map VarType TypeSet -> Pivot a
@@ -361,6 +372,17 @@ unPivot Pivot {..} = forM _pRevMap $ \v -> case v of
   Right tid -> case M.lookup tid _pSetMap of
     Nothing -> die def $ "Bad pivot, '" ++ show tid ++ "' not found: " ++ show _pSetMap
     Just s -> return s
+
+
+walkVarType :: Monad m => VarType -> (VarType -> m ()) -> m ()
+walkVarType v f = f v >> case v of
+  Spec (TySpec (TyList tv)) -> walkVarType (Spec tv) f
+  Spec (TySpec (TySchema _ tv)) -> walkVarType (User tv) f
+  Spec (TySpec (TyFun FunType {..})) -> do
+    mapM_ ((`walkVarType` f) . Spec . _aType) _ftArgs
+    walkVarType (Spec _ftReturn) f
+  _ -> return ()
+
 
 failEx :: a -> TC a -> TC a
 failEx a = handle (\(e :: CheckerException) -> do
@@ -409,8 +431,7 @@ typecheckSet' inf vset = do
     [] -> return Nothing
     [c] -> return $ Just c
     _cs -> die inf $ "Multiple concrete types in set:" ++ show vset
-  let (tvs,v3) = S.partition isTyVar v2
-      (uts,rest) = S.partition isParamVar v3
+  let (tvs,rest) = S.partition isTyVarType v2
       constraintsHaveType c t = case t of
         (Spec (TyVar _ es)) -> c `elem` es
         _ -> False
@@ -653,13 +674,6 @@ trackVar i t = do
     Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
   tcVars %= M.insert i (sing $ Spec t)
 
-walkType :: Type (TermType UserType) -> (VarType -> TC ()) -> TC ()
-walkType (TySpec (TyList tv)) f = f (Spec tv) >> walkType tv f
-walkType (TySpec (TySchema _ tv)) f= f (User tv)
-walkType (TySpec (TyFun FunType {..})) f = do
-  mapM_ ((`walkType` f) . _aType) _ftArgs
-  walkType _ftReturn f
-walkType _ _ = return ()
 
 -- | Track type to id with typechecking
 assocTy :: TcId -> VarType -> TC ()
