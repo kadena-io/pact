@@ -56,9 +56,9 @@ instance Show UserType where
 
 data VarRole = ArgVar Int | RetVar deriving (Eq,Show,Ord)
 
-data VarType = Spec { _vtType :: Type UserType } |
+data VarType = Spec { _vtType :: Type (TermType UserType) } |
                Overload { _vtRole :: VarRole, _vtOverApp :: TcId } |
-               User { _vtUser :: TypeParam UserType }
+               User { _vtUser :: Type UserType }
                deriving (Eq,Ord)
 
 type TypeSet = S.Set VarType
@@ -67,20 +67,11 @@ newtype TypeSetId = TypeSetId String
 instance Show TypeSetId where show (TypeSetId i) = i
 
 
-showTPUser :: TypeParam UserType -> String
-showTPUser (ParamSpec UserType {..}) = "{" ++ asString _utName ++ "." ++ asString _utModule ++ "}"
-showTPUser t = "{" ++ show t ++ "}"
-
-showTypeUser :: Type UserType -> String
-showTypeUser (TyTable t) = "table:" ++ showTPUser t
-showTypeUser (TyObject t) = "object:" ++ showTPUser t
-showTypeUser t = show t
-
 instance Show VarType where
-  show (Spec t) = showTypeUser t
+  show (Spec t) = show t
   show (Overload r ts) =
     show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
-  show (User t) = showTPUser t
+  show (User t) = show t
 
 instance Pretty VarType where pretty = string . show
 
@@ -213,16 +204,16 @@ data AST t =
   List {
   _aId :: TcId,
   _aList :: [AST t],
-  _aListType :: TypeParam (Type UserType)
+  _aListType :: Type (TermType UserType)
   } |
   Object {
   _aId :: TcId,
   _aObject :: [(AST t,AST t)],
-  _aUserType :: TypeParam UserType
+  _aUserType :: Type UserType
   } |
   Lit {
   _aId :: TcId,
-  _aLitType :: Type UserType,
+  _aLitType :: TermType UserType,
   _aLitValue :: LitValue
   } |
   Var {
@@ -231,13 +222,13 @@ data AST t =
   } |
   Table {
   _aId :: TcId,
-  _aUserType :: TypeParam UserType
+  _aUserType :: Type UserType
   }
 
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (AST t) where
-  pretty Lit {..} = pretty _aLitType <> equals <> pretty _aLitValue
+  pretty Lit {..} = sshow _aLitType <> equals <> pretty _aLitValue
   pretty Var {..} = pretty _aVar
   pretty Object {..} =
     "{" <$$>
@@ -251,7 +242,7 @@ instance Pretty t => Pretty (AST t) where
     pretty _aId <$$>
     pretty _aAppFun <$$>
     indent 2 (vsep (map pretty _aAppArgs))
-  pretty Table {..} = text "table" <> colon <> text (showTPUser _aUserType)
+  pretty Table {..} = text "table" <> colon <> sshow _aUserType
 
 
 
@@ -308,15 +299,14 @@ isOverload _ = False
 isConcrete :: VarType -> Bool
 isConcrete v@(Spec ty) = case ty of
   TyVar {} -> False
-  TyRest -> False
-  TyFun {} -> False
-  _ -> not (isParamVar v)
+  TyAny -> False
+  _ -> True
 isConcrete _ = False
 
 isRestOrUnconstrained :: VarType -> Bool
 isRestOrUnconstrained (Spec ty) = case ty of
   TyVar _ [] -> True
-  TyRest -> True
+  TyAny -> True
   _ -> False
 isRestOrUnconstrained _ = False
 
@@ -328,7 +318,7 @@ isParamVar :: VarType -> Bool
 --isParamVar (Spec (TyObject ParamVar {})) = True
 --isParamVar (Spec (TyList ParamVar {})) = True
 --isParamVar (Spec (TyTable ParamVar {})) = True
-isParamVar (User ParamVar {}) = True
+isParamVar (User TyVar {}) = True
 isParamVar _ = False
 
 pivot :: TC ()
@@ -396,10 +386,17 @@ eliminate' p = do
   return $ set pSetMap tsets' p
 
 _testElim :: MonadThrow m => m (Pivot a)
-_testElim = eliminate' (Pivot def def (M.fromList [("foo",S.fromList [Spec $ TyVar "a" [TyInteger,TyDecimal],Spec TyDecimal])]))
+_testElim =
+  eliminate' (Pivot def def (M.fromList
+                             [("foo",S.fromList
+                                [Spec $ TyVar "a" [TyPrim TyInteger,TyPrim TyDecimal],Spec (TySpec $ TyPrim TyDecimal)])]))
 
 _testElim2 :: MonadThrow m => m (Pivot a)
-_testElim2 = eliminate' (Pivot def def (M.fromList [("foo",S.fromList [Spec $ TyVar "a" [TyInteger,TyDecimal],Spec TyString])]))
+_testElim2 =
+  eliminate' (Pivot def def (M.fromList
+                              [("foo",S.fromList
+                                 [Spec $ TyVar "a" [TyPrim TyInteger,TyPrim TyDecimal],Spec (TySpec $ TyPrim TyString)])]))
+
 
 
 
@@ -418,7 +415,7 @@ typecheckSet' inf vset = do
         (Spec (TyVar _ es)) -> c `elem` es
         _ -> False
   case conc of
-    Just c@(Spec concTy) -> do
+    Just c@(Spec (TySpec concTy)) -> do
       unless (all (constraintsHaveType concTy) tvs) $
         die inf $ "Constraints incompatible with concrete type: " ++ show vset
       return $ S.insert c rest -- constraints good with concrete, so we can get rid of them
@@ -426,11 +423,11 @@ typecheckSet' inf vset = do
     Nothing ->
       if S.null tvs then return rest -- no conc, no tvs, just leftovers
       else do
-        let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtType.tvConstraint)) (toList tvs)
+        let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtType.tyConstraint)) (toList tvs)
         case inter of
           [] -> die inf $ "Incommensurate constraints in set: " ++ show vset
           _ -> do
-            let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tvId)) (toList tvs)
+            let uname = foldr1 (\a b -> a ++ "_U_" ++ b) $ mapMaybe (firstOf (vtType.tyId)) (toList tvs)
             return $ S.insert (Spec (TyVar uname inter)) rest
 
 
@@ -441,8 +438,8 @@ data SolverEdge = SolverEdge {
   } deriving (Eq,Show,Ord)
 
 data SolverState = SolverState {
-  _funMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type UserType),Maybe (FunType UserType)),
-  _tsetMap :: M.Map TypeSetId (TypeSet,Maybe (Type UserType))
+  _funMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type (TermType UserType)),Maybe (FunType UserType)),
+  _tsetMap :: M.Map TypeSetId (TypeSet,Maybe (Type (TermType UserType)))
 } deriving (Eq,Show)
 makeLenses ''SolverState
 instance Pretty SolverState where
@@ -472,9 +469,9 @@ runSolver s e a = runReaderT (runStateT a s) e
 solveOverloads :: TC ()
 solveOverloads = do
   tss <- M.toList <$> use (tcPivot . pSetMap)
-  (oMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type UserType),Maybe (FunType UserType))) <-
+  (oMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type (TermType UserType)),Maybe (FunType UserType))) <-
     M.map (,def,Nothing) <$> use tcOverloads
-  (stuff :: [((TypeSetId,(TypeSet,Maybe (Type UserType))),[SolverEdge])]) <-
+  (stuff :: [((TypeSetId,(TypeSet,Maybe (Type (TermType UserType)))),[SolverEdge])]) <-
     fmap catMaybes $ forM tss $ \(tid,ts) -> do
     let es = (`map` toList ts) $ \v -> case v of
                Overload r i -> Right (SolverEdge tid r i)
@@ -487,7 +484,7 @@ solveOverloads = do
     let ses = mapMaybe (either (const Nothing) Just) es
     if null ses then return Nothing else
       return $ Just ((tid,(ts,concrete)),mapMaybe (either (const Nothing) Just) es)
-  let tsMap :: M.Map TypeSetId (TypeSet,Maybe (Type UserType))
+  let tsMap :: M.Map TypeSetId (TypeSet,Maybe (Type (TermType UserType)))
       tsMap = M.fromList $ map fst stuff
       initState = SolverState oMap tsMap
       concretes :: [TypeSetId]
@@ -545,8 +542,8 @@ doTypesets cs = fmap (nub . concat) $ forM cs $ \c -> do
           return [ov]
     (_,_) -> return []
 
-tryFunType :: (MonadIO m,MonadCatch m) => FunType UserType -> M.Map VarRole (Type UserType) ->
-              m (Maybe (M.Map VarRole (Type UserType)))
+tryFunType :: (MonadIO m,MonadCatch m) => FunType UserType -> M.Map VarRole (Type (TermType UserType)) ->
+              m (Maybe (M.Map VarRole (Type (TermType UserType))))
 tryFunType (FunType as rt) vMap = do
   let ars = zipWith (\(Arg _ t _) i -> (ArgVar i,t)) as [0..]
       fMap = M.fromList $ (RetVar,rt):ars
@@ -561,20 +558,20 @@ tryFunType (FunType as rt) vMap = do
       Nothing -> return Nothing
       Just ps -> return (Just (M.fromList ps))
 
-asConcrete :: VarType -> Maybe (Type UserType)
+asConcrete :: VarType -> Maybe (Type (TermType UserType))
 asConcrete s | isConcrete s = Just $ _vtType s
 asConcrete _ = Nothing
 
-asConcreteSingleton :: TypeSet -> Maybe (Type UserType)
+asConcreteSingleton :: TypeSet -> Maybe (Type (TermType UserType))
 asConcreteSingleton s | S.size s == 1 = asConcrete (head (toList s))
 asConcreteSingleton _ = Nothing
 
 _ftaaa :: FunType UserType
-_ftaaa = let a = TyVar "a" [TyInteger,TyDecimal]
+_ftaaa = let a = TyVar "a" [TyPrim TyInteger,TyPrim TyDecimal]
          in FunType [Arg "x" a def,Arg "y" a def] a
 _ftabD :: FunType UserType
-_ftabD = let v n = TyVar n [TyInteger,TyDecimal]
-         in FunType [Arg "x" (v "a") def,Arg "y" (v "b") def] TyDecimal
+_ftabD = let v n = TyVar n [TyPrim TyInteger,TyPrim TyDecimal]
+         in FunType [Arg "x" (v "a") def,Arg "y" (v "b") def] (TySpec $ TyPrim TyDecimal)
 
 {-
 
@@ -639,16 +636,16 @@ lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
 
 tcToTy :: AST TcId -> TC TypeSet
-tcToTy Lit {..} = return $ S.singleton $ Spec _aLitType
+tcToTy Lit {..} = return $ S.singleton $ Spec $ TySpec $ _aLitType
 tcToTy Var {..} = lookupIdTys _aVar
-tcToTy Object {..} = return $ tyToTyset $ TyObject _aUserType
-tcToTy List {..} = return $ S.singleton $ Spec $ TyList _aListType
+tcToTy Object {..} = return $ tyToTyset $ TySpec $ TySchema TyObject _aUserType
+tcToTy List {..} = return $ S.singleton $ Spec $ TySpec $ TyList _aListType
 tcToTy App {..} = lookupIdTys _aId
 tcToTy Binding {..} = lookupIdTys _aId
-tcToTy Table {..} = return $ tyToTyset $ TyTable _aUserType
+tcToTy Table {..} = return $ tyToTyset $ TySpec $ TySchema TyTable _aUserType
 
 -- | Track type to id
-trackVar :: TcId -> Type UserType -> TC ()
+trackVar :: TcId -> Type (TermType UserType) -> TC ()
 trackVar i t = do
   old <- M.lookup i <$> use tcVars
   case old of
@@ -661,9 +658,8 @@ assocTy :: TcId -> VarType -> TC ()
 assocTy i (Spec ty) = assocTys i (tyToTyset ty)
 assocTy i vt = assocTys i (S.singleton vt)
 
-tyToTyset :: Type UserType -> TypeSet
-tyToTyset t@(TyObject p) = S.fromList [Spec t,User p]
-tyToTyset t@(TyTable p) = S.fromList [Spec t,User p]
+tyToTyset :: Type (TermType UserType) -> TypeSet
+tyToTyset t@(TySpec (TySchema _ p)) = S.fromList [Spec t,User p]
 tyToTyset t = S.singleton $ Spec t
 
 -- | Track ast type to id with typechecking
@@ -690,23 +686,18 @@ scopeToBody i args bod = do
 pfx :: String -> String -> String
 pfx s = ((s ++ "_") ++)
 
-idTyVar :: TcId -> Type UserType
+idTyVar :: TcId -> Type n
 idTyVar i = TyVar (show i) []
 
-mangle :: TcId -> String -> String
-mangle f = pfx (show f)
+mangle :: TcId -> Type n -> Type n
+mangle i = over tyId (pfx (show i))
 
-mangleType :: TcId -> Type UserType -> Type UserType
-mangleType f t@TyVar {} = over tvId (mangle f) t
-mangleType f t@TyList {} = over (tlType . mapped) (mangleType f) $
-                           over tlType (mangleTypeParam f) t
-mangleType f t@TyFun {} = over tfType (mangleFunType f) t
-mangleType f t@TyObject {} = over toType (mangleTypeParam f) t
-mangleType f t@TyTable {} = over ttType (mangleTypeParam f) t
+mangleType :: TcId -> Type (TermType UserType) -> Type (TermType UserType)
+mangleType f t@TyVar {} = mangle f t
+mangleType f t@(TySpec TyList {}) = over (tySpec . ttListType) (mangleType f) t
+mangleType f t@(TySpec TySchema {}) = over (tySpec . ttSchemaType) (mangle f) t
+mangleType f t@(TySpec TyFun {}) = over (tySpec . ttFunType) (mangleFunType f) t
 mangleType _ t = t
-
-mangleTypeParam :: TcId -> TypeParam t -> TypeParam t
-mangleTypeParam f = over tpVar (mangle f)
 
 mangleFunType :: TcId -> FunType UserType -> FunType UserType
 mangleFunType f = over ftReturn (mangleType f) .
@@ -714,7 +705,7 @@ mangleFunType f = over ftReturn (mangleType f) .
 
 toFun :: Term (Either Ref (AST TcId)) -> TC (Fun TcId)
 toFun (TVar (Left (Direct TNative {..})) _) = do
-  ft' <- mapM (liftFunType toUserType') _tFunTypes
+  ft' <- mapM (traverseFunType toUserType') _tFunTypes
   return $ FNative _tInfo (asString _tNativeName) ft' ((,[]) <$> isSpecialForm _tNativeName)
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
@@ -722,11 +713,11 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   let fn = asString _tModule ++ "." ++ asString _tDefName
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
-    t' <- mangleType an <$> liftTy toUserType t
+    t' <- mangleType an <$> traverse (traverse toUserType) t
     trackVar an t'
     return an
   tcs <- scopeToBody _tInfo (map (\ai -> Var ai ai) args) _tDefBody
-  ft' <- liftFunType toUserType _tFunType
+  ft' <- traverseFunType toUserType _tFunType
   return $ FDefun _tInfo fn ft' args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
@@ -761,7 +752,7 @@ toAST TBinding {..} = do
   trackVar bi $ idTyVar bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     an <- freshId ai (pfx (show bi) n)
-    t' <- mangleType an <$> liftTy toUserType t
+    t' <- mangleType an <$> traverse (traverse toUserType) t
     trackVar an t'
     case _tBindCtx of
       BindLet -> do
@@ -775,20 +766,20 @@ toAST TBinding {..} = do
     BindKV -> return () -- TODO check it out
   return $ Binding bi bs bb _tBindCtx
 
-toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> liftTypeParam (liftTy toUserType) _tListType
+toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> traverse (traverse toUserType) _tListType
 toAST TObject {..} = Object <$> freshId _tInfo "object" <*>
-                       mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> liftTypeParam toUserType _tUserType
+                       mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> traverse toUserType _tUserType
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
-toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Lit i TyKeySet (LVKeySet _tKeySet)
-toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Lit i TyValue (LVValue _tValue)
+toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Lit i (TyPrim TyKeySet) (LVKeySet _tKeySet)
+toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Lit i (TyPrim TyValue) (LVValue _tValue)
 toAST TLiteral {..} = do
-  let ty = l2ty _tLiteral
+  let (ty :: TermType UserType) = TyPrim (litToPrim _tLiteral)
   i <- freshId _tInfo (show ty)
-  trackVar i ty
+  trackVar i (TySpec ty)
   return $ Lit i ty (LVLit _tLiteral)
 toAST TTable {..} = do
   i <- freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName)
-  Table i <$> liftTypeParam toUserType _tTableType
+  Table i <$> traverse toUserType _tTableType
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = die _tInfo "TODO steps/pacts"
@@ -803,15 +794,8 @@ toUserType t = case t of
     derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
 
 toUserType' :: Show n => Term n -> TC UserType
-toUserType' TUserType {..} = UserType _tUserTypeName _tModule <$> mapM (liftArg toUserType') _tFields <*> pure _tInfo
+toUserType' TUserType {..} = UserType _tUserTypeName _tModule <$> mapM (traverseArg toUserType') _tFields <*> pure _tInfo
 toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
-
-l2ty :: Literal -> Type UserType
-l2ty LInteger {} = TyInteger
-l2ty LDecimal {} = TyDecimal
-l2ty LString {} = TyString
-l2ty LBool {} = TyBool
-l2ty LTime {} = TyTime
 
 bindArgs :: Info -> [a] -> Int -> TC a
 bindArgs i args b =
@@ -825,7 +809,7 @@ infer t@TDef {..} = toFun (fmap Left t)
 infer t = die (_tInfo t) "Non-def"
 
 
-allVarsCheck :: TC (Either (M.Map TcId TypeSet) (M.Map TcId (Type UserType)))
+allVarsCheck :: TC (Either (M.Map TcId TypeSet) (M.Map TcId (Type (TermType UserType))))
 allVarsCheck = do
   vs <- use tcVars
   let vs' = (`map` M.toList vs) $ \(tid,s) -> case asConcreteSingleton s of
@@ -841,8 +825,8 @@ debugState :: TC ()
 debugState = liftIO . putDoc . pretty =<< get
 
 
-substFun :: Fun TcId -> TC (Either (String,Fun TcId) (Fun (TcId,Type UserType)))
-substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyRest)) f
+substFun :: Fun TcId -> TC (Either (String,Fun TcId) (Fun (TcId,Type (TermType UserType))))
+substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyAny)) f
 substFun f@FDefun {..} = do
   debug "Transform"
   b'' <- mapM (walkAST $ substAppDefun Nothing) _fBody
@@ -870,18 +854,18 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . _2 . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type (TermType UserType))), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 -- _pretty =<< _inferIssue
-_inferIssue :: IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_inferIssue :: IO (Either (String,Fun TcId) (Fun (TcId,Type (TermType UserType))), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_inferTransfer :: IO (Either (String,Fun TcId) (Fun (TcId,Type (TermType UserType))), TcState)
 _inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
 
 -- prettify output of '_infer' runs
-_pretty :: (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState) -> IO ()
+_pretty :: (Either (String,Fun TcId) (Fun (TcId,Type (TermType UserType))), TcState) -> IO ()
 _pretty (Left (m,f),tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc <$$> text m <> hardline)
 _pretty (Right f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)

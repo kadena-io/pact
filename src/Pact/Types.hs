@@ -277,8 +277,8 @@ data TermType v =
   TyPrim PrimType |
   TyList { _ttListType :: Type (TermType v) } |
   TySchema { _ttSchema :: SchemaType, _ttSchemaType :: Type v } |
-  TyFun { _ttFunType :: FunType (TermType v) } |
-  TyUser v -- reserved for enums etc
+  TyFun { _ttFunType :: FunType v } |
+  TyUser { _ttUser :: v } -- reserved for enums etc
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance (Show v) => Show (TermType v) where
   show (TyPrim t) = show t
@@ -295,7 +295,7 @@ traverseTermType :: Applicative m => (a -> m b) -> TermType a -> m (TermType b)
 traverseTermType _ (TyPrim t) = pure $ TyPrim t
 traverseTermType f (TyList l) = TyList <$> traverse (traverseTermType f) l
 traverseTermType f (TySchema s t) = TySchema s <$> traverse f t
-traverseTermType f (TyFun ft) = TyFun <$> traverseFunType (traverseTermType f) ft
+traverseTermType f (TyFun ft) = TyFun <$> traverseFunType f ft
 traverseTermType f t@TyUser {} = traverse f t
 
 makeLenses ''Type
