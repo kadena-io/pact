@@ -148,15 +148,15 @@ makeLenses ''Pivot
 freshId :: Info -> String -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
 
-data LitValue =
-  LVLit Literal |
-  LVKeySet PactKeySet |
-  LVValue Value
+data PrimValue =
+  PrimLit Literal |
+  PrimKeySet PactKeySet |
+  PrimValue Value
   deriving (Eq,Show)
-instance Pretty LitValue where
-  pretty (LVLit l) = text (show l)
-  pretty (LVKeySet k) = text (show k)
-  pretty (LVValue v) = text (show v)
+instance Pretty PrimValue where
+  pretty (PrimLit l) = text (show l)
+  pretty (PrimKeySet k) = text (show k)
+  pretty (PrimValue v) = text (show v)
 
 
 
@@ -211,10 +211,10 @@ data AST t =
   _aObject :: [(AST t,AST t)],
   _aUserType :: Type UserType
   } |
-  Lit {
+  Prim {
   _aId :: TcId,
-  _aLitType :: TermType UserType,
-  _aLitValue :: LitValue
+  _aPrimType :: PrimType,
+  _aPrimValue :: PrimValue
   } |
   Var {
   _aId :: TcId,
@@ -228,7 +228,7 @@ data AST t =
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (AST t) where
-  pretty Lit {..} = sshow _aLitType <> equals <> pretty _aLitValue
+  pretty Prim {..} = sshow _aPrimType <> equals <> pretty _aPrimValue
   pretty Var {..} = pretty _aVar
   pretty Object {..} =
     "{" <$$>
@@ -257,7 +257,7 @@ type Visitor m n = Visit -> AST n -> m (AST n)
 
 -- | Walk the AST, performing function both before and after descent into child elements.
 walkAST :: Monad m => Visitor m n -> AST n -> m (AST n)
-walkAST f t@Lit {} = f Pre t >>= f Post
+walkAST f t@Prim {} = f Pre t >>= f Post
 walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
@@ -633,16 +633,16 @@ substAppDefun _ _ t = return t
 lookupIdTys :: TcId -> TC TypeSet
 lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
-
+sing = S.singleton
 
 tcToTy :: AST TcId -> TC TypeSet
-tcToTy Lit {..} = return $ S.singleton $ Spec $ TySpec $ _aLitType
+tcToTy Prim {..} = return $ sing $ Spec $ TySpec $ TyPrim _aPrimType
 tcToTy Var {..} = lookupIdTys _aVar
-tcToTy Object {..} = return $ tyToTyset $ TySpec $ TySchema TyObject _aUserType
-tcToTy List {..} = return $ S.singleton $ Spec $ TySpec $ TyList _aListType
+tcToTy Object {..} = return $ sing $ Spec $ TySpec $ TySchema TyObject _aUserType
+tcToTy List {..} = return $ sing $ Spec $ TySpec $ TyList _aListType
 tcToTy App {..} = lookupIdTys _aId
 tcToTy Binding {..} = lookupIdTys _aId
-tcToTy Table {..} = return $ tyToTyset $ TySpec $ TySchema TyTable _aUserType
+tcToTy Table {..} = return $ sing $ Spec $ TySpec $ TySchema TyTable _aUserType
 
 -- | Track type to id
 trackVar :: TcId -> Type (TermType UserType) -> TC ()
@@ -651,16 +651,19 @@ trackVar i t = do
   case old of
     Nothing -> return ()
     Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
-  tcVars %= M.insert i (tyToTyset t)
+  tcVars %= M.insert i (sing $ Spec t)
+
+walkType :: Type (TermType UserType) -> (VarType -> TC ()) -> TC ()
+walkType (TySpec (TyList tv)) f = f (Spec tv) >> walkType tv f
+walkType (TySpec (TySchema _ tv)) f= f (User tv)
+walkType (TySpec (TyFun FunType {..})) f = do
+  mapM_ ((`walkType` f) . _aType) _ftArgs
+  walkType _ftReturn f
+walkType _ _ = return ()
 
 -- | Track type to id with typechecking
 assocTy :: TcId -> VarType -> TC ()
-assocTy i (Spec ty) = assocTys i (tyToTyset ty)
-assocTy i vt = assocTys i (S.singleton vt)
-
-tyToTyset :: Type (TermType UserType) -> TypeSet
-tyToTyset t@(TySpec (TySchema _ p)) = S.fromList [Spec t,User p]
-tyToTyset t = S.singleton $ Spec t
+assocTy i vt = assocTys i (sing vt)
 
 -- | Track ast type to id with typechecking
 assocAST :: TcId -> AST TcId -> TC ()
@@ -770,13 +773,13 @@ toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> trav
 toAST TObject {..} = Object <$> freshId _tInfo "object" <*>
                        mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> traverse toUserType _tUserType
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
-toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Lit i (TyPrim TyKeySet) (LVKeySet _tKeySet)
-toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Lit i (TyPrim TyValue) (LVValue _tValue)
+toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Prim i TyKeySet (PrimKeySet _tKeySet)
+toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Prim i TyValue (PrimValue _tValue)
 toAST TLiteral {..} = do
-  let (ty :: TermType UserType) = TyPrim (litToPrim _tLiteral)
+  let ty = litToPrim _tLiteral
   i <- freshId _tInfo (show ty)
-  trackVar i (TySpec ty)
-  return $ Lit i ty (LVLit _tLiteral)
+  trackVar i (TySpec $ TyPrim ty)
+  return $ Prim i ty (PrimLit _tLiteral)
 toAST TTable {..} = do
   i <- freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName)
   Table i <$> traverse toUserType _tTableType
