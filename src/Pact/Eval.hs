@@ -208,7 +208,7 @@ reduce (TBinding ps bod c i) = case c of
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> traverse (traverseArg reduce) _tFields <*> pure _tInfo
+reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
@@ -216,7 +216,7 @@ mkDirect = (`TVar` def) . Direct
 
 reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
-  ps' <- mapM (\(a,t) -> (,) <$> traverseArg reduce a <*> reduce t) ps
+  ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
   reduce (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
@@ -231,7 +231,7 @@ reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp TDef {..} as ai = do
   as' <- mapM reduce as
-  ft' <- traverseFunType reduce _tFunType
+  ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
@@ -327,7 +327,7 @@ typecheck ps = void $ foldM tvarCheck M.empty ps where
                         evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
                         " do not match: " ++ show (prevTy,ty)
 
-check1 :: forall e . Info -> Type (TermType (Term Name)) -> Term Name -> Eval e (Maybe (String,Type (TermType (Term Name))))
+check1 :: forall e . Info -> Type (Term Name) -> Term Name -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
 check1 i spec t = do
   ty <- case typeof t of
     Left s -> evalError i $ "Invalid type in value location: " ++ s
@@ -336,36 +336,35 @@ check1 i spec t = do
     tcFail :: Show a => a -> Eval e b
     tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
     tcOK = return Nothing
-    paramCheck :: Eq t => Type t -> Type t -> (t -> Eval e (Type (TermType (Term Name)))) ->
-                  Eval e (Maybe (String,Type (TermType (Term Name))))
+    paramCheck :: Eq t => Type t -> Type t -> (Type t -> Eval e (Type (Term Name))) ->
+                  Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
     paramCheck TyAny _ _ = tcOK
     paramCheck TyVar {} _ _ = tcOK
-    paramCheck (TySpec pspec) (TySpec pty) _
-      | pspec == pty = tcOK -- dupe check, oh well
-      | otherwise = tcFail ty
-    paramCheck (TySpec pspec) _ check = do
-      checked <- check pspec
-      if checked == spec then tcOK else tcFail checked
-    checkList [] lty = return $ TySpec lty
-    checkList es lty = return $ TySpec $ TyList $
+    paramCheck pspec pty check | pspec == pty = tcOK -- dupe check as below, for totality
+                               | (not (isUnconstrainedTy pty)) = tcFail ty -- unequal constrained fails
+                               | otherwise = do
+                                   checked <- check pspec
+                                   if checked == spec then tcOK else tcFail checked
+    checkList [] lty = return lty
+    checkList es lty = return $ TyList $
                     case nub (map typeof es) of
-                      [] -> TySpec lty
-                      [Right a] -> TySpec a
+                      [] -> lty
+                      [Right a] -> a
                       _ -> TyAny
   case (spec,ty,t) of
-    (_,_,_) | spec == TySpec ty -> tcOK -- identical types always OK
+    (_,_,_) | spec == ty -> tcOK -- identical types always OK
     (TyAny,_,_) -> tcOK -- var args are untyped
     (TyVar {..},_,_) ->
-      if null _tyConstraint || ty `elem` _tyConstraint
-      then return $ Just (_tyId,TySpec ty) -- collect found types under vars
+      if spec `canUnifyWith` ty
+      then return $ Just (_tyVar,ty) -- collect found types under vars
       else tcFail ty -- constraint failed
-    (TySpec (TyList lspec),TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
-    (TySpec (TySchema TyObject ospec),TySchema TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
+    (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
+    (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
     _ -> tcFail ty
 
 
-checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Term Name -> Eval e (Type (TermType (Term Name)))
-checkUserType total i ps tu@TUserType {..} = do
+checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
+checkUserType total i ps (TyUser tu@TUserType {..}) = do
   let uty = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
@@ -376,7 +375,7 @@ checkUserType total i ps tu@TUserType {..} = do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
     unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tUserTypeName ++ "}: " ++ show (M.elems missing)
   typecheck aps
-  return $ TySpec $ TySchema TyObject $ TySpec tu
+  return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
 
 

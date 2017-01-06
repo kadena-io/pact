@@ -41,9 +41,9 @@ dbDefs :: Eval e NativeDef
 dbDefs = do
   let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
-      rt = TyVar "r" []
-      tableTy = TySpec $ TySchema TyTable rt
-      rowTy = TySpec $ TySchema TyObject rt
+      rt = mkSchemaVar "row"
+      tableTy = TySchema TyTable rt
+      rowTy = TySchema TyObject rt
 
   foldDefs
     [defRNative "create-table" createTable'
@@ -66,16 +66,16 @@ dbDefs = do
 
     ,defRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
-      funType rowTy [("table",tableTy),("key",tTyString),("columns",tTyList tTyString)])
+      funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
      "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
      \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defRNative "keys" keys'
-     (funType (tTyList tTyString) [("table",tableTy)])
+     (funType (TyList tTyString) [("table",tableTy)])
      "Return all keys in TABLE. `$(keys 'accounts)`"
 
     ,defRNative "txids" txids'
-     (funType (tTyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
+     (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
@@ -88,7 +88,7 @@ dbDefs = do
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
 
     ,defRNative "txlog" txlog
-     (funType (tTyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
+     (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
     ,defRNative "describe-table" descTable
      (funType tTyValue [("table",tTyString)]) "Get metadata for TABLE"
@@ -203,7 +203,7 @@ write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
   case _tTableType of
     TyAny -> return ()
     TyVar {} -> return ()
-    TySpec tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
+    tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
   success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
 write _ i as = argsError i as
 

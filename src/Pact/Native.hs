@@ -71,21 +71,21 @@ langDefs = foldDefs
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
     ,defNative "map" map'
-     (funType (tTyList a) [("app",lam b a),("list",tTyList a)])
+     (funType (TyList a) [("app",lam b a),("list",TyList a)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
-     (funType a [("app",lam2 b b a),("init",a),("list",tTyList b)])
+     (funType a [("app",lam2 b b a),("init",a),("list",TyList b)])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
 
     ,defRNative "list" list
-     (funType (tTyList TyAny) [("elems",TyAny)])
+     (funType (TyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. `(list 1 2 3)`"
 
     ,defNative "filter" filter'
-     (funType (tTyList a) [("app",lam a tTyBool),("list",tTyList a)])
+     (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
@@ -105,11 +105,11 @@ langDefs = foldDefs
      "Drop COUNT values from LIST (or string). If negative, drop from end.\
      \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
 
-    ,defRNative "remove" remove (funType (tTyObject (TyVar "o" [])) [("key",tTyString),("object",tTyObject (TyVar "o" []))])
+    ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",tTyList (TyVar "l" []))] <>
-                          funType a [("idx",tTyString),("object",tTyObject (TyVar "o" []))])
+    ,defRNative "at" at' (funType a [("idx",tTyInteger),("list",TyList (mkTyVar "l" []))] <>
+                          funType a [("idx",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
@@ -144,21 +144,21 @@ langDefs = foldDefs
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative (specialForm Bind) bind (funType a [("src",tTyObject (TyVar "o" [])),("bindings",tTyBinding),("body",TyAny)])
+    ,defNative (specialForm Bind) bind (funType a [("src",tTyObject (mkSchemaVar "o")),("bindings",tTyBinding),("body",TyAny)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
-    ,defRNative "list-modules" listModules (funType (tTyList tTyString) []) "List modules available for loading."
+    ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
     ]
-    where a = TyVar "a" []
-          b = TyVar "b" []
-          c = TyVar "c" []
-          listA = TyVar "a" [TyList (TyVar "l" []),TyPrim TyString,TySchema TyObject (TyVar "o" [])]
-          listStringA = TyVar "a" [TyList (TyVar "l" []),TyPrim TyString]
+    where a = mkTyVar "a" []
+          b = mkTyVar "b" []
+          c = mkTyVar "c" []
+          listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
+          listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
           takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
-          lam x y = TySpec $ TyFun $ funType' y [("x",x)]
-          lam2 x y z = TySpec $ TyFun $ funType' z [("x",x),("y",y)]
+          lam x y = TyFun $ funType' y [("x",x)]
+          lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
           isTy t = funType t [("val",t)]
 
 

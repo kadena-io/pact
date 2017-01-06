@@ -90,16 +90,16 @@ expr = do
 qualified :: (Monad m,TokenParsing m) => m String
 qualified = char '.' *> ident style
 
-typed :: (Monad m,TokenParsing m) => m (Type (TermType TypeName))
+typed :: (Monad m,TokenParsing m) => m (Type TypeName)
 typed = do
   _ <- char ':'
   spaces
-  TySpec <$> parseType
+  parseType
 
-parseType :: (Monad m,TokenParsing m) => m (TermType TypeName)
+parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
 parseType =
-  (char '[' >> parseType >>= \t -> char ']' >> return (TyList $ TySpec t) <?> "typed list") <|>
-  (char '{' >> ident style >>= \t -> char '}' >> return (TySchema TyObject (TySpec (fromString t))) <?> "user type") <|>
+  (char '[' >> parseType >>= \t -> char ']' >> return (TyList t) <?> "typed list") <|>
+  (char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type") <|>
   symbol tyInteger *> return (TyPrim TyInteger) <|>
   symbol tyDecimal *> return (TyPrim TyDecimal) <|>
   symbol tyTime *> return (TyPrim TyTime) <|>
@@ -233,10 +233,10 @@ doDef es defType ai i =
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn cm defType dty db ddocs i
 
-freshTyVar :: Compile (Type (TermType (Term Name)))
+freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
   c <- state (view csFresh &&& over csFresh succ)
-  return $ TyVar (cToTV c) []
+  return $ mkTyVar (cToTV c) []
 
 cToTV :: Int -> String
 cToTV n | n < 26 = [toC n]
@@ -247,9 +247,9 @@ cToTV n | n < 26 = [toC n]
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
-maybeTyVar :: Maybe (Type (TermType TypeName)) -> Compile (Type (TermType (Term Name)))
+maybeTyVar :: Maybe (Type TypeName) -> Compile (Type (Term Name))
 maybeTyVar Nothing = freshTyVar
-maybeTyVar (Just t) = return (fmap (fmap (return . Name . asString)) t)
+maybeTyVar (Just t) = return (fmap (return . Name . asString) t)
 
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
@@ -324,7 +324,7 @@ doTable es i = case es of
     mkT tn ty docs = do
       cm <- currentModule i
       tty :: Type (Term Name) <- case ty of
-        Just (TySpec (TySchema _ (TySpec ot))) -> return $ TySpec (return (Name (asString ot)))
+        Just (TyUser ot) -> return $ TyUser (return (Name (asString ot)))
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (fromString tn) cm tty docs i

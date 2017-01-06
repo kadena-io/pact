@@ -184,23 +184,17 @@ instance Show TypeName where show (TypeName s) = show s
 
 data Arg o = Arg {
   _aName :: String,
-  _aType :: Type (TermType o),
+  _aType :: Type o,
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (Arg o) where show (Arg n t _) = n ++ ":" ++ show t
 
-traverseArg :: Applicative m => (a -> m b) -> Arg a -> m (Arg b)
-traverseArg f (Arg a t i) = Arg a <$> traverse (traverseTermType f) t <*> pure i
-
 data FunType o = FunType {
   _ftArgs :: [Arg o],
-  _ftReturn :: Type (TermType o)
+  _ftReturn :: Type o
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
-
-traverseFunType :: Applicative m => (a -> m b) -> FunType a -> m (FunType b)
-traverseFunType f (FunType as r) = FunType <$> traverse (traverseArg f) as <*> traverse (traverseTermType f) r
 
 type FunTypes o = NonEmpty (FunType o)
 funTypes :: FunType o -> FunTypes o
@@ -257,51 +251,89 @@ instance Show SchemaType where
   show TyTable = tyTable
   show TyObject = tyObject
 
-data Type o =
+newtype TypeVarName = TypeVarName { _typeVarName :: String }
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable)
+instance Show TypeVarName where show = _typeVarName
+
+data TypeVar v =
+  TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
+  SchemaVar { _tvName :: TypeVarName }
+  deriving (Functor,Foldable,Traversable)
+instance Eq (TypeVar v) where
+  (TypeVar a _) == (TypeVar b _) = a == b
+  (SchemaVar a) == (SchemaVar b) = a == b
+  _ == _ = False
+instance Ord (TypeVar v) where
+  x `compare` y = case (x,y) of
+    (TypeVar {},SchemaVar {}) -> LT
+    (SchemaVar {},TypeVar {}) -> GT
+    (TypeVar a _,TypeVar b _) -> a `compare` b
+    (SchemaVar a,SchemaVar b) -> a `compare` b
+instance Show v => Show (TypeVar v) where
+  show (TypeVar n []) = "<" ++ show n ++ ">"
+  show (TypeVar n cs) = "<" ++ show n ++ show cs ++ ">"
+  show (SchemaVar n) = "<{" ++ show n ++ "}>"
+
+
+data Type v =
   TyAny |
-  TySpec { _tySpec :: o } |
-  TyVar { _tyId :: String, _tyConstraint :: [o] }
-     deriving (Eq,Ord,Functor,Foldable,Traversable)
-instance Show o => Show (Type o) where
-  show TyAny = "*"
-  show (TySpec o) = show o
-  show (TyVar i []) = "<" ++ i ++ ">"
-  show (TyVar i c) = "<" ++ i ++ "=(" ++ intercalate "|" (map show c) ++ ")>"
-instance Default (Type o) where def = TyAny
-
-isAnyTy :: Type n -> Bool
-isAnyTy TyAny = True
-isAnyTy _ = False
-
-data TermType v =
+  TyVar { _tyVar :: TypeVar v } |
   TyPrim PrimType |
-  TyList { _ttListType :: Type (TermType v) } |
+  TyList { _ttListType :: Type v } |
   TySchema { _ttSchema :: SchemaType, _ttSchemaType :: Type v } |
   TyFun { _ttFunType :: FunType v } |
-  TyUser { _ttUser :: v } -- reserved for enums etc
+  TyUser { _ttUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable)
-instance (Show v) => Show (TermType v) where
+instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
   show (TyList t) | isAnyTy t = tyList
                   | otherwise = "[" ++ show t ++ "]"
   show (TySchema s t) | isAnyTy t = show s
                       | otherwise = case s of
                           TyTable -> "table:" ++ show t
-                          TyObject -> "{" ++ show t ++ "}"
+                          TyObject -> "object:" ++ show t
   show (TyFun f) = show f
   show (TyUser v) = show v
+  show TyAny = "*"
+  show (TyVar n) = show n
 
-traverseTermType :: Applicative m => (a -> m b) -> TermType a -> m (TermType b)
-traverseTermType _ (TyPrim t) = pure $ TyPrim t
-traverseTermType f (TyList l) = TyList <$> traverse (traverseTermType f) l
-traverseTermType f (TySchema s t) = TySchema s <$> traverse f t
-traverseTermType f (TyFun ft) = TyFun <$> traverseFunType f ft
-traverseTermType f t@TyUser {} = traverse f t
+mkTyVar :: String -> [Type n] -> Type n
+mkTyVar n cs = TyVar (TypeVar (fromString n) cs)
+mkTyVar' :: String -> Type n
+mkTyVar' n = mkTyVar n []
+mkSchemaVar :: String -> Type n
+mkSchemaVar n = TyVar (SchemaVar (fromString n))
+
+isAnyTy :: Type v -> Bool
+isAnyTy TyAny = True
+isAnyTy _ = False
+
+isVarTy :: Type v -> Bool
+isVarTy TyVar {} = True
+isVarTy _ = False
+
+isUnconstrainedTy :: Type v -> Bool
+isUnconstrainedTy TyAny = True
+isUnconstrainedTy (TyVar (TypeVar _ [])) = True
+isUnconstrainedTy _ = False
+
+-- | a `canUnifyWith` b means a "can represent/contains" b
+canUnifyWith :: Eq n => Type n -> Type n -> Bool
+canUnifyWith TyAny _ = True
+canUnifyWith _ TyAny = True
+canUnifyWith (TyVar (SchemaVar _)) TyUser {} = True
+canUnifyWith (TyVar SchemaVar {}) (TyVar SchemaVar {}) = True
+canUnifyWith (TyVar (TypeVar _ ac)) (TyVar (TypeVar _ bc)) = all (`elem` ac) bc
+canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
+canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
+canUnifyWith (TySchema _ a) (TySchema _ b) = a `canUnifyWith` b
+canUnifyWith a b = a == b
 
 makeLenses ''Type
 makeLenses ''FunType
 makeLenses ''Arg
-makeLenses ''TermType
+makeLenses ''TypeVar
+makeLenses ''TypeVarName
 
 instance Show o => PP.Pretty (Type o) where pretty = PP.string . show
 
@@ -311,7 +343,7 @@ data Exp = ELiteral { _eLiteral :: !Literal, _eInfo :: !Info }
            | ESymbol { _eSymbol :: !String, _eInfo :: !Info }
            | EAtom { _eAtom :: !String
                    , _eQualifier :: !(Maybe String)
-                   , _eType :: !(Maybe (Type (TermType TypeName)))
+                   , _eType :: !(Maybe (Type TypeName))
                    , _eInfo :: !Info }
            | EList { _eList :: ![Exp], _eInfo :: !Info }
            | EObject { _eObject :: ![(Exp,Exp)], _eInfo :: !Info }
@@ -443,7 +475,7 @@ data Term n =
     } |
     TList {
       _tList :: ![Term n]
-    , _tListType :: Type (TermType (Term n))
+    , _tListType :: Type (Term n)
     , _tInfo :: !Info
     } |
     TDef {
@@ -567,7 +599,7 @@ instance Applicative Term where
 instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule m (b >>>= f) i
-    TList bs t i >>= f = TList (map (>>= f) bs) (fmap (fmap (>>= f)) t) i
+    TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (c >>= f) t i
@@ -615,13 +647,13 @@ instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
 
-toTermList :: (ToTerm a,Foldable f) => Type (TermType (Term b)) -> f a -> Term b
+toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
 toTermList ty l = TList (map toTerm (toList l)) ty def
 
 
 
 
-typeof :: Term a -> Either String (TermType (Term a))
+typeof :: Term a -> Either String (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule {} -> Left "module"

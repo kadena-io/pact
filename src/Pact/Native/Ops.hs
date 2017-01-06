@@ -63,13 +63,13 @@ opDefs = foldDefs
     ,defTrunc "floor" "Rounds down" floor
     ]
     where eqTy = binTy tTyBool eqA eqA
-          eqA = TyVar "a" [TyPrim TyInteger,TyPrim TyString,TyPrim TyTime,TyPrim TyDecimal,TyPrim TyBool,
-                           TyList (TyVar "l" []),TySchema TyObject (TyVar "o" []),TyPrim TyKeySet]
+          eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
+                           TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
           numA = numV "a"
-          numV a = TyVar a [TyPrim TyInteger,TyPrim TyDecimal]
+          numV a = mkTyVar a [tTyInteger,tTyDecimal]
           coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
           unaryNumTys = unaryTy numA numA
-          plusA = TyVar "a" [TyPrim TyString,TyList (TyVar "l" []),TySchema TyObject (TyVar "o" [])]
+          plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
           plusTy = coerceBinNum <> binTy plusA plusA plusA
           unopTy = unaryTy numA numA
 
@@ -101,15 +101,15 @@ eq f _ [a,b] = return $ toTerm $ f (a `termEq` b)
 eq _ i as = argsError i as
 {-# INLINE eq #-}
 
-unaryTy :: Type (TermType n) -> Type (TermType n) -> FunTypes n
+unaryTy :: Type n -> Type n -> FunTypes n
 unaryTy rt ta = funType rt [("x",ta)]
-binTy :: Type (TermType n) -> Type (TermType n) -> Type (TermType n) -> FunTypes n
+binTy :: Type n -> Type n -> Type n -> FunTypes n
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> Eval e (String,Term Name)
 defCmp o f = let o' = asString o
                  ex a' b = " `(" ++ o' ++ " " ++ a' ++ " " ++ b ++ ")`"
-                 a = TyVar "a" [TyPrim TyInteger,TyPrim TyDecimal,TyPrim TyString,TyPrim TyTime]
+                 a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]
              in
              defRNative o f (binTy tTyBool a a) $
              "True if X " ++ o' ++ " Y." ++
