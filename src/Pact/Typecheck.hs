@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -77,6 +78,8 @@ instance Ord TcId where
 instance Show TcId where show TcId {..} = _tiName ++ show _tiId
 instance Pretty TcId where pretty = string . show
 
+die' i = die (_tiInfo i)
+
 data VarType = Spec { _vtSpec :: Type UserType } |
                Overload { _vtRole :: VarRole, _vtOverApp :: TcId }
              deriving (Eq,Ord)
@@ -109,6 +112,13 @@ freeVarType :: VarType -> S.Set (TypeVar UserType)
 freeVarType v = walkVarType' v $ \vt -> case vt of
   Spec (TyVar n) -> sing n
   _ -> mempty
+
+freeType :: Type n -> S.Set (TypeVar n)
+freeType (TyVar v) = sing v
+freeType (TyList l) = freeType l
+freeType (TySchema _ o) = freeType o
+freeType (TyFun FunType {..}) = mconcat (map (freeType . _aType) _ftArgs) <> freeType _ftReturn
+freeType _ = mempty
 
 instance Substitutable VarType where
   applySubst s vt = case vt of
@@ -173,24 +183,24 @@ makeLenses ''VarType
 
 -- | The unification of two 'VarType's is the most general substitution that can be
 -- applied to both of them in order to yield the same result.
-unify :: forall m . MonadThrow m => (VarType, VarType) -> m Subst
-unify ab = case ab of
-  (Spec a,Spec b) -> unifyTy (a,b)
+unifyHM :: forall m . MonadThrow m => (VarType, VarType) -> m Subst
+unifyHM ab = case ab of
+  (Spec a,Spec b) -> unifyHMTy (a,b)
   (_,_) -> pure mempty
   where
     cannotUnify :: MonadThrow m => Show s => s -> m a
-    cannotUnify bad = die def $ "Cannot unify: " ++ show bad
-    unifyTy ts = case ts of
+    cannotUnify bad = die def $ "Cannot unifyHM: " ++ show bad
+    unifyHMTy ts = case ts of
       (TyAny,_) -> pure mempty
       (_,TyAny) -> pure mempty
       (TyVar v,x) -> bindVariableTo v x
       (x,TyVar v) -> bindVariableTo v x
       (TyPrim a,TyPrim b) | a == b -> pure mempty
-      (TyList a,TyList b) -> unifyTy (a,b)
-      (TySchema _ a,TySchema _ b) -> unifyTy (a,b)
-      (TyFun a,TyFun b) -> unifyFuns (a,b)
+      (TyList a,TyList b) -> unifyHMTy (a,b)
+      (TySchema _ a,TySchema _ b) -> unifyHMTy (a,b)
+      (TyFun a,TyFun b) -> unifyHMFuns (a,b)
       (_,_) -> cannotUnify ts
-    unifyFuns _ = die def "unifyFuns TODO"
+    unifyHMFuns _ = die def "unifyHMFuns TODO"
 
 -- | Build a 'Subst'itution that binds a '(TypeVar UserType)' of a 'TyVar' to an 'VarType'.
 bindVariableTo :: MonadThrow m => (TypeVar UserType) -> Type UserType -> m Subst
@@ -233,7 +243,9 @@ data TcState = TcState {
   _tcVars :: M.Map TcId TypeSet,
   _tcOverloads :: M.Map TcId (FunTypes UserType),
   _tcPivot :: Pivot TcId,
-  _tcFailures :: S.Set CheckerException
+  _tcFailures :: S.Set CheckerException,
+  _tcAstToVar :: M.Map TcId (Type UserType),
+  _tcVarToTypes :: M.Map (TypeVar UserType) (S.Set VarType)
   } deriving (Eq,Show)
 
 infixr 5 <$$>
@@ -246,15 +258,20 @@ sshow = text . show
 for :: [a] -> (a -> b) -> [b]
 for = flip map
 
-instance Default TcState where def = TcState 0 def def def def
+instance Default TcState where def = TcState 0 def def def def def def
 instance Pretty TcState where
-  pretty TcState {..} = string "Vars:" <$$>
+  pretty TcState {..} = "Vars:" <$$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) <$$>
-    string "Overloads:" <$$>
+    "Overloads:" <$$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
                            align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
     pretty _tcPivot <$$>
-    string "Failures:" <$$> indent 2 (vsep $ map (string.show) (toList _tcFailures))
+    "AstToVar:" <$$>
+    indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> sshow v) (M.toList _tcAstToVar))) <$$>
+    "VarToTypes:" <$$>
+    indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> sshow v) $ M.toList $ M.map S.toList _tcVarToTypes) <$$>
+    "Failures:" <$$>
+    indent 2 (vsep $ map (string.show) (toList _tcFailures))
     <> hardline
 
 
@@ -758,7 +775,7 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let FunType {..} = mangleFunType i ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t) >> assocAST (_aId aa) aa) _ftArgs as
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t) {- >> assocAST (_aId aa) aa -}) _ftArgs as
       assocTy i (Spec _ftReturn)
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
@@ -795,6 +812,14 @@ substAppDefun _ _ t = return t
 lookupIdTys :: TcId -> TC TypeSet
 lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
+astToTy :: AST n -> Maybe (Type UserType)
+astToTy Prim {..} = Just $ TyPrim _aPrimType
+astToTy Var {} = Nothing
+astToTy Object {..} = Just $ TySchema TyObject _aUserType
+astToTy List {..} = Just $ TyList _aListType
+astToTy App {} = Nothing
+astToTy Binding {} = Nothing
+astToTy Table {..} = Just $ TySchema TyTable _aUserType
 
 tcToTy :: AST TcId -> TC TypeSet
 tcToTy Prim {..} = return $ sing $ Spec $ TyPrim _aPrimType
@@ -806,27 +831,107 @@ tcToTy Binding {..} = lookupIdTys _aId
 tcToTy Table {..} = return $ sing $ Spec $ TySchema TyTable _aUserType
 
 -- | Track type to id
-trackVar :: TcId -> Type UserType -> TC ()
-trackVar i t = do
+trackAST :: TcId -> Type UserType -> TC ()
+trackAST i t = do
   old <- M.lookup i <$> use tcVars
   case old of
     Nothing -> return ()
     Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
   tcVars %= M.insert i (sing $ Spec t)
+  trackAST' i t
+
+trackAST' :: TcId -> Type UserType -> TC ()
+trackAST' i t = do
+  tcAstToVar %= M.insert i t
+  case t of
+    TyVar v -> tcVarToTypes %= M.insertWith mappend v (sing (Spec t))
+    _ -> return ()
 
 getParamTypes :: VarType -> [Type UserType]
 getParamTypes t = walkVarType' t $ \pt -> case pt of
   Spec s | pt /= t && s /= TyAny -> [s]
   _ -> []
 
+addFailure :: TcId -> String -> TC ()
+addFailure i s = tcFailures %= S.insert (CheckerException (_tiInfo i) s)
+
+lookupAst :: String -> TcId -> TC (Type UserType)
+lookupAst msg i = maybe (die' i $ msg ++ ": ast not already tracked: " ++ show i) return =<<
+                  (M.lookup i <$> use tcAstToVar)
 
 -- | Track type to id with typechecking
 assocTy :: TcId -> VarType -> TC ()
-assocTy i vt = assocTys i (sing vt)
+assocTy i vt = do
+  assocTys i (sing vt) -- old way
+  ty <- lookupAst "assocTy" i
+{-  case ty of
+    TyVar v -> do
+      tcVarToTypes %= M.insertWith mappend v (sing vt)
+    _ -> debug  -}
+  debug $ show ("assocTy",i,ty,vt)
+  return ()
 
 -- | Track ast type to id with typechecking
 assocAST :: TcId -> AST TcId -> TC ()
-assocAST i a = tcToTy a >>= assocTys i
+assocAST ai b = do
+  tcToTy b >>= assocTys ai -- old way
+  let bi = _aId b
+  aty <- lookupAst "assocAST" ai
+  bty <- lookupAst "assocAST" bi
+  let doSub si sty fi fty = do
+        debug $ "assocAST: substituting " ++ show (si,sty) ++ " for " ++ show (fi,fty)
+        tcAstToVar %= M.insert fi sty
+        case fty of
+          TyVar fv -> do
+            tm <- M.lookup fv <$> use tcVarToTypes
+            case tm of
+              Nothing -> return ()
+              Just fTys -> do
+                tcVarToTypes %= M.delete fv
+                case sty of
+                  TyVar sv -> tcVarToTypes %= M.insertWith mappend sv fTys
+                  _ -> return ()
+          _ -> return ()
+  case unifyTypes aty bty of
+    Nothing -> addFailure bi $ "Cannot unify: " ++ show (aty,bty)
+    Just (Left _) -> doSub ai aty bi bty
+    Just (Right _) -> doSub bi bty ai aty
+
+
+
+unifyVarTypes :: VarType -> VarType -> Maybe (Either VarType VarType)
+unifyVarTypes l r = case (l,r) of
+  _ | l == r -> Just (Right r)
+  (Spec a,Spec b) -> fmap (either (Left . Spec) (Right . Spec)) (unifyTypes a b)
+  _ -> Nothing
+
+unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
+unifyTypes l r = case (l,r) of
+  _ | l == r -> Just (Right r)
+  (TyAny,_) -> Just (Right r)
+  (_,TyAny) -> Just (Left l)
+  (TyVar v,s) -> unifyVar Left Right v s
+  (s,TyVar v) -> unifyVar Right Left v s
+  (TyList a,TyList b) -> unifyParam a b
+  (TySchema sa a,TySchema sb b) | sa == sb -> unifyParam a b
+  _ -> Nothing
+  where
+    unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
+    unifyVar vc sc v s =
+      let vWins = Just (vc (TyVar v))
+          sWins = Just (sc s)
+      in case (v,s) of
+        (SchemaVar {},TyUser {}) -> sWins
+        (SchemaVar {},TyVar SchemaVar {}) -> sWins
+        (SchemaVar {},_) -> Nothing
+        (TypeVar {},TyVar SchemaVar {}) -> Nothing
+        (TypeVar {},TyUser {}) -> Nothing
+        (TypeVar _ ac,TyVar (TypeVar _ bc)) | all (`elem` ac) bc -> sWins
+                                            | all (`elem` bc) ac -> vWins
+                                            | otherwise -> Nothing
+        (TypeVar _ ac,_) | null ac || s `elem` ac -> sWins
+        _ -> Nothing
+
 
 -- | Track types to id with typechecking
 -- TODO figure out better error messages. The type being added
@@ -876,7 +981,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
-    trackVar an t'
+    trackAST an t'
     return an
   tcs <- scopeToBody _tInfo (map (\ai -> Var ai ai) args) _tDefBody
   ft' <- traverse toUserType _tFunType
@@ -899,7 +1004,7 @@ toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
-  trackVar i $ idTyVar i
+  trackAST i $ idTyVar i
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
@@ -911,11 +1016,11 @@ toAST TApp {..} = do
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
-  trackVar bi $ idTyVar bi
+  trackAST bi $ idTyVar bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     an <- freshId ai (pfx (show bi) n)
     t' <- mangleType an <$> traverse toUserType t
-    trackVar an t'
+    trackAST an t'
     case _tBindCtx of
       BindLet -> do
         v' <- toAST v
@@ -928,23 +1033,34 @@ toAST TBinding {..} = do
     BindKV -> return () -- TODO check it out
   return $ Binding bi bs bb _tBindCtx
 
-toAST TList {..} = List <$> freshId _tInfo "list" <*> mapM toAST _tList <*> traverse toUserType _tListType
-toAST TObject {..} = Object <$> freshId _tInfo "object" <*>
-                       mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> traverse toUserType _tUserType
+toAST TList {..} = do
+  i <- freshId _tInfo "list"
+  ty <- traverse toUserType _tListType
+  trackAST i ty
+  List i <$> mapM toAST _tList <*> pure ty
+toAST TObject {..} = do
+  i <- freshId _tInfo "object"
+  ty <- traverse toUserType _tUserType
+  trackAST i ty
+  Object i <$> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> pure ty
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
-toAST TKeySet {..} = freshId _tInfo "keyset" >>= \i -> return $ Prim i TyKeySet (PrimKeySet _tKeySet)
-toAST TValue {..} = freshId _tInfo "value" >>= \i -> return $ Prim i TyValue (PrimValue _tValue)
-toAST TLiteral {..} = do
-  let ty = litToPrim _tLiteral
-  i <- freshId _tInfo (show ty)
-  trackVar i (TyPrim ty)
-  return $ Prim i ty (PrimLit _tLiteral)
+toAST TKeySet {..} = trackPrim _tInfo TyKeySet (PrimKeySet _tKeySet)
+toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
+toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   i <- freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName)
-  Table i <$> traverse toUserType _tTableType
+  ty <- traverse toUserType _tTableType
+  trackAST i ty
+  return $ Table i ty
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = die _tInfo "TODO steps/pacts"
+
+trackPrim :: Info -> PrimType -> PrimValue -> TC (AST TcId)
+trackPrim inf ty v = do
+  i <- freshId inf (show ty)
+  trackAST i (TyPrim ty)
+  return $ Prim i ty v
 
 
 toUserType :: Term (Either Ref (AST TcId)) -> TC UserType
