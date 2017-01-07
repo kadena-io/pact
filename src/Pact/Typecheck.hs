@@ -82,7 +82,9 @@ die' :: MonadThrow m => TcId -> String -> m a
 die' i = die (_tiInfo i)
 
 data Overloaded = Overloaded { _oRole :: VarRole, _oOverApp :: TcId }
- deriving (Eq,Show,Ord)
+ deriving (Eq,Ord)
+instance Show Overloaded where
+  show (Overloaded r ts) = show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
 
 data VarType = Spec { _vtSpec :: Type UserType } |
                Overload { _vtOverload :: Overloaded }
@@ -91,8 +93,8 @@ data VarType = Spec { _vtSpec :: Type UserType } |
 
 instance Show VarType where
   show (Spec t) = show t
-  show (Overload (Overloaded r ts)) =
-    show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
+  show (Overload o) = show o
+
 
 instance Pretty VarType where pretty = string . show
 
@@ -124,97 +126,9 @@ freeType (TySchema _ o) = freeType o
 freeType (TyFun FunType {..}) = mconcat (map (freeType . _aType) _ftArgs) <> freeType _ftReturn
 freeType _ = mempty
 
-instance Substitutable VarType where
-  applySubst s vt = case vt of
-    Spec v -> Spec $ applySubst s v
-    _ -> vt
-
-
-instance Substitutable (Type UserType) where
-  applySubst s@(Subst sm) v = case v of
-      (TyVar n) -> case M.lookup n sm of
-        Just (Spec t) -> t -- TODO check schema vs normal
-        _ -> v
-      t@(TyList {}) -> over (ttListType) (applySubst s) t
-      t@(TySchema {}) -> over (ttSchemaType) (applySubst s) t
-      t@((TyFun FunType {})) ->
-        over (ttFunType . ftArgs . traverse . aType) (applySubst s) .
-        over (ttFunType . ftReturn) (applySubst s) $ t
-      _ -> v
-
-
-class Substitutable a where
-    applySubst :: Subst -> a -> a
-
-newtype Subst = Subst { _subst :: M.Map (TypeVar UserType) VarType }
-
-instance Substitutable Subst where
-    applySubst s (Subst target) = Subst $ fmap (applySubst s) target
-
--- | Combine two substitutions by applying all substitutions mentioned in the
--- first argument to the type variables contained in the second.
-instance Monoid Subst where
-  a `mappend` b = Subst . M.union (_subst a) . _subst $ applySubst a b
-  mempty = Subst mempty
-
-
-data PType = Forall (S.Set (TypeVar UserType)) VarType
-freePType :: PType -> S.Set (TypeVar UserType)
-freePType (Forall qs mType) = freeVarType mType `S.difference` qs
-
-instance Substitutable PType where
-    applySubst (Subst subst) (Forall qs mType) =
-        let qs' = M.fromSet (const ()) qs
-            subst' = Subst (subst `M.difference` qs')
-        in Forall qs (applySubst subst' mType)
-
-newtype Env = Env (M.Map (TypeVar UserType) PType)
-
-freeEnv :: Env -> S.Set (TypeVar UserType)
-freeEnv (Env env) = let allPTypes = M.elems env
-                    in S.unions (map freePType allPTypes)
-
-
-
--- | Performing a 'Subst'itution in an 'Env'ironment means performing that
--- substituion on all the contained 'PType's.
-instance Substitutable Env where
-    applySubst s (Env env) = Env (M.map (applySubst s) env)
 
 
 makeLenses ''VarType
-
-
--- | The unification of two 'VarType's is the most general substitution that can be
--- applied to both of them in order to yield the same result.
-unifyHM :: forall m . MonadThrow m => (VarType, VarType) -> m Subst
-unifyHM ab = case ab of
-  (Spec a,Spec b) -> unifyHMTy (a,b)
-  (_,_) -> pure mempty
-  where
-    cannotUnify :: MonadThrow m => Show s => s -> m a
-    cannotUnify bad = die def $ "Cannot unifyHM: " ++ show bad
-    unifyHMTy ts = case ts of
-      (TyAny,_) -> pure mempty
-      (_,TyAny) -> pure mempty
-      (TyVar v,x) -> bindVariableTo v x
-      (x,TyVar v) -> bindVariableTo v x
-      (TyPrim a,TyPrim b) | a == b -> pure mempty
-      (TyList a,TyList b) -> unifyHMTy (a,b)
-      (TySchema _ a,TySchema _ b) -> unifyHMTy (a,b)
-      (TyFun a,TyFun b) -> unifyHMFuns (a,b)
-      (_,_) -> cannotUnify ts
-    unifyHMFuns _ = die def "unifyHMFuns TODO"
-
--- | Build a 'Subst'itution that binds a '(TypeVar UserType)' of a 'TyVar' to an 'VarType'.
-bindVariableTo :: MonadThrow m => (TypeVar UserType) -> Type UserType -> m Subst
-bindVariableTo name (TyVar v) | name == v = pure mempty
-bindVariableTo name mType | name `occursIn` mType =
-                              die def $ "Occurs check failed for " ++ show name ++ " in " ++ show mType
-  where
-    n `occursIn` ty = n `S.member` freeVarType (Spec ty)
-bindVariableTo name mType = pure (Subst (M.singleton name (Spec mType)))
-
 
 
 
@@ -241,10 +155,13 @@ instance Pretty (Pivot a) where
                          indent 4 (hsep (map (string . show) (toList v)))) $ M.toList _pSetMap)
 
 
-data Types = Types {
+data Types o = Types {
   _tsPlain :: Type UserType,
-  _tsOverloads :: [Overloaded]
-  } deriving (Eq,Show,Ord)
+  _tsOverloads :: [o]
+  } deriving (Eq,Ord)
+instance Show o => Show (Types o) where
+  show (Types p []) = show p
+  show (Types p os) = show p ++ " " ++ show os
 
 
 data TcState = TcState {
@@ -254,7 +171,7 @@ data TcState = TcState {
   _tcPivot :: Pivot TcId,
   _tcFailures :: S.Set CheckerException,
   _tcAstToVar :: M.Map TcId (Type UserType),
-  _tcVarToTypes :: M.Map (TypeVar UserType) Types
+  _tcVarToTypes :: M.Map (TypeVar UserType) (Types Overloaded)
   } deriving (Eq,Show)
 
 infixr 5 <$$>
@@ -405,45 +322,6 @@ makeLenses ''Fun
 
 runTC :: TC a -> IO (a, TcState)
 runTC a = runStateT (unTC a) def
-
-
-inferTop :: Env -> AST TcId -> TC (Subst,VarType)
-inferTop env a = case a of
-  Prim i t v -> inferLit t
-  Var _ n -> inferVar env n
-
-inferLit :: PrimType -> TC (Subst,VarType)
-inferLit p = pure (mempty,Spec $ TyPrim p)
-
-inferVar :: Env -> TcId -> TC (Subst,VarType)
-inferVar env name = do
-  sigma <- lookupEnv env (TypeVar (fromString $ show name) []) -- TODO)
-  tau <- instantiateHM sigma
-  pure (mempty,tau)
-
-lookupEnv :: Env -> (TypeVar UserType) -> TC PType
-lookupEnv (Env env) name = case M.lookup name env of
-    Just x  -> pure x
-    Nothing -> die def $ "Unknown identifier: " ++ show name
-
--- | Bind all quantified variables of a 'PType' to 'fresh' type variables.
-instantiateHM :: PType -> TC VarType
-instantiateHM (Forall qs t) = do
-    subst <- substituteAllWithFresh qs
-    pure (applySubst subst t)
-
-  where
-    -- For each given name, add a substitution from that name to a fresh type
-    -- variable to the result.
-    substituteAllWithFresh :: S.Set (TypeVar UserType) -> TC Subst
-    substituteAllWithFresh xs = do
-        let freshSubstActions = M.fromSet (const (return (Spec (mkTyVar' "" {- TODO -} )))) xs
-        freshSubsts <- sequenceA freshSubstActions
-        pure (Subst freshSubsts)
-
-
-
-
 
 
 data Visit = Pre | Post deriving (Eq,Show)
@@ -907,11 +785,13 @@ assocTy ai vt = do
             tcVarToTypes %= M.insert v (set tsPlain u tys)
           _ -> die' ai $ "assocTy: var not tracked: " ++ show (ai,avm,atysm)
 
+updateTyVar :: Type UserType -> Type UserType -> TC ()
 updateTyVar (TyVar uv) u = do
   debug $ "updateTyVar: " ++ show (uv,u)
   tcVarToTypes %= M.alter (maybe (Just (Types u [])) (Just . set tsPlain u)) uv
 updateTyVar _ _ = return ()
 
+assocParams :: Type UserType -> Type UserType -> TC ()
 assocParams x y = case (x,y) of
   _ | x == y -> return ()
   (TySchema _ a,TySchema _ b) -> assoc a b
