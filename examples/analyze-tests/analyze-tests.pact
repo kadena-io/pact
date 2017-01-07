@@ -27,6 +27,22 @@
 
   (defun get-balance (id:string) (read 'payments-table id 'balance))
 
+  (defun pay-with-let (from:string to:string amount:integer)
+    (with-read 'payments-table from { "balance":= from-bal }
+      (with-read 'payments-table to { "balance":= to-bal }
+        (enforce (>= from-bal amount) "Insufficient Funds")
+        (let* ((new-from-bal (- from-bal amount))
+               (new-to-bal (+ to-bal amount))
+              )
+          (update 'payments-table from
+                  { "balance": new-from-bal})
+          (update 'payments-table to
+                  { "balance": new-to-bal })
+         )
+      )
+    )
+  )
+
   (defun pay (from:string to:string amount:integer)
     (with-read 'payments-table from { "balance":= from-bal }
       (with-read 'payments-table to { "balance":= to-bal }
