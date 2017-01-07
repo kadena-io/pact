@@ -7,4 +7,12 @@
   (defun complicated-cond (a:integer b:string)
     (if (or (> a 10) (= b "foo")) "more than ten" "less than ten")
   )
+  (defun simple-let (a:integer)
+    (enforce (> a 0) "less than 0")
+    (let* ((b (+ a 10)))
+      (enforce (> a 10) "less than 10")
+      (enforce (< b 20) "greater than 20")
+      b
+    )
+  )
 )

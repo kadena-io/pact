@@ -28,7 +28,7 @@ library
                      , mtl >= 2.2.1
                      , pact
                      , parsec
-                     , show-prettyprint
+                     , groom
                      , transformers
                      , yaml
 
