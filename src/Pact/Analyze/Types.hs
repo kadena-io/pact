@@ -14,7 +14,7 @@ import Pact.Typecheck
 import Pact.Types
 import Data.Either
 import Data.Decimal
-import Data.Aeson
+import Data.Aeson hiding (Object)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -91,6 +91,14 @@ data SymAst =
   ReturnVar
     { _rvResult :: SymVar
     , _saProverState :: ProverState } |
+  ReturnUnit |
+  WithKeyset
+    { _wkKeySet :: String
+    , _saRest :: SymAst
+    , _saProverState :: ProverState } |
+  TableInsert
+    { _tiTableName :: String
+    , _saProverState :: ProverState } |
   CannotAnalyze
     { _elWhy :: String
     , _saProverState :: ProverState }
@@ -116,14 +124,28 @@ instance ToJSON SymAst where
            , "why" .= _elWhy
            ]
   toJSON ReturnLit{..} =
-    object [ "node" .= ("Return" :: String)
+    object [ "node" .= ("ReturnLit" :: String)
            , "state" .= _saProverState
            , "returned_literal" .= _rlResult
            ]
   toJSON ReturnVar{..} =
-    object [ "node" .= ("Return" :: String)
+    object [ "node" .= ("ReturnVar" :: String)
            , "state" .= _saProverState
            , "returned_variable" .= _rvResult
+           ]
+  toJSON ReturnUnit =
+    object [ "node" .= ("ReturnUnit" :: String)
+           ]
+  toJSON WithKeyset{..} =
+    object [ "node" .= ("WithKeyset" :: String)
+           , "state" .= _saProverState
+           , "required_keyset" .= _wkKeySet
+           , "rest" .= _saRest
+           ]
+  toJSON TableInsert{..} =
+    object [ "node" .= ("Insert" :: String)
+           , "state" .= _saProverState
+           , "table" .= _tiTableName
            ]
   toJSON CannotAnalyze{..} =
     object [ "node" .= ("CannotAnalyze" :: String)
@@ -174,10 +196,15 @@ isAppView :: AST (TcId, Type) -> (Bool, AST (TcId, Type))
 isAppView app@(App _ _ _) = (True, app)
 isAppView _ = (False, undefined)
 
+pattern Obj_Key_Val key' val' <- (Lit _ _ (LVLit (LString key')), val')
+
 pattern NativeFunc f <- (FNative _ f _ _)
+pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,bdy)))
 
 pattern AST_Lit lit <- (Lit _ _ (LVLit lit))
 pattern AST_Var var <- (Var _ var)
+pattern AST_KeySetName keyset' <- (Lit _ _ (LVLit (LString keyset')))
+pattern AST_Obj objName kvs <- (Object objName kvs _)
 
 pattern Args_Var var <- [AST_Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
@@ -195,6 +222,8 @@ pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App ap
 pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
 pattern ENFORCE_App_msg app' msg' <- (App _ (NativeFunc "enforce") (Args_App_Lit app' (LString msg')))
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
+pattern WITHKEYSET keyset' bdy' <- (App _ (NativeFuncSpecial "with-keyset" bdy') [AST_KeySetName keyset'])
+pattern INSERT table' key' objName' kvs' <- (App _ (NativeFunc "insert") [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
 
 varToTerm :: TcId -> PactAnalysis (Either String Smt.Term)
 varToTerm n = do
@@ -239,6 +268,8 @@ booleanAstToTerm (NativeFunc_App_App f app1 app2)
       case (op, app1', app2') of
         (Right op', Right app1'', Right app2'') -> return $ Right $ TermQualIdentifierT op' [app1'', app2'']
         err -> return $ Left $ "unable to analyze: " ++ show err
+booleanAstToTerm (AST_Lit l) = return $ literalToTerm l
+booleanAstToTerm (AST_Var (name',_)) = varToTerm name'
 booleanAstToTerm err = return $ Left "Unsupported construct found when constructing boolean-expr node"
 
 negateBoolAstTerm :: Smt.Term -> Smt.Term
@@ -310,12 +341,19 @@ analyze ((ENFORCE_App_msg app' msg'):rest) = do
     Left err -> error $ err
     Right smtTerm -> do
       trueAssert <- return $ boolTermToAssertion smtTerm
-      rest' <- local (appendSmtCmds [trueAssert]) $ analyze rest
-      return $ EnforceConstraint
-        { _ecFailsIf = msg'
-        , _saProverState = appendSmtCmds [trueAssert] initialState
-        , _saRest = rest'
-        }
+      if null rest
+        then return $ EnforceConstraint
+          { _ecFailsIf = msg'
+          , _saProverState = appendSmtCmds [trueAssert] initialState
+          , _saRest = ReturnUnit
+          }
+        else do
+          rest' <- local (appendSmtCmds [trueAssert]) $ analyze rest
+          return $ EnforceConstraint
+            { _ecFailsIf = msg'
+            , _saProverState = appendSmtCmds [trueAssert] initialState
+            , _saRest = rest'
+            }
 analyze ((BINDING bindings' ast'):rest) = do
   newState <- bindNewVars bindings'
   local (const newState) $ analyze ast'
@@ -334,6 +372,30 @@ analyze (AST_Var var':[]) = do
       { _rvResult = sVar
       , _saProverState = s}
 analyze (AST_Var var':rest) = analyze rest -- this has no effect do just pass
+analyze (WITHKEYSET keyset' bdy:rest) = do
+  block' <- analyze bdy
+  state' <- ask
+  return $ WithKeyset
+    { _wkKeySet = keyset'
+    , _saProverState = state'
+    , _saRest = block' }
+analyze (INSERT table key objName kvs:rest) = do
+  objKey' <- return $ case key of
+    AST_Var (vName,_) -> unSymName $ convertName vName
+    AST_Lit v -> show v
+    err -> error $ "insert's lookup key must be a literal or a variable and not: " ++ show err
+  mangledObjects <- return $ fmap (mangleObjToVar objName) kvs
+  newState <- bindNewVars mangledObjects
+  return $ TableInsert
+    { _tiTableName = table
+    , _saProverState = newState}
+
+analyze err = error $ "Pattern match failure: " ++ show err
+
+mangleObjToVar :: TcId -> (AST (TcId, Type), AST (TcId, Type)) -> ((TcId,Type), AST (TcId, Type))
+mangleObjToVar objName (AST_Lit (LString field), ast@(AST_Var (_,type'))) =
+  let tcId' = TcId undefined ("insert-" ++ show objName ++ "-" ++ field) 0
+  in ((tcId',type'),ast)
 
 bindNewVars :: [((TcId,Type), AST (TcId, Type))] -> PactAnalysis ProverState
 bindNewVars [] = ask
@@ -363,15 +425,6 @@ appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 _parseSmtCmd :: String -> Smt.Command
 _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 
-
-_inferGtTen :: IO (Either (String, Fun TcId) (Fun (TcId, Type)), TcState)
-_inferGtTen = _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" "gt-ten"
-
-_getGtTenFun :: IO (Fun (TcId, Type))
-_getGtTenFun = do
-  (Right f, _) <- _inferGtTen
-  return f
-
 _getSampFunc :: String -> IO (Fun (TcId, Type))
 _getSampFunc s = do
   (Right f, _) <- _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
@@ -382,3 +435,58 @@ _analyzeSampFunc s = do
   a <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
+
+--  (defun create-account (id:string initial-balance:integer)
+--    "Create a new account for ID with INITIAL-BALANCE funds"
+--    (with-keyset 'module-keyset
+--      (insert 'payments-table id { "balance": initial-balance })))
+--
+--FDefun
+--  { _fInfo = "(defun create-account (id:string initial-balance:integer)"
+--  , _fName = "analyze-tests.create-account"
+--  , _fType = "(id:string initial-balance:integer) -> <e>"
+--  , _fArgs =
+--    [ (analyze-tests.create-account_id0,string)
+--    , (analyze-tests.create-account_initial-balance1,integer)
+--    ]
+--  , _fBody = [
+--      App
+--        { _aId = appNwith-keyset2
+--        , _aAppFun = FNative
+--          { _fInfo = ""
+--          , _fName = "with-keyset"
+--          , _fTypes = "(keyset-or-name:string body:@rest) -> <a> :| []"
+--          , _fSpecial =
+--            Just ( "with-keyset"
+-- pattern INSERT table' key' objName' kvs' <- (App _ (NativeFunc "insert") [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
+--                 , [ App { _aId = appNinsert4
+--                         , _aAppFun = FNative
+--                           { _fInfo = ""
+--                           , _fName = "insert"
+--                           , _fTypes = "(table:string key:string object:object) -> string :| []"
+--                           , _fSpecial = Nothing}
+--                         , _aAppArgs =
+--                           [ Lit { _aId = string5
+--                                 , _aLitType = string
+--                                 , _aLitValue = LVLit "payments-table"}
+--                           , Var { _aId = analyze-tests.create-account_id0
+--                                 , _aVar = (analyze-tests.create-account_id0,string)}
+--                           , Object { _aId = object6
+--                                    , _aObject =
+--                                      [
+--                                        (Lit { _aId = string7
+--                                             , _aLitType = string
+--                                             , _aLitValue = LVLit "balance"}
+--                                        , Var { _aId = analyze-tests.create-account_initial-balance1
+--                                              , _aVar = (analyze-tests.create-account_initial-balance1,integer)})
+--                                      ], _aUserType = Nothing}
+--                           ]}
+--                   ]
+--                 )
+--          }
+--        , _aAppArgs =
+--          [ Lit { _aId = string3
+--                , _aLitType = string
+--                , _aLitValue = LVLit "module-keyset"}
+--          ]}
+--      ]}
