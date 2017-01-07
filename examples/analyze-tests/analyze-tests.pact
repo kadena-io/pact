@@ -35,8 +35,18 @@
                 { "balance": (- from-bal amount) })
         (update 'payments-table to
                 { "balance": (+ to-bal amount) })
-        (format "{} paid {} {}" from to amount))))
+      )
+    )
+  )
 
+  (defun pay-with-read (id:string)
+    (with-read 'payments-table id { "balance":= from-bal }
+      (enforce (>= from-bal 0) "bal too low")
+    )
+  )
+
+  (defun pay-update (id:string amount:integer)
+    (update 'payments-table id
+            { "balance": amount })
+  )
 )
-
-(create-table 'payments-table 'analyze-tests)
