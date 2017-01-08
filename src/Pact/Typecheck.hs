@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -23,7 +24,6 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad
 import Control.Monad.State
-import Control.Monad.Reader
 import Data.List.NonEmpty (NonEmpty (..))
 import Control.Arrow hiding ((<+>))
 import Data.Aeson hiding (Object, (.=))
@@ -31,8 +31,6 @@ import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
 import Data.String
 import Data.Maybe
-import Data.List
-import Data.Either
 import Data.Monoid
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -47,10 +45,6 @@ die i s = throwM $ CheckerException i s
 debug :: MonadIO m => String -> m ()
 debug = liftIO . putStrLn
 
-
-sing :: a -> S.Set a
-sing = S.singleton
-
 data UserType = UserType {
   _utName :: TypeName,
   _utModule :: ModuleName,
@@ -59,9 +53,6 @@ data UserType = UserType {
   } deriving (Eq,Ord)
 instance Show UserType where
   show UserType {..} = "{" ++ asString _utModule ++ "." ++ asString _utName ++ " " ++ show _utFields ++ "}"
-
-
-data VarRole = ArgVar Int | RetVar deriving (Eq,Show,Ord)
 
 
 data TcId = TcId {
@@ -81,97 +72,34 @@ instance Pretty TcId where pretty = string . show
 die' :: MonadThrow m => TcId -> String -> m a
 die' i = die (_tiInfo i)
 
-data Overloaded = Overloaded { _oRole :: VarRole, _oOverApp :: TcId }
+
+
+data VarRole = ArgVar Int | RetVar
+  deriving (Eq,Show,Ord)
+
+data Overload = Overload { _oRole :: VarRole, _oOverApp :: TcId }
  deriving (Eq,Ord)
-instance Show Overloaded where
-  show (Overloaded r ts) = show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
 
-data VarType = Spec { _vtSpec :: Type UserType } |
-               Overload { _vtOverload :: Overloaded }
-             deriving (Eq,Ord)
+instance Show Overload where
+  show (Overload r ts) = show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
 
 
-instance Show VarType where
-  show (Spec t) = show t
-  show (Overload o) = show o
-
-
-instance Pretty VarType where pretty = string . show
-
-walkVarType :: (Monoid s, Monad m) => VarType -> (VarType -> m s) -> m s
-walkVarType v f = do
-  s <- f v
-  s' <- case v of
-          Spec (TyList tv) -> walkVarType (Spec tv) f
-          Spec (TySchema _ tv) -> walkVarType (Spec tv) f
-          Spec (TyFun FunType {..}) -> do
-            as <- mapM ((`walkVarType` f) . Spec . _aType) _ftArgs
-            r <- walkVarType (Spec _ftReturn) f
-            return (mconcat as <> r)
-          _ -> return mempty
-  return (s <> s')
-
-walkVarType' :: Monoid s => VarType -> (VarType -> s) -> s
-walkVarType' v f = runIdentity (walkVarType v (return . f))
-
-freeVarType :: VarType -> S.Set (TypeVar UserType)
-freeVarType v = walkVarType' v $ \vt -> case vt of
-  Spec (TyVar n) -> sing n
-  _ -> mempty
-
-freeType :: Type n -> S.Set (TypeVar n)
-freeType (TyVar v) = sing v
-freeType (TyList l) = freeType l
-freeType (TySchema _ o) = freeType o
-freeType (TyFun FunType {..}) = mconcat (map (freeType . _aType) _ftArgs) <> freeType _ftReturn
-freeType _ = mempty
-
-
-
-makeLenses ''VarType
-
-
-
-
-type TypeSet = S.Set VarType
-newtype TypeSetId = TypeSetId String
-  deriving (Eq,Ord,IsString,AsString)
-instance Show TypeSetId where show (TypeSetId i) = i
-
-
-
-data Pivot a = Pivot {
-  _pRevMap :: M.Map a (Either TypeSet TypeSetId),
-  _pVarMap :: M.Map VarType TypeSetId,
-  _pSetMap :: M.Map TypeSetId TypeSet
-  } deriving (Eq,Show)
-instance Default (Pivot a) where def = Pivot def def def
-instance Pretty (Pivot a) where
-  pretty Pivot {..} =
-    string "Pivot:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k  <> colon <+> sshow v) $ M.toList _pVarMap) <$$>
-    string "Sets:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> sshow k  <+> colon <$$>
-                         indent 4 (hsep (map (string . show) (toList v)))) $ M.toList _pSetMap)
-
-
-data Types o = Types {
+data Types = Types {
   _tsPlain :: Type UserType,
-  _tsOverloads :: [o]
+  _tsOverloads :: [Overload]
   } deriving (Eq,Ord)
-instance Show o => Show (Types o) where
+
+instance Show Types  where
   show (Types p []) = show p
   show (Types p os) = show p ++ " " ++ show os
 
 
 data TcState = TcState {
   _tcSupply :: Int,
-  _tcVars :: M.Map TcId TypeSet,
   _tcOverloads :: M.Map TcId (FunTypes UserType),
-  _tcPivot :: Pivot TcId,
   _tcFailures :: S.Set CheckerException,
   _tcAstToVar :: M.Map TcId (Type UserType),
-  _tcVarToTypes :: M.Map (TypeVar UserType) (Types Overloaded)
+  _tcVarToTypes :: M.Map (TypeVar UserType) Types
   } deriving (Eq,Show)
 
 infixr 5 <$$>
@@ -181,21 +109,16 @@ infixr 5 <$$>
 sshow :: Show a => a -> Doc
 sshow = text . show
 
-for :: [a] -> (a -> b) -> [b]
-for = flip map
-
-instance Default TcState where def = TcState 0 def def def def def def
+instance Default TcState where def = TcState 0 def def def def
 instance Pretty TcState where
-  pretty TcState {..} = "Vars:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k <+> colon <+> string (show v)) $ M.toList $ M.map S.toList _tcVars) <$$>
+  pretty TcState {..} =
     "Overloads:" <$$>
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
                            align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
-    pretty _tcPivot <$$>
     "AstToVar:" <$$>
     indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> sshow v) (M.toList _tcAstToVar))) <$$>
     "VarToTypes:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> sshow v) $ M.toList $ _tcVarToTypes) <$$>
+    indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> sshow v) $ M.toList _tcVarToTypes) <$$>
     "Failures:" <$$>
     indent 2 (vsep $ map (string.show) (toList _tcFailures))
     <> hardline
@@ -207,17 +130,11 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 
 
 makeLenses ''TcState
-makeLenses ''Pivot
 makeLenses ''Types
 
 
 freshId :: Info -> String -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
-
-fresh :: TC VarType
-fresh = do
-  i <- state (_tcSupply &&& over tcSupply succ)
-  return $ Spec $ undefined -- TyVar ("v" ++ show i) []
 
 data PrimValue =
   PrimLit Literal |
@@ -303,7 +220,8 @@ instance Pretty t => Pretty (AST t) where
   pretty Var {..} = pretty _aVar
   pretty Object {..} =
     "{" <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$> "}"
+    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$>
+    "}" <> colon <> sshow _aUserType
   pretty List {..} = list (map pretty _aList)
   pretty Binding {..} =
     pretty _aId <$$>
@@ -364,294 +282,73 @@ walkAST f t@App {} = do
         mapM (walkAST f) _aAppArgs
   f Post t'
 
-isOverload :: VarType -> Bool
-isOverload Overload {} = True
-isOverload _ = False
+isConcreteTy :: Type n -> Bool
+isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 
-isConcrete :: VarType -> Bool
-isConcrete (Spec ty) = not (isAnyTy ty || isVarTy ty)
-isConcrete _ = False
+data SolveOverload o = SO {
+  _soOverload :: o,
+  _soRoles :: M.Map VarRole (TypeVar UserType),
+  _soSolution :: Maybe (FunType UserType)
+  } deriving (Eq,Show,Functor,Foldable,Traversable)
 
-isUnconstrained :: VarType -> Bool
-isUnconstrained (Spec ty) = isUnconstrainedTy ty
-isUnconstrained _ = False
-
-isTyVarType :: VarType -> Bool
-isTyVarType (Spec v) = isVarTy v
-isTyVarType _ = False
-
-pivot :: TC ()
-pivot = do
-  m <- use tcVars
-  tcPivot .= pivot' m
-
-pivot' :: Ord a => M.Map a TypeSet -> Pivot a
-pivot' m = mkPivot m $ rpt initPivot
-  where
-    initPivot = execState (rinse m) M.empty
-    lather = execState (get >>= rinse)
-    rinse :: M.Map a TypeSet -> State (M.Map VarType TypeSet) ()
-    rinse p =
-      forM_ (M.elems p) $ \vts ->
-        forM_ vts $ \vt' -> walkVarType vt' $ \vt -> do
-          let vts' = S.insert vt vts
-          when (isTyVarType vt || isOverload vt) $
-            modify $ M.insertWith S.union vt vts'
-    rpt p = let p' = lather p in if p' == p then p else rpt p'
-
-mkPivot :: forall a . Ord a => M.Map a TypeSet -> M.Map VarType TypeSet -> Pivot a
-mkPivot org m =
-  let lkps = concatMap mk $ nub $ M.elems m
-      mk v = let tid = TypeSetId (show (toList v))
-             in [((tid,v),(v,tid),map (,tid) (toList v))]
-      tsMap = M.fromList $ map (view _1) lkps
-      revLkp = M.fromList $ map (view _2) lkps
-      aLkp = M.fromList $ concatMap (view _3) lkps
-      vMap = M.map (revLkp M.!) m
-      lkpVars :: TypeSet -> Maybe TypeSetId
-      lkpVars s = case catMaybes $ S.toList $ S.map (`M.lookup` aLkp) s of
-        [] -> Nothing
-        (tid:_) -> Just tid
-      revMap :: M.Map a (Either TypeSet TypeSetId)
-      revMap = M.map (\s -> maybe (Left s) Right $ lkpVars s) org
-  in Pivot revMap vMap tsMap
-
-unPivot :: MonadThrow m => Pivot a -> m (M.Map a TypeSet)
-unPivot Pivot {..} = forM _pRevMap $ \v -> case v of
-  Left s -> return s
-  Right tid -> case M.lookup tid _pSetMap of
-    Nothing -> die def $ "Bad pivot, '" ++ show tid ++ "' not found: " ++ show _pSetMap
-    Just s -> return s
-
-
-
-failEx :: a -> TC a -> TC a
-failEx a = handle (\(e :: CheckerException) -> do
-                      tcFailures %= S.insert e
-                      debug $ "Failure: " ++ show e
-                      return a)
-
-modifying' :: MonadState s m => Lens' s a -> (a -> m a) -> m ()
-modifying' l f = use l >>= f >>= assign l
-
--- | Eliminate/reduce sets and accumulate errors.
-eliminate :: TC ()
-eliminate = modifying' (tcPivot . pSetMap) $ mapM (typecheckSet def)
-
--- | Typecheck and monadically accumulate errors
-typecheckSet :: Info -> TypeSet -> TC TypeSet
-typecheckSet inf vset = failEx vset $ typecheckSet' inf vset
-
--- | Eliminate/reduce sets and throw errors.
-eliminate' :: MonadThrow m => Pivot a -> m (Pivot a)
-eliminate' p = do
-  tsets' <- forM (_pSetMap p) $ typecheckSet' def
-  return $ set pSetMap tsets' p
-
-_testElim :: MonadThrow m => m (Pivot a)
-_testElim =
-  eliminate' (Pivot def def (M.fromList
-                             [("foo",S.fromList
-                                [Spec $ mkTyVar "a" [TyPrim TyInteger,TyPrim TyDecimal],Spec (TyPrim TyDecimal)])]))
-
-_testElim2 :: MonadThrow m => m (Pivot a)
-_testElim2 =
-  eliminate' (Pivot def def (M.fromList
-                              [("foo",S.fromList
-                                 [Spec $ mkTyVar "a" [TyPrim TyInteger,TyPrim TyDecimal],Spec (TyPrim TyString)])]))
-
-{-
-set typechecking:
-
--}
-
-
--- | Typecheck and throw errors.
-typecheckSet' :: MonadThrow m => Info -> TypeSet -> m TypeSet
-typecheckSet' inf vset = do
-  let (_rocs,v1) = S.partition isUnconstrained vset
-      (concs,v2) = S.partition isConcrete v1
-  conc <- case toList concs of
-    [] -> return Nothing
-    [c] -> return $ Just c
-    _cs -> die inf $ "Multiple concrete types in set:" ++ show vset
-  let (tvs,rest) = S.partition isTyVarType v2
-      constraintsHaveType c t = case t of
-        (Spec (TyVar (TypeVar _ es))) -> c `elem` es
-        _ -> False
-  case conc of
-    Just c@(Spec concTy) -> do
-      unless (all (constraintsHaveType concTy) tvs) $
-        die inf $ "Constraints incompatible with concrete type: " ++ show vset
-      return $ S.insert c rest -- constraints good with concrete, so we can get rid of them
-    Just c -> die inf $ "Internal error, expected concrete type: " ++ show c
-    Nothing ->
-      if S.null tvs then return rest -- no conc, no tvs, just leftovers
-      else do
-        let inter = S.toList $ foldr1 S.intersection $ map S.fromList $ mapMaybe (firstOf (vtSpec.tyVar.tvConstraint)) (toList tvs)
-        case inter of
-          [] -> die inf $ "Incommensurate constraints in set: " ++ show vset
-          _ -> do
-            let uname = foldr1 (\a b -> (TypeVarName $ show a ++ "_U_" ++ show b)) $ -- TODO fix for real VarName
-                  mapMaybe (firstOf (vtSpec.tyVar.tvName)) (toList tvs)
-            return $ S.insert (Spec (TyVar (TypeVar uname inter))) rest
-
-
-data SolverEdge = SolverEdge {
-  _seTypeSet :: TypeSetId,
-  _seVarRole :: VarRole,
-  _seOverload :: TcId
-  } deriving (Eq,Show,Ord)
-
-data SolverState = SolverState {
-  _funMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type UserType),Maybe (FunType UserType)),
-  _tsetMap :: M.Map TypeSetId (TypeSet,Maybe (Type UserType))
-} deriving (Eq,Show)
-makeLenses ''SolverState
-instance Pretty SolverState where
-  pretty SolverState {..} =
-    text "Funs:" <$$>
-    indent 2 (vsep $ for (M.toList _funMap) $ \(k,(fts,mems,mft)) ->
-                 text (show k) <> colon <+> align (text (show mems) <$$>
-                                                   text (show mft) <$$>
-                                                   indent 2 (vsep (map (text . show) $ toList fts))))
-    <$$>
-    text "Typesets:" <$$>
-    indent 2 (vsep $ for (M.toList _tsetMap) $ \(k,(_,mt)) ->
-                 text (show k) <> colon <+> text (show mt))
-
-
-
-data SolverEnv = SolverEnv {
-  _graph :: M.Map (Either TypeSetId TcId) [SolverEdge]
-  }
-makeLenses ''SolverEnv
-
-type Solver = StateT SolverState (ReaderT SolverEnv IO)
-
-runSolver :: SolverState -> SolverEnv -> Solver a -> IO (a, SolverState)
-runSolver s e a = runReaderT (runStateT a s) e
 
 solveOverloads :: TC ()
 solveOverloads = do
-  tss <- M.toList <$> use (tcPivot . pSetMap)
-  (oMap :: M.Map TcId (FunTypes UserType,M.Map VarRole (Type UserType),Maybe (FunType UserType))) <-
-    M.map (,def,Nothing) <$> use tcOverloads
-  (stuff :: [((TypeSetId,(TypeSet,Maybe (Type UserType))),[SolverEdge])]) <-
-   fmap catMaybes $ forM tss $ \(tid,ts) -> do
-    let es = (`map` toList ts) $ \v -> case v of
-               Overload (Overloaded r i) -> Right (SolverEdge tid r i)
-               Spec t | isConcrete v -> Left (Just t)
-               _ -> Left Nothing
-    concrete <- case (`mapMaybe` es) (either id (const Nothing)) of
-      [] -> return Nothing
-      [a] -> return (Just a)
-      _ -> return Nothing {- TODO: die def $ "Cannot solve: more than one concrete type in set: " ++ show ts -}
-    let ses = mapMaybe (either (const Nothing) Just) es
-    if null ses then return Nothing else
-      return $ Just ((tid,(ts,concrete)),mapMaybe (either (const Nothing) Just) es)
-  let tsMap :: M.Map TypeSetId (TypeSet,Maybe (Type UserType))
-      tsMap = M.fromList $ map fst stuff
-      initState = SolverState oMap tsMap
-      concretes :: [TypeSetId]
-      concretes = (`mapMaybe` stuff) $ \((tid,(_,t)),_) -> tid <$ t
-      edges :: [SolverEdge]
-      edges = concatMap snd stuff
-      edgeMap :: M.Map (Either TypeSetId TcId) [SolverEdge]
-      edgeMap = M.fromListWith (++) $ (`concatMap` edges) $ \s@(SolverEdge t _ i) -> [(Left t,[s]),(Right i,[s])]
+  vts <- M.toList <$> use tcVarToTypes
+  let (edges :: [(TypeVar UserType,Overload)]) =
+        (`concatMap` vts) $ \(v,Types _ os) -> map (v,) os
+      (omap1 :: M.Map TcId [SolveOverload TcId]) =
+        M.fromListWith (++) $ (`map` edges) $ \(v,Overload r oid) ->
+        (oid,[SO oid (M.singleton r v) Nothing])
+  omap :: M.Map TcId (SolveOverload (FunTypes UserType)) <- forM omap1 $ \sos -> do
+    let sor = foldl1 (\(SO a b c) (SO _ e _) -> SO a (M.union b e) c) sos
+    unless (length sos == M.size (_soRoles sor)) $
+      die def $ "Role conflict in overloads: " ++ show sos
+    forM sor $ \oid -> use tcOverloads >>= \m -> case M.lookup oid m of
+        Just ft -> return ft
+        Nothing -> die def $ "Bad overload, could not deref id: " ++ show oid
+  let runSolve os = forM os $ \o@(SO fts roles sol) -> case sol of
+        Just _solved -> return o
+        Nothing -> SO fts roles <$> foldM (tryFunType roles) Nothing fts
+      rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
+  done <- rptSolve omap
+  if all (isJust . _soSolution) (M.elems done)
+    then debug "Success!"
+    else debug $ "Boo!" ++ show (filter (isNothing . _soSolution) (M.elems done))
 
-  (_,ss@SolverState {..}) <- liftIO $ runSolver initState (SolverEnv edgeMap) (solve concretes)
-  liftIO $ putDoc $ pretty ss <$$> hardline
-  let resolved = concatMap (\(tid,(_,ty)) -> maybe [] ((:[]) . (tid,)) ty) $ M.toList _tsetMap
-  forM_ resolved $ \(tid,ty) -> tcPivot . pSetMap %= M.insert tid (S.singleton (Spec ty))
 
-solve :: [TypeSetId] -> Solver ()
-solve initTypes = run initTypes (0 :: Int) where
-  run ts i = do
-    ovs <- doTypesets ts
-    unless (null ovs) $ do
-      ts' <- doFuns ovs
-      unless (null ts') $ run ts' (succ i)
-
-doFuns :: [TcId] -> Solver [TypeSetId]
-doFuns ovs = fmap (nub . concat) $ forM ovs $ \ov -> do
-  fr <- M.lookup ov <$> use funMap
-  er <- M.lookup (Right ov) <$> view graph
-  case (fr,er) of
-    (Just (fTys,mems,Nothing),Just es) -> do
-      ftym <- foldM (\r f -> maybe (fmap (f,) <$> tryFunType f mems) (return . Just) r) Nothing fTys
-      case ftym of
-        Nothing -> return []
-        Just (fty,mems') -> do
-          funMap %= M.adjust (set _3 (Just fty) . set _2 mems') ov
-          let newmems = M.difference mems' mems
-              findEdge vr = filter ((== vr) . _seVarRole) es
-          fmap concat $ forM (M.toList newmems) $ \(vr,ty) -> case findEdge vr of
-            [SolverEdge ts _ _] -> do
-              tsetMap %= M.adjust (set _2 (Just ty)) ts
-              return [ts]
-            _ -> return [] -- need more error reporting
-    _ -> return []
-
-doTypesets :: [TypeSetId] -> Solver [TcId]
-doTypesets cs = fmap (nub . concat) $ forM cs $ \c -> do
-  cr <- M.lookup c <$> use tsetMap
-  er <- M.lookup (Left c) <$> view graph
-  case (cr,er) of
-    (Just (_, Just ct),Just es) -> fmap concat $ forM es $ \(SolverEdge _ r ov) -> do
-      fm <- M.lookup ov <$> use funMap
-      case fm of
-        Nothing -> return []
-        Just (_,_,Just _) -> return []
-        _ -> do
-          funMap %= M.adjust (over _2 (M.insert r ct)) ov
-          return [ov]
-    (_,_) -> return []
-
-tryFunType :: (MonadIO m,MonadCatch m) => FunType UserType -> M.Map VarRole (Type UserType) ->
-              m (Maybe (M.Map VarRole (Type UserType)))
-tryFunType (FunType as rt) vMap = do
-  let ars = zipWith (\(Arg _ t _) i -> (ArgVar i,t)) as [0..]
-      fMap = M.fromList $ (RetVar,rt):ars
-      toSets = M.map (S.singleton . Spec)
-      setsMap = M.unionWith S.union (toSets vMap) (toSets fMap)
-      piv = pivot' setsMap
-  handle (\(_ :: CheckerException) -> return Nothing) $ do
-    elim <- eliminate' piv
-    remapped <- unPivot elim
-    let justConcs = (`map` M.toList remapped) $ \(vr,s) -> ((vr,) <$> asConcreteSingleton s)
-    case sequence justConcs of
-      Nothing -> return Nothing
-      Just ps -> return (Just (M.fromList ps))
-
-asConcrete :: VarType -> Maybe (Type UserType)
-asConcrete s | isConcrete s = Just $ _vtSpec s
-asConcrete _ = Nothing
-
-asConcreteSingleton :: TypeSet -> Maybe (Type UserType)
-asConcreteSingleton s | S.size s == 1 = asConcrete (head (toList s))
-asConcreteSingleton _ = Nothing
-
-_ftaaa :: FunType UserType
-_ftaaa = let a = mkTyVar "a" [TyPrim TyInteger,TyPrim TyDecimal]
-         in FunType [Arg "x" a def,Arg "y" a def] a
-_ftabD :: FunType UserType
-_ftabD = let v n = mkTyVar n [TyPrim TyInteger,TyPrim TyDecimal]
-         in FunType [Arg "x" (v "a") def,Arg "y" (v "b") def] (TyPrim TyDecimal)
-
-{-
-
-λ> tryFunType _ftaaa (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyInteger)])
-Nothing
-λ> tryFunType _ftaaa (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyDecimal)])
-Just (fromList [(ArgVar 0,decimal),(ArgVar 1,decimal),(RetVar,decimal)])
-λ> tryFunType _ftabD (M.fromList [(ArgVar 0,TyDecimal),(ArgVar 1,TyInteger)])
-Just (fromList [(ArgVar 0,decimal),(ArgVar 1,integer),(RetVar,decimal)])
-λ> tryFunType _ftabD (M.fromList [(ArgVar 0,TyDecimal)])
-Nothing
-λ>
-
--}
+tryFunType :: M.Map VarRole (TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
+               TC (Maybe (FunType UserType))
+tryFunType _ r@Just {} _ = return r
+tryFunType roles _ f@(FunType as rt) = do
+  let tryRole rol fty = case M.lookup rol roles of
+        Nothing -> return Nothing
+        Just tv -> use tcVarToTypes >>= \m -> case M.lookup tv m of
+          Nothing -> die def $ "Bad var in funtype solver: " ++ show tv
+          Just (Types ty _) -> case unifyTypes fty ty of
+            Nothing -> return Nothing
+            Just _ -> return (Just (fty,[(tv,ty)]))
+  subAsM <- forM (zip as [0..]) $ \(Arg _ fty _,i) -> tryRole (ArgVar i) fty
+  subRolesM <- fmap (M.fromListWith (++)) . sequence . (:subAsM) <$> tryRole RetVar rt
+  case subRolesM of
+    Nothing -> return Nothing
+    Just subRoles -> do
+      let solvedM = sequence $ (`map` M.toList subRoles) $ \(fty,tvTys) ->
+            let tys = foldl1 unifyM $ (Just fty:) $ map (Just . snd) tvTys
+                unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
+                unifyM _ _ = Nothing
+            in case tys of
+              Nothing -> Nothing
+              Just uty -> Just (fty,(uty,map fst tvTys))
+          allConcrete = all isConcreteTy . map (fst . snd)
+      case solvedM of
+        Nothing -> return Nothing
+        Just solved | allConcrete solved -> do
+                        debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
+                        forM_ solved $ \(_,(uty,tvs)) -> forM_ tvs $ \tv ->
+                          tcVarToTypes %= M.adjust (set tsPlain uty) tv
+                        return $ Just f
+                    | otherwise -> return Nothing
 
 
 -- | Native funs get processed on their own walk.
@@ -662,19 +359,19 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let FunType {..} = mangleFunType i ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) (Spec t) {- >> assocAST (_aId aa) aa -}) _ftArgs as
-      assocTy i (Spec _ftReturn)
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) t) _ftArgs as
+      assocTy i _ftReturn
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
-        Just (_,[Binding {..}]) -> assocTy _aId (Spec _ftReturn)
+        Just (_,[Binding {..}]) -> assocTy _aId _ftReturn
         _ -> return ()
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType i) fts
       tcOverloads %= M.insert i fts'
-      zipWithM_ (\ai aa -> assocTy (_aId aa) (Overload (Overloaded (ArgVar ai) i))) [0..] as -- this assoc's the funty with the app ty.
-      assocTy i (Overload (Overloaded RetVar i))
+      zipWithM_ (\ai aa -> assocOverload (_aId aa) (Overload (ArgVar ai) i)) [0..] as -- this assoc's the funty with the app ty.
+      assocOverload i (Overload RetVar i)
   return a
 processNatives _ a = return a
 
@@ -696,39 +393,9 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aId af _aAppArgs)
 substAppDefun _ _ t = return t
 
-lookupIdTys :: TcId -> TC TypeSet
-lookupIdTys i = (fromMaybe S.empty . M.lookup i) <$> use tcVars
 
-astToTy :: AST n -> Maybe (Type UserType)
-astToTy Prim {..} = Just $ TyPrim _aPrimType
-astToTy Var {} = Nothing
-astToTy Object {..} = Just $ TySchema TyObject _aUserType
-astToTy List {..} = Just $ TyList _aListType
-astToTy App {} = Nothing
-astToTy Binding {} = Nothing
-astToTy Table {..} = Just $ TySchema TyTable _aUserType
-
-tcToTy :: AST TcId -> TC TypeSet
-tcToTy Prim {..} = return $ sing $ Spec $ TyPrim _aPrimType
-tcToTy Var {..} = lookupIdTys _aVar
-tcToTy Object {..} = return $ sing $ Spec $ TySchema TyObject _aUserType
-tcToTy List {..} = return $ sing $ Spec $ TyList _aListType
-tcToTy App {..} = lookupIdTys _aId
-tcToTy Binding {..} = lookupIdTys _aId
-tcToTy Table {..} = return $ sing $ Spec $ TySchema TyTable _aUserType
-
--- | Track type to id
 trackAST :: TcId -> Type UserType -> TC ()
 trackAST i t = do
-  old <- M.lookup i <$> use tcVars
-  case old of
-    Nothing -> return ()
-    Just tys -> die (_tiInfo i) $ "Internal error: type already tracked: " ++ show (i,t,tys)
-  tcVars %= M.insert i (sing $ Spec t)
-  trackAST' i t
-
-trackAST' :: TcId -> Type UserType -> TC ()
-trackAST' i t = do
   debug $ "trackAST: " ++ show (i,t)
   maybe (return ()) (const (die' i $ "trackAST: ast already tracked: " ++ show (i,t)))
     =<< (M.lookup i <$> use tcAstToVar)
@@ -740,11 +407,6 @@ trackAST' i t = do
       tcVarToTypes %= M.insert v (Types t [])
     _ -> return ()
 
-getParamTypes :: VarType -> [Type UserType]
-getParamTypes t = walkVarType' t $ \pt -> case pt of
-  Spec s | pt /= t && s /= TyAny -> [s]
-  _ -> []
-
 addFailure :: TcId -> String -> TC ()
 addFailure i s = do
   debug $ "Failure: " ++ show (i,s)
@@ -755,40 +417,53 @@ lookupAst msg i = maybe (die' i $ msg ++ ": ast not already tracked: " ++ show i
                   (M.lookup i <$> use tcAstToVar)
 
 -- | Track type to id with typechecking
-assocTy :: TcId -> VarType -> TC ()
-assocTy ai vt = do
-  assocTys ai (sing vt) -- old way
+assocTy :: TcId -> Type UserType -> TC ()
+assocTy ai ty = do
   aty <- lookupAst "assocTy" ai
   (avm,atysm) <- case aty of
     TyVar tv -> (Just tv,) . M.lookup tv <$> use tcVarToTypes
     _ -> return (Nothing,Nothing)
-  debug $ "assocTy: " ++ show (ai,aty,vt)
-  case vt of
-    Overload o -> case (avm,atysm) of
-      (Just v,Just tys) -> do
-        debug ("assocTy: associating " ++ show o ++ " with " ++ show (ai,v,tys))
-        tcVarToTypes %= M.insert v (over tsOverloads (o:) tys)
-      _ -> die' ai $ "assocTy: cannot track overload, not a var or not tracked: " ++ show (ai,aty,atysm,vt)
-    Spec ty -> case unifyTypes aty ty of
-      Nothing -> addFailure ai $ "assocTy: cannot unify: " ++ show (ai,aty,ty)
-      Just (Left _same) -> do
-        debug ("assocTy: noop: " ++ show (ai,aty,ty))
-        assocParams aty ty
-      (Just (Right u)) -> do
-        debug $ "assocTy: substituting " ++ show u ++ " for " ++ show (ai,ty)
-        assocParams aty ty
-        case (avm,atysm) of
-          (Nothing,Nothing) -> do
-            tcAstToVar %= M.insert ai u
-            updateTyVar u u
-          (Just v,Just tys) ->
-            tcVarToTypes %= M.insert v (set tsPlain u tys)
-          _ -> die' ai $ "assocTy: var not tracked: " ++ show (ai,avm,atysm)
+  debug $ "assocTy: " ++ show (ai,aty,ty)
+  case unifyTypes aty ty of
+    Nothing -> addFailure ai $ "assocTy: cannot unify: " ++ show (ai,aty,ty)
+    Just (Left _same) -> do
+      debug ("assocTy: noop: " ++ show (ai,aty,ty))
+      assocParams aty ty
+    (Just (Right u)) -> do
+      debug $ "assocTy: substituting " ++ show u ++ " for " ++ show (ai,ty)
+      assocParams aty ty
+      case (avm,atysm) of
+        (Nothing,Nothing) -> do
+          tcAstToVar %= M.insert ai u
+          updateTyVar u u
+        (Just v,Just tys) ->
+          tcVarToTypes %= M.insert v (set tsPlain u tys)
+        _ -> die' ai $ "assocTy: var not tracked: " ++ show (ai,avm,atysm)
+
+-- | Track type to id with typechecking
+assocOverload :: TcId -> Overload -> TC ()
+assocOverload ai o = do
+  aty <- lookupAst "assocTy" ai
+  (avm,atysm) <- case aty of
+    TyVar tv -> (Just tv,) . M.lookup tv <$> use tcVarToTypes
+    _ -> return (Nothing,Nothing)
+  debug $ "assocOverload: " ++ show (ai,aty,o)
+  case (avm,atysm) of
+    (Just v,Just tys) -> do
+      debug ("assocTy: associating " ++ show o ++ " with " ++ show (ai,v,tys))
+      tcVarToTypes %= M.insert v (over tsOverloads (o:) tys)
+    _ | isConcreteTy aty -> do
+          debug ("assocTy: associating " ++ show o ++ " with concrete ty/id " ++ show (ai,aty))
+          alterTypes (TypeVar (fromString (show ai)) []) (Types aty [o]) (over tsOverloads (o:))
+      | otherwise -> die' ai $ "assocTy: cannot track overload, not a var or not tracked: " ++ show (ai,aty,atysm,o)
+
+alterTypes :: TypeVar UserType -> Types -> (Types -> Types) -> TC ()
+alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 
 updateTyVar :: Type UserType -> Type UserType -> TC ()
 updateTyVar (TyVar uv) u = do
   debug $ "updateTyVar: " ++ show (uv,u)
-  tcVarToTypes %= M.alter (maybe (Just (Types u [])) (Just . set tsPlain u)) uv
+  alterTypes uv (Types u []) (set tsPlain u)
 updateTyVar _ _ = return ()
 
 assocParams :: Type UserType -> Type UserType -> TC ()
@@ -798,14 +473,13 @@ assocParams x y = case (x,y) of
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
-    assoc a@(TyVar {}) b = updateTyVar a b
-    assoc a b@(TyVar {}) = updateTyVar b a
+    assoc a@TyVar {} b = updateTyVar a b
+    assoc a b@TyVar {} = updateTyVar b a
     assoc _ _ = return ()
 
 -- | Track ast type to id with typechecking
 assocAST :: TcId -> AST TcId -> TC ()
 assocAST ai b = do
-  tcToTy b >>= assocTys ai -- old way
   let bi = _aId b
   aty <- lookupAst "assocAST" ai
   bty <- lookupAst "assocAST" bi
@@ -821,12 +495,6 @@ assocAST ai b = do
     Just (Right _) -> doSub bi bty ai aty
 
 
-
-unifyVarTypes :: VarType -> VarType -> Maybe (Either VarType VarType)
-unifyVarTypes l r = case (l,r) of
-  _ | l == r -> Just (Right r)
-  (Spec a,Spec b) -> fmap (either (Left . Spec) (Right . Spec)) (unifyTypes a b)
-  _ -> Nothing
 
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
@@ -857,16 +525,6 @@ unifyTypes l r = case (l,r) of
         (TypeVar _ ac,_) | null ac || s `elem` ac -> sWins
         _ -> Nothing
 
-
--- | Track types to id with typechecking
--- TODO figure out better error messages. The type being added
--- is at least in App case the specified type to the arg type,
--- meaning the already-tracked type is the unexpected one.
-assocTys :: TcId -> TypeSet -> TC ()
-assocTys i tys = do
-  tys' <- S.union tys <$> lookupIdTys i
-  void $ typecheckSet (_tiInfo i) tys'
-  tcVars %= M.insert i tys'
 
 scopeToBody :: Info -> [AST TcId] -> Scope Int Term (Either Ref (AST TcId)) -> TC [AST TcId]
 scopeToBody i args bod = do
@@ -1012,45 +670,50 @@ infer t@TDef {..} = toFun (fmap Left t)
 infer t = die (_tInfo t) "Non-def"
 
 
-allVarsCheck :: TC (Either (M.Map TcId TypeSet) (M.Map TcId (Type UserType)))
-allVarsCheck = do
-  vs <- use tcVars
-  let vs' = (`map` M.toList vs) $ \(tid,s) -> case asConcreteSingleton s of
-        Nothing -> Left (tid,s)
-        Just ty -> Right (tid,ty)
-  case sequence vs' of
-    Left _ -> do
+resolveTy :: Type UserType -> TC (Type UserType)
+resolveTy tv@(TyVar v) = use tcVarToTypes >>= \m -> case M.lookup v m of
+      Just (Types t _) -> resolveTy t
+      Nothing -> return tv
+resolveTy (TySchema s st) = TySchema s <$> resolveTy st
+resolveTy (TyList l) = TyList <$> resolveTy l
+resolveTy t = return t
 
-      debug $ "Unification failed:"
-      liftIO $ putDoc $ (indent 2 (vsep (map (\(Left l) -> sshow l) $ filter isLeft vs')) <> hardline)
-      return (Left $ M.fromList $ concatMap (either pure (const [])) vs')
-    Right ps -> return (Right (M.fromList ps))
+isUnresolvedTy :: Type n -> Bool
+isUnresolvedTy TyVar {} = True
+isUnresolvedTy (TySchema _ v) = isUnresolvedTy v
+isUnresolvedTy (TyList l) = isUnresolvedTy l
+isUnresolvedTy _ = False -- TODO fun types
 
-debugState :: TC ()
-debugState = liftIO . putDoc . pretty =<< get
+prettyMap :: (t -> Doc) -> (t1 -> Doc) -> M.Map t t1 -> Doc
+prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV v) . M.toList
+
+resolveAllTypes :: TC (M.Map TcId (Type UserType))
+resolveAllTypes = do
+  ast2Ty <- use tcAstToVar >>= \a2v -> forM a2v resolveTy
+  tcAstToVar .= ast2Ty
+  let unresolved = M.filter isUnresolvedTy ast2Ty
+  unless (M.null unresolved) $ do
+    debug "Unable to resolve all types"
+    liftIO $ putDoc (indent 2 (prettyMap sshow sshow unresolved))
+  return ast2Ty
+
+_debugState :: TC ()
+_debugState = liftIO . putDoc . pretty =<< get
 
 
-substFun :: Fun TcId -> TC (Either (String,Fun TcId) (Fun (TcId,Type UserType)))
-substFun f@FNative {} = return $ Right $ fmap (const (TcId def "" 0,TyAny)) f
+substFun :: Fun TcId -> TC (Fun (TcId,Type UserType))
+substFun FNative {} = error "Native TODO"
 substFun f@FDefun {..} = do
   debug "Transform"
   b'' <- mapM (walkAST $ substAppDefun Nothing) _fBody
   debug "Substitution"
   b' <- mapM (walkAST processNatives) b''
-  debug "Pivot"
-  pivot
-  debugState
-  debug "Eliminate"
-  eliminate
-  debug "Solve overloads"
-  failEx () solveOverloads
-  use tcPivot >>= unPivot >>= assign tcVars
-  result <- allVarsCheck
+  debug "Solve take 2"
+  solveOverloads
+  ast2Ty <- resolveAllTypes
   let f' = set fBody b' f
-  -- TODO need to bail on any errors accumulated up to here
-  case result of
-    Left _ -> return $ Left ("Failed to unify all types",f')
-    Right vs -> return $ Right $ fmap (\v -> (v,vs M.! v)) f'
+  return ((\v -> (v,ast2Ty M.! v)) <$> f')
+
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
 _loadFun fp mn fn = do
@@ -1059,18 +722,17 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . _2 . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Fun (TcId,Type UserType), TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 -- _pretty =<< _inferIssue
-_inferIssue :: IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_inferIssue :: IO (Fun (TcId,Type UserType), TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState)
+_inferTransfer :: IO (Fun (TcId,Type UserType), TcState)
 _inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
 
 -- prettify output of '_infer' runs
-_pretty :: (Either (String,Fun TcId) (Fun (TcId,Type UserType)), TcState) -> IO ()
-_pretty (Left (m,f),tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc <$$> text m <> hardline)
-_pretty (Right f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
+_pretty :: (Fun (TcId,Type UserType), TcState) -> IO ()
+_pretty (f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
