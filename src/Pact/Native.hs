@@ -144,7 +144,8 @@ langDefs = foldDefs
      "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defNative (specialForm Bind) bind (funType a [("src",tTyObject (mkSchemaVar "o")),("bindings",tTyBinding),("body",TyAny)])
+    ,defNative (specialForm Bind) bind
+     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row),("body",TyAny)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof' (funType tTyString [("x",a)])
@@ -154,6 +155,7 @@ langDefs = foldDefs
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
           c = mkTyVar "c" []
+          row = mkSchemaVar "row"
           listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
           listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
           takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
@@ -331,7 +333,7 @@ pactTxId _ [] = do
 pactTxId i as = argsError i as
 
 bind :: NativeFun e
-bind i [src,TBinding ps bd BindKV bi] = reduce src >>= \st -> case st of
+bind i [src,TBinding ps bd (BindSchema _) bi] = reduce src >>= \st -> case st of
   TObject o _ _ -> do
     !m <- fmap M.fromList $ forM o $ \(k,v) -> case k of
              TLitString k' -> return (k',liftTerm v)

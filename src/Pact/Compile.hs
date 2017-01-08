@@ -353,7 +353,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
               bs' <- mapNonEmpty "binding" mkPairs bs li
               let ks = map (Name . _aName . fst) bs'
               bdg <- TBinding <$> pure bs' <*>
-                   (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure BindKV <*> pure bi
+                   (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure (BindSchema TyAny) <*> pure bi
               TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
           _ -> TApp <$> mkVar a q ai <*> mapM run rest <*> pure li
 

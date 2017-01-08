@@ -214,8 +214,7 @@ data PrimType =
   TyBool |
   TyString |
   TyValue |
-  TyKeySet |
-  TyBinding -- ugly but no use for this yet
+  TyKeySet
   deriving (Eq,Ord)
 
 litToPrim :: Literal -> PrimType
@@ -245,16 +244,17 @@ instance Show PrimType where
   show TyString = tyString
   show TyValue = tyValue
   show TyKeySet = tyKeySet
-  show TyBinding = "binding"
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =
   TyTable |
-  TyObject
+  TyObject |
+  TyBinding
   deriving (Eq,Ord)
 instance Show SchemaType where
   show TyTable = tyTable
   show TyObject = tyObject
+  show TyBinding = "binding"
 instance Pretty SchemaType where pretty = text . show
 
 newtype TypeVarName = TypeVarName { _typeVarName :: String }
@@ -460,7 +460,16 @@ data NativeDFun = NativeDFun {
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
 
-data BindCtx = BindLet | BindKV deriving (Eq,Show)
+data BindType n =
+  BindLet |
+  BindSchema { _bType :: n }
+  deriving (Eq,Functor,Foldable,Traversable,Ord)
+instance (Show n) => Show (BindType n) where
+  show BindLet = "let"
+  show (BindSchema b) = "bind" ++ show b
+instance (Pretty n) => Pretty (BindType n) where
+  pretty BindLet = "let"
+  pretty (BindSchema b) = "bind" PP.<> pretty b
 
 
 newtype TableName = TableName String
@@ -531,7 +540,7 @@ data Term n =
     TBinding {
       _tBindPairs :: ![(Arg (Term n),Term n)]
     , _tBindBody :: !(Scope Int Term n)
-    , _tBindCtx :: BindCtx
+    , _tBindType :: BindType (Type (Term n))
     , _tInfo :: !Info
     } |
     TObject {
@@ -623,7 +632,7 @@ instance Monad Term where
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (c >>= f) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
-    TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) c i
+    TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
@@ -681,7 +690,9 @@ typeof t = case t of
       TConst {..} -> Left $ "const:" ++ _aName _tConstArg
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
-      TBinding {} -> Right $ TyPrim TyBinding
+      TBinding {..} -> case _tBindType of
+        BindLet -> Left "let"
+        BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tUserType
       TKeySet {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"

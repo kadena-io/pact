@@ -160,7 +160,7 @@ data Fun t =
     _fInfo :: Info,
     _fName :: String,
     _fTypes :: FunTypes UserType,
-    _fSpecial :: Maybe (SpecialForm,[AST t])
+    _fSpecial :: Maybe (SpecialForm,AST t)
     } |
   FDefun {
     _fInfo :: Info,
@@ -175,7 +175,7 @@ instance Pretty t => Pretty (Fun t) where
     indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
       (case _fSpecial of
          Nothing -> mempty
-         Just (_,bod) -> mempty <$$> indent 2 (vsep (map pretty bod))) <$$>
+         Just (_,bod) -> mempty <$$> indent 2 (pretty bod)) <$$>
       ")"
   pretty FDefun {..} = "(defun " <> text _fName <$$>
     indent 2 ("::" <+> pretty _fType) <$$>
@@ -212,7 +212,7 @@ data AST n =
   _aNode :: n,
   _aBindings :: [(Named n,AST n)],
   _aBody :: [AST n],
-  _aBindCtx :: BindCtx
+  _aBindType :: BindType n
   } |
   List {
   _aNode :: n,
@@ -243,7 +243,7 @@ instance Pretty t => Pretty (AST t) where
        indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$>
        "}"
      List {..} -> pn <$$> "[" <$$> indent 2 (vsep (map pretty _aList)) <$$> "]"
-     Binding {..} -> pn <$$> "(" <> (case _aBindCtx of BindLet -> "let"; BindKV -> "bind") <$$>
+     Binding {..} -> pn <$$> "(" <> pretty _aBindType <$$>
        indent 2 (vsep (map (\(k,v) ->
                               "(" <$$>
                               indent 2 (pretty k <+> colon <$$>
@@ -286,7 +286,7 @@ walkAST f t@Binding {} = do
   Binding {..} <- f Pre t
   t' <- Binding _aNode <$>
         forM _aBindings (\(k,v) -> (k,) <$> walkAST f v) <*>
-        mapM (walkAST f) _aBody <*> pure _aBindCtx
+        mapM (walkAST f) _aBody <*> pure _aBindType
   f Post t'
 walkAST f t@App {} = do
   App {..} <- f Pre t
@@ -295,7 +295,7 @@ walkAST f t@App {} = do
            fun@FNative {..} -> case _fSpecial of
              Nothing -> return fun
              Just (fs,bod) -> do
-               bod' <- mapM (walkAST f) bod
+               bod' <- walkAST f bod
                return (set fSpecial (Just (fs,bod')) fun)
            fun@FDefun {..} -> do
              db <- mapM (walkAST f) _fBody
@@ -381,12 +381,16 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let FunType {..} = mangleFunType (_aId i) ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId (_aNode aa)) t) _ftArgs as
-      assocTy (_aId i) _ftReturn
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aNode aa) t) _ftArgs as
+      assocTy i _ftReturn
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
-        Just (_,[Binding {..}]) -> assocTy (_aId _aNode) _ftReturn
+        Just (_,Binding bn _ _ (BindSchema sn)) -> do
+          assocTy bn _ftReturn
+          -- assoc schema with last ft arg
+          assocTy sn (_aType (last (toList _ftArgs)))
+        Just sf -> die _fInfo $ "Invalid special form: " ++ show sf
         _ -> return ()
     -- multiple funtypes
     fts -> do
@@ -440,8 +444,8 @@ lookupAst msg i = maybe (die' i $ msg ++ ": ast not already tracked: " ++ show i
                   (M.lookup i <$> use tcAstToVar)
 
 -- | Track type to id with typechecking
-assocTy :: TcId -> Type UserType -> TC ()
-assocTy ai ty = do
+assocTy :: Node -> Type UserType -> TC ()
+assocTy (Node ai _) ty = do
   aty <- lookupAst "assocTy" ai
   (avm,atysm) <- case aty of
     TyVar tv -> (Just tv,) . M.lookup tv <$> use tcVarToTypes
@@ -579,7 +583,8 @@ mangleFunType f = over ftReturn (mangleType f) .
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') _tFunTypes
-  return $ FNative _tInfo (asString _tNativeName) ft' ((,[]) <$> isSpecialForm _tNativeName)
+  let special = (,Var (Node (TcId def "temp" 0) TyAny)) <$> isSpecialForm _tNativeName
+  return $ FNative _tInfo (asString _tNativeName) ft' special
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
@@ -616,27 +621,34 @@ toAST TApp {..} = do
     FNative {..} -> case _fSpecial of
       Nothing -> return (as,fun)
       Just (f,_) -> (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
-                    <*> pure (set fSpecial (Just (f,[last as])) fun)
+                    <*> pure (set fSpecial (Just (f,last as)) fun)
   return $ App n fun' as'
 
 toAST TBinding {..} = do
-  bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
+  bi <- freshId _tInfo (show _tBindType)
   bn <- trackNode (idTyVar bi) bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     aid <- freshId ai (pfx (show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
-    an <- Named n <$> trackNode t' aid
-    case _tBindCtx of
+    an <- trackNode t' aid
+    v' <- toAST v
+    case _tBindType of
       BindLet -> do
-        v' <- toAST v
         assocAST aid v'
-        return (an,v')
-      BindKV -> return (an,Var (_nnNamed an)) -- KV bind punts and simply creates a var
+        return (Named n an,v')
+      BindSchema _ -> do
+        fieldName <- case v' of
+          (Prim _ (PrimLit (LString f))) -> return f
+          _ -> die ai $ "Bad binding, non-string field name: " ++ show v'
+        return (Named fieldName an,Var an)
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
-  case _tBindCtx of
-    BindLet -> assocAST bi (last bb)
-    BindKV -> return () -- TODO check it out
-  return $ Binding bn bs bb _tBindCtx
+  bt <- case _tBindType of
+    BindLet -> assocAST bi (last bb) >> return BindLet
+    BindSchema sty -> do
+      sty' <- mangleType bi <$> traverse toUserType sty
+      sn <- trackNode sty' =<< freshId _tInfo (show sty')
+      return $ BindSchema sn
+  return $ Binding bn bs bb bt
 
 toAST TList {..} = do
   ty <- TyList <$> traverse toUserType _tListType

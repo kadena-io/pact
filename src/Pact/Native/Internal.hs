@@ -137,5 +137,4 @@ tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
 tTyValue :: Type n; tTyValue = TyPrim TyValue
 tTyKeySet :: Type n; tTyKeySet = TyPrim TyKeySet
-tTyBinding :: Type n; tTyBinding = TyPrim TyBinding
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o

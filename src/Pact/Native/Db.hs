@@ -44,6 +44,7 @@ dbDefs = do
       rt = mkSchemaVar "row"
       tableTy = TySchema TyTable rt
       rowTy = TySchema TyObject rt
+      bindTy = TySchema TyBinding rt
 
   foldDefs
     [defRNative "create-table" createTable'
@@ -51,14 +52,14 @@ dbDefs = do
      "Create table TABLE. `$(create-table accounts)`"
 
     ,defNative (specialForm WithRead) withRead
-     (funType tTyString [("table",tableTy),("key",tTyString),("bindings",tTyBinding)])
+     (funType tTyString [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType tTyString
-      [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",tTyBinding)])
+      [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
@@ -148,7 +149,7 @@ read' i as = argsError i as
 
 
 withDefaultRead :: NativeFun e
-withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
+withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
   !tkd <- (,,) <$> reduce table' <*> reduce key' <*> reduce defaultRow'
   case tkd of
     (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
@@ -161,7 +162,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd BindKV _)] = do
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
-withRead fi as@[table',key',b@(TBinding ps bd BindKV _)] = do
+withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   !tk <- (,) <$> reduce table' <*> reduce key'
   case tk of
     (table@TTable {..},TLitString key) -> do
