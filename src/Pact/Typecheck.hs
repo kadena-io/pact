@@ -166,7 +166,7 @@ data Fun t =
     _fInfo :: Info,
     _fName :: String,
     _fType :: FunType UserType,
-    _fArgs :: [t],
+    _fArgs :: [Named t],
     _fBody :: [AST t] }
   deriving (Eq,Functor,Foldable,Show)
 
@@ -193,6 +193,13 @@ instance Show Node where
 instance Pretty Node where
   pretty (Node i t) = pretty i <> "::" <> pretty t
 
+data Named i = Named {
+  _nnName :: String,
+  _nnNamed :: i
+  } deriving (Eq,Ord,Functor,Foldable,Traversable)
+instance (Show i) => Show (Named i) where
+  show (Named na no) = show na ++ "(" ++ show no ++ ")"
+instance (Pretty i) => Pretty (Named i) where pretty (Named na no) = dquotes (pretty na) <+> parens (pretty no)
 
 
 data AST n =
@@ -203,7 +210,7 @@ data AST n =
   } |
   Binding {
   _aNode :: n,
-  _aBindings :: [(n,AST n)],
+  _aBindings :: [(Named n,AST n)],
   _aBody :: [AST n],
   _aBindCtx :: BindCtx
   } |
@@ -404,7 +411,7 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
       f@FNative {} -> return f
       f@FDefun {..} -> do
         fb' <- forM _fBody $ \bAst ->
-          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip (map _aId _fArgs) _aAppArgs) -- this zip might need a typecheck
+          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip (map (_aId . _nnNamed) _fArgs) _aAppArgs) -- this zip might need a typecheck
         return $ set fBody fb' f
     return (App _aNode af _aAppArgs)
 substAppDefun _ _ t = return t
@@ -580,8 +587,8 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
-    trackNode t' an
-  tcs <- scopeToBody _tInfo (map (\ai -> Var ai) args) _tDefBody
+    Named n <$> trackNode t' an
+  tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
   ft' <- traverse toUserType _tFunType
   return $ FDefun _tInfo fn ft' args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
@@ -618,14 +625,14 @@ toAST TBinding {..} = do
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     aid <- freshId ai (pfx (show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
-    an <- trackNode t' aid
+    an <- Named n <$> trackNode t' aid
     case _tBindCtx of
       BindLet -> do
         v' <- toAST v
         assocAST aid v'
         return (an,v')
-      BindKV -> return (an,Var an) -- KV bind punts and simply creates a var
-  bb <- scopeToBody _tInfo (map ((\ai -> Var ai).fst) bs) _tBindBody
+      BindKV -> return (an,Var (_nnNamed an)) -- KV bind punts and simply creates a var
+  bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
   case _tBindCtx of
     BindLet -> assocAST bi (last bb)
     BindKV -> return () -- TODO check it out
