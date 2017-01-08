@@ -373,6 +373,23 @@ tryFunType roles _ f@(FunType as rt) = do
                     | otherwise -> return Nothing
 
 
+enforceSchemas :: Visitor TC Node
+enforceSchemas Pre ast = case ast of
+  (Object n ps) -> findSchema n $ \sch -> do
+    debug $ "enforceSchemas: " ++ show (n,sch)
+    return ast
+  (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
+    debug $ "enforceSchemas: " ++ show (n,sch)
+    return ast
+  _ -> return ast
+  where
+    findSchema n act = do
+      ty <- resolveTy =<< lookupAst "enforceSchemas" (_aId n)
+      case ty of
+        (TySchema _ (TyUser sch)) -> act sch
+        _ -> return ast
+enforceSchemas Post a = return a
+
 -- | Native funs get processed on their own walk.
 -- 'assocAST' associates the app arg's ID with the fun ty.
 processNatives :: Visitor TC Node
@@ -646,7 +663,7 @@ toAST TBinding {..} = do
     BindLet -> assocAST bi (last bb) >> return BindLet
     BindSchema sty -> do
       sty' <- mangleType bi <$> traverse toUserType sty
-      sn <- trackNode sty' =<< freshId _tInfo (show sty')
+      sn <- trackNode sty' =<< freshId _tInfo (show bi ++ "schema")
       return $ BindSchema sn
   return $ Binding bn bs bb bt
 
@@ -738,14 +755,14 @@ substFun :: Fun Node -> TC (Fun Node)
 substFun FNative {} = error "Native TODO"
 substFun f@FDefun {..} = do
   debug "Transform"
-  b'' <- mapM (walkAST $ substAppDefun Nothing) _fBody
+  appSub <- mapM (walkAST $ substAppDefun Nothing) _fBody
   debug "Substitution"
-  b' <- mapM (walkAST processNatives) b''
+  nativesProc <- mapM (walkAST processNatives) appSub
   debug "Solve Overloads"
   solveOverloads
+  schEnforced <- mapM (walkAST enforceSchemas) nativesProc
   ast2Ty <- resolveAllTypes
-  let f' = set fBody b' f
-  return ((\(Node i _) -> Node i (ast2Ty M.! i)) <$> f')
+  return $ (\(Node i _) -> Node i (ast2Ty M.! i)) <$> set fBody schEnforced f
 
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
