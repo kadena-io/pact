@@ -36,14 +36,13 @@ import Control.Applicative
 import Data.List
 import Control.Monad
 import Prelude hiding (exp)
-import Control.Arrow hiding (app)
+import Control.Arrow hiding (app,(<+>))
 import Prelude.Extras
 import Bound
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Text.Trifecta (Rendering)
-import Text.PrettyPrint.ANSI.Leijen (Pretty,Doc,SimpleDoc,pretty,plain,renderCompact,renderPretty,displayS)
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Text (pack,unpack)
@@ -71,6 +70,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
 import Control.Concurrent.MVar
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 
 
 import Data.Serialize (Serialize)
@@ -123,7 +123,7 @@ simpleISO8601 :: String
 simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
 newtype ModuleName = ModuleName String
-    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable)
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
 
 
@@ -179,7 +179,7 @@ instance ToJSON Literal where
 
 
 newtype TypeName = TypeName String
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty)
 instance Show TypeName where show (TypeName s) = show s
 
 data Arg o = Arg {
@@ -188,6 +188,8 @@ data Arg o = Arg {
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (Arg o) where show (Arg n t _) = n ++ ":" ++ show t
+instance (Pretty o) => Pretty (Arg o)
+  where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
 
 data FunType o = FunType {
   _ftArgs :: [Arg o],
@@ -195,6 +197,8 @@ data FunType o = FunType {
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
+instance (Pretty o) => Pretty (FunType o) where
+  pretty (FunType as t) = parens (hsep (map pretty as)) <+> "->" <+> pretty t
 
 type FunTypes o = NonEmpty (FunType o)
 funTypes :: FunType o -> FunTypes o
@@ -242,6 +246,7 @@ instance Show PrimType where
   show TyValue = tyValue
   show TyKeySet = tyKeySet
   show TyBinding = "binding"
+instance Pretty PrimType where pretty = text . show
 
 data SchemaType =
   TyTable |
@@ -250,9 +255,10 @@ data SchemaType =
 instance Show SchemaType where
   show TyTable = tyTable
   show TyObject = tyObject
+instance Pretty SchemaType where pretty = text . show
 
 newtype TypeVarName = TypeVarName { _typeVarName :: String }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty)
 instance Show TypeVarName where show = _typeVarName
 
 data TypeVar v =
@@ -273,6 +279,11 @@ instance Show v => Show (TypeVar v) where
   show (TypeVar n []) = "<" ++ show n ++ ">"
   show (TypeVar n cs) = "<" ++ show n ++ show cs ++ ">"
   show (SchemaVar n) = "<{" ++ show n ++ "}>"
+instance (Pretty v) => Pretty (TypeVar v) where
+  pretty (TypeVar n []) = angles (pretty n)
+  pretty (TypeVar n cs) = angles (pretty n <+> brackets (hsep (map pretty cs)))
+  pretty (SchemaVar n) = angles (braces (pretty n))
+
 
 
 data Type v =
@@ -284,18 +295,27 @@ data Type v =
   TyFun { _ttFunType :: FunType v } |
   TyUser { _ttUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable)
+
 instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
   show (TyList t) | isAnyTy t = tyList
                   | otherwise = "[" ++ show t ++ "]"
   show (TySchema s t) | isAnyTy t = show s
-                      | otherwise = case s of
-                          TyTable -> "table:" ++ show t
-                          TyObject -> "object:" ++ show t
+                      | otherwise = show s ++ ":" ++ show t
   show (TyFun f) = show f
   show (TyUser v) = show v
   show TyAny = "*"
   show (TyVar n) = show n
+
+instance (Pretty o) => Pretty (Type o) where
+  pretty ty = case ty of
+    TyVar n -> pretty n
+    TyUser v -> pretty v
+    TyFun f -> pretty f
+    TySchema s t -> pretty s PP.<> colon PP.<> pretty t
+    TyList t -> "list:" PP.<> pretty t
+    TyPrim t -> pretty t
+    TyAny -> "*"
 
 mkTyVar :: String -> [Type n] -> Type n
 mkTyVar n cs = TyVar (TypeVar (fromString n) cs)
@@ -334,8 +354,6 @@ makeLenses ''FunType
 makeLenses ''Arg
 makeLenses ''TypeVar
 makeLenses ''TypeVarName
-
-instance Show o => PP.Pretty (Type o) where pretty = PP.string . show
 
 
 

@@ -53,6 +53,8 @@ data UserType = UserType {
   } deriving (Eq,Ord)
 instance Show UserType where
   show UserType {..} = "{" ++ asString _utModule ++ "." ++ asString _utName ++ " " ++ show _utFields ++ "}"
+instance Pretty UserType where
+  pretty UserType {..} = braces (pretty _utModule <> dot <> pretty _utName)
 
 
 data TcId = TcId {
@@ -92,6 +94,10 @@ data Types = Types {
 instance Show Types  where
   show (Types p []) = show p
   show (Types p os) = show p ++ " " ++ show os
+instance Pretty Types where
+  pretty (Types p []) = pretty p
+  pretty (Types p os) = pretty p <+> sshow os
+
 
 
 data TcState = TcState {
@@ -116,9 +122,9 @@ instance Pretty TcState where
     indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
                            align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
     "AstToVar:" <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> sshow v) (M.toList _tcAstToVar))) <$$>
+    indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> pretty v) (M.toList _tcAstToVar))) <$$>
     "VarToTypes:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> sshow v) $ M.toList _tcVarToTypes) <$$>
+    indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> pretty v) $ M.toList _tcVarToTypes) <$$>
     "Failures:" <$$>
     indent 2 (vsep $ map (string.show) (toList _tcFailures))
     <> hardline
@@ -165,73 +171,83 @@ data Fun t =
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (Fun t) where
-  pretty FNative {..} = text (show _fName) <$$>
-    indent 4 (vsep (map (text.show) (toList _fTypes))) <>
+  pretty FNative {..} = "(native " <> text _fName <$$>
+    indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
       (case _fSpecial of
          Nothing -> mempty
-         Just (_,bod) -> mempty <$$> indent 2 (vsep (map pretty bod)))
-  pretty FDefun {..} = text (show _fName) <$$>
-    indent 4 (text (show _fType)) <$$>
-    indent 4 (text "Args:") <+> hsep (map pretty _fArgs) <$$>
-    indent 2 (vsep (map pretty _fBody))
+         Just (_,bod) -> mempty <$$> indent 2 (vsep (map pretty bod))) <$$>
+      ")"
+  pretty FDefun {..} = "(defun " <> text _fName <$$>
+    indent 2 ("::" <+> pretty _fType) <$$>
+    indent 2 ("(" <$$>
+              indent 2 (vsep (map pretty _fArgs)) <$$> ")") <$$>
+    indent 2 (vsep (map pretty _fBody)) <$$>
+    ")"
 
-
-
-data AST t =
-  App {
+data Node = Node {
   _aId :: TcId,
-  _aAppFun :: Fun t,
-  _aAppArgs :: [AST t]
+  _aTy :: Type UserType
+  } deriving (Eq,Ord)
+instance Show Node where
+  show (Node i t) = show i ++ "::" ++ show t
+instance Pretty Node where
+  pretty (Node i t) = pretty i <> "::" <> pretty t
+
+
+
+data AST n =
+  App {
+  _aNode :: n,
+  _aAppFun :: Fun n,
+  _aAppArgs :: [AST n]
   } |
   Binding {
-  _aId :: TcId,
-  _aBindings :: [(t,AST t)],
-  _aBody :: [AST t],
+  _aNode :: n,
+  _aBindings :: [(n,AST n)],
+  _aBody :: [AST n],
   _aBindCtx :: BindCtx
   } |
   List {
-  _aId :: TcId,
-  _aList :: [AST t],
-  _aListType :: Type UserType
+  _aNode :: n,
+  _aList :: [AST n]
   } |
   Object {
-  _aId :: TcId,
-  _aObject :: [(AST t,AST t)],
-  _aUserType :: Type UserType
+  _aNode :: n,
+  _aObject :: [(AST n,AST n)]
   } |
   Prim {
-  _aId :: TcId,
-  _aPrimType :: PrimType,
+  _aNode :: n,
   _aPrimValue :: PrimValue
   } |
   Var {
-  _aId :: TcId,
-  _aVar :: t
+  _aNode :: n
   } |
   Table {
-  _aId :: TcId,
-  _aUserType :: Type UserType
+  _aNode :: n
   }
 
   deriving (Eq,Functor,Foldable,Show)
 
 instance Pretty t => Pretty (AST t) where
-  pretty Prim {..} = sshow _aPrimType <> equals <> pretty _aPrimValue
-  pretty Var {..} = pretty _aVar
-  pretty Object {..} =
-    "{" <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$>
-    "}" <> colon <> sshow _aUserType
-  pretty List {..} = list (map pretty _aList)
-  pretty Binding {..} =
-    pretty _aId <$$>
-    indent 2 (vsep (map (\(k,v) -> pretty k <> text ":=" <$$> indent 4 (pretty v)) _aBindings)) <$$>
-    indent 4 (vsep (map pretty _aBody))
-  pretty App {..} =
-    pretty _aId <$$>
-    pretty _aAppFun <$$>
-    indent 2 (vsep (map pretty _aAppArgs))
-  pretty Table {..} = text "table" <> colon <> sshow _aUserType
+  pretty a = case a of
+     Prim {..} -> pn <+> equals <+> pretty _aPrimValue
+     Var {..} -> pn
+     Object {..} -> pn <$$> "{" <$$>
+       indent 2 (vsep (map (\(k,v) -> pretty k <> text ":" <$$> indent 4 (pretty v)) _aObject)) <$$>
+       "}"
+     List {..} -> pn <$$> "[" <$$> indent 2 (vsep (map pretty _aList)) <$$> "]"
+     Binding {..} -> pn <$$> "(" <> (case _aBindCtx of BindLet -> "let"; BindKV -> "bind") <$$>
+       indent 2 (vsep (map (\(k,v) ->
+                              "(" <$$>
+                              indent 2 (pretty k <+> colon <$$>
+                                        indent 2 (pretty v)) <$$>
+                              ")" ) _aBindings)) <$$>
+       indent 2 (vsep (map pretty _aBody)) <$$> ")"
+     App {..} -> pn <$$>
+       indent 2 ("(" <$$> indent 2 (vsep (map pretty _aAppArgs)) <$$> ")") <$$>
+       indent 2 (pretty _aAppFun)
+     Table {..} -> pn
+   where pn = pretty (_aNode a)
 
 
 
@@ -252,23 +268,22 @@ walkAST f t@Var {} = f Pre t >>= f Post
 walkAST f t@Table {} = f Pre t >>= f Post
 walkAST f t@Object {} = do
   Object {..} <- f Pre t
-  t' <- Object _aId <$>
-         forM _aObject (\(k,v) -> (,) <$> walkAST f k <*> walkAST f v) <*>
-         pure _aUserType
+  t' <- Object _aNode <$>
+         forM _aObject (\(k,v) -> (,) <$> walkAST f k <*> walkAST f v)
   f Post t'
 walkAST f t@List {} = do
   List {..} <- f Pre t
-  t' <- List _aId <$> mapM (walkAST f) _aList <*> pure _aListType
+  t' <- List _aNode <$> mapM (walkAST f) _aList
   f Post t'
 walkAST f t@Binding {} = do
   Binding {..} <- f Pre t
-  t' <- Binding _aId <$>
+  t' <- Binding _aNode <$>
         forM _aBindings (\(k,v) -> (k,) <$> walkAST f v) <*>
         mapM (walkAST f) _aBody <*> pure _aBindCtx
   f Post t'
 walkAST f t@App {} = do
   App {..} <- f Pre t
-  t' <- App _aId <$>
+  t' <- App _aNode <$>
         (case _aAppFun of
            fun@FNative {..} -> case _fSpecial of
              Nothing -> return fun
@@ -353,49 +368,50 @@ tryFunType roles _ f@(FunType as rt) = do
 
 -- | Native funs get processed on their own walk.
 -- 'assocAST' associates the app arg's ID with the fun ty.
-processNatives :: Visitor TC TcId
+processNatives :: Visitor TC Node
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
     -- single funtype
     ft@FunType {} :| [] -> do
-      let FunType {..} = mangleFunType i ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId aa) t) _ftArgs as
-      assocTy i _ftReturn
+      let FunType {..} = mangleFunType (_aId i) ft
+      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aId (_aNode aa)) t) _ftArgs as
+      assocTy (_aId i) _ftReturn
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
-        Just (_,[Binding {..}]) -> assocTy _aId _ftReturn
+        Just (_,[Binding {..}]) -> assocTy (_aId _aNode) _ftReturn
         _ -> return ()
     -- multiple funtypes
     fts -> do
-      let fts' = fmap (mangleFunType i) fts
-      tcOverloads %= M.insert i fts'
-      zipWithM_ (\ai aa -> assocOverload (_aId aa) (Overload (ArgVar ai) i)) [0..] as -- this assoc's the funty with the app ty.
-      assocOverload i (Overload RetVar i)
+      let fts' = fmap (mangleFunType (_aId i)) fts
+      tcOverloads %= M.insert (_aId i) fts'
+      zipWithM_ (\ai aa -> assocOverload (_aId (_aNode aa))
+                  (Overload (ArgVar ai) (_aId i))) [0..] as -- this assoc's the funty with the app ty.
+      assocOverload (_aId i) (Overload RetVar (_aId i))
   return a
 processNatives _ a = return a
 
 -- | Walk to substitute app args into vars for FDefuns
 -- 'assocAST' associates the defun's arg with the app arg type.
-substAppDefun :: Maybe (TcId, AST TcId) -> Visitor TC TcId
+substAppDefun :: Maybe (TcId, AST Node) -> Visitor TC Node
 substAppDefun sub Pre t@Var {..} = case sub of
     Nothing -> return t
     Just (defArg,appAst)
-      | defArg == _aVar -> assocAST defArg appAst >> return appAst
+      | defArg == _aId _aNode -> assocAST defArg appAst >> return appAst
       | otherwise -> return t
 substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out first.
     af <- case _aAppFun of
       f@FNative {} -> return f
       f@FDefun {..} -> do
         fb' <- forM _fBody $ \bAst ->
-          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip _fArgs _aAppArgs) -- this zip might need a typecheck
+          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip (map _aId _fArgs) _aAppArgs) -- this zip might need a typecheck
         return $ set fBody fb' f
-    return (App _aId af _aAppArgs)
+    return (App _aNode af _aAppArgs)
 substAppDefun _ _ t = return t
 
 
-trackAST :: TcId -> Type UserType -> TC ()
-trackAST i t = do
+trackAST :: Node -> TC ()
+trackAST (Node i t) = do
   debug $ "trackAST: " ++ show (i,t)
   maybe (return ()) (const (die' i $ "trackAST: ast already tracked: " ++ show (i,t)))
     =<< (M.lookup i <$> use tcAstToVar)
@@ -428,7 +444,7 @@ assocTy ai ty = do
     Nothing -> addFailure ai $ "assocTy: cannot unify: " ++ show (ai,aty,ty)
     Just (Left _same) -> do
       debug ("assocTy: noop: " ++ show (ai,aty,ty))
-      assocParams aty ty
+      assocParams ty aty
     (Just (Right u)) -> do
       debug $ "assocTy: substituting " ++ show u ++ " for " ++ show (ai,ty)
       assocParams aty ty
@@ -473,14 +489,14 @@ assocParams x y = case (x,y) of
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
-    assoc a@TyVar {} b = updateTyVar a b
-    assoc a b@TyVar {} = updateTyVar b a
+    assoc a@TyVar {} b | b /= TyAny = updateTyVar a b
+    assoc a b@TyVar {} | a /= TyAny = updateTyVar b a
     assoc _ _ = return ()
 
 -- | Track ast type to id with typechecking
-assocAST :: TcId -> AST TcId -> TC ()
+assocAST :: TcId -> AST Node -> TC ()
 assocAST ai b = do
-  let bi = _aId b
+  let bi = _aId (_aNode b)
   aty <- lookupAst "assocAST" ai
   bty <- lookupAst "assocAST" bi
   let doSub si sty fi fty = do
@@ -526,7 +542,7 @@ unifyTypes l r = case (l,r) of
         _ -> Nothing
 
 
-scopeToBody :: Info -> [AST TcId] -> Scope Int Term (Either Ref (AST TcId)) -> TC [AST TcId]
+scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
   case bt of
@@ -553,7 +569,7 @@ mangleFunType :: TcId -> FunType UserType -> FunType UserType
 mangleFunType f = over ftReturn (mangleType f) .
                   over (ftArgs.traverse.aType) (mangleType f)
 
-toFun :: Term (Either Ref (AST TcId)) -> TC (Fun TcId)
+toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') _tFunTypes
   return $ FNative _tInfo (asString _tNativeName) ft' ((,[]) <$> isSpecialForm _tNativeName)
@@ -564,9 +580,8 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
-    trackAST an t'
-    return an
-  tcs <- scopeToBody _tInfo (map (\ai -> Var ai ai) args) _tDefBody
+    trackNode t' an
+  tcs <- scopeToBody _tInfo (map (\ai -> Var ai) args) _tDefBody
   ft' <- traverse toUserType _tFunType
   return $ FDefun _tInfo fn ft' args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
@@ -575,7 +590,7 @@ notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
 notEmpty i msg [] = die i msg
 notEmpty _ _ as = return as
 
-toAST :: Term (Either Ref (AST TcId)) -> TC (AST TcId)
+toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TUserType {..} = die _tInfo "User type in value position"
@@ -587,7 +602,7 @@ toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
-  trackAST i $ idTyVar i
+  n <- trackNode (idTyVar i) i
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
@@ -595,58 +610,57 @@ toAST TApp {..} = do
       Nothing -> return (as,fun)
       Just (f,_) -> (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
                     <*> pure (set fSpecial (Just (f,[last as])) fun)
-  return $ App i fun' as'
+  return $ App n fun' as'
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (case _tBindCtx of BindLet -> "let"; BindKV -> "bind")
-  trackAST bi $ idTyVar bi
+  bn <- trackNode (idTyVar bi) bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
-    an <- freshId ai (pfx (show bi) n)
-    t' <- mangleType an <$> traverse toUserType t
-    trackAST an t'
+    aid <- freshId ai (pfx (show bi) n)
+    t' <- mangleType aid <$> traverse toUserType t
+    an <- trackNode t' aid
     case _tBindCtx of
       BindLet -> do
         v' <- toAST v
-        assocAST an v'
+        assocAST aid v'
         return (an,v')
-      BindKV -> return (an,Var an an) -- KV bind punts and simply creates a var
-  bb <- scopeToBody _tInfo (map ((\ai -> Var ai ai).fst) bs) _tBindBody
+      BindKV -> return (an,Var an) -- KV bind punts and simply creates a var
+  bb <- scopeToBody _tInfo (map ((\ai -> Var ai).fst) bs) _tBindBody
   case _tBindCtx of
     BindLet -> assocAST bi (last bb)
     BindKV -> return () -- TODO check it out
-  return $ Binding bi bs bb _tBindCtx
+  return $ Binding bn bs bb _tBindCtx
 
 toAST TList {..} = do
-  i <- freshId _tInfo "list"
-  ty <- traverse toUserType _tListType
-  trackAST i ty
-  List i <$> mapM toAST _tList <*> pure ty
+  ty <- TyList <$> traverse toUserType _tListType
+  List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST TObject {..} = do
-  i <- freshId _tInfo "object"
-  ty <- traverse toUserType _tUserType
-  trackAST i ty
-  Object i <$> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject <*> pure ty
+  debug $ "TObject: " ++ show _tUserType
+  ty <- TySchema TyObject <$> traverse toUserType _tUserType
+  Object <$> (trackNode ty =<< freshId _tInfo "object")
+    <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
 toAST TKeySet {..} = trackPrim _tInfo TyKeySet (PrimKeySet _tKeySet)
 toAST TValue {..} = trackPrim _tInfo TyValue (PrimValue _tValue)
 toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
-  i <- freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName)
+  debug $ "TTable: " ++ show _tTableType
   ty <- TySchema TyTable <$> traverse toUserType _tTableType
-  trackAST i ty
-  return $ Table i ty
+  Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName))
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = die _tInfo "TODO steps/pacts"
 
-trackPrim :: Info -> PrimType -> PrimValue -> TC (AST TcId)
-trackPrim inf ty v = do
-  i <- freshId inf (show ty)
-  trackAST i (TyPrim ty)
-  return $ Prim i ty v
+trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
+trackPrim inf pty v = do
+  let ty :: Type UserType = TyPrim pty
+  Prim <$> (trackNode ty =<< freshId inf (show ty) ) <*> pure v
 
+trackNode :: Type UserType -> TcId -> TC Node
+trackNode ty i = trackAST node >> return node
+  where node = Node i ty
 
-toUserType :: Term (Either Ref (AST TcId)) -> TC UserType
+toUserType :: Term (Either Ref (AST Node)) -> TC UserType
 toUserType t = case t of
   (TVar (Left r) _) -> derefUT r
   _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
@@ -665,7 +679,7 @@ bindArgs i args b =
     Just a -> return a
 
 
-infer :: Term Ref -> TC (Fun TcId)
+infer :: Term Ref -> TC (Fun Node)
 infer t@TDef {..} = toFun (fmap Left t)
 infer t = die (_tInfo t) "Non-def"
 
@@ -694,25 +708,25 @@ resolveAllTypes = do
   let unresolved = M.filter isUnresolvedTy ast2Ty
   unless (M.null unresolved) $ do
     debug "Unable to resolve all types"
-    liftIO $ putDoc (indent 2 (prettyMap sshow sshow unresolved))
+    liftIO $ putDoc (indent 2 (prettyMap pretty pretty unresolved))
   return ast2Ty
 
 _debugState :: TC ()
 _debugState = liftIO . putDoc . pretty =<< get
 
 
-substFun :: Fun TcId -> TC (Fun (TcId,Type UserType))
+substFun :: Fun Node -> TC (Fun Node)
 substFun FNative {} = error "Native TODO"
 substFun f@FDefun {..} = do
   debug "Transform"
   b'' <- mapM (walkAST $ substAppDefun Nothing) _fBody
   debug "Substitution"
   b' <- mapM (walkAST processNatives) b''
-  debug "Solve take 2"
+  debug "Solve Overloads"
   solveOverloads
   ast2Ty <- resolveAllTypes
   let f' = set fBody b' f
-  return ((\v -> (v,ast2Ty M.! v)) <$> f')
+  return ((\(Node i _) -> Node i (ast2Ty M.! i)) <$> f')
 
 
 _loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
@@ -722,17 +736,17 @@ _loadFun fp mn fn = do
   let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . _2 . at fn) s
   return d
 
-_infer :: FilePath -> ModuleName -> String -> IO (Fun (TcId,Type UserType), TcState)
+_infer :: FilePath -> ModuleName -> String -> IO (Fun Node, TcState)
 _infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
 
 -- _pretty =<< _inferIssue
-_inferIssue :: IO (Fun (TcId,Type UserType), TcState)
+_inferIssue :: IO (Fun Node, TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO (Fun (TcId,Type UserType), TcState)
+_inferTransfer :: IO (Fun Node, TcState)
 _inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
 
 -- prettify output of '_infer' runs
-_pretty :: (Fun (TcId,Type UserType), TcState) -> IO ()
-_pretty (f,tc) = putDoc (pretty f <> hardline <> hardline <> pretty tc)
+_pretty :: (Fun Node, TcState) -> IO ()
+_pretty (f,tc) = putDoc (pretty tc <> hardline <> hardline <> pretty f <> hardline)
