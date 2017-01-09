@@ -372,23 +372,40 @@ tryFunType roles _ f@(FunType as rt) = do
                         return $ Just f
                     | otherwise -> return Nothing
 
+asPrimString :: AST Node -> TC String
+asPrimString (Prim _ (PrimLit (LString s))) = return s
+asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " ++ show t
 
-enforceSchemas :: Visitor TC Node
-enforceSchemas Pre ast = case ast of
+applySchemas :: Visitor TC Node
+applySchemas Pre ast = case ast of
   (Object n ps) -> findSchema n $ \sch -> do
-    debug $ "enforceSchemas: " ++ show (n,sch)
+    debug $ "applySchemas: " ++ show (n,sch)
+    pmap <- M.fromList <$> forM ps
+      (\(k,v) -> (,) <$> asPrimString k <*> ((v,) <$> lookupTy (_aNode v)))
+    validateSchema sch pmap
     return ast
   (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
-    debug $ "enforceSchemas: " ++ show (n,sch)
+    debug $ "applySchemas: " ++ show (n,sch)
+    pmap <- M.fromList <$> forM bs
+      (\(Named bn _,v) -> (bn,) <$> ((v,) <$> lookupTy (_aNode v)))
+    validateSchema sch pmap
     return ast
   _ -> return ast
   where
+    validateSchema sch pmap = do
+      let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
+      forM_ (M.toList pmap) $ \(k,(v,vty)) -> case M.lookup k smap of
+        Nothing -> addFailure (_aId (_aNode v)) $ "Invalid field in schema object: " ++ show k
+        Just aty -> case unifyTypes aty vty of
+          Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
+          Just u -> assocTy (_aNode v) (either id id u)
+    lookupTy a = resolveTy =<< lookupAst "lookupTy" (_aId a)
     findSchema n act = do
-      ty <- resolveTy =<< lookupAst "enforceSchemas" (_aId n)
+      ty <- lookupTy n
       case ty of
         (TySchema _ (TyUser sch)) -> act sch
         _ -> return ast
-enforceSchemas Post a = return a
+applySchemas Post a = return a
 
 -- | Native funs get processed on their own walk.
 -- 'assocAST' associates the app arg's ID with the fun ty.
@@ -654,9 +671,7 @@ toAST TBinding {..} = do
         assocAST aid v'
         return (Named n an,v')
       BindSchema _ -> do
-        fieldName <- case v' of
-          (Prim _ (PrimLit (LString f))) -> return f
-          _ -> die ai $ "Bad binding, non-string field name: " ++ show v'
+        fieldName <- asPrimString v'
         return (Named fieldName an,Var an)
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
   bt <- case _tBindType of
@@ -744,7 +759,7 @@ resolveAllTypes = do
   let unresolved = M.filter isUnresolvedTy ast2Ty
   unless (M.null unresolved) $ do
     debug "Unable to resolve all types"
-    liftIO $ putDoc (indent 2 (prettyMap pretty pretty unresolved))
+    liftIO $ putDoc (indent 2 (prettyMap pretty pretty unresolved) <> hardline)
   return ast2Ty
 
 _debugState :: TC ()
@@ -760,7 +775,7 @@ substFun f@FDefun {..} = do
   nativesProc <- mapM (walkAST processNatives) appSub
   debug "Solve Overloads"
   solveOverloads
-  schEnforced <- mapM (walkAST enforceSchemas) nativesProc
+  schEnforced <- mapM (walkAST applySchemas) nativesProc
   ast2Ty <- resolveAllTypes
   return $ (\(Node i _) -> Node i (ast2Ty M.! i)) <$> set fBody schEnforced f
 
