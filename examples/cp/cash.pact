@@ -1,6 +1,12 @@
 (module cash 'cp-module-admin
 
-  (deftable cash)
+  (defschema entry
+    ccy:string
+    balance:decimal
+    change:decimal
+    date:time)
+
+  (deftable cash:{entry})
 
   (defun debit (id amount date)
     "Debit ID for AMOUNT, checking balance for available funds"

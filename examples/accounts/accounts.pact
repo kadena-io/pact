@@ -11,7 +11,7 @@
 \ Version: 0.1                  \
 \ Author: Stuart Popejoy"
 
-  (defobject account
+  (defschema account
     "Row type for accounts table."
      balance:decimal
      amount:decimal
@@ -47,14 +47,14 @@
         (update accounts src
                 { "balance": (- src-balance amount)
                 , "amount": (- amount)
-                , "date": (is-time date)
+                , "date": date
                 , "data": { "transfer-to": dest }
                 }
         )
         (update accounts dest
                 { "balance": (+ dest-balance amount)
                 , "amount": amount
-                , "date": (is-time date)
+                , "date": date
                 , "data": { "transfer-from": src }
                 }
         ))))
@@ -81,14 +81,14 @@
     (keys 'accounts from))
 
   (defun check-balance (balance amount)
-    (enforce (<= (is-decimal amount) balance) "Insufficient funds"))
+    (enforce (<= amount balance) "Insufficient funds"))
 
   (defun fund-account (address amount date)
     (enforce-keyset 'accounts-admin-keyset)
     (update accounts address
-            { "balance": (is-decimal amount)
+            { "balance": amount
             , "amount": amount
-            , "date": (is-time date)
+            , "date": date
             , "data": "Admin account funding" }
       ))
 
@@ -126,7 +126,7 @@
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
-                , "date": (is-time date)
+                , "date": date
                 , "data": data
                 }
           )))
@@ -138,7 +138,7 @@
      (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
-            , "date": (is-time date)
+            , "date": date
             , "data": data
             }
       )))

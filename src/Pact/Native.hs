@@ -43,8 +43,6 @@ import Pact.Types
 import Pact.Compile
 
 
-type IsXFun e = FunApp -> Term Name -> Eval e (Term Name)
-
 natives :: Eval e NativeDef
 natives = do
   nds <- langDefs
@@ -121,17 +119,6 @@ langDefs = foldDefs
      "Interpolate VARS into TEMPLATE using {}. \
      \`(format \"My {} has {}\" \"dog\" \"fleas\")`"
 
-    ,defRNative "is-string" (isX isString) (isTy tTyString)
-     "Return VAL, enforcing string type. `!(is-string 123)` `(is-string \"abc\")`"
-    ,defRNative "is-integer" (isX isInteger) (isTy tTyInteger)
-     "Return VAL, enforcing integer type `(is-integer 123)` `!(is-integer \"abc\")`"
-    ,defRNative "is-bool" (isX isBool) (isTy tTyBool)
-     "Return VAL, enforcing boolean type. `(is-bool true)`"
-    ,defRNative "is-decimal" (isX isDecimal) (isTy tTyDecimal)
-     "Return VAL, enforcing decimal type. `(is-decimal 123.45)`"
-    ,defRNative "is-time" (isX isTime) (isTy tTyTime)
-     "Return VAL, enforcing time type. `(is-time (time \"2016-07-22T11:26:35Z\"))`"
-
     ,defRNative "pact-txid" pactTxId (funType tTyInteger [])
      "Return reference tx id for pact execution."
 
@@ -161,7 +148,6 @@ langDefs = foldDefs
           takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
-          isTy t = funType t [("val",t)]
 
 
 -- | Symbol map must be made within target monad
@@ -300,29 +286,6 @@ enforce _ [TLiteral (LBool b) _,TLitString msg]
 enforce i as = argsError i as
 {-# INLINE enforce #-}
 
-isX :: IsXFun e -> RNativeFun e
-isX fun i [t] = fun i t
-isX  _ i as = argsError i as
-
-isString :: IsXFun e
-isString _ t@TLitString {} = return t
-isString i t = evalError' i $ "Not string: " ++ show t
-
-isInteger :: IsXFun e
-isInteger _ t@TLitInteger {} = return t
-isInteger i t = evalError' i $ "Not integer: " ++ show t
-
-isDecimal :: IsXFun e
-isDecimal _ t@(TLiteral LDecimal {} _) = return t
-isDecimal i t = evalError' i $ "Not decimal: " ++ show t
-
-isBool :: IsXFun e
-isBool _ t@(TLiteral LBool {} _) = return t
-isBool i t = evalError' i $ "Not boolean: " ++ show t
-
-isTime :: IsXFun e
-isTime _ t@(TLiteral LTime {} _) = return t
-isTime i t = evalError' i $ "Not time: " ++ show t
 
 pactTxId :: RNativeFun e
 pactTxId _ [] = do

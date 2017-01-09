@@ -45,16 +45,16 @@ die i s = throwM $ CheckerException i s
 debug :: MonadIO m => String -> m ()
 debug = liftIO . putStrLn
 
-data UserType = UserType {
+data UserType = Schema {
   _utName :: TypeName,
   _utModule :: ModuleName,
   _utFields :: [Arg UserType],
   _utInfo :: Info
   } deriving (Eq,Ord)
 instance Show UserType where
-  show UserType {..} = "{" ++ asString _utModule ++ "." ++ asString _utName ++ " " ++ show _utFields ++ "}"
+  show Schema {..} = "{" ++ asString _utModule ++ "." ++ asString _utName ++ " " ++ show _utFields ++ "}"
 instance Pretty UserType where
-  pretty UserType {..} = braces (pretty _utModule <> dot <> pretty _utName)
+  pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
 
 
 data TcId = TcId {
@@ -639,7 +639,7 @@ notEmpty _ _ as = return as
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
-toAST TUserType {..} = die _tInfo "User type in value position"
+toAST TSchema {..} = die _tInfo "User type in value position"
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left Direct {}) -> die i "Native in value context"
@@ -686,8 +686,8 @@ toAST TList {..} = do
   ty <- TyList <$> traverse toUserType _tListType
   List <$> (trackNode ty =<< freshId _tInfo "list") <*> mapM toAST _tList
 toAST TObject {..} = do
-  debug $ "TObject: " ++ show _tUserType
-  ty <- TySchema TyObject <$> traverse toUserType _tUserType
+  debug $ "TObject: " ++ show _tObjectType
+  ty <- TySchema TyObject <$> traverse toUserType _tObjectType
   Object <$> (trackNode ty =<< freshId _tInfo "object")
     <*> mapM (\(k,v) -> (,) <$> toAST k <*> toAST v) _tObject
 toAST TConst {..} = toAST _tConstVal -- TODO typecheck here
@@ -720,7 +720,7 @@ toUserType t = case t of
     derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
 
 toUserType' :: Show n => Term n -> TC UserType
-toUserType' TUserType {..} = UserType _tUserTypeName _tModule <$> mapM (traverse toUserType') _tFields <*> pure _tInfo
+toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType') _tFields <*> pure _tInfo
 toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a

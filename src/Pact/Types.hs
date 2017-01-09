@@ -545,11 +545,11 @@ data Term n =
     } |
     TObject {
       _tObject :: ![(Term n,Term n)]
-    , _tUserType :: !(Type (Term n))
+    , _tObjectType :: !(Type (Term n))
     , _tInfo :: !Info
     } |
-    TUserType {
-      _tUserTypeName :: !TypeName
+    TSchema {
+      _tSchemaName :: !TypeName
     , _tModule :: !ModuleName
     , _tDocs :: !(Maybe String)
     , _tFields :: ![Arg (Term n)]
@@ -608,8 +608,8 @@ instance Show n => Show (Term n) where
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
-    show TUserType {..} =
-      "(TUserType " ++ asString _tModule ++ "." ++ asString _tUserTypeName ++ " " ++
+    show TSchema {..} =
+      "(TSchema " ++ asString _tModule ++ "." ++ asString _tSchemaName ++ " " ++
       show _tFields ++ maybeDelim " " _tDocs ++ ")"
     show TTable {..} =
       "(TTable " ++ asString _tModule ++ "." ++ asString _tTableName ++ ":" ++ show _tTableType
@@ -639,7 +639,7 @@ instance Monad Term where
     TUse m i >>= _ = TUse m i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
-    TUserType {..} >>= f = TUserType _tUserTypeName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
+    TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
 
 
@@ -693,12 +693,12 @@ typeof t = case t of
       TBinding {..} -> case _tBindType of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt
-      TObject {..} -> Right $ TySchema TyObject _tUserType
+      TObject {..} -> Right $ TySchema TyObject _tObjectType
       TKeySet {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
-      TUserType {..} -> Left $ "defobject:" ++ asString _tUserTypeName
+      TSchema {..} -> Left $ "defobject:" ++ asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
 
 
@@ -729,7 +729,7 @@ termEq _ _ = False
 
 
 abbrev :: Show t => Term t -> String
-abbrev t@TModule {} = "<module " ++ show (_tModuleName t) ++ ">"
+abbrev (TModule m _ _) = "<module " ++ asString (_mName m) ++ ">"
 abbrev (TList bs _ _) = concatMap abbrev bs
 abbrev TDef {..} = "<defun " ++ _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString _tNativeName ++ ">"
@@ -743,7 +743,7 @@ abbrev (TUse m _) = "<use '" ++ show m ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
-abbrev TUserType {..} = "<defobject " ++ asString _tUserTypeName ++ ">"
+abbrev TSchema {..} = "<defschema " ++ asString _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString _tTableName ++ ">"
 
 

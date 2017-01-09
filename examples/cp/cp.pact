@@ -5,8 +5,26 @@
 
   "Commercial paper demonstration smart contract."
 
-  (deftable cp-master)
-  (deftable cp-inventory)
+  (defschema cp-asset
+    ticker:string
+    issuer:string
+    future-value:decimal
+    discount-rate:decimal
+    maturity:integer
+    par:decimal
+    discount:decimal
+    cost:decimal
+    trade-date:time
+    settlement-date:time)
+
+  (deftable cp-master:{cp-asset})
+
+  (defschema inventory
+    qty:integer
+    price:decimal
+    date:time)
+
+  (deftable cp-inventory:{inventory})
 
   (defun issue (issuer cusip ticker future-value discount-rate
                 days-to-maturity par date)
@@ -26,14 +44,14 @@
            (cost (- future-value discount))
            (settlement-date (add-time date (days days-to-maturity))))
 
-        (insert cp-master (is-string cusip)
+        (insert cp-master cusip
           {
-            "ticker": (is-string ticker),
+            "ticker": ticker,
             "issuer": issuer,
             "future-value": future-value,
             "discount-rate": discount-rate,
             "maturity": days-to-maturity,
-            "par": (is-decimal par),
+            "par": par,
             "discount": discount,
             "cost": cost,
             "trade-date": date,
@@ -65,7 +83,7 @@
   )
 
 
-  (defun transfer-inventory (owner:string cusip transferee qty price date)
+  (defun transfer-inventory (owner cusip transferee qty price date)
 
     "Transfer CUSIP QTY from OWNER to TRANSFEREE, confirming PRICE"
 
@@ -77,8 +95,8 @@
           "price" := owner-price
         }
 
-        (enforce (>= owner-owned (is-integer qty)) "Owner has inventory")
-        (enforce (= owner-price (is-decimal price)) "Price matches inventory")
+        (enforce (>= owner-owned qty) "Owner has inventory")
+        (enforce (= owner-price price) "Price matches inventory")
 
         (with-default-read cp-inventory transferee-key
           { "qty": 0 }
@@ -86,11 +104,13 @@
 
           (update cp-inventory owner-key
             { "qty": (- owner-owned qty),
-              "date": (is-time date) })
+              "date": date })
 
           (write cp-inventory transferee-key
             { "qty": (+ transferee-owned qty),
-              "date": date }))))
+            "date": date,
+            "price": price
+            }))))
   )
 
 

@@ -131,7 +131,7 @@ loadModule m bod1 mi = do
                 TDef {..} -> return _tDefName
                 TNative {..} -> return $ asString _tNativeName
                 TConst {..} -> return $ _aName _tConstArg
-                TUserType {..} -> return $ asString _tUserTypeName
+                TSchema {..} -> return $ asString _tSchemaName
                 TTable {..} -> return $ asString _tTableName
                 _ -> evalError (_tInfo t) "Invalid module member"
               return (dn,t))
@@ -208,7 +208,7 @@ reduce (TBinding ps bod c i) = case c of
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce TUserType {..} = TUserType _tUserTypeName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
+reduce TSchema {..} = TSchema _tSchemaName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
@@ -364,16 +364,16 @@ check1 i spec t = do
 
 
 checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
-checkUserType total i ps (TyUser tu@TUserType {..}) = do
+checkUserType total i ps (TyUser tu@TSchema {..}) = do
   let uty = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
-      Nothing -> evalError i $ "Invalid field for {" ++ asString _tUserTypeName ++ "}: " ++ ks
+      Nothing -> evalError i $ "Invalid field for {" ++ asString _tSchemaName ++ "}: " ++ ks
       Just a -> return (a,v)
     t -> evalError i $ "Invalid object, non-String key found: " ++ show t
   when total $ do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
-    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tUserTypeName ++ "}: " ++ show (M.elems missing)
+    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tSchemaName ++ "}: " ++ show (M.elems missing)
   typecheck aps
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t

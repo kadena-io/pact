@@ -194,7 +194,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
         TDef {} -> return d
         TNative {} -> return d
         TConst {} -> return d
-        TUserType {} -> return d
+        TSchema {} -> return d
         TTable {} -> return d
         t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable allowed in module"
       mkModule docs body = do
@@ -302,18 +302,18 @@ doConst es i = case es of
       a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
       return $ TConst a cm v' docs i
 
-doUserType :: [Exp] -> Info -> Compile (Term Name)
-doUserType es i = case es of
+doSchema :: [Exp] -> Info -> Compile (Term Name)
+doSchema es i = case es of
   (EAtom utn Nothing Nothing _:ELiteral (LString docs) _:as) -> mkUT utn (Just docs) as
   (EAtom utn Nothing Nothing _:as) -> mkUT utn Nothing as
-  _ -> syntaxError i "Invalid object definition"
+  _ -> syntaxError i "Invalid schema definition"
   where
     mkUT utn docs as = do
       cm <- currentModule i
       fs <- forM as $ \a -> case a of
         EAtom an Nothing ty ai -> Arg an <$> maybeTyVar ty <*> pure ai
-        _ -> syntaxError i "Invalid object field definition"
-      return $ TUserType (fromString utn) cm docs fs i
+        _ -> syntaxError i "Invalid schema field definition"
+      return $ TSchema (fromString utn) cm docs fs i
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
@@ -342,7 +342,7 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
       ("let",Nothing) -> doLet rest li
       ("let*",Nothing) -> doLets rest li
       ("defconst",Nothing) -> doConst rest li
-      ("defobject",Nothing) -> doUserType rest li
+      ("defschema",Nothing) -> doSchema rest li
       ("deftable",Nothing) -> doTable rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
