@@ -3,7 +3,7 @@
 (define-keyset 'keyset (read-keyset "msgkeys"))
 (module tctest 'keyset
 
-  (defobject person
+  (defschema person
     name:string
     age:integer
     dob:time)

@@ -737,7 +737,8 @@ infer t = die (_tInfo t) "Non-def"
 
 resolveTy :: Type UserType -> TC (Type UserType)
 resolveTy tv@(TyVar v) = use tcVarToTypes >>= \m -> case M.lookup v m of
-      Just (Types t _) -> resolveTy t
+      Just (Types t _) | t /= tv -> resolveTy t
+                       | otherwise -> return tv
       Nothing -> return tv
 resolveTy (TySchema s st) = TySchema s <$> resolveTy st
 resolveTy (TyList l) = TyList <$> resolveTy l
@@ -773,9 +774,10 @@ substFun f@FDefun {..} = do
   appSub <- mapM (walkAST $ substAppDefun Nothing) _fBody
   debug "Substitution"
   nativesProc <- mapM (walkAST processNatives) appSub
+  debug "Schemas"
+  schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "Solve Overloads"
   solveOverloads
-  schEnforced <- mapM (walkAST applySchemas) nativesProc
   ast2Ty <- resolveAllTypes
   return $ (\(Node i _) -> Node i (ast2Ty M.! i)) <$> set fBody schEnforced f
 
