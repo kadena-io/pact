@@ -33,18 +33,18 @@
     (insert accounts id { "balance": initial-balance })
   )
 
-  (defun get-balance (id:string) (read 'payments-table id 'balance))
+  (defun get-balance (id:string) (read accounts id 'balance))
 
   (defun pay-with-let (from:string to:string amount:integer)
-    (with-read 'payments-table from { "balance":= from-bal }
-      (with-read 'payments-table to { "balance":= to-bal }
+    (with-read accounts from { "balance":= from-bal }
+      (with-read accounts to { "balance":= to-bal }
         (enforce (>= from-bal amount) "Insufficient Funds")
         (let* ((new-from-bal (- from-bal amount))
                (new-to-bal (+ to-bal amount))
               )
-          (update 'payments-table from
+          (update accounts from
                   { "balance": new-from-bal})
-          (update 'payments-table to
+          (update accounts to
                   { "balance": new-to-bal })
          )
       )
@@ -52,25 +52,25 @@
   )
 
   (defun pay (from:string to:string amount:integer)
-    (with-read 'payments-table from { "balance":= from-bal }
-      (with-read 'payments-table to { "balance":= to-bal }
+    (with-read accounts from { "balance":= from-bal }
+      (with-read accounts to { "balance":= to-bal }
         (enforce (>= from-bal amount) "Insufficient Funds")
-        (update 'payments-table from
+        (update accounts from
                 { "balance": (- from-bal amount) })
-        (update 'payments-table to
+        (update accounts to
                 { "balance": (+ to-bal amount) })
       )
     )
   )
 
   (defun pay-with-read (id:string)
-    (with-read 'payments-table id { "balance":= from-bal }
+    (with-read accounts id { "balance":= from-bal }
       (enforce (>= from-bal 0) "bal too low")
     )
   )
 
   (defun pay-update (id:string amount:integer)
-    (update 'payments-table id
+    (update accounts id
             { "balance": amount })
   )
 )

@@ -274,7 +274,7 @@ pattern ENFORCE_App_msg app' msg' <- (App _ (NativeFunc "enforce") (Args_App_Lit
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
 pattern ENFORCEKEYSET keyset' <- (App _ (NativeFunc "enforce-keyset") (Args_Lit (LString keyset')))
 pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [RawTableName table', key', AST_Obj _ kvs'])
-pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [AST_Lit (LString table'), key'])
+pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [RawTableName table', key'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
 
@@ -505,60 +505,3 @@ _analyzeSampFunc s = do
   a <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
-
---  (defun create-account (id:string initial-balance:integer)
---    "Create a new account for ID with INITIAL-BALANCE funds"
---    (enforce-keyset 'module-keyset)
---    (enforce (> initial-balance 0) "Initial balance must be > 0")
---    (insert accounts id { "balance": initial-balance })
---  )
---FDefun
---  { _fInfo = "(defun create-account (id:string initial-balance:integer) "
---  , _fName = "analyze-tests.create-account"
---  , _fType = "(id:string initial-balance:integer) -> <f>"
---  , _fArgs =
---    ["id"(analyze-tests.create-account_id0::string)
---    ,"initial-balance"(analyze-tests.create-account_initial-balance1::integer)
---    ]
---  , _fBody =
---    [ App {_aNode = appNenforce-keyset2::bool
---          , _aAppFun = FNative {_fInfo = ""
---                               , _fName = "enforce-keyset"
---                               , _fTypes = "(keyset-or-name:<k[string,keyset]>) -> bool :| []"
---                               , _fSpecial = Nothing}
---          , _aAppArgs =
---              [ Prim {_aNode = string3::string, _aPrimValue = PrimLit "module-keyset"}
---              ]
---          }
---    , App {_aNode = appNenforce4::bool
---          , _aAppFun = FNative {_fInfo = ""
---                               , _fName = "enforce"
---                               , _fTypes = "(test:bool msg:string) -> bool :| []"
---                               , _fSpecial = Nothing}
---          , _aAppArgs = [App {_aNode = appN>5::bool
---                             , _aAppFun = FNative {_fInfo = ""
---                                                  , _fName = ">"
---                                                  , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>) -> bool :| []"
---                                                  , _fSpecial = Nothing}
---                             , _aAppArgs =
---                               [Var {_aNode = analyze-tests.create-account_initial-balance1::integer}
---                               ,Prim {_aNode = integer6::integer, _aPrimValue = PrimLit 0}
---                               ]}
---                        ,Prim {_aNode = string7::string, _aPrimValue = PrimLit "Initial balance must be > 0"}
---                        ]
---          }
---    , App {_aNode = appNinsert8::string
---          , _aAppFun = FNative {_fInfo = ""
---                               , _fName = "insert"
---                               , _fTypes = "(table:table:<{row}> key:string object:object:<{row}>) -> string :| []"
---                               , _fSpecial = Nothing}
---          , _aAppArgs =
---            [ Table {_aNode = "analyze-tests.accounts9::table:{analyze-tests.account [balance:integer,data:<e>]}"}
---            , Var {_aNode = "analyze-tests.create-account_id0::string"}
---            ,Object { _aNode = "object10::object:{analyze-tests.account [balance:integer,data:<e>]}"
---                    , _aObject =
---                      [ (Prim {_aNode = string11::string, _aPrimValue = PrimLit "balance"}
---                        ,Var {_aNode = analyze-tests.create-account_initial-balance1::integer})
---                      ]}
---            ]}
---    ]}
