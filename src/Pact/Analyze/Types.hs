@@ -63,7 +63,7 @@ data ProverCtx = ProverCtx
 makeLenses ''ProverCtx
 
 data ProverState = ProverState
-  { _psVars :: Map TcId SymVar
+  { _psVars :: Map Node SymVar
   , _psNodeSMT :: [Command]
   } deriving (Show, Eq)
 makeLenses ''ProverState
@@ -221,32 +221,43 @@ basicOperatorToQualId o
   | o == "/" = Right $ QIdentifier $ ISymbol "/"
   | otherwise = Left $ "Operator " ++ o ++ " is not yet supported!"
 
-isAppView :: AST (TcId, Type) -> (Bool, AST (TcId, Type))
+isAppView :: AST Node -> (Bool, AST Node)
 isAppView app@(App _ _ _) = (True, app)
 isAppView _ = (False, undefined)
 
-isInsertOrUpdate :: Fun (TcId,Type) -> (Bool, String)
+isInsertOrUpdate :: Fun Node -> (Bool, String)
 isInsertOrUpdate (NativeFunc "insert") = (True, "insert")
 isInsertOrUpdate (NativeFunc "update") = (True, "update")
 isInsertOrUpdate err = (False, error $ "isInsertOrUpdate view pattern failure, wanted insert or update string, got: " ++ show err)
 
-pattern Obj_Key_Val key' val' <- (Lit _ _ (LVLit (LString key')), val')
+ofPrimType :: Node -> Maybe PrimType
+ofPrimType (Node _ (TyPrim ty)) = Just ty
+ofPrimType _ = Nothing
+
+tcIdToUniqueId :: TcId -> String
+tcIdToUniqueId (TcId _ name' nonce') = name' ++ show nonce'
+
+tcIdToSymName :: TcId -> SymName
+tcIdToSymName = SymName . tcIdToUniqueId
+
+pattern OfPrimType pType <- (ofPrimType -> Just pType)
+
+pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
 
 pattern NativeFunc f <- (FNative _ f _ _)
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,bdy)))
 
-pattern AST_Lit lit <- (Lit _ _ (LVLit lit))
-pattern AST_Var var <- (Var _ var)
-pattern AST_KeySetName keyset' <- (Lit _ _ (LVLit (LString keyset')))
-pattern AST_Obj objName kvs <- (Object objName kvs _)
+pattern AST_Lit lit <- (Prim _ (PrimLit lit))
+--pattern AST_KeySetName keyset' <- (Prim _ _ (PrimLit (LString keyset')))
+--pattern AST_Obj objName kvs <- (Object objName kvs _)
 
-pattern Args_Var var <- [AST_Var var]
+pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
-pattern Args_Var_Var var1 var2 <- [(AST_Var var1),(Var _ var2)]
-pattern Args_Var_Lit var lit <- [(AST_Var var),AST_Lit lit]
-pattern Args_Lit_Var lit var <- [AST_Lit lit,(AST_Var var)]
+pattern Args_Var_Var var1 var2 <- [(Var var1),(Var var2)]
+pattern Args_Var_Lit var lit <- [(Var var),AST_Lit lit]
+pattern Args_Lit_Var lit var <- [AST_Lit lit,(Var var)]
 pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (True, app2))]
-pattern Args_App_Lit_Var app' lit var <- [(isAppView -> (True,app')),AST_Lit lit,(AST_Var var)]
+pattern Args_App_Lit_Var app' lit var <- [(isAppView -> (True,app')),AST_Lit lit,(Var var)]
 pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
 pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
 
@@ -257,13 +268,13 @@ pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App ap
 pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
 pattern ENFORCE_App_msg app' msg' <- (App _ (NativeFunc "enforce") (Args_App_Lit app' (LString msg')))
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
-pattern WITHKEYSET keyset' bdy' <- (App _ (NativeFuncSpecial "with-keyset" bdy') [AST_KeySetName keyset'])
-pattern INSERT_or_UPDATE fnName' table' key' objName' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
-pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" [BINDING bindings' bdy']) [AST_Lit (LString table'), key'])
+--pattern WITHKEYSET keyset' bdy' <- (App _ (NativeFuncSpecial "with-keyset" bdy') [AST_KeySetName keyset'])
+--pattern INSERT_or_UPDATE fnName' table' key' objName' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
+pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [AST_Lit (LString table'), key'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
 
-varToTerm :: TcId -> PactAnalysis (Either String Smt.Term)
+varToTerm :: Node -> PactAnalysis (Either String Smt.Term)
 varToTerm n = do
   sVar <- Map.lookup n <$> view psVars
   return $ case sVar of
@@ -279,17 +290,17 @@ literalToTerm (LInteger v) = Right $ TermSpecConstant $ SpecConstantNumeral v
 literalToTerm (LDecimal v) = Right $ TermSpecConstant $ SpecConstantDecimal $ show v
 literalToTerm (LTime _) = Left $ "Time base proving is currently unsupported"
 
-mkPureEquationTerm :: AST (TcId, Type) -> PactAnalysis (Either String Smt.Term)
-mkPureEquationTerm (NativeFunc_Var_Lit f v@(name', _) l)
+mkPureEquationTerm :: AST Node -> PactAnalysis (Either String Smt.Term)
+mkPureEquationTerm (NativeFunc_Var_Lit f v l)
   | isBasicOperator f = do
-      varAsTerm <- varToTerm name'
+      varAsTerm <- varToTerm v
       litAsTerm <- return $ literalToTerm l
       op <- return $ basicOperatorToQualId f
       case (op, varAsTerm, litAsTerm) of
         (Right op', Right v', Right l') -> return $ Right $ TermQualIdentifierT op' [v', l']
         err -> return $ Left $ "unable to analyze: " ++ show err
   | otherwise = return $ Left $ "Function " ++ show f ++ " is unsupported"
-mkPureEquationTerm (NativeFunc_Lit_Var f l v@(name', _))
+mkPureEquationTerm (NativeFunc_Lit_Var f l name')
   | isBasicOperator f = do
       varAsTerm <- varToTerm name'
       litAsTerm <- return $ literalToTerm l
@@ -298,7 +309,7 @@ mkPureEquationTerm (NativeFunc_Lit_Var f l v@(name', _))
         (Right op', Right l', Right v') -> return $ Right $ TermQualIdentifierT op' [l',v']
         err -> return $ Left $ "unable to analyze: " ++ show err
   | otherwise = return $ Left $ "Function " ++ show f ++ " is unsupported"
-mkPureEquationTerm (NativeFunc_Var_Var f v1@(name1, _) v2@(name2, _))
+mkPureEquationTerm (NativeFunc_Var_Var f name1 name2)
   | isBasicOperator f = do
       var1AsTerm <- varToTerm name1
       var2AsTerm <- varToTerm name2
@@ -316,7 +327,7 @@ mkPureEquationTerm (NativeFunc_App_App f app1 app2)
         (Right op', Right app1'', Right app2'') -> return $ Right $ TermQualIdentifierT op' [app1'', app2'']
         err -> return $ Left $ "unable to analyze: " ++ show err
 mkPureEquationTerm (AST_Lit l) = return $ literalToTerm l
-mkPureEquationTerm (AST_Var (name',_)) = varToTerm name'
+mkPureEquationTerm (Var name') = varToTerm name'
 mkPureEquationTerm err = return $ Left $ "Unsupported construct found when constructing pure-equation term:\n" ++ show err
 
 negatePureEquationTerm :: Smt.Term -> Smt.Term
@@ -328,14 +339,11 @@ pureEquationTermToAssertion t = Assert t
 negateAssertion :: Command -> Command
 negateAssertion (Assert t) = Assert $ negatePureEquationTerm t
 
-convertName :: TcId -> SymName
-convertName = SymName . show
-
-convertType :: Type -> Maybe SymType
-convertType TyInteger = Just SymInteger
-convertType TyBool = Just SymBool
-convertType TyDecimal = Just SymDecimal
-convertType TyString = Just SymString
+convertType :: Node -> Maybe SymType
+convertType (OfPrimType TyInteger) = Just SymInteger
+convertType (OfPrimType TyBool) = Just SymBool
+convertType (OfPrimType TyDecimal) = Just SymDecimal
+convertType (OfPrimType TyString) = Just SymString
 convertType _ = Nothing
 
 symTypeToSortId :: SymType -> Either String Sort
@@ -344,11 +352,11 @@ symTypeToSortId SymBool = Right $ SortId $ ISymbol "Bool"
 symTypeToSortId SymDecimal = Right $ SortId $ ISymbol "Real"
 symTypeToSortId SymString = Right $ SortId $ ISymbol "String"
 
-constructSymVar :: (TcId, Type) -> SymVar
-constructSymVar (name', type') = newVar
+constructSymVar :: Node -> SymVar
+constructSymVar node'@(Node tcId _) = newVar
   where
-    convType = convertType type'
-    convName = convertName name'
+    convType = convertType node'
+    convName = tcIdToSymName tcId
     trackingStatus = case convType of
       Nothing -> Untracked "Unsupported Type"
       Just _ -> Tracked
@@ -359,12 +367,12 @@ symVarToDeclareConst SymVar{..} = case _svType of
   Nothing -> Left $ "SymVar Type is unsupported"
   Just t' -> symTypeToSortId t' >>= return . DeclareFun (unSymName _svName) []
 
-analyzeFunction :: Fun (TcId, Type) -> IO SymAst
+analyzeFunction :: Fun Node -> IO SymAst
 analyzeFunction (FDefun _ name' _ args' bdy') = do
-  initialState <- return $ ProverState (Map.fromList $ (\x -> (fst x, constructSymVar x)) <$> args') []
+  initialState <- return $ ProverState (Map.fromList $ (\x -> (x, constructSymVar x)) . _nnNamed <$> args') []
   runReaderT (analyze bdy') initialState
 
-analyze :: [AST (TcId, Type)] -> PactAnalysis SymAst
+analyze :: [AST Node] -> PactAnalysis SymAst
 analyze [] = return $ Terminate
 analyze ((IF_App_Lit_Lit app' lit1 lit2):rest) = do
   initialState <- ask
@@ -411,34 +419,34 @@ analyze (AST_Lit lit':[]) = do
     { _rlResult = lit'
     , _saProverState = s}
 analyze (AST_Lit lit':rest) = analyze rest -- this has no effect do just pass
-analyze (AST_Var var':[]) = do
+analyze (Var var':[]) = do
   s <- ask
   psVars' <- view psVars
-  case Map.lookup (fst var') psVars' of
+  case Map.lookup var' psVars' of
     Nothing -> error $ "Variable not found: " ++ show var' ++ " in " ++ show psVars'
     Just sVar -> return $ ReturnVar
       { _rvResult = sVar
       , _saProverState = s}
-analyze (AST_Var var':rest) = analyze rest -- this has no effect do just pass
-analyze (WITHKEYSET keyset' bdy:rest) = do
-  block' <- analyze bdy
-  state' <- ask
-  return $ WithKeyset
-    { _wkKeySet = keyset'
-    , _saProverState = state'
-    , _saRest = block' }
-analyze (INSERT_or_UPDATE fnName table key objName kvs:rest) = do
-  objKey' <- return $ case key of
-    AST_Var (vName,_) -> unSymName $ convertName vName
-    AST_Lit v -> show v
-    err -> error $ "insert's lookup key must be a literal or a variable and not: " ++ show err
-  mangledObjects <- return $ fmap (mangleObjToVar objName) kvs
-  newState <- bindNewVars mangledObjects
-  rest' <- local (const newState) $ analyze rest
-  return $ TableInsert
-    { _tiTableName = table
-    , _saRest = rest'
-    , _saProverState = newState}
+analyze (Var var':rest) = analyze rest -- this has no effect do just pass
+--analyze (WITHKEYSET keyset' bdy:rest) = do
+--  block' <- analyze bdy
+--  state' <- ask
+--  return $ WithKeyset
+--    { _wkKeySet = keyset'
+--    , _saProverState = state'
+--    , _saRest = block' }
+--analyze (INSERT_or_UPDATE fnName table key objName kvs:rest) = do
+--  objKey' <- return $ case key of
+--    Var (vName,_) -> unSymName $ tcIdToSymName vName
+--    AST_Lit v -> show v
+--    err -> error $ "insert's lookup key must be a literal or a variable and not: " ++ show err
+--  mangledObjects <- return $ fmap (mangleObjToVar objName) kvs
+--  newState <- bindNewVars mangledObjects
+--  rest' <- local (const newState) $ analyze rest
+--  return $ TableInsert
+--    { _tiTableName = table
+--    , _saRest = rest'
+--    , _saProverState = newState}
 analyze (WITHREAD table' key' bindings' ast':rest) = do
   newState <- bindNewVars bindings'
   local (const newState) $ do
@@ -452,27 +460,27 @@ analyze (WITHREAD table' key' bindings' ast':rest) = do
 analyze (READ:_rest) = error "Objects are not yet supported, which `read` returns. Please use `with-read` instead"
 analyze err = error $ "Pattern match failure: " ++ show err
 
-mangleObjToVar :: TcId -> (AST (TcId, Type), AST (TcId, Type)) -> ((TcId,Type), AST (TcId, Type))
-mangleObjToVar objName (AST_Lit (LString field), ast@(AST_Var (_,type'))) =
-  let tcId' = TcId undefined ("insert-" ++ show objName ++ "-" ++ field) 0
-  in ((tcId',type'),ast)
+--mangleObjToVar :: TcId -> (AST Node, AST Node) -> (Node, AST Node)
+--mangleObjToVar objName (AST_Lit (LString field), ast@(Var node')) =
+--  let tcId' = TcId undefined ("insert-" ++ show objName ++ "-" ++ field) 0
+--  in ((tcId',type'),ast)
 
-bindNewVars :: [((TcId,Type), AST (TcId, Type))] -> PactAnalysis ProverState
+bindNewVars :: [(Named Node, AST Node)] -> PactAnalysis ProverState
 bindNewVars [] = ask
-bindNewVars ((varId@(name',_), ast'):rest) = do
+bindNewVars (((Named _ node'), ast'):rest) = do
   curVars <- view psVars
-  if Map.member name' curVars
-    then error $ "Duplicate Variable Declared: " ++ show name' ++ " already in " ++ show curVars
+  if Map.member node' curVars
+    then error $ "Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars
     else do
-      newSymVar <- return $ constructSymVar varId
+      newSymVar <- return $ constructSymVar node'
       curSt <- ask
-      local (psVars %~ (Map.insert name' newSymVar)) $ do
-        relation <- constructVarRelation varId ast'
+      local (psVars %~ (Map.insert node' newSymVar)) $ do
+        relation <- constructVarRelation node' ast'
         local (psNodeSMT %~ (++ [relation])) $ bindNewVars rest
 
-constructVarRelation :: (TcId, Type) -> AST (TcId, Type) -> PactAnalysis Command
-constructVarRelation (name',_) ast' = do
-  varAsTerm <- varToTerm name'
+constructVarRelation :: Node -> AST Node -> PactAnalysis Command
+constructVarRelation node' ast' = do
+  varAsTerm <- varToTerm node'
   relation <- mkPureEquationTerm ast'
   case (varAsTerm, relation) of
     (Right v, Right r) -> return $ pureEquationTermToAssertion (TermQualIdentifierT (QIdentifier $ ISymbol "=") [v,r])
@@ -485,243 +493,11 @@ appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 _parseSmtCmd :: String -> Smt.Command
 _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 
-_getSampFunc :: String -> IO (Fun (TcId, Type))
-_getSampFunc s = do
-  (Right f, _) <- _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
-  return f
+_getSampFunc :: String -> IO (Fun Node)
+_getSampFunc s = fst <$> _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
 
 _analyzeSampFunc :: String -> IO ()
 _analyzeSampFunc s = do
   a <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
-
---FDefun
---  { _fInfo = "(defun create-account (id:string initial-balance:integer)"
---  , _fName = "analyze-tests.create-account"
---  , _fType = "(id:string initial-balance:integer) -> <e>"
---  , _fArgs =
---    [ (analyze-tests.create-account_id0,string)
---    , (analyze-tests.create-account_initial-balance1,integer)
---    ]
---  , _fBody = [
---      App
---        { _aId = appNwith-keyset2
---        , _aAppFun = FNative
---          { _fInfo = ""
---          , _fName = "with-keyset"
---          , _fTypes = "(keyset-or-name:string body:@rest) -> <a> :| []"
---          , _fSpecial =
---            Just ( "with-keyset"
--- pattern INSERT table' key' objName' kvs' <- (App _ (NativeFunc "insert") [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
---                 , [ App { _aId = appNinsert4
---                         , _aAppFun = FNative
---                           { _fInfo = ""
---                           , _fName = "insert"
---                           , _fTypes = "(table:string key:string object:object) -> string :| []"
---                           , _fSpecial = Nothing}
---                         , _aAppArgs =
---                           [ Lit { _aId = string5
---                                 , _aLitType = string
---                                 , _aLitValue = LVLit "payments-table"}
---                           , Var { _aId = analyze-tests.create-account_id0
---                                 , _aVar = (analyze-tests.create-account_id0,string)}
---                           , Object { _aId = object6
---                                    , _aObject =
---                                      [
---                                        (Lit { _aId = string7
---                                             , _aLitType = string
---                                             , _aLitValue = LVLit "balance"}
---                                        , Var { _aId = analyze-tests.create-account_initial-balance1
---                                              , _aVar = (analyze-tests.create-account_initial-balance1,integer)})
---                                      ], _aUserType = Nothing}
---                           ]}
---                   ]
---                 )
---        , _aAppArgs =
---          [ Lit { _aId = string3
---                , _aLitType = string
---                , _aLitValue = LVLit "module-keyset"}
---          ]}
---      ]}
-
---  (defun pay-update (id:string amount:integer)
---    (update 'payments-table id
---            { "balance": amount })
---  )
---FDefun { _fInfo = "(defun pay-update (id:string amount:integer)"
---       , _fName = "analyze-tests.pay-update"
---       , _fType = "(id:string amount:integer) -> <l>"
---       , _fArgs =
---           [ (analyze-tests.pay-update_id0,string)
---           , (analyze-tests.pay-update_amount1,integer)]
---       , _fBody =
---         [ App { _aId = appNupdate2
---               , _aAppFun = FNative { _fInfo = ""
---                                    , _fName = "update"
---                                    , _fTypes = "(table:string key:string object:object) -> string :| []"
---                                    , _fSpecial = Nothing}
---               , _aAppArgs =
---                 [ Lit {_aId = string3, _aLitType = string, _aLitValue = LVLit "payments-table"}
---                 , Var {_aId = analyze-tests.pay-update_id0, _aVar = (analyze-tests.pay-update_id0,string)}
---                 , Object { _aId = object4
---                          , _aObject =
---                            [ ( Lit {_aId = string5, _aLitType = string, _aLitValue = LVLit "balance"}
---                              , Var {_aId = analyze-tests.pay-update_amount1, _aVar = (analyze-tests.pay-update_amount1,integer)})]
---                          , _aUserType = Nothing}
---                 ]}
---         ]}
-
---FDefun
---  { _fInfo =  "(defun pay (from:string to:string amount:integer)"
---  , _fName = "analyze-tests.pay"
---  , _fType = "(from:string to:string amount:integer) -> <g>"
---  , _fArgs =
---    [ (analyze-tests.pay_from0,string)
---    , (analyze-tests.pay_to1,string)
---    , (analyze-tests.pay_amount2,integer) ]
---  , _fBody =
---    [ App { _aId = appNwith-read3
---          , _aAppFun = FNative { _fInfo = ""
---                               , _fName = "with-read"
---                               , _fTypes = "(table:string key:string bindings:binding) -> string :| []"
---                               , _fSpecial = Just ("with-read"
---                                                  ,[ Binding { _aId = bind5
---                                                             , _aBindings =
---                                                               [ ( (bind5_from-bal6,integer)
---                                                                 , Var { _aId = bind5_from-bal6
---                                                                       , _aVar = (bind5_from-bal6,integer)}
---                                                                 )
---                                                               ]
---                                                             , _aBody =
---                                                               [ App {_aId = appNwith-read7
---                                                                     , _aAppFun =
---                                                                       FNative { _fInfo = ""
---                                                                               , _fName = "with-read"
---                                                                               , _fTypes = "(table:string key:string bindings:binding) -> string :| []"
---                                                                               , _fSpecial = Just
---                                                                                 ( "with-read"
---                                                                                 , [Binding { _aId = bind9
---                                                                                            , _aBindings = [
---                                                                                                ((bind9_to-bal10,integer)
---                                                                                                ,Var { _aId = bind9_to-bal10
---                                                                                                     , _aVar = (bind9_to-bal10,integer)})
---                                                                                                ]
---                                                                                            , _aBody =
---                                                                                                [ App { _aId = appNenforce11
---                                                                                                      , _aAppFun = FNative {_fInfo = ""
---                                                                                                                           , _fName = "enforce"
---                                                                                                                           , _fTypes = "(test:bool msg:string) -> bool :| []"
---                                                                                                                           , _fSpecial = Nothing }
---                                                                                                      , _aAppArgs =
---                                                                                                        [ App { _aId = appN>=12
---                                                                                                              , _aAppFun = FNative { _fInfo = ""
---                                                                                                                                   , _fName = ">="
---                                                                                                                                   , _fTypes = "(x:<a => (integer|decimal|string|time)> y:<a => (integer|decimal|string|time)>) -> bool :| []"
---                                                                                                                                   , _fSpecial = Nothing}
---                                                                                                              , _aAppArgs =
---                                                                                                                [ Var { _aId = bind5_from-bal6
---                                                                                                                      , _aVar = (bind5_from-bal6,integer)}
---                                                                                                                , Var { _aId = analyze-tests.pay_amount2
---                                                                                                                      , _aVar = (analyze-tests.pay_amount2,integer)}
---                                                                                                                ]
---                                                                                                              }
---                                                                                                        , Lit { _aId = string13
---                                                                                                              , _aLitType = string
---                                                                                                              , _aLitValue = LVLit "Insufficient Funds"}
---                                                                                                        ]}
---                                                                                                , App { _aId = appNupdate14
---                                                                                                      , _aAppFun = FNative { _fInfo = ""
---                                                                                                                           , _fName = "update"
---                                                                                                                           , _fTypes = "(table:string key:string object:object) -> string :| []"
---                                                                                                                           , _fSpecial = Nothing}
---                                                                                                      , _aAppArgs =
---                                                                                                        [ Lit { _aId = string15
---                                                                                                              , _aLitType = string
---                                                                                                              , _aLitValue = LVLit "payments-table"}
---                                                                                                        , Var { _aId = analyze-tests.pay_from0
---                                                                                                              , _aVar = (analyze-tests.pay_from0,string)}
---                                                                                                        , Object { _aId = object16
---                                                                                                                 , _aObject =
---                                                                                                                   [ (Lit { _aId = string17
---                                                                                                                          , _aLitType = string
---                                                                                                                          , _aLitValue = LVLit "balance"}
---                                                                                                                     , App { _aId = appN-18
---                                                                                                                           , _aAppFun = FNative { _fInfo = ""
---                                                                                                                                                , _fName = "-"
---                                                                                                                                                , _fTypes = "(x:<a => (integer|decimal)> y:<a => (integer|decimal)>) -> <a => (integer|decimal)> :| [(x:<a => (integer|decimal)> y:<b => (integer|decimal)>) -> decimal,(x:<a => (integer|decimal)>) -> <a => (integer|decimal)>]"
---                                                                                                                                                , _fSpecial = Nothing}
---                                                                                                                           , _aAppArgs =
---                                                                                                                             [ Var {_aId = bind5_from-bal6, _aVar = (bind5_from-bal6,integer)}
---                                                                                                                             , Var {_aId = analyze-tests.pay_amount2
---                                                                                                                                   , _aVar = (analyze-tests.pay_amount2,integer)}
---                                                                                                                             ]
---                                                                                                                           }
---                                                                                                                     )
---                                                                                                                   ]
---                                                                                                                 , _aUserType = Nothing}
---                                                                                                        ]
---                                                                                                      }
---                                                                                                , App { _aId = appNupdate19
---                                                                                                      , _aAppFun = FNative { _fInfo = ""
---                                                                                                                           , _fName = "update"
---                                                                                                                           , _fTypes = "(table:string key:string object:object) -> string :| []"
---                                                                                                                           , _fSpecial = Nothing }
---                                                                                                      , _aAppArgs =
---                                                                                                        [ Lit {_aId = string20, _aLitType = string, _aLitValue = LVLit "payments-table"}
---                                                                                                        , Var {_aId = analyze-tests.pay_to1, _aVar = (analyze-tests.pay_to1,string)}
---                                                                                                        , Object { _aId = object21
---                                                                                                                 , _aObject =
---                                                                                                                   [ ( Lit { _aId = string22, _aLitType = string, _aLitValue = LVLit "balance"}
---                                                                                                                     , App { _aId = appN+23
---                                                                                                                           , _aAppFun = FNative {_fInfo = ""
---                                                                                                                                                , _fName = "+"
---                                                                                                                                                , _fTypes = "(x:<a => (integer|decimal)> y:<a => (integer|decimal)>) -> <a => (integer|decimal)> :| [(x:<a => (integer|decimal)> y:<b => (integer|decimal)>) -> decimal,(x:<a => (string|list|object)> y:<a => (string|list|object)>) -> <a => (string|list|object)>]"
---                                                                                                                                                , _fSpecial = Nothing}
---                                                                                                                           , _aAppArgs =
---                                                                                                                             [ Var { _aId = bind9_to-bal10, _aVar = (bind9_to-bal10,integer)}
---                                                                                                                             , Var { _aId = analyze-tests.pay_amount2
---                                                                                                                                   , _aVar = (analyze-tests.pay_amount2,integer)}
---                                                                                                                             ]
---                                                                                                                           }
---                                                                                                                     )
---                                                                                                                   ]
---                                                                                                                 , _aUserType = Nothing}
---                                                                                                        ]
---                                                                                                      }
---                                                                                                , App { _aId = appNformat24
---                                                                                                      , _aAppFun = FNative { _fInfo = ""
---                                                                                                                           , _fName = "format"
---                                                                                                                           , _fTypes = "(template:string vars:@rest) -> string :| []"
---                                                                                                                           , _fSpecial = Nothing}
---                                                                                                      , _aAppArgs =
---                                                                                                        [ Lit { _aId = string25, _aLitType = string, _aLitValue = LVLit "{} paid {} {}"}
---                                                                                                        , Var { _aId = analyze-tests.pay_from0
---                                                                                                              , _aVar = (analyze-tests.pay_from0,string)}
---                                                                                                        , Var { _aId = analyze-tests.pay_to1
---                                                                                                              , _aVar = (analyze-tests.pay_to1,string)}
---                                                                                                        , Var { _aId = analyze-tests.pay_amount2
---                                                                                                              , _aVar = (analyze-tests.pay_amount2,integer)}
---                                                                                                        ]}
---                                                                                                ]
---                                                                                            , _aBindCtx = BindKV}
---                                                                                   ]
---                                                                                 )
---                                                                               }
---                                                                     , _aAppArgs =
---                                                                       [ Lit { _aId = string8, _aLitType = string, _aLitValue = LVLit "payments-table"}
---                                                                       , Var { _aId = analyze-tests.pay_to1
---                                                                             , _aVar = (analyze-tests.pay_to1,string)}
---                                                                       ]}
---                                                               ]
---                                                             , _aBindCtx = BindKV}
---                                                   ]
---                                                  )
---                               }
---          , _aAppArgs =
---            [ Lit {_aId = string4, _aLitType = string, _aLitValue = LVLit "payments-table"}
---            , Var {_aId = analyze-tests.pay_from0, _aVar = (analyze-tests.pay_from0,string)}
---            ]
---          }
---    ]
---  }

@@ -21,9 +21,10 @@
 
   (defun create-account (id:string initial-balance:integer)
     "Create a new account for ID with INITIAL-BALANCE funds"
-    (with-keyset 'module-keyset
-      (enforce (> initial-balance 0) "Initial balance must be > 0")
-      (insert 'payments-table id { "balance": initial-balance })))
+    (enforce-keyset 'module-keyset)
+    (enforce (> initial-balance 0) "Initial balance must be > 0")
+    (insert 'payments-table id { "balance": initial-balance })
+  )
 
   (defun get-balance (id:string) (read 'payments-table id 'balance))
 
