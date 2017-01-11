@@ -94,7 +94,7 @@ data SymAst =
     , _saProverState :: ProverState } |
   ReturnUnit |
   Terminate |
-  WithKeyset
+  EnforceKeySet
     { _wkKeySet :: String
     , _saRest :: SymAst
     , _saProverState :: ProverState } |
@@ -117,69 +117,69 @@ data SymAst =
   deriving (Show, Eq)
 
 instance ToJSON SymAst where
-  toJSON IfBranch{..} =
-    object [ "node" .= ("if" :: String)
-           , "state" .= _saProverState
-           , "cond" .= (SmtShow.showSL _ifbrCond)
-           , "true" .= _ifbrTrue
-           , "false" .= _ifbrFalse
+  toJSON IfBranch{..} = toJSON
+           [ object [ "node" .= ("if" :: String) ]
+           , object ["state" .= _saProverState]
+           , object ["cond" .= (SmtShow.showSL _ifbrCond)]
+           , object ["true" .= _ifbrTrue]
+           , object ["false" .= _ifbrFalse]
            ]
   toJSON EnforceConstraint{..} =
-    object [ "node" .= ("enforce" :: String)
-           , "state" .= _saProverState
-           , "failsIf" .= _ecFailsIf
-           , "rest" .= _saRest
+    toJSON [ object ["node" .= ("enforce" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["failsIf" .= _ecFailsIf]
+           , object ["rest" .= _saRest]
            ]
   toJSON ErrorLeaf{..} =
-    object [ "node" .= ("error" :: String)
-           , "state" .= _saProverState
-           , "why" .= _elWhy
+    toJSON [ object ["node" .= ("error" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["why" .= _elWhy]
            ]
   toJSON ReturnLit{..} =
-    object [ "node" .= ("return-literal" :: String)
-           , "state" .= _saProverState
-           , "returned_literal" .= _rlResult
+    toJSON [ object ["node" .= ("return-literal" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["returned_literal" .= _rlResult]
            ]
   toJSON ReturnVar{..} =
-    object [ "node" .= ("return-variable" :: String)
-           , "state" .= _saProverState
-           , "returned_variable" .= _rvResult
+    toJSON [ object ["node" .= ("return-variable" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["returned_variable" .= _rvResult]
            ]
   toJSON ReturnUnit =
-    object [ "node" .= ("return-unit" :: String)
+    toJSON [ object ["node" .= ("return-unit" :: String)]
            ]
   toJSON Terminate =
-    object [ "node" .= ("terminate" :: String)
+    toJSON [ object ["node" .= ("terminate" :: String)]
            ]
-  toJSON WithKeyset{..} =
-    object [ "node" .= ("with-keyset" :: String)
-           , "state" .= _saProverState
-           , "required_keyset" .= _wkKeySet
-           , "rest" .= _saRest
+  toJSON EnforceKeySet{..} =
+    toJSON [ object ["node" .= ("enforce-keyset" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["required_keyset" .= _wkKeySet]
+           , object ["rest" .= _saRest]
            ]
   toJSON WithRead{..} =
-    object [ "node" .= ("with-read" :: String)
-           , "state" .= _saProverState
-           , "table" .= _wrTableName
-           , "lookup_key" .= _wrKey
-           , "rest" .= _saRest
+    toJSON [ object ["node" .= ("with-read" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["table" .= _wrTableName]
+           , object ["lookup_key" .= _wrKey]
+           , object ["rest" .= _saRest]
            ]
   toJSON TableInsert{..} =
-    object [ "node" .= ("Insert" :: String)
-           , "state" .= _saProverState
-           , "table" .= _tiTableName
-           , "rest" .= _saRest
+    toJSON [ object ["node" .= ("Insert" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["table" .= _tiTableName]
+           , object ["rest" .= _saRest]
            ]
   toJSON TableUpdate{..} =
-    object [ "node" .= ("Insert" :: String)
-           , "state" .= _saProverState
-           , "table" .= _tiTableName
-           , "rest" .= _saRest
+    toJSON [ object ["node" .= ("Insert" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["table" .= _tiTableName]
+           , object ["rest" .= _saRest]
            ]
   toJSON CannotAnalyze{..} =
-    object [ "node" .= ("CannotAnalyze" :: String)
-           , "state" .= _saProverState
-           , "why" .= _elWhy
+    toJSON [ object ["node" .= ("CannotAnalyze" :: String)]
+           , object ["state" .= _saProverState]
+           , object ["why" .= _elWhy]
            ]
 
 ppSymAst :: SymAst -> IO ()
@@ -240,7 +240,12 @@ tcIdToUniqueId (TcId _ name' nonce') = name' ++ show nonce'
 tcIdToSymName :: TcId -> SymName
 tcIdToSymName = SymName . tcIdToUniqueId
 
+nodeToUniqueId :: Node -> String
+nodeToUniqueId (Node tcId _) = tcIdToUniqueId tcId
+
 pattern OfPrimType pType <- (ofPrimType -> Just pType)
+
+pattern RawTableName t <- (Table (Node (TcId _ t _) _))
 
 pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
 
@@ -248,8 +253,7 @@ pattern NativeFunc f <- (FNative _ f _ _)
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,bdy)))
 
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
---pattern AST_KeySetName keyset' <- (Prim _ _ (PrimLit (LString keyset')))
---pattern AST_Obj objName kvs <- (Object objName kvs _)
+pattern AST_Obj objNode kvs <- (Object objNode kvs)
 
 pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
@@ -268,8 +272,8 @@ pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App ap
 pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
 pattern ENFORCE_App_msg app' msg' <- (App _ (NativeFunc "enforce") (Args_App_Lit app' (LString msg')))
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
---pattern WITHKEYSET keyset' bdy' <- (App _ (NativeFuncSpecial "with-keyset" bdy') [AST_KeySetName keyset'])
---pattern INSERT_or_UPDATE fnName' table' key' objName' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [AST_Lit (LString table'), key', AST_Obj objName' kvs'])
+pattern ENFORCEKEYSET keyset' <- (App _ (NativeFunc "enforce-keyset") (Args_Lit (LString keyset')))
+pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [RawTableName table', key', AST_Obj _ kvs'])
 pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [AST_Lit (LString table'), key'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
@@ -428,25 +432,25 @@ analyze (Var var':[]) = do
       { _rvResult = sVar
       , _saProverState = s}
 analyze (Var var':rest) = analyze rest -- this has no effect do just pass
---analyze (WITHKEYSET keyset' bdy:rest) = do
---  block' <- analyze bdy
---  state' <- ask
---  return $ WithKeyset
---    { _wkKeySet = keyset'
---    , _saProverState = state'
---    , _saRest = block' }
---analyze (INSERT_or_UPDATE fnName table key objName kvs:rest) = do
---  objKey' <- return $ case key of
---    Var (vName,_) -> unSymName $ tcIdToSymName vName
---    AST_Lit v -> show v
---    err -> error $ "insert's lookup key must be a literal or a variable and not: " ++ show err
---  mangledObjects <- return $ fmap (mangleObjToVar objName) kvs
---  newState <- bindNewVars mangledObjects
---  rest' <- local (const newState) $ analyze rest
---  return $ TableInsert
---    { _tiTableName = table
---    , _saRest = rest'
---    , _saProverState = newState}
+analyze (ENFORCEKEYSET keyset':rest) = do
+  block' <- analyze rest
+  state' <- ask
+  return $ EnforceKeySet
+    { _wkKeySet = keyset'
+    , _saProverState = state'
+    , _saRest = block' }
+analyze (INSERT_or_UPDATE fnName table key kvs:rest) = do
+  objKey' <- return $ case key of
+    Var node' -> nodeToUniqueId node'
+    AST_Lit (LString v) -> v
+    err -> error $ "insert's lookup key must be a string literal or a variable and not: " ++ show err
+  mangledObjects <- return $ fmap (mangleObjToVar table) kvs
+  newState <- bindNewVars mangledObjects
+  rest' <- local (const newState) $ analyze rest
+  return $ TableInsert
+    { _tiTableName = table
+    , _saRest = rest'
+    , _saProverState = newState}
 analyze (WITHREAD table' key' bindings' ast':rest) = do
   newState <- bindNewVars bindings'
   local (const newState) $ do
@@ -460,10 +464,10 @@ analyze (WITHREAD table' key' bindings' ast':rest) = do
 analyze (READ:_rest) = error "Objects are not yet supported, which `read` returns. Please use `with-read` instead"
 analyze err = error $ "Pattern match failure: " ++ show err
 
---mangleObjToVar :: TcId -> (AST Node, AST Node) -> (Node, AST Node)
---mangleObjToVar objName (AST_Lit (LString field), ast@(Var node')) =
---  let tcId' = TcId undefined ("insert-" ++ show objName ++ "-" ++ field) 0
---  in ((tcId',type'),ast)
+mangleObjToVar :: String -> (AST Node, AST Node) -> (Named Node, AST Node)
+mangleObjToVar tableId (Prim (Node pTcId _) (PrimLit (LString field)), ast@(Var (Node varTcId varType))) =
+  let node' = Node (TcId (_tiInfo pTcId) (tableId ++ "-insert-" ++ field) (_tiId varTcId)) varType
+  in (Named (tableId ++ "insert-key") node',ast)
 
 bindNewVars :: [(Named Node, AST Node)] -> PactAnalysis ProverState
 bindNewVars [] = ask
@@ -501,3 +505,60 @@ _analyzeSampFunc s = do
   a <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
+
+--  (defun create-account (id:string initial-balance:integer)
+--    "Create a new account for ID with INITIAL-BALANCE funds"
+--    (enforce-keyset 'module-keyset)
+--    (enforce (> initial-balance 0) "Initial balance must be > 0")
+--    (insert accounts id { "balance": initial-balance })
+--  )
+--FDefun
+--  { _fInfo = "(defun create-account (id:string initial-balance:integer) "
+--  , _fName = "analyze-tests.create-account"
+--  , _fType = "(id:string initial-balance:integer) -> <f>"
+--  , _fArgs =
+--    ["id"(analyze-tests.create-account_id0::string)
+--    ,"initial-balance"(analyze-tests.create-account_initial-balance1::integer)
+--    ]
+--  , _fBody =
+--    [ App {_aNode = appNenforce-keyset2::bool
+--          , _aAppFun = FNative {_fInfo = ""
+--                               , _fName = "enforce-keyset"
+--                               , _fTypes = "(keyset-or-name:<k[string,keyset]>) -> bool :| []"
+--                               , _fSpecial = Nothing}
+--          , _aAppArgs =
+--              [ Prim {_aNode = string3::string, _aPrimValue = PrimLit "module-keyset"}
+--              ]
+--          }
+--    , App {_aNode = appNenforce4::bool
+--          , _aAppFun = FNative {_fInfo = ""
+--                               , _fName = "enforce"
+--                               , _fTypes = "(test:bool msg:string) -> bool :| []"
+--                               , _fSpecial = Nothing}
+--          , _aAppArgs = [App {_aNode = appN>5::bool
+--                             , _aAppFun = FNative {_fInfo = ""
+--                                                  , _fName = ">"
+--                                                  , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>) -> bool :| []"
+--                                                  , _fSpecial = Nothing}
+--                             , _aAppArgs =
+--                               [Var {_aNode = analyze-tests.create-account_initial-balance1::integer}
+--                               ,Prim {_aNode = integer6::integer, _aPrimValue = PrimLit 0}
+--                               ]}
+--                        ,Prim {_aNode = string7::string, _aPrimValue = PrimLit "Initial balance must be > 0"}
+--                        ]
+--          }
+--    , App {_aNode = appNinsert8::string
+--          , _aAppFun = FNative {_fInfo = ""
+--                               , _fName = "insert"
+--                               , _fTypes = "(table:table:<{row}> key:string object:object:<{row}>) -> string :| []"
+--                               , _fSpecial = Nothing}
+--          , _aAppArgs =
+--            [ Table {_aNode = "analyze-tests.accounts9::table:{analyze-tests.account [balance:integer,data:<e>]}"}
+--            , Var {_aNode = "analyze-tests.create-account_id0::string"}
+--            ,Object { _aNode = "object10::object:{analyze-tests.account [balance:integer,data:<e>]}"
+--                    , _aObject =
+--                      [ (Prim {_aNode = string11::string, _aPrimValue = PrimLit "balance"}
+--                        ,Var {_aNode = analyze-tests.create-account_initial-balance1::integer})
+--                      ]}
+--            ]}
+--    ]}

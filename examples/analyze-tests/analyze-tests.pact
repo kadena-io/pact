@@ -1,7 +1,6 @@
 (define-keyset 'module-keyset (read-keyset "module-keyset"))
 
 (module analyze-tests 'module-keyset
-
   (defun gt-ten (a:integer)
     (if (> a 10) "more than ten" "less than ten")
   )
@@ -19,11 +18,19 @@
     )
   )
 
+  (defschema account
+    "Row type for accounts table."
+     balance:integer
+     data
+     )
+  (deftable accounts:{account}
+    "Main table for accounts module.")
+
   (defun create-account (id:string initial-balance:integer)
     "Create a new account for ID with INITIAL-BALANCE funds"
     (enforce-keyset 'module-keyset)
     (enforce (> initial-balance 0) "Initial balance must be > 0")
-    (insert 'payments-table id { "balance": initial-balance })
+    (insert accounts id { "balance": initial-balance })
   )
 
   (defun get-balance (id:string) (read 'payments-table id 'balance))
