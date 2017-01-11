@@ -87,7 +87,7 @@ instance Show Overload where
 
 
 data Types = Types {
-  _tsPlain :: Type UserType,
+  _tsType :: Type UserType,
   _tsOverloads :: [Overload]
   } deriving (Eq,Ord)
 
@@ -104,7 +104,7 @@ data TcState = TcState {
   _tcSupply :: Int,
   _tcOverloads :: M.Map TcId (FunTypes UserType),
   _tcFailures :: S.Set CheckerException,
-  _tcAstToVar :: M.Map TcId (Type UserType),
+  _tcAstToVar :: M.Map TcId (TypeVar UserType),
   _tcVarToTypes :: M.Map (TypeVar UserType) Types
   } deriving (Eq,Show)
 
@@ -368,7 +368,7 @@ tryFunType roles _ f@(FunType as rt) = do
         Just solved | allConcrete solved -> do
                         debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
                         forM_ solved $ \(_,(uty,tvs)) -> forM_ tvs $ \tv ->
-                          tcVarToTypes %= M.adjust (set tsPlain uty) tv
+                          tcVarToTypes %= M.adjust (set tsType uty) tv
                         return $ Just f
                     | otherwise -> return Nothing
 
@@ -399,7 +399,7 @@ applySchemas Pre ast = case ast of
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocTy (_aNode v) (either id id u)
-    lookupTy a = resolveTy =<< lookupAst "lookupTy" (_aId a)
+    lookupTy a = resolveTy =<< ((_tsType . snd) <$> lookupAst "lookupTy" (_aId a))
     findSchema n act = do
       ty <- lookupTy n
       case ty of
@@ -454,69 +454,70 @@ substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out
     return (App _aNode af _aAppArgs)
 substAppDefun _ _ t = return t
 
-
+-- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,
+-- otherwise make a new var based on the TcId.
 trackAST :: Node -> TC ()
 trackAST (Node i t) = do
   debug $ "trackAST: " ++ show (i,t)
   maybe (return ()) (const (die' i $ "trackAST: ast already tracked: " ++ show (i,t)))
     =<< (M.lookup i <$> use tcAstToVar)
-  tcAstToVar %= M.insert i t
-  case t of
-    TyVar v -> do
-      maybe (return ()) (const (die' i $ "trackAST: var already tracked: " ++ show (i,t)))
-        =<< (M.lookup v <$> use tcVarToTypes)
-      tcVarToTypes %= M.insert v (Types t [])
-    _ -> return ()
+  let v = case t of
+        (TyVar tv) -> tv
+        _ -> TypeVar (fromString (show i)) []
+  tcAstToVar %= M.insert i v
+  maybe (return ()) (const (die' i $ "trackAST: var already tracked: " ++ show (i,t)))
+    =<< (M.lookup v <$> use tcVarToTypes)
+  tcVarToTypes %= M.insert v (Types t [])
+
 
 addFailure :: TcId -> String -> TC ()
 addFailure i s = do
   debug $ "Failure: " ++ show (i,s)
   tcFailures %= S.insert (CheckerException (_tiInfo i) s)
 
-lookupAst :: String -> TcId -> TC (Type UserType)
-lookupAst msg i = maybe (die' i $ msg ++ ": ast not already tracked: " ++ show i) return =<<
-                  (M.lookup i <$> use tcAstToVar)
+lookupAst :: String -> TcId -> TC (TypeVar UserType,Types)
+lookupAst msg i = do
+  v <- maybe (die' i $ msg ++ ": ast not already tracked: " ++ show i) return =<<
+       (M.lookup i <$> use tcAstToVar)
+  ts <- maybe (die' i $ msg ++ ": ast var not already tracked: " ++ show (i,v)) return =<<
+        (M.lookup v <$> use tcVarToTypes)
+  return (v,ts)
 
--- | Track type to id with typechecking
+-- | Do substitution between a non-AST type (types from natives, overloads, schemas)
+-- and an AST type.
 assocTy :: Node -> Type UserType -> TC ()
 assocTy (Node ai _) ty = do
-  aty <- lookupAst "assocTy" ai
-  (avm,atysm) <- case aty of
-    TyVar tv -> (Just tv,) . M.lookup tv <$> use tcVarToTypes
-    _ -> return (Nothing,Nothing)
+  (av,aty) <- lookupAst "assocTy" ai
   debug $ "assocTy: " ++ show (ai,aty,ty)
-  case unifyTypes aty ty of
-    Nothing -> addFailure ai $ "assocTy: cannot unify: " ++ show (ai,aty,ty)
-    Just (Left _same) -> do
-      debug ("assocTy: noop: " ++ show (ai,aty,ty))
-      assocParams ty aty
-    (Just (Right u)) -> do
+  unifyTypes' "assocTy" ai (_tsType aty) ty $ \r -> case r of
+    Left _same -> do
+      -- AST type is most specialized. If assoc ty is a var, update it to point
+      -- at ast type.
+      assocParams ty (_tsType aty)
+      case ty of
+        TyVar tv -> do
+          tvtysm <- M.lookup tv <$> use tcVarToTypes
+          case tvtysm of
+            Nothing -> do
+              debug $ "assocTy: substituting " ++ show aty ++ " for var " ++ show tv
+              tcVarToTypes %= M.insert tv aty
+            Just tvtys ->
+              -- substitute now for tracked var if necessary
+              unifyTypes' "assocTy" ai (_tsType aty) (_tsType tvtys) $ \r' ->
+                (tcVarToTypes . at tv . _Just . tsType) .= either id id r'
+        _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
+    Right u -> do
+      -- Associated ty is most specialized, simply update record for AST type.
       debug $ "assocTy: substituting " ++ show u ++ " for " ++ show (ai,ty)
-      assocParams aty ty
-      case (avm,atysm) of
-        (Nothing,Nothing) -> do
-          tcAstToVar %= M.insert ai u
-          updateTyVar u u
-        (Just v,Just tys) ->
-          tcVarToTypes %= M.insert v (set tsPlain u tys)
-        _ -> die' ai $ "assocTy: var not tracked: " ++ show (ai,avm,atysm)
+      tcVarToTypes . at av . _Just . tsType .= ty
 
 -- | Track type to id with typechecking
 assocOverload :: TcId -> Overload -> TC ()
 assocOverload ai o = do
-  aty <- lookupAst "assocTy" ai
-  (avm,atysm) <- case aty of
-    TyVar tv -> (Just tv,) . M.lookup tv <$> use tcVarToTypes
-    _ -> return (Nothing,Nothing)
-  debug $ "assocOverload: " ++ show (ai,aty,o)
-  case (avm,atysm) of
-    (Just v,Just tys) -> do
-      debug ("assocTy: associating " ++ show o ++ " with " ++ show (ai,v,tys))
-      tcVarToTypes %= M.insert v (over tsOverloads (o:) tys)
-    _ | isConcreteTy aty -> do
-          debug ("assocTy: associating " ++ show o ++ " with concrete ty/id " ++ show (ai,aty))
-          alterTypes (TypeVar (fromString (show ai)) []) (Types aty [o]) (over tsOverloads (o:))
-      | otherwise -> die' ai $ "assocTy: cannot track overload, not a var or not tracked: " ++ show (ai,aty,atysm,o)
+  (av,aty) <- lookupAst "assocTy" ai
+  debug $ "assocOverload: " ++ show (ai,av,aty,o)
+  (tcVarToTypes . at av . _Just . tsOverloads) %= (o:)
+
 
 alterTypes :: TypeVar UserType -> Types -> (Types -> Types) -> TC ()
 alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
@@ -524,7 +525,7 @@ alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 updateTyVar :: Type UserType -> Type UserType -> TC ()
 updateTyVar (TyVar uv) u = do
   debug $ "updateTyVar: " ++ show (uv,u)
-  alterTypes uv (Types u []) (set tsPlain u)
+  alterTypes uv (Types u []) (set tsType u)
 updateTyVar _ _ = return ()
 
 assocParams :: Type UserType -> Type UserType -> TC ()
@@ -538,24 +539,27 @@ assocParams x y = case (x,y) of
     assoc a b@TyVar {} | a /= TyAny = updateTyVar b a
     assoc _ _ = return ()
 
--- | Track ast type to id with typechecking
+-- | Substitute AST types to most specialized.
 assocAST :: TcId -> AST Node -> TC ()
 assocAST ai b = do
   let bi = _aId (_aNode b)
-  aty <- lookupAst "assocAST" ai
-  bty <- lookupAst "assocAST" bi
-  let doSub si sty fi fty = do
-        debug $ "assocAST: substituting " ++ show (si,sty) ++ " for " ++ show (fi,fty)
-        tcAstToVar %= M.insert fi sty
-        case fty of
-          TyVar fv -> tcVarToTypes %= M.delete fv
-          _ -> return ()
-  case unifyTypes aty bty of
+  (av,aty) <- lookupAst "assocAST" ai
+  (bv,bty) <- lookupAst "assocAST" bi
+  let doSub si sv sty fi fv fty = do
+        debug $ "assocAST: substituting " ++ show (si,sv,sty) ++ " for " ++ show (fi,fv,fty)
+        tcAstToVar %= M.insert fi sv
+        unless (sv == fv) $ tcVarToTypes %= M.delete fv
+  case unifyTypes (_tsType aty) (_tsType bty) of
     Nothing -> addFailure bi $ "assocAST: cannot unify: " ++ show (aty,bty)
-    Just (Left _) -> doSub ai aty bi bty
-    Just (Right _) -> doSub bi bty ai aty
+    Just (Left _) -> doSub ai av aty bi bv bty
+    Just (Right _) -> doSub bi bv bty ai bv aty
 
-
+unifyTypes' :: (Show n,Eq n) => String -> TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
+unifyTypes' msg i a b act = case unifyTypes a b of
+  Just r -> act r
+  Nothing -> do
+    addFailure i $ "Cannot unify [" ++ msg ++ "]: " ++ show (a,b)
+    return ()
 
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
@@ -731,7 +735,9 @@ bindArgs i args b =
 
 
 infer :: Term Ref -> TC (Fun Node)
-infer t@TDef {..} = toFun (fmap Left t)
+infer t@TDef {..} = do
+  debug "Build"
+  toFun (fmap Left t)
 infer t = die (_tInfo t) "Non-def"
 
 
@@ -755,8 +761,11 @@ prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV
 
 resolveAllTypes :: TC (M.Map TcId (Type UserType))
 resolveAllTypes = do
-  ast2Ty <- use tcAstToVar >>= \a2v -> forM a2v resolveTy
-  tcAstToVar .= ast2Ty
+  ast2Ty <- use tcAstToVar >>= \a2v -> forM a2v $ \tv -> do
+    tysm <- M.lookup tv <$> use tcVarToTypes
+    case tysm of
+      Nothing -> die def $ "resolveAllTypes: untracked type var: " ++ show tv
+      Just tys -> resolveTy (_tsType tys)
   let unresolved = M.filter isUnresolvedTy ast2Ty
   unless (M.null unresolved) $ do
     debug "Unable to resolve all types"
@@ -799,6 +808,9 @@ _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 -- _pretty =<< _inferTransfer
 _inferTransfer :: IO (Fun Node, TcState)
 _inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
+
+_inferTest1 :: IO (Fun Node, TcState)
+_inferTest1 = _infer "tests/pact/tc.repl" "tctest" "unconsumed-app-typevar"
 
 -- prettify output of '_infer' runs
 _pretty :: (Fun Node, TcState) -> IO ()

@@ -21,6 +21,9 @@
 
   (defun addToAll (i vals:[integer]) (map (+ i) vals))
 
+  (defun unconsumed-app-typevar ()
+    (if true "hello" "goodbye"))
+
 )
 
 (create-table persons)
