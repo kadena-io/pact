@@ -14,14 +14,13 @@
 --
 
 module Pact.Native
-    (nativeDefs,nativesForDocs)
+    (natives,nativeDefs,moduleToMap)
     where
 
 import Control.Lens hiding (from,to,parts)
 import Control.Monad
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
-import Data.String
 import Prelude hiding (exp)
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
@@ -42,28 +41,28 @@ import Pact.Native.Keysets
 import Pact.Types
 import Pact.Compile
 
+-- | All production native modules.
+natives :: [NativeModule]
+natives = [
+  langDefs,
+  dbDefs,
+  timeDefs,
+  opDefs,
+  keyDefs]
 
-natives :: Eval e NativeDef
-natives = do
-  nds <- langDefs
-  dds <- dbDefs
-  tds <- timeDefs
-  ops <- opDefs
-  kds <- keyDefs
-  return $ nds ++ dds ++ tds ++ ops ++ kds
 
-nativesForDocs :: Eval e [(String,NativeDef)]
-nativesForDocs = do
-  nds <- ("General",) <$> langDefs
-  dds <- ("Database",) <$> dbDefs
-  tds <- ("Time",) <$> timeDefs
-  ops <- ("Operators",) <$> opDefs
-  kds <- ("KeySets",) <$> keyDefs
-  return [nds,dds,tds,ops,kds]
+-- | Production native modules as a dispatch map.
+nativeDefs :: M.HashMap Name Ref
+nativeDefs = mconcat $ map moduleToMap natives
 
-langDefs :: Eval e NativeDef
-langDefs = foldDefs
-    [
+moduleToMap :: NativeModule -> M.HashMap Name Ref
+moduleToMap = M.fromList . map ((Name . asString) *** Direct) . snd
+
+
+
+langDefs :: NativeModule
+langDefs =
+    ("General",[
      defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
@@ -138,7 +137,7 @@ langDefs = foldDefs
     ,defRNative "typeof" typeof' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
-    ]
+    ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
           c = mkTyVar "c" []
@@ -149,10 +148,6 @@ langDefs = foldDefs
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
 
-
--- | Symbol map must be made within target monad
-nativeDefs :: Eval e (M.HashMap String Ref)
-nativeDefs = (M.map Direct . M.fromList) <$> natives
 
 if' :: NativeFun e
 if' i [cond,then',else'] = reduce cond >>= \cm -> case cm of

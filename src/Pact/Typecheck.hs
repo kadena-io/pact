@@ -98,12 +98,12 @@ instance Pretty Types where
   pretty (Types p []) = pretty p
   pretty (Types p os) = pretty p <+> sshow os
 
-
+type Failures = S.Set CheckerException
 
 data TcState = TcState {
   _tcSupply :: Int,
   _tcOverloads :: M.Map TcId (FunTypes UserType),
-  _tcFailures :: S.Set CheckerException,
+  _tcFailures :: Failures,
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
   _tcVarToTypes :: M.Map (TypeVar UserType) Types
   } deriving (Eq,Show)
@@ -125,9 +125,12 @@ instance Pretty TcState where
     indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> pretty v) (M.toList _tcAstToVar))) <$$>
     "VarToTypes:" <$$>
     indent 2 (vsep $ map (\(k,v) -> sshow k <> colon <+> pretty v) $ M.toList _tcVarToTypes) <$$>
-    "Failures:" <$$>
-    indent 2 (vsep $ map (string.show) (toList _tcFailures))
+    prettyFails _tcFailures
     <> hardline
+
+prettyFails :: Failures -> Doc
+prettyFails fs = "Failures:" <$$>
+    indent 2 (vsep $ map (string.show) (toList fs))
 
 
 newtype TC a = TC { unTC :: StateT TcState IO a }
@@ -335,8 +338,8 @@ solveOverloads = do
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
   done <- rptSolve omap
   if all (isJust . _soSolution) (M.elems done)
-    then debug "Success!"
-    else debug $ "Boo!" ++ show (filter (isNothing . _soSolution) (M.elems done))
+    then debug "Success solving overloads"
+    else debug $ "Unable to solve overloads: " ++ show (filter (isNothing . _soSolution) (M.elems done))
 
 
 tryFunType :: M.Map VarRole (TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
@@ -767,9 +770,10 @@ resolveAllTypes = do
       Nothing -> die def $ "resolveAllTypes: untracked type var: " ++ show tv
       Just tys -> resolveTy (_tsType tys)
   let unresolved = M.filter isUnresolvedTy ast2Ty
-  unless (M.null unresolved) $ do
-    debug "Unable to resolve all types"
-    liftIO $ putDoc (indent 2 (prettyMap pretty pretty unresolved) <> hardline)
+  if M.null unresolved then debug "Successfully resolved all types"
+    else do
+      debug "Unable to resolve all types"
+      liftIO $ putDoc (indent 2 (prettyMap pretty pretty unresolved) <> hardline)
   return ast2Ty
 
 _debugState :: TC ()
@@ -788,6 +792,8 @@ substFun f@FDefun {..} = do
   debug "Solve Overloads"
   solveOverloads
   ast2Ty <- resolveAllTypes
+  fails <- use tcFailures
+  unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
   return $ (\(Node i _) -> Node i (ast2Ty M.! i)) <$> set fBody schEnforced f
 
 

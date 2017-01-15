@@ -33,7 +33,6 @@ module Pact.Repl
     ) where
 
 import Control.Applicative
-import Control.Arrow (first)
 import Control.Lens hiding (op)
 import Control.Monad.Catch
 import Control.Monad.State.Strict
@@ -161,7 +160,7 @@ endsWith v s = s == reverse (take (length s) (reverse v))
 echoBuiltins :: IO ()
 echoBuiltins = do
   defs <- view (eeRefStore.rsNatives) <$> initPureEvalEnv
-  forM_ (sort $ HM.keys defs) putStrLn
+  forM_ (sort $ HM.keys defs) print
 
 runRepl :: ReplState -> Handle -> IO (Either () (Term Name))
 runRepl s@ReplState{..} h =
@@ -179,8 +178,7 @@ initPureEvalEnv = do
 initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
 initEvalEnv e b = do
   mv <- newMVar e
-  (Right nds,_) <- runEval undefined undefined nativeDefs -- can i coerce this??
-  return $ EvalEnv (RefStore nds HM.empty) def Null def def def mv b
+  return $ EvalEnv (RefStore nativeDefs HM.empty) def Null def def def mv b
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
@@ -372,8 +370,7 @@ execScript' m fp = do
 
 useReplLib :: Repl ()
 useReplLib = do
-  (Right rds,_) <- liftIO $ runEval undefined undefined replDefsMap
-  rEvalState.evalRefs.rsLoaded %= HM.union (HM.fromList . map (first Name) . HM.toList $ rds)
+  rEvalState.evalRefs.rsLoaded %= HM.union (moduleToMap replDefs)
 
 
 evalRepl' :: String -> Repl (Either String (Term Name))

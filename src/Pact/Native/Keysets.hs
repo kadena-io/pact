@@ -23,13 +23,12 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types
 
-keyDefs :: Eval e NativeDef
+keyDefs :: NativeModule
 keyDefs =
     let keyPredArgs = funType tTyBool [("count",tTyInteger),("matched",tTyInteger)]
         keysN n _ m = m >= n
     in
-    foldDefs
-    [
+    ("Keysets",[
      defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
          "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " ++
          "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
@@ -47,7 +46,7 @@ keyDefs =
      "Keyset predicate function to match all keys in keyset. `(keys-any 10 1)`"
     ,defRNative "keys-2" (keyPred (keysN 2)) keyPredArgs
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
-    ]
+    ])
 
 readKeySet :: RNativeFun e
 readKeySet i [TLitString key] = (`TKeySet` def) <$> parseMsgKey i "read-keyset" key

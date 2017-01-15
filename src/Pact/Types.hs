@@ -909,7 +909,7 @@ data PactStep = PactStep {
 type ModuleData = (Module,HM.HashMap String Ref)
 
 data RefStore = RefStore {
-      _rsNatives :: HM.HashMap String Ref
+      _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
     } deriving (Eq,Show)
 makeLenses ''RefStore

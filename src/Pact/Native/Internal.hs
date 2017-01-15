@@ -63,8 +63,8 @@ type NativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
 
-type NativeDef = [(String,Term Name)]
-
+type NativeDef = (NativeDefName,Term Name)
+type NativeModule = (ModuleName,[NativeDef])
 
 void' :: (ToTerm t,Functor m) => t -> m a -> m (Term Name)
 void' = fmap . const . toTerm
@@ -100,11 +100,10 @@ bindReduce ps bd bi lkpFun = do
   call (StackFrame ("(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
 
 
-defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> String -> Eval e (String,Term Name)
-defNative n fun ftype docs =
-  return (asString n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
+defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> String -> NativeDef
+defNative n fun ftype docs = (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
 
-defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> String -> Eval e (String,Term Name)
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> String -> NativeDef
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= \as' -> f fi as'
 

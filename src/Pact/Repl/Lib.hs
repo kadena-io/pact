@@ -60,11 +60,8 @@ makeLenses ''LibState
 initLibState :: IO LibState
 initLibState = newMVar def >>= \m -> return (LibState m Noop def)
 
-replDefsMap :: Eval LibState (HM.HashMap String Ref)
-replDefsMap = HM.map Direct . HM.fromList <$> replDefs
-
-replDefs :: Eval LibState NativeDef
-replDefs = foldDefs
+replDefs :: NativeModule
+replDefs = ("Repl",
      [
       defRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
@@ -94,7 +91,7 @@ replDefs = foldDefs
       "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
      ,defNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
-     ]
+     ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet,tTyValue]

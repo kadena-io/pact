@@ -169,8 +169,8 @@ resolveRef qn@(QName q n) = do
           case dsm of
             d@Just {} -> return d
             Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
-resolveRef nn@(Name n) = do
-          nm <- firstOf (eeRefStore.rsNatives.ix n) <$> ask
+resolveRef nn@(Name _) = do
+          nm <- firstOf (eeRefStore.rsNatives.ix nn) <$> ask
           case nm of
             d@Just {} -> return d
             Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get

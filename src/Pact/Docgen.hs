@@ -35,19 +35,17 @@ data ExampleType = Exec|ExecErr|Lit
 
 funDocs :: IO ()
 funDocs = do
-  (Right nns,_) <- runEval undefined undefined nativesForDocs
   h <- openFile "docs/pact-functions.md" WriteMode
   let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h t
-  forM_ nns $ \(sect,ns) -> do
-    hPutStrLn h $ "## " ++ sect ++ " {#" ++ sect ++ "}"
+  forM_ natives $ \(sect,ns) -> do
+    hPutStrLn h $ "## " ++ asString sect ++ " {#" ++ asString sect ++ "}"
     renderSection ns
-  (Right rds,_) <- runEval undefined undefined replDefs
   hPutStrLn h "## REPL-only functions {#repl-lib}"
   hPutStrLn h ""
   hPutStrLn h "The following functions are loaded magically in the interactive REPL, or in script files \
                \with a `.repl` extension. They are not available for blockchain-based execution."
   hPutStrLn h ""
-  renderSection rds
+  renderSection (snd replDefs)
   hClose h
 
 renderDocs :: Show n => Handle -> Term n -> IO ()

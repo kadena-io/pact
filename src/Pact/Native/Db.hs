@@ -37,16 +37,15 @@ import Data.Semigroup ((<>))
 
 
 
-dbDefs :: Eval e NativeDef
-dbDefs = do
+dbDefs :: NativeModule
+dbDefs =
   let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
       writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
       rt = mkSchemaVar "row"
       tableTy = TySchema TyTable rt
       rowTy = TySchema TyObject rt
       bindTy = TySchema TyBinding rt
-
-  foldDefs
+  in ("Database",
     [defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
      "Create table TABLE. `$(create-table accounts)`"
@@ -97,7 +96,7 @@ dbDefs = do
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)]) "Get metadata for MODULE"
-    ]
+    ])
 
 descTable :: RNativeFun e
 descTable _ [TLitString t] =

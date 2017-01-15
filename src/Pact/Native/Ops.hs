@@ -27,8 +27,8 @@ import qualified Data.Map.Strict as M
 import Data.Semigroup
 
 
-opDefs :: Eval e NativeDef
-opDefs = foldDefs
+opDefs :: NativeModule
+opDefs = ("Operators",
     [defCmp ">" (cmp (== GT))
     ,defCmp "<" (cmp (== LT))
     ,defCmp ">=" (cmp (`elem` [GT,EQ]))
@@ -61,7 +61,7 @@ opDefs = foldDefs
     ,defTrunc "round" "Performs Banker's rounding" round
     ,defTrunc "ceiling" "Rounds up" ceiling
     ,defTrunc "floor" "Rounds down" floor
-    ]
+    ])
     where eqTy = binTy tTyBool eqA eqA
           eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
                            TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
@@ -73,7 +73,7 @@ opDefs = foldDefs
           plusTy = coerceBinNum <> binTy plusA plusA plusA
           unopTy = unaryTy numA numA
 
-defTrunc :: NativeDefName -> String -> (Decimal -> Integer) -> Eval e (String,Term Name)
+defTrunc :: NativeDefName -> String -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
                                       unaryTy tTyInteger tTyDecimal)
                      (desc ++ " value of decimal X as integer, or to PREC precision as decimal. " ++
@@ -86,7 +86,7 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
               | otherwise = evalError' i "Negative precision not allowed"
           fun i as = argsError i as
 
-defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Eval e (String,Term Name)
+defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> NativeDef
 defLogic n bop = defRNative n fun (binTy tTyBool tTyBool tTyBool) $
                  "Boolean logic. `(" ++ asString n ++ " true false)`"
     where fun _ [TLiteral (LBool a) _,TLiteral (LBool b) _] = return $ toTerm $ a `bop` b
@@ -106,7 +106,7 @@ unaryTy rt ta = funType rt [("x",ta)]
 binTy :: Type n -> Type n -> Type n -> FunTypes n
 binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
-defCmp :: NativeDefName -> RNativeFun e -> Eval e (String,Term Name)
+defCmp :: NativeDefName -> RNativeFun e -> NativeDef
 defCmp o f = let o' = asString o
                  ex a' b = " `(" ++ o' ++ " " ++ a' ++ " " ++ b ++ ")`"
                  a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]

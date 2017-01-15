@@ -28,8 +28,8 @@ import Data.AffineSpace
 import Data.Semigroup
 
 
-timeDefs :: Eval e NativeDef
-timeDefs = foldDefs
+timeDefs :: NativeModule
+timeDefs = ("Time",
     [defRNative "time" time (funType tTyTime [("utcval",tTyString)]) $
      "Construct time from UTCVAL using ISO8601 format (" ++ simpleISO8601 ++ "). " ++
      "`(time \"2016-07-22T11:26:35Z\")`"
@@ -51,7 +51,7 @@ timeDefs = foldDefs
      \`(add-time (time \"2016-07-22T12:00:00Z\") (hours 1))`"
     ,defRNative "days" (timeMult $ 60 * 60 * 24) multType "N days, for use with 'add-time' \
      \`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
-    ]
+    ])
     where multType = funType tTyDecimal [("n",tTyDecimal)] <>
                      funType tTyDecimal [("n",tTyInteger)]
 
