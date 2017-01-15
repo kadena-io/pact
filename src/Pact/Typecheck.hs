@@ -20,7 +20,8 @@ import Control.Lens hiding (pre,List)
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as S
 import Control.Monad
 import Control.Monad.State
@@ -42,8 +43,6 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
 
-debug :: MonadIO m => String -> m ()
-debug = liftIO . putStrLn
 
 data UserType = Schema {
   _utName :: TypeName,
@@ -101,6 +100,7 @@ instance Pretty Types where
 type Failures = S.Set CheckerException
 
 data TcState = TcState {
+  _doDebug :: Bool,
   _tcSupply :: Int,
   _tcOverloads :: M.Map TcId (FunTypes UserType),
   _tcFailures :: Failures,
@@ -115,7 +115,9 @@ infixr 5 <$$>
 sshow :: Show a => a -> Doc
 sshow = text . show
 
-instance Default TcState where def = TcState 0 def def def def
+mkTcState :: Int -> Bool -> TcState
+mkTcState sup dbg = TcState dbg sup def def def def
+
 instance Pretty TcState where
   pretty TcState {..} =
     "Overloads:" <$$>
@@ -142,6 +144,14 @@ makeLenses ''TcState
 makeLenses ''Types
 
 
+
+debug :: String -> TC ()
+debug s = use doDebug >>= \d -> debug' d s
+
+debug' :: MonadIO m => Bool -> String -> m ()
+debug' d s = when d (liftIO $ putStrLn s)
+
+
 freshId :: Info -> String -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
 
@@ -156,7 +166,34 @@ instance Pretty PrimValue where
   pretty (PrimValue v) = text (show v)
 
 
-
+data TopLevel t =
+  TopFun {
+    _tlFun :: Fun t
+    } |
+  TopConst {
+    _tlInfo :: Info,
+    _tlName :: String,
+    _tlType :: Type UserType,
+    _tlConstVal :: AST t
+    } |
+  TopTable {
+    _tlInfo :: Info,
+    _tlName :: String,
+    _tlType :: Type UserType
+  } |
+  TopUserType {
+    _tlInfo :: Info,
+    _tlUserType :: UserType
+  }
+  deriving (Eq,Functor,Foldable,Traversable,Show)
+instance Pretty t => Pretty (TopLevel t) where
+  pretty (TopFun f) = "Fun" <$$> pretty f
+  pretty (TopConst _i n t v) =
+    "Const" <+> pretty n <> colon <> pretty t <$$>
+    indent 2 (pretty v)
+  pretty (TopTable _i n t) =
+    "Table" <+> pretty n <> colon <> pretty t
+  pretty (TopUserType _i t) = "UserType" <+> pretty t
 
 data Fun t =
   FNative {
@@ -171,7 +208,7 @@ data Fun t =
     _fType :: FunType UserType,
     _fArgs :: [Named t],
     _fBody :: [AST t] }
-  deriving (Eq,Functor,Foldable,Show)
+  deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (Fun t) where
   pretty FNative {..} = "(native " <> text _fName <$$>
@@ -234,9 +271,15 @@ data AST n =
   } |
   Table {
   _aNode :: n
+  } |
+  Step {
+  _aNode :: n,
+  _aEntity :: AST n,
+  _aExec :: AST n,
+  _aRollback :: Maybe (AST n)
   }
 
-  deriving (Eq,Functor,Foldable,Show)
+  deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (AST t) where
   pretty a = case a of
@@ -257,15 +300,22 @@ instance Pretty t => Pretty (AST t) where
        indent 2 ("(" <$$> indent 2 (vsep (map pretty _aAppArgs)) <$$> ")") <$$>
        indent 2 (pretty _aAppFun)
      Table {..} -> pn
+     Step {..} ->
+       let rb = case _aRollback of
+                  Nothing -> (<> empty)
+                  Just r -> (<$$> "Rollback:" <$$> indent 2 (pretty r))
+       in rb (pn <$$> indent 2 ("Entity" <> colon <+> pretty _aEntity) <$$>
+              indent 2 (pretty _aExec))
    where pn = pretty (_aNode a)
 
 
 
 makeLenses ''AST
 makeLenses ''Fun
+makeLenses ''TopLevel
 
-runTC :: TC a -> IO (a, TcState)
-runTC a = runStateT (unTC a) def
+runTC :: Int -> Bool -> TC a -> IO (a, TcState)
+runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
 
 
 data Visit = Pre | Post deriving (Eq,Show)
@@ -305,6 +355,10 @@ walkAST f t@App {} = do
              return $ set fBody db fun
         ) <*>
         mapM (walkAST f) _aAppArgs
+  f Post t'
+walkAST f t@Step {} = do
+  Step {..} <- f Pre t
+  t' <- Step _aNode <$> walkAST f _aEntity <*> walkAST f _aExec <*> traverse (walkAST f) _aRollback
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -707,7 +761,14 @@ toAST TTable {..} = do
   Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName))
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
-toAST TStep {..} = die _tInfo "TODO steps/pacts"
+toAST TStep {..} = do
+  ent <- toAST _tStepEntity
+  assocTy (_aNode ent) $ TyPrim TyString
+  si <- freshId _tInfo "step"
+  sn <- trackNode (idTyVar si) si
+  ex <- toAST _tStepExec
+  assocAST si ex
+  Step sn ent ex <$> traverse toAST _tStepRollback
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
@@ -736,12 +797,24 @@ bindArgs i args b =
     Nothing -> die i $ "Missing arg: " ++ show b ++ ", " ++ show (length args) ++ " provided"
     Just a -> return a
 
-
-infer :: Term Ref -> TC (Fun Node)
-infer t@TDef {..} = do
-  debug "Build"
-  toFun (fmap Left t)
-infer t = die (_tInfo t) "Non-def"
+-- | Convert a top-level Term to a TopLevel.
+mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
+mkTop t@TDef {} = do
+  debug $ "===== Fun: " ++ abbrev t
+  TopFun <$> toFun t
+mkTop t@TConst {..} = do
+  debug $ "===== Const: " ++ abbrev t
+  TopConst _tInfo (asString _tModule ++ "." ++ _aName _tConstArg) <$>
+    traverse toUserType (_aType _tConstArg) <*>
+    toAST _tConstVal
+mkTop t@TTable {..} = do
+  debug $ "===== Table: " ++ abbrev t
+  TopTable _tInfo (asString _tModule ++ "." ++ asString _tTableName) <$>
+    traverse toUserType _tTableType
+mkTop t@TSchema {..} = do
+  debug $ "===== Schema: " ++ abbrev t
+  TopUserType _tInfo <$> toUserType' t
+mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
 resolveTy :: Type UserType -> TC (Type UserType)
@@ -779,45 +852,96 @@ resolveAllTypes = do
 _debugState :: TC ()
 _debugState = liftIO . putDoc . pretty =<< get
 
+showFails :: TC ()
+showFails = do
+  fails <- use tcFailures
+  unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
 
-substFun :: Fun Node -> TC (Fun Node)
-substFun FNative {} = error "Native TODO"
-substFun f@FDefun {..} = do
-  debug "Transform"
-  appSub <- mapM (walkAST $ substAppDefun Nothing) _fBody
-  debug "Substitution"
+-- | Typecheck a top-level production.
+typecheck :: TopLevel Node -> TC (TopLevel Node)
+typecheck f@(TopFun FDefun {..}) = do
+  bod <- typecheckBody _fBody
+  return $ set (tlFun . fBody) bod f
+typecheck c@TopConst {..} = do
+  assocTy (_aNode _tlConstVal) _tlType
+  [v'] <- typecheckBody [_tlConstVal]
+  return $ set tlConstVal v' c
+typecheck tl = return tl
+
+
+typecheckBody :: [AST Node] -> TC [AST Node]
+typecheckBody body = do
+  debug "Substitute defuns"
+  appSub <- mapM (walkAST $ substAppDefun Nothing) body
+  debug "Substitute natives"
   nativesProc <- mapM (walkAST processNatives) appSub
-  debug "Schemas"
+  debug "Apply Schemas"
   schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "Solve Overloads"
   solveOverloads
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
   unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
-  return $ (\(Node i _) -> Node i (ast2Ty M.! i)) <$> set fBody schEnforced f
+  forM schEnforced $ \a -> forM a $ \n@(Node i _) -> case M.lookup i ast2Ty of
+    Nothing -> die' i $ "Failed to find tracked AST for node: " ++ show n
+    Just ty -> return (Node i ty)
 
 
-_loadFun :: FilePath -> ModuleName -> String -> IO (Term Ref)
-_loadFun fp mn fn = do
+typecheckTopLevel :: Ref -> TC (TopLevel Node)
+typecheckTopLevel (Ref r) = do
+  tl <- mkTop (fmap Left r)
+  tl' <- typecheck tl
+  debug $ "===== Done: " ++ abbrev r
+  return tl'
+typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrev d
+
+typecheckModule :: Bool -> ModuleData -> IO [TopLevel Node]
+typecheckModule dbg (Module {..},refs) = do
+  debug' dbg $ "Typechecking module " ++ show _mName
+  let tc (tls,sup) r = do
+        (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
+        return (tl:tls,succ _tcSupply)
+  fst <$> foldM tc ([],0) (HM.elems refs)
+
+
+
+_loadModule :: FilePath -> ModuleName -> IO ModuleData
+_loadModule fp mn = do
   (r,s) <- execScript' (Script fp) fp
   either (die def) (const (return ())) r
-  let (Just (Just (Ref d))) = firstOf (rEnv . eeRefStore . rsModules . at mn . _Just . _2 . at fn) s
-  return d
+  case view (rEnv . eeRefStore . rsModules . at mn) s of
+    Just m -> return m
+    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
 
-_infer :: FilePath -> ModuleName -> String -> IO (Fun Node, TcState)
-_infer fp mn fn = _loadFun fp mn fn >>= \d -> runTC (infer d >>= substFun)
+_loadFun :: FilePath -> ModuleName -> String -> IO Ref
+_loadFun fp mn fn = _loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
+  Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
+  Just f -> return f
+
+
+_infer :: FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+_infer fp mn fn = _loadFun fp mn fn >>= \r -> runTC 0 True (typecheckTopLevel r)
 
 -- _pretty =<< _inferIssue
-_inferIssue :: IO (Fun Node, TcState)
+_inferIssue :: IO (TopLevel Node, TcState)
 _inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
 
 -- _pretty =<< _inferTransfer
-_inferTransfer :: IO (Fun Node, TcState)
+_inferTransfer :: IO (TopLevel Node, TcState)
 _inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
 
-_inferTest1 :: IO (Fun Node, TcState)
+_inferTest1 :: IO (TopLevel Node, TcState)
 _inferTest1 = _infer "tests/pact/tc.repl" "tctest" "unconsumed-app-typevar"
 
+_inferModule :: FilePath -> ModuleName -> IO [TopLevel Node]
+_inferModule fp mn = _loadModule fp mn >>= typecheckModule True
+
+_inferTestModule :: IO [TopLevel Node]
+_inferTestModule = _inferModule "tests/pact/tc.repl" "tctest"
+
+_inferAccounts :: IO [TopLevel Node]
+_inferAccounts = _inferModule "examples/accounts/accounts.repl" "accounts"
+
 -- prettify output of '_infer' runs
-_pretty :: (Fun Node, TcState) -> IO ()
+_pretty :: (TopLevel Node, TcState) -> IO ()
 _pretty (f,tc) = putDoc (pretty tc <> hardline <> hardline <> pretty f <> hardline)

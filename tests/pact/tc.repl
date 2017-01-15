@@ -8,6 +8,8 @@
     age:integer
     dob:time)
 
+  (defconst FOUR (+ 2 2))
+
   (deftable persons:{person})
 
   (defun add-person (person)
