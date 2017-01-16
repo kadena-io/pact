@@ -80,7 +80,7 @@
     (enforce-keyset 'accounts-admin-keyset)
     (keys accounts))
 
-  (defun check-balance (balance:decimal amount:decimal)
+  (defun check-balance (balance amount)
     (enforce (<= amount balance) "Insufficient funds"))
 
   (defun fund-account (address amount date)

@@ -622,12 +622,14 @@ assocAST ai b = do
   (bv,bty) <- lookupAst "assocAST" bi
   let doSub si sv sty fi fv fty = do
         debug $ "assocAST: substituting " ++ show (si,sv,sty) ++ " for " ++ show (fi,fv,fty)
-        tcAstToVar %= M.insert fi sv
+        -- reassign any references to old var to new
+        tcAstToVar %= fmap (\v -> if v == fv then sv else v)
+        -- cleanup old var
         unless (sv == fv) $ tcVarToTypes %= M.delete fv
   case unifyTypes (_tsType aty) (_tsType bty) of
     Nothing -> addFailure bi $ "assocAST: cannot unify: " ++ show (aty,bty)
     Just (Left _) -> doSub ai av aty bi bv bty
-    Just (Right _) -> doSub bi bv bty ai bv aty
+    Just (Right _) -> doSub bi bv bty ai av aty
 
 unifyTypes' :: (Show n,Eq n) => String -> TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
 unifyTypes' msg i a b act = case unifyTypes a b of
@@ -855,10 +857,10 @@ prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV
 
 resolveAllTypes :: TC (M.Map TcId (Type UserType))
 resolveAllTypes = do
-  ast2Ty <- use tcAstToVar >>= \a2v -> forM a2v $ \tv -> do
+  ast2Ty <- use tcAstToVar >>= \a2v -> (`M.traverseWithKey` a2v) $ \i tv -> do
     tysm <- M.lookup tv <$> use tcVarToTypes
     case tysm of
-      Nothing -> die def $ "resolveAllTypes: untracked type var: " ++ show tv
+      Nothing -> die def $ "resolveAllTypes: untracked type var: " ++ show (i,tv)
       Just tys -> resolveTy (_tsType tys)
   let unresolved = M.filter isUnresolvedTy ast2Ty
   if M.null unresolved then debug "Successfully resolved all types"
