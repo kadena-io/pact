@@ -72,15 +72,15 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
-    (read accounts id 'balance 'ccy 'keyset 'data 'date 'amount))
+    (read accounts id ['balance 'ccy 'keyset 'data 'date 'amount]))
 
 
-  (defun account-keys (from)
-    "Get account keys after FROM txid"
+  (defun account-keys ()
+    "Get all account keys"
     (enforce-keyset 'accounts-admin-keyset)
-    (keys 'accounts from))
+    (keys accounts))
 
-  (defun check-balance (balance amount)
+  (defun check-balance (balance:decimal amount:decimal)
     (enforce (<= amount balance) "Insufficient funds"))
 
   (defun fund-account (address amount date)
