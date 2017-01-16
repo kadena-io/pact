@@ -45,19 +45,20 @@ dbDefs =
       tableTy = TySchema TyTable rt
       rowTy = TySchema TyObject rt
       bindTy = TySchema TyBinding rt
+      a = mkTyVar "a" []
   in ("Database",
     [defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
      "Create table TABLE. `$(create-table accounts)`"
 
     ,defNative (specialForm WithRead) withRead
-     (funType tTyString [("table",tableTy),("key",tTyString),("bindings",bindTy)])
+     (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" id bal ccy))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
-     (funType tTyString
+     (funType a
       [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
