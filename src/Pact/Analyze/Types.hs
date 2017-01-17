@@ -4,35 +4,37 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
-module Pact.Analyze.Types where
+module Pact.Analyze.Types
+  ( analyzeFunction
+  , _parseSmtCmd
+  , _getSampFunc
+  , _analyzeSampFunc
+  ) where
 
 import Control.Monad.Trans.Reader
 import Control.Monad.IO.Class (liftIO)
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=), op)
 import Pact.Typecheck
 import Pact.Types
 import Data.Either
 import Data.Decimal
 import Data.Aeson hiding (Object)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>))
 import GHC.Generics
 
 import SmtLib.Syntax.Syntax
-import SmtLib.Parsers.CommandsParsers (parseCommand)
-import Text.Parsec (parse)
 import qualified SmtLib.Syntax.Syntax as Smt
 import qualified SmtLib.Syntax.ShowSL as SmtShow
+import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Yaml as Yaml
 import qualified Text.Parsec as Parsec
-import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 
 data SymType = SymInteger
   | SymDecimal
@@ -187,12 +189,6 @@ ppSymAst = BS8.putStrLn . Yaml.encode
 
 type PactAnalysis a = ReaderT ProverState IO a
 
-data LitVal =
-    LVDecimal Decimal
-  | LVBool Bool
-  | LVInteger Integer
-
-
 isCmpOperator :: String -> Bool
 isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "="]
 
@@ -247,21 +243,21 @@ pattern OfPrimType pType <- (ofPrimType -> Just pType)
 
 pattern RawTableName t <- (Table (Node (TcId _ t _) _))
 
-pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
+-- pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
 
 pattern NativeFunc f <- (FNative _ f _ _)
-pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,bdy)))
+pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
 
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
 
-pattern Args_Var var <- [Var var]
+-- pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
 pattern Args_Var_Var var1 var2 <- [(Var var1),(Var var2)]
 pattern Args_Var_Lit var lit <- [(Var var),AST_Lit lit]
 pattern Args_Lit_Var lit var <- [AST_Lit lit,(Var var)]
 pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (True, app2))]
-pattern Args_App_Lit_Var app' lit var <- [(isAppView -> (True,app')),AST_Lit lit,(Var var)]
+-- pattern Args_App_Lit_Var app' lit var <- [(isAppView -> (True,app')),AST_Lit lit,(Var var)]
 pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
 pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
 
@@ -342,6 +338,7 @@ pureEquationTermToAssertion t = Assert t
 
 negateAssertion :: Command -> Command
 negateAssertion (Assert t) = Assert $ negatePureEquationTerm t
+negateAssertion err = error $ "pattern match failure in negateAssertion, expected Assert, got: " ++ show err
 
 convertType :: Node -> Maybe SymType
 convertType (OfPrimType TyInteger) = Just SymInteger
@@ -372,13 +369,14 @@ symVarToDeclareConst SymVar{..} = case _svType of
   Just t' -> symTypeToSortId t' >>= return . DeclareFun (unSymName _svName) []
 
 analyzeFunction :: Fun Node -> IO SymAst
-analyzeFunction (FDefun _ name' _ args' bdy') = do
+analyzeFunction (FDefun _ _ _ args' bdy') = do
   initialState <- return $ ProverState (Map.fromList $ (\x -> (x, constructSymVar x)) . _nnNamed <$> args') []
   runReaderT (analyze bdy') initialState
+analyzeFunction _ = error "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 analyze :: [AST Node] -> PactAnalysis SymAst
 analyze [] = return $ Terminate
-analyze ((IF_App_Lit_Lit app' lit1 lit2):rest) = do
+analyze ((IF_App_Lit_Lit app' lit1 lit2):_rest) = do
   initialState <- ask
   branchPoint <- mkPureEquationTerm app'
   case branchPoint of
@@ -414,7 +412,7 @@ analyze ((ENFORCE_App_msg app' msg'):rest) = do
             , _saProverState = appendSmtCmds [trueAssert] initialState
             , _saRest = rest'
             }
-analyze ((BINDING bindings' ast'):rest) = do
+analyze ((BINDING bindings' ast'):_rest) = do
   newState <- bindNewVars bindings'
   local (const newState) $ analyze ast'
 analyze (AST_Lit lit':[]) = do
@@ -422,7 +420,7 @@ analyze (AST_Lit lit':[]) = do
   return $ ReturnLit
     { _rlResult = lit'
     , _saProverState = s}
-analyze (AST_Lit lit':rest) = analyze rest -- this has no effect do just pass
+analyze (AST_Lit _lit':rest) = analyze rest -- this has no effect do just pass
 analyze (Var var':[]) = do
   s <- ask
   psVars' <- view psVars
@@ -431,7 +429,7 @@ analyze (Var var':[]) = do
     Just sVar -> return $ ReturnVar
       { _rvResult = sVar
       , _saProverState = s}
-analyze (Var var':rest) = analyze rest -- this has no effect do just pass
+analyze (Var _var':rest) = analyze rest -- this has no effect do just pass
 analyze (ENFORCEKEYSET keyset':rest) = do
   block' <- analyze rest
   state' <- ask
@@ -439,7 +437,7 @@ analyze (ENFORCEKEYSET keyset':rest) = do
     { _wkKeySet = keyset'
     , _saProverState = state'
     , _saRest = block' }
-analyze (INSERT_or_UPDATE fnName table key kvs:rest) = do
+analyze (INSERT_or_UPDATE _fnName table key kvs:rest) = do
   objKey' <- return $ case key of
     Var node' -> nodeToUniqueId node'
     AST_Lit (LString v) -> v
@@ -451,7 +449,7 @@ analyze (INSERT_or_UPDATE fnName table key kvs:rest) = do
     { _tiTableName = table
     , _saRest = rest'
     , _saProverState = newState}
-analyze (WITHREAD table' key' bindings' ast':rest) = do
+analyze (WITHREAD table' key' bindings' ast':_rest) = do
   newState <- bindNewVars bindings'
   local (const newState) $ do
     st' <- ask
@@ -477,7 +475,6 @@ bindNewVars (((Named _ node'), ast'):rest) = do
     then error $ "Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars
     else do
       newSymVar <- return $ constructSymVar node'
-      curSt <- ask
       local (psVars %~ (Map.insert node' newSymVar)) $ do
         relation <- constructVarRelation node' ast'
         local (psNodeSMT %~ (++ [relation])) $ bindNewVars rest
@@ -497,11 +494,11 @@ appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 _parseSmtCmd :: String -> Smt.Command
 _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 
-_getSampFunc :: String -> IO (Fun Node)
+_getSampFunc :: String -> IO (TopLevel Node)
 _getSampFunc s = fst <$> _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
 
 _analyzeSampFunc :: String -> IO ()
 _analyzeSampFunc s = do
-  a <- _getSampFunc s
+  (TopFun a) <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
