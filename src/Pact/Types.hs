@@ -196,9 +196,9 @@ data FunType o = FunType {
   _ftReturn :: Type o
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (FunType o) where
-  show (FunType as t) = "(" ++ unwords (map show as) ++ ") -> " ++ show t
+  show (FunType as t) = "(" ++ unwords (map show as) ++ ")->" ++ show t
 instance (Pretty o) => Pretty (FunType o) where
-  pretty (FunType as t) = parens (hsep (map pretty as)) <+> "->" <+> pretty t
+  pretty (FunType as t) = parens (hsep (map pretty as)) PP.<> "->" PP.<> pretty t
 
 type FunTypes o = NonEmpty (FunType o)
 funTypes :: FunType o -> FunTypes o

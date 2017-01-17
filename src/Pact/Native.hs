@@ -68,7 +68,7 @@ langDefs =
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
     ,defNative (specialForm Map) map'
-     (funType (TyList a) [("app",lam b a),("list",TyList a)])
+     (funType (TyList a) [("app",lam b a),("list",TyList b)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 

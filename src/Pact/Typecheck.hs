@@ -426,6 +426,7 @@ tryFunType i roles _ f@(FunType as rt) = do
   case subRolesM of
     Nothing -> return Nothing
     Just subRoles -> do
+      debug $ "solveOverload': trying " ++ show (f,subRoles)
       let solvedM = sequence $ (`map` M.toList subRoles) $ \(fty,tvTys) ->
             let tys = foldl1 unifyM $ (Just fty:) $ map (Just . snd) tvTys
                 unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
@@ -480,14 +481,20 @@ applySchemas Pre ast = case ast of
         _ -> return ast
 applySchemas Post a = return a
 
--- | Native funs get processed on their own walk.
--- 'assocAST' associates the app arg's ID with the fun ty.
+-- | Associate fun tys of Native funs, or record overloads for later pass.
+-- Handle special forms.
 processNatives :: Visitor TC Node
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
     -- single funtype
     ft@FunType {} :| [] -> do
-      let FunType {..} = mangleFunType (_aId i) ft
+      let adjustForSpecial = case _fSpecial of
+            Just (Map,_) -> over (ftArgs . ix 0 . aType)
+              (\ty -> case ty of
+                  TyFun (FunType _ r) -> r -- replace map funty with just return val
+                  _ -> ty)
+            _ -> id
+          FunType {..} = mangleFunType (_aId i) $ adjustForSpecial ft
       zipWithM_ (\(Arg _ t _) aa -> assocTy (_aNode aa) t) _ftArgs as
       assocTy i _ftReturn
       -- the following assumes that special forms are never overloaded!
@@ -578,32 +585,33 @@ assocTy (Node ai _) ty = do
 assocTy' :: TcId -> TypeVar UserType -> Type UserType -> TC ()
 assocTy' ai av ty = do
   aty <- lookupTypes "assocTy" ai av
-  debug $ "assocTy: " ++ show (ai,aty,ty)
-  unifyTypes' "assocTy" ai (_tsType aty) ty $ \r -> case r of
+  debug $ "assocTy: " ++ show (av,aty) ++ " <=> " ++ show ty
+  unifyTypes' ai (_tsType aty) ty $ \r -> case r of
     Left _same -> do
       -- AST type is most specialized. If assoc ty is a var, update it to point
       -- at ast type.
-      assocParams ty (_tsType aty)
+      assocParams ai ty (_tsType aty)
       case ty of
         TyVar tv -> do
           tvtysm <- M.lookup tv <$> use tcVarToTypes
           case tvtysm of
             Nothing -> do
-              debug $ "assocTy1: substituting " ++ show aty ++ " for var " ++ show tv
+              debug $ "assocTy: " ++ show aty ++ " => " ++ show tv
               tcVarToTypes %= M.insert tv aty
             Just tvtys ->
               -- substitute now for tracked var if necessary
-              unifyTypes' "assocTy" ai (_tsType aty) (_tsType tvtys) $ \r' ->
+              unifyTypes' ai (_tsType aty) (_tsType tvtys) $ \r' ->
                 (tcVarToTypes . at tv . _Just . tsType) .= either id id r'
-        _ -> debug $ "assocTy: no var to update: " ++ show (aty,ty)
+        _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
     Right u -> do
       -- Associated ty is most specialized, simply update record for AST type.
-      debug $ "assocTy2: substituting " ++ show u ++ " for " ++ show (ai,av,aty)
+      debug $ "assocTy: " ++ show (av,aty) ++ " <= " ++ show u
       tcVarToTypes . at av . _Just . tsType .= u
+      assocParams ai u (_tsType aty)
       -- if old type was var, make entry and adjust it
       case _tsType aty of
         TyVar atyv | u /= _tsType aty -> do
-                       debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " as " ++ show u
+                       debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " => " ++ show u
                        alterTypes atyv (Types u []) (set tsType u)
         _ -> return ()
 
@@ -618,21 +626,23 @@ assocOverload ai o = do
 alterTypes :: TypeVar UserType -> Types -> (Types -> Types) -> TC ()
 alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 
+-- | currently unused
 updateTyVar :: Type UserType -> Type UserType -> TC ()
 updateTyVar (TyVar uv) u = do
   debug $ "updateTyVar: " ++ show (uv,u)
   alterTypes uv (Types u []) (set tsType u)
 updateTyVar _ _ = return ()
 
-assocParams :: Type UserType -> Type UserType -> TC ()
-assocParams x y = case (x,y) of
+assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
+assocParams i x y = case (x,y) of
   _ | x == y -> return ()
   (TySchema _ a,TySchema _ b) -> assoc a b
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
-    assoc a@TyVar {} b | b /= TyAny = updateTyVar a b
-    assoc a b@TyVar {} | a /= TyAny = updateTyVar b a
+    createMaybe v = alterTypes v (Types (TyVar v) []) id
+    assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy' i a b -- updateTyVar a b
+    assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy' i b a -- updateTyVar b a
     assoc _ _ = return ()
 
 -- | Substitute AST types to most specialized.
@@ -642,7 +652,7 @@ assocAST ai b = do
   (av,aty) <- lookupAst "assocAST" ai
   (bv,bty) <- lookupAst "assocAST" bi
   let doSub si sv sty fi fv fty = do
-        debug $ "assocAST: substituting " ++ show (si,sv,sty) ++ " for " ++ show (fi,fv,fty)
+        debug $ "assocAST: " ++ show (si,sv,sty) ++ " => " ++ show (fi,fv,fty)
         -- reassign any references to old var to new
         tcAstToVar %= fmap (\v -> if v == fv then sv else v)
         -- cleanup old var
@@ -652,11 +662,11 @@ assocAST ai b = do
     Just (Left _) -> doSub ai av aty bi bv bty
     Just (Right _) -> doSub bi bv bty ai av aty
 
-unifyTypes' :: (Show n,Eq n) => String -> TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
-unifyTypes' msg i a b act = case unifyTypes a b of
+unifyTypes' :: (Show n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
+unifyTypes' i a b act = case unifyTypes a b of
   Just r -> act r
   Nothing -> do
-    addFailure i $ "Cannot unify [" ++ msg ++ "]: " ++ show (a,b)
+    addFailure i $ "Cannot unify: " ++ show (a,b)
     return ()
 
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
@@ -699,8 +709,13 @@ scopeToBody i args bod = do
 pfx :: String -> String -> String
 pfx s = ((s ++ "_") ++)
 
+-- | Make a type variable to track a TcId.
 idTyVar :: TcId -> Type n
 idTyVar i = mkTyVar (show i) []
+
+-- | Make/track a Node using an "idTyVar", ie a variable for itself.
+trackIdNode :: TcId -> TC Node
+trackIdNode i = trackNode (idTyVar i) i
 
 mangle :: TcId -> Type n -> Type n
 mangle i = over (tyVar.tvName.typeVarName) (pfx (show i))
@@ -749,7 +764,7 @@ toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
        "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
-  n <- trackNode (idTyVar i) i
+  n <- trackIdNode i
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
@@ -758,16 +773,26 @@ toAST TApp {..} = do
       Just sf -> do
         let specialBind = (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
                           <*> pure (set fSpecial (Just (sf,SBinding (last as))) fun)
+            specialOther s as' = return (as',set fSpecial (Just (sf,s)) fun)
         case sf of
           Bind -> specialBind
           WithRead -> specialBind
           WithDefaultRead -> specialBind
-          _ -> return (as,set fSpecial (Just (sf,SPartial)) fun)
+          Map -> case as of
+            [] -> do
+              addFailure i "map with no arguments encountered"
+              specialOther SPartial as
+            _ -> do
+              -- create Var AST and append to arg list of partial apply.
+              mpa <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as)))) "map-partial-apply"
+              specialOther SPartial (over (ix 0 . aAppArgs) (++ [Var mpa]) as)
+          _ -> specialOther SPartial as
+
   return $ App n fun' as'
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (show _tBindType)
-  bn <- trackNode (idTyVar bi) bi
+  bn <- trackIdNode bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
     aid <- freshId ai (pfx (show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
@@ -812,7 +837,7 @@ toAST TStep {..} = do
   ent <- toAST _tStepEntity
   assocTy (_aNode ent) $ TyPrim TyString
   si <- freshId _tInfo "step"
-  sn <- trackNode (idTyVar si) si
+  sn <- trackIdNode si
   ex <- toAST _tStepExec
   assocAST si ex
   Step sn ent ex <$> traverse toAST _tStepRollback
@@ -925,6 +950,7 @@ typecheckBody body = do
   schEnforced <- mapM (walkAST applySchemas) nativesProc
   debug "Solve Overloads"
   solveOverloads
+  debug "Resolve types"
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
   unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
