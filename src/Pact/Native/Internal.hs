@@ -25,7 +25,7 @@ import Pact.Types
 import Data.Default
 import Pact.Eval
 import Unsafe.Coerce
-import Control.Lens
+import Control.Lens hiding (Fold)
 import Data.Aeson
 import Control.Arrow
 import qualified Data.Aeson.Lens as A
@@ -38,12 +38,21 @@ import qualified Data.HashMap.Strict as HM
 data SpecialForm =
   WithRead |
   WithDefaultRead |
-  Bind deriving (Eq,Enum,Ord,Bounded)
+  Bind |
+  Map |
+  Filter |
+  Fold |
+  Compose
+  deriving (Eq,Enum,Ord,Bounded)
 
 instance AsString SpecialForm where
   asString WithRead = "with-read"
   asString WithDefaultRead = "with-default-read"
   asString Bind = "bind"
+  asString Map = "map"
+  asString Filter = "filter"
+  asString Fold = "fold"
+  asString Compose = "compose"
 instance Show SpecialForm where show = show . asString
 
 specialForm :: SpecialForm -> NativeDefName

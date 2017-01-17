@@ -17,7 +17,7 @@ module Pact.Native
     (natives,nativeDefs,moduleToMap)
     where
 
-import Control.Lens hiding (from,to,parts)
+import Control.Lens hiding (from,to,parts,Fold)
 import Control.Monad
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
@@ -67,12 +67,12 @@ langDefs =
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
-    ,defNative "map" map'
+    ,defNative (specialForm Map) map'
      (funType (TyList a) [("app",lam b a),("list",TyList a)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
-    ,defNative "fold" fold'
+    ,defNative (specialForm Fold) fold'
      (funType a [("app",lam2 b b a),("init",a),("list",TyList b)])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
@@ -81,12 +81,12 @@ langDefs =
      (funType (TyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. `(list 1 2 3)`"
 
-    ,defNative "filter" filter'
+    ,defNative (specialForm Filter) filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
+     ,defNative (specialForm Compose) compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 

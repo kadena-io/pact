@@ -194,12 +194,17 @@ instance Pretty t => Pretty (TopLevel t) where
     "Table" <+> pretty n <> colon <> pretty t
   pretty (TopUserType _i t) = "UserType" <+> pretty t
 
+data Special t =
+  SPartial |
+  SBinding (AST t)
+  deriving (Eq,Show,Functor,Foldable,Traversable)
+
 data Fun t =
   FNative {
     _fInfo :: Info,
     _fName :: String,
     _fTypes :: FunTypes UserType,
-    _fSpecial :: Maybe (SpecialForm,AST t)
+    _fSpecial :: Maybe (SpecialForm,Special t)
     } |
   FDefun {
     _fInfo :: Info,
@@ -214,7 +219,8 @@ instance Pretty t => Pretty (Fun t) where
     indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
       (case _fSpecial of
          Nothing -> mempty
-         Just (_,bod) -> mempty <$$> indent 2 (pretty bod)) <$$>
+         Just (_,SBinding bod) -> mempty <$$> indent 2 (pretty bod)
+         _ -> mempty) <$$>
       ")"
   pretty FDefun {..} = "(defun " <> text _fName <$$>
     indent 2 ("::" <+> pretty _fType) <$$>
@@ -346,9 +352,10 @@ walkAST f t@App {} = do
         (case _aAppFun of
            fun@FNative {..} -> case _fSpecial of
              Nothing -> return fun
-             Just (fs,bod) -> do
+             Just (fs,SBinding bod) -> do
                bod' <- walkAST f bod
-               return (set fSpecial (Just (fs,bod')) fun)
+               return (set fSpecial (Just (fs,SBinding bod')) fun)
+             _ -> return fun
            fun@FDefun {..} -> do
              db <- mapM (walkAST f) _fBody
              return $ set fBody db fun
@@ -486,14 +493,13 @@ processNatives Pre a@(App i FNative {..} as) = do
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
-        Just (_,Binding bn _ _ (BindSchema sn)) -> do
-          debug "hi"
-          assocTy bn _ftReturn
-          -- assoc schema with last ft arg
-          debug "hello"
-          assocTy sn (_aType (last (toList _ftArgs)))
-        Just sf -> die _fInfo $ "Invalid special form: " ++ show sf
-        _ -> return ()
+        Just (_,SBinding b) -> case b of
+          (Binding bn _ _ (BindSchema sn)) -> do
+            assocTy bn _ftReturn
+            -- assoc schema with last ft arg
+            assocTy sn (_aType (last (toList _ftArgs)))
+          sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
+        _ -> return () -- todo partials etc
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
@@ -713,8 +719,7 @@ mangleFunType f = over ftReturn (mangleType f) .
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') _tFunTypes
-  let special = (,Var (Node (TcId def "temp" 0) TyAny)) <$> isSpecialForm _tNativeName
-  return $ FNative _tInfo (asString _tNativeName) ft' special
+  return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
@@ -748,10 +753,16 @@ toAST TApp {..} = do
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
-    FNative {..} -> case _fSpecial of
+    FNative {..} -> case isSpecialForm (fromString _fName) of
       Nothing -> return (as,fun)
-      Just (f,_) -> (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
-                    <*> pure (set fSpecial (Just (f,last as)) fun)
+      Just sf -> do
+        let specialBind = (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
+                          <*> pure (set fSpecial (Just (sf,SBinding (last as))) fun)
+        case sf of
+          Bind -> specialBind
+          WithRead -> specialBind
+          WithDefaultRead -> specialBind
+          _ -> return (as,set fSpecial (Just (sf,SPartial)) fun)
   return $ App n fun' as'
 
 toAST TBinding {..} = do
