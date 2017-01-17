@@ -12,15 +12,17 @@ module Pact.Analyze.Types
   , _parseSmtCmd
   , _getSampFunc
   , _analyzeSampFunc
+  , SymVar(..), svName, svType, svTracked, svTableColumn
+  , ProverState(..), psVars, psNodeSMT
   ) where
 
 import Control.Monad.Trans.Reader
-import Control.Monad.IO.Class (liftIO)
+--import Control.Monad.IO.Class (liftIO)
 import Control.Lens hiding ((.=), op)
 import Pact.Typecheck
 import Pact.Types
 import Data.Either
-import Data.Decimal
+--import Data.Decimal
 import Data.Aeson hiding (Object)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -44,6 +46,14 @@ data SymType = SymInteger
 
 newtype SymName = SymName { unSymName :: String } deriving (Show, Eq)
 
+data TableAccess = TableRead | TableWrite deriving (Show, Eq, Generic, ToJSON)
+
+data OfTableColumn = OfTableColumn
+  { _otcTable :: String
+  , _otcColumn :: String
+  , _otcAccess :: TableAccess
+  } deriving (Show, Eq, Generic, ToJSON)
+
 instance ToJSON SymName where
   toJSON (SymName s) = toJSON s
 
@@ -56,13 +66,9 @@ data SymVar = SymVar
   { _svName :: SymName
   , _svType :: Maybe SymType
   , _svTracked :: TrackingStatus
+  , _svTableColumn :: Maybe OfTableColumn
   } deriving (Show, Eq, Generic, ToJSON)
 makeLenses ''SymVar
-
-data ProverCtx = ProverCtx
-  { _pcInputArgs :: Map TcId SymVar
-  } deriving (Show, Eq)
-makeLenses ''ProverCtx
 
 data ProverState = ProverState
   { _psVars :: Map Node SymVar
@@ -236,8 +242,8 @@ tcIdToUniqueId (TcId _ name' nonce') = name' ++ show nonce'
 tcIdToSymName :: TcId -> SymName
 tcIdToSymName = SymName . tcIdToUniqueId
 
-nodeToUniqueId :: Node -> String
-nodeToUniqueId (Node tcId _) = tcIdToUniqueId tcId
+--nodeToUniqueId :: Node -> String
+--nodeToUniqueId (Node tcId _) = tcIdToUniqueId tcId
 
 pattern OfPrimType pType <- (ofPrimType -> Just pType)
 
@@ -361,15 +367,15 @@ constructSymVar node'@(Node tcId _) = newVar
     trackingStatus = case convType of
       Nothing -> Untracked "Unsupported Type"
       Just _ -> Tracked
-    newVar = SymVar { _svName = convName, _svType = convType, _svTracked = trackingStatus}
+    newVar = SymVar { _svName = convName, _svType = convType, _svTracked = trackingStatus, _svTableColumn = Nothing}
 
 symVarToDeclareConst :: SymVar -> Either String Command
 symVarToDeclareConst SymVar{..} = case _svType of
   Nothing -> Left $ "SymVar Type is unsupported"
   Just t' -> symTypeToSortId t' >>= return . DeclareFun (unSymName _svName) []
 
-analyzeFunction :: Fun Node -> IO SymAst
-analyzeFunction (FDefun _ _ _ args' bdy') = do
+analyzeFunction :: TopLevel Node -> IO SymAst
+analyzeFunction (TopFun (FDefun _ _ _ args' bdy')) = do
   initialState <- return $ ProverState (Map.fromList $ (\x -> (x, constructSymVar x)) . _nnNamed <$> args') []
   runReaderT (analyze bdy') initialState
 analyzeFunction _ = error "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
@@ -437,20 +443,20 @@ analyze (ENFORCEKEYSET keyset':rest) = do
     { _wkKeySet = keyset'
     , _saProverState = state'
     , _saRest = block' }
-analyze (INSERT_or_UPDATE _fnName table key kvs:rest) = do
-  objKey' <- return $ case key of
-    Var node' -> nodeToUniqueId node'
-    AST_Lit (LString v) -> v
-    err -> error $ "insert's lookup key must be a string literal or a variable and not: " ++ show err
-  mangledObjects <- return $ fmap (mangleObjToVar table) kvs
-  newState <- bindNewVars mangledObjects
+analyze (INSERT_or_UPDATE _fnName table _key kvs:rest) = do
+--  objKey' <- return $ case key of
+--    Var node' -> nodeToUniqueId node'
+--    AST_Lit (LString v) -> v
+--    err -> error $ "insert's lookup key must be a string literal or a variable and not: " ++ show err
+  mangledObjects <- return $ fmap (mangleObjToVar table TableWrite) kvs
+  newState <- bindNewVarsOfTableColumn mangledObjects
   rest' <- local (const newState) $ analyze rest
   return $ TableInsert
     { _tiTableName = table
     , _saRest = rest'
     , _saProverState = newState}
 analyze (WITHREAD table' key' bindings' ast':_rest) = do
-  newState <- bindNewVars bindings'
+  newState <- bindNewVarsOfTableColumn $ associateVarsWithCols table' TableRead <$> bindings'
   local (const newState) $ do
     st' <- ask
     rest' <- analyze ast'
@@ -462,10 +468,15 @@ analyze (WITHREAD table' key' bindings' ast':_rest) = do
 analyze (READ:_rest) = error "Objects are not yet supported, which `read` returns. Please use `with-read` instead"
 analyze err = error $ "Pattern match failure: " ++ show err
 
-mangleObjToVar :: String -> (AST Node, AST Node) -> (Named Node, AST Node)
-mangleObjToVar tableId (Prim (Node pTcId _) (PrimLit (LString field)), ast@(Var (Node varTcId varType))) =
+mangleObjToVar :: String -> TableAccess -> (AST Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
+mangleObjToVar tableId ta (Prim (Node pTcId _) (PrimLit (LString field)), ast@(Var (Node varTcId varType))) =
   let node' = Node (TcId (_tiInfo pTcId) (tableId ++ "-insert-" ++ field) (_tiId varTcId)) varType
-  in (Named (tableId ++ "insert-key") node',ast)
+  in (Named (tableId ++ "insert-key") node',ast, OfTableColumn { _otcTable = tableId, _otcColumn = field, _otcAccess = ta})
+mangleObjToVar tableId _ err = error $ "mangleObjToVar for table " ++ tableId ++ " given incorrect datatype: " ++ show err
+
+associateVarsWithCols :: String -> TableAccess -> (Named Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
+associateVarsWithCols table' ta orig@(Named column' _,_) =
+  (fst orig, snd orig, OfTableColumn { _otcTable = table', _otcColumn = column', _otcAccess = ta})
 
 bindNewVars :: [(Named Node, AST Node)] -> PactAnalysis ProverState
 bindNewVars [] = ask
@@ -479,6 +490,18 @@ bindNewVars (((Named _ node'), ast'):rest) = do
         relation <- constructVarRelation node' ast'
         local (psNodeSMT %~ (++ [relation])) $ bindNewVars rest
 
+bindNewVarsOfTableColumn :: [(Named Node, AST Node, OfTableColumn)] -> PactAnalysis ProverState
+bindNewVarsOfTableColumn [] = ask
+bindNewVarsOfTableColumn (((Named _ node'), ast', otc):rest) = do
+  curVars <- view psVars
+  if Map.member node' curVars
+    then error $ "Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars
+    else do
+      newSymVar <- return $ constructSymVar node'
+      local (psVars %~ (Map.insert node' (newSymVar {_svTableColumn = Just otc}))) $ do
+        relation <- constructVarRelation node' ast'
+        local (psNodeSMT %~ (++ [relation])) $ bindNewVarsOfTableColumn rest
+
 constructVarRelation :: Node -> AST Node -> PactAnalysis Command
 constructVarRelation node' ast' = do
   varAsTerm <- varToTerm node'
@@ -490,6 +513,68 @@ constructVarRelation node' ast' = do
 appendSmtCmds :: [Command] -> ProverState -> ProverState
 appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 
+data ProverTest =
+  ColumnRange
+  { _ptcFunc :: String
+  , _ptcValue :: Integer} |
+  ConservesMass
+  deriving (Show, Eq)
+
+data DocTest = DocTest
+  { _dtTable :: String
+  , _dtColumn :: String
+  , _dtTests :: [ProverTest]
+  } deriving (Show, Eq)
+
+-- | Go through declared variables and gather a list of those read from a given table's column and those written to it
+getColumnsSymVars :: DocTest -> Map Node SymVar -> ([SymName], [SymName])
+getColumnsSymVars (DocTest table' column' _) m = (reads', writes')
+  where
+    reads' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
+    writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
+
+renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
+renderProverTest table' column' (reads', writes') ColumnRange{..} =
+    preamble ++ (constructDomainAssertion <$> reads') ++ (constructRangeAssertion <$> writes') ++ exitCmds
+  where
+    preamble = [Echo $ "Verifying Domain and Range Stability for: " ++ table' ++ "." ++ column', Push 1]
+    constructDomainAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
+                                         [TermQualIdentifier (QIdentifier (ISymbol sn))
+                                         ,TermSpecConstant (SpecConstantNumeral _ptcValue)])
+    constructRangeAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol "not"))
+                                         [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
+                                           [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantNumeral _ptcValue)]])
+    exitCmds = [Echo "Domain/Range relation holds iff unsat", CheckSat, Pop 1]
+renderProverTest table' column' (reads', writes') ConservesMass =
+    preamble ++ [mkRelation] ++ exitCmds
+  where
+    preamble = [Echo $ "Verifying mass conservation for: " ++ table' ++ "." ++ column', Push 1]
+    symNameToTerm (SymName sn) = TermQualIdentifier (QIdentifier (ISymbol sn))
+    mkRelation = Assert (TermQualIdentifierT
+                         (QIdentifier (ISymbol "not"))
+                         [TermQualIdentifierT (QIdentifier (ISymbol "="))
+                          [TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> reads')
+                          ,TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> writes')
+                          ]])
+    exitCmds = [Echo "Mass is conserved iff unsat", CheckSat, Pop 1]
+
+renderTestsFromSymAst :: DocTest -> SymAst -> [String]
+renderTestsFromSymAst dt@DocTest{..} sa
+  | _saRest sa == Terminate =
+    let ProverState{..} = _saProverState sa
+        declrs = init . SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
+        funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
+        involvedVars = getColumnsSymVars dt _psVars
+        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
+    in funcBody ++ tests
+  | otherwise = renderTestsFromSymAst dt (_saRest sa)
+
+renderTestsFromState :: ProverState -> DocTest -> [String]
+renderTestsFromState ProverState{..} dt@DocTest{..} =
+    let involvedVars = getColumnsSymVars dt _psVars
+        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
+    in if not (null $ fst involvedVars) && not (null $ snd involvedVars) then tests else []
+
 -- helper stuff
 _parseSmtCmd :: String -> Smt.Command
 _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
@@ -499,6 +584,126 @@ _getSampFunc s = fst <$> _infer "examples/analyze-tests/analyze-tests.repl" "ana
 
 _analyzeSampFunc :: String -> IO ()
 _analyzeSampFunc s = do
-  (TopFun a) <- _getSampFunc s
+  a <- _getSampFunc s
   b <- analyzeFunction a
   ppSymAst b
+
+
+--Assert (TermQualIdentifierT
+--        (QIdentifier (ISymbol "not"))
+--        [TermQualIdentifierT (QIdentifier (ISymbol "="))
+--         [TermQualIdentifierT (QIdentifier (ISymbol "+"))
+--          [TermQualIdentifier (QIdentifier (ISymbol "foo1"))
+--          ,TermQualIdentifier (QIdentifier (ISymbol "bar1"))
+--          ,TermQualIdentifier (QIdentifier (ISymbol "baz1"))]
+--         ,TermQualIdentifierT (QIdentifier (ISymbol "+")) [TermQualIdentifier (QIdentifier (ISymbol "foo2")),TermQualIdentifier (QIdentifier (ISymbol "bar2")),TermQualIdentifier (QIdentifier (ISymbol "baz2"))]]])
+--TopFun
+--  { _tlFun = FDefun
+--    { _fInfo = "(defun create-account (id:string initial-balance:integer)"
+--    , _fName = "analyze-tests.create-account"
+--    , _fType = "(id:string initial-balance:integer) -> <f>"
+--    , _fArgs =
+--      ["id"(analyze-tests.create-account_id0::string)
+--      ,"initial-balance"(analyze-tests.create-account_initial-balance1::integer)]
+--    , _fBody =
+--      [ App
+--        { _aNode = appNenforce-keyset2::bool
+--        , _aAppFun = FNative
+--          { _fInfo = ""
+--          , _fName = "enforce-keyset"
+--          , _fTypes = "(keyset-or-name:<k[string,keyset]>) -> bool :| []"
+--          , _fSpecial = Nothing}
+--        , _aAppArgs =
+--          [ Prim {_aNode = string3::string, _aPrimValue = PrimLit "module-keyset"}]
+--        }
+--      , App { _aNode = appNenforce4::bool
+--            , _aAppFun = FNative
+--              { _fInfo = ""
+--              , _fName = "enforce"
+--              , _fTypes = "(test:bool msg:string) -> bool :| []"
+--              , _fSpecial = Nothing}
+--            , _aAppArgs =
+--              [ App { _aNode = "appN>5::bool"
+--                    , _aAppFun =
+--                      FNative { _fInfo = ""
+--                              , _fName = ">"
+--                              , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>) -> bool :| []"
+--                              , _fSpecial = Nothing}
+--                    , _aAppArgs =
+--                      [ Var {_aNode = analyze-tests.create-account_initial-balance1::integer}
+--                      , Prim {_aNode = integer6::integer, _aPrimValue = PrimLit 0}]}
+--              ,Prim {_aNode = string7::string
+--                    , _aPrimValue = PrimLit "Initial balance must be > 0"}
+--              ]
+--            }
+--      ,App
+--       { _aNode = appNinsert8::string
+--       , _aAppFun = FNative
+--         { _fInfo = ""
+--         , _fName = "insert"
+--         , _fTypes = "(table:table:<{row}> key:string object:object:<{row}>) -> string :| []"
+--         , _fSpecial = Nothing}
+--       , _aAppArgs =
+--         [ Table { _aNode = "analyze-tests.accounts9::table:{analyze-tests.account [balance:integer,data:<e>]}"}
+--         , Var {_aNode = "analyze-tests.create-account_id0::string"}
+--         , Object { _aNode = "object10::object:{analyze-tests.account [balance:integer,data:<e>]}"
+--                  , _aObject =
+--                    [ (Prim { _aNode = "string11::string"
+--                            , _aPrimValue = PrimLit "balance"}
+--                      , Var {_aNode = "analyze-tests.create-account_initial-balance1::integer"})
+--                    ]
+--                  }
+--         ]}
+--      ]}}
+
+--FDefun
+--  { _fInfo = "(defun pay-with-read (id:string)"
+--  , _fName = "analyze-tests.pay-with-read"
+--  , _fType = "(id:string) -> <p>"
+--  , _fArgs =
+--    ["id"(analyze-tests.pay-with-read_id0::string)]
+--  , _fBody =
+--    [ App { _aNode = appNwith-read1::bool
+--          , _aAppFun = FNative
+--            { _fInfo = ""
+--            , _fName = "with-read"
+--            , _fTypes = "(table:table:<{row}> key:string bindings:binding:<{row}>) -> <a> :| []"
+--            , _fSpecial = Just
+--              ("with-read"
+--              ,SBinding (Binding { _aNode = bind*3::bool
+--                                 , _aBindings =
+--                                     [ ("balance"(bind*3_from-bal4::integer)
+--                                       ,Var {_aNode = bind*3_from-bal4::integer})
+--                                     ]
+--                                 , _aBody =
+--                                     [ App { _aNode = appNenforce6::bool
+--                                           , _aAppFun = FNative
+--                                             { _fInfo = ""
+--                                             , _fName = "enforce"
+--                                             , _fTypes = "(test:bool msg:string) -> bool :| []"
+--                                             , _fSpecial = Nothing}
+--                                           , _aAppArgs =
+--                                             [ App { _aNode = appN>=7::bool
+--                                                   , _aAppFun = FNative
+--                                                     { _fInfo =""
+--                                                     , _fName = ">="
+--                                                     , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>) -> bool :| []"
+--                                                     , _fSpecial = Nothing}
+--                                                   , _aAppArgs =
+--                                                     [ Var {_aNode = bind*3_from-bal4::integer}
+--                                                     , Prim {_aNode = integer8::integer, _aPrimValue = PrimLit 0}
+--                                                     ]}
+--                                             ,Prim { _aNode = string9::string
+--                                                   , _aPrimValue = PrimLit "bal too low"}
+--                                             ]}
+--                                     ]
+--                                 , _aBindType = "bindbind*3schema10::binding:{analyze-tests.account [balance:integer,data:<e>]}"
+--                                 }
+--                        )
+--              )
+--            }
+--          , _aAppArgs =
+--            [ Table {_aNode = "analyze-tests.accounts2::table:{analyze-tests.account [balance:integer,data:<e>]}"}
+--            , Var {_aNode = analyze-tests.pay-with-read_id0::string}
+--            ]}
+--    ]}
