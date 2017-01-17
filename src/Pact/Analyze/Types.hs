@@ -531,24 +531,25 @@ getColumnsSymVars :: DocTest -> Map Node SymVar -> ([SymName], [SymName])
 getColumnsSymVars (DocTest table' column' _) m = (reads', writes')
   where
     reads' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
-    writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
+    writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableWrite)) m)
 
 renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
 renderProverTest table' column' (reads', writes') ColumnRange{..} =
-    preamble ++ (constructDomainAssertion <$> reads') ++ (constructRangeAssertion <$> writes') ++ exitCmds
+    preamble ++ (constructDomainAssertion <$> reads') ++ [constructRangeAssertion] ++ exitCmds
   where
-    preamble = [Echo $ "Verifying Domain and Range Stability for: " ++ table' ++ "." ++ column', Push 1]
+    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability for: " ++ table' ++ "." ++ column' ++ "\""]
     constructDomainAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
                                          [TermQualIdentifier (QIdentifier (ISymbol sn))
                                          ,TermSpecConstant (SpecConstantNumeral _ptcValue)])
-    constructRangeAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol "not"))
-                                         [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
-                                           [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantNumeral _ptcValue)]])
-    exitCmds = [Echo "Domain/Range relation holds iff unsat", CheckSat, Pop 1]
+    constructIndividualRangeAsserts (SymName sn) = TermQualIdentifierT (QIdentifier (ISymbol "not"))
+                                                   [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
+                                                    [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantNumeral _ptcValue)]]
+    constructRangeAssertion = Assert (TermQualIdentifierT (QIdentifier (ISymbol "or")) (constructIndividualRangeAsserts <$> writes'))
+    exitCmds = [Echo "\"Domain/Range relation holds iff unsat\"", CheckSat, Pop 1]
 renderProverTest table' column' (reads', writes') ConservesMass =
     preamble ++ [mkRelation] ++ exitCmds
   where
-    preamble = [Echo $ "Verifying mass conservation for: " ++ table' ++ "." ++ column', Push 1]
+    preamble = [Push 1, Echo $ "\"Verifying mass conservation for: " ++ table' ++ "." ++ column' ++ "\""]
     symNameToTerm (SymName sn) = TermQualIdentifier (QIdentifier (ISymbol sn))
     mkRelation = Assert (TermQualIdentifierT
                          (QIdentifier (ISymbol "not"))
@@ -556,18 +557,24 @@ renderProverTest table' column' (reads', writes') ConservesMass =
                           [TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> reads')
                           ,TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> writes')
                           ]])
-    exitCmds = [Echo "Mass is conserved iff unsat", CheckSat, Pop 1]
+    exitCmds = [Echo "\"Mass is conserved iff unsat\"", CheckSat, Pop 1]
 
-renderTestsFromSymAst :: DocTest -> SymAst -> [String]
-renderTestsFromSymAst dt@DocTest{..} sa
-  | _saRest sa == Terminate =
-    let ProverState{..} = _saProverState sa
-        declrs = init . SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
+-- | This is gross and needs to be re-thought
+getPreTerminationProverState :: SymAst -> ProverState
+getPreTerminationProverState sa
+  | _saRest sa == Terminate = _saProverState sa
+  | otherwise = getPreTerminationProverState $ _saRest sa
+
+dumpModelsOnSat :: Smt.Command
+dumpModelsOnSat = SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))
+
+renderAllFromProverState :: DocTest -> ProverState -> [String]
+renderAllFromProverState dt@DocTest{..} ProverState{..} =
+    let declrs = init . SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
         funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
         involvedVars = getColumnsSymVars dt _psVars
         tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
-    in funcBody ++ tests
-  | otherwise = renderTestsFromSymAst dt (_saRest sa)
+    in [SmtShow.showSL $ dumpModelsOnSat] ++ funcBody ++ tests
 
 renderTestsFromState :: ProverState -> DocTest -> [String]
 renderTestsFromState ProverState{..} dt@DocTest{..} =
@@ -588,6 +595,12 @@ _analyzeSampFunc s = do
   b <- analyzeFunction a
   ppSymAst b
 
+_docTestPayWithLet :: IO ()
+_docTestPayWithLet = do
+  f <- _getSampFunc "pay-with-let"
+  a <- analyzeFunction f
+  ps <- return $ getPreTerminationProverState a
+  putStrLn $ unlines $ renderAllFromProverState (DocTest "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
 
 --Assert (TermQualIdentifierT
 --        (QIdentifier (ISymbol "not"))
