@@ -15,10 +15,10 @@ module Pact.Analyze.Types
   , _docTestPayWithLet
   , SymVar(..), svName, svType, svTracked, svTableColumn
   , ProverState(..), psVars, psNodeSMT
-  , DocTest(..)
+  , ProveProperty(..)
   , ProverTest(..)
   , renderTestsFromState
-  , prettyPrintDocTest
+  , prettyPrintProveProperty
   , ppSymAst
   ) where
 
@@ -526,15 +526,15 @@ data ProverTest =
   ConservesMass
   deriving (Show, Eq)
 
-data DocTest = DocTest
+data ProveProperty = ProveProperty
   { _dtTable :: String
   , _dtColumn :: String
   , _dtTests :: [ProverTest]
   } deriving (Show, Eq)
 
 -- | Go through declared variables and gather a list of those read from a given table's column and those written to it
-getColumnsSymVars :: DocTest -> Map Node SymVar -> ([SymName], [SymName])
-getColumnsSymVars (DocTest table' column' _) m = (reads', writes')
+getColumnsSymVars :: ProveProperty -> Map Node SymVar -> ([SymName], [SymName])
+getColumnsSymVars (ProveProperty table' column' _) m = (reads', writes')
   where
     reads' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
     writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableWrite)) m)
@@ -574,22 +574,22 @@ getPreTerminationProverState sa
 dumpModelsOnSat :: Smt.Command
 dumpModelsOnSat = SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))
 
-renderAllFromProverState :: DocTest -> ProverState -> [String]
-renderAllFromProverState dt@DocTest{..} ProverState{..} =
+renderAllFromProverState :: ProveProperty -> ProverState -> [String]
+renderAllFromProverState dt@ProveProperty{..} ProverState{..} =
     let declrs = SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
         funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
         involvedVars = getColumnsSymVars dt _psVars
         tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
     in [SmtShow.showSL $ dumpModelsOnSat] ++ funcBody ++ tests
 
-renderTestsFromState :: ProverState -> DocTest -> [String]
-renderTestsFromState ProverState{..} dt@DocTest{..} =
+renderTestsFromState :: ProverState -> ProveProperty -> [String]
+renderTestsFromState ProverState{..} dt@ProveProperty{..} =
     let involvedVars = getColumnsSymVars dt _psVars
         tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
     in if not (null $ fst involvedVars) && not (null $ snd involvedVars) then tests else []
 
-prettyPrintDocTest :: SymAst -> DocTest -> IO ()
-prettyPrintDocTest sa dt = do
+prettyPrintProveProperty :: SymAst -> ProveProperty -> IO ()
+prettyPrintProveProperty sa dt = do
   ps <- return $ getPreTerminationProverState sa
   putStrLn $ unlines $ renderAllFromProverState dt ps
 
@@ -611,7 +611,7 @@ _docTestPayWithLet = do
   f <- _getSampFunc "pay-with-let"
   a <- analyzeFunction f
   ps <- return $ getPreTerminationProverState a
-  putStrLn $ unlines $ renderAllFromProverState (DocTest "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
+  putStrLn $ unlines $ renderAllFromProverState (ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
 
 -- (Prim {_aNode = string19::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-20::integer, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>) -> <a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>) -> decimal,(x:<a[integer,decimal]>) -> <a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*5_from-bal6::integer},Var {_aNode = analyze-tests.pay_amount2::integer}]})
 

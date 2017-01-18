@@ -4,8 +4,8 @@ module Pact.Analyze.Demo where
 import Pact.Analyze.Types
 
 
-demoTest :: DocTest
-demoTest = DocTest "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]
+demoTest :: ProveProperty
+demoTest = ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]
 
 runDemo :: IO ()
 runDemo = do
@@ -21,4 +21,4 @@ runDemo = do
   putStrLn "\n# ----------------------------- #"
   putStrLn "# Rendering Formal Verification #"
   putStrLn "# ----------------------------- #\n"
-  prettyPrintDocTest ps demoTest
+  prettyPrintProveProperty ps demoTest
