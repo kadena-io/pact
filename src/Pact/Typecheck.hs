@@ -377,6 +377,8 @@ data SolveOverload o = SO {
   } deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 makeLenses ''SolveOverload
 
+
+-- | Run through all overloads attempting to find all-concrete type solution for each.
 solveOverloads :: TC ()
 solveOverloads = do
 
@@ -410,6 +412,7 @@ solveOverloads = do
       Just ft -> tcOverloads %= M.insert i (Right ft)
 
 
+-- | Attempt to solve an overload with one of its candidate types.
 tryFunType :: TcId -> M.Map VarRole (TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
                TC (Maybe (FunType UserType))
 tryFunType _ _ r@Just {} _ = return r
@@ -441,8 +444,8 @@ tryFunType i roles _ f@(FunType as rt) = do
                         debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
                         forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
                           debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
-                          assocTy' i tv fty
-                          assocTy' i tv uty
+                          assocTy i tv fty
+                          assocTy i tv uty
                         return $ Just f
                     | otherwise -> return Nothing
 
@@ -450,6 +453,8 @@ asPrimString :: AST Node -> TC String
 asPrimString (Prim _ (PrimLit (LString s))) = return s
 asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " ++ show t
 
+-- | Visitor to inspect Objects and Bindings to validate schemas,
+-- "pushing down" the field types to associate with field ASTs.
 applySchemas :: Visitor TC Node
 applySchemas Pre ast = case ast of
   (Object n ps) -> findSchema n $ \sch -> do
@@ -472,7 +477,7 @@ applySchemas Pre ast = case ast of
         Nothing -> addFailure (_aId (_aNode v)) $ "Invalid field in schema object: " ++ show k
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
-          Just u -> assocTy (_aNode v) (either id id u)
+          Just u -> assocAstTy (_aNode v) (either id id u)
     lookupTy a = resolveTy =<< ((_tsType . snd) <$> lookupAst "lookupTy" (_aId a))
     findSchema n act = do
       ty <- lookupTy n
@@ -481,8 +486,13 @@ applySchemas Pre ast = case ast of
         _ -> return ast
 applySchemas Post a = return a
 
--- | Associate fun tys of Native funs, or record overloads for later pass.
--- Handle special forms.
+-- | Visitor to process Apps of native funs.
+-- For non-overloads, associate fun tys with app args and result.
+-- Overloads are simply tracked to app args and result.
+-- Special form support includes:
+--  1. for 'map', associate lambda result type for arg AST
+--  2. for bindings, associate binding AST with fun return ty,
+--     associate inner binding schema type with funty last arg ty (what about the association alread with the binding/last arg)?
 processNatives :: Visitor TC Node
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
@@ -495,16 +505,16 @@ processNatives Pre a@(App i FNative {..} as) = do
                   _ -> ty)
             _ -> id
           FunType {..} = mangleFunType (_aId i) $ adjustForSpecial ft
-      zipWithM_ (\(Arg _ t _) aa -> assocTy (_aNode aa) t) _ftArgs as
-      assocTy i _ftReturn
+      zipWithM_ (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t) _ftArgs as
+      assocAstTy i _ftReturn
       -- the following assumes that special forms are never overloaded!
       case _fSpecial of
         -- with-read et al have a single Binding body, associate this with return type
         Just (_,SBinding b) -> case b of
           (Binding bn _ _ (BindSchema sn)) -> do
-            assocTy bn _ftReturn
+            assocAstTy bn _ftReturn
             -- assoc schema with last ft arg
-            assocTy sn (_aType (last (toList _ftArgs)))
+            assocAstTy sn (_aType (last (toList _ftArgs)))
           sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
         _ -> return () -- todo partials etc
     -- multiple funtypes
@@ -517,22 +527,28 @@ processNatives Pre a@(App i FNative {..} as) = do
   return a
 processNatives _ a = return a
 
--- | Walk to substitute app args into vars for FDefuns
--- 'assocAST' associates the defun's arg with the app arg type.
+-- | Visitor to process Apps of user defuns.
+-- We want to a) replace AST nodes with the app arg ASTs,
+-- b) associate the AST nodes to check and track their related types
 substAppDefun :: Maybe (TcId, AST Node) -> Visitor TC Node
-substAppDefun sub Pre t@Var {..} = case sub of
-    Nothing -> return t
-    Just (defArg,appAst)
-      | defArg == _aId _aNode -> assocAST defArg appAst >> return appAst
-      | otherwise -> return t
-substAppDefun _ Post App {..} = do -- Post, to allow args to get substituted out first.
-    af <- case _aAppFun of
-      f@FNative {} -> return f
-      f@FDefun {..} -> do
-        fb' <- forM _fBody $ \bAst ->
-          foldM (\b fa -> walkAST (substAppDefun (Just fa)) b) bAst (zip (map (_aId . _nnNamed) _fArgs) _aAppArgs) -- this zip might need a typecheck
-        return $ set fBody fb' f
-    return (App _aNode af _aAppArgs)
+substAppDefun (Just (defArg,appAst)) Pre t@Var {..}
+  | defArg == _aId _aNode = assocAST defArg appAst >> return appAst
+  | otherwise = return t
+substAppDefun Nothing Post (App appNode appFun appArgs) = do -- Post, to allow AST subs first
+    af <- case appFun of
+      FNative {} -> return appFun -- noop
+      FDefun {..} -> do
+        -- assemble substitutions, and also associate fun ty with app args
+        let mangledFty = mangleFunType (_aId appNode) _fType
+        subArgs <- forM (zip3 _fArgs appArgs (_ftArgs mangledFty)) $ \(fa,aa,_ft) -> -- do
+          -- assocAstTy (_aNode aa) (_aType ft) -- this was causing recursive var refs, bailing for now
+          return (_aId (_nnNamed fa),aa)
+        -- associate fun return ty with app
+        assocAstTy appNode (_ftReturn mangledFty)
+        let subDefArg b fa = walkAST (substAppDefun (Just fa)) b
+        fb' <- forM _fBody $ \bAst -> foldM subDefArg bAst subArgs
+        return $ set fBody fb' appFun
+    return (App appNode af appArgs)
 substAppDefun _ _ t = return t
 
 -- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,
@@ -575,15 +591,15 @@ lookupTypes msg i v =
 
 -- | Do substitution between a non-AST type (types from natives, overloads, schemas)
 -- and an AST type.
-assocTy :: Node -> Type UserType -> TC ()
-assocTy (Node ai _) ty = do
-  av <- lookupAstVar "assocTy" ai
-  assocTy' ai av ty
+assocAstTy :: Node -> Type UserType -> TC ()
+assocAstTy (Node ai _) ty = do
+  av <- lookupAstVar "assocAstTy" ai
+  assocTy ai av ty
 
 
 
-assocTy' :: TcId -> TypeVar UserType -> Type UserType -> TC ()
-assocTy' ai av ty = do
+assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
+assocTy ai av ty = do
   aty <- lookupTypes "assocTy" ai av
   debug $ "assocTy: " ++ show (av,aty) ++ " <=> " ++ show ty
   unifyTypes' ai (_tsType aty) ty $ \r -> case r of
@@ -611,7 +627,7 @@ assocTy' ai av ty = do
       -- if old type was var, make entry and adjust it
       case _tsType aty of
         TyVar atyv | u /= _tsType aty -> do
-                       debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " => " ++ show u
+                       debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " <= " ++ show u
                        alterTypes atyv (Types u []) (set tsType u)
         _ -> return ()
 
@@ -633,6 +649,7 @@ updateTyVar (TyVar uv) u = do
   alterTypes uv (Types u []) (set tsType u)
 updateTyVar _ _ = return ()
 
+-- | Investigate types "inside of" schemas and lists to see if they can associate.
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
 assocParams i x y = case (x,y) of
   _ | x == y -> return ()
@@ -641,11 +658,12 @@ assocParams i x y = case (x,y) of
   _ -> return ()
   where
     createMaybe v = alterTypes v (Types (TyVar v) []) id
-    assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy' i a b -- updateTyVar a b
-    assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy' i b a -- updateTyVar b a
+    assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy i a b -- updateTyVar a b
+    assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a -- updateTyVar b a
     assoc _ _ = return ()
 
 -- | Substitute AST types to most specialized.
+-- Not as sophisticated as `assocTy`, should probably be though.
 assocAST :: TcId -> AST Node -> TC ()
 assocAST ai b = do
   let bi = _aId (_aNode b)
@@ -731,6 +749,8 @@ mangleFunType :: TcId -> FunType UserType -> FunType UserType
 mangleFunType f = over ftReturn (mangleType f) .
                   over (ftArgs.traverse.aType) (mangleType f)
 
+
+-- | Build Defuns and natives from Terms.
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
   ft' <- traverse (traverse toUserType') _tFunTypes
@@ -748,10 +768,14 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   return $ FDefun _tInfo fn ft' args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
+
 notEmpty :: MonadThrow m => Info -> String -> [a] -> m [a]
 notEmpty i msg [] = die i msg
 notEmpty _ _ as = return as
 
+
+
+-- | Build ASTs from terms.
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
@@ -835,7 +859,7 @@ toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = do
   ent <- toAST _tStepEntity
-  assocTy (_aNode ent) $ TyPrim TyString
+  assocAstTy (_aNode ent) $ TyPrim TyString
   si <- freshId _tInfo "step"
   sn <- trackIdNode si
   ex <- toAST _tStepExec
@@ -890,13 +914,28 @@ mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
 resolveTy :: Type UserType -> TC (Type UserType)
-resolveTy tv@(TyVar v) = use tcVarToTypes >>= \m -> case M.lookup v m of
-      Just (Types t _) | t /= tv -> resolveTy t
-                       | otherwise -> return tv
-      Nothing -> return tv
-resolveTy (TySchema s st) = TySchema s <$> resolveTy st
-resolveTy (TyList l) = TyList <$> resolveTy l
-resolveTy t = return t
+resolveTy rt = do
+  v2Ty <- use tcVarToTypes
+  let resolv tv@(TyVar v) =
+        case M.lookup v v2Ty of
+          Just (Types t _) | t /= tv -> go t
+                           | otherwise -> return (Just tv)
+          Nothing -> return (Just tv)
+      resolv (TySchema s st) = fmap (TySchema s) <$> go st
+      resolv (TyList l) = fmap TyList <$> go l
+      resolv t = return (Just t)
+      go t = do
+        ts <- get
+        if t `elem` ts then
+          return Nothing
+          else modify (t:) >> resolv t
+  case runState (go rt) [] of
+    (Just r,_) -> return r
+    (Nothing,rs) -> die def $ "Error: recursive type vars: " ++ show rs
+
+
+
+
 
 isUnresolvedTy :: Type n -> Bool
 isUnresolvedTy TyVar {} = True
@@ -934,7 +973,7 @@ typecheck f@(TopFun FDefun {..}) = do
   bod <- typecheckBody _fBody
   return $ set (tlFun . fBody) bod f
 typecheck c@TopConst {..} = do
-  assocTy (_aNode _tlConstVal) _tlType
+  assocAstTy (_aNode _tlConstVal) _tlType
   [v'] <- typecheckBody [_tlConstVal]
   return $ set tlConstVal v' c
 typecheck tl = return tl

@@ -32,7 +32,7 @@
         "modify-date": date
         }))
 
-  (defun read-order:{order} (order-id) (read orders order-id))
+  (defun read-order:object{order} (order-id) (read orders order-id))
 
   (defun update-order-status (order-id status date)
     (enforce (or (= ORDER_NEW status)
@@ -45,7 +45,7 @@
 
   )
 
-  (defun with-order-status:{order} (order-id status)
+  (defun with-order-status:object{order} (order-id status)
     "Check that order status is correct, returning details"
     (with-read orders order-id {
       "cusip" := cusip,
@@ -63,7 +63,7 @@
        "seller": seller })
   )
 
-  (defun with-order:{order} (order-id)
+  (defun with-order:object{order} (order-id)
     "Get order details"
     (read orders order-id)
   )
@@ -71,7 +71,7 @@
   (defun cancel-order (order-id date)
     (with-read orders order-id {"status" := status }
       (enforce (= ORDER_NEW status) "only NEW orders can be canceled")
-      (update-order-status order-id ORDER_CANCELED))
+      (update-order-status order-id ORDER_CANCELED date))
   )
 
 )

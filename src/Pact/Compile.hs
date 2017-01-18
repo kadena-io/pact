@@ -99,17 +99,26 @@ typed = do
 parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
 parseType =
   (char '[' >> parseType >>= \t -> char ']' >> return (TyList t) <?> "typed list") <|>
-  (char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type") <|>
+  parseUserSchema <|>
   symbol tyInteger *> return (TyPrim TyInteger) <|>
   symbol tyDecimal *> return (TyPrim TyDecimal) <|>
   symbol tyTime *> return (TyPrim TyTime) <|>
   symbol tyBool *> return (TyPrim TyBool) <|>
   symbol tyString *> return (TyPrim TyString) <|>
   symbol tyList *> return (TyList TyAny) <|>
-  symbol tyObject *> return (TySchema TyObject TyAny) <|>
+  parseSchemaType tyObject TyObject <|>
   symbol tyValue *> return (TyPrim TyValue) <|>
   symbol tyKeySet *> return (TyPrim TyKeySet) <|>
-  symbol tyTable *> return (TySchema TyTable TyAny) -- TODO no way to specify table schema
+  parseSchemaType tyTable TyTable
+
+
+parseUserSchema :: (Monad m,TokenParsing m) => m (Type TypeName)
+parseUserSchema = char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type"
+
+parseSchemaType :: (Monad m,TokenParsing m) => String -> SchemaType -> m (Type TypeName)
+parseSchemaType tyRep sty =
+  TF.try (TySchema sty <$> (symbol tyRep *> parseUserSchema)) <|>
+  (symbol tyRep *> return (TySchema sty TyAny))
 
 
 
