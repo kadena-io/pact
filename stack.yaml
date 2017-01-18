@@ -14,7 +14,7 @@ packages:
   extra-dep: true
 - location:
     git: git@github.com:buckie/SmtLib.git
-    commit: d19457c665aed402ff7069712cac12f4c433c6d6
+    commit: d954aaf13e0418dfc354828ab1db0afdff212fd7
   extra-dep: true
 
 extra-deps:

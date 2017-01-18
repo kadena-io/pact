@@ -12,8 +12,14 @@ module Pact.Analyze.Types
   , _parseSmtCmd
   , _getSampFunc
   , _analyzeSampFunc
+  , _docTestPayWithLet
   , SymVar(..), svName, svType, svTracked, svTableColumn
   , ProverState(..), psVars, psNodeSMT
+  , DocTest(..)
+  , ProverTest(..)
+  , renderTestsFromState
+  , prettyPrintDocTest
+  , ppSymAst
   ) where
 
 import Control.Monad.Trans.Reader
@@ -78,7 +84,7 @@ makeLenses ''ProverState
 
 instance ToJSON ProverState where
   toJSON ProverState{..} = do
-    let declrs = init . SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
+    let declrs = SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
     toJSON $ declrs ++ (SmtShow.showSL <$> _psNodeSMT)
 
 data SymAst =
@@ -570,7 +576,7 @@ dumpModelsOnSat = SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueS
 
 renderAllFromProverState :: DocTest -> ProverState -> [String]
 renderAllFromProverState dt@DocTest{..} ProverState{..} =
-    let declrs = init . SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
+    let declrs = SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
         funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
         involvedVars = getColumnsSymVars dt _psVars
         tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
@@ -581,6 +587,11 @@ renderTestsFromState ProverState{..} dt@DocTest{..} =
     let involvedVars = getColumnsSymVars dt _psVars
         tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
     in if not (null $ fst involvedVars) && not (null $ snd involvedVars) then tests else []
+
+prettyPrintDocTest :: SymAst -> DocTest -> IO ()
+prettyPrintDocTest sa dt = do
+  ps <- return $ getPreTerminationProverState sa
+  putStrLn $ unlines $ renderAllFromProverState dt ps
 
 -- helper stuff
 _parseSmtCmd :: String -> Smt.Command
@@ -601,6 +612,8 @@ _docTestPayWithLet = do
   a <- analyzeFunction f
   ps <- return $ getPreTerminationProverState a
   putStrLn $ unlines $ renderAllFromProverState (DocTest "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
+
+-- (Prim {_aNode = string19::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-20::integer, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>) -> <a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>) -> decimal,(x:<a[integer,decimal]>) -> <a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*5_from-bal6::integer},Var {_aNode = analyze-tests.pay_amount2::integer}]})
 
 --Assert (TermQualIdentifierT
 --        (QIdentifier (ISymbol "not"))
@@ -720,3 +733,60 @@ _docTestPayWithLet = do
 --            , Var {_aNode = analyze-tests.pay-with-read_id0::string}
 --            ]}
 --    ]}
+
+--FDefun { _fInfo = "(defun pay-update (id:string amount:integer)"
+--       , _fName = "analyze-tests.pay-update"
+--       , _fType = "(id:string amount:integer) -> <r>"
+--       , _fArgs =
+--         ["id"(analyze-tests.pay-update_id0::string)
+--         ,"amount"(analyze-tests.pay-update_amount1::integer)]
+--       , _fBody =
+--         [ App { _aNode = appNwith-read2::string
+--               , _aAppFun = FNative
+--                 { _fInfo = ""
+--                 , _fName = "with-read"
+--                 , _fTypes = "(table:table:<{row}> key:string bindings:binding:<{row}>) -> <a> :| []"
+--                 , _fSpecial = Just ("with-read"
+--                                    , SBinding (Binding { _aNode = bind*4::string
+--                                                        , _aBindings =
+--                                                          [ ("balance"(bind*4_from-bal5::integer)
+--                                                            ,Var {_aNode = bind*4_from-bal5::integer})
+--                                                          ]
+--                                                        , _aBody =
+--                                                          [ App {_aNode = appNupdate7::string
+--                                                                , _aAppFun = FNative
+--                                                                  { _fInfo = ""
+--                                                                  , _fName = "update"
+--                                                                  , _fTypes = "(table:table:<{row}> key:string object:object:<{row}>) -> string :| []"
+--                                                                  , _fSpecial = Nothing}
+--                                                                , _aAppArgs =
+--                                                                  [ Table {_aNode = "analyze-tests.accounts8::table:{analyze-tests.account [balance:integer,data:<e>]}"}
+--                                                                  , Var {_aNode = analyze-tests.pay-update_id0::string}
+--                                                                  ,Object { _aNode = "object9::object:{analyze-tests.account [balance:integer,data:<e>]}"
+--                                                                          , _aObject =
+--                                                                            [( Prim {_aNode = string10::string, _aPrimValue = PrimLit "balance"}
+--                                                                             , App { _aNode = appN+11::integer
+--                                                                                   , _aAppFun = FNative
+--                                                                                     { _fInfo = ""
+--                                                                                     , _fName = "+"
+--                                                                                     , _fTypes = "(x:<a[integer,decimal]> y:<a[integer,decimal]>) -> <a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>) -> decimal,(x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]>) -> <a[string,[<l>],object:<{o}>]>]"
+--                                                                                     , _fSpecial = Nothing}
+--                                                                                   , _aAppArgs =
+--                                                                                     [ Var {_aNode = analyze-tests.pay-update_amount1::integer}
+--                                                                                     , Var {_aNode = bind*4_from-bal5::integer}
+--                                                                                     ]}
+--                                                                             )
+--                                                                            ]}
+--                                                                  ]}
+--                                                          ]
+--                                                        , _aBindType = "bindbind*4schema12::binding:{analyze-tests.account [balance:integer,data:<e>]}"
+--                                                        }
+--                                               )
+--                                    )
+--                 }
+--               , _aAppArgs =
+--                 [ Table {_aNode = "analyze-tests.accounts3::table:{analyze-tests.account [balance:integer,data:<e>]}"}
+--                 , Var {_aNode = analyze-tests.pay-update_id0::string}
+--                 ]}
+--         ]
+--       }

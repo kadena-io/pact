@@ -36,7 +36,8 @@
   (defun get-balance (id:string) (read accounts id 'balance))
 
   (defun pay-with-let (from:string to:string amount:integer)
-    "Transfer money between accounts"
+    "Transfer money between accounts \
+    \DocTest -> accounts.balance [ConservesMass, ColumnRange >= 0]"
     (with-read accounts from { "balance":= from-bal }
       (with-read accounts to { "balance":= to-bal }
         (enforce (>= from-bal amount) "Insufficient Funds")
@@ -71,7 +72,9 @@
   )
 
   (defun pay-update (id:string amount:integer)
-    (update accounts id
-            { "balance": amount })
+    (with-read accounts id { "balance":= from-bal }
+      (update accounts id
+            { "balance": (+ amount from-bal)})
+    )
   )
 )
