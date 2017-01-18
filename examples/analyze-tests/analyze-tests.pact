@@ -41,7 +41,6 @@
     (with-read accounts from { "balance":= from-bal }
       (with-read accounts to { "balance":= to-bal }
         (enforce (>= from-bal amount) "Insufficient Funds")
-        (enforce (>= amount 0) "Amount too small")
         (let* ((new-from-bal (- from-bal amount))
                (new-to-bal (+ to-bal amount))
               )
