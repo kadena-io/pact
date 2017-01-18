@@ -551,7 +551,7 @@ renderProverTest table' column' (reads', writes') ColumnRange{..} =
                                                    [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
                                                     [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantNumeral _ptcValue)]]
     constructRangeAssertion = Assert (TermQualIdentifierT (QIdentifier (ISymbol "or")) (constructIndividualRangeAsserts <$> writes'))
-    exitCmds = [Echo "\"Domain/Range relation holds iff unsat\"", CheckSat, Pop 1]
+    exitCmds = [Echo "\"Domain/Range relation holds IFF unsat\"", CheckSat, Pop 1]
 renderProverTest table' column' (reads', writes') ConservesMass =
     preamble ++ [mkRelation] ++ exitCmds
   where
@@ -563,7 +563,7 @@ renderProverTest table' column' (reads', writes') ConservesMass =
                           [TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> reads')
                           ,TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> writes')
                           ]])
-    exitCmds = [Echo "\"Mass is conserved iff unsat\"", CheckSat, Pop 1]
+    exitCmds = [Echo "\"Mass is conserved IFF unsat\"", CheckSat, Pop 1]
 
 -- | This is gross and needs to be re-thought
 getPreTerminationProverState :: SymAst -> ProverState
