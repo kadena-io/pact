@@ -281,6 +281,7 @@ pattern AST_Obj objNode kvs <- (Object objNode kvs)
 
 -- pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
+pattern Args_Var var1 <- [(Var var1)]
 pattern Args_Var_Var var1 var2 <- [(Var var1),(Var var2)]
 pattern Args_Var_Lit var lit <- [(Var var),AST_Lit lit]
 pattern Args_Lit_Var lit var <- [AST_Lit lit,(Var var)]
@@ -289,6 +290,8 @@ pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (Tr
 pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
 pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
 
+pattern NegativeVar var' <- (App _ (NativeFunc "-") (Args_Var var'))
+pattern NegativeLit lit' <- (App _ (NativeFunc "-") (Args_Lit lit'))
 pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
 pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
 pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
@@ -305,9 +308,11 @@ pattern READ <- (App _ (NativeFunc "read") _)
 varToTerm :: Node -> PactAnalysis (Either String Smt.Term)
 varToTerm n = do
   sVar <- Map.lookup n <$> view psVars
-  return $ case sVar of
-    Nothing -> Left $ "Variable " ++ show n ++ "not found!"
-    Just SymVar{..} -> case _svTracked of
+  case sVar of
+    Nothing -> do
+      psVars' <- view psVars
+      return $ Left $ "VarToTerm: Variable " ++ show n ++ "not found in: " ++ show psVars'
+    Just SymVar{..} -> return $ case _svTracked of
       Tracked -> Right $ TermQualIdentifier $ QIdentifier $ ISymbol $ unSymName _svName
       err -> Left $ "Variable found but tracking has failed: " ++ show err
 
@@ -356,6 +361,18 @@ mkPureEquationTerm (NativeFunc_App_App f app1 app2)
         err -> return $ Left $ "unable to analyze: " ++ show err
 mkPureEquationTerm (AST_Lit l) = return $ literalToTerm l
 mkPureEquationTerm (Var name') = varToTerm name'
+mkPureEquationTerm (NegativeVar var') = do
+  varAsTerm <- varToTerm var'
+  op <- return $ basicOperatorToQualId "-"
+  case (op, varAsTerm) of
+    (Right op', Right v') -> return $ Right $ TermQualIdentifierT op' [v']
+    err -> return $ Left $ "unable to analyze: " ++ show err
+mkPureEquationTerm (NegativeLit lit') = do
+  litAsTerm <- return $ literalToTerm lit'
+  op <- return $ basicOperatorToQualId "-"
+  case (op, litAsTerm) of
+    (Right op', Right l') -> return $ Right $ TermQualIdentifierT op' [l']
+    err -> return $ Left $ "unable to analyze: " ++ show err
 mkPureEquationTerm err = return $ Left $ "Unsupported construct found when constructing pure-equation term:\n" ++ show err
 
 negatePureEquationTerm :: Smt.Term -> Smt.Term
@@ -373,6 +390,7 @@ convertType (OfPrimType TyInteger) = Just SymInteger
 convertType (OfPrimType TyBool) = Just SymBool
 convertType (OfPrimType TyDecimal) = Just SymDecimal
 convertType (OfPrimType TyString) = Just SymString
+convertType (OfPrimType TyTime) = Just SymString
 convertType _ = Nothing
 
 symTypeToSortId :: SymType -> Either String Sort
@@ -397,7 +415,7 @@ symVarToDeclareConst SymVar{..} = case _svType of
   Just t' -> symTypeToSortId t' >>= return . DeclareFun (unSymName _svName) []
 
 analyzeFunction :: TopLevel Node -> IO (Either PactAnalyzeException SymAst)
-analyzeFunction (TopFun (FDefun _ _ _ args' bdy')) = try $ do
+analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) = try $ do
   initialState <- return $ ProverState (Map.fromList $ (\x -> (x, constructSymVar x)) . _nnNamed <$> args') []
   runReaderT (analyze bdy') initialState
 analyzeFunction _ = return $ Left $ UnsupportedStructure "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)" Nothing
@@ -626,6 +644,12 @@ _analyzeSampFunc s = do
   b <- analyzeFunction a
   either (putStrLn . show) ppSymAst b
 
+_analyzeAnyFunc :: String -> String -> String -> IO ()
+_analyzeAnyFunc fp' mod' func' = do
+  a <- fst <$> _infer fp' (ModuleName mod') func'
+  b <- analyzeFunction a
+  either (putStrLn . show) ppSymAst b
+
 _docTestPayWithLet :: IO ()
 _docTestPayWithLet = do
   f <- _getSampFunc "pay-with-let"
@@ -813,3 +837,20 @@ _docTestPayWithLet = do
 --                 ]}
 --         ]
 --       }
+
+--TopFun
+--  { _fInfo =   "(defun make-payment (payor:string payee:string amount:decimal date:time)"
+--  , _fName = "cash.make-payment"
+--  , _fType = "(payor:string payee:string amount:decimal date:time)-><e>"
+--  , _fArgs = ["payor"(cash.make-payment_payor0::string)
+--              ,"payee"(cash.make-payment_payee1::string)
+--              ,"amount"(cash.make-payment_amount2::decimal)
+--              ,"date"(cash.make-payment_date3::time)]
+--  , _fBody = [App { _aNode = appDcash.debit24::string
+--                  , _aAppFun = FDefun { _fInfo =   "(defun debit (id:string amount:decimal date:time)"
+--                                      , _fName = "cash.debit"
+--                                      , _fType = "(id:string amount:decimal date:time)-><a>"
+--                                      , _fArgs = ["id"(cash.debit_id4::string)
+--                                                 ,"amount"(cash.debit_amount5::decimal)
+--                                                 ,"date"(cash.debit_date6::time)]
+--                                      , _fBody = [App {_aNode = appNwith-read7::string, _aAppFun = FNative {_fInfo = , _fName = "with-read", _fTypes = (table:table:<{row}> key:string bindings:binding:<{row}>)-><a> :| [], _fSpecial = Just ("with-read",SBinding (Binding {_aNode = bind*9::string, _aBindings = [("balance"(bind*9_balance10::decimal),Var {_aNode = bind*9_balance10::decimal})], _aBody = [App {_aNode = appNenforce12::bool, _aAppFun = FNative {_fInfo = , _fName = "enforce", _fTypes = (test:bool msg:string)->bool :| [], _fSpecial = Nothing}, _aAppArgs = [App {_aNode = appN>=13::bool, _aAppFun = FNative {_fInfo = , _fName = ">=", _fTypes = (x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| [], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*9_balance10::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]},Prim {_aNode = string14::string, _aPrimValue = PrimLit "Insufficient funds"}]},App {_aNode = appNupdate15::string, _aAppFun = FNative {_fInfo = , _fName = "update", _fTypes = (table:table:<{row}> key:string object:object:<{row}>)->string :| [], _fSpecial = Nothing}, _aAppArgs = [Table {_aNode = cash.cash16::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payor0::string},Object {_aNode = object17::object:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}, _aObject = [(Prim {_aNode = string18::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-19::decimal, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[integer,decimal]>)-><a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*9_balance10::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string20::string, _aPrimValue = PrimLit "change"},App {_aNode = appN-21::decimal, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[integer,decimal]>)-><a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string22::string, _aPrimValue = PrimLit "date"},Var {_aNode = cash.make-payment_date3::time})]}]}], _aBindType = bindbind*9schema23::binding:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}}))}, _aAppArgs = [Table {_aNode = cash.cash8::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payor0::string}]}]}, _aAppArgs = [Var {_aNode = cash.make-payment_payor0::string},Var {_aNode = cash.make-payment_amount2::decimal},Var {_aNode = cash.make-payment_date3::time}]},App {_aNode = appDcash.credit41::string, _aAppFun = FDefun {_fInfo =   (defun credit (id:string amount:decimal date:time) , _fName = "cash.credit", _fType = (id:string amount:decimal date:time)-><c>, _fArgs = ["id"(cash.credit_id25::string),"amount"(cash.credit_amount26::decimal),"date"(cash.credit_date27::time)], _fBody = [App {_aNode = appNwith-read28::string, _aAppFun = FNative {_fInfo = , _fName = "with-read", _fTypes = (table:table:<{row}> key:string bindings:binding:<{row}>)-><a> :| [], _fSpecial = Just ("with-read",SBinding (Binding {_aNode = bind*30::string, _aBindings = [("balance"(bind*30_balance31::decimal),Var {_aNode = bind*30_balance31::decimal})], _aBody = [App {_aNode = appNupdate33::string, _aAppFun = FNative {_fInfo = , _fName = "update", _fTypes = (table:table:<{row}> key:string object:object:<{row}>)->string :| [], _fSpecial = Nothing}, _aAppArgs = [Table {_aNode = cash.cash34::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payee1::string},Object {_aNode = object35::object:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}, _aObject = [(Prim {_aNode = string36::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN+37::decimal, _aAppFun = FNative {_fInfo = , _fName = "+", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]>)-><a[string,[<l>],object:<{o}>]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*30_balance31::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string38::string, _aPrimValue = PrimLit "change"},Var {_aNode = cash.make-payment_amount2::decimal}),(Prim {_aNode = string39::string, _aPrimValue = PrimLit "date"},Var {_aNode = cash.make-payment_date3::time})]}]}], _aBindType = bindbind*30schema40::binding:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}}))}, _aAppArgs = [Table {_aNode = cash.cash29::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payee1::string}]}]}, _aAppArgs = [Var {_aNode = cash.make-payment_payee1::string},Var {_aNode = cash.make-payment_amount2::decimal},Var {_aNode = cash.make-payment_date3::time}]}]}}
