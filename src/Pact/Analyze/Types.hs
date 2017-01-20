@@ -454,7 +454,7 @@ analyze (INSERT_or_UPDATE _fnName table _key kvs:rest) = do
 --    Var node' -> nodeToUniqueId node'
 --    AST_Lit (LString v) -> v
 --    err -> error $ "insert's lookup key must be a string literal or a variable and not: " ++ show err
-  mangledObjects <- return $ fmap (mangleObjToVar table TableWrite) kvs
+  mangledObjects <- return $ fmap (prepTableBindSite table TableWrite) kvs
   newState <- bindNewVarsOfTableColumn mangledObjects
   rest' <- local (const newState) $ analyze rest
   return $ TableInsert
@@ -474,11 +474,12 @@ analyze (WITHREAD table' key' bindings' ast':_rest) = do
 analyze (READ:_rest) = error "Objects are not yet supported, which `read` returns. Please use `with-read` instead"
 analyze err = error $ "Pattern match failure: " ++ show err
 
-mangleObjToVar :: String -> TableAccess -> (AST Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
-mangleObjToVar tableId ta (Prim (Node pTcId _) (PrimLit (LString field)), ast@(Var (Node varTcId varType))) =
-  let node' = Node (TcId (_tiInfo pTcId) (tableId ++ "-insert-" ++ field) (_tiId varTcId)) varType
-  in (Named (tableId ++ "insert-key") node',ast, OfTableColumn { _otcTable = tableId, _otcColumn = field, _otcAccess = ta})
-mangleObjToVar tableId _ err = error $ "mangleObjToVar for table " ++ tableId ++ " given incorrect datatype: " ++ show err
+prepTableBindSite :: String -> TableAccess -> (AST Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
+prepTableBindSite tableId ta (Prim _ (PrimLit (LString field)), ast') =
+  let tcId' = (_aId $ _aNode ast') {_tiName = tableId ++ "-insert-" ++ field}
+      node' = (_aNode ast') {_aId = tcId'}
+  in (Named (tableId ++ "insert-key") node',ast', OfTableColumn { _otcTable = tableId, _otcColumn = field, _otcAccess = ta})
+prepTableBindSite tableId _ err = error $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype: " ++ show err
 
 associateVarsWithCols :: String -> TableAccess -> (Named Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
 associateVarsWithCols table' ta orig@(Named column' _,_) =
