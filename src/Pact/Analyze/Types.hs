@@ -509,7 +509,9 @@ bindNewVars (((Named _ node'), ast'):rest) = do
       newSymVar <- return $ constructSymVar node'
       local (psVars %~ (Map.insert node' newSymVar)) $ do
         relation <- constructVarRelation node' ast'
-        local (psNodeSMT %~ (++ [relation])) $ bindNewVars rest
+        case relation of
+          Nothing -> bindNewVars rest
+          Just relation' -> local (psNodeSMT %~ (++ [relation'])) $ bindNewVars rest
 
 bindNewVarsOfTableColumn :: [(Named Node, AST Node, OfTableColumn)] -> PactAnalysis ProverState
 bindNewVarsOfTableColumn [] = ask
@@ -521,14 +523,17 @@ bindNewVarsOfTableColumn (((Named _ node'), ast', otc):rest) = do
       newSymVar <- return $ constructSymVar node'
       local (psVars %~ (Map.insert node' (newSymVar {_svTableColumn = Just otc}))) $ do
         relation <- constructVarRelation node' ast'
-        local (psNodeSMT %~ (++ [relation])) $ bindNewVarsOfTableColumn rest
+        case relation of
+          Nothing -> bindNewVarsOfTableColumn rest
+          Just relation' -> local (psNodeSMT %~ (++ [relation'])) $ bindNewVarsOfTableColumn rest
 
-constructVarRelation :: Node -> AST Node -> PactAnalysis Command
+constructVarRelation :: Node -> AST Node -> PactAnalysis (Maybe Command)
 constructVarRelation node' ast' = do
   varAsTerm <- varToTerm node'
   relation <- mkPureEquationTerm ast'
   case (varAsTerm, relation) of
-    (Right v, Right r) -> return $ pureEquationTermToAssertion (TermQualIdentifierT (QIdentifier $ ISymbol "=") [v,r])
+    (Right v, Right r) | v == r -> return Nothing
+                       | otherwise -> return $ Just $ pureEquationTermToAssertion (TermQualIdentifierT (QIdentifier $ ISymbol "=") [v,r])
     err -> throw $ UnsupportedStructure ("Cannot construct var relation in: " ++ show err) $ Just ast'
 
 appendSmtCmds :: [Command] -> ProverState -> ProverState
