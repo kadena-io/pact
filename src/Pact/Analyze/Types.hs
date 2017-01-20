@@ -34,6 +34,7 @@ import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import GHC.Generics
+import Control.Exception
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
@@ -43,6 +44,21 @@ import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Yaml as Yaml
 import qualified Text.Parsec as Parsec
+
+data PactAnalyzeException =
+  UnsupportedStructure
+  { _paeErr :: String
+  , _paeAst :: Maybe (AST Node) } |
+  VariableNotFound
+  { _paeErr :: String }
+  deriving (Eq)
+
+instance Show PactAnalyzeException where
+  show (UnsupportedStructure err (Just ast')) = "Unsupported Structure: " ++ err ++ "\n## AST ##\n" ++ show ast'
+  show (UnsupportedStructure err Nothing) = "Unsupported Structure: " ++ err
+  show (VariableNotFound err) = "Variable Not Found: " ++ err
+
+instance Exception PactAnalyzeException
 
 data SymType = SymInteger
   | SymDecimal
@@ -233,10 +249,10 @@ isAppView :: AST Node -> (Bool, AST Node)
 isAppView app@(App _ _ _) = (True, app)
 isAppView _ = (False, undefined)
 
-isInsertOrUpdate :: Fun Node -> (Bool, String)
-isInsertOrUpdate (NativeFunc "insert") = (True, "insert")
-isInsertOrUpdate (NativeFunc "update") = (True, "update")
-isInsertOrUpdate err = (False, error $ "isInsertOrUpdate view pattern failure, wanted insert or update string, got: " ++ show err)
+isInsertOrUpdate :: Fun Node -> Maybe String
+isInsertOrUpdate (NativeFunc "insert") = Just "insert"
+isInsertOrUpdate (NativeFunc "update") = Just "update"
+isInsertOrUpdate _ = Nothing
 
 ofPrimType :: Node -> Maybe PrimType
 ofPrimType (Node _ (TyPrim ty)) = Just ty
@@ -281,7 +297,7 @@ pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_
 pattern ENFORCE_App_msg app' msg' <- (App _ (NativeFunc "enforce") (Args_App_Lit app' (LString msg')))
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
 pattern ENFORCEKEYSET keyset' <- (App _ (NativeFunc "enforce-keyset") (Args_Lit (LString keyset')))
-pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (True, fnName')) [RawTableName table', key', AST_Obj _ kvs'])
+pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
 pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [RawTableName table', key'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
@@ -380,11 +396,11 @@ symVarToDeclareConst SymVar{..} = case _svType of
   Nothing -> Left $ "SymVar Type is unsupported"
   Just t' -> symTypeToSortId t' >>= return . DeclareFun (unSymName _svName) []
 
-analyzeFunction :: TopLevel Node -> IO SymAst
-analyzeFunction (TopFun (FDefun _ _ _ args' bdy')) = do
+analyzeFunction :: TopLevel Node -> IO (Either PactAnalyzeException SymAst)
+analyzeFunction (TopFun (FDefun _ _ _ args' bdy')) = try $ do
   initialState <- return $ ProverState (Map.fromList $ (\x -> (x, constructSymVar x)) . _nnNamed <$> args') []
   runReaderT (analyze bdy') initialState
-analyzeFunction _ = error "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+analyzeFunction _ = return $ Left $ UnsupportedStructure "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)" Nothing
 
 analyze :: [AST Node] -> PactAnalysis SymAst
 analyze [] = return $ Terminate
@@ -392,7 +408,7 @@ analyze ((IF_App_Lit_Lit app' lit1 lit2):_rest) = do
   initialState <- ask
   branchPoint <- mkPureEquationTerm app'
   case branchPoint of
-    Left err -> error $ err
+    Left err -> throw (UnsupportedStructure err $ Just app')
     Right smtTerm -> do
       trueAssert <- return $ pureEquationTermToAssertion smtTerm
       falseAssert <- return $ negateAssertion trueAssert
@@ -408,7 +424,7 @@ analyze ((ENFORCE_App_msg app' msg'):rest) = do
   initialState <- ask
   branchPoint <- mkPureEquationTerm app'
   case branchPoint of
-    Left err -> error $ "from enfoce: " ++ err
+    Left err -> throw $ UnsupportedStructure ("from enforce: " ++ err) $ Just app'
     Right smtTerm -> do
       trueAssert <- return $ pureEquationTermToAssertion smtTerm
       if null rest
@@ -437,7 +453,7 @@ analyze (Var var':[]) = do
   s <- ask
   psVars' <- view psVars
   case Map.lookup var' psVars' of
-    Nothing -> error $ "Variable not found: " ++ show var' ++ " in " ++ show psVars'
+    Nothing -> throw $ VariableNotFound ("Variable not found: " ++ show var' ++ " in " ++ show psVars')
     Just sVar -> return $ ReturnVar
       { _rvResult = sVar
       , _saProverState = s}
@@ -450,12 +466,8 @@ analyze (ENFORCEKEYSET keyset':rest) = do
     , _saProverState = state'
     , _saRest = block' }
 analyze (INSERT_or_UPDATE _fnName table _key kvs:rest) = do
---  objKey' <- return $ case key of
---    Var node' -> nodeToUniqueId node'
---    AST_Lit (LString v) -> v
---    err -> error $ "insert's lookup key must be a string literal or a variable and not: " ++ show err
-  mangledObjects <- return $ fmap (prepTableBindSite table TableWrite) kvs
-  newState <- bindNewVarsOfTableColumn mangledObjects
+  preppedObjects <- return $ fmap (prepTableBindSite table TableWrite) kvs
+  newState <- bindNewVarsOfTableColumn preppedObjects
   rest' <- local (const newState) $ analyze rest
   return $ TableInsert
     { _tiTableName = table
@@ -471,15 +483,17 @@ analyze (WITHREAD table' key' bindings' ast':_rest) = do
       , _wrKey = show $ key'
       , _saRest = rest'
       , _saProverState = st' }
-analyze (READ:_rest) = error "Objects are not yet supported, which `read` returns. Please use `with-read` instead"
-analyze err = error $ "Pattern match failure: " ++ show err
+analyze (READ:_rest) = throw $ UnsupportedStructure "Objects are not yet supported, which `read` returns. Please use `with-read` instead" Nothing
+analyze err = throw $ UnsupportedStructure "Apologies, Pact Prover is still in alpha and only a subset of the language is supported. Part of what you entered isn't supported"
+                      (if null err then Nothing else Just $ head err)
 
 prepTableBindSite :: String -> TableAccess -> (AST Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
 prepTableBindSite tableId ta (Prim _ (PrimLit (LString field)), ast') =
   let tcId' = (_aId $ _aNode ast') {_tiName = tableId ++ "-insert-" ++ field}
       node' = (_aNode ast') {_aId = tcId'}
   in (Named (tableId ++ "insert-key") node',ast', OfTableColumn { _otcTable = tableId, _otcColumn = field, _otcAccess = ta})
-prepTableBindSite tableId _ err = error $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype: " ++ show err
+prepTableBindSite tableId _ (Prim _ _, err) = throw $ UnsupportedStructure ("prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in snd position") $ Just err
+prepTableBindSite tableId _ (err, _) = throw $ UnsupportedStructure ("prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in first position") $ Just err
 
 associateVarsWithCols :: String -> TableAccess -> (Named Node, AST Node) -> (Named Node, AST Node, OfTableColumn)
 associateVarsWithCols table' ta orig@(Named column' _,_) =
@@ -490,7 +504,7 @@ bindNewVars [] = ask
 bindNewVars (((Named _ node'), ast'):rest) = do
   curVars <- view psVars
   if Map.member node' curVars
-    then error $ "Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars
+    then throw $ UnsupportedStructure ("Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars) Nothing
     else do
       newSymVar <- return $ constructSymVar node'
       local (psVars %~ (Map.insert node' newSymVar)) $ do
@@ -502,7 +516,7 @@ bindNewVarsOfTableColumn [] = ask
 bindNewVarsOfTableColumn (((Named _ node'), ast', otc):rest) = do
   curVars <- view psVars
   if Map.member node' curVars
-    then error $ "Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars
+    then throw $ UnsupportedStructure ("Duplicate Variable Declared: " ++ show node' ++ " already in " ++ show curVars) Nothing
     else do
       newSymVar <- return $ constructSymVar node'
       local (psVars %~ (Map.insert node' (newSymVar {_svTableColumn = Just otc}))) $ do
@@ -515,7 +529,7 @@ constructVarRelation node' ast' = do
   relation <- mkPureEquationTerm ast'
   case (varAsTerm, relation) of
     (Right v, Right r) -> return $ pureEquationTermToAssertion (TermQualIdentifierT (QIdentifier $ ISymbol "=") [v,r])
-    err -> error $ "cannot construct var relation in: " ++ show err ++ " in\n" ++ show ast'
+    err -> throw $ UnsupportedStructure ("Cannot construct var relation in: " ++ show err) $ Just ast'
 
 appendSmtCmds :: [Command] -> ProverState -> ProverState
 appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
@@ -605,14 +619,17 @@ _analyzeSampFunc :: String -> IO ()
 _analyzeSampFunc s = do
   a <- _getSampFunc s
   b <- analyzeFunction a
-  ppSymAst b
+  either (putStrLn . show) ppSymAst b
 
 _docTestPayWithLet :: IO ()
 _docTestPayWithLet = do
   f <- _getSampFunc "pay-with-let"
   a <- analyzeFunction f
-  ps <- return $ getPreTerminationProverState a
-  putStrLn $ unlines $ renderAllFromProverState (ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
+  case a of
+    Left err -> putStrLn $ show err
+    Right a' -> do
+      ps <- return $ getPreTerminationProverState a'
+      putStrLn $ unlines $ renderAllFromProverState (ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
 
 -- (Prim {_aNode = string19::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-20::integer, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>) -> <a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>) -> decimal,(x:<a[integer,decimal]>) -> <a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*5_from-bal6::integer},Var {_aNode = analyze-tests.pay_amount2::integer}]})
 

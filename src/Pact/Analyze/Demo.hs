@@ -17,8 +17,11 @@ runDemo = do
   putStrLn "# Compiling to SMT-LIB2 #"
   putStrLn "# --------------------- #\n"
   ps <- analyzeFunction f
-  ppSymAst ps
-  putStrLn "\n# ----------------------------- #"
-  putStrLn "# Rendering Formal Verification #"
-  putStrLn "# ----------------------------- #\n"
-  prettyPrintProveProperty ps demoTest
+  case ps of
+    Left err -> putStrLn $ show err
+    Right ps' -> do
+      ppSymAst ps'
+      putStrLn "\n# ----------------------------- #"
+      putStrLn "# Rendering Formal Verification #"
+      putStrLn "# ----------------------------- #\n"
+      prettyPrintProveProperty ps' demoTest
