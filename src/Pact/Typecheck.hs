@@ -1,3 +1,4 @@
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -211,7 +212,9 @@ data Fun t =
     _fName :: String,
     _fType :: FunType UserType,
     _fArgs :: [Named t],
-    _fBody :: [AST t] }
+    _fBody :: [AST t],
+    _fDocs :: Maybe String
+    }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (Fun t) where
@@ -318,6 +321,8 @@ instance Pretty t => Pretty (AST t) where
 makeLenses ''AST
 makeLenses ''Fun
 makeLenses ''TopLevel
+makeLenses ''Node
+makeLenses ''TcId
 
 runTC :: Int -> Bool -> TC a -> IO (a, TcState)
 runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
@@ -765,7 +770,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
     Named n <$> trackNode t' an
   tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
   ft' <- traverse toUserType _tFunType
-  return $ FDefun _tInfo fn ft' args tcs
+  return $ FDefun _tInfo fn ft' args tcs _tDocs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -967,20 +972,22 @@ showFails = do
   fails <- use tcFailures
   unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
 
+-- | unsafe lens for using `typecheckBody` with const
+singLens :: Iso' a [a]
+singLens = iso pure head
+
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {..}) = do
-  bod <- typecheckBody _fBody
-  return $ set (tlFun . fBody) bod f
+typecheck f@(TopFun FDefun {}) = typecheckBody (f,(tlFun . fBody))
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
-  [v'] <- typecheckBody [_tlConstVal]
-  return $ set tlConstVal v' c
+  typecheckBody (c,tlConstVal . singLens)
 typecheck tl = return tl
 
 
-typecheckBody :: [AST Node] -> TC [AST Node]
-typecheckBody body = do
+typecheckBody :: (TopLevel Node,Traversal' (TopLevel Node) [AST Node]) -> TC (TopLevel Node)
+typecheckBody (tl,bodyLens) = do
+  let body = view bodyLens tl
   debug "Substitute defuns"
   appSub <- mapM (walkAST $ substAppDefun Nothing) body
   debug "Substitute natives"
@@ -993,7 +1000,8 @@ typecheckBody body = do
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
   unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
-  forM schEnforced $ \a -> forM a $ \n@(Node i _) -> case M.lookup i ast2Ty of
+  let tl' = set bodyLens schEnforced tl
+  forM tl' $ \n@(Node i _) -> case M.lookup i ast2Ty of
     Nothing -> die' i $ "Failed to find tracked AST for node: " ++ show n
     Just ty -> return (Node i ty)
 
@@ -1045,7 +1053,7 @@ _inferTest1 :: IO (TopLevel Node, TcState)
 _inferTest1 = _infer "tests/pact/tc.repl" "tctest" "unconsumed-app-typevar"
 
 _inferModule :: FilePath -> ModuleName -> IO [TopLevel Node]
-_inferModule fp mn = _loadModule fp mn >>= typecheckModule True
+_inferModule fp mn = _loadModule fp mn >>= typecheckModule False
 
 _inferTestModule :: IO [TopLevel Node]
 _inferTestModule = _inferModule "tests/pact/tc.repl" "tctest"
