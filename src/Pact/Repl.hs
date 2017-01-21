@@ -28,7 +28,7 @@ module Pact.Repl
     ,execScript,execScript'
     ,initEvalEnv
     ,evalString
-    ,ReplState(..),rEnv,rEvalState,rMode,rOut,rLine
+    ,ReplState(..),rEnv,rEvalState,rMode,rOut
     ,pactVersion
     ) where
 
@@ -80,7 +80,7 @@ replOpts =
     (OLoad
      <$> O.flag False True
          (O.short 'r' <> O.long "findscript" <>
-          O.help "For .pact files, attempts to find a file with same basename and extension .repl to execute.")
+          O.help "For .pact files, attempts to locate a .repl file to execute.")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
@@ -108,7 +108,7 @@ data ReplState = ReplState {
     , _rEvalState :: EvalState
     , _rMode :: ReplMode
     , _rOut :: String
-    , _rLine :: Int
+    , _rFile :: Maybe FilePath
     }
 makeLenses ''ReplState
 
@@ -135,12 +135,21 @@ repl = do
         | otherwise -> execScript fp >>= exitLoad
     ORepl -> initReplState Interactive >>= \s -> runRepl s stdin >>= exitEither (const (return ()))
 
-
+-- | Run heuristics to find a repl script. First is the file name with ".repl" extension;
+-- if not, it will see if there is a single ".repl" file in the directory, and if so
+-- use that.
 locatePactReplScript :: FilePath -> IO (Maybe FilePath)
 locatePactReplScript fp = do
   let r = dropExtension fp ++ ".repl"
   b <- doesFileExist r
-  return $ if b then Just r else Nothing
+  if b then return $ Just r
+    else do
+      let dir = takeDirectory fp
+      rs <- filter ((== ".repl") . takeExtension) <$> getDirectoryContents dir
+      case rs of
+        [a] -> return $ Just $ combine dir a
+        _ -> return Nothing
+
 
 compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
@@ -169,7 +178,7 @@ runRepl s@ReplState{..} h =
     evalStateT (useReplLib >> loop h (_rMode /= Interactive && _rMode /= FailureTest) Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> m ReplState
-initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def 1)
+initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def def)
 
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
@@ -196,7 +205,6 @@ loop h abortOnError lastResult = do
          else do
            d <- getDelta
            errToUnit $ parsedCompileEval $ TF.parseString exprs d line
-    rLine %= succ
     case r of
       Left _ | abortOnError -> do
                  outStrLn HErr "Aborting execution"
@@ -220,7 +228,6 @@ checkMultiline h l | last3 == "<<<" = runMulti allButLast3
                        runMulti s = do
                          isEof <- liftIO $ hIsEOF h
                          if isEof then return s else do
-                           rLine %= succ
                            interact $ outStr HOut "> "
                            line <- trim <$> liftIO (hGetLine h)
                            if line == "" then return (trim s) else runMulti (s ++ " " ++ line)
@@ -286,7 +293,6 @@ pureEval e = do
           else do
             outStrLn HErr $ show (head cs) ++ ": " ++ show err
             mapM_ (\c -> outStrLn HErr $ " at " ++ show c) (tail cs)
-          liftIO $ hFlush stderr
           return (Left serr)
 
 renderErr :: PactError -> Repl String
@@ -316,20 +322,28 @@ updateForOp a = do
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
 
 
-
+-- | load and evaluate a Pact file.
+-- Track file and use current file to mangle directory as necessary.
 loadFile :: FilePath -> Repl (Either String (Term Name))
 loadFile f = do
-  cwd <- liftIO getCurrentDirectory
+  curFileM <- use rFile
+  let computedPath = case curFileM of
+        Nothing -> f -- no current file, just use f
+        Just curFile
+          | isAbsolute f -> f -- absolute always wins
+          | takeFileName curFile == curFile -> f -- current with no directory loses
+          | otherwise -> combine (takeDirectory curFile) f -- otherwise start with dir of curfile
+      restoreFile = rFile .= curFileM
+  rFile .= Just computedPath
   catch (do
-          pr <- TF.parseFromFileEx exprs f
-          liftIO $ setCurrentDirectory (takeDirectory f)
+          pr <- TF.parseFromFileEx exprs computedPath
           when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
           r <- parsedCompileEval pr
           when (isPactFile f) $ void useReplLib
-          liftIO $ setCurrentDirectory cwd
+          restoreFile
           return r)
          $ \(e :: SomeException) -> do
-               liftIO $ setCurrentDirectory cwd
+               restoreFile
                outStrLn HErr $ "load: file load failed: " ++ f ++ ", " ++ show e
                return (Left (show e))
 
