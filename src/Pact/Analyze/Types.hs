@@ -27,12 +27,15 @@ import Control.Monad.Trans.Reader
 import Control.Lens hiding ((.=), op)
 import Pact.Typecheck
 import Pact.Types
+import Pact.Repl
 import Data.Either
 --import Data.Decimal
 import Data.Aeson hiding (Object)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.HashMap.Strict as HM
+import Data.Default
 import GHC.Generics
 import Control.Exception
 
@@ -229,6 +232,7 @@ isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/"]
 isBasicOperator :: String -> Bool
 isBasicOperator s = isCmpOperator s || isLogicalOperator s || isNumericalOperator s
 
+-- NB: for != to work, you need to change this/add another constructor function that can nest (not (=))
 basicOperatorToQualId :: String -> Either String QualIdentifier
 basicOperatorToQualId o
   | o == ">" = Right $ QIdentifier $ ISymbol ">"
@@ -632,11 +636,28 @@ prettyPrintProveProperty sa dt = do
   putStrLn $ unlines $ renderAllFromProverState dt ps
 
 -- helper stuff
+
+loadModule :: FilePath -> ModuleName -> IO ModuleData
+loadModule fp mn = do
+  (r,s) <- execScript' (Script fp) fp
+  either (die def) (const (return ())) r
+  case view (rEnv . eeRefStore . rsModules . at mn) s of
+    Just m -> return m
+    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
+
+loadFun :: FilePath -> ModuleName -> String -> IO Ref
+loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
+  Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
+  Just f -> return f
+
+inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
+
 _parseSmtCmd :: String -> Smt.Command
 _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 
 _getSampFunc :: String -> IO (TopLevel Node)
-_getSampFunc s = fst <$> _infer "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
+_getSampFunc s = fst <$> inferFun False "examples/analyze-tests/analyze-tests.repl" "analyze-tests" s
 
 _analyzeSampFunc :: String -> IO ()
 _analyzeSampFunc s = do
@@ -646,7 +667,7 @@ _analyzeSampFunc s = do
 
 _analyzeAnyFunc :: String -> String -> String -> IO ()
 _analyzeAnyFunc fp' mod' func' = do
-  a <- fst <$> _infer fp' (ModuleName mod') func'
+  a <- fst <$> inferFun False fp' (ModuleName mod') func'
   b <- analyzeFunction a
   either (putStrLn . show) ppSymAst b
 

@@ -24,8 +24,10 @@ library
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , base >= 4.7 && < 5
                      , bytestring
+                     , unordered-containers
                      , containers
                      , lens
+                     , data-default
                      , mtl >= 2.2.1
                      , pact
                      , parsec

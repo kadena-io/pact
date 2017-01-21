@@ -6,7 +6,7 @@ packages:
 - '.'
 - location:
     git: git@bitbucket.org:spopejoy/pact.git
-    commit: 3e2f425d3db703b27c0caec3f06db96dfca6c44f
+    commit: 36854a3b62df954deee39a90fc591e3faf4618c4
   extra-dep: true
 - location:
     git: git@github.com:buckie/Hsmtlib.git
