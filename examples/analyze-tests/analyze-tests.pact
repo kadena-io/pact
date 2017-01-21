@@ -20,14 +20,14 @@
 
   (defun pay (from to amount)
     "Transfer money between accounts \
-    \ProveProperty -> accounts.balance [ConservesMass, ColumnRange >= 0]"
+    \{-# PROVE 'analyze-tests.accounts.balance' [ConservesMass, Column >= 0] #-}"
     (with-read accounts from { "balance":= from-bal }
       (with-read accounts to { "balance":= to-bal }
-        (enforce (>= from-bal amount) "Insufficient Funds")
-        (update accounts from
-                { "balance": (- from-bal amount) })
-        (update accounts to
-                { "balance": (+ to-bal amount) })
+          (enforce (>= from-bal amount) "Insufficient Funds")
+          (update accounts from
+                  { "balance": (- from-bal amount) })
+          (update accounts to
+                  { "balance": (+ to-bal amount) })
       )
     )
   )

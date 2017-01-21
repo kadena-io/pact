@@ -2,17 +2,12 @@
 module Pact.Analyze.Demo where
 
 import Pact.Analyze.Types
+import Pact.Analyze.DSL
 
-
-demoTest :: ProveProperty
-demoTest = ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]
 
 runDemo :: IO ()
 runDemo = do
-  putStrLn "# ----------------- #"
-  putStrLn "# Running TypeCheck #"
-  putStrLn "# ----------------- #\n"
-  f <- _getSampFunc "pay-with-let"
+  f <- _getSampFunc "pay"
   putStrLn "\n# --------------------- #"
   putStrLn "# Compiling to SMT-LIB2 #"
   putStrLn "# --------------------- #\n"
@@ -24,4 +19,4 @@ runDemo = do
       putStrLn "\n# ----------------------------- #"
       putStrLn "# Rendering Formal Verification #"
       putStrLn "# ----------------------------- #\n"
-      prettyPrintProveProperty ps' demoTest
+      either putStrLn (putStrLn . unlines) =<< analyzeAndRenderTests f

@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Pact.Analyze.Types
                      , Pact.Analyze.Demo
+                     , Pact.Analyze.DSL
   build-depends:       Decimal
                      , Hsmtlib
                      , SmtLib

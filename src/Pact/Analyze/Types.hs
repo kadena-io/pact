@@ -12,13 +12,13 @@ module Pact.Analyze.Types
   , _parseSmtCmd
   , _getSampFunc
   , _analyzeSampFunc
-  , _docTestPayWithLet
   , SymVar(..), svName, svType, svTracked, svTableColumn
+  , SymName(..)
+  , OfTableColumn(..)
+  , TableAccess(..)
   , ProverState(..), psVars, psNodeSMT
-  , ProveProperty(..)
-  , ProverTest(..)
-  , renderTestsFromState
-  , prettyPrintProveProperty
+  , SymAst(..)
+  , symVarToDeclareConst
   , ppSymAst
   ) where
 
@@ -136,6 +136,10 @@ data SymAst =
       , _wrKey :: String
       , _saRest :: SymAst
       , _saProverState :: ProverState } |
+  UserFunc
+      { _ufFuncName :: String
+      , _saRest :: SymAst
+      , _saProverState :: ProverState } |
   TableInsert
     { _tiTableName :: String
     , _saRest :: SymAst
@@ -195,6 +199,12 @@ instance ToJSON SymAst where
            , object ["state" .= _saProverState]
            , object ["table" .= _wrTableName]
            , object ["lookup_key" .= _wrKey]
+           , object ["rest" .= _saRest]
+           ]
+  toJSON UserFunc{..} =
+    toJSON [ object ["node" .= ("user-function" :: String)]
+           , object ["function-name" .= _ufFuncName]
+           , object ["state" .= _saProverState]
            , object ["rest" .= _saRest]
            ]
   toJSON TableInsert{..} =
@@ -278,6 +288,7 @@ pattern RawTableName t <- (Table (Node (TcId _ t _) _))
 -- pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
 
 pattern NativeFunc f <- (FNative _ f _ _)
+--pattern FDEFUN args bdy <- (FDefun _ _ _ args bdy _)
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
 
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
@@ -294,6 +305,7 @@ pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (Tr
 pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
 pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
 
+--pattern AppFDefun fDefArgs fDefBdy appArgs <- (App _ (FDEFUN fDefArgs fDefBdy) appArgs)
 pattern NegativeVar var' <- (App _ (NativeFunc "-") (Args_Var var'))
 pattern NegativeLit lit' <- (App _ (NativeFunc "-") (Args_Lit lit'))
 pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
@@ -561,80 +573,6 @@ constructVarRelation node' ast' = do
 appendSmtCmds :: [Command] -> ProverState -> ProverState
 appendSmtCmds cmds ps@ProverState{..} = ps { _psNodeSMT = _psNodeSMT ++ cmds }
 
-data ProverTest =
-  ColumnRange
-  { _ptcFunc :: String
-  , _ptcValue :: Integer} |
-  ConservesMass
-  deriving (Show, Eq)
-
-data ProveProperty = ProveProperty
-  { _dtTable :: String
-  , _dtColumn :: String
-  , _dtTests :: [ProverTest]
-  } deriving (Show, Eq)
-
--- | Go through declared variables and gather a list of those read from a given table's column and those written to it
-getColumnsSymVars :: ProveProperty -> Map Node SymVar -> ([SymName], [SymName])
-getColumnsSymVars (ProveProperty table' column' _) m = (reads', writes')
-  where
-    reads' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
-    writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableWrite)) m)
-
-renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
-renderProverTest table' column' (reads', writes') ColumnRange{..} =
-    preamble ++ (constructDomainAssertion <$> reads') ++ [constructRangeAssertion] ++ exitCmds
-  where
-    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability for: " ++ table' ++ "." ++ column' ++ "\""]
-    constructDomainAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
-                                         [TermQualIdentifier (QIdentifier (ISymbol sn))
-                                         ,TermSpecConstant (SpecConstantNumeral _ptcValue)])
-    constructIndividualRangeAsserts (SymName sn) = TermQualIdentifierT (QIdentifier (ISymbol "not"))
-                                                   [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
-                                                    [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantNumeral _ptcValue)]]
-    constructRangeAssertion = Assert (TermQualIdentifierT (QIdentifier (ISymbol "or")) (constructIndividualRangeAsserts <$> writes'))
-    exitCmds = [Echo "\"Domain/Range relation holds IFF unsat\"", CheckSat, Pop 1]
-renderProverTest table' column' (reads', writes') ConservesMass =
-    preamble ++ [mkRelation] ++ exitCmds
-  where
-    preamble = [Push 1, Echo $ "\"Verifying mass conservation for: " ++ table' ++ "." ++ column' ++ "\""]
-    symNameToTerm (SymName sn) = TermQualIdentifier (QIdentifier (ISymbol sn))
-    mkRelation = Assert (TermQualIdentifierT
-                         (QIdentifier (ISymbol "not"))
-                         [TermQualIdentifierT (QIdentifier (ISymbol "="))
-                          [TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> reads')
-                          ,TermQualIdentifierT (QIdentifier (ISymbol "+")) (symNameToTerm <$> writes')
-                          ]])
-    exitCmds = [Echo "\"Mass is conserved IFF unsat\"", CheckSat, Pop 1]
-
--- | This is gross and needs to be re-thought
-getPreTerminationProverState :: SymAst -> ProverState
-getPreTerminationProverState sa
-  | _saRest sa == Terminate = _saProverState sa
-  | otherwise = getPreTerminationProverState $ _saRest sa
-
-dumpModelsOnSat :: Smt.Command
-dumpModelsOnSat = SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))
-
-renderAllFromProverState :: ProveProperty -> ProverState -> [String]
-renderAllFromProverState dt@ProveProperty{..} ProverState{..} =
-    let declrs = SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
-        funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
-        involvedVars = getColumnsSymVars dt _psVars
-        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
-    in [SmtShow.showSL $ dumpModelsOnSat] ++ funcBody ++ tests
-
-renderTestsFromState :: ProverState -> ProveProperty -> [String]
-renderTestsFromState ProverState{..} dt@ProveProperty{..} =
-    let involvedVars = getColumnsSymVars dt _psVars
-        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
-    in if not (null $ fst involvedVars) && not (null $ snd involvedVars) then tests else []
-
-prettyPrintProveProperty :: SymAst -> ProveProperty -> IO ()
-prettyPrintProveProperty sa dt = do
-  ps <- return $ getPreTerminationProverState sa
-  putStrLn $ unlines $ renderAllFromProverState dt ps
-
 -- helper stuff
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
@@ -670,16 +608,6 @@ _analyzeAnyFunc fp' mod' func' = do
   a <- fst <$> inferFun False fp' (ModuleName mod') func'
   b <- analyzeFunction a
   either (putStrLn . show) ppSymAst b
-
-_docTestPayWithLet :: IO ()
-_docTestPayWithLet = do
-  f <- _getSampFunc "pay-with-let"
-  a <- analyzeFunction f
-  case a of
-    Left err -> putStrLn $ show err
-    Right a' -> do
-      ps <- return $ getPreTerminationProverState a'
-      putStrLn $ unlines $ renderAllFromProverState (ProveProperty "analyze-tests.accounts" "balance" [ColumnRange ">=" 0, ConservesMass]) ps
 
 -- (Prim {_aNode = string19::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-20::integer, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>) -> <a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>) -> decimal,(x:<a[integer,decimal]>) -> <a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*5_from-bal6::integer},Var {_aNode = analyze-tests.pay_amount2::integer}]})
 
@@ -860,18 +788,67 @@ _docTestPayWithLet = do
 --       }
 
 --TopFun
---  { _fInfo =   "(defun make-payment (payor:string payee:string amount:decimal date:time)"
---  , _fName = "cash.make-payment"
---  , _fType = "(payor:string payee:string amount:decimal date:time)-><e>"
---  , _fArgs = ["payor"(cash.make-payment_payor0::string)
---              ,"payee"(cash.make-payment_payee1::string)
---              ,"amount"(cash.make-payment_amount2::decimal)
---              ,"date"(cash.make-payment_date3::time)]
---  , _fBody = [App { _aNode = appDcash.debit24::string
---                  , _aAppFun = FDefun { _fInfo =   "(defun debit (id:string amount:decimal date:time)"
---                                      , _fName = "cash.debit"
---                                      , _fType = "(id:string amount:decimal date:time)-><a>"
---                                      , _fArgs = ["id"(cash.debit_id4::string)
---                                                 ,"amount"(cash.debit_amount5::decimal)
---                                                 ,"date"(cash.debit_date6::time)]
---                                      , _fBody = [App {_aNode = appNwith-read7::string, _aAppFun = FNative {_fInfo = , _fName = "with-read", _fTypes = (table:table:<{row}> key:string bindings:binding:<{row}>)-><a> :| [], _fSpecial = Just ("with-read",SBinding (Binding {_aNode = bind*9::string, _aBindings = [("balance"(bind*9_balance10::decimal),Var {_aNode = bind*9_balance10::decimal})], _aBody = [App {_aNode = appNenforce12::bool, _aAppFun = FNative {_fInfo = , _fName = "enforce", _fTypes = (test:bool msg:string)->bool :| [], _fSpecial = Nothing}, _aAppArgs = [App {_aNode = appN>=13::bool, _aAppFun = FNative {_fInfo = , _fName = ">=", _fTypes = (x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| [], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*9_balance10::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]},Prim {_aNode = string14::string, _aPrimValue = PrimLit "Insufficient funds"}]},App {_aNode = appNupdate15::string, _aAppFun = FNative {_fInfo = , _fName = "update", _fTypes = (table:table:<{row}> key:string object:object:<{row}>)->string :| [], _fSpecial = Nothing}, _aAppArgs = [Table {_aNode = cash.cash16::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payor0::string},Object {_aNode = object17::object:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}, _aObject = [(Prim {_aNode = string18::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN-19::decimal, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[integer,decimal]>)-><a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*9_balance10::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string20::string, _aPrimValue = PrimLit "change"},App {_aNode = appN-21::decimal, _aAppFun = FNative {_fInfo = , _fName = "-", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[integer,decimal]>)-><a[integer,decimal]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string22::string, _aPrimValue = PrimLit "date"},Var {_aNode = cash.make-payment_date3::time})]}]}], _aBindType = bindbind*9schema23::binding:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}}))}, _aAppArgs = [Table {_aNode = cash.cash8::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payor0::string}]}]}, _aAppArgs = [Var {_aNode = cash.make-payment_payor0::string},Var {_aNode = cash.make-payment_amount2::decimal},Var {_aNode = cash.make-payment_date3::time}]},App {_aNode = appDcash.credit41::string, _aAppFun = FDefun {_fInfo =   (defun credit (id:string amount:decimal date:time) , _fName = "cash.credit", _fType = (id:string amount:decimal date:time)-><c>, _fArgs = ["id"(cash.credit_id25::string),"amount"(cash.credit_amount26::decimal),"date"(cash.credit_date27::time)], _fBody = [App {_aNode = appNwith-read28::string, _aAppFun = FNative {_fInfo = , _fName = "with-read", _fTypes = (table:table:<{row}> key:string bindings:binding:<{row}>)-><a> :| [], _fSpecial = Just ("with-read",SBinding (Binding {_aNode = bind*30::string, _aBindings = [("balance"(bind*30_balance31::decimal),Var {_aNode = bind*30_balance31::decimal})], _aBody = [App {_aNode = appNupdate33::string, _aAppFun = FNative {_fInfo = , _fName = "update", _fTypes = (table:table:<{row}> key:string object:object:<{row}>)->string :| [], _fSpecial = Nothing}, _aAppArgs = [Table {_aNode = cash.cash34::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payee1::string},Object {_aNode = object35::object:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}, _aObject = [(Prim {_aNode = string36::string, _aPrimValue = PrimLit "balance"},App {_aNode = appN+37::decimal, _aAppFun = FNative {_fInfo = , _fName = "+", _fTypes = (x:<a[integer,decimal]> y:<a[integer,decimal]>)-><a[integer,decimal]> :| [(x:<a[integer,decimal]> y:<b[integer,decimal]>)->decimal,(x:<a[string,[<l>],object:<{o}>]> y:<a[string,[<l>],object:<{o}>]>)-><a[string,[<l>],object:<{o}>]>], _fSpecial = Nothing}, _aAppArgs = [Var {_aNode = bind*30_balance31::decimal},Var {_aNode = cash.make-payment_amount2::decimal}]}),(Prim {_aNode = string38::string, _aPrimValue = PrimLit "change"},Var {_aNode = cash.make-payment_amount2::decimal}),(Prim {_aNode = string39::string, _aPrimValue = PrimLit "date"},Var {_aNode = cash.make-payment_date3::time})]}]}], _aBindType = bindbind*30schema40::binding:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}}))}, _aAppArgs = [Table {_aNode = cash.cash29::table:{cash.entry [ccy:string,balance:decimal,change:decimal,date:time]}},Var {_aNode = cash.make-payment_payee1::string}]}]}, _aAppArgs = [Var {_aNode = cash.make-payment_payee1::string},Var {_aNode = cash.make-payment_amount2::decimal},Var {_aNode = cash.make-payment_date3::time}]}]}}
+--  { _tlFun = FDefun
+--    { _fInfo = "(defun create-account2 (id2 initial-balance2)"
+--    , _fName = "analyze-tests.create-account2"
+--    , _fType = "(id2:<e> initial-balance2:<f>)-><g>"
+--    , _fArgs = ["id2"(analyze-tests.create-account2_id20::string),"initial-balance2"(analyze-tests.create-account2_initial-balance21::integer)]
+--    , _fBody =
+--      [ App
+--        { _aNode = appDanalyze-tests.create-account14::string
+--        , _aAppFun = FDefun
+--          { _fInfo = "(defun create-account (id initial-balance) "
+--          , _fName = "analyze-tests.create-account"
+--          , _fType = "(id:<b> initial-balance:<c>)-><d>"
+--          , _fArgs = ["id"(analyze-tests.create-account_id2::string),"initial-balance"(analyze-tests.create-account_initial-balance3::integer)]
+--          , _fBody =
+--            [ App
+--              { _aNode = "appNenforce-keyset4::bool"
+--              , _aAppFun =
+--                FNative { _fInfo = ""
+--                        , _fName = "enforce-keyset"
+--                        , _fTypes = "(keyset-or-name:<k[string,keyset]>)->bool :| []"
+--                        , _fSpecial = Nothing}
+--              , _aAppArgs = [Prim {_aNode = string5::string, _aPrimValue = PrimLit "module-keyset"}]}
+--            ,App {_aNode = appNenforce6::bool
+--                 , _aAppFun = FNative
+--                   { _fInfo = ""
+--                   , _fName = "enforce"
+--                   , _fTypes = "(test:bool msg:string)->bool :| []"
+--                   , _fSpecial = Nothing}
+--                 , _aAppArgs =
+--                   [ App { _aNode = appN>=7::bool
+--                         , _aAppFun = FNative
+--                           { _fInfo = ""
+--                           , _fName = ">="
+--                           , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| []"
+--                           , _fSpecial = Nothing}
+--                         , _aAppArgs = [Var {_aNode = analyze-tests.create-account2_initial-balance21::integer},Prim {_aNode = integer8::integer, _aPrimValue = PrimLit 0}]}
+--                   , Prim {_aNode = string9::string, _aPrimValue = PrimLit "Initial balance must be > 0"}]}
+--            ,App {_aNode = appNinsert10::string
+--                 , _aAppFun = FNative
+--                   { _fInfo = ""
+--                   , _fName = "insert"
+--                   , _fTypes = "(table:table:<{row}> key:string object:object:<{row}>)->string :| []"
+--                   , _fSpecial = Nothing}
+--                 , _aAppArgs =
+--                   [ Table {_aNode = "analyze-tests.accounts11::table:{analyze-tests.account [balance:integer,data:<a>]}"}
+--                   , Var {_aNode = analyze-tests.create-account2_id20::string}
+--                   ,Object
+--                    { _aNode = "object12::object:{analyze-tests.account [balance:integer,data:<a>]}"
+--                    , _aObject =
+--                      [ (Prim {_aNode = string13::string, _aPrimValue = PrimLit "balance"}
+--                        ,Var {_aNode = analyze-tests.create-account2_initial-balance21::integer})
+--                      ]
+--                    }
+--                   ]
+--                 }
+--            ]
+--          , _fDocs = Just "Create a new account for ID with INITIAL-BALANCE funds"}
+--        , _aAppArgs =
+--          [Var {_aNode = analyze-tests.create-account2_id20::string}
+--          ,Var {_aNode = analyze-tests.create-account2_initial-balance21::integer}
+--          ]
+--        }
+--      ]
+--    , _fDocs = Nothing}}
