@@ -8,7 +8,7 @@
 
   (deftable cash:{entry})
 
-  (defun debit (id:string amount:decimal date:time)
+  (defun debit (id amount date)
     "Debit ID for AMOUNT, checking balance for available funds"
     (with-read cash id { "balance":= balance }
       (enforce (>= balance amount) "Insufficient funds")
@@ -19,7 +19,7 @@
         }))
   )
 
-  (defun credit (id:string amount:decimal date:time)
+  (defun credit (id amount date)
     "Credit ID with AMOUNT"
     (with-read cash id { "balance" := balance}
       (update cash id {
@@ -30,12 +30,12 @@
     )
   )
 
-  (defun make-payment (payor:string payee:string amount:decimal date:time)
+  (defun make-payment (payor payee amount date)
     "Debit PAYOR and credit PAYEE AMOUNT"
     (debit payor amount date)
     (credit payee amount date))
 
-  (defun create-account (id:string ccy:string amount:decimal date:time)
+  (defun create-account (id ccy amount date)
     "Create account ID for CCY and fund with AMOUNT"
     (insert cash id {
       "ccy": ccy,
@@ -44,7 +44,7 @@
       "date": date })
   )
 
-  (defun read-account (id:string) (read cash id))
+  (defun read-account (id) (read cash id))
 
 )
 
