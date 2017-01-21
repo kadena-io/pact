@@ -120,7 +120,7 @@ main = repl
 repl :: IO ()
 repl = do
   as <- O.execParser argParser
-  let exitEither _ Left {} = exitFailure
+  let exitEither _ Left {} = hPutStrLn stderr "Load failed" >> hFlush stderr >> exitFailure
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
@@ -134,6 +134,7 @@ repl = do
               Nothing -> compileOnly fp >>= exitLoad
         | otherwise -> execScript fp >>= exitLoad
     ORepl -> initReplState Interactive >>= \s -> runRepl s stdin >>= exitEither (const (return ()))
+
 
 locatePactReplScript :: FilePath -> IO (Maybe FilePath)
 locatePactReplScript fp = do
@@ -289,8 +290,8 @@ pureEval e = do
           return (Left serr)
 
 renderErr :: PactError -> Repl String
-renderErr (EvalError i s) = return $ renderInfo i ++ ":" ++ s
-renderErr a@(ArgsError f _ _) = return $ renderInfo (_faInfo f) ++ ":" ++ show a
+renderErr (EvalError i s) = return $ renderInfo i ++ ": " ++ s
+renderErr a@(ArgsError f _ _) = return $ renderInfo (_faInfo f) ++ ": " ++ show a
 renderErr a = do
   m <- use rMode
   let i = case m of
@@ -312,7 +313,7 @@ updateForOp a = do
     Load fp reset -> do
                   when reset (initReplState mode >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
-    Errors es -> forM_ es (outStrLn HErr) >> return (Right a)
+    TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
 
 
 
@@ -371,8 +372,7 @@ execScript' m fp = do
 
 
 useReplLib :: Repl ()
-useReplLib = do
-  rEvalState.evalRefs.rsLoaded %= HM.union (moduleToMap replDefs)
+useReplLib = rEvalState.evalRefs.rsLoaded %= HM.union (moduleToMap replDefs)
 
 
 evalRepl' :: String -> Repl (Either String (Term Name))

@@ -50,7 +50,7 @@ data LibOp =
     Noop |
     UpdateEnv (Endo (EvalEnv LibState)) |
     Load FilePath Bool |
-    Errors [String]
+    TcErrors [String]
 instance Default LibOp where def = Noop
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
@@ -266,12 +266,12 @@ tc i as = case as of
       case mdm of
         Nothing -> evalError' i $ "No such module: " ++ show modname
         Just md -> do
-          r :: Either SomeException ([TopLevel Node],[CheckerException]) <-
+          r :: Either SomeException ([TopLevel Node],[Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
             Left e -> evalError' i $ "Typecheck failed with internal error: " ++ show e
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " ++ modname ++ ": success"
               _ -> do
-                setop $ Errors $ map show fails
+                setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " ++ modname ++ ": Unable to resolve all types"

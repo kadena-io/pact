@@ -120,7 +120,8 @@ instance Pretty Types where
   pretty (Types p []) = pretty p
   pretty (Types p os) = pretty p <+> sshow os
 
-type Failures = S.Set CheckerException
+data Failure = Failure TcId String deriving (Eq,Ord,Show)
+type Failures = S.Set Failure
 
 -- | Typechecker state.
 data TcState = TcState {
@@ -614,7 +615,7 @@ trackAST (Node i t) = do
 addFailure :: TcId -> String -> TC ()
 addFailure i s = do
   debug $ "Failure: " ++ show (i,s)
-  tcFailures %= S.insert (CheckerException (_tiInfo i) s)
+  tcFailures %= S.insert (Failure i s)
 
 -- | Lookup both type var and Types for AST node.
 lookupAst :: String -> TcId -> TC (TypeVar UserType,Types)
@@ -1003,7 +1004,11 @@ resolveAllTypes = do
   let unresolved = M.filter isUnresolvedTy ast2Ty
   if M.null unresolved then debug "Successfully resolved all types"
     else forM_ (M.toList unresolved) $ \(i,v) ->
-      addFailure i $ "Unable to resolve type (" ++ show v ++ ")"
+      addFailure i $ "Unable to resolve type" ++
+        (case v of
+           (TyVar (TypeVar _ [])) -> ""
+           (TyVar (TypeVar _ as)) -> " " ++ (show as)
+           _ -> " (" ++ show v ++ ")")
   return ast2Ty
 
 _debugState :: TC ()
@@ -1060,7 +1065,7 @@ typecheckTopLevel (Ref r) = do
 typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrev d
 
 -- | Typecheck all productions in a module.
-typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[CheckerException])
+typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
 typecheckModule dbg (Module {..},refs) = do
   debug' dbg $ "Typechecking module " ++ show _mName
   let tc ((tls,fails),sup) r = do
