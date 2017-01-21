@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -40,13 +41,16 @@ import Pact.Types
 import Pact.Eval
 import Pact.Pure
 import Data.Semigroup
+import Data.String
+import Pact.Typecheck
 
 
 
 data LibOp =
     Noop |
     UpdateEnv (Endo (EvalEnv LibState)) |
-    Load FilePath Bool
+    Load FilePath Bool |
+    Errors [String]
 instance Default LibOp where def = Noop
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
@@ -91,6 +95,9 @@ replDefs = ("Repl",
       "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
      ,defNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
+     ,defRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
+                                 funType tTyString [("module",tTyString),("debug",tTyBool)])
+       "Typecheck MODULE, optionally enabling DEBUG output."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -246,3 +253,25 @@ bench' i as = do
 #else
 bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
 #endif
+
+
+tc :: RNativeFun LibState
+tc i as = case as of
+  [TLitString s] -> go s False
+  [TLitString s,TLiteral (LBool d) _] -> go s d
+  _ -> argsError i as
+  where
+    go modname dbg = do
+      mdm <- HM.lookup (fromString modname) <$> view (eeRefStore . rsModules)
+      case mdm of
+        Nothing -> evalError' i $ "No such module: " ++ show modname
+        Just md -> do
+          r :: Either SomeException ([TopLevel Node],[CheckerException]) <-
+            try $ liftIO $ typecheckModule dbg md
+          case r of
+            Left e -> evalError' i $ "Typecheck failed with internal error: " ++ show e
+            Right (_,fails) -> case fails of
+              [] -> return $ tStr $ "Typecheck " ++ modname ++ ": success"
+              _ -> do
+                setop $ Errors $ map show fails
+                return $ tStr $ "Typecheck " ++ modname ++ ": Unable to resolve all types"

@@ -11,9 +11,31 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+-- |
+-- Module      :  Pact.Typecheck
+-- Copyright   :  (C) 2017 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Stylized static typechecker for Pact, operates on
+-- "loaded" modules only, where all references have been resolved.
+-- Upon success, produces a fully-inlined 'AST' with concrete types
+-- for each node.
+--
+-- Typechecking follows a Hindley-Milner approach using binary
+-- substitutions, but does not have need for polytypes since all
+-- types are expected to resolve to a concrete type or a native
+-- function.
+--
+-- Pact's support for overloaded native functions is one reason
+-- a more traditional HM approach is not used.
+--
+-- TODO: handle lazy functions better (map, filter etc).
+--
+
 module Pact.Typecheck where
 
-import Pact.Repl
 import Pact.Types
 import Pact.Native.Internal
 import Control.Monad.Catch
@@ -43,7 +65,7 @@ instance Show CheckerException where show (CheckerException i s) = renderInfo i 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
 
-
+-- | Model a user type. Currently only Schemas are supported.
 data UserType = Schema {
   _utName :: TypeName,
   _utModule :: ModuleName,
@@ -55,7 +77,7 @@ instance Show UserType where
 instance Pretty UserType where
   pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
 
-
+-- | An ID for an AST node.
 data TcId = TcId {
   _tiInfo :: Info,
   _tiName :: String,
@@ -74,17 +96,18 @@ die' :: MonadThrow m => TcId -> String -> m a
 die' i = die (_tiInfo i)
 
 
-
+-- | Role of an AST in an overload.
 data VarRole = ArgVar Int | RetVar
   deriving (Eq,Show,Ord)
 
+-- | Combine an AST id with a role.
 data Overload = Overload { _oRole :: VarRole, _oOverApp :: TcId }
  deriving (Eq,Ord)
 
 instance Show Overload where
   show (Overload r ts) = show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
 
-
+-- | Data structure to track the latest substituted type and any associated overloads.
 data Types = Types {
   _tsType :: Type UserType,
   _tsOverloads :: [Overload]
@@ -99,12 +122,16 @@ instance Pretty Types where
 
 type Failures = S.Set CheckerException
 
+-- | Typechecker state.
 data TcState = TcState {
   _doDebug :: Bool,
   _tcSupply :: Int,
+  -- | Maps native app AST to an overloaded function type, and stores result of solver.
   _tcOverloads :: M.Map TcId (Either (FunTypes UserType) (FunType UserType)),
   _tcFailures :: Failures,
+  -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
+  -- | Maps type vars to types.
   _tcVarToTypes :: M.Map (TypeVar UserType) Types
   } deriving (Eq,Show)
 
@@ -135,6 +162,7 @@ prettyFails fs = "Failures:" <$$>
     indent 2 (vsep $ map (string.show) (toList fs))
 
 
+-- | Typechecker monad.
 newtype TC a = TC { unTC :: StateT TcState IO a }
   deriving (Functor,Applicative,Monad,MonadState TcState,MonadIO,MonadThrow,MonadCatch)
 
@@ -155,6 +183,7 @@ debug' d s = when d (liftIO $ putStrLn s)
 freshId :: Info -> String -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
 
+-- | Storage for literal values.
 data PrimValue =
   PrimLit Literal |
   PrimKeySet PactKeySet |
@@ -166,6 +195,7 @@ instance Pretty PrimValue where
   pretty (PrimValue v) = text (show v)
 
 
+-- | A top-level module production.
 data TopLevel t =
   TopFun {
     _tlFun :: Fun t
@@ -195,11 +225,14 @@ instance Pretty t => Pretty (TopLevel t) where
     "Table" <+> pretty n <> colon <> pretty t
   pretty (TopUserType _i t) = "UserType" <+> pretty t
 
+-- | Special-form handling (with-read, map etc)
 data Special t =
   SPartial |
   SBinding (AST t)
   deriving (Eq,Show,Functor,Foldable,Traversable)
 
+
+-- | A native or user function.
 data Fun t =
   FNative {
     _fInfo :: Info,
@@ -232,6 +265,8 @@ instance Pretty t => Pretty (Fun t) where
     indent 2 (vsep (map pretty _fBody)) <$$>
     ")"
 
+
+-- | Pair an AST with its type.
 data Node = Node {
   _aId :: TcId,
   _aTy :: Type UserType
@@ -241,6 +276,7 @@ instance Show Node where
 instance Pretty Node where
   pretty (Node i t) = pretty i <> "::" <> pretty t
 
+-- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
   _nnName :: String,
   _nnNamed :: i
@@ -249,7 +285,7 @@ instance (Show i) => Show (Named i) where
   show (Named na no) = show na ++ "(" ++ show no ++ ")"
 instance (Pretty i) => Pretty (Named i) where pretty (Named na no) = dquotes (pretty na) <+> parens (pretty no)
 
-
+-- | Inlined AST.
 data AST n =
   App {
   _aNode :: n,
@@ -324,11 +360,13 @@ makeLenses ''TopLevel
 makeLenses ''Node
 makeLenses ''TcId
 
+-- | Run monad providing supply seed and debug.
 runTC :: Int -> Bool -> TC a -> IO (a, TcState)
 runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
 
-
+-- | Pre-visit or post-visit specification.
 data Visit = Pre | Post deriving (Eq,Show)
+-- | Type that can walk AST nodes with 'walkAST'
 type Visitor m n = Visit -> AST n -> m (AST n)
 
 -- | Walk the AST, performing function both before and after descent into child elements.
@@ -375,6 +413,7 @@ walkAST f t@Step {} = do
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 
+-- | Storage for overload solving.
 data SolveOverload o = SO {
   _soOverload :: o,
   _soRoles :: M.Map VarRole (TypeVar UserType),
@@ -497,7 +536,7 @@ applySchemas Post a = return a
 -- Special form support includes:
 --  1. for 'map', associate lambda result type for arg AST
 --  2. for bindings, associate binding AST with fun return ty,
---     associate inner binding schema type with funty last arg ty (what about the association alread with the binding/last arg)?
+--     associate inner binding schema type with funty last arg ty
 processNatives :: Visitor TC Node
 processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
@@ -602,7 +641,9 @@ assocAstTy (Node ai _) ty = do
   assocTy ai av ty
 
 
-
+-- | associate/substitute a tracked type with a provided type.
+-- The fact that one of these implies storage and the other
+-- is "just a type" is problematic, creating much cruft in here.
 assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
 assocTy ai av ty = do
   aty <- lookupTypes "assocTy" ai av
@@ -643,16 +684,10 @@ assocOverload ai o = do
   debug $ "assocOverload: " ++ show (ai,av,aty,o)
   (tcVarToTypes . at av . _Just . tsOverloads) %= (o:)
 
-
+-- | Set, or update, a tracked 'Types' value.
 alterTypes :: TypeVar UserType -> Types -> (Types -> Types) -> TC ()
 alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 
--- | currently unused
-updateTyVar :: Type UserType -> Type UserType -> TC ()
-updateTyVar (TyVar uv) u = do
-  debug $ "updateTyVar: " ++ show (uv,u)
-  alterTypes uv (Types u []) (set tsType u)
-updateTyVar _ _ = return ()
 
 -- | Investigate types "inside of" schemas and lists to see if they can associate.
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
@@ -663,12 +698,12 @@ assocParams i x y = case (x,y) of
   _ -> return ()
   where
     createMaybe v = alterTypes v (Types (TyVar v) []) id
-    assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy i a b -- updateTyVar a b
-    assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a -- updateTyVar b a
+    assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy i a b
+    assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a
     assoc _ _ = return ()
 
 -- | Substitute AST types to most specialized.
--- Not as sophisticated as `assocTy`, should probably be though.
+-- Not as thorough as `assocTy`, should probably use it.
 assocAST :: TcId -> AST Node -> TC ()
 assocAST ai b = do
   let bi = _aId (_aNode b)
@@ -685,6 +720,7 @@ assocAST ai b = do
     Just (Left _) -> doSub ai av aty bi bv bty
     Just (Right _) -> doSub bi bv bty ai av aty
 
+-- | Unify two types and note failure.
 unifyTypes' :: (Show n,Eq n) => TcId -> Type n -> Type n -> (Either (Type n) (Type n) -> TC ()) -> TC ()
 unifyTypes' i a b act = case unifyTypes a b of
   Just r -> act r
@@ -692,6 +728,7 @@ unifyTypes' i a b act = case unifyTypes a b of
     addFailure i $ "Cannot unify: " ++ show (a,b)
     return ()
 
+-- | Unify two types, indicating which of the types was more specialized with the Either result.
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
@@ -721,7 +758,7 @@ unifyTypes l r = case (l,r) of
         (TypeVar _ ac,_) | null ac || s `elem` ac -> sWins
         _ -> Nothing
 
-
+-- | Instantiate a Bound scope as AST nodes or references.
 scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
 scopeToBody i args bod = do
   bt <- instantiate (return . Right) <$> traverseScope (bindArgs i args) return bod
@@ -743,6 +780,7 @@ trackIdNode i = trackNode (idTyVar i) i
 mangle :: TcId -> Type n -> Type n
 mangle i = over (tyVar.tvName.typeVarName) (pfx (show i))
 
+-- | Mangle a type variable.
 mangleType :: TcId -> Type UserType -> Type UserType
 mangleType f t@TyVar {} = mangle f t
 mangleType f t@TyList {} = over ttListType (mangleType f) t
@@ -880,6 +918,7 @@ trackNode :: Type UserType -> TcId -> TC Node
 trackNode ty i = trackAST node >> return node
   where node = Node i ty
 
+-- | Main type transform, expecting that vars can only refer to a user type.
 toUserType :: Term (Either Ref (AST Node)) -> TC UserType
 toUserType t = case t of
   (TVar (Left r) _) -> derefUT r
@@ -918,6 +957,8 @@ mkTop t@TSchema {..} = do
 mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
+-- | Recursively find the "leaf type" for a type which could be a var,
+-- or have a parameterized type in it.
 resolveTy :: Type UserType -> TC (Type UserType)
 resolveTy rt = do
   v2Ty <- use tcVarToTypes
@@ -941,7 +982,7 @@ resolveTy rt = do
 
 
 
-
+-- | Is this type a variable, or does it have any parameterized variables
 isUnresolvedTy :: Type n -> Bool
 isUnresolvedTy TyVar {} = True
 isUnresolvedTy (TySchema _ v) = isUnresolvedTy v
@@ -951,6 +992,7 @@ isUnresolvedTy _ = False -- TODO fun types
 prettyMap :: (t -> Doc) -> (t1 -> Doc) -> M.Map t t1 -> Doc
 prettyMap prettyK prettyV = vsep . map (\(k,v) -> prettyK k <> colon <+> prettyV v) . M.toList
 
+-- | A successful result has the '_tcAstToVar' map populated with "resolved types", ie concrete non-var types.
 resolveAllTypes :: TC (M.Map TcId (Type UserType))
 resolveAllTypes = do
   ast2Ty <- use tcAstToVar >>= \a2v -> (`M.traverseWithKey` a2v) $ \i tv -> do
@@ -978,13 +1020,15 @@ singLens = iso pure head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {}) = typecheckBody (f,(tlFun . fBody))
+typecheck f@(TopFun FDefun {}) = typecheckBody (f,tlFun . fBody)
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
   typecheckBody (c,tlConstVal . singLens)
 typecheck tl = return tl
 
 
+-- | Workhorse function. Perform AST substitutions, associate types, solve overloads,
+-- enforce schemas, resolve all type variables, populate back into AST.
 typecheckBody :: (TopLevel Node,Traversal' (TopLevel Node) [AST Node]) -> TC (TopLevel Node)
 typecheckBody (tl,bodyLens) = do
   let body = view bodyLens tl
@@ -999,13 +1043,14 @@ typecheckBody (tl,bodyLens) = do
   debug "Resolve types"
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
-  unless (S.null fails) $ liftIO $ putDoc (prettyFails fails <> hardline)
+  dbg <- use doDebug
+  when (dbg && not (S.null fails)) $ liftIO $ putDoc (prettyFails fails <> hardline)
   let tl' = set bodyLens schEnforced tl
   forM tl' $ \n@(Node i _) -> case M.lookup i ast2Ty of
     Nothing -> die' i $ "Failed to find tracked AST for node: " ++ show n
     Just ty -> return (Node i ty)
 
-
+-- | Typecheck a single module production.
 typecheckTopLevel :: Ref -> TC (TopLevel Node)
 typecheckTopLevel (Ref r) = do
   tl <- mkTop (fmap Left r)
@@ -1014,56 +1059,11 @@ typecheckTopLevel (Ref r) = do
   return tl'
 typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abbrev d
 
-typecheckModule :: Bool -> ModuleData -> IO [TopLevel Node]
+-- | Typecheck all productions in a module.
+typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[CheckerException])
 typecheckModule dbg (Module {..},refs) = do
   debug' dbg $ "Typechecking module " ++ show _mName
-  let tc (tls,sup) r = do
+  let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
-        return (tl:tls,succ _tcSupply)
-  fst <$> foldM tc ([],0) (HM.elems refs)
-
-
-
-_loadModule :: FilePath -> ModuleName -> IO ModuleData
-_loadModule fp mn = do
-  (r,s) <- execScript' (Script fp) fp
-  either (die def) (const (return ())) r
-  case view (rEnv . eeRefStore . rsModules . at mn) s of
-    Just m -> return m
-    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
-
-_loadFun :: FilePath -> ModuleName -> String -> IO Ref
-_loadFun fp mn fn = _loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
-  Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
-  Just f -> return f
-
-
-_infer :: FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
-_infer fp mn fn = _loadFun fp mn fn >>= \r -> runTC 0 True (typecheckTopLevel r)
-
--- _pretty =<< _inferIssue
-_inferIssue :: IO (TopLevel Node, TcState)
-_inferIssue = _infer "examples/cp/cp.repl" "cp" "issue"
-
--- _pretty =<< _inferTransfer
-_inferTransfer :: IO (TopLevel Node, TcState)
-_inferTransfer = _infer "examples/accounts/accounts.repl" "accounts" "transfer"
-
-_inferTest1 :: IO (TopLevel Node, TcState)
-_inferTest1 = _infer "tests/pact/tc.repl" "tctest" "unconsumed-app-typevar"
-
-_inferModule :: FilePath -> ModuleName -> IO [TopLevel Node]
-_inferModule fp mn = _loadModule fp mn >>= typecheckModule False
-
-_inferTestModule :: IO [TopLevel Node]
-_inferTestModule = _inferModule "tests/pact/tc.repl" "tctest"
-
-_inferAccounts :: IO [TopLevel Node]
-_inferAccounts = _inferModule "examples/accounts/accounts.repl" "accounts"
-
-_inferCP :: IO [TopLevel Node]
-_inferCP = _inferModule "examples/cp/cp.repl" "cp"
-
--- prettify output of '_infer' runs
-_pretty :: (TopLevel Node, TcState) -> IO ()
-_pretty (f,tc) = putDoc (pretty tc <> hardline <> hardline <> pretty f <> hardline)
+        return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
+  fst <$> foldM tc (([],[]),0) (HM.elems refs)

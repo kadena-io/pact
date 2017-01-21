@@ -54,6 +54,7 @@ import Data.Monoid
 import System.Directory
 import System.FilePath
 
+
 import Pact.Compile
 import Pact.Eval
 import Pact.Types
@@ -62,7 +63,7 @@ import Pact.Repl.Lib
 
 
 pactVersion :: String
-pactVersion = "1.0.1"
+pactVersion = "2.0"
 
 data Option =
     OVersion |
@@ -311,6 +312,7 @@ updateForOp a = do
     Load fp reset -> do
                   when reset (initReplState mode >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
+    Errors es -> forM_ es (outStrLn HErr) >> return (Right a)
 
 
 
