@@ -31,4 +31,6 @@
       )
     )
   )
+  (defun enf-gt (a:integer b:integer) (enforce (> a b)))
+  (defun tricky1 (a:integer b:integer) (enforce (and (> a b) (enf-gt a b))))
 )
