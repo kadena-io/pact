@@ -113,7 +113,7 @@ renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> 
 renderProverTest table' column' (reads', writes') ColumnRange{..} =
     preamble ++ (constructDomainAssertion <$> reads') ++ [constructRangeAssertion] ++ exitCmds
   where
-    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability for: " ++ table' ++ "." ++ column' ++ "\""]
+    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability (by attempting to violate it) for: " ++ table' ++ "." ++ column' ++ "\""]
     constructDomainAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
                                          [TermQualIdentifier (QIdentifier (ISymbol sn))
                                          ,TermSpecConstant (SpecConstantDecimal $ show _ptcValue)])
@@ -125,7 +125,7 @@ renderProverTest table' column' (reads', writes') ColumnRange{..} =
 renderProverTest table' column' (reads', writes') ConservesMass =
     preamble ++ [mkRelation] ++ exitCmds
   where
-    preamble = [Push 1, Echo $ "\"Verifying mass conservation for: " ++ table' ++ "." ++ column' ++ "\""]
+    preamble = [Push 1, Echo $ "\"Verifying mass conservation (by attempting to violate it) for: " ++ table' ++ "." ++ column' ++ "\""]
     symNameToTerm (SymName sn) = TermQualIdentifier (QIdentifier (ISymbol sn))
     mkRelation = Assert (TermQualIdentifierT
                          (QIdentifier (ISymbol "not"))
