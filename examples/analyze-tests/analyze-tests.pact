@@ -39,6 +39,7 @@
   )
 
   (defun tricky1 (a:integer b:integer)
+    (enforce-keyset 'module-keyset)
     (enforce (and (> a b) (enf-gt a b)) "bar")
   )
 )

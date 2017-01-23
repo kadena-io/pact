@@ -385,7 +385,7 @@ compileNode inIf (AST_Enforce node' app' msg') = do
   assertTerm inIf action (Just $ "enforces: " ++ msg') >>= tellCmd
   nodeToTerm node'
 compileNode inIf (AST_EnforceKeyset node' ks) = do
-  let newNode = (addToNodeTcIdName ("requires-keyset-" ++ ks) node')
+  let newNode = (addToNodeTcIdName ks node')
   trackNewNode newNode
   asTerm <- nodeToTerm newNode
   assertEquality inIf asTerm (boolAsTerm True) Nothing >>= tellCmd
