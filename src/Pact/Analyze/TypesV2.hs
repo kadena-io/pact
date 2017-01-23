@@ -63,33 +63,32 @@ data SymType = SymInteger
   | SymTime
   deriving (Show, Eq, Ord, Generic, ToJSON)
 
-newtype SymName = SymName { unSymName :: String } deriving (Show, Eq)
+newtype SymName = SymName { unSymName :: String } deriving (Show, Eq, Ord)
 instance ToJSON SymName where
   toJSON (SymName s) = toJSON s
 
 data TableAccess =
-  TableRead
-  { _taKey :: SymName } |
+  TableRead |
   TableWrite
-  { _taKey :: SymName }
   deriving (Show, Eq, Generic, ToJSON)
 
 data OfTableColumn = OfTableColumn
   { _otcTable :: String
   , _otcColumn :: String
+  , _otcKey :: Smt.Term
   , _otcAccess :: TableAccess
-  } deriving (Show, Eq, Generic, ToJSON)
+  } deriving (Show, Eq, Generic)
 
 data SymVar = SymVar
   { _svName :: SymName
   , _svNode :: Node
   , _svType :: SymType
-  } deriving (Show, Eq, Generic, ToJSON)
+  } deriving (Show, Eq, Generic, ToJSON, Ord)
 makeLenses ''SymVar
 
 data CompilerState = CompilerState
   { _csVars :: Map Node SymVar
-  , _csTableAssoc :: Map SymVar TableAccess
+  , _csTableAssoc :: Map SymVar OfTableColumn
   } deriving (Show, Eq)
 makeLenses ''CompilerState
 
@@ -213,10 +212,11 @@ pattern RawTableName t <- (Table (Node (TcId _ t _) _))
 pattern NativeFunc f <- (FNative _ f _ _)
 pattern UserFunc args bdy <- (FDefun _ _ _ args bdy _)
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
-pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
 
 pattern AST_Var var <- (Var var)
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
+pattern AST_NegativeVar var' <- (App _ (NativeFunc "-") (Args_Var var'))
+pattern AST_NegativeLit lit' <- (App _ (NativeFunc "-") (Args_Lit lit'))
 pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
 pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
 pattern AST_UFun node' bdy' args' <- (App node' (UserFunc _ bdy') args')
@@ -224,6 +224,8 @@ pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', 
 pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
 pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
+pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
+pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
 
 -- pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
@@ -237,14 +239,11 @@ pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
 pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
 
 --pattern AppFDefun fDefArgs fDefBdy appArgs <- (App _ (FDEFUN fDefArgs fDefBdy) appArgs)
-pattern NegativeVar var' <- (App _ (NativeFunc "-") (Args_Var var'))
-pattern NegativeLit lit' <- (App _ (NativeFunc "-") (Args_Lit lit'))
 pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
 pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
 pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
 pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
 pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
-pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [RawTableName table', key'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
 
@@ -324,27 +323,52 @@ mkIteNodes node'@(Node _ (TyPrim _)) = do
   return (ifRes, ifCond, ifTrue, ifFalse)
 mkIteNodes (Node _ ty) = throw $ SmtCompilerException "mkIteNodes" $ "only ifs that return a primitive type are supported, not: " ++ show ty
 
+bindNewVar :: InIf -> (Named Node, AST Node) -> SmtCompiler ()
+bindNewVar inIf ((Named n node'), ast') = do
+  trackNewNode node'
+  asTerm <- nodeToTerm node'
+  resTerm <- compileNode inIf ast'
+  assertEquality inIf asTerm resTerm (Just $ "binding " ++ n) >>= tellCmd
+
+bindTableVar :: InIf -> TableAccess -> String -> Smt.Term -> (Named Node, AST Node) -> SmtCompiler ()
+bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
+  let otc' = OfTableColumn { _otcTable = table', _otcColumn = column', _otcKey = key', _otcAccess = ta}
+  bindNewVar inIf orig
+  symVar' <- Map.lookup node' <$> use csVars
+  case symVar' of
+    Nothing -> throw $ SmtCompilerException "bindTableVar" $ "failed to find associated symVar: " ++ show node'
+    Just s -> do
+      csTableAssoc %= Map.insert s otc'
+
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
 compileBody inIf parentRel ast' = do -- do compilation, (assert (= retNode' <final thing>))
-  fin <- last <$> mapM (compileNode inIf) ast'
-  case parentRel of
-    NoRelation -> return ()
-    HasRelation retNode -> do
-      retNode' <- nodeToTerm retNode
-      assertEquality inIf retNode' fin Nothing >>= tellCmd
-      return ()
+  results <- mapM (compileNode inIf) ast'
+  if null results
+  then return () -- throw $ SmtCompilerException "compileBody" "encountered an empty body"
+  else do
+    case parentRel of
+      NoRelation -> return ()
+      HasRelation retNode -> do
+        retNode' <- nodeToTerm retNode
+        assertEquality inIf retNode' (last results) Nothing >>= tellCmd
+        return ()
 
 -- | the workhorse of compilation
 compileNode :: InIf -> AST Node -> SmtCompiler Smt.Term
 -- #BEGIN# Handle Lits and Vars
 compileNode _ (AST_Lit lit) = return $ literalToTerm lit
-compileNode _ (NegativeLit lit) = do
+compileNode _ (AST_NegativeLit lit) = do
   return $ TermQualIdentifierT negAsQID [literalToTerm lit]
 compileNode _ (AST_Var var) = nodeToTerm var
-compileNode _ (NegativeVar var) = do
+compileNode _ (AST_NegativeVar var) = do
   v' <- nodeToTerm var
   return $ TermQualIdentifierT negAsQID [v']
+compileNode inIf (AST_Binding node' bindings' bdy') = do
+  trackNewNode node'
+  mapM_ (bindNewVar inIf) bindings'
+  compileBody inIf (HasRelation node') bdy'
+  nodeToTerm node'
 -- #END# Handle Lits and Vars
 
 compileNode inIf (AST_If node' cond' ifTrue' ifFalse') = do
@@ -390,6 +414,12 @@ compileNode inIf (AST_EnforceKeyset node' ks) = do
   asTerm <- nodeToTerm newNode
   assertEquality inIf asTerm (boolAsTerm True) Nothing >>= tellCmd
   return asTerm
+compileNode inIf (AST_WithRead node' table' key' bindings' bdy') = do
+  trackNewNode node'
+  keyTerm <- compileNode inIf key'
+  mapM_ (bindTableVar inIf TableRead table' keyTerm) bindings'
+  compileBody inIf (HasRelation node') bdy'
+  nodeToTerm node'
 -- #END# Handle Natives Section
 
 -- #BEGIN# Handle User Functions Section
