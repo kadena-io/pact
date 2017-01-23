@@ -213,6 +213,7 @@ pattern RawTableName t <- (Table (Node (TcId _ t _) _))
 pattern NativeFunc f <- (FNative _ f _ _)
 pattern UserFunc args bdy <- (FDefun _ _ _ args bdy _)
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
+pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
 
 pattern AST_Var var <- (Var var)
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
@@ -222,6 +223,7 @@ pattern AST_UFun node' bdy' args' <- (App node' (UserFunc _ bdy') args')
 pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
 pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
+pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
 
 -- pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
@@ -241,8 +243,6 @@ pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var li
 pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
 pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
 pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
-pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
-pattern ENFORCEKEYSET keyset' <- (App _ (NativeFunc "enforce-keyset") (Args_Lit (LString keyset')))
 pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
 pattern WITHREAD table' key' bindings' bdy' <- (App _ (NativeFuncSpecial "with-read" (BINDING bindings' bdy')) [RawTableName table', key'])
 -- Unsupported currently
@@ -384,6 +384,12 @@ compileNode inIf (AST_Enforce node' app' msg') = do
   action <- compileNode inIf app'
   assertTerm inIf action (Just $ "enforces: " ++ msg') >>= tellCmd
   nodeToTerm node'
+compileNode inIf (AST_EnforceKeyset node' ks) = do
+  let newNode = (addToNodeTcIdName ("requires-keyset-" ++ ks) node')
+  trackNewNode newNode
+  asTerm <- nodeToTerm newNode
+  assertEquality inIf asTerm (boolAsTerm True) Nothing >>= tellCmd
+  return asTerm
 -- #END# Handle Natives Section
 
 -- #BEGIN# Handle User Functions Section
@@ -405,8 +411,11 @@ analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) = try $ do
                     { _csVars = (Map.fromList $ (\x -> (x, mkSymVar x)) . _nnNamed <$> args')
                     , _csTableAssoc = Map.empty}
   ((), _cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') () initState
-  return $ encodeSmt <$> res
+  return $ encodeSmt <$> ([dumpModelsOnSat] ++ res)
 analyzeFunction _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+
+dumpModelsOnSat :: CompiledSmt
+dumpModelsOnSat = CompiledSmt (SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))) Nothing
 
 runCompiler :: String -> IO ()
 runCompiler s = do
