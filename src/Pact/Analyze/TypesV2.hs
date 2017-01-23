@@ -16,28 +16,28 @@ import Control.Monad.Trans.RWS.Strict
 import Control.Lens hiding ((.=), op)
 import Pact.Typecheck
 import Pact.Types
-import Pact.Repl
-import Data.Either
+--import Pact.Repl
+--import Data.Either
 --import Data.Decimal
 import Data.Aeson hiding (Object)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.HashMap.Strict as HM
-import Data.Default
+--import qualified Data.HashMap.Strict as HM
+--import Data.Default
 import GHC.Generics
 import Control.Exception
-import Data.Thyme.Clock
+--import Data.Thyme.Clock
 import Data.Thyme.Clock.POSIX
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
 import qualified SmtLib.Syntax.ShowSL as SmtShow
-import qualified SmtLib.Parsers.CommandsParsers as SmtParser
+--import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 
-import qualified Data.ByteString.Char8 as BS8
-import qualified Data.Yaml as Yaml
-import qualified Text.Parsec as Parsec
+--import qualified Data.ByteString.Char8 as BS8
+--import qualified Data.Yaml as Yaml
+--import qualified Text.Parsec as Parsec
 
 import qualified Pact.Analyze.Types as TypesV1
 
@@ -116,7 +116,7 @@ isCmpOperator :: String -> Bool
 isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "="]
 
 isLogicalOperator :: String -> Bool
-isLogicalOperator s = Set.member s $ Set.fromList ["=", "and", "or", "not"]
+isLogicalOperator s = Set.member s $ Set.fromList ["=", "and", "or", "not", "!="]
 
 isNumericalOperator :: String -> Bool
 isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/"]
@@ -217,9 +217,10 @@ pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
 pattern AST_Var var <- (Var var)
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
 pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
-pattern AST_NFun_Basic_Direct fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
+pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
 pattern AST_UFun node' bdy' args' <- (App node' (UserFunc _ bdy') args')
-pattern ENFORCE node app' msg' <- (App node (NativeFunc "enforce") [app', AST_Lit (LString msg')])
+pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
+pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
 
 -- pattern Args_Var var <- [Var var]
@@ -240,7 +241,6 @@ pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var li
 pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
 pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
 pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
-pattern IF_App_Lit_Lit app' lit1 lit2 <- (App _ (NativeFunc "if") (Args_App_Lit_Lit app' lit1 lit2))
 pattern BINDING bindings' bdy' <- (Binding _ bindings' bdy' _)
 pattern ENFORCEKEYSET keyset' <- (App _ (NativeFunc "enforce-keyset") (Args_Lit (LString keyset')))
 pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
@@ -261,11 +261,29 @@ boolAsTerm b = TermQualIdentifier $ QIdentifier $ ISymbol (if b then "true" else
 eqAsQID :: QualIdentifier
 eqAsQID = QIdentifier $ ISymbol "="
 
-assertEquality :: Smt.Term -> Smt.Term -> Maybe String -> CompiledSmt
-assertEquality t1 t2 cmt = CompiledSmt (Assert $ TermQualIdentifierT eqAsQID [t1, t2]) cmt
+negAsQID :: QualIdentifier
+negAsQID = QIdentifier $ ISymbol "-"
 
-assertTrue :: Smt.Term -> Maybe String -> CompiledSmt
-assertTrue t1 cmt = CompiledSmt (Assert $ TermQualIdentifierT eqAsQID [boolAsTerm True, t1]) cmt
+iteAsQID :: QualIdentifier
+iteAsQID = QIdentifier $ ISymbol "ite"
+
+mkIteTerm :: Smt.Term -> Smt.Term -> Smt.Term -> Smt.Term
+mkIteTerm cond ifTrue ifFalse = TermQualIdentifierT iteAsQID [cond, ifTrue, ifFalse]
+
+negateTerm :: Smt.Term -> Smt.Term
+negateTerm t = TermQualIdentifierT (QIdentifier (ISymbol "not")) [t]
+
+assertEquality :: Smt.Term -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
+assertEquality t1 t2 cmt = assertTerm NoIf (TermQualIdentifierT eqAsQID [t1, t2]) cmt
+
+assertTerm :: InIf -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
+assertTerm NoIf t1 cmt = return $ CompiledSmt (Assert t1) cmt
+assertTerm (IfTrue node) t1 cmt = do
+  node' <- nodeToTerm node
+  return $ CompiledSmt (Assert $ mkIteTerm node' t1 (boolAsTerm True)) cmt
+assertTerm (IfFalse node) t1 cmt = do
+  node' <- nodeToTerm node
+  return $ CompiledSmt (Assert $ mkIteTerm (negateTerm node') t1 (boolAsTerm True)) cmt
 
 -- | adds node to SymVars
 trackNewNode :: Node -> SmtCompiler ()
@@ -278,39 +296,65 @@ trackNewNode n = do
     csVars %= Map.insert n newSv
     tell [CompiledSmt (symVarToDeclareConst newSv) Nothing]
 
+tellCmd :: CompiledSmt -> SmtCompiler ()
+tellCmd c = tell [c]
+
+data InIf = IfTrue Node | IfFalse Node | NoIf deriving (Show, Eq)
+data ParentRel = NoRelation | HasRelation Node deriving (Show, Eq)
+
 -- | the wrapper
-compileBody :: Maybe Node -> [AST Node] -> SmtCompiler ()
-compileBody Nothing [] = return ()
-compileBody mRetNode ast' = do -- do compilation, (assert (= retNode' <final thing>))
-  fin <- last <$> mapM compileNode ast'
-  case mRetNode of
-    Nothing -> return ()
-    Just retNode -> do
+compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
+compileBody inIf parentRel ast' = do -- do compilation, (assert (= retNode' <final thing>))
+  fin <- last <$> mapM (compileNode inIf) ast'
+  case parentRel of
+    NoRelation -> return ()
+    HasRelation retNode -> do
       retNode' <- nodeToTerm retNode
-      tell [assertEquality retNode' fin Nothing]
+      assertEquality inIf retNode' fin Nothing >>= tellCmd
       return ()
 
--- | the workhorse
-compileNode :: AST Node -> SmtCompiler Smt.Term
--- if you can directly compileNode -> do it -> return the Term
--- if you need to swap in a stand in node -> compileNode as much as you can, and use compileAst for the rest -> return the term with the node swapped in
-compileNode (AST_Lit lit) = return $ literalToTerm lit
-compileNode (AST_Var var) = nodeToTerm var
-compileNode (AST_NFun_Basic_Direct fn args) = do
-  args' <- mapM compileNode args
+-- | the workhorse of compilation
+compileNode :: InIf -> AST Node -> SmtCompiler Smt.Term
+-- #BEGIN# Handle Lits and Vars
+compileNode _ (AST_Lit lit) = return $ literalToTerm lit
+compileNode _ (NegativeLit lit) = do
+  return $ TermQualIdentifierT negAsQID [literalToTerm lit]
+compileNode _ (AST_Var var) = nodeToTerm var
+compileNode _ (NegativeVar var) = do
+  v' <- nodeToTerm var
+  return $ TermQualIdentifierT negAsQID [v']
+-- #END# Handle Lits and Vars
+
+compileNode inIf (AST_If node' cond' ifTrue' ifFalse') = do
+  trackNewNode node'
+  ifRes <- nodeToTerm node'
+  condRes <- compileNode inIf cond'
+  trueRes <- compileNode (IfTrue node') ifTrue'
+  falseRes <- compileNode (IfFalse node') ifFalse'
+  iteStatement <- assertEquality inIf ifRes (mkIteTerm condRes trueRes falseRes) Nothing
+  tell [iteStatement]
+  return $ ifRes
+
+-- #BEGIN# Handle Natives Section
+compileNode inIf (AST_NFun_Basic fn args) = do
+  args' <- mapM (compileNode inIf) args
   case basicOperatorToQualId fn of
     SingleLevelOp op' -> return $ TermQualIdentifierT op' args'
     DoubleLevelOp op1 op2 -> return $ TermQualIdentifierT op1 $ [TermQualIdentifierT op2 args']
-compileNode (ENFORCE node' app' msg') = do
+compileNode inIf (AST_Enforce node' app' msg') = do
   trackNewNode node'
-  action <- compileNode app'
-  tell [assertTrue action (Just $ "enforces: " ++ msg')]
+  action <- compileNode inIf app'
+  assertTerm inIf action (Just $ "enforces: " ++ msg') >>= tellCmd
   nodeToTerm node'
-compileNode (AST_UFun node' bdy' _args') = do
+-- #END# Handle Natives Section
+
+-- #BEGIN# Handle User Functions Section
+compileNode inIf (AST_UFun node' bdy' _args') = do
   trackNewNode node'
-  compileBody (Just node') bdy'
+  compileBody inIf (HasRelation node') bdy'
   nodeToTerm node'
-compileNode err = throw $ SmtCompilerException "compileNode" $ "unsupported construct: " ++ show err
+compileNode _ err = throw $ SmtCompilerException "compileNode" $ "unsupported construct: " ++ show err
+-- #END# Handle User Functions Section
 
 declareTopLevelVars :: SmtCompiler ()
 declareTopLevelVars = do
@@ -322,9 +366,17 @@ analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) = try $ do
   let initState = CompilerState
                     { _csVars = (Map.fromList $ (\x -> (x, mkSymVar x)) . _nnNamed <$> args')
                     , _csTableAssoc = Map.empty}
-  ((), _cstate, res) <- runRWST (declareTopLevelVars >> compileBody Nothing bdy') () initState
+  ((), _cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') () initState
   return $ encodeSmt <$> res
 analyzeFunction _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+
+runCompiler :: String -> IO ()
+runCompiler s = do
+  f <- TypesV1._getSampFunc s
+  r <- analyzeFunction f
+  case r of
+    Left err -> putStrLn $ show err
+    Right res -> putStrLn $ unlines res
 
 --TopFun
 --  { _tlFun =
@@ -378,3 +430,45 @@ analyzeFunction _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-
 --              }
 --        ]
 --      , _fDocs = Nothing}}
+
+--TopFun
+--  { _tlFun = FDefun
+--    { _fInfo = "defun tricky1 (a:integer b:integer)"
+--    , _fName = "analyze-tests.tricky1"
+--    , _fType = (a:integer b:integer)-><n>
+--    , _fArgs = ["a"(analyze-tests.tricky1_a0::integer),"b"(analyze-tests.tricky1_b1::integer)]
+--    , _fBody =
+--      [ App { _aNode = appNenforce2::bool
+--            , _aAppFun = FNative {_fInfo = "", _fName = "enforce", _fTypes = "(test:bool msg:string)->bool :| []", _fSpecial = Nothing}
+--            , _aAppArgs =
+--              [ App { _aNode = appNand3::bool, _aAppFun = FNative {_fInfo = "", _fName = "and", _fTypes = "(x:bool y:bool)->bool :| []", _fSpecial = Nothing}
+--                    , _aAppArgs =
+--                      [App { _aNode = appN>4::bool
+--                           , _aAppFun = FNative {_fInfo = "", _fName = ">", _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| []", _fSpecial = Nothing}
+--                           , _aAppArgs =
+--                             [ Var {_aNode = analyze-tests.tricky1_a0::integer}
+--                             , Var {_aNode = analyze-tests.tricky1_b1::integer}]
+--                           }
+--                      ,App {_aNode = appDanalyze-tests.enf-gt10::bool
+--                           , _aAppFun =
+--                             FDefun { _fInfo = "(defun enf-gt (a:integer b:integer)"
+--                                    , _fName = "analyze-tests.enf-gt"
+--                                    , _fType = (a:integer b:integer)-><m>
+--                                    , _fArgs = ["a"(analyze-tests.enf-gt_a5::integer),"b"(analyze-tests.enf-gt_b6::integer)]
+--                                    , _fBody = [App { _aNode = appNif7::bool
+--                                                    , _aAppFun = FNative {_fInfo = ""
+--                                                                         , _fName = "if"
+--                                                                         , _fTypes = "(cond:bool then:<a> else:<a>)-><a> :| []"
+--                                                                         , _fSpecial = Nothing}
+--                                                    , _aAppArgs =
+--                                                      [ App { _aNode = appN=8::bool
+--                                                            , _aAppFun = FNative {_fInfo = , _fName = "=", _fTypes = "(x:<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]> y:<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>)->bool :| []", _fSpecial = Nothing}
+--                                                            , _aAppArgs = [ Var {_aNode = analyze-tests.tricky1_a0::integer}
+--                                                                          , Prim {_aNode = integer9::integer, _aPrimValue = PrimLit 10}]
+--                                                            }
+--                                                      ,Var {_aNode = analyze-tests.tricky1_a0::integer}
+--                                                      ,Var {_aNode = analyze-tests.tricky1_b1::integer}]
+--                                                    }
+--                                               ]
+--                                    , _fDocs = Nothing}
+--                           , _aAppArgs = [Var {_aNode = analyze-tests.tricky1_a0::integer},Var {_aNode = analyze-tests.tricky1_b1::integer}]}]},Prim {_aNode = string11::string, _aPrimValue = PrimLit "bar"}]}], _fDocs = Nothing}}
