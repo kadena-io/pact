@@ -273,17 +273,22 @@ mkIteTerm cond ifTrue ifFalse = TermQualIdentifierT iteAsQID [cond, ifTrue, ifFa
 negateTerm :: Smt.Term -> Smt.Term
 negateTerm t = TermQualIdentifierT (QIdentifier (ISymbol "not")) [t]
 
-assertEquality :: Smt.Term -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
-assertEquality t1 t2 cmt = assertTerm NoIf (TermQualIdentifierT eqAsQID [t1, t2]) cmt
+implication :: Smt.Term -> Smt.Term -> Smt.Term
+implication t1 t2 = TermQualIdentifierT implQID [t1, t2]
+  where
+    implQID = QIdentifier (ISymbol "=>")
+
+assertEquality :: InIf -> Smt.Term -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
+assertEquality inIf t1 t2 cmt = assertTerm inIf (TermQualIdentifierT eqAsQID [t1, t2]) cmt
 
 assertTerm :: InIf -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
 assertTerm NoIf t1 cmt = return $ CompiledSmt (Assert t1) cmt
 assertTerm (IfTrue node) t1 cmt = do
   node' <- nodeToTerm node
-  return $ CompiledSmt (Assert $ mkIteTerm node' t1 (boolAsTerm True)) cmt
+  return $ CompiledSmt (Assert $ implication node' t1) cmt
 assertTerm (IfFalse node) t1 cmt = do
   node' <- nodeToTerm node
-  return $ CompiledSmt (Assert $ mkIteTerm (negateTerm node') t1 (boolAsTerm True)) cmt
+  return $ CompiledSmt (Assert $ implication (negateTerm node') t1) cmt
 
 -- | adds node to SymVars
 trackNewNode :: Node -> SmtCompiler ()
@@ -299,8 +304,25 @@ trackNewNode n = do
 tellCmd :: CompiledSmt -> SmtCompiler ()
 tellCmd c = tell [c]
 
+-- | This is used to track the ifCond term: (= d (if a b c)) <-- it tracks a
 data InIf = IfTrue Node | IfFalse Node | NoIf deriving (Show, Eq)
 data ParentRel = NoRelation | HasRelation Node deriving (Show, Eq)
+
+addToNodeTcIdName :: String -> Node -> Node
+addToNodeTcIdName s = over (aId.tiName) (\x -> x ++ "-" ++ s)
+
+mkIteNodes :: Node -> SmtCompiler (Node, Node, Node, Node)
+mkIteNodes node'@(Node _ (TyPrim _)) = do
+  let ifRes = node'
+      ifCond = (addToNodeTcIdName "cond" node') { _aTy = TyPrim TyBool}
+      ifTrue = (addToNodeTcIdName "true" node')
+      ifFalse = (addToNodeTcIdName "false" node')
+  trackNewNode ifRes
+  trackNewNode ifCond
+  trackNewNode ifTrue
+  trackNewNode ifFalse
+  return (ifRes, ifCond, ifTrue, ifFalse)
+mkIteNodes (Node _ ty) = throw $ SmtCompilerException "mkIteNodes" $ "only ifs that return a primitive type are supported, not: " ++ show ty
 
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
@@ -326,14 +348,30 @@ compileNode _ (NegativeVar var) = do
 -- #END# Handle Lits and Vars
 
 compileNode inIf (AST_If node' cond' ifTrue' ifFalse') = do
-  trackNewNode node'
-  ifRes <- nodeToTerm node'
-  condRes <- compileNode inIf cond'
-  trueRes <- compileNode (IfTrue node') ifTrue'
-  falseRes <- compileNode (IfFalse node') ifFalse'
-  iteStatement <- assertEquality inIf ifRes (mkIteTerm condRes trueRes falseRes) Nothing
-  tell [iteStatement]
-  return $ ifRes
+  (ifRetNode, ifCondNode, ifTrueNode, ifFalseNode) <- mkIteNodes node'
+  ifRetTerm <- nodeToTerm ifRetNode
+  ifCondTerm <- nodeToTerm ifCondNode
+  ifTrueTerm <- nodeToTerm ifTrueNode
+  ifFalseTerm <- nodeToTerm ifFalseNode
+
+  -- this may be verbose, I think we can do without the extra ifTrueTerm and ifFalseTerm
+  -- assert relationship between the conditional and the return value
+  assertEquality (IfTrue ifCondNode) ifRetTerm ifTrueTerm Nothing >>= tellCmd
+  assertEquality (IfFalse ifCondNode) ifRetTerm ifFalseTerm Nothing >>= tellCmd
+
+  -- compile the conditional, set it equal to the ifs cond node
+  ifsCond <- compileNode inIf cond'
+  assertEquality inIf ifCondTerm ifsCond Nothing >>= tellCmd
+
+  -- compile the left and right side, using the implication of the
+  -- ifCondNode to imply only when true or false (so asserts don't bleed out)
+  ifsTrueRes <- compileNode (IfTrue ifCondNode) ifTrue'
+  assertEquality (IfTrue ifCondNode) ifTrueTerm ifsTrueRes Nothing >>= tellCmd
+
+  ifsFalseRes <- compileNode (IfFalse ifCondNode) ifFalse'
+  assertEquality (IfFalse ifCondNode) ifFalseTerm ifsFalseRes Nothing >>= tellCmd
+
+  return ifRetTerm
 
 -- #BEGIN# Handle Natives Section
 compileNode inIf (AST_NFun_Basic fn args) = do
