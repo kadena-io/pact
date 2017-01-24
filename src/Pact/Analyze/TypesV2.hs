@@ -222,10 +222,11 @@ pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') a
 pattern AST_UFun node' bdy' args' <- (App node' (UserFunc _ bdy') args')
 pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
 pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
-pattern AST_Obj objNode kvs <- (Object objNode kvs)
 pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
 pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
 pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
+pattern AST_Obj objNode kvs <- (Object objNode kvs)
+pattern AST_InsertOrUpdate node' fnName' table' key' kvs' <- (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
 
 -- pattern Args_Var var <- [Var var]
 pattern Args_Lit lit <- [AST_Lit lit]
@@ -243,7 +244,6 @@ pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var li
 pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
 pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
 pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
-pattern INSERT_or_UPDATE fnName' table' key' kvs' <- (App _ (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
 -- Unsupported currently
 pattern READ <- (App _ (NativeFunc "read") _)
 
@@ -340,6 +340,13 @@ bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
     Just s -> do
       csTableAssoc %= Map.insert s otc'
 
+prepTableBindSite :: String -> String -> (AST Node, AST Node) -> (Named Node, AST Node)
+prepTableBindSite tableId fn (Prim _ (PrimLit (LString field)), ast') =
+  let newNode = addToNodeTcIdName (tableId ++ "-" ++ fn ++ "-" ++ field) (_aNode ast')
+  in (Named (tableId ++ "insert-key") newNode,ast')
+prepTableBindSite tableId _ (Prim _ _, err) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in snd position: " ++ show err
+prepTableBindSite tableId _ (err, _) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in first position: " ++ show err
+
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
 compileBody inIf parentRel ast' = do -- do compilation, (assert (= retNode' <final thing>))
@@ -420,6 +427,13 @@ compileNode inIf (AST_WithRead node' table' key' bindings' bdy') = do
   mapM_ (bindTableVar inIf TableRead table' keyTerm) bindings'
   compileBody inIf (HasRelation node') bdy'
   nodeToTerm node'
+compileNode inIf (AST_InsertOrUpdate node' fn' table' key' kvs') = do
+  trackNewNode node'
+  asTerm <- nodeToTerm node'
+  keyTerm <- compileNode inIf key'
+  mapM_ (bindTableVar inIf TableRead table' keyTerm) (prepTableBindSite table' fn' <$> kvs')
+  assertEquality inIf asTerm (boolAsTerm True) Nothing >>= tellCmd
+  return $ asTerm
 -- #END# Handle Natives Section
 
 -- #BEGIN# Handle User Functions Section
