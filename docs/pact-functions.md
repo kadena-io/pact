@@ -2,9 +2,9 @@
 
 ### at {#at}
 
-*idx*&nbsp;`integer` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`<a>`
+*idx*&nbsp;`integer` *list*&nbsp;`[<l>]` *&rarr;*&nbsp;`<a>`
 
-*idx*&nbsp;`string` *object*&nbsp;`object` *&rarr;*&nbsp;`<a>`
+*idx*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`<a>`
 
 
 Index LIST at IDX, or get value with key IDX from OBJECT. 
@@ -18,10 +18,10 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 ### bind {#bind}
 
-*src*&nbsp;`object` *bindings*&nbsp;`binding` *body*&nbsp;`@rest` *&rarr;*&nbsp;`<a>`
+*src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
 
 
-Evaluate SRC which must return an object, using BINDINGS to bind variables to values used in BODY. 
+Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. 
 ```lisp
 pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 1
@@ -30,19 +30,19 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### compose {#compose}
 
-*x*&nbsp;`function: (x:<a>) -> <b>` *y*&nbsp;`function: (x:<b>) -> <c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
+*x*&nbsp;`(x:<a>)-><b>` *y*&nbsp;`(x:<b>)-><c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
 
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of X. 
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog" "has" "fleas"]
+["dog" "has" "fleas"]:*
 ```
 
 
 ### drop {#drop}
 
-*count*&nbsp;`integer` *list*&nbsp;`<a => (list|string)>` *&rarr;*&nbsp;`<a => (list|string)>`
+*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
 
 Drop COUNT values from LIST (or string). If negative, drop from end.
@@ -50,7 +50,7 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
 pact> (drop 2 "vwxyz")
 "xyz"
 pact> (drop (- 2) [1 2 3 4 5])
-[1 2 3]
+[1 2 3]:*
 ```
 
 
@@ -68,19 +68,19 @@ pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 
 ### filter {#filter}
 
-*app*&nbsp;`function: (x:<a>) -> bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`(x:<a>)->bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Filter LIST by applying APP to each element to get a boolean determining inclusion.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog" "has" "fleas"]
+["dog" "has" "fleas"]:*
 ```
 
 
 ### fold {#fold}
 
-*app*&nbsp;`function: (x:<b> y:<b>) -> <a>` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`(x:<b> y:<b>)-><a>` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
 Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 
@@ -92,7 +92,7 @@ pact> (fold (+) 0 [100 10 5])
 
 ### format {#format}
 
-*template*&nbsp;`string` *vars*&nbsp;`@rest` *&rarr;*&nbsp;`string`
+*template*&nbsp;`string` *vars*&nbsp;`*` *&rarr;*&nbsp;`string`
 
 
 Interpolate VARS into TEMPLATE using {}. 
@@ -114,73 +114,9 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 ```
 
 
-### is-bool {#is-bool}
-
-*val*&nbsp;`bool` *&rarr;*&nbsp;`bool`
-
-
-Return VAL, enforcing boolean type. 
-```lisp
-pact> (is-bool true)
-true
-```
-
-
-### is-decimal {#is-decimal}
-
-*val*&nbsp;`decimal` *&rarr;*&nbsp;`decimal`
-
-
-Return VAL, enforcing decimal type. 
-```lisp
-pact> (is-decimal 123.45)
-123.45
-```
-
-
-### is-integer {#is-integer}
-
-*val*&nbsp;`integer` *&rarr;*&nbsp;`integer`
-
-
-Return VAL, enforcing integer type 
-```lisp
-pact> (is-integer 123)
-123
-pact> (is-integer "abc")
-<interactive>:0:0:Not integer: "abc"
-```
-
-
-### is-string {#is-string}
-
-*val*&nbsp;`string` *&rarr;*&nbsp;`string`
-
-
-Return VAL, enforcing string type. 
-```lisp
-pact> (is-string 123)
-<interactive>:0:0:Not string: 123
-pact> (is-string "abc")
-"abc"
-```
-
-
-### is-time {#is-time}
-
-*val*&nbsp;`time` *&rarr;*&nbsp;`time`
-
-
-Return VAL, enforcing time type. 
-```lisp
-pact> (is-time (time "2016-07-22T11:26:35Z"))
-"2016-07-22T11:26:35Z"
-```
-
-
 ### length {#length}
 
-*x*&nbsp;`<a => (list|string|object)>` *&rarr;*&nbsp;`integer`
+*x*&nbsp;`<a[[<l>],string,object:<{o}>]>` *&rarr;*&nbsp;`integer`
 
 
 Compute length of X, which can be a list, a string, or an object.
@@ -196,13 +132,13 @@ pact> (length { "a": 1, "b": 2 })
 
 ### list {#list}
 
-*elems*&nbsp;`@rest` *&rarr;*&nbsp;`list`
+*elems*&nbsp;`*` *&rarr;*&nbsp;`list`
 
 
 Create list from ELEMS. 
 ```lisp
 pact> (list 1 2 3)
-[1 2 3]
+[1 2 3]:*
 ```
 
 
@@ -216,13 +152,13 @@ List modules available for loading.
 
 ### map {#map}
 
-*app*&nbsp;`function: (x:<b>) -> <a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`(x:<b>)-><a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Apply elements in LIST as last arg to APP, returning list of results. 
 ```lisp
 pact> (map (+ 1) [1 2 3])
-[2 3 4]
+[2 3 4]:*
 ```
 
 
@@ -271,19 +207,19 @@ Read KEY from message data body. Will recognize JSON types as corresponding Pact
 
 ### remove {#remove}
 
-*key*&nbsp;`string` *object*&nbsp;`object` *&rarr;*&nbsp;`object`
+*key*&nbsp;`string` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
 
 Remove entry for KEY from OBJECT. 
 ```lisp
 pact> (remove "bar" { "foo": 1, "bar": 2 })
-{"foo": 1})
+{"foo": 1}:*
 ```
 
 
 ### take {#take}
 
-*count*&nbsp;`integer` *list*&nbsp;`<a => (list|string)>` *&rarr;*&nbsp;`<a => (list|string)>`
+*count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
 
 Take COUNT values from LIST (or string). If negative, take from end. 
@@ -291,7 +227,7 @@ Take COUNT values from LIST (or string). If negative, take from end.
 pact> (take 2 "abcd")
 "ab"
 pact> (take (- 3) [1 2 3 4 5])
-[3 4 5]
+[3 4 5]:*
 ```
 
 
@@ -310,12 +246,12 @@ pact> (typeof "hello")
 
 ### create-table {#create-table}
 
-*table*&nbsp;`string` *module*&nbsp;`string` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`string`
 
 
-Create table TABLE guarded by module MODULE. 
+Create table TABLE. 
 ```lisp
-(create-table 'accounts 'accounts-admin)
+(create-table accounts)
 ```
 
 
@@ -345,7 +281,7 @@ Get metadata for TABLE
 
 ### insert {#insert}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *object*&nbsp;`object` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
@@ -356,7 +292,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 ### keys {#keys}
 
-*table*&nbsp;`string` *&rarr;*&nbsp;`[string]`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`[string]`
 
 
 Return all keys in TABLE. 
@@ -367,9 +303,9 @@ Return all keys in TABLE.
 
 ### read {#read}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *&rarr;*&nbsp;`object`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *&rarr;*&nbsp;`object:<{row}>`
 
-*table*&nbsp;`string` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:<{row}>`
 
 
 Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. 
@@ -380,7 +316,7 @@ Read row from TABLE for KEY returning database record object, or just COLUMNS if
 
 ### txids {#txids}
 
-*table*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
+*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[integer]`
 
 
 Return all txid values greater than or equal to TXID in TABLE. 
@@ -391,7 +327,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 ### txlog {#txlog}
 
-*table*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
+*table*&nbsp;`table:<{row}>` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[value]`
 
 
 Return all updates to TABLE performed in transaction TXID. 
@@ -402,7 +338,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 ### update {#update}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *object*&nbsp;`object` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
@@ -413,7 +349,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 ### with-default-read {#with-default-read}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *defaults*&nbsp;`object` *bindings*&nbsp;`binding` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *defaults*&nbsp;`object:<{row}>` *bindings*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
@@ -425,7 +361,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### with-read {#with-read}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *bindings*&nbsp;`binding` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *bindings*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
@@ -437,7 +373,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 ### write {#write}
 
-*table*&nbsp;`string` *key*&nbsp;`string` *object*&nbsp;`object` *&rarr;*&nbsp;`string`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *object*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`string`
 
 
 Write entry in TABLE for KEY of OBJECT column data.
@@ -542,7 +478,7 @@ pact> (time "2016-07-22T11:26:35Z")
 
 ### != {#bangeq}
 
-*x*&nbsp;`<a => (integer|string|time|decimal|bool|list|object|keyset)>` *y*&nbsp;`<a => (integer|string|time|decimal|bool|list|object|keyset)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X does not equal Y. 
@@ -554,9 +490,9 @@ true
 
 ### * {#star}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Multiply X by Y. 
@@ -570,11 +506,11 @@ pact> (* 3 5)
 
 ### \+ {#plus}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
-*x*&nbsp;`<a => (string|list|object)>` *y*&nbsp;`<a => (string|list|object)>` *&rarr;*&nbsp;`<a => (string|list|object)>`
+*x*&nbsp;`<a[string,[<l>],object:<{o}>]>` *y*&nbsp;`<a[string,[<l>],object:<{o}>]>` *&rarr;*&nbsp;`<a[string,[<l>],object:<{o}>]>`
 
 
 Add numbers, concatenate strings/lists, or merge objects. 
@@ -586,19 +522,19 @@ pact> (+ 5.0 0.5)
 pact> (+ "every" "body")
 "everybody"
 pact> (+ [1 2] [3 4])
-[1 2 3 4]
+[1 2 3 4]:*
 pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-{"bar": 2, "foo": 100})
+{"bar": 2, "foo": 100}:*
 ```
 
 
 ### \- {#minus}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
-*x*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Negate X, or subtract Y from X. 
@@ -612,9 +548,9 @@ pact> (- 3 2)
 
 ### / {#slash}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Divide X by Y. 
@@ -628,7 +564,7 @@ pact> (/ 8 3)
 
 ### < {#lt}
 
-*x*&nbsp;`<a => (integer|decimal|string|time)>` *y*&nbsp;`<a => (integer|decimal|string|time)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X < Y. 
@@ -644,7 +580,7 @@ true
 
 ### <= {#lteq}
 
-*x*&nbsp;`<a => (integer|decimal|string|time)>` *y*&nbsp;`<a => (integer|decimal|string|time)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X <= Y. 
@@ -660,7 +596,7 @@ true
 
 ### = {#eq}
 
-*x*&nbsp;`<a => (integer|string|time|decimal|bool|list|object|keyset)>` *y*&nbsp;`<a => (integer|string|time|decimal|bool|list|object|keyset)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *y*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>` *&rarr;*&nbsp;`bool`
 
 
 True if X equals Y. 
@@ -676,7 +612,7 @@ true
 
 ### > {#gt}
 
-*x*&nbsp;`<a => (integer|decimal|string|time)>` *y*&nbsp;`<a => (integer|decimal|string|time)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X > Y. 
@@ -692,7 +628,7 @@ false
 
 ### >= {#gteq}
 
-*x*&nbsp;`<a => (integer|decimal|string|time)>` *y*&nbsp;`<a => (integer|decimal|string|time)>` *&rarr;*&nbsp;`bool`
+*x*&nbsp;`<a[integer,decimal,string,time]>` *y*&nbsp;`<a[integer,decimal,string,time]>` *&rarr;*&nbsp;`bool`
 
 
 True if X >= Y. 
@@ -708,9 +644,9 @@ false
 
 ### ^ {#hat}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Raise X to Y power. 
@@ -764,7 +700,7 @@ pact> (ceiling 100.15234 2)
 
 ### exp {#exp}
 
-*x*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Exp of X 
@@ -792,7 +728,7 @@ pact> (floor 100.15234 2)
 
 ### ln {#ln}
 
-*x*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Natural log of X. 
@@ -804,9 +740,9 @@ pact> (round (ln 60) 6)
 
 ### log {#log}
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
-*x*&nbsp;`<a => (integer|decimal)>` *y*&nbsp;`<b => (integer|decimal)>` *&rarr;*&nbsp;`decimal`
+*x*&nbsp;`<a[integer,decimal]>` *y*&nbsp;`<b[integer,decimal]>` *&rarr;*&nbsp;`decimal`
 
 
 Log of Y base X. 
@@ -870,7 +806,7 @@ pact> (round 100.15234 2)
 
 ### sqrt {#sqrt}
 
-*x*&nbsp;`<a => (integer|decimal)>` *&rarr;*&nbsp;`<a => (integer|decimal)>`
+*x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
 Square root of X. 
@@ -879,7 +815,7 @@ pact> (sqrt 25)
 5
 ```
 
-## KeySets {#KeySets}
+## Keysets {#Keysets}
 
 ### define-keyset {#define-keyset}
 
@@ -889,6 +825,18 @@ pact> (sqrt 25)
 Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset will be enforced before updating to new value.
 ```lisp
 (define-keyset 'admin-keyset (read-keyset "keyset"))
+```
+
+
+### enforce-keyset {#enforce-keyset}
+
+*keyset-or-name*&nbsp;`<k[string,keyset]>` *&rarr;*&nbsp;`bool`
+
+
+Special form to enforce KEYSET-OR-NAME against message keys before running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. 
+```lisp
+(with-keyset 'admin-keyset ...)
+(with-keyset (read-keyset "keyset") ...)
 ```
 
 
@@ -938,18 +886,6 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 (read-keyset "admin-keyset")
 ```
 
-
-### with-keyset {#with-keyset}
-
-*keyset-or-name*&nbsp;`string` *body*&nbsp;`@rest` *&rarr;*&nbsp;`<a>`
-
-
-Enforce KEYSET-OR-NAME against message keys to run BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. 
-```lisp
-(with-keyset 'admin-keyset ...)
-(with-keyset (read-keyset "keyset") ...)
-```
-
 ## REPL-only functions {#repl-lib}
 
 The following functions are loaded magically in the interactive REPL, or in script files with a `.repl` extension. They are not available for blockchain-based execution.
@@ -970,7 +906,7 @@ Begin transaction with optional NAME.
 
 ### bench {#bench}
 
-*exprs*&nbsp;`@rest` *&rarr;*&nbsp;`string`
+*exprs*&nbsp;`*` *&rarr;*&nbsp;`string`
 
 
 Benchmark execution of EXPRS. 
@@ -992,7 +928,7 @@ Commit transaction.
 
 ### env-data {#env-data}
 
-*json*&nbsp;`<a => (integer|string|time|decimal|bool|list|object|keyset|value)>` *&rarr;*&nbsp;`string`
+*json*&nbsp;`<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>` *&rarr;*&nbsp;`string`
 
 
 Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. 
@@ -1087,4 +1023,14 @@ Rollback transaction.
 ```lisp
 (rollback-tx)
 ```
+
+
+### typecheck {#typecheck}
+
+*module*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+*module*&nbsp;`string` *debug*&nbsp;`bool` *&rarr;*&nbsp;`string`
+
+
+Typecheck MODULE, optionally enabling DEBUG output.
 

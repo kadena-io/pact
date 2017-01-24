@@ -7,7 +7,20 @@ blockchain <http://kadena.io>`__. For more background, please see the
 `white
 paper <http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf>`__.
 
-Copyright (c) 2016, Stuart Popejoy. All Rights Reserved.
+Pact Version: 2.0
+
+Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
+
+Changelog
+=========
+
+Version 2.0:
+------------
+
+-  Types and schemas added
+-  ``with-keyset`` changed to non-special-form ``enforce-keyset``
+-  Table definitions added; database functions reference these directly
+   instead of using strings.
 
 Concepts
 ========
@@ -45,30 +58,40 @@ to specify admin authorization schemes for modules and tables.
 Module declaration
 ^^^^^^^^^^^^^^^^^^
 
-`Modules <#module>`__ define the API for smart contracts, comprised of
-`function <#defun>`__ and `"pact" <#defpact>`__ definitions. When a
-module is declared, all references to native functions or functions from
-other modules are resolved. Resolution failure results in transaction
-rollback.
+`Modules <#module>`__ contain the API and data definitions for smart
+contracts. They are comprised of:
+
+-  `functions <#defun>`__
+-  `schema <#defschema>`__ definitions
+-  `table <#deftable>`__ definitions
+-  `"pact" <#defpact>`__ special functions
+-  `const <#defconst>`__ values
+
+When a module is declared, all references to native functions or
+definitions from other modules are resolved. Resolution failure results
+in transaction rollback.
 
 Modules can be re-defined as controlled by their admin keyset. Module
 versioning is not supported, except by including a version sigil in the
 module name (e.g., "accounts-v1").
 
+Module names must be globally unique.
+
 Table Creation
 ^^^^^^^^^^^^^^
 
-Tables are `created <#create-table>`__ at the same time as modules, due
-to the tight relationship of database tables to code modules, as
-described in `Table Guards <#tableguards>`__.
+Tables are `created <#create-table>`__ at the same time as modules.
+While tables are *defined* in modules, they are *created* "after"
+modules, so that the module may be redefined later without having to
+necessarily re-create the table.
 
-There is no restriction on how many tables may be created. However,
-table names are not namespaced, so care must be taken to ensure unique
-names.
+The relationship of modules to tables is important, as described in
+`Table Guards <#tableguards>`__.
 
-Tables are schema-less, so there is no need to drop or redefine tables.
-Table data can be migrated for new module code by simply executing the
-necessary data modification.
+There is no restriction on how many tables may be created. Table names
+are namespaced with the module name.
+
+Tables can be typed with a `schema <#defschema>`__.
 
 Transaction Execution
 ~~~~~~~~~~~~~~~~~~~~~
@@ -126,13 +149,6 @@ from exports from the Pact database. This does not mean Pact cannot
 Customer table whose keys are used in a Sales table would involve the
 code looking up the Customer record before writing to the Sales table.
 
-Schema-less
-~~~~~~~~~~~
-
-Pact tables do not declare a schema. Modules are expected to enforce
-data access to ensure type safety (through the use of functions like
-`is-string <#is-string>`__, `is-decimal <#is-decimal>`__ etc).
-
 No Nulls
 ~~~~~~~~
 
@@ -162,6 +178,53 @@ identical on different consensus nodes. Pact's implementation allows for
 integration of industrial RDBMSs, to assist large migrations onto a
 blockchain-based system, by facilitating bulk replication of data to
 downstream systems.
+
+Types and Schemas
+-----------------
+
+With Pact 2.0, Pact gains explicit type specification, albeit optional.
+Pact 1.0 code without types still functions as before, and writing code
+without types is attractive for rapid prototyping.
+
+Schemas provide the main impetus for types. A schema `is
+defined <#defschema>`__ with a list of columns that can have types
+(although this is also not required). Tables are then
+`defined <#deftable>`__ with a particular schema (again, optional).
+
+Note that schemas also can be used on/specified for object types.
+
+Runtime Type enforcement
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any types declared in code are enforced at runtime. For table schemas,
+this means any write to a table will be typechecked against the schema.
+Otherwise, if a type specification is encountered, the runtime enforces
+the type when the expression is evaluated.
+
+Static Type Inference on Modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With the `typecheck <#typecheck>`__ repl command, the Pact interpreter
+will analyze a module and attempt to infer types on every variable,
+function application or const definition. Using this in project repl
+scripts is helpful to aid the developer in adding "just enough types" to
+make the typecheck succeed. Fully successful typecheck is usually a
+matter of providing schemas for all tables, and argument types for
+ancilliary functions that call ambigious or overloaded native functions.
+
+Formal Verification
+~~~~~~~~~~~~~~~~~~~
+
+Pact's typechecker is designed to output a fully typechecked, inlined
+AST for use generating formal proofs in SMT-LIB2. If the typecheck does
+not fully succeed, the module is not considered "provable".
+
+We see, then, that Pact code can move its way up a "safety" gradient,
+starting with no types, then with "enough" types, and lastly, with
+formal proofs.
+
+Note that as of Pact 2.0 the formal verification function is still under
+development.
 
 Keysets and Authorization
 -------------------------
@@ -221,18 +284,18 @@ be achieved:
 .. code:: lisp
 
     (defun create-account (id)
-      (insert 'accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+      (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
     (defun read-balance (id)
       (with-read { "balance":= bal, "keyset":= ks }
-        (with-keyset ks
-          (format "Your balance is {}" bal))))
+        (enforce-keyset ks)
+        (format "Your balance is {}" bal)))
 
 In the example, ``create-account`` reads a keyset definition from the
 message payload using `read-keyset <#read-keyset>`__ to store as
 "keyset" in the table. ``read-balance`` only allows that owner's keyset
 to read the balance, by first enforcing the keyset using
-`with-keyset <#with-keyset>`__.
+`enforce-keyset <#enforce-keyset>`__.
 
 Computational Model
 -------------------
@@ -255,14 +318,16 @@ lookup table, the function definition is directly injected (or
 "inlined") into the callsite. This is an example of the performance
 advantages of a Turing-incomplete language.
 
-Variables
-~~~~~~~~~
+Single-assignment Variables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pact allows variable declarations in `let expressions <#let>`__ and
 `bindings <#binding>`__. Variables are immutable: they cannot be
-re-assigned or modified in-place. The most common variable declaration
-occurs in the `with-read <#with-read>`__ function, assigning variables
-to column values by name.
+re-assigned, or modified in-place.
+
+A common variable declaration occurs in the `with-read <#with-read>`__
+function, assigning variables to column values by name. The
+`bind <#bind>`__ function offers this same functionality for objects.
 
 Module-global constant values can be declared with
 `defconst <#defconst>`__.
@@ -270,11 +335,11 @@ Module-global constant values can be declared with
 Data Types
 ~~~~~~~~~~
 
-Pact is not a explicitly-typed language, but does use fixed type
-representations "under the hood" and does no coercion of types, so is
-strongly-typed nonetheless. Authors can employ functions like
-`is-string <#is-string>`__, `is-decimal <#is-decimal>`__ to enforce type
-safety.
+Pact code can be explicitly typed, and is always strongly-typed under
+the hood as the native functions perform strict typechecking as
+indicated in their documented type signatures. language, but does use
+fixed type representations "under the hood" and does no coercion of
+types, so is strongly-typed nonetheless.
 
 Pact's supported types are:
 
@@ -287,9 +352,8 @@ Pact's supported types are:
 -  `Objects <#object>`__
 -  `Function <#defun>`__ and `pact <#defpact>`__ definitions
 -  `JSON values <#json>`__
-
-`Functions <#defun>`__ may take no arguments and return bare values,
-which can function as *constants*.
+-  `Tables <#deftable>`__
+-  `Schemas <#defschema>`__
 
 Performance
 ~~~~~~~~~~~
@@ -334,6 +398,16 @@ or it can read values from the message JSON payload:
 
 The latter will execute slightly faster, as there is less code to
 interpret at transaction time.
+
+Types as necessary
+^^^^^^^^^^^^^^^^^^
+
+With table schemas, Pact will be strongly typed for most use cases, but
+functions that do not use the database might still need types. Use the
+`typecheck <typecheck>`__ REPL function to add the necessary types.
+There is a small cost for type enforcement at runtime, and too many type
+signatures can harm readability. However types can help document an API,
+so this is a judgement call.
 
 Control Flow
 ~~~~~~~~~~~~
@@ -583,8 +657,73 @@ assign variables to named columns in a row, or values in an object.
 .. code:: lisp
 
     (defun check-balance (id)
-      (with-read 'accounts id { "balance" := bal }
+      (with-read accounts id { "balance" := bal }
         (enforce (> bal 0) (format "Account in overdraft: {}" bal))))
+
+Type specifiers
+---------------
+
+Types can be specified in syntax with the colon ``:`` operator followed
+by a type literal or user type specification.
+
+Type literals
+~~~~~~~~~~~~~
+
+-  ``string``
+-  ``integer``
+-  ``decimal``
+-  ``bool``
+-  ``keyset``
+-  ``list``, or ``[type]`` to specify the list type
+-  ``object``, which can be further typed with a schema
+-  ``table``, which can be further typed with a schema
+-  ``value`` (JSON values)
+
+Schema type literals
+~~~~~~~~~~~~~~~~~~~~
+
+A schema defined with `defschema <#defschema>`__ is referenced by name
+enclosed in curly braces.
+
+.. code:: lisp
+
+    table:{accounts}
+    object:{person}
+
+What can be typed
+~~~~~~~~~~~~~~~~~
+
+Function arguments and return types
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: lisp
+
+    (defun prefix:string (pfx:string str:string) (+ pfx str))
+
+Let variables
+^^^^^^^^^^^^^
+
+.. code:: lisp
+
+    (let ((a:integer 1) (b:integer 2)) (+ a b))
+
+Tables and objects
+^^^^^^^^^^^^^^^^^^
+
+Tables and objects can only take a schema type literal.
+
+.. code:: lisp
+
+    (deftable accounts:{account})
+
+    (defun get-order:{order} (id) (read orders id))
+
+Consts
+^^^^^^
+
+.. code:: lisp
+
+    (defconst PENNY:decimal 0.1)
 
 Special forms
 -------------
@@ -635,6 +774,31 @@ comprised of `steps <#step>`__.
         (credit payer amount))
       (step payee-entity
         (credit payee amount)))
+
+defschema
+~~~~~~~~~
+
+``(defschema NAME [DOCSTRING] FIELDS...)``
+
+Define NAME as a *schema*, which specifies a list of FIELDS. Each field
+is in the form ``FIELDNAME[:FIELDTYPE]``.
+
+.. code:: lisp
+
+    (defschema accounts
+      "Schema for accounts table".
+      balance:decimal
+      amount:decimal
+      ccy:string
+      data)
+
+deftable
+~~~~~~~~
+
+``(deftable NAME[:SCHEMA] [DOCSTRING])``
+
+Define NAME as a *table*, used in database functions. Note the table
+must still be created with `create-table <#create-table>`__.
 
 let
 ~~~
@@ -717,15 +881,15 @@ expressions only.
 
       (defun create-account (id bal)
        "Create account ID with initial balance BAL"
-       (insert 'accounts id { "balance": bal }))
+       (insert accounts id { "balance": bal }))
 
       (defun transfer (from to amount)
        "Transfer AMOUNT from FROM to TO"
-       (with-read 'accounts from { "balance": fbal }
+       (with-read accounts from { "balance": fbal }
         (enforce (<= amount fbal) "Insufficient funds")
-         (with-read 'accounts to { "balance": tbal }
-          (update 'accounts from { "balance": (- fbal amount) })
-          (update 'accounts to { "balance": (+ tbal amount) }))))
+         (with-read accounts to { "balance": tbal }
+          (update accounts from { "balance": (- fbal amount) })
+          (update accounts to { "balance": (+ tbal amount) }))))
     )
 
 Expressions
@@ -792,9 +956,9 @@ General
 at
 ~~
 
-*idx* ``integer`` *list* ``[<a>]`` *→* ``<a>``
+*idx* ``integer`` *list* ``[<l>]`` *→* ``<a>``
 
-*idx* ``string`` *object* ``object`` *→* ``<a>``
+*idx* ``string`` *object* ``object:<{o}>`` *→* ``<a>``
 
 Index LIST at IDX, or get value with key IDX from OBJECT.
 
@@ -808,10 +972,11 @@ Index LIST at IDX, or get value with key IDX from OBJECT.
 bind
 ~~~~
 
-*src* ``object`` *bindings* ``binding`` *body* ``@rest`` *→* ``<a>``
+*src* ``object:<{row}>`` *binding* ``binding:<{row}>`` *body* ``*``
+*→* ``<a>``
 
-Evaluate SRC which must return an object, using BINDINGS to bind
-variables to values used in BODY.
+Special form evaluates SRC to an object which is bound to with BINDINGS
+to run BODY.
 
 .. code:: lisp
 
@@ -821,8 +986,7 @@ variables to values used in BODY.
 compose
 ~~~~~~~
 
-*x* ``function: (x:<a>) -> <b>`` *y* ``function: (x:<b>) -> <c>``
-*value* ``<a>`` *→* ``<c>``
+*x* ``(x:<a>)-><b>`` *y* ``(x:<b>)-><c>`` *value* ``<a>`` *→* ``<c>``
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of
 X.
@@ -830,13 +994,13 @@ X.
 .. code:: lisp
 
     pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+    ["dog" "has" "fleas"]:*
 
 drop
 ~~~~
 
-*count* ``integer`` *list* ``<a => (list|string)>``
-*→* ``<a => (list|string)>``
+*count* ``integer`` *list* ``<a[[<l>],string]>``
+*→* ``<a[[<l>],string]>``
 
 Drop COUNT values from LIST (or string). If negative, drop from end.
 
@@ -845,7 +1009,7 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
     pact> (drop 2 "vwxyz")
     "xyz"
     pact> (drop (- 2) [1 2 3 4 5])
-    [1 2 3]
+    [1 2 3]:*
 
 enforce
 ~~~~~~~
@@ -862,7 +1026,7 @@ Fail transaction with MSG if TEST fails, or returns true.
 filter
 ~~~~~~
 
-*app* ``function: (x:<a>) -> bool`` *list* ``[<a>]`` *→* ``[<a>]``
+*app* ``(x:<a>)->bool`` *list* ``[<a>]`` *→* ``[<a>]``
 
 Filter LIST by applying APP to each element to get a boolean determining
 inclusion.
@@ -870,13 +1034,12 @@ inclusion.
 .. code:: lisp
 
     pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]
+    ["dog" "has" "fleas"]:*
 
 fold
 ~~~~
 
-*app* ``function: (x:<b> y:<b>) -> <a>`` *init* ``<a>`` *list* ``[<b>]``
-*→* ``<a>``
+*app* ``(x:<b> y:<b>)-><a>`` *init* ``<a>`` *list* ``[<b>]`` *→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
 starting with INIT.
@@ -889,7 +1052,7 @@ starting with INIT.
 format
 ~~~~~~
 
-*template* ``string`` *vars* ``@rest`` *→* ``string``
+*template* ``string`` *vars* ``*`` *→* ``string``
 
 Interpolate VARS into TEMPLATE using {}.
 
@@ -910,74 +1073,10 @@ Test COND, if true evaluate THEN, otherwise evaluate ELSE.
     pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
     "Sanity prevails"
 
-is-bool
-~~~~~~~
-
-*val* ``bool`` *→* ``bool``
-
-Return VAL, enforcing boolean type.
-
-.. code:: lisp
-
-    pact> (is-bool true)
-    true
-
-is-decimal
-~~~~~~~~~~
-
-*val* ``decimal`` *→* ``decimal``
-
-Return VAL, enforcing decimal type.
-
-.. code:: lisp
-
-    pact> (is-decimal 123.45)
-    123.45
-
-is-integer
-~~~~~~~~~~
-
-*val* ``integer`` *→* ``integer``
-
-Return VAL, enforcing integer type
-
-.. code:: lisp
-
-    pact> (is-integer 123)
-    123
-    pact> (is-integer "abc")
-    <interactive>:0:0:Not integer: "abc"
-
-is-string
-~~~~~~~~~
-
-*val* ``string`` *→* ``string``
-
-Return VAL, enforcing string type.
-
-.. code:: lisp
-
-    pact> (is-string 123)
-    <interactive>:0:0:Not string: 123
-    pact> (is-string "abc")
-    "abc"
-
-is-time
-~~~~~~~
-
-*val* ``time`` *→* ``time``
-
-Return VAL, enforcing time type.
-
-.. code:: lisp
-
-    pact> (is-time (time "2016-07-22T11:26:35Z"))
-    "2016-07-22T11:26:35Z"
-
 length
 ~~~~~~
 
-*x* ``<a => (list|string|object)>`` *→* ``integer``
+*x* ``<a[[<l>],string,object:<{o}>]>`` *→* ``integer``
 
 Compute length of X, which can be a list, a string, or an object.
 
@@ -993,14 +1092,14 @@ Compute length of X, which can be a list, a string, or an object.
 list
 ~~~~
 
-*elems* ``@rest`` *→* ``list``
+*elems* ``*`` *→* ``list``
 
 Create list from ELEMS.
 
 .. code:: lisp
 
     pact> (list 1 2 3)
-    [1 2 3]
+    [1 2 3]:*
 
 list-modules
 ~~~~~~~~~~~~
@@ -1012,14 +1111,14 @@ List modules available for loading.
 map
 ~~~
 
-*app* ``function: (x:<b>) -> <a>`` *list* ``[<b>]`` *→* ``[<a>]``
+*app* ``(x:<b>)-><a>`` *list* ``[<b>]`` *→* ``[<a>]``
 
 Apply elements in LIST as last arg to APP, returning list of results.
 
 .. code:: lisp
 
     pact> (map (+ 1) [1 2 3])
-    [2 3 4]
+    [2 3 4]:*
 
 pact-txid
 ~~~~~~~~~
@@ -1067,20 +1166,20 @@ corresponding Pact type.
 remove
 ~~~~~~
 
-*key* ``string`` *object* ``object`` *→* ``object``
+*key* ``string`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
 
 Remove entry for KEY from OBJECT.
 
 .. code:: lisp
 
     pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1})
+    {"foo": 1}:*
 
 take
 ~~~~
 
-*count* ``integer`` *list* ``<a => (list|string)>``
-*→* ``<a => (list|string)>``
+*count* ``integer`` *list* ``<a[[<l>],string]>``
+*→* ``<a[[<l>],string]>``
 
 Take COUNT values from LIST (or string). If negative, take from end.
 
@@ -1089,7 +1188,7 @@ Take COUNT values from LIST (or string). If negative, take from end.
     pact> (take 2 "abcd")
     "ab"
     pact> (take (- 3) [1 2 3 4 5])
-    [3 4 5]
+    [3 4 5]:*
 
 typeof
 ~~~~~~
@@ -1109,13 +1208,13 @@ Database
 create-table
 ~~~~~~~~~~~~
 
-*table* ``string`` *module* ``string`` *→* ``string``
+*table* ``table:<{row}>`` *→* ``string``
 
-Create table TABLE guarded by module MODULE.
+Create table TABLE.
 
 .. code:: lisp
 
-    (create-table 'accounts 'accounts-admin)
+    (create-table accounts)
 
 describe-keyset
 ~~~~~~~~~~~~~~~
@@ -1141,7 +1240,8 @@ Get metadata for TABLE
 insert
 ~~~~~~
 
-*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data
 already exists for KEY.
@@ -1153,7 +1253,7 @@ already exists for KEY.
 keys
 ~~~~
 
-*table* ``string`` *→* ``[string]``
+*table* ``table:<{row}>`` *→* ``[string]``
 
 Return all keys in TABLE.
 
@@ -1164,10 +1264,10 @@ Return all keys in TABLE.
 read
 ~~~~
 
-*table* ``string`` *key* ``string`` *→* ``object``
+*table* ``table:<{row}>`` *key* ``string`` *→* ``object:<{row}>``
 
-*table* ``string`` *key* ``string`` *columns* ``[string]``
-*→* ``object``
+*table* ``table:<{row}>`` *key* ``string`` *columns* ``[string]``
+*→* ``object:<{row}>``
 
 Read row from TABLE for KEY returning database record object, or just
 COLUMNS if specified.
@@ -1179,7 +1279,7 @@ COLUMNS if specified.
 txids
 ~~~~~
 
-*table* ``string`` *txid* ``integer`` *→* ``[integer]``
+*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[integer]``
 
 Return all txid values greater than or equal to TXID in TABLE.
 
@@ -1190,7 +1290,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 txlog
 ~~~~~
 
-*table* ``string`` *txid* ``integer`` *→* ``[value]``
+*table* ``table:<{row}>`` *txid* ``integer`` *→* ``[value]``
 
 Return all updates to TABLE performed in transaction TXID.
 
@@ -1201,7 +1301,8 @@ Return all updates to TABLE performed in transaction TXID.
 update
 ~~~~~~
 
-*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does
 not exist for KEY.
@@ -1213,8 +1314,8 @@ not exist for KEY.
 with-default-read
 ~~~~~~~~~~~~~~~~~
 
-*table* ``string`` *key* ``string`` *defaults* ``object``
-*bindings* ``binding`` *→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *defaults* ``object:<{row}>``
+*bindings* ``binding:<{row}>`` *→* ``<a>``
 
 Special form to read row from TABLE for KEY and bind columns per
 BINDINGS over subsequent body statements. If row not found, read columns
@@ -1228,8 +1329,8 @@ from DEFAULTS, an object with matching key names.
 with-read
 ~~~~~~~~~
 
-*table* ``string`` *key* ``string`` *bindings* ``binding``
-*→* ``string``
+*table* ``table:<{row}>`` *key* ``string``
+*bindings* ``binding:<{row}>`` *→* ``<a>``
 
 Special form to read row from TABLE for KEY and bind columns per
 BINDINGS over subsequent body statements.
@@ -1242,7 +1343,8 @@ BINDINGS over subsequent body statements.
 write
 ~~~~~
 
-*table* ``string`` *key* ``string`` *object* ``object`` *→* ``string``
+*table* ``table:<{row}>`` *key* ``string`` *object* ``object:<{row}>``
+*→* ``string``
 
 Write entry in TABLE for KEY of OBJECT column data.
 
@@ -1353,8 +1455,8 @@ Operators
 !=
 ~~
 
-*x* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
-*y* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
 *→* ``bool``
 
 True if X does not equal Y.
@@ -1367,10 +1469,10 @@ True if X does not equal Y.
 \*
 ~~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
 Multiply X by Y.
@@ -1385,14 +1487,15 @@ Multiply X by Y.
 \+
 ~~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
-*x* ``<a => (string|list|object)>`` *y* ``<a => (string|list|object)>``
-*→* ``<a => (string|list|object)>``
+*x* ``<a[string,[<l>],object:<{o}>]>``
+*y* ``<a[string,[<l>],object:<{o}>]>``
+*→* ``<a[string,[<l>],object:<{o}>]>``
 
 Add numbers, concatenate strings/lists, or merge objects.
 
@@ -1405,20 +1508,20 @@ Add numbers, concatenate strings/lists, or merge objects.
     pact> (+ "every" "body")
     "everybody"
     pact> (+ [1 2] [3 4])
-    [1 2 3 4]
+    [1 2 3 4]:*
     pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100})
+    {"bar": 2, "foo": 100}:*
 
 \-
 ~~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
-*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 Negate X, or subtract Y from X.
 
@@ -1432,10 +1535,10 @@ Negate X, or subtract Y from X.
 /
 ~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
 Divide X by Y.
@@ -1450,8 +1553,8 @@ Divide X by Y.
 <
 ~
 
-*x* ``<a => (integer|decimal|string|time)>``
-*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 True if X < Y.
 
@@ -1467,8 +1570,8 @@ True if X < Y.
 <=
 ~~
 
-*x* ``<a => (integer|decimal|string|time)>``
-*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 True if X <= Y.
 
@@ -1484,8 +1587,8 @@ True if X <= Y.
 =
 ~
 
-*x* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
-*y* ``<a => (integer|string|time|decimal|bool|list|object|keyset)>``
+*x* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
+*y* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>``
 *→* ``bool``
 
 True if X equals Y.
@@ -1502,8 +1605,8 @@ True if X equals Y.
 >
 ~
 
-*x* ``<a => (integer|decimal|string|time)>``
-*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 True if X > Y.
 
@@ -1519,8 +1622,8 @@ True if X > Y.
 >=
 ~~
 
-*x* ``<a => (integer|decimal|string|time)>``
-*y* ``<a => (integer|decimal|string|time)>`` *→* ``bool``
+*x* ``<a[integer,decimal,string,time]>``
+*y* ``<a[integer,decimal,string,time]>`` *→* ``bool``
 
 True if X >= Y.
 
@@ -1536,10 +1639,10 @@ True if X >= Y.
 ^
 ~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
 Raise X to Y power.
@@ -1595,7 +1698,7 @@ decimal.
 exp
 ~~~
 
-*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 Exp of X
 
@@ -1624,7 +1727,7 @@ decimal.
 ln
 ~~
 
-*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 Natural log of X.
 
@@ -1636,10 +1739,10 @@ Natural log of X.
 log
 ~~~
 
-*x* ``<a => (integer|decimal)>`` *y* ``<a => (integer|decimal)>``
-*→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<a[integer,decimal]>``
+*→* ``<a[integer,decimal]>``
 
-*x* ``<a => (integer|decimal)>`` *y* ``<b => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *y* ``<b[integer,decimal]>``
 *→* ``decimal``
 
 Log of Y base X.
@@ -1705,7 +1808,7 @@ precision as decimal.
 sqrt
 ~~~~
 
-*x* ``<a => (integer|decimal)>`` *→* ``<a => (integer|decimal)>``
+*x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
 Square root of X.
 
@@ -1714,7 +1817,7 @@ Square root of X.
     pact> (sqrt 25)
     5
 
-KeySets
+Keysets
 -------
 
 define-keyset
@@ -1728,6 +1831,20 @@ will be enforced before updating to new value.
 .. code:: lisp
 
     (define-keyset 'admin-keyset (read-keyset "keyset"))
+
+enforce-keyset
+~~~~~~~~~~~~~~
+
+*keyset-or-name* ``<k[string,keyset]>`` *→* ``bool``
+
+Special form to enforce KEYSET-OR-NAME against message keys before
+running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a
+keyset object.
+
+.. code:: lisp
+
+    (with-keyset 'admin-keyset ...)
+    (with-keyset (read-keyset "keyset") ...)
 
 keys-2
 ~~~~~~
@@ -1777,19 +1894,6 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 
     (read-keyset "admin-keyset")
 
-with-keyset
-~~~~~~~~~~~
-
-*keyset-or-name* ``string`` *body* ``@rest`` *→* ``<a>``
-
-Enforce KEYSET-OR-NAME against message keys to run BODY. KEYSET-OR-NAME
-can be a symbol of a keyset name or a keyset object.
-
-.. code:: lisp
-
-    (with-keyset 'admin-keyset ...)
-    (with-keyset (read-keyset "keyset") ...)
-
 REPL-only functions
 -------------------
 
@@ -1813,7 +1917,7 @@ Begin transaction with optional NAME.
 bench
 ~~~~~
 
-*exprs* ``@rest`` *→* ``string``
+*exprs* ``*`` *→* ``string``
 
 Benchmark execution of EXPRS.
 
@@ -1835,7 +1939,7 @@ Commit transaction.
 env-data
 ~~~~~~~~
 
-*json* ``<a => (integer|string|time|decimal|bool|list|object|keyset|value)>``
+*json* ``<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset,value]>``
 *→* ``string``
 
 Set transaction JSON data, either as encoded string, or as pact types
@@ -1934,3 +2038,12 @@ Rollback transaction.
 .. code:: lisp
 
     (rollback-tx)
+
+typecheck
+~~~~~~~~~
+
+*module* ``string`` *→* ``string``
+
+*module* ``string`` *debug* ``bool`` *→* ``string``
+
+Typecheck MODULE, optionally enabling DEBUG output.

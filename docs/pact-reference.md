@@ -4,7 +4,16 @@ This document is a reference for the Pact smart-contract language, designed for
 correct, transactional execution on a [high-performance blockchain](http://kadena.io). For more
 background, please see the [white paper](http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf).
 
-Copyright (c) 2016, Stuart Popejoy. All Rights Reserved.
+Pact Version: 2.0
+
+Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
+
+Changelog
+===
+#### Version 2.0:
+- Types and schemas added
+- `with-keyset` changed to non-special-form `enforce-keyset`
+- Table definitions added; database functions reference these directly instead of using strings.
 
 Concepts {#concepts}
 ========
@@ -38,23 +47,34 @@ admin authorization schemes for modules and tables.
 
 #### Module declaration {#moduledeclaration}
 
-[Modules](#module) define the API for smart contracts, comprised of [function](#defun)
-and ["pact"](#defpact) definitions. When a module is declared, all references to native functions
-or functions from other modules are resolved. Resolution failure results in transaction rollback.
+[Modules](#module) contain the API and data definitions for smart contracts. They are comprised of:
+
+- [functions](#defun)
+- [schema](#defschema) definitions
+- [table](#deftable) definitions
+- ["pact"](#defpact) special functions
+- [const](#defconst) values
+
+When a module is declared, all references to native functions
+or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
 Modules can be re-defined as controlled by their admin keyset. Module versioning is not supported,
 except by including a version sigil in the module name (e.g., "accounts-v1").
 
+Module names must be globally unique.
+
 #### Table Creation {#tablecreation}
 
-Tables are [created](#create-table) at the same time as modules, due to the tight relationship
-of database tables to code modules, as described in [Table Guards](#tableguards).
+Tables are [created](#create-table) at the same time as modules. While tables are *defined* in
+modules, they are *created* "after" modules, so that the module may be redefined later without
+having to necessarily re-create the table.
 
-There is no restriction on how many tables may be created. However, table names are not
-namespaced, so care must be taken to ensure unique names.
+The relationship of modules to tables is important, as described in [Table Guards](#tableguards).
 
-Tables are schema-less, so there is no need to drop or redefine tables. Table data can
-be migrated for new module code by simply executing the necessary data modification.
+There is no restriction on how many tables may be created. Table names are namespaced with
+the module name.
+
+Tables can be typed with a [schema](#defschema).
 
 ### Transaction Execution {#transactionexec}
 
@@ -98,11 +118,6 @@ mean Pact cannot *record* transactions using relational techniques -- for exampl
 are used in a Sales table would involve the code looking up the Customer record before writing
 to the Sales table.
 
-### Schema-less {#schemaless}
-
-Pact tables do not declare a schema. Modules are expected to enforce data access to ensure
-type safety (through the use of functions like [is-string](#is-string), [is-decimal](#is-decimal) etc).
-
 ### No Nulls {#nonulls}
 
 Pact has no concept of a NULL value in its database metaphor. The main function for computing
@@ -123,6 +138,45 @@ Pact guarantees identical, correct execution at the smart-contract layer within 
 a result, the backing store need not be identical on different consensus nodes.
 Pact's implementation allows for integration of industrial RDBMSs, to assist large migrations onto
 a blockchain-based system, by facilitating bulk replication of data to downstream systems.
+
+Types and Schemas
+---
+
+With Pact 2.0, Pact gains explicit type specification, albeit optional. Pact 1.0 code without
+types still functions as before, and writing code without types is attractive for rapid prototyping.
+
+Schemas provide the main impetus for types. A schema [is defined](#defschema) with a list of
+columns that can have types (although this is also not required). Tables are then [defined](#deftable)
+with a particular schema (again, optional).
+
+Note that schemas also can be used on/specified for object types.
+
+### Runtime Type enforcement
+
+Any types declared in code are enforced at runtime. For table schemas, this means any write
+to a table will be typechecked against the schema. Otherwise, if a type specification is
+encountered, the runtime enforces the type when the expression is evaluated.
+
+### Static Type Inference on Modules
+
+With the [typecheck](#typecheck) repl command, the Pact interpreter will analyze a module
+and attempt to infer types on every variable, function application or const definition.
+Using this in project repl scripts is helpful to aid the developer in adding "just enough types"
+to make the typecheck succeed. Fully successful typecheck is usually a matter of providing
+schemas for all tables, and argument types for ancilliary functions that call ambigious or
+overloaded native functions.
+
+### Formal Verification
+
+Pact's typechecker is designed to output a fully typechecked, inlined AST for use generating
+formal proofs in SMT-LIB2. If the typecheck does not fully succeed, the module is not
+considered "provable".
+
+We see, then, that Pact code can move its way up a "safety" gradient, starting with no types,
+then with "enough" types, and lastly, with formal proofs.
+
+Note that as of Pact 2.0 the formal verification function is still under development.
+
 
 Keysets and Authorization {#keysets}
 ---
@@ -169,17 +223,17 @@ The following code indicates how this might be achieved:
 
 ```lisp
 (defun create-account (id)
-  (insert 'accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+  (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
 (defun read-balance (id)
   (with-read { "balance":= bal, "keyset":= ks }
-    (with-keyset ks
-      (format "Your balance is {}" bal))))
+    (enforce-keyset ks)
+    (format "Your balance is {}" bal)))
 ```
 
 In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](#read-keyset)
 to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
-by first enforcing the keyset using [with-keyset](#with-keyset).
+by first enforcing the keyset using [enforce-keyset](#enforce-keyset).
 
 Computational Model {#computation}
 ---
@@ -196,19 +250,23 @@ Turing-incompleteness allows Pact module loading to resolve all references in ad
 instead of addressing functions in a lookup table, the function definition is directly injected (or "inlined")
 into the callsite. This is an example of the performance advantages of a Turing-incomplete language.
 
-### Variables {#variables}
+### Single-assignment Variables {#variables}
 
 Pact allows variable declarations in [let expressions](#let) and [bindings](#binding). Variables are
-immutable: they cannot be re-assigned or modified in-place. The most common variable declaration
-occurs in the [with-read](#with-read) function, assigning variables to column values by name.
+immutable: they cannot be re-assigned, or modified in-place.
+
+A common variable declaration
+occurs in the [with-read](#with-read) function, assigning variables to column values by name. The
+[bind](#bind) function offers this same functionality for objects.
 
 Module-global constant values can be declared with [defconst](#defconst).
 
 ### Data Types {#datatypes}
 
-Pact is not a explicitly-typed language, but does use fixed type representations "under the hood"
-and does no coercion of types, so is strongly-typed nonetheless. Authors can employ functions
-like [is-string](#is-string), [is-decimal](#is-decimal) to enforce type safety.
+Pact code can be explicitly typed, and is always strongly-typed under the hood as the native
+functions perform strict typechecking as indicated in their documented type signatures.
+language, but does use fixed type representations "under the hood"
+and does no coercion of types, so is strongly-typed nonetheless.
 
 Pact's supported types are:
 
@@ -221,8 +279,9 @@ Pact's supported types are:
 - [Objects](#object)
 - [Function](#defun) and [pact](#defpact) definitions
 - [JSON values](#json)
+- [Tables](#deftable)
+- [Schemas](#defschema)
 
-[Functions](#defun) may take no arguments and return bare values, which can function as *constants*.
 
 ### Performance {#performance}
 
@@ -254,6 +313,12 @@ or it can read values from the message JSON payload:
 (accounts.transfer-msg)
 ```
 The latter will execute slightly faster, as there is less code to interpret at transaction time.
+
+#### Types as necessary
+With table schemas, Pact will be strongly typed for most use cases, but functions that do not
+use the database might still need types. Use the [typecheck](typecheck) REPL function to add
+the necessary types. There is a small cost for type enforcement at runtime, and too many type
+signatures can harm readability. However types can help document an API, so this is a judgement call.
 
 ### Control Flow {#controlflow}
 Pact supports conditionals via [if](#if), bounded looping, and of course function application.
@@ -456,9 +521,62 @@ They are used in [with-read](#with-read), [with-default-read](#with-default-read
 
 ```lisp
 (defun check-balance (id)
-  (with-read 'accounts id { "balance" := bal }
+  (with-read accounts id { "balance" := bal }
     (enforce (> bal 0) (format "Account in overdraft: {}" bal))))
 ```
+
+Type specifiers
+-----
+
+Types can be specified in syntax with the colon `:` operator followed by
+a type literal or user type specification.
+
+### Type literals
+
+- `string`
+- `integer`
+- `decimal`
+- `bool`
+- `keyset`
+- `list`, or `[type]` to specify the list type
+- `object`, which can be further typed with a schema
+- `table`, which can be further typed with a schema
+- `value` (JSON values)
+
+### Schema type literals
+
+A schema defined with [defschema](#defschema) is referenced by name enclosed in curly braces.
+
+```lisp
+table:{accounts}
+object:{person}
+```
+
+### What can be typed
+
+#### Function arguments and return types
+```lisp
+(defun prefix:string (pfx:string str:string) (+ pfx str))
+```
+
+#### Let variables
+```lisp
+(let ((a:integer 1) (b:integer 2)) (+ a b))
+```
+
+#### Tables and objects
+Tables and objects can only take a schema type literal.
+```lisp
+(deftable accounts:{account})
+
+(defun get-order:{order} (id) (read orders id))
+```
+
+#### Consts
+```lisp
+(defconst PENNY:decimal 0.1)
+```
+
 
 Special forms {#special}
 ---
@@ -504,6 +622,29 @@ Identical to [defun](#defun) except body must be comprised of [steps](#step).
   (step payee-entity
     (credit payee amount)))
 ```
+
+### defschema {#defschema}
+
+```(defschema NAME [DOCSTRING] FIELDS...)```
+
+Define NAME as a _schema_, which specifies a list of FIELDS. Each field
+is in the form `FIELDNAME[:FIELDTYPE]`.
+
+```lisp
+(defschema accounts
+  "Schema for accounts table".
+  balance:decimal
+  amount:decimal
+  ccy:string
+  data)
+```
+
+### deftable {#deftable}
+
+```(deftable NAME[:SCHEMA] [DOCSTRING])```
+
+Define NAME as a _table_, used in database functions. Note the
+table must still be created with [create-table](#create-table).
 
 ### let {#let}
 
@@ -572,15 +713,15 @@ DEFS must be [defun](#defun) or [defpact](#defpact) expressions only.
 
   (defun create-account (id bal)
    "Create account ID with initial balance BAL"
-   (insert 'accounts id { "balance": bal }))
+   (insert accounts id { "balance": bal }))
 
   (defun transfer (from to amount)
    "Transfer AMOUNT from FROM to TO"
-   (with-read 'accounts from { "balance": fbal }
+   (with-read accounts from { "balance": fbal }
     (enforce (<= amount fbal) "Insufficient funds")
-     (with-read 'accounts to { "balance": tbal }
-      (update 'accounts from { "balance": (- fbal amount) })
-      (update 'accounts to { "balance": (+ tbal amount) }))))
+     (with-read accounts to { "balance": tbal }
+      (update accounts from { "balance": (- fbal amount) })
+      (update accounts to { "balance": (+ tbal amount) }))))
 )
 ```
 
