@@ -9,37 +9,43 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GADTs #-}
 
-module Pact.Analyze.TypesV2 where
+module Pact.Analyze.TypesV2
+  ( runCompiler
+  , runCompilerDebug
+  , analyzeFunction
+  , SymVar(..), svName, svType, svNode
+  , SymName(..)
+  , OfTableColumn(..)
+  , TableAccess(..)
+  , CompiledSmt(..)
+  , SmtEncoding(..)
+  , symVarToDeclareConst
+  , _parseSmtCmd
+  ) where
 
+import Control.Monad
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.RWS.Strict
---import Control.Monad.IO.Class (liftIO)
 import Control.Lens hiding ((.=), op)
-import Pact.Typecheck
+import Pact.Typecheck hiding (debug)
 import Pact.Types
---import Pact.Repl
---import Data.Either
---import Data.Decimal
+import Pact.Repl
 import Data.Aeson hiding (Object)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
---import qualified Data.HashMap.Strict as HM
---import Data.Default
+import qualified Data.HashMap.Strict as HM
+import Data.Default
 import GHC.Generics
 import Control.Exception
---import Data.Thyme.Clock
 import Data.Thyme.Clock.POSIX
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
 import qualified SmtLib.Syntax.ShowSL as SmtShow
---import qualified SmtLib.Parsers.CommandsParsers as SmtParser
+import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 
---import qualified Data.ByteString.Char8 as BS8
---import qualified Data.Yaml as Yaml
---import qualified Text.Parsec as Parsec
-
-import qualified Pact.Analyze.Types as TypesV1
+import qualified Text.Parsec as Parsec
 
 -- !!! Orphan needed for dev, delete when finished
 instance ToJSON Node where
@@ -86,6 +92,11 @@ data SymVar = SymVar
   } deriving (Show, Eq, Generic, ToJSON, Ord)
 makeLenses ''SymVar
 
+data CompilerConf = CompilerConf
+  { _enableDebug :: Bool
+  } deriving (Show, Eq)
+makeLenses ''CompilerConf
+
 data CompilerState = CompilerState
   { _csVars :: Map Node SymVar
   , _csTableAssoc :: Map SymVar OfTableColumn
@@ -101,7 +112,7 @@ data CompiledSmt = CompiledSmt
   , _smtComment :: Maybe String
   } deriving (Show, Eq)
 
-type SmtCompiler a = RWST () [CompiledSmt] CompilerState IO a
+type SmtCompiler a = RWST CompilerConf [CompiledSmt] CompilerState IO a
 
 class SmtEncoding a where
   encodeSmt :: a -> String
@@ -140,22 +151,10 @@ basicOperatorToQualId o
   | o == "!=" = DoubleLevelOp (QIdentifier $ ISymbol "not") (QIdentifier $ ISymbol "=")
   | otherwise = throw $ SmtCompilerException "basicOperatorToQualId" $ "operator not supported -> " ++ o
 
-isAppView :: AST Node -> (Bool, AST Node)
-isAppView app@(App _ _ _) = (True, app)
-isAppView _ = (False, undefined)
-
 isInsertOrUpdate :: Fun Node -> Maybe String
 isInsertOrUpdate (NativeFunc "insert") = Just "insert"
 isInsertOrUpdate (NativeFunc "update") = Just "update"
 isInsertOrUpdate _ = Nothing
-
-isVarOrPrim :: AST Node -> Bool
-isVarOrPrim (Prim _ _) = True
-isVarOrPrim (Var _) = True
-isVarOrPrim _ = False
-
-ofVarOrPrim :: [AST Node] -> Either [AST Node] [AST Node]
-ofVarOrPrim args = if all isVarOrPrim args then Right args else Left args
 
 ofPrimType :: Node -> Maybe PrimType
 ofPrimType (Node _ (TyPrim ty)) = Just ty
@@ -203,50 +202,10 @@ mkSymVar node'@(Node tcId _) = newVar
 symVarToDeclareConst :: SymVar -> Command
 symVarToDeclareConst SymVar{..} = DeclareFun (unSymName _svName) [] (symTypeToSortId _svType)
 
-pattern OfPrimType pType <- (ofPrimType -> Just pType)
-
-pattern RawTableName t <- (Table (Node (TcId _ t _) _))
-
--- pattern Obj_Key_Val key' val' <- (Prim _ (PrimLit (LString key')), val')
-
-pattern NativeFunc f <- (FNative _ f _ _)
-pattern UserFunc args bdy <- (FDefun _ _ _ args bdy _)
-pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
-
-pattern AST_Var var <- (Var var)
-pattern AST_Lit lit <- (Prim _ (PrimLit lit))
-pattern AST_NegativeVar var' <- (App _ (NativeFunc "-") (Args_Var var'))
-pattern AST_NegativeLit lit' <- (App _ (NativeFunc "-") (Args_Lit lit'))
-pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
-pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
-pattern AST_UFun node' bdy' args' <- (App node' (UserFunc _ bdy') args')
-pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
-pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
-pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
-pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
-pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
-pattern AST_Obj objNode kvs <- (Object objNode kvs)
-pattern AST_InsertOrUpdate node' fnName' table' key' kvs' <- (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj _ kvs'])
-
--- pattern Args_Var var <- [Var var]
-pattern Args_Lit lit <- [AST_Lit lit]
-pattern Args_Var var1 <- [(Var var1)]
-pattern Args_Var_Var var1 var2 <- [(Var var1),(Var var2)]
-pattern Args_Var_Lit var lit <- [(Var var),AST_Lit lit]
-pattern Args_Lit_Var lit var <- [AST_Lit lit,(Var var)]
-pattern Args_App_App app1 app2 <- [(isAppView -> (True, app1)),(isAppView -> (True, app2))]
--- pattern Args_App_Lit_Var app' lit var <- [(isAppView -> (True,app')),AST_Lit lit,(Var var)]
-pattern Args_App_Lit app' lit' <- [(isAppView -> (True,app')),AST_Lit lit']
-pattern Args_App_Lit_Lit app' lit1 lit2 <- [(isAppView -> (True,app')),AST_Lit lit1,AST_Lit lit2]
-
---pattern AppFDefun fDefArgs fDefBdy appArgs <- (App _ (FDEFUN fDefArgs fDefBdy) appArgs)
-pattern NativeFunc_Lit_Var f lit' var' <- (App _ (NativeFunc f) (Args_Lit_Var lit' var'))
-pattern NativeFunc_Var_Lit f var' lit' <- (App _ (NativeFunc f) (Args_Var_Lit var' lit'))
-pattern NativeFunc_Var_Var f var1 var2 <- (App _ (NativeFunc f) (Args_Var_Var var1 var2))
-pattern NativeFunc_App_App f app1 app2 <- (App _ (NativeFunc f) (Args_App_App app1 app2))
--- Unsupported currently
-pattern READ <- (App _ (NativeFunc "read") _)
-
+-- | Everything is obvious except for time, which works like this:
+-- `\(LTime (t :: UTCTime)) -> (init $ show (t ^. posixTime)` :: Smt.Decimal)
+-- Decimals (which are actually Reals) are strings in the SMT parser (dunno why)
+-- so we convert to POSIX time and show, getting `<some numbers>.<some more numbers>s` and use init to remove the trailing `s`
 literalToTerm :: Literal -> Smt.Term
 literalToTerm (LBool v) = boolAsTerm v
 literalToTerm (LString v) = TermSpecConstant $ SpecConstantString $ show v
@@ -263,15 +222,11 @@ eqAsQID = QIdentifier $ ISymbol "="
 negAsQID :: QualIdentifier
 negAsQID = QIdentifier $ ISymbol "-"
 
-iteAsQID :: QualIdentifier
-iteAsQID = QIdentifier $ ISymbol "ite"
-
-mkIteTerm :: Smt.Term -> Smt.Term -> Smt.Term -> Smt.Term
-mkIteTerm cond ifTrue ifFalse = TermQualIdentifierT iteAsQID [cond, ifTrue, ifFalse]
-
 negateTerm :: Smt.Term -> Smt.Term
 negateTerm t = TermQualIdentifierT (QIdentifier (ISymbol "not")) [t]
 
+-- | Create an SMT implication from two terms. Used to assert <term2> only if <term1> is true
+-- NB: implication functions like saying "if `x == true` then y else <I know nothing new>"
 implication :: Smt.Term -> Smt.Term -> Smt.Term
 implication t1 t2 = TermQualIdentifierT implQID [t1, t2]
   where
@@ -280,6 +235,10 @@ implication t1 t2 = TermQualIdentifierT implQID [t1, t2]
 assertEquality :: InIf -> Smt.Term -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
 assertEquality inIf t1 t2 cmt = assertTerm inIf (TermQualIdentifierT eqAsQID [t1, t2]) cmt
 
+-- | Assert a Smt.Term. If you're in an If block, then imply the assertion (i.e. the ifCond being true implies Smt.Term)
+-- ex: NoIf -> `(assert <term>) ; cmt`
+-- ex: IfTrue -> `(assert (=> <ifCond> <term>)) ; cmt`
+-- ex: IfFalse -> `(assert (=> (not <ifCond>) <term>)) ; cmt`
 assertTerm :: InIf -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
 assertTerm NoIf t1 cmt = return $ CompiledSmt (Assert t1) cmt
 assertTerm (IfTrue node) t1 cmt = do
@@ -295,21 +254,60 @@ trackNewNode n = do
   newSv <- return $ mkSymVar n
   csVars' <- use csVars
   if Map.member n csVars'
-  then throw $ SmtCompilerException "trackNewNode" $ "node is already tracked: " ++ show n ++ "/n" ++ show csVars'
+  then throw $ SmtCompilerException "trackNewNode" $ "node is already tracked:\n" ++ show n ++ "\n" ++ show csVars'
   else do
     csVars %= Map.insert n newSv
-    tell [CompiledSmt (symVarToDeclareConst newSv) Nothing]
+    tell' [CompiledSmt (symVarToDeclareConst newSv) Nothing]
+
+tell' :: [CompiledSmt] -> SmtCompiler ()
+tell' s = do
+  dbg <- view enableDebug
+  when dbg $ liftIO $ putStrLn $ unlines $ encodeSmt <$> s
+  tell s
+
+debug :: String -> SmtCompiler ()
+debug s = do
+  dbg <- view enableDebug
+  when dbg $ liftIO $ putStrLn $ "## debug ## " ++ s
 
 tellCmd :: CompiledSmt -> SmtCompiler ()
-tellCmd c = tell [c]
+tellCmd c = tell' [c]
 
 -- | This is used to track the ifCond term: (= d (if a b c)) <-- it tracks a
-data InIf = IfTrue Node | IfFalse Node | NoIf deriving (Show, Eq)
-data ParentRel = NoRelation | HasRelation Node deriving (Show, Eq)
+data InIf =
+  NoIf |
+  IfTrue Node |
+  IfFalse Node
+  deriving (Show, Eq)
+
+-- | Used to track if compileBody needs to assert that the last node in [AST Node] needs to be returned equal
+-- if so: then `(assert (= parentNodeAsTerm lastAstTerm))`
+data ParentRel =
+  NoRelation |
+  HasRelation Node
+  deriving (Show, Eq)
 
 addToNodeTcIdName :: String -> Node -> Node
 addToNodeTcIdName s = over (aId.tiName) (\x -> x ++ "-" ++ s)
 
+-- | handling if branches is crazy. Use this example to get a handle on what's going on here.
+-- NB: we need to handle if there are assertions of the body of ifTrue etc... hence the implication trick
+-- NB: NB: implication works like `onlyApplyAssertionWhenTrue :: Smt.Term -> Assert Smt.Term -> IO ()`
+-- ; (if (= a 10) (> b 8) (> b a))
+-- (declare-fun ifRet () Bool)
+-- (declare-fun ifCond () Bool)
+-- (declare-fun ifNTrue () Bool)
+-- (declare-fun ifNFalse () Bool)
+--
+-- (assert (= ifCond (= a 10)))
+--
+-- (assert (=> ifCond (> b 8)))
+-- (assert (=> ifCond (= ifNTrue true)))
+-- (assert (=> ifCond (= ifRet ifNTrue)))
+--
+-- (assert (=> (not ifCond) (> b a)))
+-- (assert (=> (not ifCond) (= ifNFalse true)))
+-- (assert (=> (not ifCond) (= ifRet ifNFalse)))
 mkIteNodes :: Node -> SmtCompiler (Node, Node, Node, Node)
 mkIteNodes node'@(Node _ (TyPrim _)) = do
   let ifRes = node'
@@ -323,13 +321,15 @@ mkIteNodes node'@(Node _ (TyPrim _)) = do
   return (ifRes, ifCond, ifTrue, ifFalse)
 mkIteNodes (Node _ ty) = throw $ SmtCompilerException "mkIteNodes" $ "only ifs that return a primitive type are supported, not: " ++ show ty
 
+-- | bind variables encountered in a let
 bindNewVar :: InIf -> (Named Node, AST Node) -> SmtCompiler ()
 bindNewVar inIf ((Named n node'), ast') = do
   trackNewNode node'
   asTerm <- nodeToTerm node'
   resTerm <- compileNode inIf ast'
-  assertEquality inIf asTerm resTerm (Just $ "binding " ++ n) >>= tellCmd
+  when (asTerm /= resTerm) $ assertEquality inIf asTerm resTerm (Just $ "binding " ++ n) >>= tellCmd
 
+-- | bind variables read from the DB
 bindTableVar :: InIf -> TableAccess -> String -> Smt.Term -> (Named Node, AST Node) -> SmtCompiler ()
 bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
   let otc' = OfTableColumn { _otcTable = table', _otcColumn = column', _otcKey = key', _otcAccess = ta}
@@ -340,12 +340,44 @@ bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
     Just s -> do
       csTableAssoc %= Map.insert s otc'
 
-prepTableBindSite :: String -> String -> (AST Node, AST Node) -> (Named Node, AST Node)
-prepTableBindSite tableId fn (Prim _ (PrimLit (LString field)), ast') =
-  let newNode = addToNodeTcIdName (tableId ++ "-" ++ fn ++ "-" ++ field) (_aNode ast')
-  in (Named (tableId ++ "insert-key") newNode,ast')
-prepTableBindSite tableId _ (Prim _ _, err) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in snd position: " ++ show err
-prepTableBindSite tableId _ (err, _) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in first position: " ++ show err
+-- | construct names for variables that are to be written to the DB
+prepTableBindSite :: String -> Int -> String -> (AST Node, AST Node) -> (Named Node, AST Node)
+prepTableBindSite tableId objNonce fn (Prim _ (PrimLit (LString field)), ast') =
+  let newNode = (addToNodeTcIdName (tableId ++ "-" ++ fn ++ "-" ++ field) (_aNode ast'))
+  in (Named field (set (aId.tiId) objNonce newNode),ast')
+prepTableBindSite tableId _ _ (Prim _ _, err) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in snd position: " ++ show err
+prepTableBindSite tableId _ _ (err, _) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in first position: " ++ show err
+
+-- helper patterns
+pattern OfPrimType pType <- (ofPrimType -> Just pType)
+pattern RawTableName t <- (Table (Node (TcId _ t _) _))
+pattern NativeFunc f <- (FNative _ f _ _)
+pattern UserFunc name' args bdy <- (FDefun _ name' _ args bdy _)
+pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
+pattern NodeNonce i <- (Node (TcId _ _ i) _)
+
+-- compileNode's Patterns
+pattern AST_Var var <- (Var var)
+pattern AST_Lit lit <- (Prim _ (PrimLit lit))
+pattern AST_NegativeVar var' <- (App _ (NativeFunc "-") [AST_Var var'])
+pattern AST_NegativeLit lit' <- (App _ (NativeFunc "-") [AST_Lit lit'])
+pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
+pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
+pattern AST_UFun name' node' bdy' args' <- (App node' (UserFunc name' _ bdy') args')
+pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
+pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
+pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
+pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
+pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
+pattern AST_Obj objNode kvs <- (Object objNode kvs)
+pattern AST_InsertOrUpdate node' fnName' table' key' objNonce' kvs' <- (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj (NodeNonce objNonce') kvs'])
+
+-- Unsupported currently
+pattern AST_Read <- (App _ (NativeFunc "read") _)
+pattern AST_AddTime <- (App _ (NativeFunc "add-time") _)
+pattern AST_Days <- (App _ (NativeFunc "days") _)
+pattern AST_Format <- (App _ (NativeFunc "format") _)
+pattern AST_Bind <- (App _ (NativeFuncSpecial "bind" _) _)
 
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
@@ -363,7 +395,7 @@ compileBody inIf parentRel ast' = do -- do compilation, (assert (= retNode' <fin
 
 -- | the workhorse of compilation
 compileNode :: InIf -> AST Node -> SmtCompiler Smt.Term
--- #BEGIN# Handle Lits and Vars
+-- #BEGIN# Handle Lit, Var, If
 compileNode _ (AST_Lit lit) = return $ literalToTerm lit
 compileNode _ (AST_NegativeLit lit) = do
   return $ TermQualIdentifierT negAsQID [literalToTerm lit]
@@ -376,35 +408,34 @@ compileNode inIf (AST_Binding node' bindings' bdy') = do
   mapM_ (bindNewVar inIf) bindings'
   compileBody inIf (HasRelation node') bdy'
   nodeToTerm node'
--- #END# Handle Lits and Vars
-
 compileNode inIf (AST_If node' cond' ifTrue' ifFalse') = do
   (ifRetNode, ifCondNode, ifTrueNode, ifFalseNode) <- mkIteNodes node'
   ifRetTerm <- nodeToTerm ifRetNode
   ifCondTerm <- nodeToTerm ifCondNode
   ifTrueTerm <- nodeToTerm ifTrueNode
   ifFalseTerm <- nodeToTerm ifFalseNode
-
   -- this may be verbose, I think we can do without the extra ifTrueTerm and ifFalseTerm
   -- assert relationship between the conditional and the return value
   assertEquality (IfTrue ifCondNode) ifRetTerm ifTrueTerm Nothing >>= tellCmd
   assertEquality (IfFalse ifCondNode) ifRetTerm ifFalseTerm Nothing >>= tellCmd
-
   -- compile the conditional, set it equal to the ifs cond node
   ifsCond <- compileNode inIf cond'
   assertEquality inIf ifCondTerm ifsCond Nothing >>= tellCmd
-
   -- compile the left and right side, using the implication of the
   -- ifCondNode to imply only when true or false (so asserts don't bleed out)
   ifsTrueRes <- compileNode (IfTrue ifCondNode) ifTrue'
   assertEquality (IfTrue ifCondNode) ifTrueTerm ifsTrueRes Nothing >>= tellCmd
-
   ifsFalseRes <- compileNode (IfFalse ifCondNode) ifFalse'
   assertEquality (IfFalse ifCondNode) ifFalseTerm ifsFalseRes Nothing >>= tellCmd
-
   return ifRetTerm
+-- #END# Handle Lit, Var, If
 
 -- #BEGIN# Handle Natives Section
+compileNode _ AST_Read = throw $ SmtCompilerException "compileNode does not support `read`" "Pact's SMT compiler is still under construction and does not support <object> return types"
+compileNode _ AST_AddTime = throw $ SmtCompilerException "compileNode" "does not yet support add-time"
+compileNode _ AST_Days = throw $ SmtCompilerException "compileNode" "does not yet support days"
+compileNode _ AST_Format = throw $ SmtCompilerException "compileNode" "does not yet support format"
+compileNode _ AST_Bind = throw $ SmtCompilerException "compileNode" "does not yet support bind"
 compileNode inIf (AST_NFun_Basic fn args) = do
   args' <- mapM (compileNode inIf) args
   case basicOperatorToQualId fn of
@@ -427,139 +458,80 @@ compileNode inIf (AST_WithRead node' table' key' bindings' bdy') = do
   mapM_ (bindTableVar inIf TableRead table' keyTerm) bindings'
   compileBody inIf (HasRelation node') bdy'
   nodeToTerm node'
-compileNode inIf (AST_InsertOrUpdate node' fn' table' key' kvs') = do
+compileNode inIf (AST_InsertOrUpdate node' fn' table' key' objNonce' kvs') = do
   trackNewNode node'
   asTerm <- nodeToTerm node'
   keyTerm <- compileNode inIf key'
-  mapM_ (bindTableVar inIf TableRead table' keyTerm) (prepTableBindSite table' fn' <$> kvs')
+  mapM_ (bindTableVar inIf TableRead table' keyTerm) (prepTableBindSite table' objNonce' fn' <$> kvs')
   assertEquality inIf asTerm (boolAsTerm True) Nothing >>= tellCmd
   return $ asTerm
 -- #END# Handle Natives Section
 
 -- #BEGIN# Handle User Functions Section
-compileNode inIf (AST_UFun node' bdy' _args') = do
+compileNode inIf (AST_UFun name' node' bdy' _args') = do
+  debug $ "Entered Defun " ++ name'
   trackNewNode node'
   compileBody inIf (HasRelation node') bdy'
+  debug $ "Leaving Defun " ++ name'
   nodeToTerm node'
-compileNode _ err = throw $ SmtCompilerException "compileNode" $ "unsupported construct: " ++ show err
 -- #END# Handle User Functions Section
+compileNode _ err = throw $ SmtCompilerException "compileNode" $ "unsupported construct: " ++ show err
 
 declareTopLevelVars :: SmtCompiler ()
 declareTopLevelVars = do
   csVars' <- use csVars
-  mapM_ (\newSv -> tell [CompiledSmt (symVarToDeclareConst newSv) Nothing]) $ Map.elems csVars'
+  mapM_ (\newSv -> tell' [CompiledSmt (symVarToDeclareConst newSv) Nothing]) $ Map.elems csVars'
 
-analyzeFunction :: TopLevel Node -> IO (Either SmtCompilerException [String])
-analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) = try $ do
+analyzeFunction :: TopLevel Node -> Bool -> IO (Either SmtCompilerException (CompilerState, [CompiledSmt]))
+analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) dbg = try $ do
   let initState = CompilerState
                     { _csVars = (Map.fromList $ (\x -> (x, mkSymVar x)) . _nnNamed <$> args')
                     , _csTableAssoc = Map.empty}
-  ((), _cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') () initState
-  return $ encodeSmt <$> ([dumpModelsOnSat] ++ res)
-analyzeFunction _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+      compConf = CompilerConf { _enableDebug = dbg }
+  ((), cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') compConf initState
+  return $ (cstate, ([dumpModelsOnSat] ++ res))
+analyzeFunction _ _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 dumpModelsOnSat :: CompiledSmt
 dumpModelsOnSat = CompiledSmt (SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))) Nothing
 
-runCompiler :: String -> IO ()
-runCompiler s = do
-  f <- TypesV1._getSampFunc s
-  r <- analyzeFunction f
+loadModule :: FilePath -> ModuleName -> IO ModuleData
+loadModule fp mn = do
+  (r,s) <- execScript' (Script fp) fp
+  either (die def) (const (return ())) r
+  case view (rEnv . eeRefStore . rsModules . at mn) s of
+    Just m -> return m
+    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
+
+loadFun :: FilePath -> ModuleName -> String -> IO Ref
+loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
+  Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
+  Just f -> return f
+
+inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
+
+runCompiler :: String -> String -> String -> IO ()
+runCompiler = runCompilerDebug False
+
+runCompilerDebug :: Bool -> String -> String -> String -> IO ()
+runCompilerDebug dbg replPath' modName' funcName' = do
+  f <- fst <$> inferFun False replPath' (ModuleName modName') funcName'
+  r <- analyzeFunction f dbg
   case r of
     Left err -> putStrLn $ show err
-    Right res -> putStrLn $ unlines res
+    Right (_, res) -> putStrLn $ unlines (encodeSmt <$> res)
 
---TopFun
---  { _tlFun =
---      FDefun
---      { _fInfo = "(defun tricky1 (a:integer b:integer) (enforce (and (> a b) (enf-gt a b))))"
---      , _fName = "analyze-tests.tricky1"
---      , _fType = "(a:integer b:integer)-><n>"
---      , _fArgs = ["a"(analyze-tests.tricky1_a0::integer),"b"(analyze-tests.tricky1_b1::integer)]
---      , _fBody =
---        [ App { _aNode = appNenforce2::bool
---              , _aAppFun = FNative
---                { _fInfo = ""
---                , _fName = "enforce"
---                , _fTypes = "(test:bool msg:string)->bool :| []"
---                , _fSpecial = Nothing}
---              , _aAppArgs =
---                [ App { _aNode = appNand3::bool
---                      , _aAppFun = FNative
---                        { _fInfo = ""
---                        , _fName = "and"
---                        , _fTypes = "(x:bool y:bool)->bool :| []"
---                        , _fSpecial = Nothing}
---                      , _aAppArgs =
---                        [ App { _aNode = appN>4::bool
---                              , _aAppFun = FNative {_fInfo = "", _fName = ">", _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| []", _fSpecial = Nothing}
---                              , _aAppArgs = [Var {_aNode = analyze-tests.tricky1_a0::integer},Var {_aNode = analyze-tests.tricky1_b1::integer}]
---                              }
---                        , App { _aNode = appDanalyze-tests.enf-gt9::bool
---                              , _aAppFun = FDefun { _fInfo = "(defun enf-gt (a:integer b:integer) (enforce (> a b)))"
---                                                  , _fName = "analyze-tests.enf-gt"
---                                                  , _fType = "(a:integer b:integer)-><m>"
---                                                  , _fArgs = ["a"(analyze-tests.enf-gt_a5::integer),"b"(analyze-tests.enf-gt_b6::integer)]
---                                                  , _fBody = [App {_aNode = appNenforce7::bool
---                                                                  , _aAppFun = FNative {_fInfo = "", _fName = "enforce", _fTypes = "(test:bool msg:string)->bool :| []", _fSpecial = Nothing}
---                                                                  , _aAppArgs =
---                                                                    [ App {_aNode = appN>8::bool
---                                                                          , _aAppFun = FNative {_fInfo = "", _fName = ">"
---                                                                                               , _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| []"
---                                                                                               , _fSpecial = Nothing}
---                                                                          , _aAppArgs = [Var {_aNode = analyze-tests.tricky1_a0::integer},Var {_aNode = analyze-tests.tricky1_b1::integer}]
---                                                                          }
---                                                                    ]
---                                                                  }
---                                                             ]
---                                                  , _fDocs = Nothing}
---                              , _aAppArgs = [Var {_aNode = analyze-tests.tricky1_a0::integer},Var {_aNode = analyze-tests.tricky1_b1::integer}]
---                              }
---                        ]
---                      }
---                ]
---              }
---        ]
---      , _fDocs = Nothing}}
+-- helper stuff
 
---TopFun
---  { _tlFun = FDefun
---    { _fInfo = "defun tricky1 (a:integer b:integer)"
---    , _fName = "analyze-tests.tricky1"
---    , _fType = (a:integer b:integer)-><n>
---    , _fArgs = ["a"(analyze-tests.tricky1_a0::integer),"b"(analyze-tests.tricky1_b1::integer)]
---    , _fBody =
---      [ App { _aNode = appNenforce2::bool
---            , _aAppFun = FNative {_fInfo = "", _fName = "enforce", _fTypes = "(test:bool msg:string)->bool :| []", _fSpecial = Nothing}
---            , _aAppArgs =
---              [ App { _aNode = appNand3::bool, _aAppFun = FNative {_fInfo = "", _fName = "and", _fTypes = "(x:bool y:bool)->bool :| []", _fSpecial = Nothing}
---                    , _aAppArgs =
---                      [App { _aNode = appN>4::bool
---                           , _aAppFun = FNative {_fInfo = "", _fName = ">", _fTypes = "(x:<a[integer,decimal,string,time]> y:<a[integer,decimal,string,time]>)->bool :| []", _fSpecial = Nothing}
---                           , _aAppArgs =
---                             [ Var {_aNode = analyze-tests.tricky1_a0::integer}
---                             , Var {_aNode = analyze-tests.tricky1_b1::integer}]
---                           }
---                      ,App {_aNode = appDanalyze-tests.enf-gt10::bool
---                           , _aAppFun =
---                             FDefun { _fInfo = "(defun enf-gt (a:integer b:integer)"
---                                    , _fName = "analyze-tests.enf-gt"
---                                    , _fType = (a:integer b:integer)-><m>
---                                    , _fArgs = ["a"(analyze-tests.enf-gt_a5::integer),"b"(analyze-tests.enf-gt_b6::integer)]
---                                    , _fBody = [App { _aNode = appNif7::bool
---                                                    , _aAppFun = FNative {_fInfo = ""
---                                                                         , _fName = "if"
---                                                                         , _fTypes = "(cond:bool then:<a> else:<a>)-><a> :| []"
---                                                                         , _fSpecial = Nothing}
---                                                    , _aAppArgs =
---                                                      [ App { _aNode = appN=8::bool
---                                                            , _aAppFun = FNative {_fInfo = , _fName = "=", _fTypes = "(x:<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]> y:<a[integer,string,time,decimal,bool,[<l>],object:<{o}>,keyset]>)->bool :| []", _fSpecial = Nothing}
---                                                            , _aAppArgs = [ Var {_aNode = analyze-tests.tricky1_a0::integer}
---                                                                          , Prim {_aNode = integer9::integer, _aPrimValue = PrimLit 10}]
---                                                            }
---                                                      ,Var {_aNode = analyze-tests.tricky1_a0::integer}
---                                                      ,Var {_aNode = analyze-tests.tricky1_b1::integer}]
---                                                    }
---                                               ]
---                                    , _fDocs = Nothing}
---                           , _aAppArgs = [Var {_aNode = analyze-tests.tricky1_a0::integer},Var {_aNode = analyze-tests.tricky1_b1::integer}]}]},Prim {_aNode = string11::string, _aPrimValue = PrimLit "bar"}]}], _fDocs = Nothing}}
+_parseSmtCmd :: String -> Smt.Command
+_parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
+
+-- App { _aNode = appNformat9::string
+--     , _aAppFun = FNative { _fInfo = ""
+--                          , _fName = "format", _fTypes = "(template:string vars:*)->string :| []"
+--                          , _fSpecial = Nothing}
+--     , _aAppArgs =
+--       [ Prim {_aNode = string10::string, _aPrimValue = PrimLit "{}:{}"}
+--       , Var {_aNode = cp.issue-inventory_owner0::string},Var {_aNode = cp.issue-inventory_cusip1::string}
+--       ]}
