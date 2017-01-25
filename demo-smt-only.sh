@@ -1,3 +1,3 @@
 #!/bin/sh
 
-stack exec -- pact-analyze-exe | grep "^(.*"
+stack exec -- pact-analyze-exe
