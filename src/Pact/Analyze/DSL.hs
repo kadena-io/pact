@@ -145,16 +145,6 @@ renderTestsFromState cs ProveProperty{..} =
        then tests
        else throw $ SmtCompilerException "renderTestsFromState" "Unable To Construct Tests: there was an inequal number of read and written variables for a given column. This is usually an issue with the column specification -- make sure it is '<module-name>.<table-name>.<column-name>'"
 
--- analyzeFunction :: TopLevel Node -> Bool -> IO (Either SmtCompilerException (CompilerState, [CompiledSmt]))
--- analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) dbg = try $ do
---   let initState = CompilerState
---                     { _csVars = (Map.fromList $ (\x -> (x, mkSymVar x)) . _nnNamed <$> args')
---                     , _csTableAssoc = Map.empty}
---       compConf = CompilerConf { _enableDebug = dbg }
---   ((), cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') compConf initState
---   return $ (cstate, ([dumpModelsOnSat] ++ res))
--- analyzeFunction _ _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
-
 analyzeAndRenderTests :: Bool -> TopLevel Node -> IO (Either SmtCompilerException [String])
 analyzeAndRenderTests dbg tf = try $ do
   analysisRes <- analyzeFunction tf dbg
@@ -165,8 +155,6 @@ analyzeAndRenderTests dbg tf = try $ do
       tests <- return $ renderTestsFromState compState <$> pps
       return $ (encodeSmt <$> compiledFn) ++ concat tests
 
--- inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
-
 _compileTests :: Bool -> FilePath -> String -> String -> IO ()
 _compileTests dbg fp mod' func = do
   f <- fst <$> inferFun False fp (ModuleName mod') func
@@ -174,13 +162,3 @@ _compileTests dbg fp mod' func = do
   case res of
     Left err -> putStrLn $ show err
     Right smt -> putStrLn $ unlines smt
-
--- fromList [
--- (SymVar {_svName = SymName {unSymName = "appN+-analyze-tests.accounts-update-balance23"}, _svNode = appN+-analyze-tests.accounts-update-balance23::integer, _svType = SymInteger}
---     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_to1")), _otcAccess = TableRead}),
--- (SymVar {_svName = SymName {unSymName = "appN--analyze-tests.accounts-update-balance18"}, _svNode = appN--analyze-tests.accounts-update-balance18::integer, _svType = SymInteger}
---     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_from0")), _otcAccess = TableRead}),
--- (SymVar {_svName = SymName {unSymName = "bind*10_to-bal11"}, _svNode = bind*10_to-bal11::integer, _svType = SymInteger}
---     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_to1")), _otcAccess = TableRead}),
--- (SymVar {_svName = SymName {unSymName = "bind*5_from-bal6"}, _svNode = bind*5_from-bal6::integer, _svType = SymInteger}
---     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_from0")), _otcAccess = TableRead})]
