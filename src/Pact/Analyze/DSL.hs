@@ -3,18 +3,17 @@
 
 module Pact.Analyze.DSL
   ( analyzeAndRenderTests
-  , _docTestPay
-  , prettyPrintProveProperty
+  , _compileTests
   ) where
 
 import Pact.Analyze.Types
+import Pact.Typecheck hiding (debug)
+import Pact.Types
 
---import Control.Monad.IO.Class (liftIO)
-import Pact.Typecheck
-import Data.Either
+import Control.Exception
 import Data.Decimal
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
@@ -96,18 +95,13 @@ parseDocString = do
   pp <- many1 parseProperty
   return pp
 
-getTestsFromDoc :: TopLevel Node -> Either String [ProveProperty]
+getTestsFromDoc :: TopLevel Node -> [ProveProperty]
 getTestsFromDoc (TopFun (FDefun{..})) = case _fDocs of
-  Nothing -> Left "No doc string string found!"
-  Just docs -> either (Left . show) Right $ parse parseDocString "" docs
-getTestsFromDoc _ = Left $ "Not given a top-level defun"
-
--- | Go through declared variables and gather a list of those read from a given table's column and those written to it
-getColumnsSymVars :: ProveProperty -> Map Node SymVar -> ([SymName], [SymName])
-getColumnsSymVars (ProveProperty table' column' _) m = (reads', writes')
-  where
-    reads' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableRead)) m)
-    writes' = _svName <$> (Map.elems $ Map.filter (\(SymVar _ _ _ otc) -> otc == Just (OfTableColumn table' column' TableWrite)) m)
+  Nothing -> throw $ SmtCompilerException "getTestsFromDoc" "No doc string string found!"
+  Just docs -> case parse parseDocString "" docs of
+    Left err -> throw $ SmtCompilerException "getTestsFromDoc" $ show err
+    Right pps -> pps
+getTestsFromDoc _ = throw $ SmtCompilerException "getTestsFromDoc" "Not given a top-level defun"
 
 renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
 renderProverTest table' column' (reads', writes') ColumnRange{..} =
@@ -135,55 +129,58 @@ renderProverTest table' column' (reads', writes') ConservesMass =
                           ]])
     exitCmds = [Echo "\"Mass is conserved IFF unsat\"", CheckSat, Pop 1]
 
--- | This is gross and needs to be re-thought
-getPreTerminationProverState :: SymAst -> Either String ProverState
-getPreTerminationProverState IfBranch{..} = Left "Apologies but automatic Testing for programs containing ifs is under development (manually testing of the compiled SMT-LIB2 is required)"
-getPreTerminationProverState sa
-  | _saRest sa == Terminate = Right $ _saProverState sa
-  | otherwise = getPreTerminationProverState $ _saRest sa
+-- | Go through declared variables and gather a list of those read from a given table's column and those written to it
+varsFromTable :: TableAccess -> String -> String -> CompilerState -> [SymName]
+varsFromTable ta table' column' (CompilerState _ tvars) = _svName <$> (Set.toList $ Map.keysSet $ Map.filter (\OfTableColumn{..} -> ta == _otcAccess && table' == _otcTable && column' == _otcColumn) tvars)
 
-dumpModelsOnSat :: Smt.Command
-dumpModelsOnSat = SetOption (OptionAttr (AttributeVal ":dump-models" (AttrValueSymbol "true")))
-
-renderAllFromProverState :: ProverState -> [ProveProperty] -> [String]
-renderAllFromProverState ps@ProverState{..} pps =
-    let declrs = SmtShow.showSL <$> rights (symVarToDeclareConst <$> Map.elems _psVars)
-        funcBody = declrs ++ (SmtShow.showSL <$> _psNodeSMT)
-        tests = concat $ renderTestsFromState ps <$> pps
-    in [SmtShow.showSL $ dumpModelsOnSat] ++ funcBody ++ tests
-
-renderTestsFromState :: ProverState -> ProveProperty -> [String]
-renderTestsFromState ProverState{..} dt@ProveProperty{..} =
-    let involvedVars = getColumnsSymVars dt _psVars
-        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn involvedVars <$> _dtTests)
-    in if not (null $ fst involvedVars) && not (null $ snd involvedVars)
+renderTestsFromState :: CompilerState -> ProveProperty -> [String]
+renderTestsFromState cs ProveProperty{..} =
+    let readVars = varsFromTable TableRead _dtTable _dtColumn cs
+        writeVars = varsFromTable TableWrite _dtTable _dtColumn cs
+        tests = SmtShow.showSL <$> (concat $ renderProverTest _dtTable _dtColumn (readVars, writeVars) <$> _dtTests)
+    in
+      if null readVars || null writeVars
+      then throw $ SmtCompilerException "renderTestsFromState" $ "Unable To Construct Tests: Either no readVars or writeVars found. This is usually an issue with the column specification -- make sure it is '<module-name>.<table-name>.<column-name>'\n" ++ (show $ _csTableAssoc cs)
+      else if (length readVars == length writeVars)
        then tests
-       else [SmtShow.showSL $ (Echo "\"Unable To Construct Tests: No Variables found. This is usually an issue with the column specification -- make sure it is '<module-name>.<table-name>.<column-name>'\"")]
+       else throw $ SmtCompilerException "renderTestsFromState" "Unable To Construct Tests: there was an inequal number of read and written variables for a given column. This is usually an issue with the column specification -- make sure it is '<module-name>.<table-name>.<column-name>'"
 
-analyzeAndRenderTests :: TopLevel Node -> IO (Either String [String])
-analyzeAndRenderTests tf = do
-  symAst <- analyzeFunction tf
-  return $ case symAst of
-    Left err -> Left $ show err
-    Right sa -> case getTestsFromDoc tf of
-      Left err -> Left err
-      Right pps -> case getPreTerminationProverState sa of
-        Left err -> Left err
-        Right ps -> Right $ renderAllFromProverState ps pps
+-- analyzeFunction :: TopLevel Node -> Bool -> IO (Either SmtCompilerException (CompilerState, [CompiledSmt]))
+-- analyzeFunction (TopFun (FDefun _ _ _ args' bdy' _)) dbg = try $ do
+--   let initState = CompilerState
+--                     { _csVars = (Map.fromList $ (\x -> (x, mkSymVar x)) . _nnNamed <$> args')
+--                     , _csTableAssoc = Map.empty}
+--       compConf = CompilerConf { _enableDebug = dbg }
+--   ((), cstate, res) <- runRWST (declareTopLevelVars >> compileBody NoIf NoRelation bdy') compConf initState
+--   return $ (cstate, ([dumpModelsOnSat] ++ res))
+-- analyzeFunction _ _ = return $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
-prettyPrintProveProperty :: SymAst -> [ProveProperty] -> IO ()
-prettyPrintProveProperty sa pps = do
-  case getPreTerminationProverState sa of
-    Left err -> putStrLn err
-    Right ps -> putStrLn $ unlines $ renderAllFromProverState ps pps
+analyzeAndRenderTests :: Bool -> TopLevel Node -> IO (Either SmtCompilerException [String])
+analyzeAndRenderTests dbg tf = try $ do
+  analysisRes <- analyzeFunction tf dbg
+  case analysisRes of
+    Left err -> throw err
+    Right (compState, compiledFn) -> do
+      pps <- return $ getTestsFromDoc tf
+      tests <- return $ renderTestsFromState compState <$> pps
+      return $ (encodeSmt <$> compiledFn) ++ concat tests
 
-_docTestPay :: IO ()
-_docTestPay = do
-  f <- _getSampFunc "pay"
-  case getTestsFromDoc f of
-    Left err -> putStrLn err
-    Right pps -> do
-      a <- analyzeFunction f
-      case a of
-        Left err -> putStrLn $ show err
-        Right a' -> prettyPrintProveProperty a' pps
+-- inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+
+_compileTests :: Bool -> FilePath -> String -> String -> IO ()
+_compileTests dbg fp mod' func = do
+  f <- fst <$> inferFun False fp (ModuleName mod') func
+  res <- analyzeAndRenderTests dbg f
+  case res of
+    Left err -> putStrLn $ show err
+    Right smt -> putStrLn $ unlines smt
+
+-- fromList [
+-- (SymVar {_svName = SymName {unSymName = "appN+-analyze-tests.accounts-update-balance23"}, _svNode = appN+-analyze-tests.accounts-update-balance23::integer, _svType = SymInteger}
+--     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_to1")), _otcAccess = TableRead}),
+-- (SymVar {_svName = SymName {unSymName = "appN--analyze-tests.accounts-update-balance18"}, _svNode = appN--analyze-tests.accounts-update-balance18::integer, _svType = SymInteger}
+--     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_from0")), _otcAccess = TableRead}),
+-- (SymVar {_svName = SymName {unSymName = "bind*10_to-bal11"}, _svNode = bind*10_to-bal11::integer, _svType = SymInteger}
+--     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_to1")), _otcAccess = TableRead}),
+-- (SymVar {_svName = SymName {unSymName = "bind*5_from-bal6"}, _svNode = bind*5_from-bal6::integer, _svType = SymInteger}
+--     ,OfTableColumn {_otcTable = "analyze-tests.accounts", _otcColumn = "balance", _otcKey = TermQualIdentifier (QIdentifier (ISymbol "analyze-tests.pay_from0")), _otcAccess = TableRead})]

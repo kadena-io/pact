@@ -16,7 +16,6 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Pact.Analyze.Types
-                     , Pact.Analyze.TypesV2
                      , Pact.Analyze.Demo
                      , Pact.Analyze.DSL
   build-depends:       Decimal
