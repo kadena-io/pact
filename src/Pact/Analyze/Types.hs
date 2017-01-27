@@ -36,6 +36,7 @@ import Pact.Typecheck hiding (debug)
 import Pact.Types
 import Pact.Repl
 import Data.Aeson hiding (Object)
+import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -50,6 +51,7 @@ import qualified SmtLib.Syntax.ShowSL as SmtShow
 import qualified SmtLib.Parsers.CommandsParsers as SmtParser
 
 import qualified Text.Parsec as Parsec
+import Text.Parsec hiding (parse, try)
 
 -- !!! Orphan needed for dev, delete when finished
 instance ToJSON Node where
@@ -543,3 +545,9 @@ _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 --       [ Prim {_aNode = string10::string, _aPrimValue = PrimLit "{}:{}"}
 --       , Var {_aNode = cp.issue-inventory_owner0::string},Var {_aNode = cp.issue-inventory_cusip1::string}
 --       ]}
+
+type Parser a = Parsec String () a
+
+parseFmt :: Parser (Either () String)
+parseFmt = (manyTill anyChar (Parsec.try (string "{}")) >>= return . Right)
+  <|> (Parsec.try (char '{' >> char '}') >> return $ Left ())

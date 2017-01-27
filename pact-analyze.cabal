@@ -35,6 +35,7 @@ library
                      , groom
                      , transformers
                      , yaml
+                     , text
                      , thyme
 
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
