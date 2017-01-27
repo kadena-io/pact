@@ -408,7 +408,7 @@ evalString showLog cmd = do
 
 _eval :: String -> IO (Term Name)
 _eval cmd = evalRepl (Script "_eval") cmd >>= \r ->
-            case r of Left e -> throwM (userError $ "Failure: " ++ show e); Right v -> return v
+            case r of Left e -> throwM (userError $ " Failure: " ++ show e); Right v -> return v
 
 _run :: String -> IO ()
 _run cmd = void $ evalRepl Interactive cmd

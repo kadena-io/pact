@@ -764,7 +764,7 @@ instance Show PactError where
     show (EvalError i s) = show i ++ ": " ++ s
     show (ArgsError FunApp {..} args s) =
         show _faInfo ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
-    show (TxFailure s) = "Failure: " ++ s
+    show (TxFailure s) = " Failure: " ++ s
 
 evalError :: MonadError PactError m => Info -> String -> m a
 evalError i = throwError . EvalError i
