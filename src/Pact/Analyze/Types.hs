@@ -112,6 +112,7 @@ makeLenses ''CompilerState
 data SmtOperator where
   SingleLevelOp :: QualIdentifier -> SmtOperator
   DoubleLevelOp :: QualIdentifier -> QualIdentifier -> SmtOperator
+  TwoArgOp :: QualIdentifier -> SmtOperator
 
 data CompiledSmt = CompiledSmt
   { _smtCmd :: Command
@@ -135,7 +136,7 @@ isLogicalOperator :: String -> Bool
 isLogicalOperator s = Set.member s $ Set.fromList ["=", "and", "or", "not", "!="]
 
 isNumericalOperator :: String -> Bool
-isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/"]
+isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/", "abs", "^"]
 
 isBasicOperator :: String -> Bool
 isBasicOperator s = isCmpOperator s || isLogicalOperator s || isNumericalOperator s
@@ -150,12 +151,20 @@ basicOperatorToQualId o
   | o == "and" = SingleLevelOp $ QIdentifier $ ISymbol "and"
   | o == "or" = SingleLevelOp $ QIdentifier $ ISymbol "or"
   | o == "not" = SingleLevelOp $ QIdentifier $ ISymbol "not"
+  | o == "abs" = SingleLevelOp $ QIdentifier $ ISymbol "abs"
   | o == "+" = SingleLevelOp $ QIdentifier $ ISymbol "+"
   | o == "-" = SingleLevelOp $ QIdentifier $ ISymbol "-"
   | o == "*" = SingleLevelOp $ QIdentifier $ ISymbol "*"
   | o == "/" = SingleLevelOp $ QIdentifier $ ISymbol "/"
   | o == "!=" = DoubleLevelOp (QIdentifier $ ISymbol "not") (QIdentifier $ ISymbol "=")
+  | o == "^" = TwoArgOp $ QIdentifier $ ISymbol "^"
   | otherwise = throw $ SmtCompilerException "basicOperatorToQualId" $ "operator not supported -> " ++ o
+
+unsupportedOperators :: String -> Bool
+unsupportedOperators s = Set.member s $ Set.fromList ["log", "ln", "ceiling", "floor", "mod"]
+
+isUnsupportedOperator :: String -> Maybe String
+isUnsupportedOperator s = if unsupportedOperators s then Just s else Nothing
 
 isInsertOrUpdate :: Fun Node -> Maybe String
 isInsertOrUpdate (NativeFunc "insert") = Just "insert"
@@ -182,6 +191,40 @@ nodeToTerm n = do
     Nothing -> do
       throw $ SmtCompilerException "nodeToTerm" ("Variable " ++ show n ++ "not found in: " ++ (show csVars'))
     Just SymVar{..} -> return $ TermQualIdentifier $ QIdentifier $ ISymbol $ unSymName _svName
+
+mSymVarFromTerm :: Smt.Term -> SmtCompiler (Maybe (Node,SymVar))
+mSymVarFromTerm (TermQualIdentifier (QIdentifier (ISymbol svName'))) = do
+  svs <- Map.toList . (Map.filter (\SymVar{..}-> svName' == unSymName _svName)) <$> use csVars
+  case svs of
+    [] -> return $ Nothing
+    [sv] -> return $ Just sv
+    err -> throw $ SmtCompilerException "mSymVarFromTerm" $ "found more than one SymVar with the same name!\n" ++ show err
+mSymVarFromTerm _ = return Nothing
+
+showTermForFmt :: Smt.Term -> SmtCompiler Smt.Term
+showTermForFmt t@(TermQualIdentifier _) = do
+  mt <- mSymVarFromTerm t
+  case mt of
+    Nothing -> throw $ SmtCompilerException "showTermForFmt" $ "unable to lookup the tracked term: " ++ SmtShow.showSL t
+    Just (_n,_sv@SymVar{..}) -> return $ case _svType of
+        SymInteger -> TermQualIdentifierT (QIdentifier (ISymbol "int.to.str")) [t]
+        SymBool -> boolAsStrTerm t
+        SymString -> t
+        SymTime -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Time to String"
+        SymDecimal -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Decimal to String"
+        ty -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from: " ++ show ty
+showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "true"))) = return $ TermSpecConstant (SpecConstantString "\"true\"")
+showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "false"))) = return $ TermSpecConstant (SpecConstantString "\"false\"")
+showTermForFmt t@(TermSpecConstant (SpecConstantString _)) = return t
+showTermForFmt t@(TermSpecConstant (SpecConstantNumeral _)) = return $ TermQualIdentifierT (QIdentifier (ISymbol "int.to.str")) [t]
+showTermForFmt t@(TermSpecConstant (SpecConstantDecimal _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from literal: " ++ SmtShow.showSL t
+
+
+boolAsStrTerm :: Smt.Term -> Smt.Term
+boolAsStrTerm t = TermQualIdentifierT (QIdentifier (ISymbol "ite"))
+  [ t
+  , TermSpecConstant (SpecConstantString "\"true\"")
+  , TermSpecConstant (SpecConstantString "\"false\"")]
 
 convertType :: Node -> SymType
 convertType (OfPrimType TyInteger) = SymInteger
@@ -381,13 +424,14 @@ pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
 pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
 pattern AST_InsertOrUpdate node' fnName' table' key' objNonce' kvs' <- (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj (NodeNonce objNonce') kvs'])
+pattern AST_Format node' fmtStr' args' <- (App node' (NativeFunc "format") (AST_Lit (LString fmtStr'):args'))
 
 -- Unsupported currently
 pattern AST_Read <- (App _ (NativeFunc "read") _)
 pattern AST_AddTime <- (App _ (NativeFunc "add-time") _)
 pattern AST_Days <- (App _ (NativeFunc "days") _)
-pattern AST_Format <- (App _ (NativeFunc "format") _)
 pattern AST_Bind <- (App _ (NativeFuncSpecial "bind" _) _)
+pattern AST_UnsupportedOp s <- (App _ (NativeFunc (isUnsupportedOperator -> Just s)) _ )
 
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
@@ -444,12 +488,13 @@ compileNode inIf (AST_If node' cond' ifTrue' ifFalse') = do
 compileNode _ AST_Read = throw $ SmtCompilerException "compileNode does not support `read`" "Pact's SMT compiler is still under construction and does not support <object> return types"
 compileNode _ AST_AddTime = throw $ SmtCompilerException "compileNode" "does not yet support add-time"
 compileNode _ AST_Days = throw $ SmtCompilerException "compileNode" "does not yet support days"
-compileNode _ AST_Format = throw $ SmtCompilerException "compileNode" "does not yet support format"
 compileNode _ AST_Bind = throw $ SmtCompilerException "compileNode" "does not yet support bind"
+compileNode _ (AST_UnsupportedOp s) = throw $ SmtCompilerException "compileNode" $ "Apologies, the operator " ++ s ++ " is not yet supported"
 compileNode inIf (AST_NFun_Basic fn args) = do
   args' <- mapM (compileNode inIf) args
   case basicOperatorToQualId fn of
     SingleLevelOp op' -> return $ TermQualIdentifierT op' args'
+    TwoArgOp op' -> return $ TermQualIdentifierT op' args'
     DoubleLevelOp op1 op2 -> return $ TermQualIdentifierT op1 $ [TermQualIdentifierT op2 args']
 compileNode inIf (AST_Enforce node' app' msg') = do
   trackNewNode node'
@@ -474,6 +519,14 @@ compileNode inIf (AST_InsertOrUpdate node' fn' table' key' objNonce' kvs') = do
   keyTerm <- compileNode inIf key'
   mapM_ (bindTableVar inIf TableWrite table' keyTerm) (prepTableBindSite table' objNonce' fn' <$> kvs')
   assertEquality inIf asTerm (stringAsTerm $ fn' ++ " succeeded") Nothing >>= tellCmd
+  return $ asTerm
+compileNode inIf (AST_Format node' fmtStr' args') = do
+  trackNewNode node'
+  asTerm <- nodeToTerm node'
+  prepedFmt <- return $ parseFmtStr fmtStr'
+  terms' <- mapM (\n -> compileNode inIf n >>= showTermForFmt) args'
+  fmtAsStr <- return $ TermQualIdentifierT (QIdentifier $ ISymbol "str.++") $ constructFmt prepedFmt terms'
+  assertEquality inIf asTerm fmtAsStr (Just $ "interpreting " ++ fmtStr') >>= tellCmd
   return $ asTerm
 -- #END# Handle Natives Section
 
@@ -546,8 +599,24 @@ _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 --       , Var {_aNode = cp.issue-inventory_owner0::string},Var {_aNode = cp.issue-inventory_cusip1::string}
 --       ]}
 
-type Parser a = Parsec String () a
+data FmtStr = Placeholder
+            | FmtStrLit String
+            deriving (Show, Eq)
 
-parseFmt :: Parser (Either () String)
-parseFmt = (manyTill anyChar (Parsec.try (string "{}")) >>= return . Right)
-  <|> (Parsec.try (char '{' >> char '}') >> return $ Left ())
+parseFmtStr :: String -> [FmtStr]
+parseFmtStr s = case Parsec.parse prs "" s of
+  Left err -> throw $ SmtCompilerException "parseFmtStr" $ show err
+  Right v -> v
+  where
+    prs = (`manyTill` eof) $  (Parsec.try $ string "{}" >> return Placeholder)
+                          <|> (Parsec.try $ do str <- manyTill anyChar (Parsec.try $ lookAhead $ string "{}")
+                                               return $ FmtStrLit str)
+                          <|> (Parsec.try $ many anyChar >>= return . FmtStrLit)
+
+constructFmt :: [FmtStr] -> [Smt.Term] -> [Smt.Term]
+constructFmt [] [] = []
+constructFmt [FmtStrLit s] [] = literalToTerm (LString s) : []
+constructFmt (Placeholder:_) [] = throw $ SmtCompilerException "constructFmt" $ "cannot interpret `format`: too many placeholders, not enough args!"
+constructFmt [] args = throw $ SmtCompilerException "constructFmt" $ "cannot interpret `format`: too many args, not enough placeholders! " ++ show (SmtShow.showSL <$> args)
+constructFmt (Placeholder:restFmt) (t:restArgs) = t : constructFmt restFmt restArgs
+constructFmt ((FmtStrLit s):restFmt) args = literalToTerm (LString s) : constructFmt restFmt args

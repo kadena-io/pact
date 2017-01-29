@@ -45,4 +45,14 @@
     (enforce-keyset 'module-keyset)
     (enforce (and (> a b) (enf-gt to a b)) "bar")
   )
+
+  (defun retsBool (a:integer b:integer)
+    (enforce-keyset 'module-keyset)
+    (enforce (> a b) "bar")
+  )
+  (defun fmt-tests (to:string from:string a:integer b:integer)
+    "Make composite key from OWNER and CUSIP"
+    (format "{}:{}" to (retsBool a b))
+  )
+
 )
