@@ -123,8 +123,13 @@ descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
 userTable :: Show n => Term n -> Domain RowKey (Columns Persistable)
-userTable TTable {..} = UserTables $ fromString $ asString _tModule ++ "." ++ asString _tTableName
-userTable t = error $ "creating user table from non-TTable: " ++ show t
+userTable = UserTables . userTable'
+
+-- | unsafe function to create TableName from TTable.
+userTable' :: Show n => Term n -> TableName
+userTable' TTable {..} = fromString $ asString _tModule ++ "." ++ asString _tTableName
+userTable' t = error $ "creating user table from non-TTable: " ++ show t
+
 
 read' :: RNativeFun e
 read' i as@(table@TTable {}:TLitString key:rest) = do
@@ -181,14 +186,14 @@ bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> 
 keys' :: RNativeFun e
 keys' i [table@TTable {..}] = do
     guardTable i table
-    (\b -> TList b tTyString def) . map toTerm <$> keys _tTableName
+    (\b -> TList b tTyString def) . map toTerm <$> keys (userTable' table)
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
 txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
-  (\b -> TList b tTyInteger def) . map toTerm <$> txids _tTableName (fromIntegral key)
+  (\b -> TList b tTyInteger def) . map toTerm <$> txids (userTable' table) (fromIntegral key)
 txids' i as = argsError i as
 
 

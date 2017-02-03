@@ -714,7 +714,7 @@ tLit = (`TLiteral` def)
 tStr :: String -> Term n
 tStr = toTerm
 
--- | Support pact `=`, only for list, object, literal, keyset
+-- | Support pact `=` for value-level terms
 termEq :: Eq n => Term n -> Term n -> Bool
 termEq (TList a _ _) (TList b _ _) = length a == length b && and (zipWith termEq a b)
 termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
@@ -723,6 +723,9 @@ termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
                                      | otherwise = lkpEq ts p
 termEq (TLiteral a _) (TLiteral b _) = a == b
 termEq (TKeySet a _) (TKeySet b _) = a == b
+termEq (TValue a _) (TValue b _) = a == b
+termEq (TTable a b c d _) (TTable e f g h _) = a == e && b == f && c == g && d == h
+termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False
 
 
@@ -758,6 +761,7 @@ instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax err
 data PactError =
     EvalError Info String |
     ArgsError FunApp [Term Name] String |
+    DbError String |
     TxFailure String
 
 instance Show PactError where
@@ -765,6 +769,7 @@ instance Show PactError where
     show (ArgsError FunApp {..} args s) =
         show _faInfo ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
     show (TxFailure s) = " Failure: " ++ s
+    show (DbError s) = " Failure: Database exception: " ++ s
 
 evalError :: MonadError PactError m => Info -> String -> m a
 evalError i = throwError . EvalError i
@@ -836,7 +841,7 @@ instance Show RowKey where show (RowKey s) = show s
 
 
 newtype Columns v = Columns { _columns :: M.Map ColumnId v }
-    deriving (Eq,Show,Generic)
+    deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance (ToJSON v) => ToJSON (Columns v) where
     toJSON (Columns m) = object . map (\(k,v) -> pack (asString k) .= toJSON v) . M.toList $ m
 instance (FromJSON v) => FromJSON (Columns v) where
@@ -875,8 +880,10 @@ instance FromJSON TxLog where
 
 data WriteType = Insert|Update|Write deriving (Eq,Show)
 
+-- | Shape of back-end methods: use MVar for state, run in IO.
 type Method e a = MVar e -> IO a
 
+-- | Fun-record type for Pact back-ends.
 data PactDb e = PactDb {
       _readRow :: forall k v . (IsString k,FromJSON v) =>
                   Domain k v -> k -> Method e (Maybe v)
@@ -984,10 +991,11 @@ call s act = do
   return r
 {-# INLINE call #-}
 
+-- | Invoke a backend method, catching all exceptions as 'DbError'
 method :: (PactDb e -> Method e a) -> Eval e a
 method f = do
   EvalEnv {..} <- ask
-  liftIO $ f _eePactDb _eePactDbVar
+  handleAll (throwError . DbError . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 readRow :: (IsString k,FromJSON v) => Domain k v -> k -> Eval e (Maybe v)

@@ -36,7 +36,6 @@ module Pact.Pure
     where
 
 import Control.Lens hiding (op,use,modifying)
-import Control.Applicative
 import Data.List
 import Control.Monad
 import Prelude hiding (exp)
@@ -193,11 +192,13 @@ commitDb tid (PureState (Db us ms ks) _ (TempLog uls ml kl)) = PureState committ
 getLogs :: Domain k v -> TxId -> Db -> [TxLog]
 getLogs d@Modules tid db' = toLog d $ firstOf (dbModules.tLog.ix tid) db'
 getLogs d@KeySets tid db' = toLog d $ firstOf (dbKeySets.tLog.ix tid) db'
-getLogs d@(UserTables t) tid db' = toLog d $ firstOf (dbUserTables.ix t.utTable.tLog.ix tid) db'
+getLogs d@(UserTables t) tid db' =
+  toLog d $ fmap (fmap (fmap (toTerm :: Persistable -> Term Name))) $
+  firstOf (dbUserTables.ix t.utTable.tLog.ix tid) db'
 {-# INLINE getLogs #-}
 
-toLog :: (ToJSON v, AsString k) =>
-     Domain k v -> Maybe (HashMap String v) -> [TxLog]
+toLog :: (ToJSON j, AsString k) =>
+     Domain k v -> Maybe (HashMap String j) -> [TxLog]
 toLog d (Just m) = map (\(k,v) -> TxLog (asString d) (asString k) (toJSON v)) $ HM.toList m
 toLog _ Nothing = []
 {-# INLINE toLog #-}

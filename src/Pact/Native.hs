@@ -126,8 +126,9 @@ langDefs =
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string value from message data body as integer. `$(read-integer \"age\")`"
-    ,defRNative "read-msg" readMsg (funType a [("key",tTyString)])
-     "Read KEY from message data body. Will recognize JSON types as corresponding Pact type.\
+    ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
+     "Read KEY from message data body, or data body itself if not provided. \
+     \Will recognize JSON types as corresponding Pact type.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defNative (specialForm Bind) bind
@@ -252,6 +253,7 @@ format i as = argsError i as
 
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = parseMsgKey i "read-msg" key
+readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
 
 

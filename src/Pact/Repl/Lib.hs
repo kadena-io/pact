@@ -98,6 +98,11 @@ replDefs = ("Repl",
      ,defRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
+
+     ,defRNative "json" json' (funType tTyValue [("exp",a)]) $
+      "Encode pact expression EXP as a JSON value. " ++
+      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " ++
+      "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -275,3 +280,8 @@ tc i as = case as of
               _ -> do
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " ++ modname ++ ": Unable to resolve all types"
+
+
+json' :: RNativeFun LibState
+json' _ [a] = return $ TValue (toJSON a) def
+json' i as = argsError i as

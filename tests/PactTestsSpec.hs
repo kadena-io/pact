@@ -30,4 +30,4 @@ findTests = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)
 
 
 runScript :: String -> SpecWith ()
-runScript fp = it fp $ (fst <$> execScript' Interactive fp) >>= (`shouldSatisfy` isRight)
+runScript fp = it fp $ (fst <$> execScript' (Script fp) fp) >>= (`shouldSatisfy` isRight)
