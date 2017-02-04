@@ -73,8 +73,14 @@ library
     build-depends:
                   criterion >= 1.1.1.0 && < 1.2
                 , statistics >= 0.13.3.0 && < 0.14
+                , snap-core
+                , snap-server
+                , ed25519-donna
+                , base16-bytestring
+                , blake2
     exposed-modules:
                     Pact.Docgen
+                    , Pact.Server.Types
 
   if impl(ghcjs)
     cpp-options:   -DGHCJS_BROWSER
