@@ -15,6 +15,8 @@ module Pact.Server.Types.API
   , PollResponse
   , ListenerRequest(..)
   , ListenerResponse
+  , InboundPactChan(..),OutboundPactChan(..),PactResult(..)
+  , initChans,writeInbound,writeOutbound,readInbound,readOutbound
   ) where
 
 import Data.Text (Text)
@@ -24,6 +26,10 @@ import Data.Aeson.Types (Options(..))
 import Control.Lens hiding ((.=))
 import GHC.Generics
 import Data.Int
+import Control.Concurrent.Chan
+
+
+
 
 import Pact.Server.Types.Base
 import Pact.Server.Types.Command
@@ -96,3 +102,26 @@ instance ToJSON ListenerRequest where
 instance FromJSON ListenerRequest
 
 type ListenerResponse = ApiResponse PollResult
+
+
+newtype InboundPactChan = InboundPactChan (Chan [Command Payload])
+data PactResult = PactResult {
+  _prCommand :: Command Payload,
+  _prResult :: Value
+  } deriving (Eq,Show)
+newtype OutboundPactChan = OutboundPactChan (Chan [PactResult])
+
+initChans :: IO (InboundPactChan,OutboundPactChan)
+initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> newChan)
+
+writeInbound :: InboundPactChan -> [Command Payload] -> IO ()
+writeInbound (InboundPactChan c) = writeChan c
+
+readInbound :: InboundPactChan -> IO [Command Payload]
+readInbound (InboundPactChan c) = readChan c
+
+writeOutbound :: OutboundPactChan -> [PactResult] -> IO ()
+writeOutbound (OutboundPactChan c) = writeChan c
+
+readOutbound :: OutboundPactChan -> IO [PactResult]
+readOutbound (OutboundPactChan c) = readChan c

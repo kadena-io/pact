@@ -16,7 +16,6 @@ import Prelude hiding (log)
 import Control.Lens hiding ((.=))
 import Control.Concurrent
 import Control.Monad.Reader
-
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString.Lazy (toStrict)
@@ -25,21 +24,22 @@ import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Map.Strict as Map
-
+import qualified Data.Text as T
 import Data.Aeson hiding (defaultOptions, Result(..))
 import qualified Data.Serialize as SZ
-
 import Data.Thyme.Clock
 import Data.Thyme.Time.Core (unUTCTime, toMicroseconds)
-
 import Snap.Core
 import Snap.Http.Server as Snap
+import Data.Text.Encoding
 
-import Pact.Server.Types
+import Pact.Server.Types hiding (log)
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
---  , _aiIdCounter :: MVar Int
+  , _aiIdCounter :: MVar Int
+  , _aiInbound :: InboundPactChan
+  , _aiOutbound :: OutboundPactChan
 --  , _aiDispatch :: Dispatch
 --  , _aiConfig :: Config.Config
 --  , _aiPubConsensus :: MVar PublishedConsensus
@@ -72,7 +72,13 @@ api = route [
       ,("listen",registerListener)
       ]
 
-sendPublicBatch = undefined
+sendPublicBatch :: Api ()
+sendPublicBatch = do
+  (_,SubmitBatch cmds) <- readJSON
+  when (null cmds) $ die "Empty Batch"
+  rks <- mapM queueCmds $ group 8000 cmds
+  writeResponse $ ApiSuccess $ RequestKeys $ concat rks
+
 poll = undefined
 registerListener = undefined
 
@@ -84,7 +90,7 @@ die res = do
   _ <- getResponse -- chuck what we've done so far
   setJSON
   log res
-  writeLBS $ encode $ (ApiFailure res :: ApiResponse ())
+  writeLBS $ encode (ApiFailure res :: ApiResponse ())
   finishWith =<< getResponse
 
 readJSON :: FromJSON t => Api (BS.ByteString,t)
@@ -105,44 +111,25 @@ setJSON = modifyResponse $ setHeader "Content-Type" "application/json"
 writeResponse :: ToJSON j => j -> Api ()
 writeResponse j = setJSON >> writeLBS (encode j)
 
-{-
-aliases need to be verified by api against public key
-then, alias can be paired with requestId in message to create unique rid
-polling can then be on alias and client rid
--}
 
---buildCmdRpc :: Command -> Api (RequestKey,SignedRPC)
---buildCmdRpc Command {..} = do
---  (_,PactEnvelope {..} :: PactEnvelope PactRPC) <- tryParseJSON (BSL.fromStrict $ _pmEnvelope)
---  storedCK <- Map.lookup _peAlias <$> view (aiConfig.clientPublicKeys)
---  unless (storedCK == Just _pmKey) $ die "Invalid alias/public key"
---  rid <- getNextRequestId
---  let ce = CommandEntry $! SZ.encode $ PublicMessage _pmEnvelope
---  return (RequestKey _pmHsh,mkCmdRpc ce _peAlias rid (Digest _peAlias _pmSig _pmKey CMD _pmHsh))
---
---group :: Int -> [a] -> [[a]]
---group _ [] = []
---group n l
---  | n > 0 = take n l : (group n (drop n l))
---  | otherwise = error "Negative n"
---
---sendPublicBatch :: Api ()
---sendPublicBatch = do
---  (_,SubmitBatch cmds) <- readJSON
---  when (null cmds) $ die "Empty Batch"
---  rks <- mapM sendInSensisbleChunks $ group 8000 cmds
---  writeResponse $ ApiSuccess $ RequestKeys $ concat rks
---
---sendInSensisbleChunks :: [Command] -> Api [RequestKey]
---sendInSensisbleChunks cmds = do
---  rpcs <- mapM buildCmdRpc cmds
---  let Command {..} = head cmds
---      btch = map snd rpcs
---      hsh = hash $ SZ.encode $ btch
---      dig = Digest "batch" (Sig "") _pmKey CMDB hsh
---      rpc = mkCmdBatchRPC (map snd rpcs) dig
---  enqueueRPC $! rpc -- CMDB' $! CommandBatch (reverse cmds) NewMsg
---  return $ fst <$> rpcs
+buildCmdRpc :: Command T.Text -> Api (RequestKey,Command Payload)
+buildCmdRpc c@PublicCommand {..} = do
+  (_,p) <- tryParseJSON (BSL.fromStrict $ encodeUtf8 _cmdPayload)
+  return (RequestKey _cmdHash,p <$ c)
+
+group :: Int -> [a] -> [[a]]
+group _ [] = []
+group n l
+  | n > 0 = take n l : group n (drop n l)
+  | otherwise = error "Negative n"
+
+
+queueCmds :: [Command T.Text] -> Api [RequestKey]
+queueCmds cmds = do
+  rpcs <- mapM buildCmdRpc cmds
+  ic <- view aiInbound
+  liftIO $ writeInbound ic (map snd rpcs)
+  return $ fst <$> rpcs
 --
 --
 --poll :: Api ()
@@ -165,12 +152,12 @@ polling can then be on alias and client rid
 --  setAccessLog (ConfigFileLog "log/access.log") $
 --  setPort port defaultConfig
 --
---getNextRequestId :: Api RequestId
---getNextRequestId = do
---  cntr <- view aiIdCounter
---  cnt <- liftIO (takeMVar cntr)
---  liftIO $ putMVar cntr (cnt + 1)
---  return $ RequestId $ show cnt
+getNextRequestId :: Api RequestId
+getNextRequestId = do
+  cntr <- view aiIdCounter
+  cnt <- liftIO (takeMVar cntr)
+  liftIO $ putMVar cntr (cnt + 1)
+  return $ RequestId $ T.pack $ show cnt
 --
 --enqueueRPC :: SignedRPC -> Api ()
 --enqueueRPC signedRPC = do
