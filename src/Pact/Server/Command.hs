@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Kadena.Command.CommandLayer where
+module Pact.Server.Command where
 
 import Control.Concurrent
 import Data.Default
@@ -91,8 +91,8 @@ applyLocal config (dbv,cv) bs = do
         return $ jsonResult $
                CommandError "Local execution failed" (Just $ show e)
 
-applyLogEntry :: LogEntry -> CommandM CommandResult
-applyLogEntry e = do
+applyPreprocessedCommand :: PreprocessedCommand  -> CommandM CommandResult
+applyPreprocessedCommand PreprocessedPublicCommand{..} = do
     let
         cmd = _leCommand e
         bs = unCommandEntry $ _cmdEntry cmd

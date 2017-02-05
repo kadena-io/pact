@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -70,10 +71,29 @@ mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
                                 , _usPubKey = pk
                                 , _usSig = sign hsh sk pk}
 
+data PreprocessedCommand =
+  PreprocessedPublicCommand
+    { _ppcmdEnvelope :: !(Either String PactEnvelope) -- * captures parsing issues
+    , _ppcmdSigs :: ![(UserSig, Bool)] -- * captures signature verification failures
+    , _ppcmdHash :: !(Either String Hash) -- * captures hash mistmatches
+    }
+  deriving (Eq,Generic)
+
+verifyCommand :: Command -> PreprocessedCommand
+verifyCommand PublicCommand{..} =
+  let ppcmdEnvelope' = A.eitherDecodeStrict' _cmdEnvelope
+      ppcmdSigs' = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+      ppcmdHash' = verifyHash _cmdHash _cmdEnvelope
+  in ppcmdSigs' `seq` PreprocessedPublicCommand
+                        { _ppcmdEnvelope = ppcmdEnvelope'
+                        , _ppcmdSigs = ppcmdSigs'
+                        , _ppcmdHash = ppcmdHash'}
+{-# INLINE verifyCommand #-}
+
 data PactEnvelope = PactEnvelope
   { _pePayload :: !PactRPC
   , _peRequestId :: !RequestId
-  } deriving (Eq)
+  } deriving (Eq, Generic)
 instance ToJSON PactEnvelope where
   toJSON (PactEnvelope r rid) = object [ "payload" .= r, "rid" .= rid]
 instance FromJSON PactEnvelope where

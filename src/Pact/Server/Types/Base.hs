@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -9,6 +10,7 @@
 module Pact.Server.Types.Base
   ( parseB16JSON, toB16JSON, toB16Text, parseB16Text, failMaybe
   , PublicKey, PrivateKey, Signature(..), sign, valid, importPublic, importPrivate, exportPublic
+  , verifyUserSig, verifyHash
   , UserName(..)
   , PPKScheme(..)
   , UserSig(..), usUserName, usScheme, usPubKey, usSig
@@ -162,6 +164,17 @@ valid (Hash h) = Ed25519.valid h
 sign :: Hash -> PrivateKey -> PublicKey -> Signature
 sign (Hash h) = Ed25519.sign h
 {-# INLINE sign #-}
+
+verifyUserSig :: Hash -> UserSig -> Bool
+verifyUserSig h UserSig{..} = case _usScheme of
+  ED25519 -> valid h _usPubKey _usSig
+{-# INLINE verifyUserSig #-}
+
+verifyHash :: Hash -> ByteString -> Either String Hash
+verifyHash h b = if hash b == h
+  then Right h
+  else Left $ "Hash Mismatch, received " ++ show h ++ " but our hashing resulted in " ++ show (hash b)
+{-# INLINE verifyHash #-}
 
 instance Eq PublicKey where
   b == b' = exportPublic b == exportPublic b'
