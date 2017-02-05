@@ -8,6 +8,7 @@ packages:
 extra-deps:
 - trifecta-1.6
 - ed25519-donna-0.1.1
+- safe-exceptions-0.1.4.0
 
 flags: {}
 
