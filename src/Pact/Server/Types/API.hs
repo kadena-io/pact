@@ -17,9 +17,9 @@ module Pact.Server.Types.API
   , ListenerResponse
   ) where
 
-import Data.Char (toLower)
-import qualified Data.Aeson as A
+import Data.Text (Text)
 import Data.Aeson hiding (Success)
+import qualified Data.Aeson as A
 import Data.Aeson.Types (Options(..))
 import Control.Lens hiding ((.=))
 import GHC.Generics
@@ -58,7 +58,7 @@ instance FromJSON RequestKeys
 
 -- | Submit new commands for execution
 data SubmitBatch = SubmitBatch
-  { _sbCmds :: ![Command]
+  { _sbCmds :: ![Command Text]
   } deriving (Eq,Generic)
 makeLenses ''SubmitBatch
 instance ToJSON SubmitBatch where

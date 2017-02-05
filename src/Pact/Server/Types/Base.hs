@@ -21,6 +21,8 @@ module Pact.Server.Types.Base
   , RequestKey(..), initialRequestKey
   , RequestId(..)
   , lensyConstructorToNiceJson
+  , userSigToPactPubKey
+  , userSigsToPactKeySet
   ) where
 
 import Control.Lens
@@ -34,6 +36,7 @@ import qualified Crypto.Hash.BLAKE2.BLAKE2bp as BLAKE
 import Data.Hashable (Hashable)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
 
 import Data.Aeson
@@ -47,6 +50,8 @@ import qualified Data.Serialize as S
 import Data.Text hiding (drop, toLower)
 import Data.Text.Encoding
 import Data.Char (toLower)
+
+import qualified Pact.Types as Pact
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
@@ -231,5 +236,13 @@ instance Show RequestKey where
 
 initialRequestKey :: RequestKey
 initialRequestKey = RequestKey initialHash
+
+
+userSigToPactPubKey :: UserSig -> Pact.PublicKey
+userSigToPactPubKey UserSig{..} = case _usScheme of
+  ED25519 -> Pact.PublicKey $ Ed25519.exportPublic _usPubKey
+
+userSigsToPactKeySet :: [UserSig] -> Pact.KeySet
+userSigsToPactKeySet = Set.fromList . fmap userSigToPactPubKey
 
 makeLenses ''UserSig

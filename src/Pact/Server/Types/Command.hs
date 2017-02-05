@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -18,8 +19,6 @@ import Control.Exception.Safe
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 
-import Data.Semigroup
-
 import Data.Aeson
 import Data.Aeson as A
 
@@ -27,8 +26,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ hiding (get)
 import Data.String
-import Data.Text
-import Data.Text.Encoding
+import Data.Text hiding (filter, null, all)
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
@@ -40,28 +38,28 @@ import Pact.Types.Orphans ()
 import Pact.Server.Types.Base
 import Pact.Server.Types.SQLite
 
-data Command = PublicCommand
-  { _cmdEnvelope :: !ByteString
+data Command a = PublicCommand
+  { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !Hash
-  } deriving (Eq,Generic)
-instance Serialize Command
-instance ToJSON Command where
+  } deriving (Eq,Show,Generic)
+instance (Serialize a) => Serialize (Command a)
+instance (ToJSON a) => ToJSON (Command a) where
     toJSON (PublicCommand payload uSigs hsh) =
-        object [ "env" .= decodeUtf8 payload
+        object [ "env" .= payload
                , "sigs" .= toJSON uSigs
                , "hash" .= hsh
                ]
-instance FromJSON Command where
+instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
-                PublicCommand <$> (encodeUtf8 <$> o .: "env")
+                PublicCommand <$> (o .: "env")
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hsh")
 
-mkCommand :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command
-mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (PactEnvelope a rid)
+mkCommand :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command ByteString
+mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
 
-mkCommand' :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command
+mkCommand' :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
   where
     hsh = hash env
@@ -71,34 +69,35 @@ mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
                                 , _usPubKey = pk
                                 , _usSig = sign hsh sk pk}
 
-data PreprocessedCommand =
-  PreprocessedPublicCommand
-    { _ppcmdEnvelope :: !(Either String PactEnvelope) -- * captures parsing issues
-    , _ppcmdSigs :: ![(UserSig, Bool)] -- * captures signature verification failures
-    , _ppcmdHash :: !(Either String Hash) -- * captures hash mistmatches
-    }
-  deriving (Eq,Generic)
+data ProcessedCommand =
+  ProcFail !String |
+  ProcSucc !(Command Payload)
+  deriving (Show, Eq, Generic)
 
-verifyCommand :: Command -> PreprocessedCommand
-verifyCommand PublicCommand{..} =
-  let ppcmdEnvelope' = A.eitherDecodeStrict' _cmdEnvelope
-      ppcmdSigs' = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
-      ppcmdHash' = verifyHash _cmdHash _cmdEnvelope
-  in ppcmdSigs' `seq` PreprocessedPublicCommand
-                        { _ppcmdEnvelope = ppcmdEnvelope'
-                        , _ppcmdSigs = ppcmdSigs'
-                        , _ppcmdHash = ppcmdHash'}
+verifyCommand :: Command ByteString -> ProcessedCommand
+verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
+      (Right env', Right _, Nothing) -> ProcSucc $! orig { _cmdPayload = env' }
+      (e, h, s) -> ProcFail $! "Invalid command: " ++ (toErrStr e) ++ (toErrStr h) ++ (maybe "" id s)
+  where
+    !ppcmdPayload' = A.eitherDecodeStrict' _cmdPayload
+    ppcmdSigs' :: [(UserSig, Bool)]
+    !ppcmdSigs' = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+    !ppcmdHash' = verifyHash _cmdHash _cmdPayload
+    mSigIssue = if all snd ppcmdSigs' then Nothing else Just $ "Invalid sig(s) found: " ++ show (fst <$> filter (not.snd) ppcmdSigs')
+    toErrStr :: Either String a -> String
+    toErrStr (Right _) = ""
+    toErrStr (Left s) = s ++ "; "
 {-# INLINE verifyCommand #-}
 
-data PactEnvelope = PactEnvelope
-  { _pePayload :: !PactRPC
-  , _peRequestId :: !RequestId
-  } deriving (Eq, Generic)
-instance ToJSON PactEnvelope where
-  toJSON (PactEnvelope r rid) = object [ "payload" .= r, "rid" .= rid]
-instance FromJSON PactEnvelope where
-  parseJSON = withObject "PactEnvelope" $ \o ->
-                    PactEnvelope <$> o .: "payload" <*> o .: "rid"
+data Payload = Payload
+  { _pPayload :: !PactRPC
+  , _pRequestId :: !RequestId
+  } deriving (Show, Eq, Generic)
+instance ToJSON Payload where
+  toJSON (Payload r rid) = object [ "payload" .= r, "rid" .= rid]
+instance FromJSON Payload where
+  parseJSON = withObject "Payload" $ \o ->
+                    Payload <$> o .: "payload" <*> o .: "rid"
 
 data PactRPC =
     Exec ExecMsg |
@@ -144,6 +143,7 @@ instance ToJSON ContMsg where
 data CommandConfig = CommandConfig {
       _ccDbFile :: Maybe FilePath
     , _ccDebugFn :: String -> IO ()
+    , _ccEntity :: String
     }
 $(makeLenses ''CommandConfig)
 
@@ -151,7 +151,6 @@ data CommandState = CommandState {
      _csRefStore :: RefStore
     }
 $(makeLenses ''CommandState)
-
 
 data ExecutionMode =
     Transactional { _emTxId :: TxId } |
@@ -192,7 +191,15 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
         object [ "status" .= ("Success" :: String)
                , "result" .= a ]
 
-type ApplyLocal = ByteString -> IO CommandResult
+
+type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
+type ApplyPPCmd = ExecutionMode -> ProcessedCommand -> IO CommandResult
+
+data CommandExecInterface = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd
+  , _ceiApplyPPCmd :: ApplyPPCmd
+  }
+makeLenses ''CommandExecInterface
 
 type CommandM a = ReaderT CommandEnv IO a
 
