@@ -28,12 +28,6 @@ import Data.Int
 import Pact.Server.Types.Base
 import Pact.Server.Types.Command
 
-lensyConstructorToNiceJson :: Int -> String -> String
-lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
-  where
-    firstToLower (c:cs) = toLower c : cs
-    firstToLower _ = error "You've managed to screw up the drop number or the field name"
-
 data ApiResponse a =
   ApiSuccess
     { _apiResponse :: !a} |

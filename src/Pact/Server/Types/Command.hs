@@ -39,23 +39,68 @@ import Pact.Types.Orphans ()
 import Pact.Server.Types.Base
 import Pact.Server.Types.SQLite
 
-data CommandMessage =
-    PublicMessage {
-      _cmMessage :: !ByteString
-    } deriving (Eq,Ord,Show,Generic)
-instance Serialize CommandMessage
+data Command = PublicCommand
+  { _cmdEnvelope :: !ByteString
+  , _cmdSigs :: ![UserSig]
+  , _cmdHash :: !Hash
+  } deriving (Eq,Generic)
+instance Serialize Command
+instance ToJSON Command where
+    toJSON (PublicCommand payload uSigs hsh) =
+        object [ "env" .= decodeUtf8 payload
+               , "sigs" .= toJSON uSigs
+               , "hash" .= hsh
+               ]
+instance FromJSON Command where
+    parseJSON = withObject "Command" $ \o ->
+                PublicCommand <$> (encodeUtf8 <$> o .: "env")
+                              <*> (o .: "sigs" >>= parseJSON)
+                              <*> (o .: "hsh")
 
-instance ToJSON CommandMessage where
-  toJSON (PublicMessage m) = toJSON $ decodeUtf8 m
-instance FromJSON CommandMessage where
-  parseJSON (A.String m) = return $ PublicMessage $ encodeUtf8 m
-  parseJSON _ = mempty
+mkCommand :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command
+mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (PactEnvelope a rid)
 
-data ExecMsg = ExecMsg {
-      _pmCode :: Text
-    , _pmData :: Value
-    }
-    deriving (Eq,Generic,Show)
+mkCommand' :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command
+mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
+  where
+    hsh = hash env
+    sig (u, scheme, sk, pk) = UserSig
+                                { _usUserName = u
+                                , _usScheme = scheme
+                                , _usPubKey = pk
+                                , _usSig = sign hsh sk pk}
+
+data PactEnvelope = PactEnvelope
+  { _pePayload :: !PactRPC
+  , _peRequestId :: !RequestId
+  } deriving (Eq)
+instance ToJSON PactEnvelope where
+  toJSON (PactEnvelope r rid) = object [ "payload" .= r, "rid" .= rid]
+instance FromJSON PactEnvelope where
+  parseJSON = withObject "PactEnvelope" $ \o ->
+                    PactEnvelope <$> o .: "payload" <*> o .: "rid"
+
+data PactRPC =
+    Exec ExecMsg |
+    Continuation ContMsg
+    deriving (Eq,Show)
+instance FromJSON PactRPC where
+    parseJSON =
+        withObject "RPC" $ \o ->
+            (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
+instance ToJSON PactRPC where
+    toJSON (Exec p) = object ["exec" .= p]
+    toJSON (Continuation p) = object ["yield" .= p]
+
+class ToRPC a where
+    toRPC :: a -> PactRPC
+instance ToRPC ExecMsg where toRPC = Exec
+instance ToRPC ContMsg where toRPC = Continuation
+
+data ExecMsg = ExecMsg
+  { _pmCode :: Text
+  , _pmData :: Value
+  } deriving (Eq,Generic,Show)
 instance FromJSON ExecMsg where
     parseJSON =
         withObject "PactMsg" $ \o ->
@@ -75,79 +120,6 @@ instance FromJSON ContMsg where
             ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback"
 instance ToJSON ContMsg where
     toJSON (ContMsg t s r) = object [ "txid" .= t, "step" .= s, "rollback" .= r]
-
-data RPCDigest = RPCDigest {
-      _rdPublicKey :: ByteString
-    , _rdSignature :: ByteString
-    } deriving (Eq)
-instance FromJSON RPCDigest where
-    parseJSON =
-        withObject "RPCDigest" $ \o ->
-            RPCDigest <$> fmap encodeUtf8 (o .: "key") <*> fmap encodeUtf8 (o .: "sig")
-
-data Command = Command {
-      _pmEnvelope :: ByteString
-    , _pmKey :: PublicKey
-    , _pmSig :: Signature
-    , _pmHsh :: Hash
-    } deriving (Eq,Generic)
-instance Serialize Command
-instance ToJSON Command where
-    toJSON (Command payload pk (Sig s) hsh) =
-        object [ "env" .= decodeUtf8 payload
-               , "key" .= pk
-               , "sig" .= toB16JSON s
-               , "hsh" .= hsh
-               ]
-instance FromJSON Command where
-    parseJSON = withObject "Command" $ \o ->
-                Command <$> (encodeUtf8 <$> o .: "env")
-                            <*> o .: "key"
-                            <*> (o .: "sig" >>= \t -> Sig <$> parseB16JSON t)
-                            <*> (o .: "hsh")
-
-mkCommand :: ToJSON a => PrivateKey -> PublicKey -> Alias -> String -> a -> Command
-mkCommand sk pk al rid a = mkCommand' sk pk $ BSL.toStrict $ A.encode (PactEnvelope a rid al)
-
-mkCommand' :: PrivateKey -> PublicKey -> ByteString -> Command
-mkCommand' sk pk env = Command env pk sig hsh
-  where
-    hsh = hash env
-    sig = sign hsh sk pk
-
-data PactEnvelope a = PactEnvelope {
-      _pePayload :: a
-    , _peRequestId :: String
-    , _peAlias :: Alias
-} deriving (Eq)
-instance (ToJSON a) => ToJSON (PactEnvelope a) where
-    toJSON (PactEnvelope r rid al) = object [ "payload" .= r,
-                                              "rid" .= rid,
-                                              "alias" .= al ]
-instance (FromJSON a) => FromJSON (PactEnvelope a) where
-    parseJSON = withObject "PactEnvelope" $ \o ->
-                    PactEnvelope <$> o .: "payload"
-                                     <*> o .: "rid"
-                                     <*> o .: "alias"
-
-data PactRPC =
-    Exec ExecMsg |
-    Continuation ContMsg
-    deriving (Eq,Show)
-instance FromJSON PactRPC where
-    parseJSON =
-        withObject "RPC" $ \o ->
-            (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
-instance ToJSON PactRPC where
-    toJSON (Exec p) = object ["exec" .= p]
-    toJSON (Continuation p) = object ["yield" .= p]
-
-class ToRPC a where
-    toRPC :: a -> PactRPC
-
-instance ToRPC ExecMsg where toRPC = Exec
-instance ToRPC ContMsg where toRPC = Continuation
-
 
 data CommandConfig = CommandConfig {
       _ccDbFile :: Maybe FilePath
@@ -178,8 +150,7 @@ data CommandEnv = CommandEnv {
     }
 $(makeLenses ''CommandEnv)
 
-data CommandException = CommandException String
-                        deriving (Typeable)
+data CommandException = CommandException String deriving (Typeable)
 instance Show CommandException where show (CommandException e) = e
 instance Exception CommandException
 
@@ -207,7 +178,6 @@ type CommandM a = ReaderT CommandEnv IO a
 
 runCommand :: CommandEnv -> CommandM a -> IO a
 runCommand e a = runReaderT a e
-
 
 throwCmdEx :: MonadThrow m => String -> m a
 throwCmdEx = throw . CommandException
