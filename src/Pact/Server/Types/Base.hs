@@ -32,7 +32,7 @@ import Control.Monad.Reader
 
 import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
-import qualified Crypto.Hash.BLAKE2.BLAKE2bp as BLAKE
+import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
 
 import Data.Hashable (Hashable)
 import Data.Map (Map)
@@ -141,13 +141,13 @@ instance FromJSON UserSig
 -- if you want to change this, you need to retool the bloom filter as well
 -- So long as this is divisible by 4 you're fine
 hashLengthAsBS :: Int
-hashLengthAsBS = 32
+hashLengthAsBS = 64
 
 hashLengthAsBase16 :: Int
 hashLengthAsBase16 = hashLengthAsBS * 2
 
 hash :: ByteString -> Hash
-hash = Hash . BLAKE.hash hashLengthAsBS B.empty
+hash = Hash . BLAKE.hash hashLengthAsBS mempty
 {-# INLINE hash #-}
 
 newtype Hash = Hash { unHash :: ByteString }
