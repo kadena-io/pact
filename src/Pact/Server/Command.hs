@@ -9,7 +9,7 @@ module Pact.Server.Command
 import Control.Concurrent
 import Data.Default
 import Data.Aeson as A
-import Data.ByteString.Lazy (toStrict)
+
 
 import Control.Monad.Reader
 import Control.Exception.Safe
@@ -58,26 +58,26 @@ initCommandLayer config = do
       klog "Creating Pact Schema"
       createSchema v
       return (PSLVar v,rv)
-  return $ CommandExecInterface
-    { _ceiApplyCmd = \eMode cmd -> applyTransactionalPCmd config mvars eMode (verifyCommand cmd)
+  return CommandExecInterface
+    { _ceiApplyCmd = \eMode cmd -> applyTransactionalPCmd config mvars eMode cmd (verifyCommand cmd)
     , _ceiApplyPPCmd = applyTransactionalPCmd config mvars }
 
-applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> ProcessedCommand -> IO CommandResult
-applyTransactionalPCmd _ _ _ (ProcFail s) = return $ jsonResult s
-applyTransactionalPCmd config (dbv,cv) exMode (ProcSucc cmd) = do
+applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand -> IO PactResult
+applyTransactionalPCmd _ _ _ cmd (ProcFail s) = return $ jsonResult (cmdToRequestKey cmd) s
+applyTransactionalPCmd config (dbv,cv) exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv config exMode dbv cv) $ runPayload cmd
   case r of
     Right cr -> return cr
-    Left e -> return $ jsonResult $
+    Left e -> return $ jsonResult (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => a -> CommandResult
-jsonResult = CommandResult . toStrict . A.encode
+jsonResult :: ToJSON a => RequestKey -> a -> PactResult
+jsonResult cmd a = PactResult cmd $ toJSON a
 
-runPayload :: Command Payload -> CommandM CommandResult
-runPayload PublicCommand{..} =
+runPayload :: Command Payload -> CommandM PactResult
+runPayload c@PublicCommand{..} =
   case _pPayload _cmdPayload of
-    (Exec pm) -> applyExec pm _cmdSigs
+    (Exec pm) -> applyExec (cmdToRequestKey c) pm _cmdSigs
     (Continuation ym) -> applyContinuation ym _cmdSigs
 
 parse :: ExecutionMode -> Text -> CommandM [Exp]
@@ -91,8 +91,8 @@ parse Local code =
       TF.Failure f -> throwCmdEx $ "Pact parse failed: " ++
                       displayS (renderCompact (TF._errDoc f)) ""
 
-applyExec :: ExecMsg -> [UserSig] -> CommandM CommandResult
-applyExec (ExecMsg code edata) ks = do
+applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM PactResult
+applyExec rk (ExecMsg code edata) ks = do
   CommandEnv {..} <- ask
   exps <- parse _ceMode code
   when (null exps) $ throwCmdEx "No expressions found"
@@ -106,7 +106,7 @@ applyExec (ExecMsg code edata) ks = do
                 , _eeMsgSigs = userSigsToPactKeySet ks
                 , _eeMsgBody = edata
                 , _eeTxId = fromMaybe 0 $ firstOf emTxId _ceMode
-                , _eeEntity = _ccEntity $ _ceConfig
+                , _eeEntity = _ccEntity _ceConfig
                 , _eePactStep = Nothing
                 , _eePactDb = pdb
                 , _eePactDbVar = mv
@@ -119,7 +119,7 @@ applyExec (ExecMsg code edata) ks = do
            when (_ceMode /= Local) $ liftIO $ modifyMVar_ _ceState $ \rs ->
              return $ over (csRefStore.rsModules)
                       (HM.union (HM.fromList (_rsNew (_evalRefs rEvalState')))) rs
-           return $ jsonResult $ CommandSuccess t -- TODO Yield handling
+           return $ jsonResult rk $ CommandSuccess t -- TODO Yield handling
     Left e -> throwCmdEx $ "Exec failed: " ++ show e
 
 execTerms :: ExecutionMode -> [Term Name] -> Eval e (Term Name)
@@ -133,7 +133,7 @@ execTerms mode terms = do
     Local -> evalRollbackTx
   return er
 
-applyContinuation :: ContMsg -> [UserSig] -> CommandM CommandResult
+applyContinuation :: ContMsg -> [UserSig] -> CommandM PactResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"
 
 --mkRPC :: ToRPC a => a ->  CommandEntry

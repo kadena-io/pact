@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -20,7 +21,7 @@ module Pact.Server.Types.Base
   , CommandResult(..)
   , RequestKey(..), initialRequestKey
   , RequestId(..)
-  , lensyConstructorToNiceJson
+  , lensyConstructorToNiceJson, lensyOptions, lensyToJSON, lensyParseJSON
   , userSigToPactPubKey
   , userSigsToPactKeySet
   ) where
@@ -55,6 +56,16 @@ import qualified Pact.Types as Pact
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
+
+lensyOptions :: Int -> Options
+lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
+
+lensyToJSON :: (Generic a, GToJSON (Rep a)) => Int -> a -> Value
+lensyToJSON n = genericToJSON (lensyOptions n)
+
+lensyParseJSON
+  :: (Generic a, GFromJSON (Rep a)) => Int -> Value -> Parser a
+lensyParseJSON n = genericParseJSON (lensyOptions n)
 
 lensyConstructorToNiceJson :: Int -> String -> String
 lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
@@ -229,7 +240,9 @@ instance FromJSON CommandResult where
   parseJSON _ = mempty
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, ToJSON, FromJSON, Serialize, Hashable)
+  deriving (Eq, Ord, Generic, Serialize, Hashable)
+instance ToJSON RequestKey where toJSON (RequestKey h) = toJSON h
+instance FromJSON RequestKey where parseJSON v = RequestKey <$> parseJSON v
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk

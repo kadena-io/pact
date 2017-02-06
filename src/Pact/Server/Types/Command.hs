@@ -49,15 +49,15 @@ data Command a = PublicCommand
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
     toJSON (PublicCommand payload uSigs hsh) =
-        object [ "env" .= payload
+        object [ "cmd" .= payload
                , "sigs" .= toJSON uSigs
                , "hash" .= hsh
                ]
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
-                PublicCommand <$> (o .: "env")
+                PublicCommand <$> (o .: "cmd")
                               <*> (o .: "sigs" >>= parseJSON)
-                              <*> (o .: "hsh")
+                              <*> (o .: "hash")
 
 mkCommand :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command ByteString
 mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
@@ -195,8 +195,13 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
                , "result" .= a ]
 
 
-type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
-type ApplyPPCmd = ExecutionMode -> ProcessedCommand -> IO CommandResult
+data PactResult = PactResult {
+  _prReqKey :: RequestKey,
+  _prResult :: Value
+  } deriving (Eq,Show)
+
+type ApplyCmd = ExecutionMode -> Command ByteString -> IO PactResult
+type ApplyPPCmd = ExecutionMode -> Command ByteString -> ProcessedCommand -> IO PactResult
 
 data CommandExecInterface = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd

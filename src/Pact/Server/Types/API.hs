@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
@@ -16,19 +17,19 @@ module Pact.Server.Types.API
   , ListenerRequest(..)
   , ListenerResponse
   , InboundPactChan(..),OutboundPactChan(..),PactResult(..)
-  , initChans,writeInbound,writeOutbound,readInbound,tryReadOutbound
+  , initChans,writeInbound,writeOutbound,readInbound,tryReadOutbound,cmdToRequestKey
   ) where
 
 import Data.Text (Text)
 import Data.Aeson hiding (Success)
 import qualified Data.Aeson as A
-import Data.Aeson.Types (Options(..))
 import Control.Lens hiding ((.=))
 import GHC.Generics
 import Data.Int
 import Control.Concurrent.Chan
 import Control.Concurrent.STM.TChan
 import Control.Concurrent.STM
+import Data.ByteString (ByteString)
 
 
 
@@ -61,27 +62,33 @@ data RequestKeys = RequestKeys
 makeLenses ''RequestKeys
 
 instance ToJSON RequestKeys where
-  toEncoding = genericToEncoding (defaultOptions {fieldLabelModifier = lensyConstructorToNiceJson 3})
-instance FromJSON RequestKeys
+  toJSON = lensyToJSON 3
+instance FromJSON RequestKeys where
+  parseJSON = lensyParseJSON 3
+
+cmdToRequestKey :: Command a -> RequestKey
+cmdToRequestKey PublicCommand {..} = RequestKey _cmdHash
 
 -- | Submit new commands for execution
 data SubmitBatch = SubmitBatch
   { _sbCmds :: ![Command Text]
-  } deriving (Eq,Generic)
+  } deriving (Eq,Generic,Show)
 makeLenses ''SubmitBatch
 instance ToJSON SubmitBatch where
-  toEncoding = genericToEncoding (defaultOptions {fieldLabelModifier = lensyConstructorToNiceJson 3})
-instance FromJSON SubmitBatch
+  toJSON = lensyToJSON 3
+instance FromJSON SubmitBatch where
+  parseJSON = lensyParseJSON 3
 
 -- | What you get back from a SubmitBatch
 type SubmitBatchResponse = ApiResponse RequestKeys
 
 -- | Poll for results by RequestKey
-newtype Poll = Poll [RequestKey]
+newtype Poll = Poll { _pRequestIds :: [RequestKey] }
   deriving (Eq,Show,Generic)
 instance ToJSON Poll where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON Poll
+  toJSON = lensyToJSON 2
+instance FromJSON Poll where
+  parseJSON = lensyParseJSON 2
 
 -- | What you get back from a Poll
 data PollResult = PollResult
@@ -91,8 +98,9 @@ data PollResult = PollResult
   } deriving (Eq,Show,Generic)
 makeLenses ''PollResult
 instance ToJSON PollResult where
-  toEncoding = genericToEncoding (defaultOptions {fieldLabelModifier = lensyConstructorToNiceJson 3})
-instance FromJSON PollResult
+  toJSON = lensyToJSON 3
+instance FromJSON PollResult where
+  parseJSON = lensyParseJSON 3
 
 type PollResponse = ApiResponse [PollResult]
 
@@ -106,20 +114,16 @@ instance FromJSON ListenerRequest
 type ListenerResponse = ApiResponse PollResult
 
 
-newtype InboundPactChan = InboundPactChan (Chan [Command Payload])
-data PactResult = PactResult {
-  _prCommand :: Command Payload,
-  _prResult :: Value
-  } deriving (Eq,Show)
+newtype InboundPactChan = InboundPactChan (Chan [Command ByteString])
 newtype OutboundPactChan = OutboundPactChan (TChan [PactResult])
 
 initChans :: IO (InboundPactChan,OutboundPactChan)
-initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> (atomically newTChan))
+initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> atomically newTChan)
 
-writeInbound :: InboundPactChan -> [Command Payload] -> IO ()
+writeInbound :: InboundPactChan -> [Command ByteString] -> IO ()
 writeInbound (InboundPactChan c) = writeChan c
 
-readInbound :: InboundPactChan -> IO [Command Payload]
+readInbound :: InboundPactChan -> IO [Command ByteString]
 readInbound (InboundPactChan c) = readChan c
 
 writeOutbound :: OutboundPactChan -> [PactResult] -> IO ()
