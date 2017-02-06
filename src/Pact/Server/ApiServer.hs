@@ -20,10 +20,10 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString.Lazy (toStrict)
 import Data.HashSet (HashSet)
-import qualified Data.HashSet as HashSet
+import qualified Data.HashSet as S
 import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Map.Strict as Map
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import Data.Aeson hiding (defaultOptions, Result(..))
 import qualified Data.Serialize as SZ
@@ -42,7 +42,7 @@ data ApiEnv = ApiEnv
   , _aiOutbound :: OutboundPactChan
 --  , _aiDispatch :: Dispatch
 --  , _aiConfig :: Config.Config
---  , _aiPubConsensus :: MVar PublishedConsensus
+  , _aiResults :: MVar (HM.HashMap RequestKey Value)
   }
 makeLenses ''ApiEnv
 
@@ -79,7 +79,29 @@ sendPublicBatch = do
   rks <- mapM queueCmds $ group 8000 cmds
   writeResponse $ ApiSuccess $ RequestKeys $ concat rks
 
-poll = undefined
+poll :: Api ()
+poll = do
+  (_,Poll rks) <- readJSON
+  log $ "Polling for " ++ show rks
+  rs <- HM.filterWithKey (\k _ -> k `elem` rks) <$> serviceOutbound
+  when (HM.null rs) $ log $ "No results found for poll!" ++ show rks
+  setJSON
+  writeLBS $ encode $ pollResultToReponse rs
+
+pollResultToReponse :: HM.HashMap RequestKey Value -> PollResponse
+pollResultToReponse m = ApiSuccess (kvToRes <$> HM.toList m)
+  where
+    kvToRes (rk,v) = PollResult { _prRequestKey = rk, _prLatency = 0, _prResponse = v}
+
+--poll :: Api ()
+--poll = do
+--  (_,Poll rks) <- readJSON
+--  log $ "Polling for " ++ show rks
+--  PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList rks)
+--  when (HashMap.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
+--  setJSON
+--  writeLBS $ encode $ pollResultToReponse possiblyIncompleteResults
+
 registerListener = undefined
 
 log :: String -> Api ()
@@ -130,6 +152,17 @@ queueCmds cmds = do
   ic <- view aiInbound
   liftIO $ writeInbound ic (map snd rpcs)
   return $ fst <$> rpcs
+
+-- | Drain outbound queue, and return map of results
+serviceOutbound :: Api (HM.HashMap RequestKey Value)
+serviceOutbound = do
+  outm <- view aiOutbound >>= liftIO . tryReadOutbound
+  view aiResults >>= \v -> liftIO $ modifyMVar v $ \rm -> do
+    let toResult (PactResult PublicCommand {..} r) = (RequestKey _cmdHash,r)
+        rm' = maybe rm (HM.union rm . HM.fromList . map toResult) outm
+    return (rm',rm')
+
+
 --
 --
 --poll :: Api ()

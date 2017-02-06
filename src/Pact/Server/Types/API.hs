@@ -16,7 +16,7 @@ module Pact.Server.Types.API
   , ListenerRequest(..)
   , ListenerResponse
   , InboundPactChan(..),OutboundPactChan(..),PactResult(..)
-  , initChans,writeInbound,writeOutbound,readInbound,readOutbound
+  , initChans,writeInbound,writeOutbound,readInbound,tryReadOutbound
   ) where
 
 import Data.Text (Text)
@@ -27,6 +27,8 @@ import Control.Lens hiding ((.=))
 import GHC.Generics
 import Data.Int
 import Control.Concurrent.Chan
+import Control.Concurrent.STM.TChan
+import Control.Concurrent.STM
 
 
 
@@ -85,7 +87,7 @@ instance FromJSON Poll
 data PollResult = PollResult
   { _prRequestKey :: !RequestKey
   , _prLatency :: !Int64
-  , _prResponse :: !CommandResult
+  , _prResponse :: !Value
   } deriving (Eq,Show,Generic)
 makeLenses ''PollResult
 instance ToJSON PollResult where
@@ -109,10 +111,10 @@ data PactResult = PactResult {
   _prCommand :: Command Payload,
   _prResult :: Value
   } deriving (Eq,Show)
-newtype OutboundPactChan = OutboundPactChan (Chan [PactResult])
+newtype OutboundPactChan = OutboundPactChan (TChan [PactResult])
 
 initChans :: IO (InboundPactChan,OutboundPactChan)
-initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> newChan)
+initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> (atomically newTChan))
 
 writeInbound :: InboundPactChan -> [Command Payload] -> IO ()
 writeInbound (InboundPactChan c) = writeChan c
@@ -121,7 +123,7 @@ readInbound :: InboundPactChan -> IO [Command Payload]
 readInbound (InboundPactChan c) = readChan c
 
 writeOutbound :: OutboundPactChan -> [PactResult] -> IO ()
-writeOutbound (OutboundPactChan c) = writeChan c
+writeOutbound (OutboundPactChan c) = atomically . writeTChan c
 
-readOutbound :: OutboundPactChan -> IO [PactResult]
-readOutbound (OutboundPactChan c) = readChan c
+tryReadOutbound :: OutboundPactChan -> IO (Maybe [PactResult])
+tryReadOutbound (OutboundPactChan c) = atomically $ tryReadTChan c
