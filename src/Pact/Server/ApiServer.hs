@@ -30,7 +30,8 @@ import Snap.Http.Server as Snap
 import Data.Text.Encoding
 import Data.ByteString (ByteString)
 
-import Pact.Server.Types hiding (log)
+import Pact.Types.Command
+import Pact.Types.API
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()

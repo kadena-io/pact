@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Pact.Server.Types.SQLite
+module Pact.Types.SQLite
   ( SType(..), RType(..)
   , dbError
   , bindParams

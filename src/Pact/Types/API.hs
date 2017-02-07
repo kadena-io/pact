@@ -6,7 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Server.Types.API
+module Pact.Types.API
   ( ApiResponse(..), apiResponse, apiError
   , RequestKeys(..), rkRequestKeys
   , SubmitBatch(..), sbCmds
@@ -31,11 +31,8 @@ import Control.Concurrent.STM.TChan
 import Control.Concurrent.STM
 import Data.ByteString (ByteString)
 
-
-
-
-import Pact.Server.Types.Base
-import Pact.Server.Types.Command
+import Pact.Types.Command
+import Pact.Types.Util
 
 data ApiResponse a =
   ApiSuccess

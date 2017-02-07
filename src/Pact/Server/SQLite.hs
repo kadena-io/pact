@@ -36,9 +36,8 @@ import Control.Concurrent.MVar
 import Data.Maybe
 import qualified Data.Attoparsec.Text as AP
 
-import Pact.Server.Types
-
 import Pact.Types
+import Pact.Types.SQLite
 import Pact.Types.Orphans ()
 import Pact.Compile
 import Pact.Eval

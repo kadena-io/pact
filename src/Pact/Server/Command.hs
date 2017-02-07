@@ -31,7 +31,9 @@ import Pact.Eval
 import Pact.Compile as Pact
 import Pact.Repl
 
-import Pact.Server.Types
+import Pact.Types.API
+import Pact.Types.Command
+import Pact.Types.SQLite
 import Pact.Server.SQLite as PactSL
 
 type PactMVars = (DBVar,MVar CommandState)

@@ -1,13 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 module Pact.Server.Main where
 
-import Pact.Server.Types
 import Pact.Server.Command
 import Pact.Server.ApiServer
 import Pact.Types
 import Control.Monad
 import Control.Monad.State
 import Control.Concurrent
+import Pact.Types.Command
+import Pact.Types.API
 
 main :: IO ()
 main = do

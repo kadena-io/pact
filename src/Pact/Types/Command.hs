@@ -12,7 +12,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Pact.Server.Types.Command
+module Pact.Types.Command
 --  (Command(..)
 --  ) where
   where
@@ -27,19 +27,24 @@ import Data.Aeson as A
 import Data.Maybe
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
-import Data.Serialize as SZ hiding (get)
+import Data.Serialize as SZ
 import Data.String
 import Data.Text hiding (filter, null, all)
+import qualified Data.Set as S
+import Data.Text.Encoding
+import Data.Hashable (Hashable)
+
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
 
 import Pact.Pure
-import Pact.Types hiding (PublicKey)
+import Pact.Types as Pact
 import Pact.Types.Orphans ()
 
-import Pact.Server.Types.Base
-import Pact.Server.Types.SQLite
+import Pact.Types.Crypto as Base
+import Pact.Types.SQLite
+import Pact.Types.Util
 
 data Command a = PublicCommand
   { _cmdPayload :: !a
@@ -59,14 +64,14 @@ instance (FromJSON a) => FromJSON (Command a) where
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
 
-mkCommand :: [(PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command ByteString
+mkCommand :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> RequestId -> PactRPC -> Command ByteString
 mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
 
-mkCommand' :: [(PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command ByteString
+mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
   where
     hsh = hash env
-    sig (scheme, sk, pk) = UserSig scheme pk (sign hsh sk pk)
+    sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
 
 data ProcessedCommand =
   ProcFail !String |
@@ -88,6 +93,23 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
     toErrStr (Left s) = s ++ "; "
 {-# INLINE verifyCommand #-}
 
+
+verifyUserSig :: Hash -> UserSig -> Bool
+verifyUserSig h UserSig{..} = case _usScheme of
+  ED25519 -> case (fromJSON (String _usPubKey),fromJSON (String _usSig)) of
+    (Success pk,Success sig) -> valid h pk sig
+    _ -> False
+{-# INLINE verifyUserSig #-}
+
+
+userSigToPactPubKey :: UserSig -> Pact.PublicKey
+userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
+
+userSigsToPactKeySet :: [UserSig] -> Pact.KeySet
+userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
+
+
+
 data Payload = Payload
   { _pPayload :: !PactRPC
   , _pRequestId :: !RequestId
@@ -97,6 +119,34 @@ instance ToJSON Payload where
 instance FromJSON Payload where
   parseJSON = withObject "Payload" $ \o ->
                     Payload <$> o .: "payload" <*> o .: "rid"
+
+
+newtype RequestId = RequestId { unRequestId :: Text } deriving (Show, Eq, Ord, Generic)
+
+instance Serialize RequestId where
+  put = put . encodeUtf8 . unRequestId
+  get = RequestId . decodeUtf8 <$> SZ.get
+instance ToJSON RequestId where
+  toJSON (RequestId u) = String u
+instance FromJSON RequestId where
+  parseJSON (String u) = return $ RequestId u
+  parseJSON _ = mzero
+
+data UserSig = UserSig
+  { _usScheme :: !PPKScheme
+  , _usPubKey :: !Text
+  , _usSig :: !Text }
+  deriving (Eq, Ord, Show, Generic)
+
+
+instance Serialize UserSig
+instance ToJSON UserSig where
+  toJSON UserSig {..} = object [
+    "scheme" .= _usScheme, "pubKey" .= _usPubKey, "sig" .= _usSig ]
+instance FromJSON UserSig where
+  parseJSON = withObject "UserSig" $ \o ->
+    UserSig . fromMaybe ED25519 <$> o .:? "scheme" <*> o .: "pubKey" <*> o .: "sig"
+
 
 data PactRPC =
     Exec ExecMsg |
@@ -203,7 +253,6 @@ data CommandExecInterface = CommandExecInterface
   { _ceiApplyCmd :: ApplyCmd
   , _ceiApplyPPCmd :: ApplyPPCmd
   }
-makeLenses ''CommandExecInterface
 
 type CommandM a = ReaderT CommandEnv IO a
 
@@ -212,3 +261,20 @@ runCommand e a = runReaderT a e
 
 throwCmdEx :: MonadThrow m => String -> m a
 throwCmdEx = throw . CommandException
+
+
+newtype RequestKey = RequestKey { unRequestKey :: Hash}
+  deriving (Eq, Ord, Generic, Serialize, Hashable)
+instance ToJSON RequestKey where toJSON (RequestKey h) = toJSON h
+instance FromJSON RequestKey where parseJSON v = RequestKey <$> parseJSON v
+
+instance Show RequestKey where
+  show (RequestKey rk) = show rk
+
+initialRequestKey :: RequestKey
+initialRequestKey = RequestKey initialHash
+
+
+
+makeLenses ''UserSig
+makeLenses ''CommandExecInterface
