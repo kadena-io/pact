@@ -42,10 +42,10 @@ import Bound
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Text.Trifecta (Rendering)
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
-import Data.Text (pack,unpack)
+import Data.Text (Text,pack,unpack)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Aeson
 import qualified Data.ByteString.UTF8 as BS
@@ -71,6 +71,7 @@ import Data.Foldable
 import Control.Concurrent.MVar
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
+import Data.Monoid
 
 
 import Data.Serialize (Serialize)
@@ -88,7 +89,27 @@ renderCompactString = renderString renderCompact RPlain
 renderPrettyString :: Pretty a => RenderColor -> a -> String
 renderPrettyString c a = renderString (renderPretty 0.4 100) c a
 
-data Info = Info { _iInfo :: !(Maybe (Rendering,Delta)) }
+-- | Code location, length from parsing.
+data Parsed = Parsed {
+  _pDelta :: Delta,
+  _pLength :: Int
+  } deriving (Eq,Show,Ord)
+instance Default Parsed where def = Parsed mempty 0
+instance HasBytes Parsed where bytes = bytes . _pDelta
+instance Pretty Parsed where pretty = pretty . _pDelta
+
+newtype Code = Code { _unCode :: Text }
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid)
+instance Show Code where show = unpack . _unCode
+instance Pretty Code where
+  pretty (Code c) | T.compareLength c maxLen == GT =
+                      text $ unpack (T.take maxLen c <> "...")
+                  | otherwise = text $ unpack c
+    where maxLen = 30
+
+-- | For parsed items, original code and parse info;
+-- for runtime items, nothing
+data Info = Info { _iInfo :: !(Maybe (Code,Parsed)) }
 -- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""
@@ -106,7 +127,7 @@ instance Ord Info where
 -- renderer is for line numbers and such
 renderInfo :: Info -> String
 renderInfo (Info Nothing) = ""
-renderInfo (Info (Just (_,d))) =
+renderInfo (Info (Just (_,Parsed d _))) =
     case d of
       (Directed f l c _ _) -> BS.toString f ++ ":" ++ show (succ l) ++ ":" ++ show c
       (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
@@ -357,15 +378,17 @@ makeLenses ''TypeVarName
 
 
 
-data Exp = ELiteral { _eLiteral :: !Literal, _eInfo :: !Info }
-           | ESymbol { _eSymbol :: !String, _eInfo :: !Info }
-           | EAtom { _eAtom :: !String
-                   , _eQualifier :: !(Maybe String)
-                   , _eType :: !(Maybe (Type TypeName))
-                   , _eInfo :: !Info }
-           | EList { _eList :: ![Exp], _eInfo :: !Info }
-           | EObject { _eObject :: ![(Exp,Exp)], _eInfo :: !Info }
-           | EBinding { _eBinding :: ![(Exp,Exp)], _eInfo :: !Info }
+data Exp =
+  ELiteral { _eLiteral :: !Literal, _eParsed :: !Parsed } |
+  ESymbol { _eSymbol :: !String, _eParsed :: !Parsed } |
+  EAtom { _eAtom :: !String
+        , _eQualifier :: !(Maybe String)
+        , _eType :: !(Maybe (Type TypeName))
+        , _eParsed :: !Parsed
+        } |
+  EList { _eList :: ![Exp], _eParsed :: !Parsed } |
+  EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
+  EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
            deriving (Eq,Generic)
 makePrisms ''Exp
 
@@ -480,18 +503,18 @@ data Module = Module {
     _mName :: !ModuleName
   , _mKeySet :: !KeySetName
   , _mDocs :: !(Maybe String)
-  , _mCode :: !Exp
+  , _mCode :: !Code
   } deriving (Eq)
 instance Show Module where
   show Module {..} =
     "(Module " ++ asString _mName ++ " '" ++ asString _mKeySet ++ maybeDelim " " _mDocs ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= show _mCode ]
+    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode ]
     ++ maybe [] (return . ("docs" .=)) _mDocs
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> pure (ELiteral (LString "Code persist TODO") def)
+    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code"
 
 
 data Term n =

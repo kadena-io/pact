@@ -96,7 +96,7 @@ applyExec rk (ExecMsg code edata) ks = do
   CommandEnv {..} <- ask
   exps <- parse _ceMode code
   when (null exps) $ throwCmdEx "No expressions found"
-  terms <- forM exps $ \exp -> case compile exp of
+  terms <- forM exps $ \exp -> case compile (mkTextInfo code) exp of
             Right r -> return r
             Left err -> throwCmdEx $ show err
   (CommandState refStore) <- liftIO $ readMVar _ceState

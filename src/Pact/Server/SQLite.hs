@@ -362,7 +362,7 @@ _test1 =
                (PactKeySet [PublicKey "frah"] "stuff") e
       print =<< _readRow psl KeySets "ks1" e
       _writeRow psl Write Modules "mod1"
-               (Module "mod1" "mod-admin-keyset" Nothing $ ELiteral (LString "code") (Info Nothing)) e
+               (Module "mod1" "mod-admin-keyset" Nothing "code") e
       print =<< _readRow psl Modules "mod1" e
       void $ commit' e
       tids <- _txids psl "stuff" (fromIntegral t) e
@@ -408,7 +408,7 @@ nolog e = modifyMVar_ e $ \m -> return $ m { _log = \_ _ -> return () }
 parseCompile :: T.Text -> [Term Name]
 parseCompile code = compiled where
     (Right es) = AP.parseOnly exprs code
-    (Right compiled) = mapM compile es
+    (Right compiled) = mapM (compile mkEmptyInfo) es
 
 
 _pact :: Bool -> IO ()

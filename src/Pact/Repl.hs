@@ -154,8 +154,9 @@ locatePactReplScript fp = do
 compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
+  src <- readFile fp
   s <- initReplState (Script fp)
-  (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile e (return . Right)))
+  (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 
 
 exprsOnly :: Parser [Exp]
@@ -204,7 +205,7 @@ loop h abortOnError lastResult = do
     r <- if null line then rSuccess
          else do
            d <- getDelta
-           errToUnit $ parsedCompileEval $ TF.parseString exprs d line
+           errToUnit $ parsedCompileEval line $ TF.parseString exprs d line
     case r of
       Left _ | abortOnError -> do
                  outStrLn HErr "Aborting execution"
@@ -244,29 +245,29 @@ colors :: ReplMode -> RenderColor
 colors Interactive = RColor
 colors _ = RPlain
 
-parsedCompileEval :: TF.Result [Exp] -> Repl (Either String (Term Name))
-parsedCompileEval r = do
+parsedCompileEval :: String -> TF.Result [Exp] -> Repl (Either String (Term Name))
+parsedCompileEval src r = do
   let fc (Left e) _ = return $ Left e
-      fc _ exp = compileEval exp
+      fc _ exp = compileEval src exp
   handleParse r $ \es -> foldM fc (Right (toTerm True)) es
 
 
-handleCompile :: Exp -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
-handleCompile exp a =
-    case compile exp of
+handleCompile :: String -> Exp -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
+handleCompile src exp a =
+    case compile (mkStringInfo src) exp of
       Right t -> a t
       Left (SyntaxError i@Info {..} e) -> do
           case _iInfo of
             Just (_,d) -> do
                         mode <- use rMode
-                        outStr HErr (renderPrettyString (colors mode) d)
+                        outStr HErr (renderPrettyString (colors mode) (_pDelta d))
                         outStrLn HErr $ ": error: " ++ e
             Nothing -> outStrLn HErr $ "[No location]: " ++ e
           return (Left $ show i ++ ": " ++ show e)
 
 
-compileEval :: Exp -> Repl (Either String (Term Name))
-compileEval exp = handleCompile exp $ \e -> pureEval (eval e)
+compileEval :: String -> Exp -> Repl (Either String (Term Name))
+compileEval src exp = handleCompile src exp $ \e -> pureEval (eval e)
 
 
 pureEval :: Show a => Eval LibState a -> Repl (Either String a)
@@ -301,8 +302,8 @@ renderErr a@(ArgsError f _ _) = return $ renderInfo (_faInfo f) ++ ": " ++ show 
 renderErr a = do
   m <- use rMode
   let i = case m of
-            Script f -> Info (Just (mempty,Directed (BS.fromString f) 0 0 0 0))
-            _ -> Info (Just (mempty,Lines 0 0 0 0))
+            Script f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
+            _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
   return $ renderInfo i ++ ":" ++ show a
 
 
@@ -337,8 +338,9 @@ loadFile f = do
   rFile .= Just computedPath
   catch (do
           pr <- TF.parseFromFileEx exprs computedPath
+          src <- liftIO $ readFile computedPath
           when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
-          r <- parsedCompileEval pr
+          r <- parsedCompileEval src pr
           when (isPactFile f) $ void useReplLib
           restoreFile
           return r)
@@ -390,7 +392,7 @@ useReplLib = rEvalState.evalRefs.rsLoaded %= HM.union (moduleToMap replDefs)
 
 
 evalRepl' :: String -> Repl (Either String (Term Name))
-evalRepl' cmd = useReplLib >> parsedCompileEval (TF.parseString exprsOnly mempty cmd)
+evalRepl' cmd = useReplLib >> parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
 
 evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
 evalRepl m cmd = initReplState m >>= evalStateT (evalRepl' cmd)

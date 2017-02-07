@@ -3,6 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -17,16 +18,19 @@ module Pact.Compile
      expr,exprs
     ,compile
     ,dec
+    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
     )
 
 where
 
 import Text.Trifecta as TF hiding (spaces)
+import Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.List
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Arrow
 import Prelude hiding (exp)
 import Bound
@@ -40,6 +44,8 @@ import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
 import Data.Decimal
+import qualified Data.Attoparsec.Text as AP
+import qualified Data.Text as T
 
 symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"
@@ -52,39 +58,44 @@ style = IdentifierStyle "pact"
         Symbol
         ReservedIdentifier
 
+
 expr :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Exp
 expr = do
-  (!r,!p) <- (,) <$> rend <*> position
-  let inf = Info (Just (r,p))
-  TF.try (ELiteral . LDecimal <$> neg dec <*> pure inf <?> "Decimal literal")
+  delt <- position
+  let inf = do
+        end <- position
+        let len = bytes end - bytes delt
+        return $ Parsed delt (fromIntegral len)
+  TF.try (ELiteral . LDecimal <$> neg dec <*> inf <?> "Decimal literal")
    <|>
-   (ELiteral . LInteger <$> neg natural <*> pure inf <?> "Integer literal")
+   (ELiteral . LInteger <$> neg natural <*> inf <?> "Integer literal")
    <|>
-   (ELiteral . LString <$> stringLiteral <*> pure inf <?> "String literal")
+   (ELiteral . LString <$> stringLiteral <*> inf <?> "String literal")
    <|>
-   (reserve style "true" >> ELiteral (LBool True) <$> pure inf <?> "Boolean true")
+   (reserve style "true" >> ELiteral (LBool True) <$> inf <?> "Boolean true")
    <|>
-   (reserve style "false" >> ELiteral (LBool False) <$> pure inf <?> "Boolean false")
+   (reserve style "false" >> ELiteral (LBool False) <$> inf <?> "Boolean false")
    <|>
-   (ESymbol <$> (char '\'' >> ident style) <*> pure inf <?> "Symbol literal")
+   (ESymbol <$> (char '\'' >> ident style) <*> inf <?> "Symbol literal")
    <|>
    do
      a <- ident style
-     TF.try (typed >>= \t -> return (EAtom a Nothing (Just t) inf) <?> "typed atom") <|>
-       TF.try (qualified >>= \q -> return (EAtom a (Just q) Nothing inf) <?> "qual atom") <|>
-       (return (EAtom a Nothing Nothing inf) <?> "bare atom")
+     TF.try (typed >>= \t -> inf >>= \i -> return (EAtom a Nothing (Just t) i) <?> "typed atom") <|>
+       TF.try (qualified >>= \q -> inf >>= \i -> return (EAtom a (Just q) Nothing i) <?> "qual atom") <|>
+       (inf >>= \i -> return (EAtom a Nothing Nothing i) <?> "bare atom")
    <|>
-   (EList <$> parens (sepBy expr spaces) <*> pure inf <?> "sexp")
+   (EList <$> parens (sepBy expr spaces) <*> inf <?> "sexp")
    <|>
    do
      is <- brackets (sepBy expr spaces) <?> "list literal"
-     return $ EList (EAtom "list" Nothing Nothing def:is) inf
+     i <- inf
+     return $ EList (EAtom "list" Nothing Nothing i:is) i
    <|> do
      ps <- pairs
      let ops = map fst ps
          kvs = map snd ps
-     if all (== ":") ops then return $ EObject kvs inf
-     else if all (== ":=") ops then return $ EBinding kvs inf
+     if all (== ":") ops then EObject kvs <$> inf
+     else if all (== ":=") ops then EBinding kvs <$> inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
 
 qualified :: (Monad m,TokenParsing m) => m String
@@ -165,9 +176,21 @@ pairs =
 parseS :: TF.Parser a -> String -> TF.Result a
 parseS p = TF.parseString p mempty
 
-parseF :: TF.Parser a -> FilePath -> IO (TF.Result a)
-parseF p fp = parseS p <$> readFile fp
+parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
+parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 
+type MkInfo = Exp -> Info
+
+mkEmptyInfo :: MkInfo
+mkEmptyInfo e = Info (Just (mempty,_eParsed e))
+
+mkStringInfo :: String -> MkInfo
+mkStringInfo s e = Info (Just (fromString $ take (_pLength d) $ drop (fromIntegral $ bytes d) s,d))
+  where d = _eParsed e
+
+mkTextInfo :: T.Text -> MkInfo
+mkTextInfo s e = Info (Just (Code $ T.take (_pLength d) $ T.drop (fromIntegral $ bytes d) s,d))
+  where d = _eParsed e
 
 data CompileState = CompileState {
   _csFresh :: Int,
@@ -176,24 +199,27 @@ data CompileState = CompileState {
 instance Default CompileState where def = CompileState 0 def
 makeLenses ''CompileState
 
-type Compile a = StateT CompileState (Except SyntaxError) a
+type Compile a = ReaderT MkInfo (StateT CompileState (Except SyntaxError)) a
 
 reserved :: [String]
 reserved = words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-compile :: Exp -> Either SyntaxError (Term Name)
-compile e = runExcept (evalStateT (run e) def)
+compile :: MkInfo -> Exp -> Either SyntaxError (Term Name)
+compile mi e = runExcept (evalStateT (runReaderT (run e) mi) def)
 
 
 syntaxError :: Info -> String -> Compile a
 syntaxError i s = throwError $ SyntaxError i s
 
+syntaxError' :: Exp -> String -> Compile a
+syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
+
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse [ESymbol s _] i = return $ TUse (fromString s) i
 doUse _ i = syntaxError i "Use only takes a module symbol name"
 
-doModule :: [Exp] -> Info -> Info -> Exp -> Compile (Term Name)
-doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
+doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
+doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   case es of
     [] -> syntaxError ai "Empty module"
     (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
@@ -214,11 +240,14 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai mc =
             csModule .= Just (fromString n)
             bd <- mapNonEmpty "module" (run >=> defOnly) body li
             csModule .= Nothing
+            let code = case li of
+                  Info Nothing -> "<code unavailable>"
+                  Info (Just (c,_)) -> c
             return $ TModule
-              (Module (fromString n) (fromString k) docs mc)
+              (Module (fromString n) (fromString k) docs code)
               (abstract (const Nothing) (TList bd TyAny li)) li
 
-doModule _ li _ _ = syntaxError li "Invalid module definition"
+doModule _ li _ = syntaxError li "Invalid module definition"
 
 currentModule :: Info -> Compile ModuleName
 currentModule i = use csModule >>= \m -> case m of
@@ -272,15 +301,15 @@ doStepRollback [entity,exp,rb] i =
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
 letPair :: Exp -> Compile (Arg (Term Name), Term Name)
-letPair (EList [EAtom s Nothing ty i,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> pure i) <*> run v
-letPair t = syntaxError (_eInfo t) "Invalid let pair"
+letPair e@(EList [EAtom s Nothing ty _i,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> mkInfo e) <*> run v
+letPair t = syntaxError' t "Invalid let pair"
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
 doLet (bindings:body) i = do
   bPairs <-
     case bindings of
       (EList es _) -> forM es letPair
-      t -> syntaxError (_eInfo t) "Invalid let bindings"
+      t -> syntaxError' t "Invalid let bindings"
   let bNames = map (Name . _aName . fst) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
   return $ TBinding bPairs bs BindLet i
@@ -292,11 +321,11 @@ doLets (bindings:body) i =
   case bindings of
       e@(EList [_] _) -> doLet (e:body) i
       (EList (e:es) _) -> let e' = head es in
-                          doLet [EList [e] (_eInfo e),
-                                 EList (EAtom "let*" Nothing Nothing (_eInfo e'):
-                                        EList es (_eInfo e'):body)
-                                 (_eInfo e')] i
-      e -> syntaxError (_eInfo e) "Invalid let* binding"
+                          doLet [EList [e] (_eParsed e),
+                                 EList (EAtom "let*" Nothing Nothing (_eParsed e'):
+                                        EList es (_eParsed e'):body)
+                                 (_eParsed e')] i
+      e -> syntaxError' e "Invalid let* binding"
 doLets _ i = syntaxError i "Invalid let declaration"
 
 doConst :: [Exp] -> Info -> Compile (Term Name)
@@ -320,7 +349,7 @@ doSchema es i = case es of
     mkUT utn docs as = do
       cm <- currentModule i
       fs <- forM as $ \a -> case a of
-        EAtom an Nothing ty ai -> Arg an <$> maybeTyVar ty <*> pure ai
+        EAtom an Nothing ty _ai -> Arg an <$> maybeTyVar ty <*> mkInfo a
         _ -> syntaxError i "Invalid schema field definition"
       return $ TSchema (fromString utn) cm docs fs i
 
@@ -338,12 +367,17 @@ doTable es i = case es of
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (fromString tn) cm tty docs i
 
+mkInfo :: Exp -> Compile Info
+mkInfo e = ask >>= \f -> return (f e)
+
 run :: Exp -> Compile (Term Name)
 
-run l@(EList (EAtom a q Nothing ai:rest) li) =
+run l@(EList (ea@(EAtom a q Nothing _):rest) _) = do
+    li <- mkInfo l
+    ai <- mkInfo ea
     case (a,q) of
       ("use",Nothing) -> doUse rest li
-      ("module",Nothing) -> doModule rest li ai l
+      ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li
       ("defpact",Nothing) -> doDef rest Defpact ai li
       ("step",Nothing) -> doStep rest li
@@ -355,9 +389,10 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
       ("deftable",Nothing) -> doTable rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
-          (preArgs@(_:_),EBinding bs bi:bbody) ->
+          (preArgs@(_:_),be@(EBinding bs _):bbody) ->
             do
               as <- mapM run preArgs
+              bi <- mkInfo be
               let mkPairs (v,k) = (,) <$> atomVar k <*> run v
               bs' <- mapNonEmpty "binding" mkPairs bs li
               let ks = map (Name . _aName . fst) bs'
@@ -366,14 +401,16 @@ run l@(EList (EAtom a q Nothing ai:rest) li) =
               TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
           _ -> TApp <$> mkVar a q ai <*> mapM run rest <*> pure li
 
-run (EObject bs i) = TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure TyAny <*> pure i
-run (EBinding _ i) = syntaxError i "Unexpected binding"
-run (ESymbol s i) = return $ TLiteral (LString s) i
-run (ELiteral l i) = return $ TLiteral l i
-run (EAtom s q t i) | s `elem` reserved = syntaxError i $ "Unexpected reserved word: " ++ s
-                    | isNothing t = mkVar s q i
-                    | otherwise = syntaxError i "Invalid typed var"
-run e = syntaxError (_eInfo e) $ "Unexpected expression: " ++ show e
+run e@(EObject bs _i) = do
+  i <- mkInfo e
+  TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure TyAny <*> pure i
+run e@(EBinding _ _i) = syntaxError' e "Unexpected binding"
+run e@(ESymbol s _i) = TLiteral (LString s) <$> mkInfo e
+run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
+run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ s
+                    | isNothing t = mkInfo e >>= mkVar s q
+                    | otherwise = syntaxError' e "Invalid typed var"
+run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 
 mkVar :: String -> Maybe String -> Info -> Compile (Term Name)
@@ -390,8 +427,8 @@ runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
 atomVar :: Exp -> Compile (Arg (Term Name))
-atomVar (EAtom a Nothing ty i) = Arg <$> pure a <*> maybeTyVar ty <*> pure i
-atomVar e = syntaxError (_eInfo e) "Expected unqualified atom"
+atomVar e@(EAtom a Nothing ty _i) = Arg <$> pure a <*> maybeTyVar ty <*> mkInfo e
+atomVar e = syntaxError' e "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
 runBody :: [Exp] -> Info -> Compile (Term Name)
@@ -400,20 +437,20 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 
 
 
-_parseAccounts :: IO (Result [Exp])
+_parseAccounts :: IO (Result ([Exp],String))
 _parseAccounts = parseF (exprs <* TF.eof) "examples/accounts/accounts.pact"
 
 _compileAccounts :: IO (Either SyntaxError [Term Name])
 _compileAccounts = _parseAccounts >>= _compile
 
-_compile :: Result [Exp] -> IO (Either SyntaxError [Term Name])
+_compile :: Result ([Exp],String) -> IO (Either SyntaxError [Term Name])
 _compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
-_compile (Success a) = return $ mapM compile a
+_compile (Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
 
 
 _compileStr :: String -> IO [Term Name]
 _compileStr code = do
-    r <- _compile (parseS exprs code)
+    r <- _compile ((,code) <$> parseS exprs code)
     case r of Left e -> throwIO $ userError (show e)
               Right t -> return t
 
@@ -422,7 +459,17 @@ _compileFile f = do
     p <- parseF exprs f
     rs <- case p of
             (Failure e) -> putDoc (_errDoc e) >> error "Parse failed"
-            (Success es) -> return $ map compile es
+            (Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
     case sequence rs of
+      Left e -> throwIO $ userError (show e)
+      Right ts -> return ts
+
+_atto :: FilePath -> IO [Term Name]
+_atto fp = do
+  f <- T.pack <$> readFile fp
+  rs <- case AP.parseOnly exprs f of
+    Left s -> throwIO $ userError s
+    Right es -> return $ map (compile (mkStringInfo (T.unpack f))) es
+  case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts

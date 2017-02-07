@@ -381,5 +381,5 @@ checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show
 
 _compile :: String -> Term Name
 _compile s = let (TF.Success f) = TF.parseString expr mempty s
-                 (Right t) = compile f
+                 (Right t) = compile (mkStringInfo s) f
              in t
