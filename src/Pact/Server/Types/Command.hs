@@ -10,6 +10,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Server.Types.Command
 --  (Command(..)
@@ -22,9 +23,8 @@ import Control.Exception.Safe
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 
-import Data.Aeson
 import Data.Aeson as A
-
+import Data.Maybe
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ hiding (get)
@@ -59,18 +59,14 @@ instance (FromJSON a) => FromJSON (Command a) where
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
 
-mkCommand :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command ByteString
+mkCommand :: [(PPKScheme, PrivateKey, PublicKey)] -> RequestId -> PactRPC -> Command ByteString
 mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
 
-mkCommand' :: [(UserName, PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command ByteString
+mkCommand' :: [(PPKScheme, PrivateKey, PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
   where
     hsh = hash env
-    sig (u, scheme, sk, pk) = UserSig
-                                { _usUserName = u
-                                , _usScheme = scheme
-                                , _usPubKey = pk
-                                , _usSig = sign hsh sk pk}
+    sig (scheme, sk, pk) = UserSig scheme pk (sign hsh sk pk)
 
 data ProcessedCommand =
   ProcFail !String |
@@ -80,13 +76,13 @@ data ProcessedCommand =
 verifyCommand :: Command ByteString -> ProcessedCommand
 verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $! orig { _cmdPayload = env' }
-      (e, h, s) -> ProcFail $! "Invalid command: " ++ (toErrStr e) ++ (toErrStr h) ++ (maybe "" id s)
+      (e, h, s) -> ProcFail $! "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
   where
     !ppcmdPayload' = A.eitherDecodeStrict' _cmdPayload
-    ppcmdSigs' :: [(UserSig, Bool)]
-    !ppcmdSigs' = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+    !(ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
     !ppcmdHash' = verifyHash _cmdHash _cmdPayload
-    mSigIssue = if all snd ppcmdSigs' then Nothing else Just $ "Invalid sig(s) found: " ++ show (fst <$> filter (not.snd) ppcmdSigs')
+    mSigIssue = if all snd ppcmdSigs' then Nothing
+      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
     toErrStr (Right _) = ""
     toErrStr (Left s) = s ++ "; "

@@ -12,9 +12,8 @@ module Pact.Server.Types.Base
   ( parseB16JSON, toB16JSON, toB16Text, parseB16Text, failMaybe
   , PublicKey, PrivateKey, Signature(..), sign, valid, importPublic, importPrivate, exportPublic
   , verifyUserSig, verifyHash
-  , UserName(..)
   , PPKScheme(..)
-  , UserSig(..), usUserName, usScheme, usPubKey, usSig
+  , UserSig(..), usScheme, usPubKey, usSig
   , hash, hashLengthAsBS, hashLengthAsBase16
   , Hash(..), initialHash
   , CommandEntry(..)
@@ -26,7 +25,7 @@ module Pact.Server.Types.Base
   , userSigsToPactKeySet
   ) where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Applicative
 import Control.Monad.Reader
 
@@ -38,10 +37,9 @@ import Data.Hashable (Hashable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Maybe (fromMaybe)
 
-import Data.Aeson
-import Data.Aeson.Types
+import Data.Aeson as A
+import Data.Aeson.Types as A
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -51,6 +49,8 @@ import qualified Data.Serialize as S
 import Data.Text hiding (drop, toLower)
 import Data.Text.Encoding
 import Data.Char (toLower)
+import Data.String
+import Data.Maybe
 
 import qualified Pact.Types as Pact
 
@@ -101,7 +101,14 @@ instance FromJSON Signature where
   parseJSON s = Sig <$> parseB16JSON s
 
 data PPKScheme = ED25519
-  deriving (Show, Eq, Ord, Generic, Serialize, ToJSON, FromJSON)
+  deriving (Show, Eq, Ord, Generic)
+-- default instance with only one value is empty array!!
+instance ToJSON PPKScheme where toJSON ED25519 = "ED25519"
+instance FromJSON PPKScheme where
+  parseJSON = withText "PPKScheme" $ \s -> case s of
+    "ED25519" -> return ED25519
+    _ -> fail $ "Unsupported PPKScheme: " ++ show s
+instance Serialize PPKScheme
 
 newtype RequestId = RequestId { unRequestId :: Text } deriving (Show, Eq, Ord, Generic)
 
@@ -114,28 +121,19 @@ instance FromJSON RequestId where
   parseJSON (String u) = return $ RequestId u
   parseJSON _ = mzero
 
-newtype UserName = UserName { unUserName :: Text } deriving (Show, Eq, Ord, Generic)
-
-instance Serialize UserName where
-  put = put . encodeUtf8 . unUserName
-  get = UserName . decodeUtf8 <$> S.get
-instance ToJSON UserName where
-  toJSON (UserName u) = String u
-instance FromJSON UserName where
-  parseJSON (String u) = return $ UserName u
-  parseJSON _ = mzero
-
 data UserSig = UserSig
-  { _usUserName :: !UserName
-  , _usScheme :: !PPKScheme
+  { _usScheme :: !PPKScheme
   , _usPubKey :: !PublicKey
   , _usSig :: !Signature }
   deriving (Eq, Ord, Show, Generic)
 
 instance Serialize UserSig
 instance ToJSON UserSig where
-  toEncoding = genericToEncoding (defaultOptions {fieldLabelModifier = lensyConstructorToNiceJson 3})
-instance FromJSON UserSig
+  toJSON UserSig {..} = object [
+    "scheme" .= _usScheme, "pubKey" .= _usPubKey, "sig" .= _usSig ]
+instance FromJSON UserSig where
+  parseJSON = withObject "UserSig" $ \o ->
+    UserSig . fromMaybe ED25519 <$> o .:? "scheme" <*> o .: "pubKey" <*> o .: "sig"
 
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
 -- if you want to change this, you need to retool the bloom filter as well
@@ -219,14 +217,12 @@ instance FromJSON PrivateKey where
     s' <- parseB16JSON s
     failMaybe ("Private key import failed: " ++ show s) $ importPrivate s'
 
--- These instances suck, but I can't figure out how to use the Get monad to fail out if not
--- length = 32. For the record, if the getByteString 32 works the imports will not fail
 instance Serialize PublicKey where
   put s = S.putByteString (exportPublic s)
-  get = fromMaybe (error "Invalid PubKey") . importPublic <$> S.getByteString (32::Int)
+  get = maybe (fail "Invalid PubKey") return =<< (importPublic <$> S.getByteString 32)
 instance Serialize PrivateKey where
   put s = S.putByteString (exportPrivate s)
-  get = fromMaybe (error "Invalid PubKey") . importPrivate <$> S.getByteString (32::Int)
+  get = maybe (fail "Invalid PubKey") return =<< (importPrivate <$> S.getByteString 32)
 
 newtype CommandEntry = CommandEntry { unCommandEntry :: ByteString }
   deriving (Show, Eq, Ord, Generic, Serialize)
@@ -259,3 +255,6 @@ userSigsToPactKeySet :: [UserSig] -> Pact.KeySet
 userSigsToPactKeySet = Set.fromList . fmap userSigToPactPubKey
 
 makeLenses ''UserSig
+
+_unJSON :: FromJSON a => Value -> a
+_unJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON parse failed: " ++ show e)
