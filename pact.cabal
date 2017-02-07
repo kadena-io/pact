@@ -86,11 +86,11 @@ library
                     Pact.Docgen
                     , Pact.Server.Command
                     , Pact.Server.ApiServer
-                    , Pact.Server.Types
-                    , Pact.Server.Types.API
-                    , Pact.Server.Types.Base
-                    , Pact.Server.Types.Command
-                    , Pact.Server.Types.SQLite
+                    , Pact.Types.API
+                    , Pact.Types.Crypto
+                    , Pact.Types.Util
+                    , Pact.Types.Command
+                    , Pact.Types.SQLite
                     , Pact.Server.SQLite
 
   if impl(ghcjs)
