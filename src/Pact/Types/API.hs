@@ -105,8 +105,9 @@ type PollResponse = ApiResponse [PollResult]
 newtype ListenerRequest = ListenerRequest RequestKey
   deriving (Eq,Show,Generic)
 instance ToJSON ListenerRequest where
-  toEncoding = genericToEncoding defaultOptions
-instance FromJSON ListenerRequest
+  toJSON (ListenerRequest r) = object ["listen" .= r]
+instance FromJSON ListenerRequest where
+  parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
 
 type ListenerResponse = ApiResponse PollResult
 

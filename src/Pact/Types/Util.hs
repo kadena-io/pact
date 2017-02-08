@@ -7,6 +7,7 @@ import GHC.Generics
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
 import Data.Text (Text)
 import Data.Text.Encoding
@@ -49,3 +50,7 @@ failMaybe err m = maybe (fail err) return m
 -- | Utility for unsafe parse of JSON
 unsafeFromJSON :: FromJSON a => Value -> a
 unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON parse failed: " ++ show e)
+
+-- | Utility for GHCI output of JSON
+outputJSON :: ToJSON a => a -> IO ()
+outputJSON a = BSL8.putStrLn $ encode a
