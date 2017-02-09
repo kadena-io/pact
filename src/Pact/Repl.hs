@@ -22,14 +22,14 @@
 
 module Pact.Repl
     (
-     repl,main
-    ,runRepl
+     repl,runRepl
     ,evalRepl,ReplMode(..)
     ,execScript,execScript'
-    ,initEvalEnv
+    ,initEvalEnv,initPureEvalEnv,initReplState
+    ,handleParse,handleCompile
+    ,isPactFile
     ,evalString
     ,ReplState(..),rEnv,rEvalState,rMode,rOut
-    ,pactVersion
     ) where
 
 import Control.Applicative
@@ -47,55 +47,16 @@ import Prelude hiding (exp,print,putStrLn,putStr,interact)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import System.IO hiding (interact)
 import Text.Trifecta.Delta
-import System.Exit
 import Control.Concurrent
-import qualified Options.Applicative as O
 import Data.Monoid
-import System.Directory
 import System.FilePath
-import Data.Word (Word16)
 
 import Pact.Compile
 import Pact.Eval
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
-import qualified Pact.Server.Main as Server
 
-
-pactVersion :: String
-pactVersion = "2.0"
-
-data Option =
-  OVersion |
-  OBuiltins |
-  OLoad Bool String |
-  ORepl |
-  OServer Word16
-  deriving (Eq,Show)
-
-replOpts :: O.Parser Option
-replOpts =
-    O.subparser (O.command "serve" $ O.info
-                 (OServer <$> O.option O.auto (O.short 'p' <> O.long "port" <> O.help "set server's port" <> O.value 8080))
-                 (O.progDesc "launch the dev server, defaults to port 8080")
-                ) <|>
-    O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
-    O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
-    (OLoad
-     <$> O.flag False True
-         (O.short 'r' <> O.long "findscript" <>
-          O.help "For .pact files, attempts to locate a .repl file to execute.")
-     <*> O.argument O.str
-        (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
-    pure ORepl -- would be nice to bail on unrecognized args here
-
-argParser :: O.ParserInfo Option
-argParser = O.info (O.helper <*> replOpts)
-            (O.fullDesc <> O.header "The Pact Smart Contract Language Interpreter")
-
-_testArgs :: String -> O.ParserResult Option
-_testArgs = O.execParserPure O.defaultPrefs argParser . words
 
 
 data ReplMode =
@@ -119,67 +80,14 @@ makeLenses ''ReplState
 
 type Repl a = StateT ReplState IO a
 
-main :: IO ()
-main = repl
-
-repl :: IO ()
-repl = do
-  as <- O.execParser argParser
-  let exitEither _ Left {} = hPutStrLn stderr "Load failed" >> hFlush stderr >> exitFailure
-      exitEither m (Right t) = m t >> exitSuccess
-      exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
-  case as of
-    OServer port' -> do
-      Server.main port'
-    OVersion -> putStrLn $ "pact version " ++ pactVersion
-    OBuiltins -> echoBuiltins
-    OLoad findScript fp
-        | isPactFile fp -> do
-            script <- if findScript then locatePactReplScript fp else return Nothing
-            case script of
-              Just s -> execScript s >>= exitLoad
-              Nothing -> compileOnly fp >>= exitLoad
-        | otherwise -> execScript fp >>= exitLoad
-    ORepl -> initReplState Interactive >>= \s -> runRepl s stdin >>= exitEither (const (return ()))
-
--- | Run heuristics to find a repl script. First is the file name with ".repl" extension;
--- if not, it will see if there is a single ".repl" file in the directory, and if so
--- use that.
-locatePactReplScript :: FilePath -> IO (Maybe FilePath)
-locatePactReplScript fp = do
-  let r = dropExtension fp ++ ".repl"
-  b <- doesFileExist r
-  if b then return $ Just r
-    else do
-      let dir = takeDirectory fp
-      rs <- filter ((== ".repl") . takeExtension) <$> getDirectoryContents dir
-      case rs of
-        [a] -> return $ Just $ combine dir a
-        _ -> return Nothing
-
-
-compileOnly :: String -> IO (Either String [Term Name])
-compileOnly fp = do
-  !pr <- TF.parseFromFileEx exprsOnly fp
-  src <- readFile fp
-  s <- initReplState (Script fp)
-  (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
-
-
-exprsOnly :: Parser [Exp]
-exprsOnly = exprs >>= \r -> TF.eof >> return r
+repl :: IO (Either () (Term Name))
+repl = initReplState Interactive >>= \s -> runRepl s stdin
 
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
 
-
 endsWith :: Eq a => [a] -> [a] -> Bool
 endsWith v s = s == reverse (take (length s) (reverse v))
-
-echoBuiltins :: IO ()
-echoBuiltins = do
-  defs <- view (eeRefStore.rsNatives) <$> initPureEvalEnv
-  forM_ (sort $ HM.keys defs) print
 
 runRepl :: ReplState -> Handle -> IO (Either () (Term Name))
 runRepl s@ReplState{..} h =

@@ -5,7 +5,7 @@
 
 module Main where
 
-import Pact.Repl (repl)
+import qualified Pact.Main as Repl
 
 main :: IO ()
-main = repl
+main = Repl.main

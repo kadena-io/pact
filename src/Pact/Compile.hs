@@ -15,7 +15,7 @@
 
 module Pact.Compile
     (
-     expr,exprs
+     expr,exprs,exprsOnly
     ,compile
     ,dec
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo,
@@ -66,6 +66,7 @@ style = IdentifierStyle "pact"
         ReservedIdentifier
 
 
+-- | Main parser for Pact expressions.
 expr :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Exp
 expr = do
   delt <- position
@@ -150,8 +151,15 @@ spaces = skipMany (skipSome space <|> oneLineComment)
 
 {-# INLINE expr #-}
 
+-- | Parse one or more Pact expressions.
 exprs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
 exprs = some (spaces *> expr <* spaces)
+
+-- | Parse one or more Pact expressions and EOF.
+-- Unnecessary with Atto's 'parseOnly'.
+exprsOnly :: Parser [Exp]
+exprsOnly = exprs >>= \r -> TF.eof >> return r
+
 
 neg :: (Monad m,CharParsing m,Num n) => m n -> m n
 neg p = TF.try (char '-' >> (negate <$> p)) <|> p

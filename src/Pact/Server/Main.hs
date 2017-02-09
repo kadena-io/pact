@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Pact.Server.Main
-  (main
+  (serve
   )where
 
 import Control.Monad
@@ -15,8 +15,8 @@ import Pact.Types.Runtime
 import Pact.Types.Command
 import Pact.Types.API
 
-main :: Word16 -> IO ()
-main port' = do
+serve :: Word16 -> IO ()
+serve port' = do
   (inC,outC) <- initChans
   let debugFn = putStrLn
   let serverPort = fromIntegral port'

@@ -95,7 +95,8 @@ library
                     , Pact.Types.Command
                     , Pact.Types.SQLite
                     , Pact.Server.SQLite
-                    , Pact.Server.Main
+                  , Pact.Server.Main
+                  , Pact.Main
 
   if impl(ghcjs)
     cpp-options:   -DGHCJS_BROWSER
