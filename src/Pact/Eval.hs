@@ -32,20 +32,21 @@ import Data.List
 import Control.Monad
 import Prelude hiding (exp,mod)
 import Bound
-import Pact.Types
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Safe
 import Data.Default
 import Control.Arrow hiding (app)
 import Data.Maybe
-import Pact.Compile
 import Text.Trifecta as TF
 import Data.Foldable
 import Data.Graph
 import qualified Data.Set as S
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+
+import Pact.Types.Runtime
+import Pact.Compile
 
 evalBeginTx :: Eval e ()
 evalBeginTx = beginTx
@@ -69,7 +70,7 @@ enforceKeySetName mi mksn = do
 
 -- | Enforce keyset against environment
 enforceKeySet :: Info ->
-             Maybe KeySetName -> PactKeySet -> Eval e ()
+             Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn ks = do
   sigs <- view eeMsgSigs
   let keys' = _pksKeys ks

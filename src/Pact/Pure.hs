@@ -39,7 +39,6 @@ import Control.Lens hiding (op,use,modifying)
 import Data.List
 import Control.Monad
 import Prelude hiding (exp)
-import Pact.Types
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -47,6 +46,8 @@ import Data.Default
 import Data.Aeson
 import Control.Concurrent
 import Data.String
+
+import Pact.Types.Runtime
 
 type DbLog v = M.Map TxId (HashMap String v)
 
@@ -67,7 +68,7 @@ makeLenses ''UserTable
 data Db = Db {
       _dbUserTables :: HashMap TableName UserTable
     , _dbModules :: Table Module
-    , _dbKeySets :: Table PactKeySet
+    , _dbKeySets :: Table KeySet
 } deriving (Show)
 makeLenses ''Db
 instance Default Db where def = Db HM.empty def def
@@ -75,7 +76,7 @@ instance Default Db where def = Db HM.empty def def
 data TempLog = TempLog {
       _tlUserTables :: HashMap TableName (HashMap String (Columns Persistable))
     , _tlModules :: HashMap String Module
-    , _tlKeySets :: HashMap String PactKeySet
+    , _tlKeySets :: HashMap String KeySet
 }
 makeLenses ''TempLog
 instance Default TempLog where def = TempLog HM.empty HM.empty HM.empty

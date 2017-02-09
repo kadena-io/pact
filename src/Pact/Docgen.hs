@@ -22,8 +22,8 @@ import Data.Function
 import Control.Monad.Catch
 import Data.Monoid
 
-
-import Pact.Types
+import Pact.Types.Lang
+import Pact.Types.Util
 import Pact.Native
 import Pact.Repl
 import Pact.Repl.Lib

@@ -57,7 +57,7 @@ import System.FilePath
 
 import Pact.Compile
 import Pact.Eval
-import Pact.Types
+import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
 

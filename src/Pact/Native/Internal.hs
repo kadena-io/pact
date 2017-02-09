@@ -21,7 +21,6 @@ module Pact.Native.Internal
 
 import Control.Monad
 import Prelude hiding (exp)
-import Pact.Types
 import Data.Default
 import Pact.Eval
 import Unsafe.Coerce
@@ -34,6 +33,9 @@ import Bound
 import Data.String
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
+
+import Pact.Types.Runtime
+
 
 data SpecialForm =
   WithRead |

@@ -35,7 +35,7 @@ import Data.Int
 import Prelude hiding (log)
 import Control.Monad.Catch
 
-import Pact.Types
+import Pact.Types.Runtime
 
 -- | Statement input types
 data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
@@ -173,7 +173,7 @@ data TxStmts = TxStmts {
 }
 
 data SysCache = SysCache {
-      _cachedKeySets :: HM.HashMap String PactKeySet
+      _cachedKeySets :: HM.HashMap String KeySet
     , _cachedModules :: HM.HashMap String Module
     , _cachedTableInfo :: HM.HashMap TableName (ModuleName,KeySetName)
     , _cachedUserTables :: HM.HashMap TableName (HM.HashMap String (Columns Persistable))

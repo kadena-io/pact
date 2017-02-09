@@ -36,13 +36,15 @@ import Criterion
 import Criterion.Types
 import Statistics.Resampling.Bootstrap
 #endif
+
 import Pact.Native.Internal
-import Pact.Types
+import Pact.Types.Runtime
 import Pact.Eval
 import Pact.Pure
 import Data.Semigroup
 import Data.String
-import Pact.Typecheck
+import Pact.Typechecker
+import Pact.Types.Typecheck
 
 
 

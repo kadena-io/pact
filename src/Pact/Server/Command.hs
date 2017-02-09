@@ -25,7 +25,7 @@ import qualified Data.HashMap.Strict as HM
 import Text.PrettyPrint.ANSI.Leijen (renderCompact,displayS)
 import System.Directory
 
-import Pact.Types hiding (PublicKey)
+import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Pure
 import Pact.Eval
 import Pact.Compile as Pact

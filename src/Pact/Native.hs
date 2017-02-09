@@ -38,7 +38,7 @@ import Pact.Native.Internal
 import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
-import Pact.Types
+import Pact.Types.Runtime
 import Pact.Compile
 
 -- | All production native modules.

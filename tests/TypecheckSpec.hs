@@ -2,9 +2,10 @@
 module TypecheckSpec where
 
 import Test.Hspec
-import Pact.Typecheck
+import Pact.Typechecker
 import Pact.Repl
-import Pact.Types
+import Pact.Types.Runtime
+import Pact.Types.Typecheck
 import Data.Default
 import Control.Lens
 import qualified Data.HashMap.Strict as HM

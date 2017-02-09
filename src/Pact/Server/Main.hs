@@ -3,7 +3,7 @@ module Pact.Server.Main where
 
 import Pact.Server.Command
 import Pact.Server.ApiServer
-import Pact.Types
+import Pact.Types.Runtime
 import Control.Monad
 import Control.Monad.State
 import Control.Concurrent

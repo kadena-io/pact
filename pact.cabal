@@ -31,9 +31,13 @@ library
                      , Pact.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
-                     , Pact.Typecheck
-                     , Pact.Types
+                     , Pact.Typechecker
+                     , Pact.Types.Lang
+                     , Pact.Types.Runtime
+                     , Pact.Types.Typecheck
                      , Pact.Types.Orphans
+                     , Pact.Types.Util
+
   -- other-extensions:
   build-depends:       Decimal >= 0.4.2 && < 0.5
                      , aeson >= 0.11.2.1 && < 0.12
@@ -88,7 +92,6 @@ library
                     , Pact.Server.ApiServer
                     , Pact.Types.API
                     , Pact.Types.Crypto
-                    , Pact.Types.Util
                     , Pact.Types.Command
                     , Pact.Types.SQLite
                     , Pact.Server.SQLite

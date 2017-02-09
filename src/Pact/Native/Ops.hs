@@ -20,11 +20,12 @@ module Pact.Native.Ops
 
 
 import Data.Decimal
-import Pact.Native.Internal
-import Pact.Types
 import Data.Default
 import qualified Data.Map.Strict as M
 import Data.Semigroup
+
+import Pact.Native.Internal
+import Pact.Types.Runtime
 
 
 opDefs :: NativeModule

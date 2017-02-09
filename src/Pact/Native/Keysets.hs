@@ -21,7 +21,7 @@ import Prelude hiding (exp)
 
 import Pact.Eval
 import Pact.Native.Internal
-import Pact.Types
+import Pact.Types.Runtime
 
 keyDefs :: NativeModule
 keyDefs =

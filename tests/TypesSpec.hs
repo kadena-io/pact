@@ -8,7 +8,7 @@ import Data.Aeson
 import Data.Maybe
 import Data.Map.Strict (fromList)
 
-import Pact.Types
+import Pact.Types.Runtime
 
 spec :: Spec
 spec = do
@@ -26,7 +26,7 @@ testJSONPersist = do
   rt (PLiteral (LBool False))
   rt (PLiteral (LString "hello"))
   rt (PLiteral (LTime (read "2016-09-17 22:47:31.904733 UTC")))
-  rt (PKeySet (PactKeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
+  rt (PKeySet (KeySet [PublicKey "askjh",PublicKey "dfgh"] "predfun"))
   rt (PValue (fromJust (decode "{ \"stuff\": [ 1.0, false ] }" :: Maybe Value)))
 
 testJSONColumns :: Spec

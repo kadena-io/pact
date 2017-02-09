@@ -24,10 +24,58 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Main types for the Pact Language.
+-- Language types: 'Exp', 'Term', 'Type'.
 --
 
-module Pact.Types where
+module Pact.Types.Lang
+ (
+   Parsed(..),
+   Code(..),
+   Info(..),
+   renderInfo,
+   ModuleName(..),
+   Name(..),
+   Literal(..),
+   simpleISO8601,formatLTime,
+   TypeName(..),
+   Arg(..),aInfo,aName,aType,
+   FunType(..),ftArgs,ftReturn,
+   FunTypes,funTypes,showFunTypes,
+   PrimType(..),
+   litToPrim,
+   tyInteger,tyDecimal,tyTime,tyBool,tyString,
+   tyList,tyObject,tyValue,tyKeySet,tyTable,
+   SchemaType(..),
+   TypeVarName(..),typeVarName,
+   TypeVar(..),tvName,tvConstraint,
+   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
+   mkTyVar,mkTyVar',mkSchemaVar,
+   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
+   Exp(..),eLiteral,eAtom,eBinding,eList,eObject,eParsed,eQualifier,eSymbol,eType,
+   _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
+   PublicKey(..),
+   KeySet(..),
+   KeySetName(..),
+   DefType(..),
+   defTypeRep,
+   NativeDefName(..),
+   FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
+   Ref(..),
+   NativeDFun(..),
+   BindType(..),
+   TableName(..),
+   Module(..),
+   Term(..),
+   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
+   tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tInfo,tKeySet,
+   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModule,
+   tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   ToTerm(..),
+   toTermList,
+   typeof,
+   pattern TLitString,pattern TLitInteger,tLit,tStr,termEq,abbrev
+   ) where
 
 
 import Control.Lens hiding (op,(.=))
@@ -39,36 +87,24 @@ import Prelude hiding (exp)
 import Control.Arrow hiding (app,(<+>))
 import Prelude.Extras
 import Bound
-import Control.Monad.Except
-import Control.Monad.State.Strict
-import Control.Monad.Reader
-import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
 import Data.Text (Text,pack,unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Aeson
 import qualified Data.ByteString.UTF8 as BS
 import qualified Data.ByteString.Lazy.UTF8 as BSL
-import qualified Data.Set as S
 import Data.String
 import Data.Default
 import Data.Char
 import Data.Thyme
 import Data.Thyme.Format.Aeson ()
-import Data.Thyme.Time.Core
 import System.Locale
 import Data.Scientific
-import Data.Word
-import Control.Monad.Catch
 import GHC.Generics
 import Data.Decimal
-import Data.Ratio
-import qualified Data.Vector as V
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
-import Control.Concurrent.MVar
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
@@ -77,17 +113,8 @@ import Data.Monoid
 import Data.Serialize (Serialize)
 
 import Pact.Types.Orphans ()
+import Pact.Types.Util
 
-data RenderColor = RColor | RPlain
-
-renderString :: Pretty a => (Doc -> SimpleDoc) -> RenderColor -> a -> String
-renderString renderf colors p = displayS (renderf ((case colors of RColor -> id; RPlain -> plain) (pretty p))) ""
-
-renderCompactString :: Pretty a => a -> String
-renderCompactString = renderString renderCompact RPlain
-
-renderPrettyString :: Pretty a => RenderColor -> a -> String
-renderPrettyString c a = renderString (renderPretty 0.4 100) c a
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
@@ -97,6 +124,7 @@ data Parsed = Parsed {
 instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
+
 
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid)
@@ -110,6 +138,7 @@ instance Pretty Code where
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
 data Info = Info { _iInfo :: !(Maybe (Code,Parsed)) }
+
 -- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""
@@ -124,7 +153,11 @@ instance Ord Info where
   Info Nothing <= _ = True
   _ <= Info Nothing = False
 
--- renderer is for line numbers and such
+
+instance Default Info where def = Info Nothing
+
+
+-- renderer for line number output.
 renderInfo :: Info -> String
 renderInfo (Info Nothing) = ""
 renderInfo (Info (Just (_,Parsed d _))) =
@@ -133,15 +166,6 @@ renderInfo (Info (Just (_,Parsed d _))) =
       (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
       _ -> "<interactive>:0:0"
 
-
-
-class AsString a where asString :: a -> String
-instance AsString String where asString = id
-
-instance Default Info where def = Info Nothing
-
-simpleISO8601 :: String
-simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
 newtype ModuleName = ModuleName String
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
@@ -167,21 +191,15 @@ data Literal =
     LTime { _lTime :: !UTCTime }
           deriving (Eq,Generic)
 instance Serialize Literal
+
+
+-- | ISO8601 Thyme format
+simpleISO8601 :: String
+simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
+
 formatLTime :: UTCTime -> String
 formatLTime = formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
-
-decimalPrec :: Word8
-decimalPrec = 8
-
-decimalToScientific :: Decimal -> Scientific
-decimalToScientific (Decimal p m) = scientific m (negate (fromIntegral p))
-
-doubleToDecimal :: Double -> Decimal
-doubleToDecimal = realFracToDecimal decimalPrec
-
-decimalToRational :: Decimal -> Rational
-decimalToRational (Decimal p m) = m % (10 ^ (fromIntegral p :: Integer))
 
 
 instance Show Literal where
@@ -203,6 +221,7 @@ newtype TypeName = TypeName String
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty)
 instance Show TypeName where show (TypeName s) = show s
 
+-- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
   _aName :: String,
   _aType :: Type o,
@@ -212,6 +231,7 @@ instance Show o => Show (Arg o) where show (Arg n t _) = n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
 
+-- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
   _ftReturn :: Type o
@@ -221,7 +241,9 @@ instance Show o => Show (FunType o) where
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = parens (hsep (map pretty as)) PP.<> "->" PP.<> pretty t
 
+-- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
+
 funTypes :: FunType o -> FunTypes o
 funTypes ft = ft :| []
 showFunTypes :: Show o => FunTypes o -> String
@@ -282,6 +304,7 @@ newtype TypeVarName = TypeVarName { _typeVarName :: String }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty)
 instance Show TypeVarName where show = _typeVarName
 
+-- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
   TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
   SchemaVar { _tvName :: TypeVarName }
@@ -306,15 +329,15 @@ instance (Pretty v) => Pretty (TypeVar v) where
   pretty (SchemaVar n) = angles (braces (pretty n))
 
 
-
+-- | Pact types.
 data Type v =
   TyAny |
   TyVar { _tyVar :: TypeVar v } |
   TyPrim PrimType |
-  TyList { _ttListType :: Type v } |
-  TySchema { _ttSchema :: SchemaType, _ttSchemaType :: Type v } |
-  TyFun { _ttFunType :: FunType v } |
-  TyUser { _ttUser :: v }
+  TyList { _tyListType :: Type v } |
+  TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
+  TyFun { _tyFunType :: FunType v } |
+  TyUser { _tyUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable)
 
 instance (Show v) => Show (Type v) where
@@ -411,6 +434,7 @@ $(makeLenses ''Exp)
 
 
 data PublicKey = PublicKey { _pubKey :: !BS.ByteString } deriving (Eq,Ord,Generic)
+
 instance Serialize PublicKey
 instance FromJSON PublicKey where
     parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
@@ -418,22 +442,19 @@ instance ToJSON PublicKey where
     toJSON = toJSON . decodeUtf8 . _pubKey
 instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 
-type KeySet = S.Set PublicKey
-
-data PactKeySet = PactKeySet {
+-- | KeySet pairs keys with a predicate function name.
+data KeySet = KeySet {
       _pksKeys :: ![PublicKey]
     , _pksPredFun :: !String
     } deriving (Eq,Generic)
-instance Serialize PactKeySet
-instance Show PactKeySet where show (PactKeySet ks f) = "PactKeySet " ++ show ks ++ " " ++ show f
-instance FromJSON PactKeySet where
-    parseJSON = withObject "PactKeySet" $ \o ->
-                PactKeySet <$> o .: "keys" <*> o .: "pred"
-instance ToJSON PactKeySet where
-    toJSON (PactKeySet k f) = object ["keys" .= k, "pred" .= f]
+instance Serialize KeySet
+instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
+instance FromJSON KeySet where
+    parseJSON = withObject "KeySet" $ \o ->
+                KeySet <$> o .: "keys" <*> o .: "pred"
+instance ToJSON KeySet where
+    toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
-
-data RunType = Run | RunTx deriving (Eq,Show)
 
 newtype KeySetName = KeySetName String
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
@@ -449,6 +470,7 @@ newtype NativeDefName = NativeDefName String
     deriving (Eq,Ord,IsString,ToJSON,AsString)
 instance Show NativeDefName where show (NativeDefName s) = show s
 
+-- | Capture function application metadata
 data FunApp = FunApp {
       _faInfo :: !Info
     , _faName :: !String
@@ -483,8 +505,11 @@ data NativeDFun = NativeDFun {
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a
 
+-- | Binding forms.
 data BindType n =
+  -- | Normal "let" bind
   BindLet |
+  -- | Schema-style binding, with string value for key
   BindSchema { _bType :: n }
   deriving (Eq,Functor,Foldable,Traversable,Ord)
 instance (Show n) => Show (BindType n) where
@@ -516,7 +541,7 @@ instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
     o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code"
 
-
+-- | Pact evaluable term.
 data Term n =
     TModule {
       _tModuleDef :: Module
@@ -583,7 +608,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TKeySet {
-      _tKeySet :: !PactKeySet
+      _tKeySet :: !KeySet
     , _tInfo :: !Info
     } |
     TUse {
@@ -692,7 +717,7 @@ instance ToTerm Integer where toTerm = tLit . LInteger
 instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Decimal where toTerm = tLit . LDecimal
 instance ToTerm String where toTerm = tLit . LString
-instance ToTerm PactKeySet where toTerm = (`TKeySet` def)
+instance ToTerm KeySet where toTerm = (`TKeySet` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
@@ -777,308 +802,3 @@ abbrev TTable {..} = "<deftable " ++ asString _tTableName ++ ">"
 
 makeLenses ''Term
 makeLenses ''FunApp
-
-data SyntaxError = SyntaxError Info String
-instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax error: " ++ s
-
-data PactError =
-    EvalError Info String |
-    ArgsError FunApp [Term Name] String |
-    DbError String |
-    TxFailure String
-
-instance Show PactError where
-    show (EvalError i s) = show i ++ ": " ++ s
-    show (ArgsError FunApp {..} args s) =
-        show _faInfo ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
-    show (TxFailure s) = " Failure: " ++ s
-    show (DbError s) = " Failure: Database exception: " ++ s
-
-evalError :: MonadError PactError m => Info -> String -> m a
-evalError i = throwError . EvalError i
-
-evalError' :: MonadError PactError m => FunApp -> String -> m a
-evalError' = evalError . _faInfo
-
-failTx :: MonadError PactError m => String -> m a
-failTx = throwError . TxFailure
-
-
-argsError :: (MonadError PactError m) => FunApp -> [Term Name] -> m a
-argsError i as = throwError $ ArgsError i as "Invalid arguments"
-
-argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
-argsError' i as = throwError $ ArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
-
-
-data Persistable =
-    PLiteral Literal |
-    PKeySet PactKeySet |
-    PValue Value
-    deriving (Eq,Generic)
-instance Serialize Persistable
-instance Show Persistable where
-    show (PLiteral l) = show l
-    show (PKeySet k) = show k
-    show (PValue v) = BSL.toString $ encode v
-instance ToTerm Persistable where
-    toTerm (PLiteral l) = toTerm l
-    toTerm (PKeySet k) = toTerm k
-    toTerm (PValue v) = toTerm v
-instance ToJSON Persistable where
-    toJSON (PLiteral (LString s)) = String (pack s)
-    toJSON (PLiteral (LBool b)) = Bool b
-    toJSON (PLiteral (LInteger n)) = Number (fromIntegral n)
-    toJSON (PLiteral (LDecimal (Decimal dp dm))) =
-        Array (V.fromList [Number (fromIntegral dp),Number (fromIntegral dm)])
-    toJSON (PLiteral (LTime t)) =
-        let (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
-        in Array (V.fromList ["t",Number (fromIntegral d),Number (fromIntegral (toMicroseconds s))])
-    toJSON (PKeySet k) = toJSON k
-    toJSON (PValue v) = Array (V.fromList ["v",v])
-instance FromJSON Persistable where
-    parseJSON (String s) = return (PLiteral (LString (unpack s)))
-    parseJSON (Number n) = return (PLiteral (LInteger (round n)))
-    parseJSON (Bool b) = return (PLiteral (LBool b))
-    parseJSON v@(Object _) = PKeySet <$> parseJSON v
-    parseJSON Null = return (PValue Null)
-    parseJSON va@(Array a) =
-        case V.toList a of
-          [Number dp,Number dm] -> return (PLiteral (LDecimal (Decimal (truncate dp) (truncate dm))))
-          [String typ,Number d,Number s] | typ == "t" -> return $ PLiteral $ LTime $ mkUTCTime
-                                                         (ModifiedJulianDay (truncate d))
-                                                         (fromMicroseconds (truncate s))
-          [String typ,v] | typ == "v" -> return (PValue v)
-          _ -> return (PValue va)
-
-
-newtype ColumnId = ColumnId String
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show ColumnId where show (ColumnId s) = show s
-
-type PactObject = [(ColumnId,Persistable)]
-
-newtype RowKey = RowKey String
-    deriving (Eq,Ord,IsString,ToTerm,AsString)
-instance Show RowKey where show (RowKey s) = show s
-
-
-newtype Columns v = Columns { _columns :: M.Map ColumnId v }
-    deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
-instance (ToJSON v) => ToJSON (Columns v) where
-    toJSON (Columns m) = object . map (\(k,v) -> pack (asString k) .= toJSON v) . M.toList $ m
-instance (FromJSON v) => FromJSON (Columns v) where
-    parseJSON = withObject "Columns" $ \o ->
-                (Columns . M.fromList) <$>
-                 forM (HM.toList o)
-                  (\(k,v) -> ((,) <$> pure (ColumnId (unpack k)) <*> parseJSON v))
-
-makeLenses ''Columns
-
-data Domain k v where
-    UserTables :: !TableName -> Domain RowKey (Columns Persistable)
-    KeySets :: Domain KeySetName PactKeySet
-    Modules :: Domain ModuleName Module
-deriving instance Eq (Domain k v)
-deriving instance Show (Domain k v)
-instance AsString (Domain k v) where
-    asString (UserTables t) = asString t
-    asString KeySets = "SYS:KeySets"
-    asString Modules = "SYS:Modules"
-
-data TxLog =
-    TxLog {
-      _txDomain :: !String
-    , _txKey :: !String
-    , _txValue :: !Value
-    } deriving (Eq,Show)
-makeLenses ''TxLog
-
-instance ToJSON TxLog where
-    toJSON (TxLog d k v) =
-        object ["table" .= d, "key" .= k, "value" .= v]
-instance FromJSON TxLog where
-    parseJSON = withObject "TxLog" $ \o ->
-                TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
-
-data WriteType = Insert|Update|Write deriving (Eq,Show)
-
--- | Shape of back-end methods: use MVar for state, run in IO.
-type Method e a = MVar e -> IO a
-
--- | Fun-record type for Pact back-ends.
-data PactDb e = PactDb {
-      _readRow :: forall k v . (IsString k,FromJSON v) =>
-                  Domain k v -> k -> Method e (Maybe v)
-    , _writeRow :: forall k v . (AsString k,ToJSON v) =>
-                   WriteType -> Domain k v -> k -> v -> Method e ()
-    , _keys ::  TableName -> Method e [RowKey]
-    , _txids ::  TableName -> TxId -> Method e [TxId]
-    , _createUserTable ::  TableName -> ModuleName -> KeySetName -> Method e ()
-    , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
-    , _beginTx :: Method e ()
-    , _commitTx ::  TxId -> Method e ()
-    , _rollbackTx :: Method e ()
-    , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
-                   Domain k v -> TxId -> Method e [TxLog]
-}
-
-
-
-newtype TxId = TxId Word64
-    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
-instance Show TxId where show (TxId s) = show s
-instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
-
-data PactStep = PactStep {
-      _psStep :: !Int
-    , _psRollback :: !Bool
-    , _psTxId :: !TxId
-} deriving (Eq,Show)
-
-type ModuleData = (Module,HM.HashMap String Ref)
-
-data RefStore = RefStore {
-      _rsNatives :: HM.HashMap Name Ref
-    , _rsModules :: HM.HashMap ModuleName ModuleData
-    } deriving (Eq,Show)
-makeLenses ''RefStore
-instance Default RefStore where def = RefStore HM.empty HM.empty
-
-data EvalEnv e = EvalEnv {
-      _eeRefStore :: !RefStore
-    , _eeMsgSigs :: !KeySet
-    , _eeMsgBody :: !Value
-    , _eeTxId :: !TxId
-    , _eeEntity :: !String
-    , _eePactStep :: !(Maybe PactStep)
-    , _eePactDbVar :: MVar e
-    , _eePactDb :: PactDb e
-    } -- deriving (Eq,Show)
-makeLenses ''EvalEnv
-
-data StackFrame = StackFrame {
-      _sfName :: !String
-    , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[String])
-    }
-instance Show StackFrame where
-    show (StackFrame n i a) = renderInfo i ++ ": " ++ n ++ f a
-        where f Nothing = ""
-              f (Just (dd,as)) = ", " ++ show dd ++ ", values=" ++ show as
-makeLenses ''StackFrame
-
-
-data PactYield = PactYield {
-      _pyNextStep :: !(Maybe Int)
-    , _pyFailStep :: !(Maybe Int)
-    } deriving (Eq,Show)
-instance Default PactYield where def = PactYield def def
-
-
-data RefState = RefState {
-      _rsLoaded :: HM.HashMap Name Ref
-    , _rsLoadedModules :: HM.HashMap ModuleName Module
-    , _rsNew :: [(ModuleName,ModuleData)]
-    }
-                deriving (Eq,Show)
-makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty def
-
-data EvalState = EvalState {
-      _evalRefs :: !RefState
-    , _evalCallStack :: ![StackFrame]
-    , _evalYield :: !(Maybe PactYield)
-    }
-makeLenses ''EvalState
-instance Show EvalState where
-    show (EvalState m y _) = "EvalState " ++ show m ++ " " ++ show y
-instance Default EvalState where def = EvalState def def def
-
-newtype Eval e a =
-    Eval { unEval :: ExceptT PactError (ReaderT (EvalEnv e) (StateT EvalState IO)) a }
-    deriving (Functor,Applicative,Monad,MonadError PactError,MonadState EvalState,
-                     MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
-
-{-# INLINE runEval #-}
-runEval :: EvalState -> EvalEnv e -> Eval e a ->
-           IO (Either PactError a,EvalState)
-runEval s env act = runStateT (runReaderT (runExceptT (unEval act)) env) s
-
-
-call :: StackFrame -> Eval e a -> Eval e a
-call s act = do
-  evalCallStack %= (s:)
-  r <- act
-  evalCallStack %= \st -> case st of (_:as) -> as; [] -> []
-  return r
-{-# INLINE call #-}
-
--- | Invoke a backend method, catching all exceptions as 'DbError'
-method :: (PactDb e -> Method e a) -> Eval e a
-method f = do
-  EvalEnv {..} <- ask
-  handleAll (throwError . DbError . show) (liftIO $ f _eePactDb _eePactDbVar)
-
-
-readRow :: (IsString k,FromJSON v) => Domain k v -> k -> Eval e (Maybe v)
-readRow d k = method $ \db -> _readRow db d k
-
-writeRow :: (AsString k,ToJSON v) => WriteType -> Domain k v -> k -> v -> Eval e ()
-writeRow w d k v = method $ \db -> _writeRow db w d k v
-
-keys :: TableName -> Eval e [RowKey]
-keys t = method $ \db -> _keys db t
-
-txids :: TableName -> TxId -> Eval e [TxId]
-txids tn tid = method $ \db -> _txids db tn tid
-
-createUserTable :: TableName -> ModuleName -> KeySetName -> Eval e ()
-createUserTable t m k = method $ \db -> _createUserTable db t m k
-
-getUserTableInfo :: TableName -> Eval e (ModuleName,KeySetName)
-getUserTableInfo t = method $ \db -> _getUserTableInfo db t
-
-beginTx :: Eval e ()
-beginTx = method $ \db -> _beginTx db
-
-commitTx :: TxId -> Eval e ()
-commitTx t = method $ \db -> _commitTx db t
-
-rollbackTx :: Eval e ()
-rollbackTx = method $ \db -> _rollbackTx db
-
-getTxLog :: (IsString k,FromJSON v) => Domain k v -> TxId -> Eval e [TxLog]
-getTxLog d t = method $ \db -> _getTxLog db d t
-
-{-# INLINE readRow #-}
-{-# INLINE writeRow #-}
-{-# INLINE createUserTable #-}
-{-# INLINE getUserTableInfo #-}
-{-# INLINE commitTx #-}
-{-# INLINE beginTx #-}
-{-# INLINE rollbackTx #-}
-{-# INLINE getTxLog #-}
-{-# INLINE keys #-}
-{-# INLINE txids #-}
-
--- | Pure version of 'modifyMVar_'
-modifyMVar' :: MVar a -> (a -> a) -> IO ()
-modifyMVar' mv f = modifyMVar_ mv (\ps -> return (f ps))
-{-# INLINE modifyMVar' #-}
-
--- | Modify the target of a lens.
-modifyingMVar :: MVar s -> Lens' s a -> (a -> IO a) -> IO ()
-modifyingMVar mv l f = modifyMVar_ mv $ \ps -> (\b -> set l b ps) <$> f (view l ps)
-{-# INLINE modifyingMVar #-}
-
--- | Lens view into mvar.
-useMVar :: MVar s -> Getting a s a -> IO a
-useMVar e l = view l <$> readMVar e
-{-# INLINE useMVar #-}
-
-newtype PactDbException = PactDbException String deriving (Eq,Show)
-instance Exception PactDbException
-
-throwDbError :: MonadThrow m => String -> m a
-throwDbError s = throwM $ PactDbException s

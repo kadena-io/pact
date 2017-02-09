@@ -18,7 +18,8 @@ module Pact.Compile
      expr,exprs
     ,compile
     ,dec
-    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
+    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo,
+    SyntaxError(..)
     )
 
 where
@@ -35,7 +36,6 @@ import Control.Arrow
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
-import Pact.Types
 import Control.Exception
 import Data.String
 import qualified Data.HashSet as HS
@@ -46,6 +46,13 @@ import Data.Default
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.Text as T
+
+import Pact.Types.Lang
+import Pact.Types.Util
+
+data SyntaxError = SyntaxError Info String
+instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax error: " ++ s
+
 
 symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"

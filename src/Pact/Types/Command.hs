@@ -39,12 +39,11 @@ import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
 
 import Pact.Pure
-import Pact.Types as Pact
+import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 
 import Pact.Types.Crypto as Base
 import Pact.Types.SQLite
-import Pact.Types.Util
 
 data Command a = PublicCommand
   { _cmdPayload :: !a
@@ -105,7 +104,7 @@ verifyUserSig h UserSig{..} = case _usScheme of
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
 userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
 
-userSigsToPactKeySet :: [UserSig] -> Pact.KeySet
+userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
 userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 

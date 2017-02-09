@@ -36,7 +36,7 @@ import Control.Concurrent.MVar
 import Data.Maybe
 import qualified Data.Attoparsec.Text as AP
 
-import Pact.Types
+import Pact.Types.Runtime
 import Pact.Types.SQLite
 import Pact.Types.Orphans ()
 import Pact.Compile
@@ -358,7 +358,7 @@ _test1 =
                (Columns (M.fromList [("gah",PLiteral (LBool False)),("fh",PValue Null)])) e
       print =<< _readRow psl (UserTables "stuff") "key1" e
       _writeRow psl Write KeySets "ks1"
-               (PactKeySet [PublicKey "frah"] "stuff") e
+               (KeySet [PublicKey "frah"] "stuff") e
       print =<< _readRow psl KeySets "ks1" e
       _writeRow psl Write Modules "mod1"
                (Module "mod1" "mod-admin-keyset" Nothing "code") e

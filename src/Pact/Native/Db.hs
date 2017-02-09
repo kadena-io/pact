@@ -23,17 +23,18 @@ module Pact.Native.Db
 import Control.Monad
 import Prelude hiding (exp)
 import Bound
-import Pact.Types
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.String
 import Data.Default
 import Control.Arrow hiding (app)
-import Pact.Native.Internal
 import Control.Lens hiding (from,to,(.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
 import Data.Semigroup ((<>))
+
+import Pact.Types.Runtime
+import Pact.Native.Internal
 
 
 
