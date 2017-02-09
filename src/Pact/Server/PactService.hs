@@ -2,8 +2,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Server.Command
-  (initCommandLayer
+-- |
+-- Module      :  Pact.Server.PactService
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Service to provide Pact interpreter and backend.
+--
+
+module Pact.Server.PactService
+  (initPactService
   ) where
 
 import Control.Concurrent
@@ -30,16 +39,18 @@ import Pact.Pure
 import Pact.Eval
 import Pact.Compile as Pact
 
-import Pact.Types.API
+import Pact.Types.Server
+import Pact.Types.RPC
 import Pact.Native (initEvalEnv)
 import Pact.Types.Command
 import Pact.Types.SQLite
 import Pact.Server.SQLite as PactSL
 
+
 type PactMVars = (DBVar,MVar CommandState)
 
-initCommandLayer :: CommandConfig -> IO CommandExecInterface
-initCommandLayer config = do
+initPactService :: CommandConfig -> IO (CommandExecInterface ExecutionMode PactRPC)
+initPactService config = do
   let klog s = _ccDebugFn config ("[Pact] " ++ s)
   mvars <- case _ccDbFile config of
     Nothing -> do
@@ -64,7 +75,7 @@ initCommandLayer config = do
     { _ceiApplyCmd = \eMode cmd -> applyTransactionalPCmd config mvars eMode cmd (verifyCommand cmd)
     , _ceiApplyPPCmd = applyTransactionalPCmd config mvars }
 
-applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand -> IO PactResult
+applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
 applyTransactionalPCmd _ _ _ cmd (ProcFail s) = return $ jsonResult (cmdToRequestKey cmd) s
 applyTransactionalPCmd config (dbv,cv) exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv config exMode dbv cv) $ runPayload cmd
@@ -73,10 +84,10 @@ applyTransactionalPCmd config (dbv,cv) exMode _ (ProcSucc cmd) = do
     Left e -> return $ jsonResult (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => RequestKey -> a -> PactResult
-jsonResult cmd a = PactResult cmd $ toJSON a
+jsonResult :: ToJSON a => RequestKey -> a -> CommandResult
+jsonResult cmd a = CommandResult cmd $ toJSON a
 
-runPayload :: Command Payload -> CommandM PactResult
+runPayload :: Command (Payload PactRPC) -> CommandM CommandResult
 runPayload c@PublicCommand{..} =
   case _pPayload _cmdPayload of
     (Exec pm) -> applyExec (cmdToRequestKey c) pm _cmdSigs
@@ -93,7 +104,7 @@ parse Local code =
       TF.Failure f -> throwCmdEx $ "Pact parse failed: " ++
                       displayS (renderCompact (TF._errDoc f)) ""
 
-applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM PactResult
+applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM CommandResult
 applyExec rk (ExecMsg code edata) ks = do
   CommandEnv {..} <- ask
   exps <- parse _ceMode code
@@ -135,7 +146,7 @@ execTerms mode terms = do
     Local -> evalRollbackTx
   return er
 
-applyContinuation :: ContMsg -> [UserSig] -> CommandM PactResult
+applyContinuation :: ContMsg -> [UserSig] -> CommandM CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"
 
 --mkRPC :: ToRPC a => a ->  CommandEntry

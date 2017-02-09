@@ -2,6 +2,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+
+
+-- |
+-- Module      :  Pact.Types.Util
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Utility types and functions.
+--
 module Pact.Types.Util where
 
 import Data.Aeson

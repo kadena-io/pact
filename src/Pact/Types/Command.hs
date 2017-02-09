@@ -12,14 +12,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+-- |
+-- Module      :  Pact.Types.Command
+-- Copyright   :  (C) 2016 Stuart Popejoy, Will Martino
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Will Martino <will@kadena.io>
+--
+-- Specifies types for commands in a consensus/DL setting.
+--
+
 module Pact.Types.Command
 --  (Command(..)
 --  ) where
   where
 
 import Control.Applicative
-import Control.Concurrent.MVar
-import Control.Exception.Safe
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 
@@ -30,7 +37,6 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
 import Data.String
 import Data.Text hiding (filter, null, all)
-import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.Hashable (Hashable)
 
@@ -38,12 +44,10 @@ import Data.Hashable (Hashable)
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
 
-import Pact.Pure
-import Pact.Types.Runtime as Pact
+import Pact.Types.Util
 import Pact.Types.Orphans ()
-
 import Pact.Types.Crypto as Base
-import Pact.Types.SQLite
+
 
 data Command a = PublicCommand
   { _cmdPayload :: !a
@@ -63,7 +67,7 @@ instance (FromJSON a) => FromJSON (Command a) where
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
 
-mkCommand :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> RequestId -> PactRPC -> Command ByteString
+mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> RequestId -> a -> Command ByteString
 mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
@@ -72,12 +76,12 @@ mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
     hsh = hash env
     sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
 
-data ProcessedCommand =
-  ProcFail !String |
-  ProcSucc !(Command Payload)
-  deriving (Show, Eq, Generic)
+data ProcessedCommand a =
+  ProcSucc !(Command (Payload a)) |
+  ProcFail !String
+  deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
-verifyCommand :: Command ByteString -> ProcessedCommand
+verifyCommand :: FromJSON a => Command ByteString -> ProcessedCommand a
 verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $! orig { _cmdPayload = env' }
       (e, h, s) -> ProcFail $! "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
@@ -93,29 +97,14 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
 {-# INLINE verifyCommand #-}
 
 
-verifyUserSig :: Hash -> UserSig -> Bool
-verifyUserSig h UserSig{..} = case _usScheme of
-  ED25519 -> case (fromJSON (String _usPubKey),fromJSON (String _usSig)) of
-    (Success pk,Success sig) -> valid h pk sig
-    _ -> False
-{-# INLINE verifyUserSig #-}
 
-
-userSigToPactPubKey :: UserSig -> Pact.PublicKey
-userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
-
-userSigsToPactKeySet :: [UserSig] -> S.Set Pact.PublicKey
-userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
-
-
-
-data Payload = Payload
-  { _pPayload :: !PactRPC
+data Payload a = Payload
+  { _pPayload :: !a
   , _pRequestId :: !RequestId
-  } deriving (Show, Eq, Generic)
-instance ToJSON Payload where
+  } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+instance ToJSON a => ToJSON (Payload a) where
   toJSON (Payload r rid) = object [ "payload" .= r, "rid" .= rid]
-instance FromJSON Payload where
+instance FromJSON a => FromJSON (Payload a) where
   parseJSON = withObject "Payload" $ \o ->
                     Payload <$> o .: "payload" <*> o .: "rid"
 
@@ -147,79 +136,15 @@ instance FromJSON UserSig where
     UserSig . fromMaybe ED25519 <$> o .:? "scheme" <*> o .: "pubKey" <*> o .: "sig"
 
 
-data PactRPC =
-    Exec ExecMsg |
-    Continuation ContMsg
-    deriving (Eq,Show)
-instance FromJSON PactRPC where
-    parseJSON =
-        withObject "RPC" $ \o ->
-            (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
-instance ToJSON PactRPC where
-    toJSON (Exec p) = object ["exec" .= p]
-    toJSON (Continuation p) = object ["yield" .= p]
-
-class ToRPC a where
-    toRPC :: a -> PactRPC
-instance ToRPC ExecMsg where toRPC = Exec
-instance ToRPC ContMsg where toRPC = Continuation
-
-data ExecMsg = ExecMsg
-  { _pmCode :: Text
-  , _pmData :: Value
-  } deriving (Eq,Generic,Show)
-instance FromJSON ExecMsg where
-    parseJSON =
-        withObject "PactMsg" $ \o ->
-            ExecMsg <$> o .: "code" <*> o .: "data"
-instance ToJSON ExecMsg where
-    toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
-
-data ContMsg = ContMsg {
-      _cmTxId :: TxId
-    , _cmStep :: Int
-    , _cmRollback :: Bool
-    }
-    deriving (Eq,Show)
-instance FromJSON ContMsg where
-    parseJSON =
-        withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback"
-instance ToJSON ContMsg where
-    toJSON (ContMsg t s r) = object [ "txid" .= t, "step" .= s, "rollback" .= r]
-
-data CommandConfig = CommandConfig {
-      _ccDbFile :: Maybe FilePath
-    , _ccDebugFn :: String -> IO ()
-    , _ccEntity :: String
-    }
-$(makeLenses ''CommandConfig)
-
-data CommandState = CommandState {
-     _csRefStore :: RefStore
-    }
-$(makeLenses ''CommandState)
-
-data ExecutionMode =
-    Transactional { _emTxId :: TxId } |
-    Local
-    deriving (Eq,Show)
-$(makeLenses ''ExecutionMode)
 
 
-data DBVar = PureVar (MVar PureState) | PSLVar (MVar PSL)
+verifyUserSig :: Hash -> UserSig -> Bool
+verifyUserSig h UserSig{..} = case _usScheme of
+  ED25519 -> case (fromJSON (String _usPubKey),fromJSON (String _usSig)) of
+    (Success pk,Success sig) -> valid h pk sig
+    _ -> False
+{-# INLINE verifyUserSig #-}
 
-data CommandEnv = CommandEnv {
-      _ceConfig :: CommandConfig
-    , _ceMode :: ExecutionMode
-    , _ceDBVar :: DBVar
-    , _ceState :: MVar CommandState
-    }
-$(makeLenses ''CommandEnv)
-
-data CommandException = CommandException String deriving (Typeable)
-instance Show CommandException where show (CommandException e) = e
-instance Exception CommandException
 
 data CommandError = CommandError {
       _ceMsg :: String
@@ -240,26 +165,22 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
                , "result" .= a ]
 
 
-data PactResult = PactResult {
+data CommandResult = CommandResult {
   _prReqKey :: RequestKey,
   _prResult :: Value
   } deriving (Eq,Show)
 
-type ApplyCmd = ExecutionMode -> Command ByteString -> IO PactResult
-type ApplyPPCmd = ExecutionMode -> Command ByteString -> ProcessedCommand -> IO PactResult
 
-data CommandExecInterface = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd
-  , _ceiApplyPPCmd :: ApplyPPCmd
+cmdToRequestKey :: Command a -> RequestKey
+cmdToRequestKey PublicCommand {..} = RequestKey _cmdHash
+
+type ApplyCmd e = e -> Command ByteString -> IO CommandResult
+type ApplyPPCmd e a = e -> Command ByteString -> ProcessedCommand a -> IO CommandResult
+
+data CommandExecInterface e a = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd e
+  , _ceiApplyPPCmd :: ApplyPPCmd e a
   }
-
-type CommandM a = ReaderT CommandEnv IO a
-
-runCommand :: CommandEnv -> CommandM a -> IO a
-runCommand e a = runReaderT a e
-
-throwCmdEx :: MonadThrow m => String -> m a
-throwCmdEx = throw . CommandException
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}

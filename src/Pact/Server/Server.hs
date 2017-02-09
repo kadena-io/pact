@@ -1,6 +1,16 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Pact.Server.Main
+
+-- |
+-- Module      :  Pact.Server.Server
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Launch pact dev server.
+--
+
+module Pact.Server.Server
   (serve
   )where
 
@@ -9,11 +19,11 @@ import Control.Monad.State
 import Control.Concurrent
 import Data.Word (Word16)
 
-import Pact.Server.Command
+import Pact.Server.PactService
 import Pact.Server.ApiServer
 import Pact.Types.Runtime
+import Pact.Types.Server
 import Pact.Types.Command
-import Pact.Types.API
 
 serve :: Word16 -> IO ()
 serve port' = do
@@ -26,7 +36,7 @@ serve port' = do
 
 startCmdThread :: CommandConfig -> InboundPactChan -> OutboundPactChan -> IO ()
 startCmdThread cmdConfig inChan outChan = do
-  CommandExecInterface {..} <- initCommandLayer cmdConfig
+  CommandExecInterface {..} <- initPactService cmdConfig
   void $ (`runStateT` (0 :: TxId)) $ forever $ do
     cmds <- liftIO $ readInbound inChan
     resps <- forM cmds $ \cmd -> do

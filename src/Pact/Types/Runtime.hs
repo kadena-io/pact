@@ -19,7 +19,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- |
--- Module      :  Pact.Types
+-- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>

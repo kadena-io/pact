@@ -6,6 +6,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- |
+-- Module      :  Pact.Types.Crypto
+-- Copyright   :  (C) 2016 Stuart Popejoy, William Martino
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, William Martino <will@kadena.io>
+--
+-- PPK and hashing types.
+--
 module Pact.Types.Crypto
   ( PublicKey, importPublic, exportPublic
   , PrivateKey, importPrivate, exportPrivate

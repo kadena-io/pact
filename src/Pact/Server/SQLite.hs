@@ -12,6 +12,16 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 
+
+-- |
+-- Module      :  Pact.Server.SQLite
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- SQLite backend for Pact service.
+--
+
 module Pact.Server.SQLite where
 
 import Database.SQLite3.Direct as SQ3

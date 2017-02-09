@@ -7,6 +7,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
 
+-- |
+-- Module      :  Pact.Server.ApiServer
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Snap server for Pact REST API.
+--
+
 module Pact.Server.ApiServer
   ( runApiServer
   ) where
@@ -30,6 +39,7 @@ import Data.ByteString (ByteString)
 
 import Pact.Types.Command
 import Pact.Types.API
+import Pact.Types.Server
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
@@ -132,7 +142,7 @@ serviceOutbound retrying = do
   outm <- liftIO $ atomically $ (if retrying then fmap Just . readTChan else tryReadTChan) oc
   log $ "serviceOutbound: " ++ show outm
   view aiResults >>= \v -> liftIO $ modifyMVar v $ \rm -> do
-    let toResult (PactResult rk r) = (rk,r)
+    let toResult (CommandResult rk r) = (rk,r)
         rm' = maybe rm (HM.union rm . HM.fromList . map toResult) outm
     return (rm',rm')
 

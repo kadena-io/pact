@@ -1,6 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-- |
+-- Module      :  Pact.Types.SQLite
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Types for SQLite Pact backend.
+--
 module Pact.Types.SQLite
   ( SType(..), RType(..)
   , dbError

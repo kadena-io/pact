@@ -6,6 +6,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+
+-- |
+-- Module      :  Pact.Types.API
+-- Copyright   :  (C) 2016 Stuart Popejoy
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
+--
+-- Pact REST API types.
+--
+
 module Pact.Types.API
   ( ApiResponse(..), apiResponse, apiError
   , RequestKeys(..), rkRequestKeys
@@ -16,8 +26,6 @@ module Pact.Types.API
   , PollResponse
   , ListenerRequest(..)
   , ListenerResponse
-  , InboundPactChan(..),OutboundPactChan(..),PactResult(..)
-  , initChans,writeInbound,writeOutbound,readInbound,tryReadOutbound,cmdToRequestKey
   ) where
 
 import Data.Text (Text)
@@ -26,10 +34,6 @@ import qualified Data.Aeson as A
 import Control.Lens hiding ((.=))
 import GHC.Generics
 import Data.Int
-import Control.Concurrent.Chan
-import Control.Concurrent.STM.TChan
-import Control.Concurrent.STM
-import Data.ByteString (ByteString)
 
 import Pact.Types.Command
 import Pact.Types.Util
@@ -63,8 +67,6 @@ instance ToJSON RequestKeys where
 instance FromJSON RequestKeys where
   parseJSON = lensyParseJSON 3
 
-cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey PublicCommand {..} = RequestKey _cmdHash
 
 -- | Submit new commands for execution
 data SubmitBatch = SubmitBatch
@@ -110,22 +112,3 @@ instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
 
 type ListenerResponse = ApiResponse PollResult
-
-
-newtype InboundPactChan = InboundPactChan (Chan [Command ByteString])
-newtype OutboundPactChan = OutboundPactChan (TChan [PactResult])
-
-initChans :: IO (InboundPactChan,OutboundPactChan)
-initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> atomically newTChan)
-
-writeInbound :: InboundPactChan -> [Command ByteString] -> IO ()
-writeInbound (InboundPactChan c) = writeChan c
-
-readInbound :: InboundPactChan -> IO [Command ByteString]
-readInbound (InboundPactChan c) = readChan c
-
-writeOutbound :: OutboundPactChan -> [PactResult] -> IO ()
-writeOutbound (OutboundPactChan c) = atomically . writeTChan c
-
-tryReadOutbound :: OutboundPactChan -> IO (Maybe [PactResult])
-tryReadOutbound (OutboundPactChan c) = atomically $ tryReadTChan c
