@@ -53,28 +53,33 @@ import qualified Options.Applicative as O
 import Data.Monoid
 import System.Directory
 import System.FilePath
-
+import Data.Word (Word16)
 
 import Pact.Compile
 import Pact.Eval
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
+import qualified Pact.Server.Main as Server
 
 
 pactVersion :: String
 pactVersion = "2.0"
 
 data Option =
-    OVersion |
-    OBuiltins |
-    OLoad Bool String |
-    ORepl
-          deriving (Eq,Show)
-
+  OVersion |
+  OBuiltins |
+  OLoad Bool String |
+  ORepl |
+  OServer Word16
+  deriving (Eq,Show)
 
 replOpts :: O.Parser Option
 replOpts =
+    O.subparser (O.command "serve" $ O.info
+                 (OServer <$> O.option O.auto (O.short 'p' <> O.long "port" <> O.help "set server's port" <> O.value 8080))
+                 (O.progDesc "launch the dev server, defaults to port 8080")
+                ) <|>
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
     (OLoad
@@ -124,6 +129,8 @@ repl = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
+    OServer port' -> do
+      Server.main port'
     OVersion -> putStrLn $ "pact version " ++ pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript fp
@@ -185,12 +192,6 @@ initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
   ls <- initLibState
   initEvalEnv ls repldb
-
-
-initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
-initEvalEnv e b = do
-  mv <- newMVar e
-  return $ EvalEnv (RefStore nativeDefs HM.empty) def Null def def def mv b
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a

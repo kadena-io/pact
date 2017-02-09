@@ -14,9 +14,13 @@
 --
 
 module Pact.Native
-    (natives,nativeDefs,moduleToMap)
+    (natives
+    ,nativeDefs
+    ,moduleToMap
+    ,initEvalEnv)
     where
 
+import Control.Concurrent
 import Control.Lens hiding (from,to,parts,Fold)
 import Control.Monad
 import Data.Default
@@ -30,6 +34,7 @@ import Control.Arrow
 import Data.Foldable
 import Control.Applicative
 import Data.Semigroup ((<>))
+import Data.Aeson (Value(Null))
 
 
 import Pact.Eval
@@ -310,3 +315,9 @@ listModules :: RNativeFun e
 listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
   return $ toTermList tTyString $ map asString $ M.keys mods
+
+
+initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
+initEvalEnv e b = do
+  mv <- newMVar e
+  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b

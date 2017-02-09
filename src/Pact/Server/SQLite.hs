@@ -41,7 +41,7 @@ import Pact.Types.SQLite
 import Pact.Types.Orphans ()
 import Pact.Compile
 import Pact.Eval
-import Pact.Repl
+import Pact.Native (initEvalEnv)
 
 psl :: PactDb PSL
 psl =

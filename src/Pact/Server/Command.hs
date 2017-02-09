@@ -29,9 +29,9 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Pure
 import Pact.Eval
 import Pact.Compile as Pact
-import Pact.Repl
 
 import Pact.Types.API
+import Pact.Native (initEvalEnv)
 import Pact.Types.Command
 import Pact.Types.SQLite
 import Pact.Server.SQLite as PactSL

@@ -1,22 +1,28 @@
 {-# LANGUAGE RecordWildCards #-}
-module Pact.Server.Main where
+
+module Pact.Server.Main
+  (main
+  )where
+
+import Control.Monad
+import Control.Monad.State
+import Control.Concurrent
+import Data.Word (Word16)
 
 import Pact.Server.Command
 import Pact.Server.ApiServer
 import Pact.Types.Runtime
-import Control.Monad
-import Control.Monad.State
-import Control.Concurrent
 import Pact.Types.Command
 import Pact.Types.API
 
-main :: IO ()
-main = do
+main :: Word16 -> IO ()
+main port' = do
   (inC,outC) <- initChans
   let debugFn = putStrLn
+  let serverPort = fromIntegral port'
   let cmdConfig = CommandConfig Nothing debugFn "entity"
   _ <- forkIO $ startCmdThread cmdConfig inC outC
-  runApiServer inC outC debugFn 8080
+  runApiServer inC outC debugFn serverPort
 
 startCmdThread :: CommandConfig -> InboundPactChan -> OutboundPactChan -> IO ()
 startCmdThread cmdConfig inChan outChan = do
