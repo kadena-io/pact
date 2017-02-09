@@ -102,10 +102,10 @@ data Payload a = Payload
   , _pNonce :: !Text
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance ToJSON a => ToJSON (Payload a) where
-  toJSON (Payload r rid) = object [ "payload" .= r, "rid" .= rid]
+  toJSON (Payload r rid) = object [ "payload" .= r, "nonce" .= rid]
 instance FromJSON a => FromJSON (Payload a) where
   parseJSON = withObject "Payload" $ \o ->
-                    Payload <$> o .: "payload" <*> o .: "rid"
+                    Payload <$> o .: "payload" <*> o .: "nonce"
 
 
 data UserSig = UserSig
