@@ -37,7 +37,6 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
 import Data.String
 import Data.Text hiding (filter, null, all)
-import Data.Text.Encoding
 import Data.Hashable (Hashable)
 
 
@@ -67,8 +66,8 @@ instance (FromJSON a) => FromJSON (Command a) where
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
 
-mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> RequestId -> a -> Command ByteString
-mkCommand creds rid a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a rid)
+mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Text -> a -> Command ByteString
+mkCommand creds nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
@@ -100,7 +99,7 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
 
 data Payload a = Payload
   { _pPayload :: !a
-  , _pRequestId :: !RequestId
+  , _pNonce :: !Text
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 instance ToJSON a => ToJSON (Payload a) where
   toJSON (Payload r rid) = object [ "payload" .= r, "rid" .= rid]
@@ -108,17 +107,6 @@ instance FromJSON a => FromJSON (Payload a) where
   parseJSON = withObject "Payload" $ \o ->
                     Payload <$> o .: "payload" <*> o .: "rid"
 
-
-newtype RequestId = RequestId { unRequestId :: Text } deriving (Show, Eq, Ord, Generic)
-
-instance Serialize RequestId where
-  put = put . encodeUtf8 . unRequestId
-  get = RequestId . decodeUtf8 <$> SZ.get
-instance ToJSON RequestId where
-  toJSON (RequestId u) = String u
-instance FromJSON RequestId where
-  parseJSON (String u) = return $ RequestId u
-  parseJSON _ = mzero
 
 data UserSig = UserSig
   { _usScheme :: !PPKScheme

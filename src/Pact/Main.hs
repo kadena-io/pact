@@ -1,6 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -39,7 +37,7 @@ import Data.Word (Word16)
 import Pact.Repl
 import Pact.Compile
 import Pact.Types.Runtime
-import Pact.Server.Main
+import Pact.Server.Server
 
 
 data Option =

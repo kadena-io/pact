@@ -88,14 +88,16 @@ library
                 , blake2
     exposed-modules:
                     Pact.Docgen
-                    , Pact.Server.Command
+                    , Pact.Server.PactService
                     , Pact.Server.ApiServer
                     , Pact.Types.API
                     , Pact.Types.Crypto
-                    , Pact.Types.Command
+                  , Pact.Types.Command
+                  , Pact.Types.RPC
+                  , Pact.Types.Server
                     , Pact.Types.SQLite
                     , Pact.Server.SQLite
-                  , Pact.Server.Main
+                  , Pact.Server.Server
                   , Pact.Main
 
   if impl(ghcjs)
