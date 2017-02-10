@@ -1,6 +1,6 @@
 {
   "name": "pact-api",
-  "version": "1.0.0",
+  "version": "1.0.0.0",
   "description": "hashing and signing functions needed to interact with pact-lang",
   "main": "pact-api.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "url": "github.com/kadena-io/pact"
   },
   "author": "Will Martino",
-  "license": "BSD 3",
+  "license": "BSD3",
   "dependencies": {
     "blakejs": "^1.0.1",
     "tweetnacl": "^0.14.5"
