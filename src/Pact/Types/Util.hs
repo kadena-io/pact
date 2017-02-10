@@ -22,7 +22,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
-import Data.Text (Text)
+import Data.Text (Text,pack)
 import Data.Text.Encoding
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -86,8 +86,11 @@ renderPrettyString c a = renderString (renderPretty 0.4 100) c a
 
 
 -- | Provide unquoted string representation.
-class AsString a where asString :: a -> String
-instance AsString String where asString = id
+class AsString a where asString :: a -> Text
+instance AsString String where asString = pack
+instance AsString Text where asString = id
+instance AsString B.ByteString where asString = asString . decodeUtf8
+instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 
 
 

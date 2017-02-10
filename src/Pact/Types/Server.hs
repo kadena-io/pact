@@ -58,7 +58,7 @@ userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 data CommandConfig = CommandConfig {
       _ccDbFile :: Maybe FilePath
     , _ccDebugFn :: String -> IO ()
-    , _ccEntity :: String
+    , _ccEntity :: Text
     }
 $(makeLenses ''CommandConfig)
 

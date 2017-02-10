@@ -15,7 +15,6 @@ module Pact.Native.Keysets where
 import Control.Lens hiding (from,to,parts)
 import Control.Monad
 import Data.Default
-import Data.String
 import Prelude hiding (exp)
 
 
@@ -30,7 +29,7 @@ keyDefs =
     in
     ("Keysets",[
      defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
-         "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " ++
+         "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
          "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
     ,defRNative "define-keyset" defineKeyset (funType tTyString [("name",tTyString),("keyset",tTyString)])
      "Define keyset as NAME with KEYSET. \
@@ -55,7 +54,7 @@ readKeySet i as = argsError i as
 
 defineKeyset :: RNativeFun e
 defineKeyset i [TLitString name,TKeySet ks _] = do
-  let ksn = fromString name
+  let ksn = KeySetName name
   old <- readRow KeySets ksn
   case old of
     Nothing -> writeRow Write KeySets ksn ks & success "Keyset defined"
@@ -70,13 +69,13 @@ enforceKeyset' i [k] = do
   t <- reduce k
   (ksn,ks) <- case t of
     TLitString name -> do
-      let ksn = fromString name
+      let ksn = KeySetName name
       ksm <- readRow KeySets ksn
       case ksm of
-        Nothing -> evalError' i $ "Keyset not found: " ++ name
+        Nothing -> evalError' i $ "Keyset not found: " ++ show name
         Just ks -> return (Just ksn,ks)
     TKeySet ks _ -> return (Nothing,ks)
-    _ -> argsError i [t,toTerm ("[body...]" :: String)]
+    _ -> argsError i [t,toTerm ("[body...]" :: Text)]
   enforceKeySet (_faInfo i) ksn ks
   return $ toTerm True
 enforceKeyset' i _as = argsError i []

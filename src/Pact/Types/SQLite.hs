@@ -181,10 +181,10 @@ data TxStmts = TxStmts {
 }
 
 data SysCache = SysCache {
-      _cachedKeySets :: HM.HashMap String KeySet
-    , _cachedModules :: HM.HashMap String Module
+      _cachedKeySets :: HM.HashMap Text KeySet
+    , _cachedModules :: HM.HashMap Text Module
     , _cachedTableInfo :: HM.HashMap TableName (ModuleName,KeySetName)
-    , _cachedUserTables :: HM.HashMap TableName (HM.HashMap String (Columns Persistable))
+    , _cachedUserTables :: HM.HashMap TableName (HM.HashMap Text (Columns Persistable))
 } deriving (Show)
 makeLenses ''SysCache
 

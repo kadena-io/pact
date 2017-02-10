@@ -184,7 +184,7 @@ pureEval e = do
   (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (TxFailure (show ex)),evalS)
+                 Left (SomeException ex) -> (Left (TxFailure (pack $ show ex)),evalS)
                  Right v -> v
   mode <- use rMode
   case r of
@@ -206,7 +206,7 @@ pureEval e = do
           return (Left serr)
 
 renderErr :: PactError -> Repl String
-renderErr (EvalError i s) = return $ renderInfo i ++ ": " ++ s
+renderErr (EvalError i s) = return $ renderInfo i ++ ": " ++ unpack s
 renderErr a@(ArgsError f _ _) = return $ renderInfo (_faInfo f) ++ ": " ++ show a
 renderErr a = do
   m <- use rMode

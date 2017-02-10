@@ -41,8 +41,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Serialize as SZ hiding (get)
 import qualified Data.Serialize as S
-import Data.Text hiding (drop, toLower)
-import Data.Text.Encoding
 import Data.String
 import Data.Maybe
 
@@ -73,10 +71,6 @@ instance FromJSON PPKScheme where
     "ED25519" -> return ED25519
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
 instance Serialize PPKScheme
-
-instance Serialize Text where
-  put = S.put . encodeUtf8
-  get = decodeUtf8 <$> S.get
 
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
 -- if you want to change this, you need to retool the bloom filter as well

@@ -75,7 +75,8 @@ module Pact.Types.Lang
    toTermList,
    typeof,
    pattern TLitString,pattern TLitInteger,tLit,tStr,termEq,abbrev,
-   pactVersion
+   pactVersion,
+   Text,pack,unpack
    ) where
 
 
@@ -116,7 +117,7 @@ import Data.Serialize (Serialize)
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 
-pactVersion :: String
+pactVersion :: Text
 pactVersion = "2.0"
 
 
@@ -161,35 +162,38 @@ instance Ord Info where
 
 instance Default Info where def = Info Nothing
 
+asString' :: AsString a => a -> String
+asString' = unpack . asString
+
 
 -- renderer for line number output.
 renderInfo :: Info -> String
 renderInfo (Info Nothing) = ""
 renderInfo (Info (Just (_,Parsed d _))) =
     case d of
-      (Directed f l c _ _) -> BS.toString f ++ ":" ++ show (succ l) ++ ":" ++ show c
+      (Directed f l c _ _) -> asString' f ++ ":" ++ show (succ l) ++ ":" ++ show c
       (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
       _ -> "<interactive>:0:0"
 
 
-newtype ModuleName = ModuleName String
+newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
 
 
 data Name =
-    QName { _nQual :: ModuleName, _nName :: String } |
-    Name { _nName :: String }
+    QName { _nQual :: ModuleName, _nName :: Text } |
+    Name { _nName :: Text }
          deriving (Eq,Ord,Generic)
 instance Show Name where
-    show (QName q n) = asString q ++ "." ++ n
-    show (Name n) = n
+    show (QName q n) = asString' q ++ "." ++ unpack n
+    show (Name n) = unpack n
 instance ToJSON Name where toJSON = toJSON . show
 instance Hashable Name
 
 
 data Literal =
-    LString { _lString :: !String } |
+    LString { _lString :: !Text } |
     LInteger { _lInteger :: !Integer } |
     LDecimal { _lDecimal :: !Decimal } |
     LBool { _lBool :: !Bool } |
@@ -202,8 +206,8 @@ instance Serialize Literal
 simpleISO8601 :: String
 simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
 
-formatLTime :: UTCTime -> String
-formatLTime = formatTime defaultTimeLocale simpleISO8601
+formatLTime :: UTCTime -> Text
+formatLTime = pack . formatTime defaultTimeLocale simpleISO8601
 {-# INLINE formatLTime #-}
 
 
@@ -214,7 +218,7 @@ instance Show Literal where
     show (LBool b) = map toLower $ show b
     show (LTime t) = show $ formatLTime t
 instance ToJSON Literal where
-    toJSON (LString s) = String (pack s)
+    toJSON (LString s) = String s
     toJSON (LInteger i) = Number (scientific i 0)
     toJSON (LDecimal r) = toJSON (show r)
     toJSON (LBool b) = toJSON b
@@ -222,17 +226,17 @@ instance ToJSON Literal where
     {-# INLINE toJSON #-}
 
 
-newtype TypeName = TypeName String
+newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty)
 instance Show TypeName where show (TypeName s) = show s
 
 -- | Pair a name and a type (arguments, bindings etc)
 data Arg o = Arg {
-  _aName :: String,
+  _aName :: Text,
   _aType :: Type o,
   _aInfo :: Info
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
-instance Show o => Show (Arg o) where show (Arg n t _) = n ++ ":" ++ show t
+instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
 
@@ -272,7 +276,7 @@ litToPrim LDecimal {} = TyDecimal
 litToPrim LBool {} = TyBool
 litToPrim LTime {} = TyTime
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: String
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
 tyTime = "time"
@@ -285,13 +289,13 @@ tyKeySet = "keyset"
 tyTable = "table"
 
 instance Show PrimType where
-  show TyInteger = tyInteger
-  show TyDecimal = tyDecimal
-  show TyTime = tyTime
-  show TyBool = tyBool
-  show TyString = tyString
-  show TyValue = tyValue
-  show TyKeySet = tyKeySet
+  show TyInteger = unpack tyInteger
+  show TyDecimal = unpack tyDecimal
+  show TyTime = unpack tyTime
+  show TyBool = unpack tyBool
+  show TyString = unpack tyString
+  show TyValue = unpack tyValue
+  show TyKeySet = unpack tyKeySet
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =
@@ -300,14 +304,14 @@ data SchemaType =
   TyBinding
   deriving (Eq,Ord)
 instance Show SchemaType where
-  show TyTable = tyTable
-  show TyObject = tyObject
+  show TyTable = unpack tyTable
+  show TyObject = unpack tyObject
   show TyBinding = "binding"
 instance Pretty SchemaType where pretty = text . show
 
-newtype TypeVarName = TypeVarName { _typeVarName :: String }
+newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty)
-instance Show TypeVarName where show = _typeVarName
+instance Show TypeVarName where show = unpack . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
@@ -347,7 +351,7 @@ data Type v =
 
 instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
-  show (TyList t) | isAnyTy t = tyList
+  show (TyList t) | isAnyTy t = unpack tyList
                   | otherwise = "[" ++ show t ++ "]"
   show (TySchema s t) | isAnyTy t = show s
                       | otherwise = show s ++ ":" ++ show t
@@ -366,12 +370,12 @@ instance (Pretty o) => Pretty (Type o) where
     TyPrim t -> pretty t
     TyAny -> "*"
 
-mkTyVar :: String -> [Type n] -> Type n
-mkTyVar n cs = TyVar (TypeVar (fromString n) cs)
-mkTyVar' :: String -> Type n
+mkTyVar :: TypeVarName -> [Type n] -> Type n
+mkTyVar n cs = TyVar (TypeVar n cs)
+mkTyVar' :: TypeVarName -> Type n
 mkTyVar' n = mkTyVar n []
-mkSchemaVar :: String -> Type n
-mkSchemaVar n = TyVar (SchemaVar (fromString n))
+mkSchemaVar :: TypeVarName -> Type n
+mkSchemaVar n = TyVar (SchemaVar n)
 
 isAnyTy :: Type v -> Bool
 isAnyTy TyAny = True
@@ -408,9 +412,9 @@ makeLenses ''TypeVarName
 
 data Exp =
   ELiteral { _eLiteral :: !Literal, _eParsed :: !Parsed } |
-  ESymbol { _eSymbol :: !String, _eParsed :: !Parsed } |
-  EAtom { _eAtom :: !String
-        , _eQualifier :: !(Maybe String)
+  ESymbol { _eSymbol :: !Text, _eParsed :: !Parsed } |
+  EAtom { _eAtom :: !Text
+        , _eQualifier :: !(Maybe Text)
         , _eType :: !(Maybe (Type TypeName))
         , _eParsed :: !Parsed
         } |
@@ -427,8 +431,8 @@ maybeDelim d t = maybe "" ((d ++) . show) t
 
 instance Show Exp where
     show (ELiteral i _) = show i
-    show (ESymbol s _) = '\'':s
-    show (EAtom a q t _) =  a ++ maybeDelim "."  q ++ maybeDelim ": " t
+    show (ESymbol s _) = '\'':unpack s
+    show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
     show (EList ls _) = "(" ++ unwords (map show ls) ++ ")"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
@@ -450,7 +454,7 @@ instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
       _pksKeys :: ![PublicKey]
-    , _pksPredFun :: !String
+    , _pksPredFun :: !Text
     } deriving (Eq,Generic)
 instance Serialize KeySet
 instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
@@ -461,7 +465,7 @@ instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 
 
-newtype KeySetName = KeySetName String
+newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
 instance Show KeySetName where show (KeySetName s) = show s
 
@@ -471,24 +475,24 @@ defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
 
-newtype NativeDefName = NativeDefName String
+newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString)
 instance Show NativeDefName where show (NativeDefName s) = show s
 
 -- | Capture function application metadata
 data FunApp = FunApp {
       _faInfo :: !Info
-    , _faName :: !String
+    , _faName :: !Text
     , _faModule :: !(Maybe ModuleName)
     , _faDefType :: !DefType
     , _faTypes :: !(FunTypes (Term Name))
-    , _faDocs :: !(Maybe String)
+    , _faDocs :: !(Maybe Text)
     }
 
 instance Show FunApp where
   show FunApp {..} =
     "(" ++ defTypeRep _faDefType ++ " " ++ maybeDelim "." _faModule ++
-    _faName ++ " " ++ showFunTypes _faTypes ++ ")"
+    unpack _faName ++ " " ++ showFunTypes _faTypes ++ ")"
 
 
 
@@ -525,19 +529,19 @@ instance (Pretty n) => Pretty (BindType n) where
   pretty (BindSchema b) = "bind" PP.<> pretty b
 
 
-newtype TableName = TableName String
+newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
 data Module = Module {
     _mName :: !ModuleName
   , _mKeySet :: !KeySetName
-  , _mDocs :: !(Maybe String)
+  , _mDocs :: !(Maybe Text)
   , _mCode :: !Code
   } deriving (Eq)
 instance Show Module where
   show Module {..} =
-    "(Module " ++ asString _mName ++ " '" ++ asString _mKeySet ++ maybeDelim " " _mDocs ++ ")"
+    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ maybeDelim " " _mDocs ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
     ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode ]
@@ -559,26 +563,26 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDefName :: !String
+      _tDefName :: !Text
     , _tModule :: !ModuleName
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
     } |
     TNative {
       _tNativeName :: !NativeDefName
     , _tNativeFun :: !NativeDFun
     , _tFunTypes :: FunTypes (Term n)
-    , _tNativeDocs :: String
+    , _tNativeDocs :: Text
     , _tInfo :: !Info
     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !ModuleName
     , _tConstVal :: !(Term n)
-    , _tDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
     } |
     TApp {
@@ -604,7 +608,7 @@ data Term n =
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !ModuleName
-    , _tDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe Text)
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
     } |
@@ -634,7 +638,7 @@ data Term n =
       _tTableName :: !TableName
     , _tModule :: ModuleName
     , _tTableType :: !(Type (Term n))
-    , _tDocs :: !(Maybe String)
+    , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -644,12 +648,12 @@ instance Show n => Show (Term n) where
       "(TModule " ++ show _tModuleDef ++ " " ++ show _tModuleBody ++ ")"
     show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]:" ++ show t
     show TDef {..} =
-      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString _tModule ++ "." ++ _tDefName ++ " " ++
+      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
       show _tFunType ++ maybeDelim " " _tDocs ++ ")"
     show TNative {..} =
-      "(TNative " ++ asString _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ _tNativeDocs ++ ")"
+      "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
-      "(TConst " ++ asString _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tDocs ++ ")"
+      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tDocs ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
@@ -662,10 +666,10 @@ instance Show n => Show (Term n) where
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
     show TSchema {..} =
-      "(TSchema " ++ asString _tModule ++ "." ++ asString _tSchemaName ++ " " ++
+      "(TSchema " ++ asString' _tModule ++ "." ++ asString' _tSchemaName ++ " " ++
       show _tFields ++ maybeDelim " " _tDocs ++ ")"
     show TTable {..} =
-      "(TTable " ++ asString _tModule ++ "." ++ asString _tTableName ++ ":" ++ show _tTableType
+      "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tDocs ++ ")"
 
 
@@ -699,7 +703,7 @@ instance Monad Term where
 instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b
-    parseJSON (String s) = return $ toTerm (unpack s)
+    parseJSON (String s) = return $ toTerm s
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
@@ -709,7 +713,7 @@ instance Show n => ToJSON (Term n) where
     toJSON (TKeySet k _) = toJSON k
     toJSON (TObject kvs _ _) =
         object $ map (kToJSON *** toJSON) kvs
-            where kToJSON (TLitString s) = pack s
+            where kToJSON (TLitString s) = s
                   kToJSON t = pack (abbrev t)
     toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (abbrev t)
@@ -721,7 +725,7 @@ instance ToTerm Bool where toTerm = tLit . LBool
 instance ToTerm Integer where toTerm = tLit . LInteger
 instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Decimal where toTerm = tLit . LDecimal
-instance ToTerm String where toTerm = tLit . LString
+instance ToTerm Text where toTerm = tLit . LString
 instance ToTerm KeySet where toTerm = (`TKeySet` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
@@ -733,14 +737,14 @@ toTermList ty l = TList (map toTerm (toList l)) ty def
 
 
 
-typeof :: Term a -> Either String (Type (Term a))
+typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left $ defTypeRep _tDefType
+      TDef {..} -> Left $ pack $ defTypeRep _tDefType
       TNative {..} -> Left "defun"
-      TConst {..} -> Left $ "const:" ++ _aName _tConstArg
+      TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
       TBinding {..} -> case _tBindType of
@@ -751,7 +755,7 @@ typeof t = case t of
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
-      TSchema {..} -> Left $ "defobject:" ++ asString _tSchemaName
+      TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
 
 
@@ -764,7 +768,7 @@ tLit = (`TLiteral` def)
 {-# INLINE tLit #-}
 
 -- | Convenience for OverloadedStrings annoyances
-tStr :: String -> Term n
+tStr :: Text -> Term n
 tStr = toTerm
 
 -- | Support pact `=` for value-level terms
@@ -785,10 +789,10 @@ termEq _ _ = False
 
 
 abbrev :: Show t => Term t -> String
-abbrev (TModule m _ _) = "<module " ++ asString (_mName m) ++ ">"
+abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
 abbrev (TList bs _ _) = concatMap abbrev bs
-abbrev TDef {..} = "<defun " ++ _tDefName ++ ">"
-abbrev TNative {..} = "<native " ++ asString _tNativeName ++ ">"
+abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
+abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
 abbrev TBinding {} = "<binding>"
@@ -799,8 +803,8 @@ abbrev (TUse m _) = "<use '" ++ show m ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
-abbrev TSchema {..} = "<defschema " ++ asString _tSchemaName ++ ">"
-abbrev TTable {..} = "<deftable " ++ asString _tTableName ++ ">"
+abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
+abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 
 

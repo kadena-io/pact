@@ -45,14 +45,13 @@ import qualified Data.Map.Strict as M
 import Data.Default
 import Data.Aeson
 import Control.Concurrent
-import Data.String
 
 import Pact.Types.Runtime
 
-type DbLog v = M.Map TxId (HashMap String v)
+type DbLog v = M.Map TxId (HashMap Text v)
 
 data Table v = Table {
-      _tKV :: HashMap String v
+      _tKV :: HashMap Text v
     , _tLog :: DbLog v
 } deriving (Eq,Show)
 makeLenses ''Table
@@ -74,9 +73,9 @@ makeLenses ''Db
 instance Default Db where def = Db HM.empty def def
 
 data TempLog = TempLog {
-      _tlUserTables :: HashMap TableName (HashMap String (Columns Persistable))
-    , _tlModules :: HashMap String Module
-    , _tlKeySets :: HashMap String KeySet
+      _tlUserTables :: HashMap TableName (HashMap Text (Columns Persistable))
+    , _tlModules :: HashMap Text Module
+    , _tlKeySets :: HashMap Text KeySet
 }
 makeLenses ''TempLog
 instance Default TempLog where def = TempLog HM.empty HM.empty HM.empty
@@ -109,7 +108,7 @@ puredb = PactDb {
           Modules -> writeSimple e wt Modules dbModules tlModules k v
 
   , _keys = \t e ->
-         onUserTable e t $ \ut -> map fromString $ HM.keys (_tKV $ _utTable ut)
+         onUserTable e t $ \ut -> map RowKey $ HM.keys (_tKV $ _utTable ut)
 
   , _txids = \t tid e ->
          onUserTable e t $ \ut -> M.keys $ snd $ M.split tid (_tLog $ _utTable ut)
@@ -154,7 +153,7 @@ writeUser e wt t k v =
 {-# INLINE writeUser #-}
 
 writeSimple :: (AsString k,ToJSON v) => MVar PureState -> WriteType -> Domain k v ->
-               Lens' Db (Table v) -> Lens' TempLog (HashMap String v) -> k -> v -> IO ()
+               Lens' Db (Table v) -> Lens' TempLog (HashMap Text v) -> k -> v -> IO ()
 writeSimple e wt d tableL logL k v =
     modifyMVar_ e $ \ps ->
         let k' = asString k
@@ -185,7 +184,7 @@ commitDb tid (PureState (Db us ms ks) _ (TempLog uls ml kl)) = PureState committ
       committed = Db (foldl' commitUT us uls')
                   (ms & tLog %~ M.insert tid ml)
                   (ks & tLog %~ M.insert tid kl)
-      commitUT :: HashMap TableName UserTable -> (TableName,HashMap String (Columns Persistable)) ->
+      commitUT :: HashMap TableName UserTable -> (TableName,HashMap Text (Columns Persistable)) ->
                   HashMap TableName UserTable
       commitUT us' (tn,ul) = HM.adjust (& utTable.tLog %~ M.insert tid ul) tn us'
 {-# INLINE commitDb #-}
@@ -199,7 +198,7 @@ getLogs d@(UserTables t) tid db' =
 {-# INLINE getLogs #-}
 
 toLog :: (ToJSON j, AsString k) =>
-     Domain k v -> Maybe (HashMap String j) -> [TxLog]
+     Domain k v -> Maybe (HashMap Text j) -> [TxLog]
 toLog d (Just m) = map (\(k,v) -> TxLog (asString d) (asString k) (toJSON v)) $ HM.toList m
 toLog _ Nothing = []
 {-# INLINE toLog #-}

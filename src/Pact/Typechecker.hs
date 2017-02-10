@@ -46,7 +46,6 @@ import Control.Arrow hiding ((<+>))
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
 import Data.String
-import Data.Monoid
 
 
 import Pact.Types.Typecheck
@@ -68,7 +67,7 @@ debug' :: MonadIO m => Bool -> String -> m ()
 debug' d s = when d (liftIO $ putStrLn s)
 
 
-freshId :: Info -> String -> TC TcId
+freshId :: Info -> Text -> TC TcId
 freshId i n = TcId i n <$> state (_tcSupply &&& over tcSupply succ)
 
 
@@ -188,7 +187,7 @@ tryFunType i roles _ f@(FunType as rt) = do
                         return $ Just f
                     | otherwise -> return Nothing
 
-asPrimString :: AST Node -> TC String
+asPrimString :: AST Node -> TC Text
 asPrimString (Prim _ (PrimLit (LString s))) = return s
 asPrimString t = die (_tiInfo (_aId (_aNode t))) $ "Expected literal string: " ++ show t
 
@@ -461,19 +460,19 @@ scopeToBody i args bod = do
     (TList ts@(_:_) _ _) -> mapM toAST ts -- verifies non-empty body.
     _ -> die i "Malformed def body"
 
-pfx :: String -> String -> String
-pfx s = ((s ++ "_") ++)
+pfx :: Text -> Text -> Text
+pfx s = ((s <> "_") <>)
 
 -- | Make a type variable to track a TcId.
 idTyVar :: TcId -> Type n
-idTyVar i = mkTyVar (show i) []
+idTyVar i = mkTyVar (TypeVarName $ pack $ show i) []
 
 -- | Make/track a Node using an "idTyVar", ie a variable for itself.
 trackIdNode :: TcId -> TC Node
 trackIdNode i = trackNode (idTyVar i) i
 
 mangle :: TcId -> Type n -> Type n
-mangle i = over (tyVar.tvName.typeVarName) (pfx (show i))
+mangle i = over (tyVar.tvName.typeVarName) (pfx (pack $ show i))
 
 -- | Mangle a type variable.
 mangleType :: TcId -> Type UserType -> Type UserType
@@ -496,7 +495,7 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let fn = asString _tModule ++ "." ++ asString _tDefName
+  let fn = asString _tModule <> "." <> asString _tDefName
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
@@ -525,12 +524,12 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
 toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
-       "app" ++ (case fun of FDefun {} -> "D"; _ -> "N") ++  _fName fun
+       "app" <> (case fun of FDefun {} -> "D"; _ -> "N") <>  _fName fun
   n <- trackIdNode i
   as <- mapM toAST _tAppArgs
   (as',fun') <- case fun of
     FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
-    FNative {..} -> case isSpecialForm (fromString _fName) of
+    FNative {..} -> case isSpecialForm (NativeDefName _fName) of
       Nothing -> return (as,fun)
       Just sf -> do
         let specialBind = (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
@@ -553,10 +552,10 @@ toAST TApp {..} = do
   return $ App n fun' as'
 
 toAST TBinding {..} = do
-  bi <- freshId _tInfo (show _tBindType)
+  bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
   bs <- forM _tBindPairs $ \(Arg n t ai,v) -> do
-    aid <- freshId ai (pfx (show bi) n)
+    aid <- freshId ai (pfx (pack $ show bi) n)
     t' <- mangleType aid <$> traverse toUserType t
     an <- trackNode t' aid
     v' <- toAST v
@@ -573,7 +572,7 @@ toAST TBinding {..} = do
     BindSchema sty -> do
       assocAST bi (last bb)
       sty' <- mangleType bi <$> traverse toUserType sty
-      sn <- trackNode sty' =<< freshId _tInfo (show bi ++ "schema")
+      sn <- trackNode sty' =<< freshId _tInfo (pack $ show bi ++ "schema")
       return $ BindSchema sn
   return $ Binding bn bs bb bt
 
@@ -592,7 +591,7 @@ toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
   ty <- TySchema TyTable <$> traverse toUserType _tTableType
-  Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule ++ "." ++ asString _tTableName))
+  Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = do
@@ -607,7 +606,7 @@ toAST TStep {..} = do
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
   let ty :: Type UserType = TyPrim pty
-  Prim <$> (trackNode ty =<< freshId inf (show ty) ) <*> pure v
+  Prim <$> (trackNode ty =<< freshId inf (pack $ show ty) ) <*> pure v
 
 trackNode :: Type UserType -> TcId -> TC Node
 trackNode ty i = trackAST node >> return node
@@ -639,12 +638,12 @@ mkTop t@TDef {} = do
   TopFun <$> toFun t
 mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrev t
-  TopConst _tInfo (asString _tModule ++ "." ++ _aName _tConstArg) <$>
+  TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
     traverse toUserType (_aType _tConstArg) <*>
     toAST _tConstVal
 mkTop t@TTable {..} = do
   debug $ "===== Table: " ++ abbrev t
-  TopTable _tInfo (asString _tModule ++ "." ++ asString _tTableName) <$>
+  TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
     traverse toUserType _tTableType
 mkTop t@TSchema {..} = do
   debug $ "===== Schema: " ++ abbrev t

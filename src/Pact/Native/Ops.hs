@@ -74,11 +74,11 @@ opDefs = ("Operators",
           plusTy = coerceBinNum <> binTy plusA plusA plusA
           unopTy = unaryTy numA numA
 
-defTrunc :: NativeDefName -> String -> (Decimal -> Integer) -> NativeDef
+defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
                                       unaryTy tTyInteger tTyDecimal)
-                     (desc ++ " value of decimal X as integer, or to PREC precision as decimal. " ++
-                     "`(" ++ asString n ++ " 3.5)` `(" ++ asString n ++ " 100.15234 2)`")
+                     (desc <> " value of decimal X as integer, or to PREC precision as decimal. " <>
+                     "`(" <> asString n <> " 3.5)` `(" <> asString n <> " 100.15234 2)`")
     where fun :: RNativeFun e
           fun _ [TLiteral (LDecimal d) _] = return $ toTerm $ op d
           fun i [TLiteral (LDecimal d) _,TLitInteger p]
@@ -89,7 +89,7 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
 
 defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> NativeDef
 defLogic n bop = defRNative n fun (binTy tTyBool tTyBool tTyBool) $
-                 "Boolean logic. `(" ++ asString n ++ " true false)`"
+                 "Boolean logic. `(" <> asString n <> " true false)`"
     where fun _ [TLiteral (LBool a) _,TLiteral (LBool b) _] = return $ toTerm $ a `bop` b
           fun i as = argsError i as
 
@@ -109,13 +109,13 @@ binTy rt ta tb = funType rt [("x",ta),("y",tb)]
 
 defCmp :: NativeDefName -> RNativeFun e -> NativeDef
 defCmp o f = let o' = asString o
-                 ex a' b = " `(" ++ o' ++ " " ++ a' ++ " " ++ b ++ ")`"
+                 ex a' b = " `(" <> o' <> " " <> a' <> " " <> b <> ")`"
                  a = mkTyVar "a" [tTyInteger,tTyDecimal,tTyString,tTyTime]
              in
              defRNative o f (binTy tTyBool a a) $
-             "True if X " ++ o' ++ " Y." ++
-             ex "1" "3" ++
-             ex "5.24" "2.52" ++
+             "True if X " <> o' <> " Y." <>
+             ex "1" "3" <>
+             ex "5.24" "2.52" <>
              ex "\"abc\"" "\"def\""
 
 -- | Monomorphic compare.
@@ -142,7 +142,7 @@ binop :: (Decimal -> Decimal -> Either String Decimal) ->
        (Integer -> Integer -> Either String Integer) -> RNativeFun e
 binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
   let hdl (Right v) = return $ toTerm v
-      hdl (Left err) = evalError' fi $ err ++ ": " ++ show (a,b)
+      hdl (Left err) = evalError' fi $ err <> ": " <> show (a,b)
   case (a,b) of
     (LInteger i,LInteger j) -> hdl (i `iop` j)
     (LDecimal i,LDecimal j) -> hdl (i `dop` j)
@@ -153,8 +153,8 @@ binop _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
 plus :: RNativeFun e
-plus _ [TLitString a,TLitString b] = return (tStr $ a ++ b)
-plus _ [TList a aty _,TList b bty _] = return (TList (a ++ b) (if aty == bty then aty else TyAny) def)
+plus _ [TLitString a,TLitString b] = return (tStr $ a <> b)
+plus _ [TList a aty _,TList b bty _] = return (TList (a <> b) (if aty == bty then aty else TyAny) def)
 plus _ [TObject as aty _,TObject bs bty _] =
   let reps (a,b) = (abbrev a,(a,b))
       mapit = M.fromList . map reps

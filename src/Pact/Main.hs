@@ -36,7 +36,7 @@ import Data.Word (Word16)
 
 import Pact.Repl
 import Pact.Compile
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding ((<>))
 import Pact.Server.Server
 
 
@@ -78,7 +78,7 @@ main = do
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
     OServer port' -> serve port'
-    OVersion -> putStrLn $ "pact version " ++ pactVersion
+    OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript fp
         | isPactFile fp -> do

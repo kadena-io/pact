@@ -93,7 +93,7 @@ eval (TUse mn i) = do
   mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
-    Just m -> installModule m >> return (tStr $ "Using " ++ show mn)
+    Just m -> installModule m >> return (tStr $ pack $ "Using " ++ show mn)
 
 
 eval t@(TModule m bod i) = do
@@ -105,9 +105,9 @@ eval t@(TModule m bod i) = do
   -- enforce new module keyset
   enforceKeySetName i (_mKeySet m)
   -- build/install module from defs
-  _defs <- call (StackFrame (abbrev t) i Nothing) $ loadModule m bod i
+  _defs <- call (StackFrame (pack $ abbrev t) i Nothing) $ loadModule m bod i
   writeRow Write Modules (_mName m) m
-  return $ msg $ "Loaded module " ++ show (_mName m)
+  return $ msg $ pack $ "Loaded module " ++ show (_mName m)
 
 eval t = enscope t >>= reduce
 
@@ -121,7 +121,7 @@ eval t = enscope t >>= reduce
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info ->
-              Eval e (HM.HashMap String (Term Name))
+              Eval e (HM.HashMap Text (Term Name))
 loadModule m bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
@@ -137,9 +137,9 @@ loadModule m bod1 mi = do
                 _ -> evalError (_tInfo t) "Invalid module member"
               return (dn,t))
       t -> evalError (_tInfo t) "Malformed module"
-  cs :: [SCC (Term (Either String Ref), String, [String])] <-
+  cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
-      call (StackFrame (abbrev d) (_tInfo d) Nothing) $
+      call (StackFrame (pack $ abbrev d) (_tInfo d) Nothing) $
       do
         d' <- forM d $ \(f :: Name) -> do
                 dm <- resolveRef f
@@ -154,7 +154,7 @@ loadModule m bod1 mi = do
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
               CyclicSCC vs -> evalError mi $ "Recursion detected: " ++ show vs
-  let defs :: HM.HashMap String Ref
+  let defs :: HM.HashMap Text Ref
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
       dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
@@ -177,7 +177,7 @@ resolveRef nn@(Name _) = do
             Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
-unify :: HM.HashMap String Ref -> Either String Ref -> Ref
+unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right d) = d
 unify m (Left f) = m HM.! f
 
@@ -198,8 +198,8 @@ reduce t@TLiteral {} = unsafeReduce t
 reduce t@TKeySet {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce (TList bs _ _) = last <$> mapM reduce bs -- note "body" usage here, bug?
-reduce t@TDef {} = return $ toTerm $ show t
-reduce t@TNative {} = return $ toTerm $ show t
+reduce t@TDef {} = return $ toTerm $ pack $ show t
+reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce (TConst _ _ t _ _) = reduce t
 reduce (TObject ps t i) =
   TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> traverse reduce t <*> pure i
@@ -224,7 +224,7 @@ reduceLet ps bod i = do
 
 {-# INLINE resolveArg #-}
 resolveArg :: Info -> [Term n] -> Int -> Term n
-resolveArg ai as i = fromMaybe (appError ai $ "Missing argument value at index " ++ show i) $
+resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at index " ++ show i) $
                      as `atMay` i
 
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
@@ -236,18 +236,18 @@ reduceApp TDef {..} as ai = do
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
-  call (StackFrame _tDefName ai (Just (fa,map abbrev as))) $
+  call (StackFrame _tDefName ai (Just (fa,map (pack.abbrev) as))) $
     case _tDefType of
       Defun -> reduce bod'
       Defpact -> applyPact bod'
-reduceApp (TLitString errMsg) _ i = evalError i errMsg
+reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
   _nativeFun _tNativeFun
   (FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)) as
-reduceDirect (TLitString errMsg) _ i = evalError i errMsg
+reduceDirect (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r
 
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
@@ -265,7 +265,7 @@ applyPact (TList ss _ i) = do
   us <- view eeEntity
   case entr of
     (TLitString target)
-        | target /= us -> return (tStr $ "Skip step " ++ show idx)
+        | target /= us -> return (tStr $ pack $ "Skip step " ++ show idx)
         | otherwise ->
             case (doRollback,rb) of
               (False,_) -> do
@@ -289,7 +289,7 @@ evalStep exp yield = do
               reduce exp
 
 -- | Create special error form handled in 'reduceApp'
-appError :: Info -> String -> Term n
+appError :: Info -> Text -> Term n
 appError i errMsg = TApp (toTerm errMsg) [] i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
@@ -303,14 +303,14 @@ installModule (m,defs) = do
   (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first Name) . HM.toList $ defs)
   (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
 
-msg :: String -> Term n
+msg :: Text -> Term n
 msg = toTerm
 
 enscope ::  Term Name ->  Eval e (Term Ref)
 enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothing) $ t)
 
 instantiate' :: Scope n Term a -> Term a
-instantiate' = instantiate1 (toTerm ("No bindings" :: String))
+instantiate' = instantiate1 (toTerm ("No bindings" :: Text))
 
 -- | Runtime input typecheck -- let bindings and defuns.
 -- Output checking -- defconsts, function return values -- left to static TC.
@@ -331,7 +331,7 @@ typecheck ps = void $ foldM tvarCheck M.empty ps where
 check1 :: forall e . Info -> Type (Term Name) -> Term Name -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
 check1 i spec t = do
   ty <- case typeof t of
-    Left s -> evalError i $ "Invalid type in value location: " ++ s
+    Left s -> evalError i $ "Invalid type in value location: " ++ unpack s
     Right r -> return r
   let
     tcFail :: Show a => a -> Eval e b
@@ -342,7 +342,7 @@ check1 i spec t = do
     paramCheck TyAny _ _ = tcOK
     paramCheck TyVar {} _ _ = tcOK
     paramCheck pspec pty check | pspec == pty = tcOK -- dupe check as below, for totality
-                               | (not (isUnconstrainedTy pty)) = tcFail ty -- unequal constrained fails
+                               | not (isUnconstrainedTy pty) = tcFail ty -- unequal constrained fails
                                | otherwise = do
                                    checked <- check pspec
                                    if checked == spec then tcOK else tcFail checked
@@ -369,12 +369,12 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
   let uty = M.fromList . map (_aName &&& id) $ _tFields
   aps <- forM ps $ \(k,v) -> case k of
     TLitString ks -> case M.lookup ks uty of
-      Nothing -> evalError i $ "Invalid field for {" ++ asString _tSchemaName ++ "}: " ++ ks
+      Nothing -> evalError i $ "Invalid field for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show ks
       Just a -> return (a,v)
     t -> evalError i $ "Invalid object, non-String key found: " ++ show t
   when total $ do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
-    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ asString _tSchemaName ++ "}: " ++ show (M.elems missing)
+    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show (M.elems missing)
   typecheck aps
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
