@@ -137,7 +137,7 @@ var simplePollRequestFromExec = function(execMsg) {
     } else {
         rks = unique(cmds.map(function(v){return v.hash;}));
     }
-    return {"requestKeys": rks};
+    return {"requestIds": rks};
 };
 
 module.exports = {
