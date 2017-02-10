@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 var fs = require('fs');
 var nacl = require('tweetnacl');
-var pact = require('./pact-api.js');
+var pact = require('./pact-lang-api.js');
 
 var args = {};
 var key = undefined;

@@ -1,0 +1,19 @@
+{
+  "name": "pact-lang-api",
+  "version": "1.0.0",
+  "description": "hashing and signing functions needed to interact with Pact",
+  "main": "pact-lang-api.js",
+  "scripts": {
+    "build": "browserify pact-lang-api.js -o pact-lang-api.min.js && browserify pact-lang-api-global.js -o pact-lang-api-global.min.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github.com/kadena-io/pact"
+  },
+  "author": "Will Martino",
+  "license": "BSD3",
+  "dependencies": {
+    "blakejs": "^1.0.1",
+    "tweetnacl": "^0.14.5"
+  }
+}

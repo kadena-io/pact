@@ -1,3 +1,3 @@
 var Pact = window.Pact || {};
-Pact = require('./pact-api.js');
+Pact = require('./pact-lang-api.js');
 window.Pact = Pact;
