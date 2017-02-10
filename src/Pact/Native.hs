@@ -33,7 +33,6 @@ import Safe
 import Control.Arrow
 import Data.Foldable
 import Control.Applicative
-import Data.Semigroup ((<>))
 import Data.Aeson (Value(Null))
 
 
@@ -198,18 +197,18 @@ filter' i as = argsError' i as
 
 length' :: RNativeFun e
 length' _ [TList ls _ _] = return $ toTerm (length ls)
-length' _ [TLitString s] = return $ toTerm (length s)
+length' _ [TLitString s] = return $ toTerm (T.length s)
 length' _ [TObject ps _ _] = return $ toTerm (length ps)
 length' i as = argsError i as
 
 take' :: RNativeFun e
 take' _ [TLitInteger c,TList l t _] = return $ TList (tord take c l) t def
-take' _ [TLitInteger c,TLitString l] = return $ toTerm $ tord take c l
+take' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord take c (unpack l)
 take' i as = argsError i as
 
 drop' :: RNativeFun e
 drop' _ [TLitInteger c,TList l t _] = return $ TList (tord drop c l) t def
-drop' _ [TLitInteger c,TLitString l] = return $ toTerm $ tord drop c l
+drop' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord drop c (unpack l)
 drop' i as = argsError i as
 
 tord :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
@@ -242,16 +241,16 @@ compose i as = argsError' i as
 
 format :: RNativeFun e
 format i (TLitString s:es) = do
-  let parts = T.splitOn "{}" $ T.pack s
+  let parts = T.splitOn "{}" s
       plen = length parts
       rep (TLitString t) = t
-      rep t = show t
+      rep t = pack $ show t
   if plen == 1
   then return $ tStr s
   else if plen - length es > 1
        then evalError' i "format: not enough arguments for template"
-       else return $ tStr $ T.unpack $
-            foldl' (\r (e,t) -> r <> T.pack (rep e) <> t)  (head parts) (zip es (tail parts))
+       else return $ tStr $
+            foldl' (\r (e,t) -> r <> rep e <> t)  (head parts) (zip es (tail parts))
 format i as = argsError i as
 
 
@@ -284,7 +283,7 @@ negatable p = (,) <$> optional (AP.char '-') <*> p
 enforce :: RNativeFun e
 enforce _ [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
-    | otherwise = failTx msg
+    | otherwise = failTx $ unpack msg
 enforce i as = argsError i as
 {-# INLINE enforce #-}
 
@@ -308,7 +307,7 @@ bind i [src,TBinding ps bd (BindSchema _) bi] = reduce src >>= \st -> case st of
 bind i as = argsError' i as
 
 typeof' :: RNativeFun e
-typeof' _ [t] = return $ tStr $ either id show $ typeof t
+typeof' _ [t] = return $ tStr $ either id (pack.show) $ typeof t
 typeof' i as = argsError i as
 
 listModules :: RNativeFun e

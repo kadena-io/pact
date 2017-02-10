@@ -32,7 +32,7 @@ import Pact.Native.Internal
 timeDefs :: NativeModule
 timeDefs = ("Time",
     [defRNative "time" time (funType tTyTime [("utcval",tTyString)]) $
-     "Construct time from UTCVAL using ISO8601 format (" ++ simpleISO8601 ++ "). " ++
+     "Construct time from UTCVAL using ISO8601 format (" <> pack simpleISO8601 <> "). " <>
      "`(time \"2016-07-22T11:26:35Z\")`"
     ,defRNative "parse-time" parseTime' (funType tTyTime [("format",tTyString),("utcval",tTyString)])
      "Construct time from UTCVAL using FORMAT. \
@@ -59,15 +59,15 @@ timeDefs = ("Time",
 
 time :: RNativeFun e
 time i [TLitString s] =
-  case parseTime defaultTimeLocale simpleISO8601 s of
-    Nothing -> evalError' i $ "Invalid time, expecting '" ++ simpleISO8601 ++ "': " ++ s
+  case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
+    Nothing -> evalError' i $ "Invalid time, expecting '" ++ simpleISO8601 ++ "': " ++ unpack s
     Just t -> return (tLit (LTime t))
 time i as = argsError i as
 
 parseTime' :: RNativeFun e
 parseTime' i [TLitString fmt,TLitString s] =
-  case parseTime defaultTimeLocale fmt s of
-    Nothing -> evalError' i $ "Failed to parse time '" ++ s ++ "' with format: " ++ fmt
+  case parseTime defaultTimeLocale (unpack fmt) (unpack s) of
+    Nothing -> evalError' i $ "Failed to parse time '" ++ unpack s ++ "' with format: " ++ unpack fmt
     Just t -> return (tLit (LTime t))
 parseTime' i as = argsError i as
 

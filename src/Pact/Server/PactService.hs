@@ -28,7 +28,6 @@ import Data.Maybe
 import qualified Text.Trifecta as TF
 import qualified Data.Attoparsec.Text as AP
 import Control.Monad.Except
-import Data.Text (Text,unpack)
 import Prelude hiding (log,exp)
 import qualified Data.HashMap.Strict as HM
 import Text.PrettyPrint.ANSI.Leijen (renderCompact,displayS)

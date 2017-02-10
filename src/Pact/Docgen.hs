@@ -38,7 +38,7 @@ funDocs = do
   h <- openFile "docs/pact-functions.md" WriteMode
   let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h t
   forM_ natives $ \(sect,ns) -> do
-    hPutStrLn h $ "## " ++ asString sect ++ " {#" ++ asString sect ++ "}"
+    hPutStrLn h $ "## " ++ unpack (asString sect) ++ " {#" ++ unpack (asString sect) ++ "}"
     renderSection ns
   hPutStrLn h "## REPL-only functions {#repl-lib}"
   hPutStrLn h ""
@@ -51,15 +51,15 @@ funDocs = do
 renderDocs :: Show n => Handle -> Term n -> IO ()
 renderDocs h TNative {..} = do
       hPutStrLn h ""
-      hPutStrLn h $ "### " ++ escapeIfNecc (asString _tNativeName) ++ " {#" ++ sanitize (asString _tNativeName) ++ "}"
+      hPutStrLn h $ "### " ++ escapeIfNecc (unpack $ asString _tNativeName) ++ " {#" ++ sanitize (unpack $ asString _tNativeName) ++ "}"
       hPutStrLn h ""
       forM_ _tFunTypes $ \FunType {..} -> do
-        hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
+        hPutStrLn h $ unwords (map (\(Arg n t _) -> "*" ++ unpack n ++ "*&nbsp;`" ++ show t ++ "`") _ftArgs) ++
           " *&rarr;*&nbsp;`" ++ show _ftReturn ++ "`"
         hPutStrLn h ""
       hPutStrLn h ""
       let noexs = hPutStrLn stderr $ "No examples for " ++ show _tNativeName
-      case parseString parseDocs mempty _tNativeDocs of
+      case parseString parseDocs mempty (unpack _tNativeDocs) of
         Success (t,es) -> do
              hPutStrLn h t
              if null es then noexs
@@ -80,7 +80,7 @@ renderDocs h TNative {..} = do
                        (Left err,ExecErr) -> hPutStrLn h err
                        (Left err,_) -> throwM (userError err)
                hPutStrLn h "```"
-        _ -> hPutStrLn h _tNativeDocs >> noexs
+        _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
       hPutStrLn h ""
 renderDocs _ _ = return ()
 

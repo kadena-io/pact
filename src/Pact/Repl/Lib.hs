@@ -27,10 +27,10 @@ import Control.Monad.Catch
 import Control.Monad.State.Strict (get)
 import Control.Lens
 import qualified Data.Set as S
-import qualified Data.ByteString.UTF8 as BS
-import qualified Data.ByteString.Lazy.UTF8 as BSL
+import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
+import Data.Text.Encoding
 #if !defined(ghcjs_HOST_OS)
 import Criterion
 import Criterion.Types
@@ -42,7 +42,6 @@ import Pact.Types.Runtime
 import Pact.Eval
 import Pact.Pure
 import Data.Semigroup
-import Data.String
 import Pact.Typechecker
 import Pact.Types.Typecheck
 
@@ -59,7 +58,7 @@ data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 data LibState = LibState {
       _rlsPure :: MVar PureState
     , _rlsOp :: LibOp
-    , _rlsTxName :: Maybe String
+    , _rlsTxName :: Maybe Text
 }
 makeLenses ''LibState
 
@@ -71,17 +70,17 @@ replDefs = ("Repl",
      [
       defRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
-      "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " ++
+      "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " <>
       "`$(load \"accounts.repl\")`"
      ,defRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defRNative "env-data" setmsg (funType tTyString [("json",json)]) $
-      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " ++
+      "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " <>
       "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
      ,defRNative "env-step" setstep (funType tTyString [] <>
                                      funType tTyString [("step-idx",tTyInteger)] <>
                                      funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)])
-      ("Modify pact step state. With no arguments, unset step. STEP-IDX sets step index for " ++
+      ("Modify pact step state. With no arguments, unset step. STEP-IDX sets step index for " <>
        "current pact execution, ROLLBACK defaults to false. `$(env-step 1)` `$(env-step 0 true)`")
      ,defRNative "env-entity" setentity (funType tTyString [("entity",tTyString)])
       "Set environment confidential ENTITY id. `$(env-entity \"my-org\")`"
@@ -93,7 +92,7 @@ replDefs = ("Repl",
      ,defRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       "Evaluate ACTUAL and verify that it equals EXPECTED. `(expect \"Sanity prevails.\" 4 (+ 2 2))`"
      ,defNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)]) $
-      "Evaluate EXP and succeed only if it throws an error. " ++
+      "Evaluate EXP and succeed only if it throws an error. " <>
       "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
      ,defNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
@@ -102,8 +101,8 @@ replDefs = ("Repl",
        "Typecheck MODULE, optionally enabling DEBUG output."
 
      ,defRNative "json" json' (funType tTyValue [("exp",a)]) $
-      "Encode pact expression EXP as a JSON value. " ++
-      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " ++
+      "Encode pact expression EXP as a JSON value. " <>
+      "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
      ])
      where
@@ -133,8 +132,8 @@ repldb = PactDb {
 
 
 load :: RNativeFun LibState
-load _ [TLitString fn] = setop (Load fn False) >> return (tStr $ "Loading " ++ fn ++ "...")
-load _ [TLitString fn, TLiteral (LBool r) _] = setop (Load fn r) >> return (tStr $ "Loading " ++ fn ++ "...")
+load _ [TLitString fn] = setop (Load (unpack fn) False) >> return (tStr $ "Loading " <> fn <> "...")
+load _ [TLitString fn, TLiteral (LBool r) _] = setop (Load (unpack fn) r) >> return (tStr $ "Loading " <> fn <> "...")
 load i as = argsError i as
 
 
@@ -152,13 +151,13 @@ setsigs i [TList ts _ _] = do
   ks <- forM ts $ \t -> case t of
           (TLitString s) -> return s
           _ -> argsError i ts
-  setenv eeMsgSigs (S.fromList (map (PublicKey . BS.fromString) ks))
+  setenv eeMsgSigs (S.fromList (map (PublicKey . encodeUtf8) ks))
   return $ tStr "Setting transaction keys"
 setsigs i as = argsError i as
 
 setmsg :: RNativeFun LibState
 setmsg i [TLitString j] =
-  case eitherDecode (BSL.fromString j) of
+  case eitherDecode (BSL.fromStrict $ encodeUtf8 j) of
     Left f -> evalError' i ("Invalid JSON: " ++ show f)
     Right v -> setenv eeMsgBody v >> return (tStr "Setting transaction data")
 setmsg _ [a] = setenv eeMsgBody (toJSON a) >> return (tStr "Setting transaction data")
@@ -184,8 +183,8 @@ setentity :: RNativeFun LibState
 setentity _ [TLitString s] = setenv eeEntity s >> return (tStr "Setting entity")
 setentity i as = argsError i as
 
-txmsg :: Maybe String -> TxId -> String -> Term Name
-txmsg n tid s = tStr $ s ++ " Tx " ++ show tid ++ maybe "" (": " ++) n
+txmsg :: Maybe Text -> TxId -> Text -> Term Name
+txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n
 
 
 tx :: Tx -> RNativeFun LibState
@@ -217,8 +216,8 @@ tx _ i as = argsError i as
 expect :: RNativeFun LibState
 expect i [TLitString a,b,c] =
   if b `termEq` c
-  then return $ tStr $ "Expect: success: " ++ a
-  else evalError' i $ "FAILURE: " ++ a ++ ": expected " ++ show b ++ ", received " ++ show c
+  then return $ tStr $ "Expect: success: " <> a
+  else evalError' i $ "FAILURE: " ++ unpack a ++ ": expected " ++ show b ++ ", received " ++ show c
 expect i as = argsError i as
 
 expectFail :: NativeFun LibState
@@ -228,8 +227,8 @@ expectFail i as@[a,b] = do
     TLitString msg -> do
       r <- catchError (Right <$> reduce b) (return . Left)
       case r of
-        Right v -> evalError' i $ "FAILURE: " ++ msg ++ ": expected failure, got result = " ++ show v
-        Left _ -> return $ tStr $ "Expect failure: success: " ++ msg
+        Right v -> evalError' i $ "FAILURE: " ++ unpack msg ++ ": expected failure, got result = " ++ show v
+        Left _ -> return $ tStr $ "Expect failure: success: " <> msg
     _ -> argsError' i as
 expectFail i as = argsError' i as
 
@@ -269,7 +268,7 @@ tc i as = case as of
   _ -> argsError i as
   where
     go modname dbg = do
-      mdm <- HM.lookup (fromString modname) <$> view (eeRefStore . rsModules)
+      mdm <- HM.lookup (ModuleName modname) <$> view (eeRefStore . rsModules)
       case mdm of
         Nothing -> evalError' i $ "No such module: " ++ show modname
         Just md -> do
@@ -278,10 +277,10 @@ tc i as = case as of
           case r of
             Left e -> evalError' i $ "Typecheck failed with internal error: " ++ show e
             Right (_,fails) -> case fails of
-              [] -> return $ tStr $ "Typecheck " ++ modname ++ ": success"
+              [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
-                return $ tStr $ "Typecheck " ++ modname ++ ": Unable to resolve all types"
+                return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 
 json' :: RNativeFun LibState

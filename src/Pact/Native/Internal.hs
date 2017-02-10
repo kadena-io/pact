@@ -28,9 +28,7 @@ import Control.Lens hiding (Fold)
 import Data.Aeson
 import Control.Arrow
 import qualified Data.Aeson.Lens as A
-import qualified Data.Text as T
 import Bound
-import Data.String
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 
@@ -58,7 +56,7 @@ instance AsString SpecialForm where
 instance Show SpecialForm where show = show . asString
 
 specialForm :: SpecialForm -> NativeDefName
-specialForm = fromString . asString
+specialForm = NativeDefName . asString
 
 sfLookup :: M.Map NativeDefName SpecialForm
 sfLookup = M.fromList $ map (specialForm &&& id) [minBound .. maxBound]
@@ -80,7 +78,7 @@ type NativeModule = (ModuleName,[NativeDef])
 void' :: (ToTerm t,Functor m) => t -> m a -> m (Term Name)
 void' = fmap . const . toTerm
 
-success :: Functor m => String -> m a -> m (Term Name)
+success :: Functor m => Text -> m a -> m (Term Name)
 success = void'
 
 unsetInfo :: Term a -> Term a
@@ -88,9 +86,9 @@ unsetInfo a = set tInfo def a
 {-# INLINE unsetInfo #-}
 
 
-parseMsgKey :: (FromJSON t) => FunApp -> String -> String -> Eval e t
+parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
 parseMsgKey i msg key = do
-  vm <- firstOf (A.key (T.pack key)) <$> view eeMsgBody
+  vm <- firstOf (A.key key) <$> view eeMsgBody
   case vm of
     Nothing -> evalError' i $ "No such key in message: " ++ show key
     Just v -> case fromJSON v of
@@ -98,34 +96,34 @@ parseMsgKey i msg key = do
                 Error e -> evalError' i $ msg ++ ": parse failed: " ++ e ++ ": " ++ show v
 
 
-bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (String -> Maybe (Term Ref)) -> Eval e (Term Name)
+bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (Text -> Maybe (Term Ref)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
   !(vs :: [(Arg (Term Ref),Term Ref)]) <- forM ps $ \(k,var) -> do
           var' <- reduce var
           case var' of
             (TLitString s) -> case lkpFun s of
-                                Nothing -> evalError bi $ "Bad column in binding: " ++ s
+                                Nothing -> evalError bi $ "Bad column in binding: " ++ unpack s
                                 Just v -> return $! (k,v)
             t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
-  call (StackFrame ("(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
+  call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
 
 
-defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> String -> NativeDef
+defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
 defNative n fun ftype docs = (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
 
-defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> String -> NativeDef
+defRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
 defRNative name fun = defNative name (reduced fun)
     where reduced f fi as = mapM reduce as >>= \as' -> f fi as'
 
 foldDefs :: Monad m => [m a] -> m [a]
 foldDefs = foldM (\r d -> d >>= \d' -> return (d':r)) []
 
-funType :: Type n -> [(String,Type n)] -> FunTypes n
+funType :: Type n -> [(Text,Type n)] -> FunTypes n
 funType t as = funTypes $ funType' t as
 
 
-funType' :: Type n -> [(String,Type n)] -> FunType n
+funType' :: Type n -> [(Text,Type n)] -> FunType n
 funType' t as = FunType (map (\(s,ty) -> Arg s ty def) as) t
 
 

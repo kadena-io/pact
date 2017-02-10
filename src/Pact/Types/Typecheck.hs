@@ -52,14 +52,14 @@ data UserType = Schema {
   _utInfo :: Info
   } deriving (Eq,Ord)
 instance Show UserType where
-  show Schema {..} = "{" ++ asString _utModule ++ "." ++ asString _utName ++ " " ++ show _utFields ++ "}"
+  show Schema {..} = "{" ++ unpack (asString _utModule) ++ "." ++ unpack (asString _utName) ++ " " ++ show _utFields ++ "}"
 instance Pretty UserType where
   pretty Schema {..} = braces (pretty _utModule <> dot <> pretty _utName)
 
 -- | An ID for an AST node.
 data TcId = TcId {
   _tiInfo :: Info,
-  _tiName :: String,
+  _tiName :: Text,
   _tiId :: Int
   }
 
@@ -68,7 +68,7 @@ instance Eq TcId where
 instance Ord TcId where
   a <= b = _tiId a < _tiId b || (_tiId a == _tiId b && _tiName a <= _tiName b)
 -- show instance is important, used as variable name
-instance Show TcId where show TcId {..} = _tiName ++ show _tiId
+instance Show TcId where show TcId {..} = unpack _tiName ++ show _tiId
 instance Pretty TcId where pretty = string . show
 
 
@@ -161,13 +161,13 @@ data TopLevel t =
     } |
   TopConst {
     _tlInfo :: Info,
-    _tlName :: String,
+    _tlName :: Text,
     _tlType :: Type UserType,
     _tlConstVal :: AST t
     } |
   TopTable {
     _tlInfo :: Info,
-    _tlName :: String,
+    _tlName :: Text,
     _tlType :: Type UserType
   } |
   TopUserType {
@@ -195,29 +195,29 @@ data Special t =
 data Fun t =
   FNative {
     _fInfo :: Info,
-    _fName :: String,
+    _fName :: Text,
     _fTypes :: FunTypes UserType,
     _fSpecial :: Maybe (SpecialForm,Special t)
     } |
   FDefun {
     _fInfo :: Info,
-    _fName :: String,
+    _fName :: Text,
     _fType :: FunType UserType,
     _fArgs :: [Named t],
     _fBody :: [AST t],
-    _fDocs :: Maybe String
+    _fDocs :: Maybe Text
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 
 instance Pretty t => Pretty (Fun t) where
-  pretty FNative {..} = "(native " <> text _fName <$$>
+  pretty FNative {..} = "(native " <> pretty _fName <$$>
     indent 2 ("::" <+> align (vsep (map pretty (toList _fTypes)))) <>
       (case _fSpecial of
          Nothing -> mempty
          Just (_,SBinding bod) -> mempty <$$> indent 2 (pretty bod)
          _ -> mempty) <$$>
       ")"
-  pretty FDefun {..} = "(defun " <> text _fName <$$>
+  pretty FDefun {..} = "(defun " <> pretty _fName <$$>
     indent 2 ("::" <+> pretty _fType) <$$>
     indent 2 ("(" <$$>
               indent 2 (vsep (map pretty _fArgs)) <$$> ")") <$$>
@@ -237,7 +237,7 @@ instance Pretty Node where
 
 -- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
-  _nnName :: String,
+  _nnName :: Text,
   _nnNamed :: i
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance (Show i) => Show (Named i) where

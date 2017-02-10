@@ -25,6 +25,7 @@
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
 -- Runtime types: 'Eval' monad, 'PactDb' backend "funrec", exceptions.
+-- Exports Lang and Util, so this is the "default import" for most pact things.
 --
 
 module Pact.Types.Runtime
@@ -54,7 +55,8 @@ module Pact.Types.Runtime
    PactDbException(..),
    throwDbError,
    module Pact.Types.Lang,
-   module Pact.Types.Util
+   module Pact.Types.Util,
+   (<>)
    ) where
 
 
@@ -73,7 +75,6 @@ import qualified Data.ByteString.Lazy.UTF8 as BSL
 import qualified Data.Set as S
 import Data.String
 import Data.Default
-import Data.Text (pack,unpack)
 import Data.Thyme
 import Data.Thyme.Format.Aeson ()
 import Data.Thyme.Time.Core
@@ -84,6 +85,7 @@ import Data.Decimal
 import qualified Data.Vector as V
 import Control.Concurrent.MVar
 import Data.Serialize (Serialize)
+import Data.Semigroup
 
 import Pact.Types.Orphans ()
 import Pact.Types.Lang
@@ -91,33 +93,33 @@ import Pact.Types.Util
 
 
 data PactError =
-    EvalError Info String |
-    ArgsError FunApp [Term Name] String |
-    DbError String |
-    TxFailure String
+    EvalError Info Text |
+    ArgsError FunApp [Term Name] Text |
+    DbError Text |
+    TxFailure Text
 
 instance Show PactError where
-    show (EvalError i s) = show i ++ ": " ++ s
+    show (EvalError i s) = show i ++ ": " ++ unpack s
     show (ArgsError FunApp {..} args s) =
-        show _faInfo ++ ": " ++ s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
-    show (TxFailure s) = " Failure: " ++ s
-    show (DbError s) = " Failure: Database exception: " ++ s
+        show _faInfo ++ ": " ++ unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
+    show (TxFailure s) = " Failure: " ++ unpack s
+    show (DbError s) = " Failure: Database exception: " ++ unpack s
 
 evalError :: MonadError PactError m => Info -> String -> m a
-evalError i = throwError . EvalError i
+evalError i = throwError . EvalError i . pack
 
 evalError' :: MonadError PactError m => FunApp -> String -> m a
 evalError' = evalError . _faInfo
 
 failTx :: MonadError PactError m => String -> m a
-failTx = throwError . TxFailure
+failTx = throwError . TxFailure . pack
 
 
 argsError :: (MonadError PactError m) => FunApp -> [Term Name] -> m a
 argsError i as = throwError $ ArgsError i as "Invalid arguments"
 
 argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
-argsError' i as = throwError $ ArgsError i (map (toTerm.abbrev) as) "Invalid arguments"
+argsError' i as = throwError $ ArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
 
 
 data Persistable =
@@ -135,7 +137,7 @@ instance ToTerm Persistable where
     toTerm (PKeySet k) = toTerm k
     toTerm (PValue v) = toTerm v
 instance ToJSON Persistable where
-    toJSON (PLiteral (LString s)) = String (pack s)
+    toJSON (PLiteral (LString s)) = String s
     toJSON (PLiteral (LBool b)) = Bool b
     toJSON (PLiteral (LInteger n)) = Number (fromIntegral n)
     toJSON (PLiteral (LDecimal (Decimal dp dm))) =
@@ -146,7 +148,7 @@ instance ToJSON Persistable where
     toJSON (PKeySet k) = toJSON k
     toJSON (PValue v) = Array (V.fromList ["v",v])
 instance FromJSON Persistable where
-    parseJSON (String s) = return (PLiteral (LString (unpack s)))
+    parseJSON (String s) = return (PLiteral (LString s))
     parseJSON (Number n) = return (PLiteral (LInteger (round n)))
     parseJSON (Bool b) = return (PLiteral (LBool b))
     parseJSON v@(Object _) = PKeySet <$> parseJSON v
@@ -161,11 +163,11 @@ instance FromJSON Persistable where
           _ -> return (PValue va)
 
 
-newtype ColumnId = ColumnId String
+newtype ColumnId = ColumnId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
 instance Show ColumnId where show (ColumnId s) = show s
 
-newtype RowKey = RowKey String
+newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString)
 instance Show RowKey where show (RowKey s) = show s
 
@@ -173,12 +175,12 @@ instance Show RowKey where show (RowKey s) = show s
 newtype Columns v = Columns { _columns :: M.Map ColumnId v }
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance (ToJSON v) => ToJSON (Columns v) where
-    toJSON (Columns m) = object . map (\(k,v) -> pack (asString k) .= toJSON v) . M.toList $ m
+    toJSON (Columns m) = object . map (\(k,v) -> asString k .= toJSON v) . M.toList $ m
 instance (FromJSON v) => FromJSON (Columns v) where
     parseJSON = withObject "Columns" $ \o ->
                 (Columns . M.fromList) <$>
                  forM (HM.toList o)
-                  (\(k,v) -> ((,) <$> pure (ColumnId (unpack k)) <*> parseJSON v))
+                  (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
 
 makeLenses ''Columns
 
@@ -195,8 +197,8 @@ instance AsString (Domain k v) where
 
 data TxLog =
     TxLog {
-      _txDomain :: !String
-    , _txKey :: !String
+      _txDomain :: !Text
+    , _txKey :: !Text
     , _txValue :: !Value
     } deriving (Eq,Show)
 makeLenses ''TxLog
@@ -243,7 +245,7 @@ data PactStep = PactStep {
     , _psTxId :: !TxId
 } deriving (Eq,Show)
 
-type ModuleData = (Module,HM.HashMap String Ref)
+type ModuleData = (Module,HM.HashMap Text Ref)
 
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
@@ -257,7 +259,7 @@ data EvalEnv e = EvalEnv {
     , _eeMsgSigs :: !(S.Set PublicKey)
     , _eeMsgBody :: !Value
     , _eeTxId :: !TxId
-    , _eeEntity :: !String
+    , _eeEntity :: !Text
     , _eePactStep :: !(Maybe PactStep)
     , _eePactDbVar :: MVar e
     , _eePactDb :: PactDb e
@@ -265,12 +267,12 @@ data EvalEnv e = EvalEnv {
 makeLenses ''EvalEnv
 
 data StackFrame = StackFrame {
-      _sfName :: !String
+      _sfName :: !Text
     , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[String])
+    , _sfApp :: Maybe (FunApp,[Text])
     }
 instance Show StackFrame where
-    show (StackFrame n i a) = renderInfo i ++ ": " ++ n ++ f a
+    show (StackFrame n i a) = renderInfo i ++ ": " ++ unpack n ++ f a
         where f Nothing = ""
               f (Just (dd,as)) = ", " ++ show dd ++ ", values=" ++ show as
 makeLenses ''StackFrame
@@ -325,7 +327,7 @@ call s act = do
 method :: (PactDb e -> Method e a) -> Eval e a
 method f = do
   EvalEnv {..} <- ask
-  handleAll (throwError . DbError . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwError . DbError . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 readRow :: (IsString k,FromJSON v) => Domain k v -> k -> Eval e (Maybe v)

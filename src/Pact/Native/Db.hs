@@ -25,13 +25,11 @@ import Prelude hiding (exp)
 import Bound
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
-import Data.String
 import Data.Default
 import Control.Arrow hiding (app)
 import Control.Lens hiding (from,to,(.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
-import Data.Semigroup ((<>))
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -41,7 +39,7 @@ import Pact.Native.Internal
 dbDefs :: NativeModule
 dbDefs =
   let writeArgs = funType tTyString [("table",tableTy),("key",tTyString),("object",rowTy)]
-      writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" ++ s ++ "`$" ++ ex ++ "`"
+      writeDocs s ex = "Write entry in TABLE for KEY of OBJECT column data" <> s <> "`$" <> ex <> "`"
       rt = mkSchemaVar "row"
       tableTy = TySchema TyTable rt
       rowTy = TySchema TyObject rt
@@ -103,23 +101,23 @@ dbDefs =
 descTable :: RNativeFun e
 descTable _ [TLitString t] =
     toTerm . (\(m,k) -> object ["name" .= t, "module" .= m, "keyset" .= k]) <$>
-    getUserTableInfo (fromString t)
+    getUserTableInfo (TableName t)
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
-  r <- readRow KeySets (fromString t)
+  r <- readRow KeySets (KeySetName t)
   case r of
     Just v -> return (toTerm (toJSON v))
-    Nothing -> evalError' i $ "Keyset not found: " ++ t
+    Nothing -> evalError' i $ "Keyset not found: " ++ show t
 descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view (eeRefStore.rsModules.at (fromString t))
+  mods <- view (eeRefStore.rsModules.at (ModuleName t))
   case mods of
     Just (_,m) -> (\l -> TList l TyAny def) <$> mapM deref (HM.elems m)
-    Nothing -> evalError' i $ "Module not found: " ++ t
+    Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
 
 -- | unsafe function to create domain from TTable.
@@ -128,7 +126,7 @@ userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
 userTable' :: Show n => Term n -> TableName
-userTable' TTable {..} = fromString $ asString _tModule ++ "." ++ asString _tTableName
+userTable' TTable {..} = TableName $ asString _tModule <> "." <> asString _tTableName
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
@@ -138,11 +136,11 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
     [] -> return []
     [TList cs _ _] -> forM cs $ \c ->
           case c of
-            TLitString col -> return $ fromString col
+            TLitString col -> return $ ColumnId col
             _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
     _ -> argsError i as
   guardTable i table
-  mrow <- readRow (userTable table) (fromString key)
+  mrow <- readRow (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
@@ -160,7 +158,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   case tkd of
     (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (fromString key)
+      mrow <- readRow (userTable table) (RowKey key)
       case mrow of
         Nothing -> bindToRow ps bd b =<< toColumns fi defaultRow
         (Just row) -> bindToRow ps bd b row
@@ -173,7 +171,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   case tk of
     (table@TTable {..},TLitString key) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (fromString key)
+      mrow <- readRow (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx $ "with-read: row not found: " ++ show key
         (Just row) -> bindToRow ps bd b row
@@ -182,7 +180,7 @@ withRead fi as = argsError' fi as
 
 bindToRow :: [(Arg (Term Ref),Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
-bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (fromString s) row)
+bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
 
 keys' :: RNativeFun e
 keys' i [table@TTable {..}] = do
@@ -211,15 +209,15 @@ write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
     TyAny -> return ()
     TyVar {} -> return ()
     tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
-  success "Write succeeded" . writeRow wt (userTable table) (fromString key) =<< toColumns i ps
+  success "Write succeeded" . writeRow wt (userTable table) (RowKey key) =<< toColumns i ps
 write _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where
-    conv (TLitString k, TLiteral v _) = return (fromString k,PLiteral v)
-    conv (TLitString k, TKeySet ks _) = return (fromString k,PKeySet ks)
-    conv (TLitString k, TObject ks _ _) = toColumns i ks >>= \o' -> return (fromString k,PValue $ toJSON o')
-    conv (TLitString k, TValue v _) = return (fromString k,PValue v)
+    conv (TLitString k, TLiteral v _) = return (ColumnId k,PLiteral v)
+    conv (TLitString k, TKeySet ks _) = return (ColumnId k,PKeySet ks)
+    conv (TLitString k, TObject ks _ _) = toColumns i ks >>= \o' -> return (ColumnId k,PValue $ toJSON o')
+    conv (TLitString k, TValue v _) = return (ColumnId k,PValue v)
     conv p = evalError' i $ "Invalid types in object pair: " ++ show p
 
 

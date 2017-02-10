@@ -106,7 +106,7 @@ expr = do
      else if all (== ":=") ops then EBinding kvs <$> inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
 
-qualified :: (Monad m,TokenParsing m) => m String
+qualified :: (Monad m,TokenParsing m) => m Text
 qualified = char '.' *> ident style
 
 typed :: (Monad m,TokenParsing m) => m (Type TypeName)
@@ -119,25 +119,27 @@ parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
 parseType =
   (char '[' >> parseType >>= \t -> char ']' >> return (TyList t) <?> "typed list") <|>
   parseUserSchema <|>
-  symbol tyInteger *> return (TyPrim TyInteger) <|>
-  symbol tyDecimal *> return (TyPrim TyDecimal) <|>
-  symbol tyTime *> return (TyPrim TyTime) <|>
-  symbol tyBool *> return (TyPrim TyBool) <|>
-  symbol tyString *> return (TyPrim TyString) <|>
-  symbol tyList *> return (TyList TyAny) <|>
+  tsymbol tyInteger *> return (TyPrim TyInteger) <|>
+  tsymbol tyDecimal *> return (TyPrim TyDecimal) <|>
+  tsymbol tyTime *> return (TyPrim TyTime) <|>
+  tsymbol tyBool *> return (TyPrim TyBool) <|>
+  tsymbol tyString *> return (TyPrim TyString) <|>
+  tsymbol tyList *> return (TyList TyAny) <|>
   parseSchemaType tyObject TyObject <|>
-  symbol tyValue *> return (TyPrim TyValue) <|>
-  symbol tyKeySet *> return (TyPrim TyKeySet) <|>
+  tsymbol tyValue *> return (TyPrim TyValue) <|>
+  tsymbol tyKeySet *> return (TyPrim TyKeySet) <|>
   parseSchemaType tyTable TyTable
 
+tsymbol :: TokenParsing m => Text -> m String
+tsymbol = symbol . unpack
 
 parseUserSchema :: (Monad m,TokenParsing m) => m (Type TypeName)
 parseUserSchema = char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type"
 
-parseSchemaType :: (Monad m,TokenParsing m) => String -> SchemaType -> m (Type TypeName)
+parseSchemaType :: (Monad m,TokenParsing m) => Text -> SchemaType -> m (Type TypeName)
 parseSchemaType tyRep sty =
-  TF.try (TySchema sty <$> (symbol tyRep *> parseUserSchema)) <|>
-  (symbol tyRep *> return (TySchema sty TyAny))
+  TF.try (TySchema sty <$> (tsymbol tyRep *> parseUserSchema)) <|>
+  (tsymbol tyRep *> return (TySchema sty TyAny))
 
 
 
@@ -216,8 +218,8 @@ makeLenses ''CompileState
 
 type Compile a = ReaderT MkInfo (StateT CompileState (Except SyntaxError)) a
 
-reserved :: [String]
-reserved = words "use module defun defpact step step-with-rollback true false let let* defconst"
+reserved :: [Text]
+reserved = map pack $ words "use module defun defpact step step-with-rollback true false let let* defconst"
 
 compile :: MkInfo -> Exp -> Either SyntaxError (Term Name)
 compile mi e = runExcept (evalStateT (runReaderT (run e) mi) def)
@@ -230,7 +232,7 @@ syntaxError' :: Exp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 
 doUse :: [Exp] -> Info -> Compile (Term Name)
-doUse [ESymbol s _] i = return $ TUse (fromString s) i
+doUse [ESymbol s _] i = return $ TUse (ModuleName s) i
 doUse _ i = syntaxError i "Use only takes a module symbol name"
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
@@ -252,14 +254,14 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         case cm of
           Just _ -> syntaxError li "Invalid nested module"
           Nothing -> do
-            csModule .= Just (fromString n)
+            csModule .= Just (ModuleName n)
             bd <- mapNonEmpty "module" (run >=> defOnly) body li
             csModule .= Nothing
             let code = case li of
                   Info Nothing -> "<code unavailable>"
                   Info (Just (c,_)) -> c
             return $ TModule
-              (Module (fromString n) (fromString k) docs code)
+              (Module (ModuleName n) (KeySetName k) docs code)
               (abstract (const Nothing) (TList bd TyAny li)) li
 
 doModule _ li _ = syntaxError li "Invalid module definition"
@@ -291,10 +293,10 @@ freshTyVar = do
   c <- state (view csFresh &&& over csFresh succ)
   return $ mkTyVar (cToTV c) []
 
-cToTV :: Int -> String
-cToTV n | n < 26 = [toC n]
-        | n <= 26 * 26 = [toC (pred (n `div` 26)), toC (n `mod` 26)]
-        | otherwise = toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
+cToTV :: Int -> TypeVarName
+cToTV n | n < 26 = fromString [toC n]
+        | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
+        | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
   where toC i = toEnum (fromEnum 'a' + i)
 
 _testCToTV :: Bool
@@ -366,7 +368,7 @@ doSchema es i = case es of
       fs <- forM as $ \a -> case a of
         EAtom an Nothing ty _ai -> Arg an <$> maybeTyVar ty <*> mkInfo a
         _ -> syntaxError i "Invalid schema field definition"
-      return $ TSchema (fromString utn) cm docs fs i
+      return $ TSchema (TypeName utn) cm docs fs i
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
@@ -380,7 +382,7 @@ doTable es i = case es of
         Just (TyUser ot) -> return $ TyUser (return (Name (asString ot)))
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
-      return $ TTable (fromString tn) cm tty docs i
+      return $ TTable (TableName tn) cm tty docs i
 
 mkInfo :: Exp -> Compile Info
 mkInfo e = ask >>= \f -> return (f e)
@@ -422,14 +424,14 @@ run e@(EObject bs _i) = do
 run e@(EBinding _ _i) = syntaxError' e "Unexpected binding"
 run e@(ESymbol s _i) = TLiteral (LString s) <$> mkInfo e
 run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
-run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ s
+run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
                     | isNothing t = mkInfo e >>= mkVar s q
                     | otherwise = syntaxError' e "Invalid typed var"
 run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 
-mkVar :: String -> Maybe String -> Info -> Compile (Term Name)
-mkVar s q i = TVar <$> pure (maybe (Name s) (QName $ fromString s) q) <*> pure i
+mkVar :: Text -> Maybe Text -> Info -> Compile (Term Name)
+mkVar s q i = TVar <$> pure (maybe (Name s) (QName $ ModuleName s) q) <*> pure i
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]
@@ -481,10 +483,10 @@ _compileFile f = do
 
 _atto :: FilePath -> IO [Term Name]
 _atto fp = do
-  f <- T.pack <$> readFile fp
+  f <- pack <$> readFile fp
   rs <- case AP.parseOnly exprs f of
     Left s -> throwIO $ userError s
-    Right es -> return $ map (compile (mkStringInfo (T.unpack f))) es
+    Right es -> return $ map (compile (mkStringInfo (unpack f))) es
   case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts

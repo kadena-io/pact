@@ -46,12 +46,13 @@ import Control.Concurrent.MVar
 import Data.Maybe
 import qualified Data.Attoparsec.Text as AP
 
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding ((<>))
 import Pact.Types.SQLite
 import Pact.Types.Orphans ()
 import Pact.Compile
 import Pact.Eval
 import Pact.Native (initEvalEnv)
+
 
 psl :: PactDb PSL
 psl =
@@ -126,10 +127,10 @@ readUserTable' m t k = do
         [a] -> do
           v <- decodeBlob a
           return (over (tmpSysCache.cachedUserTables) (HM.insert t (HM.insert k' v (fromMaybe HM.empty tbl))) m,Just v)
-        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ k' ++ ", user table " ++ show t
+        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ unpack k' ++ ", user table " ++ show t
 {-# INLINE readUserTable #-}
 
-readSysTable :: FromJSON v => MVar PSL -> Utf8 -> Lens' PSL (HM.HashMap String v) -> String -> IO (Maybe v)
+readSysTable :: FromJSON v => MVar PSL -> Utf8 -> Lens' PSL (HM.HashMap Text v) -> Text -> IO (Maybe v)
 readSysTable e t l k = modifyMVar e $ \m -> do
   case HM.lookup k (view l m) of
     j@Just {} -> return (m,j)
@@ -141,14 +142,14 @@ readSysTable e t l k = modifyMVar e $ \m -> do
         [a] -> do
           v <- decodeBlob a
           return (over l (HM.insert k v) m,Just v)
-        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ k ++ ", user table " ++ show t
+        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ unpack k ++ ", user table " ++ show t
 {-# INLINE readSysTable #-}
 
 resetTemp :: PSL -> IO PSL
 resetTemp s = return $ s { _txRecord = M.empty, _tmpSysCache = _sysCache s }
 
 writeSys :: (AsString k,ToJSON v) => MVar PSL -> WriteType ->
-            Setter' SysCache (HM.HashMap String v) -> Utf8 -> k -> v -> IO ()
+            Setter' SysCache (HM.HashMap Text v) -> Utf8 -> k -> v -> IO ()
 writeSys s wt cache tbl k v = modifyMVar_ s $ \m -> do
     _log m "writeSys" (tbl,asString k)
     let q = case wt of
@@ -237,7 +238,7 @@ userTxRecord :: TableName -> Utf8
 userTxRecord tn = "UTXR_" <> (Utf8 $ encodeUtf8 $ sanitize tn)
 {-# INLINE userTxRecord #-}
 sanitize :: AsString t => t -> T.Text
-sanitize tn = T.replace "-" "_" $ T.pack (asString tn)
+sanitize tn = T.replace "-" "_" $ (asString tn)
 {-# INLINE sanitize #-}
 
 keysetsTable :: Utf8
@@ -254,7 +255,7 @@ sencode a = SBlob $ BSL.toStrict $ encode a
 {-# INLINE sencode #-}
 
 stext :: AsString a => a -> SType
-stext a = SText $ fromString $ asString a
+stext a = SText $ fromString $ unpack $ asString a
 {-# INLINE stext #-}
 
 

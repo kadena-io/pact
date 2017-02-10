@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -20,6 +21,11 @@ import Text.Trifecta.Combinators (DeltaParsing(..))
 import Text.Trifecta.Delta
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.Attoparsec.Internal.Types as APT
+import Data.Text (Text)
+import Data.Text.Encoding
+import qualified Data.Text as T
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import Data.Default
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
@@ -50,3 +56,9 @@ instance DeltaParsing AP.Parser where
 -- | retrieve pos from Attoparsec.
 attoPos :: APT.Parser n APT.Pos
 attoPos = APT.Parser $ \t pos more _lose win -> win t pos more pos
+
+instance PP.Pretty Text where pretty = PP.text . T.unpack
+instance Default Text where def = ""
+instance Serialize Text where
+  put = put . encodeUtf8
+  get = decodeUtf8 <$> get

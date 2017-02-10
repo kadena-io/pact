@@ -10,7 +10,6 @@ import Data.Default
 import Control.Lens
 import qualified Data.HashMap.Strict as HM
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
-import Data.Monoid
 import Control.Monad
 import Data.Foldable
 
@@ -21,16 +20,16 @@ spec = do
   void $ runIO $ inferModule "examples/accounts/accounts.repl" "accounts"
   checkFuns
 
-topLevelChecks :: String -> (TopLevel Node,TcState) -> Spec
+topLevelChecks :: Text -> (TopLevel Node,TcState) -> Spec
 topLevelChecks n (tl,s) = do
-  it (n ++ " typechecks") $
+  it (unpack n ++ " typechecks") $
     filter isUnresolvedTy (map _aTy (toList tl)) `shouldBe` []
-  it (n ++ " has no failures") $ toList (_tcFailures s) `shouldBe` []
+  it (unpack n ++ " has no failures") $ toList (_tcFailures s) `shouldBe` []
 
-checkFun :: FilePath -> ModuleName -> String -> Spec
+checkFun :: FilePath -> ModuleName -> Text -> Spec
 checkFun fp mn fn = do
   r <- runIO $ inferFun False fp mn fn
-  topLevelChecks (asString mn ++ "." ++ fn) r
+  topLevelChecks (asString mn <> "." <> fn) r
 
 checkFuns :: Spec
 checkFuns = describe "tc.pact typecheck" $ do
@@ -48,13 +47,13 @@ loadModule fp mn = do
     Just m -> return m
     Nothing -> die def $ "Module not found: " ++ show (fp,mn)
 
-loadFun :: FilePath -> ModuleName -> String -> IO Ref
+loadFun :: FilePath -> ModuleName -> Text -> IO Ref
 loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
   Just f -> return f
 
 
-inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState)
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
 
 
