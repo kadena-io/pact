@@ -14,7 +14,7 @@ var binToHex = function(s) {
 var hexToBin = function(h) {
     if (typeof h !== 'string') { throw new TypeError("Expected string: " + h); }
     return new Uint8Array(Buffer.from(h,'hex'));
-}
+};
 
 var hashBin = function(s) {
   return blake.blake2b(s);
@@ -25,17 +25,27 @@ var hash = function(s) {
 };
 
 var genKeyPair = function() {
-  return nacl.sign.keyPair();
+    var kp = nacl.sign.keyPair();
+    var pubKey = binToHex(kp.publicKey);
+    var secKey = binToHex(kp.secretKey).slice(0,64);
+    return {"publicKey": pubKey, "secretKey": secKey};
+};
+
+var toTweetNaclSecretKey = function(keyPair) {
+    if (!keyPair.hasOwnProperty("publicKey") || !keyPair.hasOwnProperty("secretKey") ) {
+        throw new TypeError("Invalid KeyPair: expected to find keys of name 'secretKey' and 'publicKey': " + JSON.stringify(keyPair));
+    }
+    return hexToBin(keyPair.secretKey + keyPair.publicKey);
 };
 
 var sign = function(msg, keyPair) {
     if (!keyPair.hasOwnProperty("publicKey") || !keyPair.hasOwnProperty("secretKey") ) {
-        throw new TypeError("Invalid KeyPair: expected to find keys of name 'secretKey' and 'publicKey' as Uint8Arrays: " + JSON.stringify(keyPair));
+        throw new TypeError("Invalid KeyPair: expected to find keys of name 'secretKey' and 'publicKey': " + JSON.stringify(keyPair));
     }
     var hshBin = hashBin(msg);
     var hsh = binToHex(hshBin);
-    var sigBin = nacl.sign.detached(hshBin, keyPair.secretKey);
-    return {"hash": hsh, "sig": binToHex(sigBin), "pubKey":binToHex(keyPair.publicKey)};
+    var sigBin = nacl.sign.detached(hshBin, toTweetNaclSecretKey(keyPair));
+    return {"hash": hsh, "sig": binToHex(sigBin), "pubKey":keyPair.publicKey};
 };
 
 var pullSigAndPubKey = function(s) {
@@ -136,7 +146,8 @@ module.exports = {
         hexToBin: hexToBin,
         hash: hash,
         genKeyPair: genKeyPair,
-        sign: sign
+        sign: sign,
+        toTweetNaclSecretKey: toTweetNaclSecretKey
     },
     api: {
         mkSingleCmd: mkSingleCmd,

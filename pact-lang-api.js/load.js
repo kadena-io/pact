@@ -36,7 +36,7 @@ function read(fp,cb) {
     });
 }
 function go(code,data) {
-    var kp = { publicKey: pact.crypto.hexToBin(args.p), secretKey: pact.crypto.hexToBin(args.s + args.p)};
+    var kp = { publicKey: args.p, secretKey: args.s + args.p};
     var msg = pact.simple.exec.createCommand(kp,args.n,code,JSON.parse(data));
     console.log(JSON.stringify(msg));
 }
