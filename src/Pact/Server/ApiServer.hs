@@ -33,6 +33,7 @@ import qualified Data.Text as T
 import Data.Aeson hiding (defaultOptions, Result(..))
 import Snap.Core
 import Snap.CORS
+import Snap.Util.FileServe
 import Snap.Http.Server as Snap
 import Data.Text.Encoding
 import Data.ByteString (ByteString)
@@ -57,8 +58,14 @@ runApiServer inChan outChan logFn port = do
   rm <- newMVar HM.empty
   httpServe (serverConf port) $
     applyCORS defaultOptions $ methods [GET, POST] $
-    route [("api", runReaderT api (ApiEnv logFn inChan outChan rm))]
+    route [("api", runReaderT api (ApiEnv logFn inChan outChan rm))
+          ,("/", noCacheStatic)]
 
+noCacheStatic :: Snap ()
+noCacheStatic = do
+  modifyResponse $ setHeader "Cache-Control" "no-cache, no-store, must-revalidate"
+  modifyResponse $ setHeader "Expires" "0"
+  serveDirectory "."
 
 api :: Api ()
 api = route [
