@@ -79,8 +79,12 @@ applyTransactionalPCmd _ _ _ cmd (ProcFail s) = return $ jsonResult (cmdToReques
 applyTransactionalPCmd config (dbv,cv) exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv config exMode dbv cv) $ runPayload cmd
   case r of
-    Right cr -> return cr
-    Left e -> return $ jsonResult (cmdToRequestKey cmd) $
+    Right cr -> do
+      putStrLn $ "[pact exec] tx success for requestKey: " ++ show (cmdToRequestKey cmd)
+      return cr
+    Left e -> do
+      putStrLn $ "[pact exec] tx failure for requestKey: " ++ show (cmdToRequestKey cmd)
+      return $ jsonResult (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 
 jsonResult :: ToJSON a => RequestKey -> a -> CommandResult

@@ -12,8 +12,10 @@
 --
 
 module Pact.Server.Server
-  (serve
-  )where
+  ( serve
+  , ServerPort(..)
+  , ServerDebugLogging(..)
+  ) where
 
 import Control.Monad
 import Control.Monad.State
@@ -26,10 +28,13 @@ import Pact.Types.Runtime
 import Pact.Types.Server
 import Pact.Types.Command
 
-serve :: Word16 -> IO ()
-serve port' = do
+newtype ServerPort = ServerPort Word16 deriving (Show, Eq, Read)
+newtype ServerDebugLogging = ServerDebugLogging Bool deriving (Show, Eq, Read)
+
+serve :: ServerPort -> ServerDebugLogging -> IO ()
+serve (ServerPort port') (ServerDebugLogging enableDebug) = do
   (inC,outC) <- initChans
-  let debugFn = putStrLn
+  let debugFn = if enableDebug then putStrLn else return . const ()
   let serverPort = fromIntegral port'
   let cmdConfig = CommandConfig Nothing debugFn "entity"
   _ <- forkIO $ startCmdThread cmdConfig inC outC

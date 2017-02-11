@@ -86,7 +86,7 @@ poll = do
   (Poll rks) <- readJSON
   log $ "Polling for " ++ show rks
   rs <- HM.filterWithKey (\k _ -> k `elem` rks) <$> serviceOutbound False
-  when (HM.null rs) $ log $ "No results found for poll!" ++ show rks
+  when (HM.null rs) $ log $ "No results found for poll! " ++ show rks
   writeResponse $ pollResultToReponse rs
 
 pollResultToReponse :: HM.HashMap RequestKey Value -> PollResponse
@@ -96,7 +96,7 @@ pollResultToReponse m = ApiSuccess (kvToRes <$> HM.toList m)
 
 
 log :: String -> Api ()
-log s = view aiLog >>= \f -> liftIO (f $ "[Service|Api]: " ++ s)
+log s = view aiLog >>= \f -> liftIO (f $ "[pact server]: " ++ s)
 
 die :: String -> Api t
 die res = do
@@ -125,7 +125,9 @@ writeResponse j = setJSON >> writeLBS (encode j)
 
 
 buildCmdRpc :: Command T.Text -> Api (RequestKey,Command ByteString)
-buildCmdRpc c@PublicCommand {..} = return (RequestKey _cmdHash,fmap encodeUtf8 c)
+buildCmdRpc c@PublicCommand {..} = do
+  log $ "Processing command with hash: " ++ show _cmdHash
+  return (RequestKey _cmdHash,fmap encodeUtf8 c)
 
 group :: Int -> [a] -> [[a]]
 group _ [] = []
