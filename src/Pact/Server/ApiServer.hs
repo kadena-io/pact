@@ -18,6 +18,7 @@
 
 module Pact.Server.ApiServer
   ( runApiServer
+  , ApiEnv(..), aiLog, aiInbound, aiOutbound, aiResults
   ) where
 
 import Prelude hiding (log)
@@ -46,7 +47,7 @@ data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
   , _aiInbound :: InboundPactChan
   , _aiOutbound :: OutboundPactChan
-  , _aiResults :: MVar (HM.HashMap RequestKey Value)
+  , _aiResults :: TVar (HM.HashMap RequestKey Value)
   }
 makeLenses ''ApiEnv
 
@@ -55,10 +56,12 @@ type Api a = ReaderT ApiEnv Snap a
 runApiServer :: InboundPactChan -> OutboundPactChan -> (String -> IO ()) -> Int -> IO ()
 runApiServer inChan outChan logFn port = do
   putStrLn $ "runApiServer: starting on port " ++ show port
-  rm <- newMVar HM.empty
+  rm <- newTVarIO HM.empty
+  let conf' = (ApiEnv logFn inChan outChan rm)
+  _ <- forkIO $ consumeResults conf'
   httpServe (serverConf port) $
     applyCORS defaultOptions $ methods [GET, POST] $
-    route [("api", runReaderT api (ApiEnv logFn inChan outChan rm))
+    route [("api", runReaderT api conf')
           ,("/", noCacheStatic)]
 
 noCacheStatic :: Snap ()
@@ -85,7 +88,7 @@ poll :: Api ()
 poll = do
   (Poll rks) <- readJSON
   log $ "Polling for " ++ show rks
-  rs <- HM.filterWithKey (\k _ -> k `elem` rks) <$> serviceOutbound False
+  rs <- HM.filterWithKey (\k _ -> k `elem` rks) <$> (view aiResults >>= liftIO . readTVarIO)
   when (HM.null rs) $ log $ "No results found for poll! " ++ show rks
   writeResponse $ pollResultToReponse rs
 
@@ -135,26 +138,12 @@ group n l
   | n > 0 = take n l : group n (drop n l)
   | otherwise = error "Negative n"
 
-
 queueCmds :: [Command T.Text] -> Api [RequestKey]
 queueCmds cmds = do
   rpcs <- mapM buildCmdRpc cmds
   ic <- view aiInbound
   liftIO $ writeInbound ic (map snd rpcs)
   return $ fst <$> rpcs
-
--- | Drain outbound queue, optionally blocking for new results, and return map of results
-serviceOutbound :: Bool -> Api (HM.HashMap RequestKey Value)
-serviceOutbound retrying = do
-  (OutboundPactChan oc) <- view aiOutbound
-  log $ "serviceOutbound " ++ show retrying
-  outm <- liftIO $ atomically $ (if retrying then fmap Just . readTChan else tryReadTChan) oc
-  log $ "serviceOutbound: " ++ show outm
-  view aiResults >>= \v -> liftIO $ modifyMVar v $ \rm -> do
-    let toResult (CommandResult rk r) = (rk,r)
-        rm' = maybe rm (HM.union rm . HM.fromList . map toResult) outm
-    return (rm',rm')
-
 
 serverConf :: MonadSnap m => Int -> Snap.Config m a
 serverConf port =
@@ -165,10 +154,23 @@ serverConf port =
 registerListener :: Api ()
 registerListener = do
   (ListenerRequest rk) <- readJSON
-  log $ "listen: " ++ show rk
-  let loop retrying = do
-        m <- serviceOutbound retrying
-        case HM.lookup rk m of
-          Nothing -> log ("doh: " ++ show rk) >> loop True
-          Just r -> writeResponse $ ApiSuccess $ PollResult rk 0 r
-  loop False
+  log $ "listening for: " ++ show rk
+  resTVar <- view aiResults
+  res <- liftIO $ atomically $ do
+    resMap <- readTVar resTVar
+    case HM.lookup rk resMap of
+      Nothing -> retry
+      Just r -> return $ ApiSuccess $ PollResult rk 0 r
+  writeResponse res
+
+consumeResults :: ApiEnv -> IO ()
+consumeResults ApiEnv{..} = do
+  let (OutboundPactChan oc) = _aiOutbound
+      log' s = liftIO (_aiLog $ "[pact server]: " ++ s)
+  forever $ do
+    outm <- liftIO $ atomically $ tryReadTChan oc
+    when (not $ null outm) $ log' $ "received result(s) for: " ++ show outm
+    liftIO $ atomically $ modifyTVar' _aiResults $ \rm ->
+      let toResult (CommandResult rk r) = (rk,r)
+          rm' = maybe rm (HM.union rm . HM.fromList . map toResult) outm
+      in rm'
