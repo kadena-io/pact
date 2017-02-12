@@ -22,10 +22,22 @@
 -- Types specific to the HTTP server and Pact service.
 --
 module Pact.Types.Server
---  , InboundPactChan(..),OutboundPactChan(..)
---  , initChans,writeInbound,writeOutbound,readInbound,tryReadOutbound,cmdToRequestKey
---  ) where
-  where
+  ( userSigToPactPubKey, userSigsToPactKeySet
+  , CommandConfig(..), ccDbFile, ccDebugFn, ccEntity
+  , CommandState(..), csRefStore
+  , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
+  , ExecutionMode(..), emTxId
+  , CommandM, runCommand, throwCmdEx
+  , DBVar(..)
+  , History(..)
+  , ExistenceResult(..)
+  , PossiblyIncompleteResults(..)
+  , ListenerResult(..)
+  , initChans
+  , InboundPactChan(..), readInbound, writeInbound
+  , OutboundPactChan(..), tryReadOutbound, writeOutbound
+  , HistoryChannel(..), readHistory, writeHistory
+  ) where
 
 import Control.Applicative
 import Control.Concurrent.MVar
@@ -40,6 +52,10 @@ import Data.String
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
 import Data.Text.Encoding
+
+import Data.HashSet (HashSet)
+import Data.HashMap.Strict (HashMap)
+
 import Prelude hiding (log,exp)
 
 import Pact.Pure
@@ -100,9 +116,10 @@ throwCmdEx = throw . CommandException
 
 newtype InboundPactChan = InboundPactChan (Chan [Command ByteString])
 newtype OutboundPactChan = OutboundPactChan (TChan [CommandResult])
+newtype HistoryChannel = HistoryChannel (Chan History)
 
-initChans :: IO (InboundPactChan,OutboundPactChan)
-initChans = (,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> atomically newTChan)
+initChans :: IO (InboundPactChan,OutboundPactChan,HistoryChannel)
+initChans = (,,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> atomically newTChan) <*> (HistoryChannel <$> newChan)
 
 writeInbound :: InboundPactChan -> [Command ByteString] -> IO ()
 writeInbound (InboundPactChan c) = writeChan c
@@ -115,3 +132,33 @@ writeOutbound (OutboundPactChan c) = atomically . writeTChan c
 
 tryReadOutbound :: OutboundPactChan -> IO (Maybe [CommandResult])
 tryReadOutbound (OutboundPactChan c) = atomically $ tryReadTChan c
+
+readHistory :: HistoryChannel -> IO History
+readHistory (HistoryChannel c) = readChan c
+
+writeHistory :: HistoryChannel -> IO History
+writeHistory (HistoryChannel c) = readChan c
+
+newtype ExistenceResult = ExistenceResult
+  { rksThatAlreadyExist :: HashSet RequestKey
+  } deriving (Show, Eq)
+
+newtype PossiblyIncompleteResults = PossiblyIncompleteResults
+  { possiblyIncompleteResults :: HashMap RequestKey CommandResult
+  } deriving (Show, Eq)
+
+data ListenerResult =
+  ListenerResult CommandResult |
+  GCed String
+  deriving (Show, Eq)
+
+data History =
+  AddNew
+    { hNewKeys :: ![Command ByteString]} |
+  Update
+    { hUpdateRks :: !(HashMap RequestKey CommandResult) } |
+  QueryForResults
+    { hQueryForResults :: !(HashSet RequestKey, MVar PossiblyIncompleteResults) } |
+  RegisterListener
+    { hNewListener :: !(HashMap RequestKey (MVar ListenerResult))}
+  deriving (Eq)

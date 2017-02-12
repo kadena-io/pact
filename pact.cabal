@@ -87,18 +87,21 @@ library
                 , base16-bytestring
                 , blake2
     exposed-modules:
-                    Pact.Docgen
-                    , Pact.Server.PactService
-                    , Pact.Server.ApiServer
-                    , Pact.Types.API
-                    , Pact.Types.Crypto
-                  , Pact.Types.Command
-                  , Pact.Types.RPC
-                  , Pact.Types.Server
-                    , Pact.Types.SQLite
-                    , Pact.Server.SQLite
+                    Pact.Main
+                  , Pact.Docgen
+                  , Pact.Server.ApiServer
+                  , Pact.Server.History.Persistence
+                  , Pact.Server.History.Service
+                  , Pact.Server.History.Types
+                  , Pact.Server.PactService
+                  , Pact.Server.SQLite
                   , Pact.Server.Server
-                  , Pact.Main
+                  , Pact.Types.API
+                  , Pact.Types.Command
+                  , Pact.Types.Crypto
+                  , Pact.Types.RPC
+                  , Pact.Types.SQLite
+                  , Pact.Types.Server
 
   if impl(ghcjs)
     cpp-options:   -DGHCJS_BROWSER
