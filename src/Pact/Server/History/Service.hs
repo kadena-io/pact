@@ -54,31 +54,29 @@ runHistoryService env mState = do
       return $! HistoryState { _registeredListeners = HashMap.empty, _persistence = pers }
     Just mState' -> do
       return mState'
-  dbg "[pact history] Launch!"
   (_,bouncedState,_) <- runRWST (handle oChan) env initHistoryState
   runHistoryService env (Just bouncedState)
 
 debug :: String -> HistoryService ()
 debug s = do
   dbg <- view debugPrint
-  liftIO $! dbg $ "[pact history] " ++ s
+  liftIO $! dbg $ "[history] " ++ s
 
 setupPersistence :: (String -> IO ()) -> Maybe FilePath -> ReplayFromDisk -> IO PersistenceSystem
 setupPersistence dbg Nothing (ReplayFromDisk rp) = do
-  dbg $ "[Service|History] Persistence Disabled"
-  putMVar rp []
+  dbg $ "[history] Persistence Disabled"
+  putMVar rp [] -- if there's no replays, we still need to unblock the cmd thread
   return $ InMemory HashMap.empty
 setupPersistence dbg (Just dbPath') (ReplayFromDisk rp) = do
-  dbg $ "[Service|History] Persistence Enabled: " ++ (dbPath' ++ "commands.sqlite")
-  dbExists <- doesFileExist dbPath'
+  dbg $ "[history] Persistence Enabled: " ++ (dbPath' ++ "commands.sqlite")
+  dbExists <- doesFileExist (dbPath' ++ "commands.sqlite")
   conn <- DB.createDB $ (dbPath' ++ "commands.sqlite")
   when dbExists $ do
     replayFromDisk' <- DB.selectAllCommands conn
-    dbg $ "[Service|History] Replaying from disk"
+    dbg $ "[history] Replaying from disk"
     putMVar rp replayFromDisk'
   unless dbExists $
-    -- if there's no replays, we still need to unblock the cmd thread
-    putMVar rp []
+    putMVar rp [] -- if there's no replays, we still need to unblock the cmd thread
   return $ OnDisk { incompleteRequestKeys = HashMap.empty
                   , dbConn = conn }
 
@@ -104,7 +102,7 @@ addNewKeys cmds = do
       persistence .= InMemory (HashMap.union m newCmdsHM)
     OnDisk{..} -> do
       asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,cmd)) <$> cmds
-      notInMem <- return $ HashMap.difference incompleteRequestKeys asHM
+      notInMem <- return $ HashMap.difference asHM incompleteRequestKeys
       if HashMap.null notInMem
       -- unlikely but worth a O(1) check
       then do

@@ -132,13 +132,13 @@ selectCompletedCommands e v = foldM f HashMap.empty v
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
-sqlSelectAllCommands = "SELECT hash,command,userSigs FROM 'main'.'pactCommands'"
+sqlSelectAllCommands = "SELECT rowid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY rowid ASC"
 
 selectAllCommands :: DbEnv -> IO ([Command ByteString])
-selectAllCommands e = fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RText,RText,RText]
-  where
-    rowToCmd [SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
-      PublicCommand { _cmdPayload = cmd'
-                    , _cmdSigs = userSigsFromField userSigs'
-                    , _cmdHash = hashFromField hash'}
-    rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err
+selectAllCommands e = do
+  let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
+        PublicCommand { _cmdPayload = cmd'
+                      , _cmdSigs = userSigsFromField userSigs'
+                      , _cmdHash = hashFromField hash'}
+      rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err
+  fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RInt,RText,RText,RText]

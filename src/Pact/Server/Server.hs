@@ -43,18 +43,22 @@ serve (ServerPort port') (ServerDebugLogging enableDebug) (ServerEnablePersisten
   let serverPort = fromIntegral port'
   let cmdConfig = CommandConfig Nothing debugFn "entity"
   let histConf = initHistoryEnv histC inC (if enablePersistence then Just "log/" else Nothing) debugFn replayFromDisk'
-  _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk'
+  _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk' debugFn
   _ <- forkIO $ runHistoryService histConf Nothing
   runApiServer histC debugFn serverPort
 
-startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> IO ()
-startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) = do
+startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> (String -> IO ()) -> IO ()
+startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
   CommandExecInterface {..} <- initPactService cmdConfig
   void $ (`runStateT` (0 :: TxId)) $ do
     -- we wait for the history service to light up, possibly giving us backups from disk to replay
     replayFromDisk' <- liftIO $ takeMVar rp
-    unless (null replayFromDisk') $ do
+    if null replayFromDisk'
+    then do
+      liftIO $ debugFn $ "[disk replay]: No replay found"
+    else do
       forM_ replayFromDisk' $ \cmd -> do
+        liftIO $ debugFn $ "[disk replay]: replaying => " ++ show cmd
         txid <- state (\i -> (i,succ i))
         liftIO $ _ceiApplyCmd (Transactional txid) cmd
       -- NB: we don't want to update history with the results from the replay
