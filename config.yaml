@@ -1,0 +1,10 @@
+# Config file for pact http server. Launch with `pact -s config.yaml`
+
+# HTTP server port
+port: 8080
+
+# directory for HTTP logs
+logDir: log
+
+# persistence directory
+persistDir: log

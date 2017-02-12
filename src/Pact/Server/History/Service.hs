@@ -1,8 +1,8 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
 
 module Pact.Server.History.Service
   ( initHistoryEnv
@@ -64,21 +64,22 @@ debug s = do
 
 setupPersistence :: (String -> IO ()) -> Maybe FilePath -> ReplayFromDisk -> IO PersistenceSystem
 setupPersistence dbg Nothing (ReplayFromDisk rp) = do
-  dbg $ "[history] Persistence Disabled"
+  dbg "[history] Persistence Disabled"
   putMVar rp [] -- if there's no replays, we still need to unblock the cmd thread
   return $ InMemory HashMap.empty
 setupPersistence dbg (Just dbPath') (ReplayFromDisk rp) = do
-  dbg $ "[history] Persistence Enabled: " ++ (dbPath' ++ "commands.sqlite")
-  dbExists <- doesFileExist (dbPath' ++ "commands.sqlite")
-  conn <- DB.createDB $ (dbPath' ++ "commands.sqlite")
+  let dbfile = dbPath' ++ "/commands.sqlite"
+  dbg $ "[history] Persistence Enabled: " ++ dbfile
+  dbExists <- doesFileExist dbfile
+  conn <- DB.createDB dbfile
   when dbExists $ do
     replayFromDisk' <- DB.selectAllCommands conn
-    dbg $ "[history] Replaying from disk"
+    dbg "[history] Replaying from disk"
     putMVar rp replayFromDisk'
   unless dbExists $
     putMVar rp [] -- if there's no replays, we still need to unblock the cmd thread
-  return $ OnDisk { incompleteRequestKeys = HashMap.empty
-                  , dbConn = conn }
+  return OnDisk { incompleteRequestKeys = HashMap.empty
+                , dbConn = conn }
 
 handle :: HistoryChannel -> HistoryService ()
 handle oChan = do
@@ -92,13 +93,15 @@ handle oChan = do
 addNewKeys :: [Command ByteString] -> HistoryService ()
 addNewKeys cmds = do
   pers <- use persistence
+  let writeNewCmds newCmdsHM = do
+        newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
+        pactChan <- view inboundPactChannel
+        liftIO $ writeInbound pactChan newCmdsList
   case pers of
     InMemory m -> do
       asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,(cmd, Nothing))) <$> cmds
       newCmdsHM <- return $ HashMap.difference asHM m
-      newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
-      pactChan <- view inboundPactChannel
-      liftIO $ writeInbound pactChan newCmdsList
+      writeNewCmds newCmdsHM
       persistence .= InMemory (HashMap.union m newCmdsHM)
     OnDisk{..} -> do
       asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,cmd)) <$> cmds
@@ -108,15 +111,13 @@ addNewKeys cmds = do
       then do
         debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a previously seen hash/requestKey"
       else do
-        foundOnDisk <- liftIO $ DB.queryForExisting dbConn $ HashSet.fromMap $ const () <$> notInMem
+        foundOnDisk <- liftIO $ DB.queryForExisting dbConn $ HashSet.fromMap $ void notInMem
         newCmdsHM <- return $ HashMap.filterWithKey (\k _ -> not $ HashSet.member k foundOnDisk) notInMem
         if HashMap.null newCmdsHM
         then do
           debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a previously hash/requestKey"
         else do
-          newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
-          pactChan <- view inboundPactChannel
-          liftIO $ writeInbound pactChan newCmdsList
+          writeNewCmds newCmdsHM
           persistence .= OnDisk { incompleteRequestKeys = HashMap.union incompleteRequestKeys newCmdsHM
                                 , dbConn = dbConn }
           debug $ "Added " ++ show (HashMap.size newCmdsHM) ++ " new command(s)"
@@ -177,10 +178,10 @@ queryForResults (srks, mRes) = do
       completed <- return $! HashSet.filter (\k -> not $ HashMap.member k incompleteRequestKeys) srks
       if HashSet.null completed
       then do
-        liftIO $! putMVar mRes $ PossiblyIncompleteResults $ HashMap.empty
+        liftIO $! putMVar mRes $ PossiblyIncompleteResults HashMap.empty
       else do
         found <- liftIO $ DB.selectCompletedCommands dbConn completed
-        liftIO $! putMVar mRes $ PossiblyIncompleteResults $ found
+        liftIO $! putMVar mRes $ PossiblyIncompleteResults found
         debug $ "Querying for " ++ show (HashSet.size srks) ++ " keys, found " ++ show (HashMap.size found)
 
 -- This is here to try to get GHC to check the fast part first
@@ -190,7 +191,7 @@ checkForIndividualResultInMem s k (_,Just _) = HashSet.member k s
 
 registerNewListeners :: HashMap RequestKey (MVar ListenerResult) -> HistoryService ()
 registerNewListeners newListeners' = do
-  srks <- return $! HashSet.fromMap $ const () <$> newListeners'
+  srks <- return $! HashSet.fromMap $ void newListeners'
   pers <- use persistence
   found <- case pers of
     InMemory m -> do

@@ -86,6 +86,8 @@ library
                 , ed25519-donna
                 , base16-bytestring
                 , blake2
+                , fast-logger
+                , yaml
     exposed-modules:
                     Pact.Main
                   , Pact.Docgen

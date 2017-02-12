@@ -53,11 +53,11 @@ makeLenses ''ApiEnv
 
 type Api a = ReaderT ApiEnv Snap a
 
-runApiServer :: HistoryChannel -> (String -> IO ()) -> Int -> IO ()
-runApiServer histChan logFn port = do
-  putStrLn $ "runApiServer: starting on port " ++ show port
+runApiServer :: HistoryChannel -> (String -> IO ()) -> Int -> FilePath -> IO ()
+runApiServer histChan logFn port logDir = do
+  logFn $ "[api] starting on port " ++ show port
   let conf' = ApiEnv logFn histChan
-  httpServe (serverConf port) $
+  httpServe (serverConf port logDir) $
     applyCORS defaultOptions $ methods [GET, POST] $
     route [("api", runReaderT api conf')
           ,("/", noCacheStatic)]
@@ -102,7 +102,7 @@ pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second _
 
 
 log :: String -> Api ()
-log s = view aiLog >>= \f -> liftIO (f $ "[pact server]: " ++ s)
+log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)
 
 die :: String -> Api t
 die res = do
@@ -148,11 +148,12 @@ queueCmds cmds = do
   liftIO $ writeHistory hc $ AddNew (map snd rpcs)
   return $ fst <$> rpcs
 
-serverConf :: MonadSnap m => Int -> Snap.Config m a
-serverConf port =
-  setErrorLog (ConfigFileLog "log/error.log") $
-  setAccessLog (ConfigFileLog "log/access.log") $
-  setPort port defaultConfig
+serverConf :: MonadSnap m => Int -> FilePath -> Snap.Config m a
+serverConf port logDir =
+  setErrorLog (ConfigFileLog $ logDir ++ "/error.log") $
+  setAccessLog (ConfigFileLog $ logDir ++ "/access.log") $
+  setPort port $
+  setVerbose False defaultConfig
 
 
 registerListener :: Api ()

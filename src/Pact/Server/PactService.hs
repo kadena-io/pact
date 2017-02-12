@@ -50,7 +50,7 @@ type PactMVars = (DBVar,MVar CommandState)
 
 initPactService :: CommandConfig -> IO (CommandExecInterface ExecutionMode PactRPC)
 initPactService config = do
-  let klog s = _ccDebugFn config ("[Pact] " ++ s)
+  let klog s = _ccDebugFn config ("[PactService] " ++ s)
   mvars <- case _ccDbFile config of
     Nothing -> do
       klog "Initializing pure pact"
@@ -76,14 +76,14 @@ initPactService config = do
 
 applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
 applyTransactionalPCmd _ _ _ cmd (ProcFail s) = return $ jsonResult (cmdToRequestKey cmd) s
-applyTransactionalPCmd config (dbv,cv) exMode _ (ProcSucc cmd) = do
-  r <- tryAny $ runCommand (CommandEnv config exMode dbv cv) $ runPayload cmd
+applyTransactionalPCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) = do
+  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
   case r of
     Right cr -> do
-      putStrLn $ "[pact exec]: tx success for requestKey: " ++ show (cmdToRequestKey cmd)
+      _ccDebugFn $ "[PactService]: tx success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
     Left e -> do
-      putStrLn $ "[pact exec]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd)
+      _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd)
       return $ jsonResult (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 

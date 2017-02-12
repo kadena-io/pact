@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -14,9 +15,6 @@
 
 module Pact.Server.Server
   ( serve
-  , ServerPort(..)
-  , ServerDebugLogging(..)
-  , ServerEnablePersistence(..)
   ) where
 
 import Control.Monad
@@ -24,29 +22,56 @@ import Control.Monad.State
 import Control.Concurrent
 import Data.Word (Word16)
 import qualified Data.HashMap.Strict as HashMap
+import GHC.Generics
+import Data.Aeson
+import qualified Data.Yaml as Y
+import Control.Exception
+import System.Log.FastLogger
+import qualified Data.ByteString.Char8 as B8
 
 import Pact.Server.PactService
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
-import Pact.Types.Runtime hiding (Update)
+import Pact.Types.Runtime hiding (Update,(<>))
+import Data.Monoid
 import Pact.Types.Server
 import Pact.Types.Command
 
-newtype ServerPort = ServerPort Word16 deriving (Show, Eq, Read, Num)
-newtype ServerDebugLogging = ServerDebugLogging Bool deriving (Show, Eq, Read)
-newtype ServerEnablePersistence = ServerEnablePersistence Bool deriving (Show, Eq, Read)
+data Config = Config {
+  _port :: Word16,
+  _persistDir :: Maybe FilePath,
+  _logDir :: FilePath
+  } deriving (Eq,Show,Generic)
+instance ToJSON Config where toJSON = lensyToJSON 1
+instance FromJSON Config where parseJSON = lensyParseJSON 1
 
-serve :: ServerPort -> ServerDebugLogging -> ServerEnablePersistence -> IO ()
-serve (ServerPort port') (ServerDebugLogging enableDebug) (ServerEnablePersistence enablePersistence) = do
+usage :: String
+usage =
+  "Config file is YAML format with the following properties: \n\
+  \port       - HTTP server port \n\
+  \persistDir - Directory for database files. \n\
+  \             If ommitted, runs in-memory only. \n\
+  \logDir     - Directory for HTTP logs"
+
+
+serve :: FilePath -> IO ()
+serve configFile = do
+  Config {..} <- Y.decodeFileEither configFile >>=
+                 either (\e -> throwIO (userError ("Error loading config: " ++ show e ++ "\n\n" ++ usage))) return
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
-  let debugFn = if enableDebug then putStrLn else return . const ()
-  let serverPort = fromIntegral port'
+  debugFn <- initFastLogger
   let cmdConfig = CommandConfig Nothing debugFn "entity"
-  let histConf = initHistoryEnv histC inC (if enablePersistence then Just "log/" else Nothing) debugFn replayFromDisk'
+  let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk' debugFn
   _ <- forkIO $ runHistoryService histConf Nothing
-  runApiServer histC debugFn serverPort
+  runApiServer histC debugFn (fromIntegral _port) _logDir
+
+initFastLogger :: IO (String -> IO ())
+initFastLogger = do
+  tc <- newTimeCache "%Y/%m/%d-%H:%M:%S"
+  (tfl,_) <- newTimedFastLogger tc (LogStdout 1000)
+  return $ \m -> tfl $ \t -> toLogStr t <> " " <> toLogStr (B8.pack m) <> "\n"
 
 startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> (String -> IO ()) -> IO ()
 startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
@@ -56,7 +81,7 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
     replayFromDisk' <- liftIO $ takeMVar rp
     if null replayFromDisk'
     then do
-      liftIO $ debugFn $ "[disk replay]: No replay found"
+      liftIO $ debugFn "[disk replay]: No replay found"
     else do
       forM_ replayFromDisk' $ \cmd -> do
         liftIO $ debugFn $ "[disk replay]: replaying => " ++ show cmd
