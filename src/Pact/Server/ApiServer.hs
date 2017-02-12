@@ -25,6 +25,7 @@ import Prelude hiding (log)
 import Control.Lens hiding ((.=))
 import Control.Concurrent
 import Control.Monad.Reader
+import Control.Arrow
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString.Lazy (toStrict)
@@ -55,7 +56,7 @@ type Api a = ReaderT ApiEnv Snap a
 runApiServer :: HistoryChannel -> (String -> IO ()) -> Int -> IO ()
 runApiServer histChan logFn port = do
   putStrLn $ "runApiServer: starting on port " ++ show port
-  let conf' = (ApiEnv logFn histChan)
+  let conf' = ApiEnv logFn histChan
   httpServe (serverConf port) $
     applyCORS defaultOptions $ methods [GET, POST] $
     route [("api", runReaderT api conf')
@@ -69,7 +70,7 @@ noCacheStatic = do
 
 api :: Api ()
 api = route [
-       ("public/send",sendPublicBatch)
+       ("send",sendPublicBatch)
       ,("poll",poll)
       ,("listen",registerListener)
       ]
@@ -84,7 +85,7 @@ sendPublicBatch = do
 checkHistoryForResult :: HashSet RequestKey -> Api PossiblyIncompleteResults
 checkHistoryForResult rks = do
   hChan <- view aiHistoryChan
-  m <- liftIO $ newEmptyMVar
+  m <- liftIO newEmptyMVar
   liftIO $ writeHistory hChan $ QueryForResults (rks,m)
   liftIO $ readMVar m
 
@@ -96,10 +97,9 @@ poll = do
   when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
   writeResponse $ pollResultToReponse possiblyIncompleteResults
 
-pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponse
-pollResultToReponse m = ApiSuccess (kvToRes <$> HM.toList m)
-  where
-    kvToRes (rk,CommandResult{..}) = PollResult { _prRequestKey = rk, _prLatency = 0, _prResponse = _prResult}
+pollResultToReponse :: HM.HashMap RequestKey CommandResult -> ApiResponse PollResponses
+pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second _prResult) $ HM.toList m
+
 
 log :: String -> Api ()
 log s = view aiLog >>= \f -> liftIO (f $ "[pact server]: " ++ s)
@@ -159,7 +159,7 @@ registerListener :: Api ()
 registerListener = do
   (ListenerRequest rk) <- readJSON
   hChan <- view aiHistoryChan
-  m <- liftIO $ newEmptyMVar
+  m <- liftIO newEmptyMVar
   liftIO $ writeHistory hChan $ RegisterListener (HM.fromList [(rk,m)])
   log $ "Registered Listener for: " ++ show rk
   res <- liftIO $ readMVar m
@@ -169,4 +169,4 @@ registerListener = do
       die msg
     ListenerResult CommandResult{..} -> do
       log $ "Listener Serviced for: " ++ show rk
-      writeResponse $ ApiSuccess $ PollResult { _prRequestKey = _prReqKey, _prLatency = 0, _prResponse = _prResult}
+      writeResponse $ ApiSuccess _prResult

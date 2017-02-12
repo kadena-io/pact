@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 
 -- |
@@ -31,7 +32,7 @@ import Pact.Types.Runtime hiding (Update)
 import Pact.Types.Server
 import Pact.Types.Command
 
-newtype ServerPort = ServerPort Word16 deriving (Show, Eq, Read)
+newtype ServerPort = ServerPort Word16 deriving (Show, Eq, Read, Num)
 newtype ServerDebugLogging = ServerDebugLogging Bool deriving (Show, Eq, Read)
 newtype ServerEnablePersistence = ServerEnablePersistence Bool deriving (Show, Eq, Read)
 

@@ -22,8 +22,7 @@ module Pact.Types.API
   , SubmitBatch(..), sbCmds
   , SubmitBatchResponse
   , Poll(..)
-  , PollResult(..), prRequestKey, prLatency, prResponse
-  , PollResponse
+  , PollResponses(..)
   , ListenerRequest(..)
   , ListenerResponse
   ) where
@@ -33,7 +32,9 @@ import Data.Aeson hiding (Success)
 import qualified Data.Aeson as A
 import Control.Lens hiding ((.=))
 import GHC.Generics
-import Data.Int
+import qualified Data.HashMap.Strict as HM
+import Control.Arrow
+import Control.Monad
 
 import Pact.Types.Command
 import Pact.Types.Util
@@ -48,13 +49,13 @@ makeLenses ''ApiResponse
 
 instance ToJSON a => ToJSON (ApiResponse a) where
   toJSON (ApiSuccess a)= object [ "status" .= A.String "success", "response" .= a]
-  toJSON (ApiFailure a)= object [ "status" .= A.String "failure", "response" .= a]
+  toJSON (ApiFailure a)= object [ "status" .= A.String "failure", "error" .= a]
 instance FromJSON a => FromJSON (ApiResponse a) where
   parseJSON (Object o) = do
     st <- o .: "status"
     if st == A.String "success"
     then ApiSuccess <$> o .: "response"
-    else ApiFailure <$> o .: "response"
+    else ApiFailure <$> o .: "error"
   parseJSON _ = mempty
 
 data RequestKeys = RequestKeys
@@ -82,7 +83,7 @@ instance FromJSON SubmitBatch where
 type SubmitBatchResponse = ApiResponse RequestKeys
 
 -- | Poll for results by RequestKey
-newtype Poll = Poll { _pRequestIds :: [RequestKey] }
+newtype Poll = Poll { _pRequestKeys :: [RequestKey] }
   deriving (Eq,Show,Generic)
 instance ToJSON Poll where
   toJSON = lensyToJSON 2
@@ -90,18 +91,13 @@ instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
 -- | What you get back from a Poll
-data PollResult = PollResult
-  { _prRequestKey :: !RequestKey
-  , _prLatency :: !Int64
-  , _prResponse :: !Value
-  } deriving (Eq,Show,Generic)
-makeLenses ''PollResult
-instance ToJSON PollResult where
-  toJSON = lensyToJSON 3
-instance FromJSON PollResult where
-  parseJSON = lensyParseJSON 3
-
-type PollResponse = ApiResponse [PollResult]
+data PollResponses = PollResponses (HM.HashMap RequestKey Value)
+instance ToJSON PollResponses where
+  toJSON (PollResponses m) = object $ map (first requestKeyToB16Text) $ HM.toList m
+instance FromJSON PollResponses where
+  parseJSON = withObject "PollResponses" $ \o ->
+    (PollResponses . HM.fromList <$> forM (HM.toList o)
+      (\(k,v) -> (,) <$> parseJSON (String k) <*> pure v))
 
 -- | ListenerRequest for results by RequestKey
 newtype ListenerRequest = ListenerRequest RequestKey
@@ -111,4 +107,4 @@ instance ToJSON ListenerRequest where
 instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
 
-type ListenerResponse = ApiResponse PollResult
+type ListenerResponse = ApiResponse Value

@@ -20,7 +20,7 @@ module Pact.Types.Crypto
   , Signature(..), exportSignature
   , sign, valid, verifyHash
   , PPKScheme(..)
-  , Hash(..), initialHash, hash, hashLengthAsBS, hashLengthAsBase16
+  , Hash(..), initialHash, hash, hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
 import Control.Applicative
@@ -43,6 +43,7 @@ import Data.Serialize as SZ hiding (get)
 import qualified Data.Serialize as S
 import Data.String
 import Data.Maybe
+import Data.Text (Text)
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
@@ -103,8 +104,11 @@ instance Serialize Hash where
                 ++ show (B.length raw)
                 ++ " from original bytestring " ++ show raw
 
+hashToB16Text :: Hash -> Text
+hashToB16Text (Hash h) = toB16Text h
+
 instance ToJSON Hash where
-  toJSON (Hash h) = toB16JSON h
+  toJSON = String . hashToB16Text
 instance FromJSON Hash where
   parseJSON s = Hash <$> parseB16JSON s
 

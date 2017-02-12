@@ -140,8 +140,8 @@ data CommandError = CommandError {
 }
 instance ToJSON CommandError where
     toJSON (CommandError m d) =
-        object $ [ "status" .= ("Failure" :: String)
-                 , "msg" .= m ] ++
+        object $ [ "status" .= ("failure" :: String)
+                 , "error" .= m ] ++
         maybe [] ((:[]) . ("detail" .=)) d
 
 data CommandSuccess a = CommandSuccess {
@@ -149,8 +149,8 @@ data CommandSuccess a = CommandSuccess {
     }
 instance (ToJSON a) => ToJSON (CommandSuccess a) where
     toJSON (CommandSuccess a) =
-        object [ "status" .= ("Success" :: String)
-               , "result" .= a ]
+        object [ "status" .= ("success" :: String)
+               , "data" .= a ]
 
 
 data CommandResult = CommandResult {
@@ -171,9 +171,13 @@ data CommandExecInterface e a = CommandExecInterface
   }
 
 
+requestKeyToB16Text :: RequestKey -> Text
+requestKeyToB16Text (RequestKey h) = hashToB16Text h
+
+
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
   deriving (Eq, Ord, Generic, Serialize, Hashable)
-instance ToJSON RequestKey where toJSON (RequestKey h) = toJSON h
+instance ToJSON RequestKey where toJSON = String . requestKeyToB16Text
 instance FromJSON RequestKey where parseJSON v = RequestKey <$> parseJSON v
 
 instance Show RequestKey where
