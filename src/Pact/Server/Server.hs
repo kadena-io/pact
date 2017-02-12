@@ -55,8 +55,8 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) = do
     replayFromDisk' <- liftIO $ takeMVar rp
     unless (null replayFromDisk') $ do
       forM_ replayFromDisk' $ \cmd -> do
-      txid <- state (\i -> (i,succ i))
-      liftIO $ _ceiApplyCmd (Transactional txid) cmd
+        txid <- state (\i -> (i,succ i))
+        liftIO $ _ceiApplyCmd (Transactional txid) cmd
       -- NB: we don't want to update history with the results from the replay
     forever $ do
       -- now we're prepared, so start taking new entries
