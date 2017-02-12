@@ -45,7 +45,7 @@ data Option =
   OBuiltins |
   OLoad Bool String |
   ORepl |
-  OServer Word16 Bool
+  OServer Word16 Bool Bool
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -54,6 +54,7 @@ replOpts =
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
     (OServer <$> O.option O.auto (O.short 's' <> O.long "serve" <> O.help "Launch pact dev HTTP server on specified port")
              <*> O.switch (O.long "verbose" <> O.help "enable extra debug logging for server")
+             <*> O.switch (O.long "persistence" <> O.help "enable the SQLite backend for the server")
     ) <|>
     (OLoad
      <$> O.flag False True
@@ -78,7 +79,7 @@ main = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-    OServer port' verbose' -> serve (ServerPort port') (ServerDebugLogging verbose')
+    OServer port' verbose' perst' -> serve (ServerPort port') (ServerDebugLogging verbose') (ServerEnablePersistence perst')
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript fp

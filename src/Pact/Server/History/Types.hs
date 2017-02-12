@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Pact.Server.History.Types
-  ( HistoryEnv(..), historyChannel, inboundPactChannel, debugPrint, dbPath
+  ( HistoryEnv(..), historyChannel, inboundPactChannel, debugPrint, dbPath, replayFromDisk
   , HistoryState(..), registeredListeners, persistence
   , PersistenceSystem(..)
   , HistoryService
@@ -28,6 +28,7 @@ data HistoryEnv = HistoryEnv
   , _inboundPactChannel :: !InboundPactChan
   , _debugPrint :: !(String -> IO ())
   , _dbPath :: !(Maybe FilePath)
+  , _replayFromDisk :: !ReplayFromDisk
   }
 makeLenses ''HistoryEnv
 
@@ -36,6 +37,7 @@ data DbEnv = DbEnv
   , _insertStatement :: !Statement
   , _qryExistingStmt :: !Statement
   , _qryCompletedStmt :: !Statement
+  , _qrySelectAllCmds :: !Statement
   }
 
 data PersistenceSystem =

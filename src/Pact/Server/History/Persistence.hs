@@ -8,6 +8,7 @@ module Pact.Server.History.Persistence
   , insertCompletedCommand
   , queryForExisting
   , selectCompletedCommands
+  , selectAllCommands
   ) where
 
 
@@ -35,10 +36,10 @@ import Pact.Server.History.Types
 hashToField :: Hash -> SType
 hashToField h = SText $ Utf8 $ BSL.toStrict $ A.encode h
 
---hashFromField :: ByteString -> Hash
---hashFromField h = case A.eitherDecodeStrict' h of
---  Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show h
---  Right v -> v
+hashFromField :: ByteString -> Hash
+hashFromField h = case A.eitherDecodeStrict' h of
+  Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
+  Right v -> v
 
 crToField :: CommandResult -> SType
 crToField (CommandResult _ r) = SText $ Utf8 $ BSL.toStrict $ A.encode r
@@ -51,10 +52,10 @@ crFromField rk cr = CommandResult rk $ case A.eitherDecodeStrict' cr of
 userSigsToField :: [UserSig] -> SType
 userSigsToField us = SText $ Utf8 $ BSL.toStrict $ A.encode us
 
---userSigsFromField :: ByteString -> [UserSig]
---userSigsFromField us = case A.eitherDecodeStrict' us of
---  Left err -> error $ "userSigsFromField: unable to decode [UserSigs] from database! " ++ show err ++ "\n" ++ show us
---  Right v -> v
+userSigsFromField :: ByteString -> [UserSig]
+userSigsFromField us = case A.eitherDecodeStrict' us of
+  Left err -> error $ "userSigsFromField: unable to decode [UserSigs] from database! " ++ show err ++ "\n" ++ show us
+  Right v -> v
 
 sqlDbSchema :: Utf8
 sqlDbSchema =
@@ -78,6 +79,7 @@ createDB f = do
         <*> prepStmt conn' sqlInsertHistoryRow
         <*> prepStmt conn' sqlQueryForExisting
         <*> prepStmt conn' sqlSelectCompletedCommands
+        <*> prepStmt conn' sqlSelectAllCommands
 
 sqlInsertHistoryRow :: Utf8
 sqlInsertHistoryRow =
@@ -128,3 +130,15 @@ selectCompletedCommands e v = foldM f HashMap.empty v
           [SText (Utf8 cr)] ->
             return $ HashMap.insert rk (crFromField rk cr) m
           r -> dbError $ "Invalid result from query: " ++ show r
+
+sqlSelectAllCommands :: Utf8
+sqlSelectAllCommands = "SELECT hash,command,userSigs FROM 'main'.'pactCommands'"
+
+selectAllCommands :: DbEnv -> IO ([Command ByteString])
+selectAllCommands e = fmap rowToCmd <$> qrys_ (_qrySelectAllCmds e) [RText,RText,RText]
+  where
+    rowToCmd [SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
+      PublicCommand { _cmdPayload = cmd'
+                    , _cmdSigs = userSigsFromField userSigs'
+                    , _cmdHash = hashFromField hash'}
+    rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err

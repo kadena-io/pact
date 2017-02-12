@@ -18,6 +18,7 @@ module Pact.Types.SQLite
   , qry
   , qry_
   , qrys
+  , qrys_
   , exec
   , exec_
   , execs
@@ -114,6 +115,14 @@ qrys stmt as rts = do
   return (reverse rows)
 {-# INLINE qrys #-}
 
+-- | Execute query statement with no params
+qrys_ :: Statement -> [RType] -> IO [[SType]]
+qrys_ stmt rts = do
+  clearBindings stmt
+  rows <- stepStmt stmt rts
+  void $ reset stmt
+  return (reverse rows)
+{-# INLINE qrys_ #-}
 
 stepStmt :: Statement -> [RType] -> IO [[SType]]
 stepStmt stmt rts = do

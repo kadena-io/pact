@@ -14,6 +14,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
 import Control.Concurrent.MVar
+import System.Directory
 
 import Data.ByteString (ByteString)
 import Data.Semigroup ((<>))
@@ -33,12 +34,14 @@ initHistoryEnv
   -> InboundPactChan
   -> Maybe FilePath
   -> (String -> IO ())
+  -> ReplayFromDisk
   -> HistoryEnv
-initHistoryEnv historyChannel' inboundPactChannel' dbPath' debugPrint' = HistoryEnv
+initHistoryEnv historyChannel' inboundPactChannel' dbPath' debugPrint' rp = HistoryEnv
   { _historyChannel = historyChannel'
   , _inboundPactChannel = inboundPactChannel'
   , _debugPrint = debugPrint'
   , _dbPath = dbPath'
+  , _replayFromDisk = rp
   }
 
 runHistoryService :: HistoryEnv -> Maybe HistoryState -> IO ()
@@ -47,7 +50,7 @@ runHistoryService env mState = do
   let oChan = env ^. historyChannel
   initHistoryState <- case mState of
     Nothing -> do
-      pers <- setupPersistence dbg (env ^. dbPath)
+      pers <- setupPersistence dbg (env ^. dbPath) (env ^. replayFromDisk)
       return $! HistoryState { _registeredListeners = HashMap.empty, _persistence = pers }
     Just mState' -> do
       return mState'
@@ -60,13 +63,22 @@ debug s = do
   dbg <- view debugPrint
   liftIO $! dbg $ "[pact history] " ++ s
 
-setupPersistence :: (String -> IO ()) -> Maybe FilePath -> IO PersistenceSystem
-setupPersistence dbg Nothing = do
+setupPersistence :: (String -> IO ()) -> Maybe FilePath -> ReplayFromDisk -> IO PersistenceSystem
+setupPersistence dbg Nothing (ReplayFromDisk rp) = do
   dbg $ "[Service|History] Persistence Disabled"
+  putMVar rp []
   return $ InMemory HashMap.empty
-setupPersistence dbg (Just dbPath') = do
-  dbg $ "[Service|History] Persistence Enabled: " ++ (dbPath' ++ "-cmdr.sqlite")
-  conn <- DB.createDB $ (dbPath' ++ "-cmdr.sqlite")
+setupPersistence dbg (Just dbPath') (ReplayFromDisk rp) = do
+  dbg $ "[Service|History] Persistence Enabled: " ++ (dbPath' ++ "commands.sqlite")
+  dbExists <- doesFileExist dbPath'
+  conn <- DB.createDB $ (dbPath' ++ "commands.sqlite")
+  when dbExists $ do
+    replayFromDisk' <- DB.selectAllCommands conn
+    dbg $ "[Service|History] Replaying from disk"
+    putMVar rp replayFromDisk'
+  unless dbExists $
+    -- if there's no replays, we still need to unblock the cmd thread
+    putMVar rp []
   return $ OnDisk { incompleteRequestKeys = HashMap.empty
                   , dbConn = conn }
 
@@ -74,7 +86,7 @@ handle :: HistoryChannel -> HistoryService ()
 handle oChan = do
   q <- liftIO $ readHistory oChan
   case q of
-    AddNew{..} ->  addNewKeys hNewKeys
+    AddNew{..} -> addNewKeys hNewKeys
     Update{..} -> updateExistingKeys hUpdateRks
     QueryForResults{..} -> queryForResults hQueryForResults
     RegisterListener{..} -> registerNewListeners hNewListener
@@ -96,21 +108,22 @@ addNewKeys cmds = do
       if HashMap.null notInMem
       -- unlikely but worth a O(1) check
       then do
-        debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a non-unique hash/requestKey"
+        debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a previously seen hash/requestKey"
       else do
         foundOnDisk <- liftIO $ DB.queryForExisting dbConn $ HashSet.fromMap $ const () <$> notInMem
-        newCmdsHM <- return $ HashMap.filterWithKey (\k _ -> HashSet.member k foundOnDisk) notInMem
+        newCmdsHM <- return $ HashMap.filterWithKey (\k _ -> not $ HashSet.member k foundOnDisk) notInMem
         if HashMap.null newCmdsHM
         then do
-          debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a non-unique hash/requestKey"
+          debug $ "Each of the " ++ show (HashMap.size asHM) ++ " new command(s) had a previously hash/requestKey"
         else do
           newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
           pactChan <- view inboundPactChannel
           liftIO $ writeInbound pactChan newCmdsList
           persistence .= OnDisk { incompleteRequestKeys = HashMap.union incompleteRequestKeys newCmdsHM
                                 , dbConn = dbConn }
-          when (HashMap.size asHM /= HashMap.size newCmdsHM) $ debug $ "Some (" ++ show (HashMap.size asHM - HashMap.size newCmdsHM) ++ ") new command(s) had a non-unique hash/requestKey"
           debug $ "Added " ++ show (HashMap.size newCmdsHM) ++ " new command(s)"
+          when (HashMap.size asHM /= HashMap.size newCmdsHM) $ do
+            debug $ "Some (" ++ show (HashMap.size asHM - HashMap.size newCmdsHM) ++ ") new command(s) had a previously seen hash/requestKey"
 
 
 updateExistingKeys :: HashMap RequestKey CommandResult -> HistoryService ()

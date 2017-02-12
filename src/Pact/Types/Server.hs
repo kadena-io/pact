@@ -35,8 +35,8 @@ module Pact.Types.Server
   , ListenerResult(..)
   , initChans
   , InboundPactChan(..), readInbound, writeInbound
-  , OutboundPactChan(..), tryReadOutbound, writeOutbound
   , HistoryChannel(..), readHistory, writeHistory
+  , ReplayFromDisk(..)
   ) where
 
 import Control.Applicative
@@ -45,8 +45,6 @@ import Control.Exception.Safe
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.Concurrent.Chan
-import Control.Concurrent.STM.TChan
-import Control.Concurrent.STM
 import Data.Maybe
 import Data.String
 import Data.ByteString (ByteString)
@@ -115,11 +113,12 @@ throwCmdEx = throw . CommandException
 
 
 newtype InboundPactChan = InboundPactChan (Chan [Command ByteString])
-newtype OutboundPactChan = OutboundPactChan (TChan [CommandResult])
 newtype HistoryChannel = HistoryChannel (Chan History)
+newtype ReplayFromDisk = ReplayFromDisk (MVar [Command ByteString])
 
-initChans :: IO (InboundPactChan,OutboundPactChan,HistoryChannel)
-initChans = (,,) <$> (InboundPactChan <$> newChan) <*> (OutboundPactChan <$> atomically newTChan) <*> (HistoryChannel <$> newChan)
+initChans :: IO (InboundPactChan,HistoryChannel)
+initChans = (,) <$> (InboundPactChan <$> newChan)
+                <*> (HistoryChannel <$> newChan)
 
 writeInbound :: InboundPactChan -> [Command ByteString] -> IO ()
 writeInbound (InboundPactChan c) = writeChan c
@@ -127,17 +126,11 @@ writeInbound (InboundPactChan c) = writeChan c
 readInbound :: InboundPactChan -> IO [Command ByteString]
 readInbound (InboundPactChan c) = readChan c
 
-writeOutbound :: OutboundPactChan -> [CommandResult] -> IO ()
-writeOutbound (OutboundPactChan c) = atomically . writeTChan c
-
-tryReadOutbound :: OutboundPactChan -> IO (Maybe [CommandResult])
-tryReadOutbound (OutboundPactChan c) = atomically $ tryReadTChan c
-
 readHistory :: HistoryChannel -> IO History
 readHistory (HistoryChannel c) = readChan c
 
-writeHistory :: HistoryChannel -> IO History
-writeHistory (HistoryChannel c) = readChan c
+writeHistory :: HistoryChannel -> History -> IO ()
+writeHistory (HistoryChannel c) h = writeChan c h
 
 newtype ExistenceResult = ExistenceResult
   { rksThatAlreadyExist :: HashSet RequestKey

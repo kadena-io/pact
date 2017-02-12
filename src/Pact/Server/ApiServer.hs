@@ -18,17 +18,18 @@
 
 module Pact.Server.ApiServer
   ( runApiServer
-  , ApiEnv(..), aiLog, aiInbound, aiOutbound, aiResults
+  , ApiEnv(..), aiLog, aiHistoryChan
   ) where
 
 import Prelude hiding (log)
 import Control.Lens hiding ((.=))
 import Control.Concurrent
-import Control.Concurrent.STM
 import Control.Monad.Reader
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.ByteString.Lazy (toStrict)
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import Data.Aeson hiding (defaultOptions, Result(..))
@@ -45,20 +46,16 @@ import Pact.Types.Server
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
-  , _aiInbound :: InboundPactChan
-  , _aiOutbound :: OutboundPactChan
-  , _aiResults :: TVar (HM.HashMap RequestKey Value)
+  , _aiHistoryChan :: HistoryChannel
   }
 makeLenses ''ApiEnv
 
 type Api a = ReaderT ApiEnv Snap a
 
-runApiServer :: InboundPactChan -> OutboundPactChan -> (String -> IO ()) -> Int -> IO ()
-runApiServer inChan outChan logFn port = do
+runApiServer :: HistoryChannel -> (String -> IO ()) -> Int -> IO ()
+runApiServer histChan logFn port = do
   putStrLn $ "runApiServer: starting on port " ++ show port
-  rm <- newTVarIO HM.empty
-  let conf' = (ApiEnv logFn inChan outChan rm)
-  _ <- forkIO $ consumeResults conf'
+  let conf' = (ApiEnv logFn histChan)
   httpServe (serverConf port) $
     applyCORS defaultOptions $ methods [GET, POST] $
     route [("api", runReaderT api conf')
@@ -84,19 +81,25 @@ sendPublicBatch = do
   rks <- mapM queueCmds $ group 8000 cmds
   writeResponse $ ApiSuccess $ RequestKeys $ concat rks
 
+checkHistoryForResult :: HashSet RequestKey -> Api PossiblyIncompleteResults
+checkHistoryForResult rks = do
+  hChan <- view aiHistoryChan
+  m <- liftIO $ newEmptyMVar
+  liftIO $ writeHistory hChan $ QueryForResults (rks,m)
+  liftIO $ readMVar m
+
 poll :: Api ()
 poll = do
   (Poll rks) <- readJSON
   log $ "Polling for " ++ show rks
-  rs <- HM.filterWithKey (\k _ -> k `elem` rks) <$> (view aiResults >>= liftIO . readTVarIO)
-  when (HM.null rs) $ log $ "No results found for poll! " ++ show rks
-  writeResponse $ pollResultToReponse rs
+  PossiblyIncompleteResults{..} <- checkHistoryForResult (HashSet.fromList rks)
+  when (HM.null possiblyIncompleteResults) $ log $ "No results found for poll!" ++ show rks
+  writeResponse $ pollResultToReponse possiblyIncompleteResults
 
-pollResultToReponse :: HM.HashMap RequestKey Value -> PollResponse
+pollResultToReponse :: HM.HashMap RequestKey CommandResult -> PollResponse
 pollResultToReponse m = ApiSuccess (kvToRes <$> HM.toList m)
   where
-    kvToRes (rk,v) = PollResult { _prRequestKey = rk, _prLatency = 0, _prResponse = v}
-
+    kvToRes (rk,CommandResult{..}) = PollResult { _prRequestKey = rk, _prLatency = 0, _prResponse = _prResult}
 
 log :: String -> Api ()
 log s = view aiLog >>= \f -> liftIO (f $ "[pact server]: " ++ s)
@@ -141,8 +144,8 @@ group n l
 queueCmds :: [Command T.Text] -> Api [RequestKey]
 queueCmds cmds = do
   rpcs <- mapM buildCmdRpc cmds
-  ic <- view aiInbound
-  liftIO $ writeInbound ic (map snd rpcs)
+  hc <- view aiHistoryChan
+  liftIO $ writeHistory hc $ AddNew (map snd rpcs)
   return $ fst <$> rpcs
 
 serverConf :: MonadSnap m => Int -> Snap.Config m a
@@ -151,26 +154,19 @@ serverConf port =
   setAccessLog (ConfigFileLog "log/access.log") $
   setPort port defaultConfig
 
+
 registerListener :: Api ()
 registerListener = do
   (ListenerRequest rk) <- readJSON
-  log $ "listening for: " ++ show rk
-  resTVar <- view aiResults
-  res <- liftIO $ atomically $ do
-    resMap <- readTVar resTVar
-    case HM.lookup rk resMap of
-      Nothing -> retry
-      Just r -> return $ ApiSuccess $ PollResult rk 0 r
-  writeResponse res
-
-consumeResults :: ApiEnv -> IO ()
-consumeResults ApiEnv{..} = do
-  let (OutboundPactChan oc) = _aiOutbound
-      log' s = liftIO (_aiLog $ "[pact server]: " ++ s)
-  forever $ do
-    outm <- liftIO $ atomically $ tryReadTChan oc
-    when (not $ null outm) $ log' $ "received result(s) for: " ++ show outm
-    liftIO $ atomically $ modifyTVar' _aiResults $ \rm ->
-      let toResult (CommandResult rk r) = (rk,r)
-          rm' = maybe rm (HM.union rm . HM.fromList . map toResult) outm
-      in rm'
+  hChan <- view aiHistoryChan
+  m <- liftIO $ newEmptyMVar
+  liftIO $ writeHistory hChan $ RegisterListener (HM.fromList [(rk,m)])
+  log $ "Registered Listener for: " ++ show rk
+  res <- liftIO $ readMVar m
+  case res of
+    GCed msg -> do
+      log $ "Listener GCed for: " ++ show rk ++ " because " ++ msg
+      die msg
+    ListenerResult CommandResult{..} -> do
+      log $ "Listener Serviced for: " ++ show rk
+      writeResponse $ ApiSuccess $ PollResult { _prRequestKey = _prReqKey, _prLatency = 0, _prResponse = _prResult}
