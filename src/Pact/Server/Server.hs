@@ -36,11 +36,13 @@ import Pact.Types.Runtime hiding (Update,(<>))
 import Data.Monoid
 import Pact.Types.Server
 import Pact.Types.Command
+import Pact.Types.SQLite
 
 data Config = Config {
   _port :: Word16,
   _persistDir :: Maybe FilePath,
-  _logDir :: FilePath
+  _logDir :: FilePath,
+  _pragmas :: [Pragma]
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
@@ -61,7 +63,7 @@ serve configFile = do
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- initFastLogger
-  let cmdConfig = CommandConfig Nothing debugFn "entity"
+  let cmdConfig = CommandConfig (fmap (++ "/pact.sqlite") _persistDir) debugFn "entity" _pragmas
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk' debugFn
   _ <- forkIO $ runHistoryService histConf Nothing

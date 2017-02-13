@@ -55,12 +55,12 @@ readKeySet i as = argsError i as
 defineKeyset :: RNativeFun e
 defineKeyset i [TLitString name,TKeySet ks _] = do
   let ksn = KeySetName name
-  old <- readRow KeySets ksn
+  old <- readRow (_faInfo i) KeySets ksn
   case old of
-    Nothing -> writeRow Write KeySets ksn ks & success "Keyset defined"
+    Nothing -> writeRow (_faInfo i) Write KeySets ksn ks & success "Keyset defined"
     Just _ -> do
              enforceKeySet (_faInfo i) (Just ksn) ks
-             writeRow Write KeySets ksn ks & success "Keyset defined"
+             writeRow (_faInfo i) Write KeySets ksn ks & success "Keyset defined"
 defineKeyset i as = argsError i as
 
 
@@ -70,7 +70,7 @@ enforceKeyset' i [k] = do
   (ksn,ks) <- case t of
     TLitString name -> do
       let ksn = KeySetName name
-      ksm <- readRow KeySets ksn
+      ksm <- readRow (_faInfo i) KeySets ksn
       case ksm of
         Nothing -> evalError' i $ "Keyset not found: " ++ show name
         Just ks -> return (Just ksn,ks)

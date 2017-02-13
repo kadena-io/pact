@@ -23,7 +23,7 @@
 --
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
-  , CommandConfig(..), ccDbFile, ccDebugFn, ccEntity
+  , CommandConfig(..), ccDbFile, ccDebugFn, ccEntity, ccPragmas
   , CommandState(..), csRefStore
   , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
   , ExecutionMode(..), emTxId
@@ -73,6 +73,7 @@ data CommandConfig = CommandConfig {
       _ccDbFile :: Maybe FilePath
     , _ccDebugFn :: String -> IO ()
     , _ccEntity :: Text
+    , _ccPragmas :: [Pragma]
     }
 $(makeLenses ''CommandConfig)
 

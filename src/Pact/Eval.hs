@@ -48,22 +48,22 @@ import Control.Monad.Reader
 import Pact.Types.Runtime
 import Pact.Compile
 
-evalBeginTx :: Eval e ()
+evalBeginTx :: Info -> Eval e ()
 evalBeginTx = beginTx
 {-# INLINE evalBeginTx #-}
 
-evalRollbackTx ::   Eval e ()
-evalRollbackTx = void rollbackTx
+evalRollbackTx :: Info -> Eval e ()
+evalRollbackTx = void . rollbackTx
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx ::   Eval e ()
-evalCommitTx = commitTx =<< view eeTxId
+evalCommitTx :: Info -> Eval e ()
+evalCommitTx i = commitTx i =<< view eeTxId
 {-# INLINE evalCommitTx #-}
 
 
 enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
 enforceKeySetName mi mksn = do
-  ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow KeySets mksn
+  ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
   enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
@@ -98,7 +98,7 @@ eval (TUse mn i) = do
 
 eval t@(TModule m bod i) = do
   -- enforce old module keysets
-  oldM <- readRow Modules (_mName m)
+  oldM <- readRow i Modules (_mName m)
   case oldM of
     Nothing -> return ()
     Just om -> enforceKeySetName i (_mKeySet om)
@@ -106,7 +106,7 @@ eval t@(TModule m bod i) = do
   enforceKeySetName i (_mKeySet m)
   -- build/install module from defs
   _defs <- call (StackFrame (pack $ abbrev t) i Nothing) $ loadModule m bod i
-  writeRow Write Modules (_mName m) m
+  writeRow i Write Modules (_mName m) m
   return $ msg $ pack $ "Loaded module " ++ show (_mName m)
 
 eval t = enscope t >>= reduce

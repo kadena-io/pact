@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
 -- Module      :  Pact.Types.SQLite
@@ -28,6 +29,7 @@ module Pact.Types.SQLite
   , TxStmts(..)
   , SysCache(..), cachedKeySets, cachedModules, cachedTableInfo, cachedUserTables
   , PSL(..), conn, log, txRecord, tableStmts, txStmts, tmpSysCache, sysCache
+  , Pragma(..)
   ) where
 
 import Database.SQLite3.Direct as SQ3
@@ -40,6 +42,7 @@ import Data.Default
 import Prelude hiding (log)
 import Control.Monad
 import Data.Int
+import Data.Aeson
 
 import Prelude hiding (log)
 import Control.Monad.Catch
@@ -198,6 +201,8 @@ data SysCache = SysCache {
 makeLenses ''SysCache
 
 instance Default SysCache where def = SysCache HM.empty HM.empty HM.empty HM.empty
+
+newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
 data PSL = PSL {
       _conn :: Database

@@ -49,9 +49,9 @@ import Pact.Server.SQLite as PactSL
 type PactMVars = (DBVar,MVar CommandState)
 
 initPactService :: CommandConfig -> IO (CommandExecInterface ExecutionMode PactRPC)
-initPactService config = do
-  let klog s = _ccDebugFn config ("[PactService] " ++ s)
-  mvars <- case _ccDbFile config of
+initPactService config@CommandConfig {..} = do
+  let klog s = _ccDebugFn ("[PactService] " ++ s)
+  mvars <- case _ccDbFile of
     Nothing -> do
       klog "Initializing pure pact"
       ee <- initEvalEnv def puredb
@@ -60,10 +60,8 @@ initPactService config = do
     Just f -> do
       klog "Initializing pact SQLLite"
       dbExists <- doesFileExist f
-      if dbExists
-        then klog "Deleting Existing Pact DB File" >> removeFile f
-        else klog "No Pact DB File Found"
-      p <- (\a -> a { _log = \m s -> klog $ m ++ ": " ++ show s }) <$> initPSL f
+      when dbExists $ klog "Deleting Existing Pact DB File" >> removeFile f
+      p <- (\a -> a { _log = \m s -> _ccDebugFn $ "[Pact SQLite] " ++ m ++ ": " ++ show s }) <$> initPSL _ccPragmas f
       ee <- initEvalEnv p psl
       rv <- newMVar (CommandState $ _eeRefStore ee)
       let v = _eePactDbVar ee
@@ -83,7 +81,7 @@ applyTransactionalPCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) 
       _ccDebugFn $ "[PactService]: tx success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
     Left e -> do
-      _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd)
+      _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       return $ jsonResult (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 
@@ -140,13 +138,13 @@ applyExec rk (ExecMsg code edata) ks = do
 
 execTerms :: ExecutionMode -> [Term Name] -> Eval e (Term Name)
 execTerms mode terms = do
-  evalBeginTx
+  evalBeginTx def
   er <- catchError
         (last <$> mapM eval terms)
-        (\e -> evalRollbackTx >> throwError e)
+        (\e -> evalRollbackTx def >> throwError e)
   case mode of
-    Transactional _ -> void evalCommitTx
-    Local -> evalRollbackTx
+    Transactional _ -> void $ evalCommitTx def
+    Local -> evalRollbackTx def
   return er
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM CommandResult

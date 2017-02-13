@@ -95,7 +95,7 @@ import Pact.Types.Util
 data PactError =
     EvalError Info Text |
     ArgsError FunApp [Term Name] Text |
-    DbError Text |
+    DbError Info Text |
     TxFailure Text
 
 instance Show PactError where
@@ -103,7 +103,7 @@ instance Show PactError where
     show (ArgsError FunApp {..} args s) =
         show _faInfo ++ ": " ++ unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
     show (TxFailure s) = " Failure: " ++ unpack s
-    show (DbError s) = " Failure: Database exception: " ++ unpack s
+    show (DbError i s) = show i ++ ": Failure: Database exception: " ++ unpack s
 
 evalError :: MonadError PactError m => Info -> String -> m a
 evalError i = throwError . EvalError i . pack
@@ -324,41 +324,41 @@ call s act = do
 {-# INLINE call #-}
 
 -- | Invoke a backend method, catching all exceptions as 'DbError'
-method :: (PactDb e -> Method e a) -> Eval e a
-method f = do
+method :: Info -> (PactDb e -> Method e a) -> Eval e a
+method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwError . DbError . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwError . DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
-readRow :: (IsString k,FromJSON v) => Domain k v -> k -> Eval e (Maybe v)
-readRow d k = method $ \db -> _readRow db d k
+readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
+readRow i d k = method i $ \db -> _readRow db d k
 
-writeRow :: (AsString k,ToJSON v) => WriteType -> Domain k v -> k -> v -> Eval e ()
-writeRow w d k v = method $ \db -> _writeRow db w d k v
+writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
+writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
-keys :: TableName -> Eval e [RowKey]
-keys t = method $ \db -> _keys db t
+keys :: Info -> TableName -> Eval e [RowKey]
+keys i t = method i $ \db -> _keys db t
 
-txids :: TableName -> TxId -> Eval e [TxId]
-txids tn tid = method $ \db -> _txids db tn tid
+txids :: Info -> TableName -> TxId -> Eval e [TxId]
+txids i tn tid = method i $ \db -> _txids db tn tid
 
-createUserTable :: TableName -> ModuleName -> KeySetName -> Eval e ()
-createUserTable t m k = method $ \db -> _createUserTable db t m k
+createUserTable :: Info -> TableName -> ModuleName -> KeySetName -> Eval e ()
+createUserTable i t m k = method i $ \db -> _createUserTable db t m k
 
-getUserTableInfo :: TableName -> Eval e (ModuleName,KeySetName)
-getUserTableInfo t = method $ \db -> _getUserTableInfo db t
+getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
+getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
-beginTx :: Eval e ()
-beginTx = method $ \db -> _beginTx db
+beginTx :: Info -> Eval e ()
+beginTx i = method i $ \db -> _beginTx db
 
-commitTx :: TxId -> Eval e ()
-commitTx t = method $ \db -> _commitTx db t
+commitTx :: Info -> TxId -> Eval e ()
+commitTx i t = method i $ \db -> _commitTx db t
 
-rollbackTx :: Eval e ()
-rollbackTx = method $ \db -> _rollbackTx db
+rollbackTx :: Info -> Eval e ()
+rollbackTx i = method i $ \db -> _rollbackTx db
 
-getTxLog :: (IsString k,FromJSON v) => Domain k v -> TxId -> Eval e [TxLog]
-getTxLog d t = method $ \db -> _getTxLog db d t
+getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog]
+getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 {-# INLINE readRow #-}
 {-# INLINE writeRow #-}

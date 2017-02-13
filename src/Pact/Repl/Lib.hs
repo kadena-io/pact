@@ -195,19 +195,19 @@ tx Begin i as = do
              _ -> argsError i as
   tid <- succ <$> view eeTxId
   setenv eeTxId tid
-  evalBeginTx
+  evalBeginTx (_faInfo i)
   view eePactDbVar >>= \m -> liftIO $ modifyMVar_ m (return . set rlsTxName tname)
   return $ txmsg tname tid "Begin"
 
-tx Rollback _ [] = do
-  evalRollbackTx
+tx Rollback i [] = do
+  evalRollbackTx (_faInfo i)
   tid <- view eeTxId
   tname <- view eePactDbVar >>= \m -> liftIO $ withMVar m (return . view rlsTxName)
   return $ txmsg tname tid "Rollback"
-tx Commit _ [] = do
+tx Commit i [] = do
   newmods <- use (evalRefs.rsNew)
   setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
-  evalCommitTx
+  evalCommitTx (_faInfo i)
   tid <- view eeTxId
   tname <- view eePactDbVar >>= \m -> liftIO $ modifyMVar m $ \v -> return (set rlsTxName Nothing v,view rlsTxName v)
   return $ txmsg tname tid "Commit"

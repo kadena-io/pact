@@ -1,16 +1,10 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE CPP #-}
 
 
 -- |
@@ -26,6 +20,7 @@ module Pact.Server.SQLite where
 
 import Database.SQLite3.Direct as SQ3
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import System.Directory
 import Data.Monoid
 import Control.Lens
@@ -87,11 +82,9 @@ psl =
  , _beginTx = \s -> withMVar s resetTemp >>= \m -> execs_ (tBegin (_txStmts m))
 
  , _commitTx = \tid s -> modifyMVar_ s $ \m -> do
-       let _tid' = SInt (fromIntegral tid)
+       let tid' = SInt (fromIntegral tid)
            m' = m { _txRecord = M.empty, _sysCache = _tmpSysCache m }
-#if ENABLE_PACT_PERSISTENCE
        forM_ (M.toList $ _txRecord m) $ \(t,es) -> execs (sRecordTx (_tableStmts m M.! t)) [tid',sencode es]
-#endif
        execs_ (tCommit $ _txStmts m)
        return m'
 
@@ -208,12 +201,12 @@ getTableStmts :: PSL -> Utf8 -> TableStmts
 getTableStmts s tn = (M.! tn) . _tableStmts $ s
 
 decodeBlob :: (FromJSON v) => [SType] -> IO v
-decodeBlob [SBlob old] = liftEither (return $ eitherDecodeStrict' old)
+decodeBlob [SText old] = liftEither (return $ eitherDecodeStrict' (convertUtf8 old))
 decodeBlob v = throwDbError $ "Expected single-column blob, got: " ++ show v
 {-# INLINE decodeBlob #-}
 
 decodeInt_ :: (Integral v) => [SType] -> IO v
-decodeInt_ [SInt i] = return $ fromIntegral $ i
+decodeInt_ [SInt i] = return $ fromIntegral i
 decodeInt_ v = throwDbError $ "Expected single-column int, got: " ++ show v
 {-# INLINE decodeInt_ #-}
 
@@ -251,7 +244,7 @@ modulesTxRecord :: Utf8
 modulesTxRecord = "STXR_modules"
 
 sencode :: ToJSON a => a -> SType
-sencode a = SBlob $ BSL.toStrict $ encode a
+sencode a = SText $ Utf8 $ BSL.toStrict $ encode a
 {-# INLINE sencode #-}
 
 stext :: AsString a => a -> SType
@@ -269,9 +262,9 @@ createTable :: Utf8 -> Utf8 -> PSL -> IO PSL
 createTable ut ur e = do
   _log e "createTables" (ut,ur)
   exec_ (_conn e) $ "create table " <> ut <>
-              " (key text primary key not null unique, value SQLBlob) without rowid;"
+              " (key text primary key not null unique, value text);" --  without rowid;"
   exec_ (_conn e) $ "create table " <> ur <>
-          " (txid integer primary key not null unique, txlogs SQLBlob);" -- 'without rowid' crashes!!
+          " (txid integer primary key not null unique, txlogs text);" -- 'without rowid' crashes!!
   let mkstmt q = prepStmt' e q
   ss <- TableStmts <$>
            mkstmt ("INSERT OR REPLACE INTO " <> ut <> " VALUES (?,?)") <*>
@@ -285,7 +278,6 @@ createTable ut ur e = do
 createSchema :: MVar PSL -> IO ()
 createSchema e = modifyMVar_ e $ \s -> do
   exec_ (_conn s)
-  -- CPP breaks multi-line strings
     "CREATE TABLE IF NOT EXISTS usertables (name TEXT PRIMARY KEY NOT NULL UNIQUE,module text NOT NULL,keyset text NOT NULL);"
   createTable keysetsTable keysetsTxRecord s >>= createTable modulesTable modulesTxRecord
 
@@ -308,14 +300,14 @@ qrys' s tn stmtf as rts = do
 {-# INLINE qrys' #-}
 
 
-initPSL :: FilePath -> IO PSL
-initPSL f = do
+initPSL :: [Pragma] -> FilePath -> IO PSL
+initPSL ps f = do
   c <- liftEither $ open (fromString f)
   ts <- TxStmts <$> prepStmt c "BEGIN TRANSACTION"
          <*> prepStmt c "COMMIT TRANSACTION"
          <*> prepStmt c "ROLLBACK TRANSACTION"
   s <- return $ PSL c (\m s -> putStrLn $ m ++ ": " ++ show s) M.empty M.empty ts def def
-  runPragmas s
+  runPragmas s ps
   return s
 
 
@@ -328,19 +320,23 @@ qry1 e q as rts = do
     [] -> throwDbError "qry1: no results!"
     rs -> throwDbError $ "qry1: multiple results! (" ++ show (length rs) ++ ")"
 
-runPragmas :: PSL -> IO ()
-runPragmas e = do
-  exec_ (_conn e) "PRAGMA synchronous = OFF"
-  exec_ (_conn e) "PRAGMA journal_mode = MEMORY"
-  exec_ (_conn e) "PRAGMA locking_mode = EXCLUSIVE"
-  exec_ (_conn e) "PRAGMA temp_store = MEMORY"
+runPragmas :: PSL -> [Pragma] -> IO ()
+runPragmas e = mapM_ (\(Pragma s) -> exec_ (_conn e) (fromString ("PRAGMA " ++ s)))
+
+fastNoJournalPragmas :: [Pragma]
+fastNoJournalPragmas = [
+  "synchronous = OFF",
+  "journal_mode = MEMORY",
+  "locking_mode = EXCLUSIVE",
+  "temp_store = MEMORY"
+  ]
 
 
 _initPSL :: IO PSL
 _initPSL = do
   let f = "foo.sqllite"
   doesFileExist f >>= \b -> when b (removeFile f)
-  initPSL f
+  initPSL fastNoJournalPragmas f
 
 _run :: (MVar PSL -> IO ()) -> IO ()
 _run a = do
@@ -432,18 +428,18 @@ _pact doBench = do
       createSchema e
       void $ commit' e
       (r,es) <- runEval def evalEnv $ do
-          evalBeginTx
+          evalBeginTx def
           rs <- mapM eval (parseCompile $ decodeUtf8 cf)
-          evalCommitTx
+          evalCommitTx def
           return rs
       print r
       let evalEnv' = over (eeRefStore.rsModules) (HM.union (HM.fromList (_rsNew (_evalRefs es)))) evalEnv
           pactBench benchterm = do
                                 tid <- fromIntegral <$> getCPUTime
                                 er <- runEval def (set eeTxId tid evalEnv') $ do
-                                      evalBeginTx
+                                      evalBeginTx def
                                       r' <- eval (head benchterm)
-                                      evalCommitTx
+                                      evalCommitTx def
                                       return r'
                                 return (fst er)
           pactSimple = fmap fst . runEval def evalEnv' . eval . head . parseCompile
@@ -458,7 +454,7 @@ _pact doBench = do
                    rr <- _readRow psl (UserTables "demo-accounts") "Acct1" e
                    void $ commit' e
                    return rr
-      benchy "_readRow no tx" $ runEval def evalEnv' $ readRow (UserTables "demo-accounts") "Acct1"
+      benchy "_readRow no tx" $ runEval def evalEnv' $ readRow def (UserTables "demo-accounts") "Acct1"
       benchy "describe-table" $ pactSimple "(describe-table 'demo-accounts)"
       benchy "transfer" $ pactBench  $ parseCompile "(demo.transfer \"Acct1\" \"Acct2\" 1.0)"
       benchy "_getUserTableInfo" $ _getUserTableInfo psl "demo-accounts" e

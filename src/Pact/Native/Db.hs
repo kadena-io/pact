@@ -99,14 +99,14 @@ dbDefs =
     ])
 
 descTable :: RNativeFun e
-descTable _ [TLitString t] =
+descTable i [TLitString t] =
     toTerm . (\(m,k) -> object ["name" .= t, "module" .= m, "keyset" .= k]) <$>
-    getUserTableInfo (TableName t)
+    getUserTableInfo (_faInfo i) (TableName t)
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
-  r <- readRow KeySets (KeySetName t)
+  r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
     Just v -> return (toTerm (toJSON v))
     Nothing -> evalError' i $ "Keyset not found: " ++ show t
@@ -126,7 +126,7 @@ userTable = UserTables . userTable'
 
 -- | unsafe function to create TableName from TTable.
 userTable' :: Show n => Term n -> TableName
-userTable' TTable {..} = TableName $ asString _tModule <> "." <> asString _tTableName
+userTable' TTable {..} = TableName $ asString _tModule <> "_" <> asString _tTableName
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
@@ -140,7 +140,7 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
             _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
     _ -> argsError i as
   guardTable i table
-  mrow <- readRow (userTable table) (RowKey key)
+  mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
@@ -158,7 +158,7 @@ withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) 
   case tkd of
     (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (RowKey key)
+      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> bindToRow ps bd b =<< toColumns fi defaultRow
         (Just row) -> bindToRow ps bd b row
@@ -171,7 +171,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
   case tk of
     (table@TTable {..},TLitString key) -> do
       guardTable fi table
-      mrow <- readRow (userTable table) (RowKey key)
+      mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx $ "with-read: row not found: " ++ show key
         (Just row) -> bindToRow ps bd b row
@@ -185,21 +185,21 @@ bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> 
 keys' :: RNativeFun e
 keys' i [table@TTable {..}] = do
     guardTable i table
-    (\b -> TList b tTyString def) . map toTerm <$> keys (userTable' table)
+    (\b -> TList b tTyString def) . map toTerm <$> keys (_faInfo i) (userTable' table)
 keys' i as = argsError i as
 
 
 txids' :: RNativeFun e
 txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
-  (\b -> TList b tTyInteger def) . map toTerm <$> txids (userTable' table) (fromIntegral key)
+  (\b -> TList b tTyInteger def) . map toTerm <$> txids (_faInfo i) (userTable' table) (fromIntegral key)
 txids' i as = argsError i as
 
 
 txlog :: RNativeFun e
 txlog i [table@TTable {..},TLitInteger tid] = do
   guardTable i table
-  (`TValue` def) . toJSON <$> getTxLog (userTable table) (fromIntegral tid)
+  (`TValue` def) . toJSON <$> getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog i as = argsError i as
 
 write :: WriteType -> RNativeFun e
@@ -209,7 +209,7 @@ write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do
     TyAny -> return ()
     TyVar {} -> return ()
     tty -> void $ checkUserType (wt /= Update) (_faInfo i) ps tty
-  success "Write succeeded" . writeRow wt (userTable table) (RowKey key) =<< toColumns i ps
+  success "Write succeeded" . writeRow (_faInfo i) wt (userTable table) (RowKey key) =<< toColumns i ps
 write _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
@@ -226,7 +226,7 @@ createTable' i [t@TTable {..}] = do
   guardTable i t
   m <- getModule (_faInfo i) _tModule
   let (UserTables tn) = userTable t
-  success "TableCreated" $ createUserTable tn _tModule (_mKeySet m)
+  success "TableCreated" $ createUserTable (_faInfo i) tn _tModule (_mKeySet m)
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
