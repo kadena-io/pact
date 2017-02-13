@@ -33,7 +33,7 @@ import Safe
 import Control.Arrow
 import Data.Foldable
 import Control.Applicative
-import Data.Aeson (Value(Null))
+import Data.Aeson
 
 
 import Pact.Eval
@@ -126,13 +126,14 @@ langDefs =
      "Return reference tx id for pact execution."
 
     ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
-     "Parse KEY string value from message data body as decimal.\
+     "Parse KEY string value from top level of message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
-     "Parse KEY string value from message data body as integer. `$(read-integer \"age\")`"
+     "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
-     "Read KEY from message data body, or data body itself if not provided. \
-     \Will recognize JSON types as corresponding Pact type.\
+     "Read KEY from top level of message data body, or data body itself if not provided. \
+     \Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, \
+     \List -> value, Object -> value. NB value types are not introspectable in pact. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defNative (specialForm Bind) bind
@@ -266,15 +267,23 @@ readDecimal i [TLitString key] = do
   (t :: T.Text) <- parseMsgKey i "read-decimal" key
   case AP.parseOnly (negatable dec) t of
     Right (n,r) -> return $ toTerm $ maybe r (const $ negate r) n
-    _ -> evalError' i $ "read-decimal: parse failure, expecting decimal: " ++ show t
+    _ -> evalError' i $ "read-decimal: parse failure, expecting decimal text: " ++ show t
 readDecimal i as = argsError i as
+
+-- | One-off type for 'readInteger', not exported.
+newtype ParsedInteger = ParsedInteger Integer
+instance FromJSON ParsedInteger where
+  parseJSON (String s) =
+    ParsedInteger <$> case AP.parseOnly (negatable natural) s of
+                        Right (n,r) -> return (maybe r (const (negate r)) n)
+                        _ -> fail $ "Failure parsing integer: " ++ show s
+  parseJSON (Number n) = return $ ParsedInteger (round n)
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
-  (t :: T.Text) <- parseMsgKey i "read-integer" key
-  case AP.parseOnly (negatable natural) t of
-    Right (n,r) -> return $ toTerm (maybe r (const (negate r)) n)
-    _ -> evalError' i $ "read-integer: parse failure, expecting integer: " ++ show t
+  (ParsedInteger a) <- parseMsgKey i "read-integer" key
+  return $ toTerm a
 readInteger i as = argsError i as
 
 negatable :: AP.Parser a -> AP.Parser (Maybe Char,a)
