@@ -121,7 +121,7 @@ argsError i as = throwError $ ArgsError i as "Invalid arguments"
 argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
 argsError' i as = throwError $ ArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
 
-
+-- | Represent Pact 'Term' values that can be stored in a database.
 data Persistable =
     PLiteral Literal |
     PKeySet KeySet |
@@ -162,16 +162,17 @@ instance FromJSON Persistable where
           [String typ,v] | typ == "v" -> return (PValue v)
           _ -> return (PValue va)
 
-
-newtype ColumnId = ColumnId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show ColumnId where show (ColumnId s) = show s
-
+-- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString)
 instance Show RowKey where show (RowKey s) = show s
 
+-- | Column key type.
+newtype ColumnId = ColumnId Text
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
+instance Show ColumnId where show (ColumnId s) = show s
 
+-- | User table row-value type, mapping column ids to values.
 newtype Columns v = Columns { _columns :: M.Map ColumnId v }
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance (ToJSON v) => ToJSON (Columns v) where
@@ -184,10 +185,14 @@ instance (FromJSON v) => FromJSON (Columns v) where
 
 makeLenses ''Columns
 
+-- | Specify key and value types for database domains.
 data Domain k v where
-    UserTables :: !TableName -> Domain RowKey (Columns Persistable)
-    KeySets :: Domain KeySetName KeySet
-    Modules :: Domain ModuleName Module
+  -- | User table domain, with table name key.
+  UserTables :: !TableName -> Domain RowKey (Columns Persistable)
+  -- | Keyset domain.
+  KeySets :: Domain KeySetName KeySet
+  -- | Module domain.
+  Modules :: Domain ModuleName Module
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where
@@ -195,6 +200,7 @@ instance AsString (Domain k v) where
     asString KeySets = "SYS:KeySets"
     asString Modules = "SYS:Modules"
 
+-- | Transaction record.
 data TxLog =
     TxLog {
       _txDomain :: !Text
@@ -210,30 +216,52 @@ instance FromJSON TxLog where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
 
-data WriteType = Insert|Update|Write deriving (Eq,Show)
+-- | Instruction for '_writeRow'.
+data WriteType =
+  -- | Insert a new row, fail if key already found.
+  --   Requires complete row value, enforced by pact runtime.
+  Insert |
+  -- | Update an existing row, fail if key not found.
+  --   Allows incomplete row values.
+  Update |
+  -- | Update an existing row, or insert a new row if not found.
+  --   Requires complete row value, enforced by pact runtime.
+  Write
+  deriving (Eq,Show)
 
 -- | Shape of back-end methods: use MVar for state, run in IO.
 type Method e a = MVar e -> IO a
 
 -- | Fun-record type for Pact back-ends.
 data PactDb e = PactDb {
-      _readRow :: forall k v . (IsString k,FromJSON v) =>
-                  Domain k v -> k -> Method e (Maybe v)
-    , _writeRow :: forall k v . (AsString k,ToJSON v) =>
-                   WriteType -> Domain k v -> k -> v -> Method e ()
-    , _keys ::  TableName -> Method e [RowKey]
-    , _txids ::  TableName -> TxId -> Method e [TxId]
-    , _createUserTable ::  TableName -> ModuleName -> KeySetName -> Method e ()
-    , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
-    , _beginTx :: Method e ()
-    , _commitTx ::  TxId -> Method e ()
-    , _rollbackTx :: Method e ()
-    , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
-                   Domain k v -> TxId -> Method e [TxLog]
+    -- | Read a domain value at key, throwing an exception if not found.
+    _readRow :: forall k v . (IsString k,FromJSON v) =>
+                Domain k v -> k -> Method e (Maybe v)
+    -- | Write a domain value at key. WriteType argument governs key behavior.
+  , _writeRow :: forall k v . (AsString k,ToJSON v) =>
+                 WriteType -> Domain k v -> k -> v -> Method e ()
+    -- | Retrieve all keys for user table.
+  , _keys ::  TableName -> Method e [RowKey]
+    -- | Retrieve all transaction ids greater than supplied txid for table.
+  , _txids ::  TableName -> TxId -> Method e [TxId]
+    -- | Create a user table.
+  , _createUserTable ::  TableName -> ModuleName -> KeySetName -> Method e ()
+    -- | Get module, keyset for user table.
+  , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
+    -- | Initiate database transaction.
+  , _beginTx :: Method e ()
+    -- | Commit database transaction.
+  , _commitTx ::  TxId -> Method e ()
+    -- | Rollback database transaction.
+  , _rollbackTx :: Method e ()
+    -- | Get transaction log for table.
+  , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
+                 Domain k v -> TxId -> Method e [TxLog]
 }
 
 
-
+-- | Transaction ids are non-negative 64-bit integers and
+--   are expected to be monotonically increasing.
 newtype TxId = TxId Word64
     deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
 instance Show TxId where show (TxId s) = show s
@@ -247,6 +275,7 @@ data PactStep = PactStep {
 
 type ModuleData = (Module,HM.HashMap Text Ref)
 
+-- | Storage for loaded modules and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
@@ -254,14 +283,23 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
+-- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
+      -- | Environment references.
       _eeRefStore :: !RefStore
+      -- | Verified keys from message.
     , _eeMsgSigs :: !(S.Set PublicKey)
+      -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
+      -- | Transaction id.
     , _eeTxId :: !TxId
+      -- | Entity governing 'pact' executions.
     , _eeEntity :: !Text
+      -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
+      -- | Back-end state MVar.
     , _eePactDbVar :: MVar e
+      -- | Back-end function record.
     , _eePactDb :: PactDb e
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
@@ -285,18 +323,26 @@ data PactYield = PactYield {
 instance Default PactYield where def = PactYield def def
 
 
+-- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
 data RefState = RefState {
+      -- | Namespace-local defs.
       _rsLoaded :: HM.HashMap Name Ref
+      -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
+      -- | Modules that were compiled and loaded in this tx.
     , _rsNew :: [(ModuleName,ModuleData)]
     }
                 deriving (Eq,Show)
 makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty def
 
+-- | Interpreter mutable state.
 data EvalState = EvalState {
+      -- | New or imported modules and defs.
       _evalRefs :: !RefState
+      -- | Current call stack.
     , _evalCallStack :: ![StackFrame]
+      -- | Lame implementation of a yield coming back from a 'pact' execution.
     , _evalYield :: !(Maybe PactYield)
     }
 makeLenses ''EvalState
@@ -304,6 +350,7 @@ instance Show EvalState where
     show (EvalState m y _) = "EvalState " ++ show m ++ " " ++ show y
 instance Default EvalState where def = EvalState def def def
 
+-- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
     Eval { unEval :: ExceptT PactError (ReaderT (EvalEnv e) (StateT EvalState IO)) a }
     deriving (Functor,Applicative,Monad,MonadError PactError,MonadState EvalState,
@@ -314,7 +361,7 @@ runEval :: EvalState -> EvalEnv e -> Eval e a ->
            IO (Either PactError a,EvalState)
 runEval s env act = runStateT (runReaderT (runExceptT (unEval act)) env) s
 
-
+-- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e a -> Eval e a
 call s act = do
   evalCallStack %= (s:)
@@ -330,35 +377,50 @@ method i f = do
   handleAll (throwError . DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
+--
+-- Methods for invoking backend function-record function.
+--
+
+-- | Invoke '_readRow'
 readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
 readRow i d k = method i $ \db -> _readRow db d k
 
+-- | Invoke '_writeRow'
 writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
 writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
+-- | Invoke '_keys'
 keys :: Info -> TableName -> Eval e [RowKey]
 keys i t = method i $ \db -> _keys db t
 
+-- | Invoke '_txids'
 txids :: Info -> TableName -> TxId -> Eval e [TxId]
 txids i tn tid = method i $ \db -> _txids db tn tid
 
+-- | Invoke '_createUserTable'
 createUserTable :: Info -> TableName -> ModuleName -> KeySetName -> Eval e ()
 createUserTable i t m k = method i $ \db -> _createUserTable db t m k
 
+-- | Invoke _getUserTableInfo
 getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
+-- | Invoke _beginTx
 beginTx :: Info -> Eval e ()
 beginTx i = method i $ \db -> _beginTx db
 
+-- | Invoke _commitTx
 commitTx :: Info -> TxId -> Eval e ()
 commitTx i t = method i $ \db -> _commitTx db t
 
+-- | Invoke _rollbackTx
 rollbackTx :: Info -> Eval e ()
 rollbackTx i = method i $ \db -> _rollbackTx db
 
+-- | Invoke _getTxLog
 getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
+
 
 {-# INLINE readRow #-}
 {-# INLINE writeRow #-}
