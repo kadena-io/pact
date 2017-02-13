@@ -42,10 +42,14 @@ data Config = Config {
   _port :: Word16,
   _persistDir :: Maybe FilePath,
   _logDir :: FilePath,
-  _pragmas :: [Pragma]
+  _pragmas :: Maybe [Pragma],
+  _verbose :: Maybe Bool
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
+
+confSamp :: String
+confSamp = B8.unpack $ Y.encode $ Config 8080 (Just "/log") "/log" (Just []) (Just True)
 
 usage :: String
 usage =
@@ -53,8 +57,11 @@ usage =
   \port       - HTTP server port \n\
   \persistDir - Directory for database files. \n\
   \             If ommitted, runs in-memory only. \n\
-  \logDir     - Directory for HTTP logs"
-
+  \logDir     - Directory for HTTP logs \n\
+  \pragmas    - SQLite pragmas to use with persistence DBs \n\
+  \\n\
+  \## Example ##\n\
+  \\n" ++ confSamp
 
 serve :: FilePath -> IO ()
 serve configFile = do
@@ -62,8 +69,10 @@ serve configFile = do
                  either (\e -> throwIO (userError ("Error loading config: " ++ show e ++ "\n\n" ++ usage))) return
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
-  debugFn <- initFastLogger
-  let cmdConfig = CommandConfig (fmap (++ "/pact.sqlite") _persistDir) debugFn "entity" _pragmas
+  debugFn <- case _verbose of
+    Just True -> initFastLogger
+    _ -> return $ return . const ()
+  let cmdConfig = CommandConfig (fmap (++ "/pact.sqlite") _persistDir) debugFn "entity" (maybe [] id _pragmas)
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk' debugFn
   _ <- forkIO $ runHistoryService histConf Nothing
