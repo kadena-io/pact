@@ -57,6 +57,7 @@ import Data.HashMap.Strict (HashMap)
 import Prelude hiding (log,exp)
 
 import Pact.Pure
+import Pact.Server.SQLite
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite

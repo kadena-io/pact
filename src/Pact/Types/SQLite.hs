@@ -8,7 +8,7 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Types for SQLite Pact backend.
+-- Types for SQLite usage.
 --
 module Pact.Types.SQLite
   ( SType(..), RType(..)
@@ -25,21 +25,12 @@ module Pact.Types.SQLite
   , execs
   , execs_
   , exec'
-  , TableStmts(..)
-  , TxStmts(..)
-  , SysCache(..), cachedKeySets, cachedModules, cachedTableInfo, cachedUserTables
-  , PSL(..), conn, log, txRecord, tableStmts, txStmts, tmpSysCache, sysCache
-  , Pragma(..)
+  , Pragma(..), runPragmas
   ) where
 
 import Database.SQLite3.Direct as SQ3
-import Control.Lens
 import Data.String
 import qualified Data.ByteString as BS
-import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
-import Data.Default
-import Prelude hiding (log)
 import Control.Monad
 import Data.Int
 import Data.Aeson
@@ -47,7 +38,6 @@ import Data.Aeson
 import Prelude hiding (log)
 import Control.Monad.Catch
 
-import Pact.Types.Runtime
 
 -- | Statement input types
 data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)
@@ -178,39 +168,8 @@ exec' e q as = do
              void $ liftEither (return r)
 {-# INLINE exec' #-}
 
-data TableStmts = TableStmts {
-      sInsertReplace :: Statement
-    , sInsert :: Statement
-    , sReplace :: Statement
-    , sRead :: Statement
-    , sRecordTx :: Statement
-}
-
-data TxStmts = TxStmts {
-      tBegin :: Statement
-    , tCommit :: Statement
-    , tRollback :: Statement
-}
-
-data SysCache = SysCache {
-      _cachedKeySets :: HM.HashMap Text KeySet
-    , _cachedModules :: HM.HashMap Text Module
-    , _cachedTableInfo :: HM.HashMap TableName (ModuleName,KeySetName)
-    , _cachedUserTables :: HM.HashMap TableName (HM.HashMap Text (Columns Persistable))
-} deriving (Show)
-makeLenses ''SysCache
-
-instance Default SysCache where def = SysCache HM.empty HM.empty HM.empty HM.empty
 
 newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
-data PSL = PSL {
-      _conn :: Database
-    , _log :: forall s . Show s => (String -> s -> IO ())
-    , _txRecord :: M.Map Utf8 [TxLog]
-    , _tableStmts :: M.Map Utf8 TableStmts
-    , _txStmts :: TxStmts
-    , _tmpSysCache :: SysCache
-    , _sysCache :: SysCache
-}
-makeLenses ''PSL
+runPragmas :: Database -> [Pragma] -> IO ()
+runPragmas c = mapM_ (\(Pragma s) -> exec_ c (fromString ("PRAGMA " ++ s)))

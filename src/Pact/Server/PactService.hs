@@ -42,7 +42,6 @@ import Pact.Types.Server
 import Pact.Types.RPC
 import Pact.Native (initEvalEnv)
 import Pact.Types.Command
-import Pact.Types.SQLite
 import Pact.Server.SQLite as PactSL
 
 
@@ -61,7 +60,7 @@ initPactService config@CommandConfig {..} = do
       klog "Initializing pact SQLLite"
       dbExists <- doesFileExist f
       when dbExists $ klog "Deleting Existing Pact DB File" >> removeFile f
-      p <- (\a -> a { _log = \m s -> _ccDebugFn $ "[Pact SQLite] " ++ m ++ ": " ++ show s }) <$> initPSL _ccPragmas f
+      p <- (\a -> a { _log = \m s -> _ccDebugFn $ "[Pact SQLite] " ++ m ++ ": " ++ show s }) <$> initPSL _ccPragmas _ccDebugFn f
       ee <- initEvalEnv p psl
       rv <- newMVar (CommandState $ _eeRefStore ee)
       let v = _eePactDbVar ee

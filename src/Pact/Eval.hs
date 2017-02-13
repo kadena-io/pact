@@ -49,7 +49,7 @@ import Pact.Types.Runtime
 import Pact.Compile
 
 evalBeginTx :: Info -> Eval e ()
-evalBeginTx = beginTx
+evalBeginTx i = beginTx i =<< view eeTxId
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
@@ -57,7 +57,7 @@ evalRollbackTx = void . rollbackTx
 {-# INLINE evalRollbackTx #-}
 
 evalCommitTx :: Info -> Eval e ()
-evalCommitTx i = commitTx i =<< view eeTxId
+evalCommitTx i = commitTx i
 {-# INLINE evalCommitTx #-}
 
 

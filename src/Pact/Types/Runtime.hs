@@ -313,9 +313,9 @@ data PactDb e = PactDb {
     -- | Get module, keyset for user table.
   , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
     -- | Initiate database transaction.
-  , _beginTx :: Method e ()
+  , _beginTx :: TxId -> Method e ()
     -- | Commit database transaction.
-  , _commitTx ::  TxId -> Method e ()
+  , _commitTx ::  Method e ()
     -- | Rollback database transaction.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table.
@@ -470,12 +470,12 @@ getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
-beginTx :: Info -> Eval e ()
-beginTx i = method i $ \db -> _beginTx db
+beginTx :: Info -> TxId -> Eval e ()
+beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> TxId -> Eval e ()
-commitTx i t = method i $ \db -> _commitTx db t
+commitTx :: Info -> Eval e ()
+commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx
 rollbackTx :: Info -> Eval e ()

@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -37,7 +38,6 @@ import Data.Default
 import Prelude hiding (log)
 import Control.Monad
 import Control.Concurrent.MVar
-import Data.Maybe
 import qualified Data.Attoparsec.Text as AP
 
 import Pact.Types.Runtime hiding ((<>))
@@ -48,20 +48,44 @@ import Pact.Eval
 import Pact.Native (initEvalEnv)
 
 
+data TableStmts = TableStmts {
+      sInsertReplace :: Statement
+    , sInsert :: Statement
+    , sReplace :: Statement
+    , sRead :: Statement
+    , sRecordTx :: Statement
+}
+
+data TxStmts = TxStmts {
+      tBegin :: Statement
+    , tCommit :: Statement
+    , tRollback :: Statement
+}
+
+data PSL = PSL {
+      _conn :: Database
+    , _log :: forall s . Show s => (String -> s -> IO ())
+    , _txRecord :: M.Map Utf8 [TxLog]
+    , _tableStmts :: M.Map Utf8 TableStmts
+    , _txStmts :: TxStmts
+    , _txId :: Maybe TxId
+}
+makeLenses ''PSL
+
 psl :: PactDb PSL
 psl =
   PactDb {
 
    _readRow = \d k e ->
        case d of
-           KeySets -> readSysTable e keysetsTable (tmpSysCache.cachedKeySets) (asString k)
-           Modules -> readSysTable e modulesTable (tmpSysCache.cachedModules) (asString k)
+           KeySets -> readSysTable e keysetsTable (asString k)
+           Modules -> readSysTable e modulesTable (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
        case d of
-           KeySets -> writeSys e wt cachedKeySets keysetsTable k v
-           Modules -> writeSys e wt cachedModules modulesTable k v
+           KeySets -> writeSys e wt keysetsTable k v
+           Modules -> writeSys e wt modulesTable k v
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> withMVar e $ \m ->
@@ -73,21 +97,29 @@ psl =
            qry (_conn m) ("select txid from " <> userTxRecord tn <> " where txid > ? order by txid")
                [SInt (fromIntegral tid)] [RInt]
 
+
  , _createUserTable = \tn mn ksn e ->
        createUserTable' e tn mn ksn
 
  , _getUserTableInfo = \tn e -> getUserTableInfo' e tn
 
- , _beginTx = \s -> withMVar s resetTemp >>= \m -> execs_ (tBegin (_txStmts m))
+ , _beginTx = \tid s -> modifyMVar_ s $ \m ->
+     case _txId m of
+       Just old -> throwDbError $ "beginTx: already in transaction " ++ show old
+       Nothing -> do
+         execs_ (tBegin (_txStmts m))
+         return $ set txId (Just tid) $ resetTemp m
 
- , _commitTx = \tid s -> modifyMVar_ s $ \m -> do
+ , _commitTx = \s -> modifyMVar_ s $ \m -> checkInTx "commitTx" m $ \tid -> do
        let tid' = SInt (fromIntegral tid)
-           m' = m { _txRecord = M.empty, _sysCache = _tmpSysCache m }
-       forM_ (M.toList $ _txRecord m) $ \(t,es) -> execs (sRecordTx (_tableStmts m M.! t)) [tid',sencode es]
+       forM_ (M.toList $ _txRecord m) $ \(t,es) ->
+         execs (sRecordTx (_tableStmts m M.! t)) [tid',sencode es]
        execs_ (tCommit $ _txStmts m)
-       return m'
+       return (resetTemp m)
 
- , _rollbackTx = \s -> withMVar s resetTemp >>= \m -> execs_ (tRollback (_txStmts m))
+ , _rollbackTx = \s -> modifyMVar_ s $ \m -> checkInTx "rollbackTx" m $ \_ -> do
+      execs_ (tRollback (_txStmts m))
+      return (resetTemp m)
 
  , _getTxLog = \d tid e -> withMVar e $ \m -> do
       let tn :: Domain k v -> Utf8
@@ -95,10 +127,15 @@ psl =
           tn Modules = modulesTxRecord
           tn (UserTables t) = userTxRecord t
       r <- qry1 m ("select txlogs from " <> tn d <> " where txid = ?")
-                     [SInt (fromIntegral tid)] [RBlob]
+                     [SInt (fromIntegral tid)] [RText]
       decodeBlob r
 
 }
+
+checkInTx :: String -> PSL -> (TxId -> IO a) -> IO a
+checkInTx msg m act = case _txId m of
+  Just tid -> act tid
+  Nothing -> throwDbError $ msg ++ ": Not in transaction"
 
 
 readUserTable :: MVar PSL -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
@@ -106,50 +143,34 @@ readUserTable e t k = modifyMVar e $ \m -> readUserTable' m t k
 
 readUserTable' :: PSL -> TableName -> RowKey -> IO (PSL,Maybe (Columns Persistable))
 readUserTable' m t k = do
-  let k' = asString k
-      tbl = HM.lookup t $ _cachedUserTables (_tmpSysCache m)
-      cached = maybe Nothing (HM.lookup k') tbl
-  case cached of
-    j@Just {} -> return (m,j)
-    Nothing -> do
-      _log m "readUserTable: cache miss" k
-      r <- qrys' m (userTable t) sRead [stext k] [RBlob]
-      case r of
-        [] -> return (m,Nothing)
-        [a] -> do
-          v <- decodeBlob a
-          return (over (tmpSysCache.cachedUserTables) (HM.insert t (HM.insert k' v (fromMaybe HM.empty tbl))) m,Just v)
-        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ unpack k' ++ ", user table " ++ show t
+  r <- qrys' m (userTable t) sRead [stext k] [RText]
+  case r of
+    [] -> return (m,Nothing)
+    [a] -> (m,) . Just <$> decodeBlob a
+    _ -> throwDbError $ "readUserTable: found more than one row for key " ++ show k ++ ", user table " ++ show t
 {-# INLINE readUserTable #-}
 
-readSysTable :: FromJSON v => MVar PSL -> Utf8 -> Lens' PSL (HM.HashMap Text v) -> Text -> IO (Maybe v)
-readSysTable e t l k = modifyMVar e $ \m -> do
-  case HM.lookup k (view l m) of
-    j@Just {} -> return (m,j)
-    Nothing -> do
-      _log m "readSysTable: cache miss" k
-      r <- qrys' m t sRead [stext k] [RBlob]
-      case r of
-        [] -> return (m,Nothing)
-        [a] -> do
-          v <- decodeBlob a
-          return (over l (HM.insert k v) m,Just v)
-        _ -> throwDbError $ "readUserTable: found more than one row for key " ++ unpack k ++ ", user table " ++ show t
+readSysTable :: FromJSON v => MVar PSL -> Utf8 -> Text -> IO (Maybe v)
+readSysTable e t k = modifyMVar e $ \m -> do
+  r <- qrys' m t sRead [stext k] [RText]
+  case r of
+    [] -> return (m,Nothing)
+    [a] -> (m,) . Just <$> decodeBlob a
+    _ -> throwDbError $ "readUserTable: found more than one row for key " ++ unpack k ++ ", user table " ++ show t
 {-# INLINE readSysTable #-}
 
-resetTemp :: PSL -> IO PSL
-resetTemp s = return $ s { _txRecord = M.empty, _tmpSysCache = _sysCache s }
+resetTemp :: PSL -> PSL
+resetTemp = set txRecord M.empty . set txId Nothing
 
-writeSys :: (AsString k,ToJSON v) => MVar PSL -> WriteType ->
-            Setter' SysCache (HM.HashMap Text v) -> Utf8 -> k -> v -> IO ()
-writeSys s wt cache tbl k v = modifyMVar_ s $ \m -> do
+writeSys :: (AsString k,ToJSON v) => MVar PSL -> WriteType -> Utf8 -> k -> v -> IO ()
+writeSys s wt tbl k v = modifyMVar_ s $ \m -> do
     _log m "writeSys" (tbl,asString k)
     let q = case wt of
               Write -> sInsertReplace
               Insert -> sInsert
               Update -> sReplace
     execs' m tbl q [stext k,sencode v]
-    return $ m { _tmpSysCache = over cache (HM.insert (asString k) v) (_tmpSysCache m) }
+    return m
 {-# INLINE writeSys #-}
 
 writeUser :: MVar PSL -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
@@ -167,12 +188,8 @@ writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
             v = sencode row'
         execs' m ut sReplace [rk',v]
         finish row'
-      finish row' = do
-        let tbl = fromMaybe HM.empty $ HM.lookup tn $ _cachedUserTables (_tmpSysCache m)
-        return $
-           over txRecord (M.insertWith (++) ut [TxLog (asString tn) (asString rk) (toJSON row)]) $
-           over (tmpSysCache.cachedUserTables) (HM.insert tn (HM.insert (asString rk) row' tbl)) m
-
+      finish row' = return $
+           over txRecord (M.insertWith (++) ut [TxLog (asString tn) (asString rk) (toJSON row')]) m
   case (olds,wt) of
     (Nothing,Insert) -> ins
     (Just _,Insert) -> throwDbError $ "Insert: row found for key " ++ show rk
@@ -184,17 +201,13 @@ writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
 
 getUserTableInfo' :: MVar PSL -> TableName -> IO (ModuleName, KeySetName)
 getUserTableInfo' e tn = modifyMVar e $ \m -> do
-  case HM.lookup tn (_cachedTableInfo $ _tmpSysCache m) of
-    Just r -> return (m,r)
-    Nothing -> do
-      _log m "getUserTableInfo': cache miss" tn
-      r <- qry (_conn m) "select module,keyset from usertables where name = ?" [stext tn] [RText,RText]
-      case r of
-        [[SText mn,SText kn]] -> do
-          let p = (convertUtf8 mn,convertUtf8 kn)
-          return (over (tmpSysCache.cachedTableInfo) (HM.insert tn p) m,p)
-        [] -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
-        v -> throwDbError $ "getUserTableInfo: bad data for " ++ show tn ++ ": " ++ show v
+  r <- qry (_conn m) "select module,keyset from usertables where name = ?" [stext tn] [RText,RText]
+  case r of
+    [[SText mn,SText kn]] -> do
+      let p = (convertUtf8 mn,convertUtf8 kn)
+      return (m,p)
+    [] -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
+    v -> throwDbError $ "getUserTableInfo: bad data for " ++ show tn ++ ": " ++ show v
 
 getTableStmts :: PSL -> Utf8 -> TableStmts
 getTableStmts s tn = (M.! tn) . _tableStmts $ s
@@ -230,7 +243,7 @@ userTxRecord :: TableName -> Utf8
 userTxRecord tn = "UTXR_" <> (Utf8 $ encodeUtf8 $ sanitize tn)
 {-# INLINE userTxRecord #-}
 sanitize :: AsString t => t -> T.Text
-sanitize tn = T.replace "-" "_" $ (asString tn)
+sanitize tn = T.replace "-" "_" $ asString tn
 {-# INLINE sanitize #-}
 
 keysetsTable :: Utf8
@@ -254,8 +267,7 @@ stext a = SText $ fromString $ unpack $ asString a
 createUserTable' :: MVar PSL -> TableName -> ModuleName -> KeySetName -> IO ()
 createUserTable' s tn mn ksn = modifyMVar_ s $ \m -> do
   exec' (_conn m) "insert into usertables values (?,?,?)" [stext tn,stext mn,stext ksn]
-  m' <- return $ over (tmpSysCache . cachedTableInfo) (HM.insert tn (mn,ksn)) m
-  createTable (userTable tn) (userTxRecord tn) m'
+  createTable (userTable tn) (userTxRecord tn) m
 
 createTable :: Utf8 -> Utf8 -> PSL -> IO PSL
 createTable ut ur e = do
@@ -299,14 +311,20 @@ qrys' s tn stmtf as rts = do
 {-# INLINE qrys' #-}
 
 
-initPSL :: [Pragma] -> FilePath -> IO PSL
-initPSL ps f = do
+initPSL :: [Pragma] -> (String -> IO ()) -> FilePath -> IO PSL
+initPSL ps logFn f = do
   c <- liftEither $ open (fromString f)
   ts <- TxStmts <$> prepStmt c "BEGIN TRANSACTION"
          <*> prepStmt c "COMMIT TRANSACTION"
          <*> prepStmt c "ROLLBACK TRANSACTION"
-  s <- return $ PSL c (\m s -> putStrLn $ m ++ ": " ++ show s) M.empty M.empty ts def def
-  runPragmas s ps
+  s <- return PSL {
+    _conn = c,
+    _log = \m s -> logFn $ m ++ ": " ++ show s,
+    _txRecord = M.empty,
+    _tableStmts = M.empty,
+    _txStmts = ts,
+    _txId = def }
+  runPragmas (_conn s) ps
   return s
 
 
@@ -319,8 +337,6 @@ qry1 e q as rts = do
     [] -> throwDbError "qry1: no results!"
     rs -> throwDbError $ "qry1: multiple results! (" ++ show (length rs) ++ ")"
 
-runPragmas :: PSL -> [Pragma] -> IO ()
-runPragmas e = mapM_ (\(Pragma s) -> exec_ (_conn e) (fromString ("PRAGMA " ++ s)))
 
 fastNoJournalPragmas :: [Pragma]
 fastNoJournalPragmas = [
@@ -335,7 +351,7 @@ _initPSL :: IO PSL
 _initPSL = do
   let f = "foo.sqllite"
   doesFileExist f >>= \b -> when b (removeFile f)
-  initPSL fastNoJournalPragmas f
+  initPSL fastNoJournalPragmas putStrLn f
 
 _run :: (MVar PSL -> IO ()) -> IO ()
 _run a = do
@@ -350,12 +366,13 @@ _test1 :: IO ()
 _test1 =
     _run $ \e -> do
       t <- getCPUTime
-      _beginTx psl e
+      begin e
       createSchema e
       createUserTable' e "stuff" "module" "keyset"
       withMVar e $ \m -> qry_ (_conn m) "select * from usertables" [RText,RText,RText] >>= print
       void $ commit' e
-      _beginTx psl e
+      begin e
+      print . _txId =<< readMVar e
       print =<< _getUserTableInfo psl "stuff" e
       _writeRow psl Insert (UserTables "stuff") "key1"
                (Columns (M.fromList [("gah",PLiteral (LDecimal 123.454345))])) e
@@ -370,28 +387,30 @@ _test1 =
                (Module "mod1" "mod-admin-keyset" Nothing "code") e
       print =<< _readRow psl Modules "mod1" e
       void $ commit' e
-      tids <- _txids psl "stuff" (fromIntegral t) e
+      tids <- _txids psl "stuff" (pred $ fromIntegral t) e
       print tids
       print =<< _getTxLog psl (UserTables "stuff") (head tids) e
 
-
-commit' :: MVar PSL -> IO TxId
-commit' e = do
+begin :: MVar PSL -> IO ()
+begin e = do
   t <- fromIntegral <$> getCPUTime
-  _commitTx psl t e
-  return t
+  _beginTx psl t e
+
+commit' :: MVar PSL -> IO ()
+commit' e = _commitTx psl e
+
 
 
 
 _bench :: IO ()
 _bench = _run $ \e -> do
-  _beginTx psl e
+  begin e
   createSchema e
   _createUserTable psl "stuff" "module" "keyset" e
   void $ commit' e
   nolog e
   benchmark $ whnfIO $ do
-       _beginTx psl e
+       begin e
        _writeRow psl Write (UserTables "stuff") "key1"
                 (Columns (M.fromList [("gah",PLiteral (LDecimal 123.454345))])) e
        void $ _readRow psl (UserTables "stuff") "key1" e
@@ -401,7 +420,7 @@ _bench = _run $ \e -> do
        void $ commit' e
        return r
   benchmark $ whnfIO $ do
-       _beginTx psl e
+       begin e
        _writeRow psl Update (UserTables "stuff") "key1"
                 (Columns (M.fromList [("gah",PLiteral (LBool False)),("fh",PValue Null)])) e
        commit' e
@@ -423,7 +442,7 @@ _pact doBench = do
       evalEnv <- set eeMsgBody body <$> initEvalEnv m psl
       e <- return (_eePactDbVar evalEnv)
       cf <- BS.readFile "demo/demo.pact"
-      _beginTx psl e
+      begin e
       createSchema e
       void $ commit' e
       (r,es) <- runEval def evalEnv $ do
@@ -443,13 +462,13 @@ _pact doBench = do
                                 return (fst er)
           pactSimple = fmap fst . runEval def evalEnv' . eval . head . parseCompile
           benchy :: Show a => String -> IO a -> IO ()
-          benchy n a | doBench = putStr n >> putStr " " >> benchmark (whnfIO $ a)
+          benchy n a | doBench = putStr n >> putStr " " >> benchmark (whnfIO a)
                      | otherwise = putStrLn "===========" >> putStrLn (n ++ ": ") >> a >>= print
       when doBench $ nolog e
-      benchy "read-account no tx" $ pactSimple $ "(demo.read-account \"Acct1\")"
+      benchy "read-account no tx" $ pactSimple "(demo.read-account \"Acct1\")"
       benchy "read-account tx" $ pactBench $ parseCompile "(demo.read-account \"Acct1\")"
       benchy "_readRow tx" $ do
-                   _beginTx psl e
+                   begin e
                    rr <- _readRow psl (UserTables "demo-accounts") "Acct1" e
                    void $ commit' e
                    return rr
@@ -458,7 +477,7 @@ _pact doBench = do
       benchy "transfer" $ pactBench  $ parseCompile "(demo.transfer \"Acct1\" \"Acct2\" 1.0)"
       benchy "_getUserTableInfo" $ _getUserTableInfo psl "demo-accounts" e
       benchy "_writeRow tx" $ do
-                   _beginTx psl e
+                   begin e
                    rr <- _writeRow psl Update (UserTables "demo-accounts") "Acct1"
                          (Columns (M.fromList [("balance",PLiteral (LDecimal 1000.0)),
                                                ("amount",PLiteral (LDecimal 1000.0)),

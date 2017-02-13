@@ -25,7 +25,7 @@
 
 
 module Pact.Pure
-    (PureState(..),db,dbCommitted,dbTempLog
+    (PureState(..),db,dbCommitted,dbTempLog,dbTxId
     ,Db(..),dbUserTables,dbModules,dbKeySets
     ,UserTable(..),utTable,utModule,utKeySet
     ,Table(..),tKV,tLog
@@ -85,9 +85,10 @@ data PureState = PureState {
       _db :: Db
     , _dbCommitted :: Db
     , _dbTempLog :: TempLog
+    , _dbTxId :: TxId
 }
 makeLenses ''PureState
-instance Default PureState where def = PureState def def def
+instance Default PureState where def = PureState def def def def
 
 
 
@@ -122,14 +123,14 @@ puredb = PactDb {
   , _getUserTableInfo = \t e ->
         onUserTable e t $ \UserTable {..} -> (_utModule,_utKeySet)
 
-  , _beginTx = \e ->
-        modifyMVar' e $ \s -> PureState (_dbCommitted s) (_dbCommitted s) def
+  , _beginTx = \tid e ->
+        modifyMVar' e $ \s -> PureState (_dbCommitted s) (_dbCommitted s) def tid
 
-  , _commitTx = \tid e ->
-        modifyMVar' e (commitDb tid)
+  , _commitTx = \e ->
+        modifyMVar' e commitDb
 
   , _rollbackTx = \e ->
-        modifyMVar' e (\s -> PureState (_dbCommitted s) (_dbCommitted s) def)
+        modifyMVar' e (\s -> PureState (_dbCommitted s) (_dbCommitted s) def def)
 
   , _getTxLog = \d t e -> getLogs d t <$> useMVar e dbCommitted
 
@@ -177,8 +178,8 @@ onUserTable e t f = do
 {-# INLINE onUserTable #-}
 
 
-commitDb :: TxId -> PureState -> PureState
-commitDb tid (PureState (Db us ms ks) _ (TempLog uls ml kl)) = PureState committed committed def
+commitDb :: PureState -> PureState
+commitDb (PureState (Db us ms ks) _ (TempLog uls ml kl) tid) = PureState committed committed def tid
     where
       uls' = HM.toList uls
       committed = Db (foldl' commitUT us uls')
