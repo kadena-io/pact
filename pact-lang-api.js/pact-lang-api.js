@@ -140,6 +140,13 @@ var simplePollRequestFromExec = function(execMsg) {
   return {"requestKeys": rks};
 };
 
+var mkExp = function(pgmName) {
+  if (typeof pgmName !== 'string') {
+    throw new TypeError('pgmName must be a string: ' + JSON.stringify(pgmName));
+  }
+  return '(' + pgmName + ' ' + Array.prototype.slice.call(arguments, 1).map(JSON.stringify).join(' ') + ')';
+};
+
 module.exports = {
   crypto: {
     binToHex: binToHex,
@@ -152,6 +159,9 @@ module.exports = {
   api: {
     mkSingleCmd: mkSingleCmd,
     mkPublicSend: mkPublicSend
+  },
+  lang: {
+    mkExp: mkExp
   },
   simple: {
     exec: {
