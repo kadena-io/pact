@@ -20,7 +20,6 @@ module Pact.Server.SQLite where
 
 import Database.SQLite3.Direct as SQ3
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import System.Directory
 import Data.Monoid
 import Control.Lens

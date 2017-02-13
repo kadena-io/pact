@@ -12,7 +12,7 @@
 
 module Pact.Docgen where
 
-import Data.Text (unpack,pack,replace)
+import Data.Text (replace)
 import qualified Data.Text as T
 import Text.Trifecta hiding (err)
 import System.IO
