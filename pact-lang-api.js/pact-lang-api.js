@@ -140,6 +140,17 @@ var simplePollRequestFromExec = function(execMsg) {
   return {"requestKeys": rks};
 };
 
+var simpleListenRequestFromExec = function(execMsg) {
+  var cmds = execMsg.cmds || TypeError("expected key 'cmds' in object: " + JSON.stringify(execMsg));
+  var rks = [];
+  if (!cmds.every(function(v){return v.hasOwnProperty("hash");})) {
+    throw new TypeError('maleformed object, expected "hash" key in every cmd: ' + JSON.stringify(execMsg));
+  } else {
+    rks = unique(cmds.map(function(v){return v.hash;}));
+  }
+  return {"requestKey": rks[0]};
+};
+
 var mkExp = function(pgmName) {
   if (typeof pgmName !== 'string') {
     throw new TypeError('pgmName must be a string: ' + JSON.stringify(pgmName));
@@ -166,7 +177,8 @@ module.exports = {
   simple: {
     exec: {
       createCommand: simpleExecCommand,
-      createPollRequest: simplePollRequestFromExec
+      createPollRequest: simplePollRequestFromExec,
+      createListenRequest: simpleListenRequestFromExec
     }
   }
 };
