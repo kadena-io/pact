@@ -71,6 +71,7 @@ import Control.Monad.Reader
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 import Data.Aeson
+import Data.Aeson.Types
 import qualified Data.ByteString.Lazy.UTF8 as BSL
 import qualified Data.Set as S
 import Data.String
@@ -82,10 +83,10 @@ import Data.Word
 import Control.Monad.Catch
 import GHC.Generics
 import Data.Decimal
-import qualified Data.Vector as V
 import Control.Concurrent.MVar
 import Data.Serialize (Serialize)
 import Data.Semigroup
+import Text.Read (readMaybe)
 
 import Pact.Types.Orphans ()
 import Pact.Types.Lang
@@ -121,6 +122,75 @@ argsError i as = throwError $ ArgsError i as "Invalid arguments"
 argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
 argsError' i as = throwError $ ArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
 
+-- | Min, max values that Javascript doesn't mess up.
+--
+--   http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html
+--   "The integer part of the Number type in Javascript is safe in [-253 .. 253] (253 = 9 007 199 254 740 992).
+--    Beyond this there will be precision loss on the least significant numbers."
+jsIntegerBounds :: (Integer, Integer)
+jsIntegerBounds = (-9007199254740991,9007199254740991)
+
+-- | JSON codec pair.
+data Codec a = Codec {
+  encoder :: a -> Value,
+  decoder :: Value -> Parser a
+  }
+
+integerCodec :: Codec Integer
+integerCodec = Codec encodeInteger decodeInteger
+  where
+    encodeInteger i = let (l,h) = jsIntegerBounds in
+                        if i >= l && i <= h then Number (fromIntegral i)
+                        else object [ field .= show i ]
+    decodeInteger (Number i) = return (round i)
+    decodeInteger (Object o) = do
+      s <- o .: field
+      case readMaybe (unpack s) of
+        Just i -> return i
+        Nothing -> fail $ "Invalid integer value: " ++ show o
+    decodeInteger v = fail $ "Invalid integer value: " ++ show v
+    field = "_P_int"
+
+decimalCodec :: Codec Decimal
+decimalCodec = Codec enc dec
+  where
+    enc (Decimal dp dm) =
+      object [ places .= dp,
+               mantissa .= encoder integerCodec dm ]
+    dec = withObject "Decimal" $ \o ->
+      Decimal <$> o .: places <*>
+      (o .: mantissa >>= decoder integerCodec)
+    places = "_P_decp"
+    mantissa = "_P_decm"
+
+timeCodec :: Codec UTCTime
+timeCodec = Codec enc dec
+  where
+    enc t = object [ day .= d,
+                     micros .= encoder integerCodec (fromIntegral (toMicroseconds s)) ]
+      where (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
+    dec = withObject "UTCTime" $ \o ->
+      mkUTCTime <$> (ModifiedJulianDay <$> o .: day) <*>
+      (fromMicroseconds . fromIntegral <$> (o .: micros >>= decoder integerCodec))
+    day = "_P_timed"
+    micros = "_P_timems"
+
+valueCodec :: Codec Value
+valueCodec = Codec enc dec
+  where
+    enc v = object [field .= v]
+    dec = withObject "Value" $ \o -> o .: field
+    field = "_P_val"
+
+keysetCodec :: Codec KeySet
+keysetCodec = Codec enc dec
+  where
+    enc (KeySet ks p) = object [ keyf .= ks, predf .= p ]
+    dec  = withObject "KeySet" $ \o -> KeySet <$> o .: keyf <*> o .: predf
+    keyf = "_P_keys"
+    predf = "_P_pred"
+
+
 -- | Represent Pact 'Term' values that can be stored in a database.
 data Persistable =
     PLiteral Literal |
@@ -139,28 +209,22 @@ instance ToTerm Persistable where
 instance ToJSON Persistable where
     toJSON (PLiteral (LString s)) = String s
     toJSON (PLiteral (LBool b)) = Bool b
-    toJSON (PLiteral (LInteger n)) = Number (fromIntegral n)
-    toJSON (PLiteral (LDecimal (Decimal dp dm))) =
-        Array (V.fromList [Number (fromIntegral dp),Number (fromIntegral dm)])
-    toJSON (PLiteral (LTime t)) =
-        let (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
-        in Array (V.fromList ["t",Number (fromIntegral d),Number (fromIntegral (toMicroseconds s))])
-    toJSON (PKeySet k) = toJSON k
-    toJSON (PValue v) = Array (V.fromList ["v",v])
+    toJSON (PLiteral (LInteger n)) = encoder integerCodec n
+    toJSON (PLiteral (LDecimal d)) = encoder decimalCodec d
+    toJSON (PLiteral (LTime t)) = encoder timeCodec t
+    toJSON (PKeySet k) = encoder keysetCodec k
+    toJSON (PValue v) = encoder valueCodec v
 instance FromJSON Persistable where
     parseJSON (String s) = return (PLiteral (LString s))
     parseJSON (Number n) = return (PLiteral (LInteger (round n)))
     parseJSON (Bool b) = return (PLiteral (LBool b))
-    parseJSON v@(Object _) = PKeySet <$> parseJSON v
+    parseJSON v@Object {} = (PLiteral . LInteger <$> decoder integerCodec v) <|>
+                            (PLiteral . LDecimal <$> decoder decimalCodec v) <|>
+                            (PLiteral . LTime <$> decoder timeCodec v) <|>
+                            (PValue <$> decoder valueCodec v) <|>
+                            (PKeySet <$> decoder keysetCodec v)
     parseJSON Null = return (PValue Null)
-    parseJSON va@(Array a) =
-        case V.toList a of
-          [Number dp,Number dm] -> return (PLiteral (LDecimal (Decimal (truncate dp) (truncate dm))))
-          [String typ,Number d,Number s] | typ == "t" -> return $ PLiteral $ LTime $ mkUTCTime
-                                                         (ModifiedJulianDay (truncate d))
-                                                         (fromMicroseconds (truncate s))
-          [String typ,v] | typ == "v" -> return (PValue v)
-          _ -> return (PValue va)
+    parseJSON va@Array {} = return (PValue va)
 
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
