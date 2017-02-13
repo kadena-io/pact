@@ -1,6 +1,6 @@
 {
   "name": "pact-lang-api",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "hashing and signing functions needed to interact with Pact",
   "main": "pact-lang-api.js",
   "scripts": {
