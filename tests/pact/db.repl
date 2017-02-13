@@ -29,7 +29,7 @@
 (expect "keys works" [ID_A] (keys persons))
 (expect "txids works" [2] (txids persons 0))
 (expect "txlog works"
-        (json [{"value":ROW_A,"key":ID_A,"table":"dbtest.persons"}])
+        (json [{"value":ROW_A,"key":ID_A,"table":"dbtest_persons"}])
         (txlog persons 2))
 (env-keys ["joe"])
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))

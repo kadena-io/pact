@@ -2,7 +2,8 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                pact
-version:             2.0.0
+-- version must also be in PACT_VERSION below
+version:             2.1.0
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -20,6 +21,9 @@ build-type:          Simple
 cabal-version:       >=1.22
 
 library
+  -- must be same as version above
+  cpp-options: -DPACT_VERSION="2.1.0"
+
   exposed-modules:     Pact.Compile
                      , Pact.Eval
                      , Pact.Native
@@ -37,6 +41,7 @@ library
                      , Pact.Types.Typecheck
                      , Pact.Types.Orphans
                      , Pact.Types.Util
+                     , Pact.Types.Version
 
   -- other-extensions:
   build-depends:       Decimal >= 0.4.2 && < 0.5
@@ -44,6 +49,7 @@ library
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.8 && < 4.10
+                     , base16-bytestring >=0.1.1.6 && < 0.2
                      , bound >=1.0.7 && < 1.1
                      , bytestring >=0.10.6.0 && < 0.11
                      , cereal >=0.5.2.0 && < 0.6
@@ -64,7 +70,6 @@ library
                      , safe >= 0.3.9 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
                      , semigroups >= 0.18.1 && < 0.19
-                     , snap-core-cors
                      , stm >= 2.4.4.1 && < 2.5
                      , text >= 1.2.2.1 && < 1.3
                      , thyme >= 0.3.5.5 && < 0.4
@@ -82,9 +87,9 @@ library
                 , safe-exceptions >= 0.1.4.0
                 , statistics >= 0.13.3.0 && < 0.14
                 , snap-core
+                , snap-core-cors
                 , snap-server
                 , ed25519-donna
-                , base16-bytestring
                 , blake2
                 , fast-logger
                 , yaml

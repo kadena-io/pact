@@ -32,12 +32,12 @@ import qualified Options.Applicative as O
 import Data.Monoid
 import System.Directory
 import System.FilePath
-import Data.Word (Word16)
 
 import Pact.Repl
 import Pact.Compile
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Server.Server
+import Pact.Types.Version
 
 
 data Option =

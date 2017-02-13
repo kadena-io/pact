@@ -75,7 +75,6 @@ module Pact.Types.Lang
    toTermList,
    typeof,
    pattern TLitString,pattern TLitInteger,tLit,tStr,termEq,abbrev,
-   pactVersion,
    Text,pack,unpack
    ) where
 
@@ -116,11 +115,6 @@ import Data.Serialize (Serialize)
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
-
-pactVersion :: Text
-pactVersion = "2.0"
-
-
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
