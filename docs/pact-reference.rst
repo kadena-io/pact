@@ -5,22 +5,22 @@ This document is a reference for the Pact smart-contract language,
 designed for correct, transactional execution on a `high-performance
 blockchain <http://kadena.io>`__. For more background, please see the
 `white
-paper <http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf>`__.
-
-Pact Version: 2.0
+paper <http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf>`__ or
+the `pact home page <http://kadena.io/pact>`__.
 
 Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 
 Changelog
 =========
 
-Version 2.1.0:
---------------
+**Version 2.1.0:**
 
--  Pact dev REST API docs
+-  "pact -serve": new REST API server for app development
+-  pact-lang-api.js javascript package
+-  ``json`` repl function, ``read-msg`` can take zero args to get entire
+   data payload
 
-Version 2.0:
-------------
+**Version 2.0:**
 
 -  Types and schemas added
 -  ``with-keyset`` changed to non-special-form ``enforce-keyset``

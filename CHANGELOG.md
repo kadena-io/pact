@@ -2,6 +2,7 @@
 ---
 * "pact -serve": new REST API server for app development
 * pact-lang-api.js javascript package
+* `json` repl function, `read-msg` can take zero args to get entire data payload
 
 
 2.0.0
