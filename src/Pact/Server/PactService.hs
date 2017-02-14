@@ -47,7 +47,7 @@ import Pact.Server.SQLite as PactSL
 
 type PactMVars = (DBVar,MVar CommandState)
 
-initPactService :: CommandConfig -> IO (CommandExecInterface ExecutionMode PactRPC)
+initPactService :: CommandConfig -> IO (CommandExecInterface PactRPC)
 initPactService config@CommandConfig {..} = do
   let klog s = _ccDebugFn ("[PactService] " ++ s)
   mvars <- case _ccDbFile of
@@ -72,7 +72,7 @@ initPactService config@CommandConfig {..} = do
     , _ceiApplyPPCmd = applyTransactionalPCmd config mvars }
 
 applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
-applyTransactionalPCmd _ _ _ cmd (ProcFail s) = return $ jsonResult (cmdToRequestKey cmd) s
+applyTransactionalPCmd _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyTransactionalPCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
   case r of
@@ -81,11 +81,15 @@ applyTransactionalPCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) 
       return cr
     Left e -> do
       _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
-      return $ jsonResult (cmdToRequestKey cmd) $
+      return $ jsonResult exMode (cmdToRequestKey cmd) $
                CommandError "Transaction execution failed" (Just $ show e)
 
-jsonResult :: ToJSON a => RequestKey -> a -> CommandResult
-jsonResult cmd a = CommandResult cmd $ toJSON a
+jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> a -> CommandResult
+jsonResult ex cmd a = CommandResult cmd (exToTx ex) (toJSON a)
+
+exToTx :: ExecutionMode -> Maybe TxId
+exToTx (Transactional t) = Just t
+exToTx Local = Nothing
 
 runPayload :: Command (Payload PactRPC) -> CommandM CommandResult
 runPayload c@PublicCommand{..} =
@@ -113,12 +117,13 @@ applyExec rk (ExecMsg code edata) ks = do
             Right r -> return r
             Left err -> throwCmdEx $ show err
   (CommandState refStore) <- liftIO $ readMVar _ceState
-  let evalEnv :: PactDb e -> MVar e -> EvalEnv e
+  let tid = exToTx _ceMode
+      evalEnv :: PactDb e -> MVar e -> EvalEnv e
       evalEnv pdb mv = EvalEnv {
                   _eeRefStore = refStore
                 , _eeMsgSigs = userSigsToPactKeySet ks
                 , _eeMsgBody = edata
-                , _eeTxId = fromMaybe 0 $ firstOf emTxId _ceMode
+                , _eeTxId = fromMaybe 0 tid
                 , _eeEntity = _ccEntity _ceConfig
                 , _eePactStep = Nothing
                 , _eePactDb = pdb
@@ -132,7 +137,7 @@ applyExec rk (ExecMsg code edata) ks = do
            when (_ceMode /= Local) $ liftIO $ modifyMVar_ _ceState $ \rs ->
              return $ over (csRefStore.rsModules)
                       (HM.union (HM.fromList (_rsNew (_evalRefs rEvalState')))) rs
-           return $ jsonResult rk $ CommandSuccess t -- TODO Yield handling
+           return $ jsonResult _ceMode rk $ CommandSuccess t -- TODO Yield handling
     Left e -> throwCmdEx $ "Exec failed: " ++ show e
 
 execTerms :: ExecutionMode -> [Term Name] -> Eval e (Term Name)

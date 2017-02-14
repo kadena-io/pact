@@ -22,9 +22,22 @@
 --
 
 module Pact.Types.Command
---  (Command(..)
---  ) where
-  where
+  ( Command(..),mkCommand,mkCommand'
+  , ProcessedCommand(..)
+  , verifyCommand
+  , Payload(..)
+  , UserSig(..),usScheme,usPubKey,usSig
+  , verifyUserSig
+  , CommandError(..)
+  , CommandSuccess(..)
+  , CommandResult(..)
+  , ExecutionMode(..), emTxId
+  , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
+  , ApplyCmd, ApplyPPCmd
+  , RequestKey(..)
+  , cmdToRequestKey, requestKeyToB16Text, initialRequestKey
+  ) where
+
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
@@ -43,7 +56,7 @@ import Data.Hashable (Hashable)
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
 
-import Pact.Types.Util
+import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
 
@@ -154,20 +167,28 @@ instance (ToJSON a) => ToJSON (CommandSuccess a) where
 
 
 data CommandResult = CommandResult {
-  _prReqKey :: RequestKey,
-  _prResult :: Value
+  _crReqKey :: RequestKey,
+  _crTxId :: Maybe TxId,
+  _crResult :: Value
   } deriving (Eq,Show)
 
 
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey PublicCommand {..} = RequestKey _cmdHash
 
-type ApplyCmd e = e -> Command ByteString -> IO CommandResult
-type ApplyPPCmd e a = e -> Command ByteString -> ProcessedCommand a -> IO CommandResult
 
-data CommandExecInterface e a = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd e
-  , _ceiApplyPPCmd :: ApplyPPCmd e a
+data ExecutionMode =
+    Transactional { _emTxId :: TxId } |
+    Local
+    deriving (Eq,Show)
+
+
+type ApplyCmd = ExecutionMode -> Command ByteString -> IO CommandResult
+type ApplyPPCmd a = ExecutionMode -> Command ByteString -> ProcessedCommand a -> IO CommandResult
+
+data CommandExecInterface a = CommandExecInterface
+  { _ceiApplyCmd :: ApplyCmd
+  , _ceiApplyPPCmd :: ApplyPPCmd a
   }
 
 
@@ -190,3 +211,4 @@ initialRequestKey = RequestKey initialHash
 
 makeLenses ''UserSig
 makeLenses ''CommandExecInterface
+makeLenses ''ExecutionMode

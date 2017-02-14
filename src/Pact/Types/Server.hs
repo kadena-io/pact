@@ -26,7 +26,6 @@ module Pact.Types.Server
   , CommandConfig(..), ccDbFile, ccDebugFn, ccEntity, ccPragmas
   , CommandState(..), csRefStore
   , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
-  , ExecutionMode(..), emTxId
   , CommandM, runCommand, throwCmdEx
   , DBVar(..)
   , History(..)
@@ -82,13 +81,6 @@ data CommandState = CommandState {
      _csRefStore :: RefStore
     }
 $(makeLenses ''CommandState)
-
-data ExecutionMode =
-    Transactional { _emTxId :: TxId } |
-    Local
-    deriving (Eq,Show)
-$(makeLenses ''ExecutionMode)
-
 
 data DBVar = PureVar (MVar PureState) | PSLVar (MVar PSL)
 

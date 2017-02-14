@@ -98,7 +98,10 @@ poll = do
   writeResponse $ pollResultToReponse possiblyIncompleteResults
 
 pollResultToReponse :: HM.HashMap RequestKey CommandResult -> ApiResponse PollResponses
-pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second _prResult) $ HM.toList m
+pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
+
+crToAr :: CommandResult -> ApiResult
+crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId
 
 
 log :: String -> Api ()
@@ -168,6 +171,6 @@ registerListener = do
     GCed msg -> do
       log $ "Listener GCed for: " ++ show rk ++ " because " ++ msg
       die msg
-    ListenerResult CommandResult{..} -> do
+    ListenerResult cr -> do
       log $ "Listener Serviced for: " ++ show rk
-      writeResponse $ ApiSuccess _prResult
+      writeResponse $ ApiSuccess (crToAr cr)

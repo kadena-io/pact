@@ -25,9 +25,9 @@ module Pact.Types.API
   , PollResponses(..)
   , ListenerRequest(..)
   , ListenerResponse
+  , ApiResult(..)
   ) where
 
-import Data.Text (Text)
 import Data.Aeson hiding (Success)
 import qualified Data.Aeson as A
 import Control.Lens hiding ((.=))
@@ -38,6 +38,7 @@ import Control.Monad
 
 import Pact.Types.Command
 import Pact.Types.Util
+import Pact.Types.Runtime
 
 data ApiResponse a =
   ApiSuccess
@@ -90,14 +91,21 @@ instance ToJSON Poll where
 instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
+data ApiResult = ApiResult {
+  _arResult :: Value,
+  _arTxId :: Maybe TxId
+  } deriving (Eq,Show,Generic)
+instance FromJSON ApiResult where parseJSON = lensyParseJSON 3
+instance ToJSON ApiResult where toJSON = lensyToJSON 3
+
 -- | What you get back from a Poll
-data PollResponses = PollResponses (HM.HashMap RequestKey Value)
+data PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
 instance ToJSON PollResponses where
-  toJSON (PollResponses m) = object $ map (first requestKeyToB16Text) $ HM.toList m
+  toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
   parseJSON = withObject "PollResponses" $ \o ->
     (PollResponses . HM.fromList <$> forM (HM.toList o)
-      (\(k,v) -> (,) <$> parseJSON (String k) <*> pure v))
+      (\(k,v) -> (,) <$> parseJSON (String k) <*> parseJSON v))
 
 -- | ListenerRequest for results by RequestKey
 newtype ListenerRequest = ListenerRequest RequestKey
@@ -107,4 +115,4 @@ instance ToJSON ListenerRequest where
 instance FromJSON ListenerRequest where
   parseJSON = withObject "ListenerRequest" $ \o -> ListenerRequest <$> o .: "listen"
 
-type ListenerResponse = ApiResponse Value
+type ListenerResponse = ApiResponse ApiResult

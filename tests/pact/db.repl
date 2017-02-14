@@ -27,15 +27,12 @@
 (expect-failure "dupe key should fail" (insert persons ID_A ROW_A))
 (commit-tx)
 (expect "keys works" [ID_A] (keys persons))
-(expect "txids works" [2] (txids persons 0))
+(expect "txids works" [1] (txids persons 0))
 (expect "txlog works"
         (json [{"value":ROW_A,"key":ID_A,"table":"dbtest_persons"}])
-        (txlog persons 2))
+        (txlog persons 1))
 (env-keys ["joe"])
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
 (expect-failure "keys protected by admin key" (keys persons))
 (expect-failure "txids protected by admin key" (txids persons 0))
 (expect-failure "txlog protected by admin key" (txlog persons 2))
-
-(expect "read-msg no arg works. TODO move to dedicated environment test"
-        (json { "k": { "keys": ["admin"], "pred": "=" } }) (read-msg))

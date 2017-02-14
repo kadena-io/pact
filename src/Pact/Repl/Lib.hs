@@ -123,8 +123,8 @@ repldb = PactDb {
   , _txids = \t tid -> invokeEnv $ _txids puredb t tid
   , _createUserTable = \t m k -> invokeEnv $ _createUserTable puredb t m k
   , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo puredb t
-  , _beginTx = invokeEnv $ _beginTx puredb
-  , _commitTx = \tid -> invokeEnv $ _commitTx puredb tid
+  , _beginTx = \tid -> invokeEnv $ _beginTx puredb tid
+  , _commitTx = invokeEnv $ _commitTx puredb
   , _rollbackTx = invokeEnv $ _rollbackTx puredb
   , _getTxLog = \d t -> invokeEnv $ _getTxLog puredb d t
 

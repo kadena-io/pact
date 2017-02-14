@@ -24,10 +24,12 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import Data.Maybe
 
 import Database.SQLite3.Direct
 
 import Pact.Types.Command
+import Pact.Types.Runtime
 import Pact.Types.Crypto
 import Pact.Types.SQLite
 
@@ -41,13 +43,15 @@ hashFromField h = case A.eitherDecodeStrict' h of
   Left err -> error $ "hashFromField: unable to decode Hash from database! " ++ show err ++ " => " ++ show h
   Right v -> v
 
-crToField :: CommandResult -> SType
-crToField (CommandResult _ r) = SText $ Utf8 $ BSL.toStrict $ A.encode r
+crToField :: A.Value -> SType
+crToField r = SText $ Utf8 $ BSL.toStrict $ A.encode r
 
-crFromField :: RequestKey -> ByteString -> CommandResult
-crFromField rk cr = CommandResult rk $ case A.eitherDecodeStrict' cr of
-  Left err -> error $ "crFromField: unable to decode CommandResult from database! " ++ show err ++ "\n" ++ show cr
-  Right v -> v
+crFromField :: RequestKey -> Maybe TxId -> ByteString -> CommandResult
+crFromField rk tid cr = CommandResult rk tid v
+  where
+    v = case A.eitherDecodeStrict' cr of
+      Left err -> error $ "crFromField: unable to decode CommandResult from database! " ++ show err ++ "\n" ++ show cr
+      Right v' -> v'
 
 userSigsToField :: [UserSig] -> SType
 userSigsToField us = SText $ Utf8 $ BSL.toStrict $ A.encode us
@@ -63,6 +67,7 @@ sqlDbSchema =
   \( 'hash' TEXT PRIMARY KEY NOT NULL UNIQUE\
   \, 'command' TEXT NOT NULL\
   \, 'result' TEXT NOT NULL\
+  \, 'txid' INTEGER NOT NULL\
   \, 'userSigs' TEXT NOT NULL\
   \)"
 
@@ -87,14 +92,16 @@ sqlInsertHistoryRow =
     \( 'hash'\
     \, 'command'\
     \, 'result'\
+    \, 'txid' \
     \, 'userSigs'\
-    \) VALUES (?,?,?,?)"
+    \) VALUES (?,?,?,?,?)"
 
 insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
-insertRow s (PublicCommand{..},cr) =
+insertRow s (PublicCommand{..},CommandResult {..}) =
     execs s [hashToField _cmdHash
-            ,SText $ Utf8 $ _cmdPayload
-            ,crToField cr
+            ,SText $ Utf8 _cmdPayload
+            ,crToField _crResult
+            ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,userSigsToField _cmdSigs]
 
 insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
@@ -117,24 +124,24 @@ queryForExisting e v = foldM f v v
 
 sqlSelectCompletedCommands :: Utf8
 sqlSelectCompletedCommands =
-  "SELECT result FROM 'main'.'pactCommands' WHERE hash=:hash LIMIT 1"
+  "SELECT result,txid FROM 'main'.'pactCommands' WHERE hash=:hash LIMIT 1"
 
 selectCompletedCommands :: DbEnv -> HashSet RequestKey -> IO (HashMap RequestKey CommandResult)
 selectCompletedCommands e v = foldM f HashMap.empty v
   where
     f m rk = do
-      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText]
+      rs <- qrys (_qryCompletedStmt e) [hashToField $ unRequestKey rk] [RText,RInt]
       if null rs
       then return m
       else case head rs of
-          [SText (Utf8 cr)] ->
-            return $ HashMap.insert rk (crFromField rk cr) m
+          [SText (Utf8 cr),SInt tid] ->
+            return $ HashMap.insert rk (crFromField rk (if tid < 0 then Nothing else Just (fromIntegral tid)) cr) m
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
 sqlSelectAllCommands = "SELECT rowid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY rowid ASC"
 
-selectAllCommands :: DbEnv -> IO ([Command ByteString])
+selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
   let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
         PublicCommand { _cmdPayload = cmd'

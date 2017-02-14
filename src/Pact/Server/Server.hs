@@ -98,4 +98,4 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
       resps <- forM cmds $ \cmd -> do
         txid <- state (\i -> (i,succ i))
         liftIO $ _ceiApplyCmd (Transactional txid) cmd
-      liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_prReqKey, cmdr)) <$> resps
+      liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
