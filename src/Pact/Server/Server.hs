@@ -18,6 +18,7 @@ module Pact.Server.Server
   ) where
 
 import Control.Concurrent
+import Control.Concurrent.Async (async, link)
 import Control.Monad
 import Control.Monad.State
 import Control.Exception
@@ -73,8 +74,8 @@ serve configFile = do
   debugFn <- if _verbose then initFastLogger else return (return . const ())
   let cmdConfig = CommandConfig (fmap (++ "/pact.sqlite") _persistDir) debugFn "entity" _pragmas
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
-  _ <- forkIO $ startCmdThread cmdConfig inC histC replayFromDisk' debugFn
-  _ <- forkIO $ runHistoryService histConf Nothing
+  link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
+  link =<< async (runHistoryService histConf Nothing)
   runApiServer histC inC debugFn (fromIntegral _port) _logDir
 
 initFastLogger :: IO (String -> IO ())
@@ -89,23 +90,23 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
   void $ (`runStateT` (0 :: TxId)) $ do
     -- we wait for the history service to light up, possibly giving us backups from disk to replay
     replayFromDisk' <- liftIO $ takeMVar rp
-    if null replayFromDisk'
-      then liftIO $ debugFn "[disk replay]: No replay found"
-      else do
+    when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"
+    unless (null replayFromDisk') $ do
       forM_ replayFromDisk' $ \cmd -> do
         liftIO $ debugFn $ "[disk replay]: replaying => " ++ show cmd
         txid <- state (\i -> (i,succ i))
         liftIO $ _ceiApplyCmd (Transactional txid) cmd
-      -- NB: we don't want to update history with the results from the replay
-      forever $ do
-        -- now we're prepared, so start taking new entries
-        inb <- liftIO $ readInbound inChan
-        case inb of
-          TxCmds cmds -> do
-            resps <- forM cmds $ \cmd -> do
-              txid <- state (\i -> (i,succ i))
-              liftIO $ _ceiApplyCmd (Transactional txid) cmd
-            liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
-          LocalCmd cmd mv -> do
-            CommandResult {..} <- liftIO $ _ceiApplyCmd Local cmd
-            liftIO $ putMVar mv _crResult
+        -- NB: we don't want to update history with the results from the replay
+    forever $ do
+      -- now we're prepared, so start taking new entries
+      inb <- liftIO $ readInbound inChan
+      case inb of
+        TxCmds cmds -> do
+          liftIO $ debugFn $ "[cmd]: executing " ++ show (length cmds) ++ " command(s)"
+          resps <- forM cmds $ \cmd -> do
+            txid <- state (\i -> (i,succ i))
+            liftIO $ _ceiApplyCmd (Transactional txid) cmd
+          liftIO $ writeHistory histChan $ Update $ HashMap.fromList $ (\cmdr@CommandResult{..} -> (_crReqKey, cmdr)) <$> resps
+        LocalCmd cmd mv -> do
+          CommandResult {..} <- liftIO $ _ceiApplyCmd Local cmd
+          liftIO $ putMVar mv _crResult
