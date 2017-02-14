@@ -55,7 +55,9 @@ The pact-api consists of:
 Each pact-api endpoint accepts a POST of a JSON object, the structure of which is outside the scope of a "quick start".
 Please refer instead to:
 
-* The `pact-lang-api` npm package, provided to facilitate pact-api interactions. Furthermore, please see the `pact-lang-api.js/readme.md` file for more details about the JSON structure.
+* [http://pact-language.readthedocs.io/en/latest/pact-reference.html#rest-api](http://pact-language.readthedocs.io/en/latest/pact-reference.html#rest-api)
+
+* The `pact-lang-api` npm package, provided to facilitate pact-api interactions.
 
 * The [pact-todomvc](github.com/kadena-io/pact-todomvc) working demonstration.
 
