@@ -251,11 +251,8 @@ makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
-  -- | User table domain, with table name key.
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
-  -- | Keyset domain.
   KeySets :: Domain KeySetName KeySet
-  -- | Module domain.
   Modules :: Domain ModuleName Module
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
