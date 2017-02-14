@@ -14,6 +14,11 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 =========
 
+Version 2.1.0:
+--------------
+
+-  Pact dev REST API docs
+
 Version 2.0:
 ------------
 
@@ -21,6 +26,175 @@ Version 2.0:
 -  ``with-keyset`` changed to non-special-form ``enforce-keyset``
 -  Table definitions added; database functions reference these directly
    instead of using strings.
+
+Rest API
+========
+
+As of version 2.1.0 Pact ships with a built-in HTTP server and SQLite
+backend. This allows for prototyping blockchain applications with just
+the ``pact`` tool.
+
+To start up the server issue ``pact -s config.yaml``, with a suitable
+config. `The ``pact-lang-api`` JS library is available via
+npm <https://www.npmjs.com/package/pact-lang-api>`__ for web
+development.
+
+Endpoints
+---------
+
+All endpoints are served from ``api/v1``. Thus a ``send`` call would be
+sent to
+(http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send],
+if running on ``localhost:8080``.
+
+``send``
+~~~~~~~~
+
+Asynchronous submit of one or more commands to the blockchain.
+
+Request JSON:
+
+.. code:: javascript
+
+    {
+      "cmds": [
+      { \\ "Command" JSON
+        "hash": "[blake2 hash in base16 of 'cmd' value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]",
+            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+          }
+        ]
+        "cmd": {
+          "nonce": "[nonce value]",
+          "payload": {
+            "exec": "[pact code]",
+            "data": {
+              /* arbitrary user data to accompany code */
+            }
+          }
+        }
+      } \\ end "Command" JSON
+    }
+
+Response JSON:
+
+::
+
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
+
+``poll``
+~~~~~~~~
+
+Poll for command results.
+
+Request JSON:
+
+::
+
+    {
+      "requestKeys": [
+        "[hash from desired commands to poll]"
+      ]
+    }
+
+Response JSON:
+
+::
+
+    {
+      "status": "success|failure",
+      "response": {
+        "[command hash]": {
+          "result": {
+            "status": "success|failure",
+            "data": /* data from Pact execution represented as JSON */
+          },
+          "txId": /* integer transaction id, for use in querying history etc */
+        }
+      }
+    }
+
+``listen``
+~~~~~~~~~~
+
+Blocking call to listen for a single command result, or retrieve an
+already-executed command.
+
+Request JSON:
+
+::
+
+    {
+      "listen": "[command hash]"
+    }
+
+Response JSON:
+
+::
+
+    {
+      "status": "success|failure",
+      "response": {
+        "result": {
+          "status": "success|failure",
+          "data": /* data from Pact execution represented as JSON */
+        },
+        "txId": /* integer transaction id, for use in querying history etc */
+      }
+    }
+
+``local``
+~~~~~~~~~
+
+Blocking/sync call to send a command for non-transactional execution. In
+a blockchain environment this would be a node-local "dirty read". Any
+database writes or changes to the environment are rolled back.
+
+Request JSON:
+
+::
+
+    { \\ "Command" JSON
+      "hash": "[blake2 hash in base16 of 'cmd' value]",
+      "sigs": [
+        {
+          "sig": "[crypto signature by secret key of 'hash' value]",
+          "pubKey": "[base16-format of public key of signing keypair]",
+          "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+        }
+      ]
+      "cmd": {
+        "nonce": "[nonce value]",
+        "payload": {
+          "exec": "[pact code]",
+          "data": {
+            /* arbitrary user data to accompany code */
+          }
+        }
+      }
+    } \\ end "Command" JSON
+
+Response JSON:
+
+::
+
+    {
+      "status": "success|failure",
+      "response": {
+        "status": "success|failure",
+        "data": /* data from Pact execution represented as JSON */
+      }
+    }
 
 Concepts
 ========
@@ -54,6 +228,8 @@ Keyset definition
 
 `Keysets <#keysets>`__ are customarily defined first, as they are used
 to specify admin authorization schemes for modules and tables.
+Definition creates the keysets in the runtime environment and stores
+their definition in the global keyset database.
 
 Module declaration
 ^^^^^^^^^^^^^^^^^^
@@ -1021,7 +1197,7 @@ Fail transaction with MSG if TEST fails, or returns true.
 .. code:: lisp
 
     pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-    <interactive>:1:0:Failure: Chaos reigns
+    <interactive>:1:0: Failure: Chaos reigns
 
 filter
 ~~~~~~
@@ -1132,7 +1308,7 @@ read-decimal
 
 *key* ``string`` *→* ``decimal``
 
-Parse KEY string value from message data body as decimal.
+Parse KEY string value from top level of message data body as decimal.
 
 .. code:: lisp
 
@@ -1144,7 +1320,8 @@ read-integer
 
 *key* ``string`` *→* ``integer``
 
-Parse KEY string value from message data body as integer.
+Parse KEY string or number value from top level of message data body as
+integer.
 
 .. code:: lisp
 
@@ -1153,10 +1330,14 @@ Parse KEY string value from message data body as integer.
 read-msg
 ~~~~~~~~
 
+*→* ``<a>``
+
 *key* ``string`` *→* ``<a>``
 
-Read KEY from message data body. Will recognize JSON types as
-corresponding Pact type.
+Read KEY from top level of message data body, or data body itself if not
+provided. Coerces value to pact type: String -> string, Number ->
+integer, Boolean -> bool, List -> value, Object -> value. NB value types
+are not introspectable in pact.
 
 .. code:: lisp
 
@@ -2013,6 +2194,20 @@ Evaluate EXP and succeed only if it throws an error.
 
     pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
     "Expect failure: success: Enforce fails on false"
+
+json
+~~~~
+
+*exp* ``<a>`` *→* ``value``
+
+Encode pact expression EXP as a JSON value. This is only needed for
+tests, as Pact values are automatically represented as JSON in API
+output.
+
+.. code:: lisp
+
+    pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+    [{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 
 load
 ~~~~

@@ -62,7 +62,7 @@ pact> (drop (- 2) [1 2 3 4 5])
 Fail transaction with MSG if TEST fails, or returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-<interactive>:1:0:Failure: Chaos reigns
+<interactive>:1:0: Failure: Chaos reigns
 ```
 
 
@@ -175,7 +175,7 @@ Return reference tx id for pact execution.
 *key*&nbsp;`string` *&rarr;*&nbsp;`decimal`
 
 
-Parse KEY string value from message data body as decimal.
+Parse KEY string value from top level of message data body as decimal.
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -187,7 +187,7 @@ Parse KEY string value from message data body as decimal.
 *key*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Parse KEY string value from message data body as integer. 
+Parse KEY string or number value from top level of message data body as integer. 
 ```lisp
 (read-integer "age")
 ```
@@ -195,10 +195,12 @@ Parse KEY string value from message data body as integer.
 
 ### read-msg {#read-msg}
 
+ *&rarr;*&nbsp;`<a>`
+
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from message data body. Will recognize JSON types as corresponding Pact type.
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, List -> value, Object -> value. NB value types are not introspectable in pact. 
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -998,6 +1000,18 @@ Evaluate EXP and succeed only if it throws an error.
 ```lisp
 pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 "Expect failure: success: Enforce fails on false"
+```
+
+
+### json {#json}
+
+*exp*&nbsp;`<a>` *&rarr;*&nbsp;`value`
+
+
+Encode pact expression EXP as a JSON value. This is only needed for tests, as Pact values are automatically represented as JSON in API output. 
+```lisp
+pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
+[{"age":10,"name":"joe"},{"age":25,"name":"mary"}]
 ```
 
 

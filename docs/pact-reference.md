@@ -10,10 +10,175 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 
 Changelog
 ===
+
+#### Version 2.1.0:
+- Pact dev REST API docs
+
 #### Version 2.0:
 - Types and schemas added
 - `with-keyset` changed to non-special-form `enforce-keyset`
 - Table definitions added; database functions reference these directly instead of using strings.
+
+Rest API
+=======
+As of version 2.1.0 Pact ships with a built-in HTTP server and SQLite backend. This allows for prototyping
+blockchain applications with just the `pact` tool.
+
+To start up the server issue `pact -s config.yaml`, with a suitable config.
+[The `pact-lang-api` JS library is available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
+
+
+Endpoints
+---
+
+All endpoints are served from `api/v1`. Thus a `send` call would be sent to (http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send], if running on `localhost:8080`.
+
+### `send` {#api-send}
+
+Asynchronous submit of one or more commands to the blockchain.
+
+Request JSON:
+
+```javascript
+{
+  "cmds": [
+  { \\ "Command" JSON
+    "hash": "[blake2 hash in base16 of 'cmd' value]",
+    "sigs": [
+      {
+        "sig": "[crypto signature by secret key of 'hash' value]",
+        "pubKey": "[base16-format of public key of signing keypair]",
+        "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+      }
+    ]
+    "cmd": {
+      "nonce": "[nonce value]",
+      "payload": {
+        "exec": "[pact code]",
+        "data": {
+          /* arbitrary user data to accompany code */
+        }
+      }
+    }
+  } \\ end "Command" JSON
+}
+```
+
+Response JSON:
+
+```
+{
+  "status": "success|failure",
+  "response": {
+    "requestKeys": [
+      "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+    ]
+  }
+}
+```
+
+### `poll` {#api-poll}
+
+Poll for command results.
+
+Request JSON:
+
+```
+{
+  "requestKeys": [
+    "[hash from desired commands to poll]"
+  ]
+}
+```
+
+Response JSON:
+
+```
+{
+  "status": "success|failure",
+  "response": {
+    "[command hash]": {
+      "result": {
+        "status": "success|failure",
+        "data": /* data from Pact execution represented as JSON */
+      },
+      "txId": /* integer transaction id, for use in querying history etc */
+    }
+  }
+}
+```
+
+### `listen` {#api-listen}
+
+Blocking call to listen for a single command result, or retrieve an already-executed command.
+
+Request JSON:
+
+```
+{
+  "listen": "[command hash]"
+}
+```
+
+Response JSON:
+
+```
+{
+  "status": "success|failure",
+  "response": {
+    "result": {
+      "status": "success|failure",
+      "data": /* data from Pact execution represented as JSON */
+    },
+    "txId": /* integer transaction id, for use in querying history etc */
+  }
+}
+```
+
+### `local` {#api-local}
+
+Blocking/sync call to send a command for non-transactional execution. In a blockchain
+environment this would be a node-local "dirty read". Any database writes or changes
+to the environment are rolled back.
+
+Request JSON:
+
+```
+{ \\ "Command" JSON
+  "hash": "[blake2 hash in base16 of 'cmd' value]",
+  "sigs": [
+    {
+      "sig": "[crypto signature by secret key of 'hash' value]",
+      "pubKey": "[base16-format of public key of signing keypair]",
+      "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+    }
+  ]
+  "cmd": {
+    "nonce": "[nonce value]",
+    "payload": {
+      "exec": "[pact code]",
+      "data": {
+        /* arbitrary user data to accompany code */
+      }
+    }
+  }
+} \\ end "Command" JSON
+```
+Response JSON:
+
+```
+{
+  "status": "success|failure",
+  "response": {
+    "status": "success|failure",
+    "data": /* data from Pact execution represented as JSON */
+  }
+}
+```
+
+
+
+
 
 Concepts {#concepts}
 ========
@@ -43,7 +208,8 @@ as a unit.
 #### Keyset definition {#keysetdefinition}
 
 [Keysets](#keysets) are customarily defined first, as they are used to specify
-admin authorization schemes for modules and tables.
+admin authorization schemes for modules and tables. Definition creates the keysets
+in the runtime environment and stores their definition in the global keyset database.
 
 #### Module declaration {#moduledeclaration}
 
