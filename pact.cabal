@@ -82,7 +82,8 @@ library
 
   if !impl(ghcjs)
     build-depends:
-                  criterion >= 1.1.1.0 && < 1.2
+                  async
+                , criterion >= 1.1.1.0 && < 1.2
                 , direct-sqlite
                 , safe-exceptions >= 0.1.4.0
                 , statistics >= 0.13.3.0 && < 0.14
