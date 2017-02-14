@@ -68,14 +68,6 @@ matrix:
 
   #  removing this build to focus on mac for now
 
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default linux"
-    addons:
-      apt: {packages: [libgmp-dev]}
-      artifacts:
-        paths:
-          - .stack-work/dist/x86_64-linux/Cabal-1.22.5.0/build/pact/pact
-
 
   # - env: BUILD=stack ARGS="--resolver lts-2"
   #   compiler: ": #stack 7.8.4"
@@ -107,15 +99,26 @@ matrix:
         paths:
           - .stack-work/dist/x86_64-osx/Cabal-1.22.5.0/build/Pact/pact
 
-  # OSX Build Yosemite
+  # Linux build
   - env: BUILD=stack ARGS=""
-    compiler: ": #stack default osx (yosemite)"
-    os: osx
-    osx_image: xcode7.1
+    compiler: ": #stack default linux"
     addons:
+      apt: {packages: [libgmp-dev]}
       artifacts:
         paths:
-          - .stack-work/dist/x86_64-osx/Cabal-1.22.5.0/build/Pact/pact
+          - .stack-work/dist/x86_64-linux/Cabal-1.22.5.0/build/pact/pact
+
+
+
+  # OSX Build Yosemite
+  # - env: BUILD=stack ARGS=""
+  #   compiler: ": #stack default osx (yosemite)"
+  #   os: osx
+  #   osx_image: xcode7.1
+  #   addons:
+  #     artifacts:
+  #       paths:
+  #         - .stack-work/dist/x86_64-osx/Cabal-1.22.5.0/build/Pact/pact
 
   # Travis includes an OS X which is incompatible with GHC 7.8.4
   #- env: BUILD=stack ARGS="--resolver lts-2"
