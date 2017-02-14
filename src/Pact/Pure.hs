@@ -85,7 +85,7 @@ data PureState = PureState {
       _db :: Db
     , _dbCommitted :: Db
     , _dbTempLog :: TempLog
-    , _dbTxId :: TxId
+    , _dbTxId :: Maybe TxId
 }
 makeLenses ''PureState
 instance Default PureState where def = PureState def def def def
@@ -124,17 +124,20 @@ puredb = PactDb {
         onUserTable e t $ \UserTable {..} -> (_utModule,_utKeySet)
 
   , _beginTx = \tid e ->
-        modifyMVar' e $ \s -> PureState (_dbCommitted s) (_dbCommitted s) def tid
+        modifyMVar' e $ set dbTxId tid . rollback
 
   , _commitTx = \e ->
         modifyMVar' e commitDb
 
   , _rollbackTx = \e ->
-        modifyMVar' e (\s -> PureState (_dbCommitted s) (_dbCommitted s) def def)
+        modifyMVar' e rollback
 
   , _getTxLog = \d t e -> getLogs d t <$> useMVar e dbCommitted
 
 }
+
+rollback :: PureState -> PureState
+rollback s = PureState (_dbCommitted s) (_dbCommitted s) def def
 
 writeUser :: MVar PureState -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
 writeUser e wt t k v =
@@ -179,8 +182,10 @@ onUserTable e t f = do
 
 
 commitDb :: PureState -> PureState
-commitDb (PureState (Db us ms ks) _ (TempLog uls ml kl) tid) = PureState committed committed def tid
-    where
+commitDb ps@(PureState (Db us ms ks) _ (TempLog uls ml kl) tidm) = case tidm of
+  Nothing -> rollback ps
+  Just tid ->
+    let
       uls' = HM.toList uls
       committed = Db (foldl' commitUT us uls')
                   (ms & tLog %~ M.insert tid ml)
@@ -188,13 +193,14 @@ commitDb (PureState (Db us ms ks) _ (TempLog uls ml kl) tid) = PureState committ
       commitUT :: HashMap TableName UserTable -> (TableName,HashMap Text (Columns Persistable)) ->
                   HashMap TableName UserTable
       commitUT us' (tn,ul) = HM.adjust (& utTable.tLog %~ M.insert tid ul) tn us'
+    in PureState committed committed def def
 {-# INLINE commitDb #-}
 
 getLogs :: Domain k v -> TxId -> Db -> [TxLog]
 getLogs d@Modules tid db' = toLog d $ firstOf (dbModules.tLog.ix tid) db'
 getLogs d@KeySets tid db' = toLog d $ firstOf (dbKeySets.tLog.ix tid) db'
 getLogs d@(UserTables t) tid db' =
-  toLog d $ fmap (fmap (fmap (toTerm :: Persistable -> Term Name))) $
+  toLog d $ fmap (fmap (toTerm :: Persistable -> Term Name)) <$>
   firstOf (dbUserTables.ix t.utTable.tLog.ix tid) db'
 {-# INLINE getLogs #-}
 

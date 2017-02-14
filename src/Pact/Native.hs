@@ -34,6 +34,7 @@ import Control.Arrow
 import Data.Foldable
 import Control.Applicative
 import Data.Aeson
+import Data.Maybe
 
 
 import Pact.Eval
@@ -302,7 +303,7 @@ pactTxId _ [] = do
   pm <- view eePactStep
   case pm of
     Just p -> return (toTerm (_psTxId p))
-    Nothing -> toTerm <$> view eeTxId
+    Nothing -> toTerm . fromMaybe (-1) <$> view eeTxId
 pactTxId i as = argsError i as
 
 bind :: NativeFun e

@@ -183,7 +183,7 @@ setentity :: RNativeFun LibState
 setentity _ [TLitString s] = setenv eeEntity s >> return (tStr "Setting entity")
 setentity i as = argsError i as
 
-txmsg :: Maybe Text -> TxId -> Text -> Term Name
+txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
 txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n
 
 
@@ -193,7 +193,7 @@ tx Begin i as = do
              [TLitString n] -> return $ Just n
              [] -> return Nothing
              _ -> argsError i as
-  tid <- succ <$> view eeTxId
+  tid <- fmap succ <$> view eeTxId
   setenv eeTxId tid
   evalBeginTx (_faInfo i)
   view eePactDbVar >>= \m -> liftIO $ modifyMVar_ m (return . set rlsTxName tname)

@@ -36,6 +36,7 @@ module Pact.Types.Server
   , InboundPactChan(..), readInbound, writeInbound
   , HistoryChannel(..), readHistory, writeHistory
   , ReplayFromDisk(..)
+  , Inbound(..)
   ) where
 
 import Control.Applicative
@@ -49,6 +50,7 @@ import Data.String
 import Data.ByteString (ByteString)
 import qualified Data.Set as S
 import Data.Text.Encoding
+import Data.Aeson
 
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
@@ -106,7 +108,7 @@ throwCmdEx :: MonadThrow m => String -> m a
 throwCmdEx = throw . CommandException
 
 
-newtype InboundPactChan = InboundPactChan (Chan [Command ByteString])
+newtype InboundPactChan = InboundPactChan (Chan Inbound)
 newtype HistoryChannel = HistoryChannel (Chan History)
 newtype ReplayFromDisk = ReplayFromDisk (MVar [Command ByteString])
 
@@ -114,10 +116,10 @@ initChans :: IO (InboundPactChan,HistoryChannel)
 initChans = (,) <$> (InboundPactChan <$> newChan)
                 <*> (HistoryChannel <$> newChan)
 
-writeInbound :: InboundPactChan -> [Command ByteString] -> IO ()
+writeInbound :: InboundPactChan -> Inbound -> IO ()
 writeInbound (InboundPactChan c) = writeChan c
 
-readInbound :: InboundPactChan -> IO [Command ByteString]
+readInbound :: InboundPactChan -> IO Inbound
 readInbound (InboundPactChan c) = readChan c
 
 readHistory :: HistoryChannel -> IO History
@@ -148,4 +150,12 @@ data History =
     { hQueryForResults :: !(HashSet RequestKey, MVar PossiblyIncompleteResults) } |
   RegisterListener
     { hNewListener :: !(HashMap RequestKey (MVar ListenerResult))}
+  deriving (Eq)
+
+
+data Inbound =
+  TxCmds { iCmds :: [Command ByteString] } |
+  LocalCmd { iCmd :: Command ByteString,
+             iLocalResult :: MVar Value
+           }
   deriving (Eq)

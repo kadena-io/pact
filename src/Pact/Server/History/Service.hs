@@ -96,7 +96,7 @@ addNewKeys cmds = do
   let writeNewCmds newCmdsHM = do
         newCmdsList <- return $ filter (\cmd -> HashMap.member (RequestKey $ _cmdHash cmd) newCmdsHM) cmds
         pactChan <- view inboundPactChannel
-        liftIO $ writeInbound pactChan newCmdsList
+        liftIO $ writeInbound pactChan (TxCmds newCmdsList)
   case pers of
     InMemory m -> do
       asHM <- return $ HashMap.fromList $! (\cmd -> (RequestKey $ _cmdHash cmd,(cmd, Nothing))) <$> cmds

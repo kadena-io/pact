@@ -68,21 +68,21 @@ initPactService config@CommandConfig {..} = do
       createSchema v
       return (PSLVar v,rv)
   return CommandExecInterface
-    { _ceiApplyCmd = \eMode cmd -> applyTransactionalPCmd config mvars eMode cmd (verifyCommand cmd)
-    , _ceiApplyPPCmd = applyTransactionalPCmd config mvars }
+    { _ceiApplyCmd = \eMode cmd -> applyCmd config mvars eMode cmd (verifyCommand cmd)
+    , _ceiApplyPPCmd = applyCmd config mvars }
 
-applyTransactionalPCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
-applyTransactionalPCmd _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
-applyTransactionalPCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) = do
+applyCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
+applyCmd _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
+applyCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
   case r of
     Right cr -> do
-      _ccDebugFn $ "[PactService]: tx success for requestKey: " ++ show (cmdToRequestKey cmd)
+      _ccDebugFn $ "[PactService]: success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
     Left e -> do
       _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       return $ jsonResult exMode (cmdToRequestKey cmd) $
-               CommandError "Transaction execution failed" (Just $ show e)
+               CommandError "Command execution failed" (Just $ show e)
 
 jsonResult :: ToJSON a => ExecutionMode -> RequestKey -> a -> CommandResult
 jsonResult ex cmd a = CommandResult cmd (exToTx ex) (toJSON a)
@@ -123,7 +123,7 @@ applyExec rk (ExecMsg code edata) ks = do
                   _eeRefStore = refStore
                 , _eeMsgSigs = userSigsToPactKeySet ks
                 , _eeMsgBody = edata
-                , _eeTxId = fromMaybe 0 tid
+                , _eeTxId = tid
                 , _eeEntity = _ccEntity _ceConfig
                 , _eePactStep = Nothing
                 , _eePactDb = pdb

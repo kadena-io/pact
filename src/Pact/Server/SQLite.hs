@@ -39,6 +39,7 @@ import Prelude hiding (log)
 import Control.Monad
 import Control.Concurrent.MVar
 import qualified Data.Attoparsec.Text as AP
+import Control.Monad.Catch
 
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Types.SQLite
@@ -103,23 +104,27 @@ psl =
 
  , _getUserTableInfo = \tn e -> getUserTableInfo' e tn
 
- , _beginTx = \tid s -> modifyMVar_ s $ \m ->
-     case _txId m of
-       Just old -> throwDbError $ "beginTx: already in transaction " ++ show old
-       Nothing -> do
-         execs_ (tBegin (_txStmts m))
-         return $ set txId (Just tid) $ resetTemp m
+ , _beginTx = \tidm s -> modifyMVar_ s $ \m -> do
+     m' <- case _txId m of
+             Just _ -> do
+               _log m "beginTx" ("In transaction, rolling back" :: String)
+               rollback m
+             Nothing -> return m
+     execs_ (tBegin (_txStmts m'))
+     return $ set txId tidm $ resetTemp m'
 
- , _commitTx = \s -> modifyMVar_ s $ \m -> checkInTx "commitTx" m $ \tid -> do
-       let tid' = SInt (fromIntegral tid)
-       forM_ (M.toList $ _txRecord m) $ \(t,es) ->
-         execs (sRecordTx (_tableStmts m M.! t)) [tid',sencode es]
-       execs_ (tCommit $ _txStmts m)
-       return (resetTemp m)
+ , _commitTx = \s -> do
+     r <- modifyMVar s $ \m -> case _txId m of
+       Nothing -> rollback m >>= \m' -> return (m',Just "Not in transaction")
+       Just tid -> do
+         let tid' = SInt (fromIntegral tid)
+         forM_ (M.toList $ _txRecord m) $ \(t,es) ->
+           execs (sRecordTx (_tableStmts m M.! t)) [tid',sencode es]
+         execs_ (tCommit $ _txStmts m)
+         return (resetTemp m,Nothing)
+     mapM_ throwDbError r
 
- , _rollbackTx = \s -> modifyMVar_ s $ \m -> checkInTx "rollbackTx" m $ \_ -> do
-      execs_ (tRollback (_txStmts m))
-      return (resetTemp m)
+ , _rollbackTx = \s -> modifyMVar_ s rollback
 
  , _getTxLog = \d tid e -> withMVar e $ \m -> do
       let tn :: Domain k v -> Utf8
@@ -131,6 +136,14 @@ psl =
       decodeBlob r
 
 }
+
+rollback :: PSL -> IO PSL
+rollback m = do
+  (r :: Either SomeException ()) <- try $ execs_ (tRollback (_txStmts m))
+  case r of
+    Left e -> _log m "rollback" $ "ERROR: " ++ show e
+    Right {} -> return ()
+  return (resetTemp m)
 
 checkInTx :: String -> PSL -> (TxId -> IO a) -> IO a
 checkInTx msg m act = case _txId m of
@@ -393,7 +406,7 @@ _test1 =
 
 begin :: MVar PSL -> IO ()
 begin e = do
-  t <- fromIntegral <$> getCPUTime
+  t <- Just . fromIntegral <$> getCPUTime
   _beginTx psl t e
 
 commit' :: MVar PSL -> IO ()
@@ -453,7 +466,7 @@ _pact doBench = do
       print r
       let evalEnv' = over (eeRefStore.rsModules) (HM.union (HM.fromList (_rsNew (_evalRefs es)))) evalEnv
           pactBench benchterm = do
-                                tid <- fromIntegral <$> getCPUTime
+                                tid <- Just . fromIntegral <$> getCPUTime
                                 er <- runEval def (set eeTxId tid evalEnv') $ do
                                       evalBeginTx def
                                       r' <- eval (head benchterm)

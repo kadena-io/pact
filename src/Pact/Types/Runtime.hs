@@ -312,9 +312,9 @@ data PactDb e = PactDb {
   , _createUserTable ::  TableName -> ModuleName -> KeySetName -> Method e ()
     -- | Get module, keyset for user table.
   , _getUserTableInfo ::  TableName -> Method e (ModuleName,KeySetName)
-    -- | Initiate database transaction.
-  , _beginTx :: TxId -> Method e ()
-    -- | Commit database transaction.
+    -- | Initiate transaction. If TxId not provided, commit fails/rolls back.
+  , _beginTx :: Maybe TxId -> Method e ()
+    -- | Commit transaction, if in tx. If not in tx, rollback and throw error.
   , _commitTx ::  Method e ()
     -- | Rollback database transaction.
   , _rollbackTx :: Method e ()
@@ -356,7 +356,7 @@ data EvalEnv e = EvalEnv {
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
       -- | Transaction id.
-    , _eeTxId :: !TxId
+    , _eeTxId :: !(Maybe TxId)
       -- | Entity governing 'pact' executions.
     , _eeEntity :: !Text
       -- | Step value for 'pact' executions.
@@ -470,7 +470,7 @@ getUserTableInfo :: Info -> TableName -> Eval e (ModuleName,KeySetName)
 getUserTableInfo i t = method i $ \db -> _getUserTableInfo db t
 
 -- | Invoke _beginTx
-beginTx :: Info -> TxId -> Eval e ()
+beginTx :: Info -> Maybe TxId -> Eval e ()
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx

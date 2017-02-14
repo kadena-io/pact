@@ -99,7 +99,7 @@ initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
   ls <- initLibState
-  initEvalEnv ls repldb
+  set eeTxId (Just 0) <$> initEvalEnv ls repldb
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a

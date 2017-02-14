@@ -48,15 +48,16 @@ import Pact.Types.Server
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
   , _aiHistoryChan :: HistoryChannel
+  , _aiInboundPactChan :: InboundPactChan
   }
 makeLenses ''ApiEnv
 
 type Api a = ReaderT ApiEnv Snap a
 
-runApiServer :: HistoryChannel -> (String -> IO ()) -> Int -> FilePath -> IO ()
-runApiServer histChan logFn port logDir = do
+runApiServer :: HistoryChannel -> InboundPactChan -> (String -> IO ()) -> Int -> FilePath -> IO ()
+runApiServer histChan inbChan logFn port logDir = do
   logFn $ "[api] starting on port " ++ show port
-  let conf' = ApiEnv logFn histChan
+  let conf' = ApiEnv logFn histChan inbChan
   httpServe (serverConf port logDir) $
     applyCORS defaultOptions $ methods [GET, POST] $
     route [("api", runReaderT api conf')
@@ -73,6 +74,7 @@ api = route [
        ("send",sendPublicBatch)
       ,("poll",poll)
       ,("listen",registerListener)
+      ,("local",sendLocal)
       ]
 
 sendPublicBatch :: Api ()
@@ -81,6 +83,16 @@ sendPublicBatch = do
   when (null cmds) $ die "Empty Batch"
   rks <- mapM queueCmds $ group 8000 cmds
   writeResponse $ ApiSuccess $ RequestKeys $ concat rks
+
+sendLocal :: Api ()
+sendLocal = do
+  (cmd :: Command ByteString) <- fmap encodeUtf8 <$> readJSON
+  mv <- liftIO newEmptyMVar
+  c <- view aiInboundPactChan
+  liftIO $ writeInbound c (LocalCmd cmd mv)
+  r <- liftIO $ takeMVar mv
+  writeResponse $ ApiSuccess $ r
+
 
 checkHistoryForResult :: HashSet RequestKey -> Api PossiblyIncompleteResults
 checkHistoryForResult rks = do
