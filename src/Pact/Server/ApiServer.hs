@@ -64,7 +64,7 @@ runApiServer histChan inbChan logFn port logDir = do
   let conf' = ApiEnv logFn histChan inbChan
   httpServe (serverConf port logDir) $
     applyCORS defaultOptions $ methods [GET, POST] $
-    route [("api", runReaderT api conf')
+    route [("api/v1", runReaderT api conf')
           ,("/", noCacheStatic)]
 
 noCacheStatic :: Snap ()
