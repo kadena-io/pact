@@ -35,6 +35,57 @@ pact> (+ "hello, " "world")
 
 There are [examples](examples/) in this source repository of working smart contracts which you can load into Atom to get started.
 
+Quick Start: pact --serve
+---
+
+To aid in application development pact has an HTTP server (pact-serve).
+To launch the server, call `pact --serve <path/to/server/config.yaml>`
+
+By default, this server will host any static files it finds in the directory that it is called from along with the pact API.
+The pact-api consists of:
+
+* `api/v1/send`: submit one-or-more signed pact commands for execution by pact-server. The results of commands are not returned, instead the requestKey needed to poll of the result is.
+
+* `api/v1/poll`: poll pact-server for the result(s) of one-or-more previously submitted commands
+
+* `api/v1/listen`: synchronously poll pact-server for the result of one previously submitted command. This will only return when the result is available.
+
+* `api/v1/local`: synchronously execute a non-transactional command. This is useful for testing commands without impacting the state of the system.
+
+Each pact-api endpoint accepts a POST of a JSON object, the structure of which is outside the scope of a "quick start".
+Please refer instead to:
+
+* The `pact-lang-api` npm package, provided to facilitate pact-api interactions. Furthermore, please see the `pact-lang-api.js/readme.md` file for more details about the JSON structure.
+
+* The [pact-todomvc](github.com/kadena-io/pact-todomvc) working demonstration.
+
+
+Using the Pact Dev Server
+---
+
+The pact dev server (pact-serve) requires a configuration Yaml file (e.g. server.conf) to operate. The documentation for it is:
+
+```
+➜  pact git:(feat/dev-server) pact --serve --help
+Config file is YAML format with the following properties:
+port       - HTTP server port
+persistDir - Directory for database files.
+             If ommitted, runs in-memory only.
+logDir     - Directory for HTTP logs
+pragmas    - SQLite pragmas to use with persistence DBs
+verbose    - [True|False] Provide extra logging information
+```
+
+### Initializing the server
+
+When running pact-serve with persistence enabled the development server will automatically replay from disk when it starts.
+In this demo, we are persisting to `log/` which causes pact-serve to create or use `log/commands.sqlite` to store Commands and CommandResults.
+
+The first time you run pact-serve the SQLite DBs will be created empty (as no commands have been run yet).
+The important thing to note is that until you delete `log/commands.sqlite` (or run pact-serve in memory) pact-serve will replay every command on start up.
+
+If you think of it like a blockchain, deleting the `commands.sqlite` file or running in memory gives Pact a "fresh" chain to work with.
+
 Building
 ---
 
