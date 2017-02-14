@@ -20,6 +20,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 
+import Data.List (sortBy)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import Data.HashMap.Strict (HashMap)
@@ -65,9 +66,9 @@ sqlDbSchema :: Utf8
 sqlDbSchema =
   "CREATE TABLE IF NOT EXISTS 'main'.'pactCommands' \
   \( 'hash' TEXT PRIMARY KEY NOT NULL UNIQUE\
+  \, 'txid' INTEGER NOT NULL\
   \, 'command' TEXT NOT NULL\
   \, 'result' TEXT NOT NULL\
-  \, 'txid' INTEGER NOT NULL\
   \, 'userSigs' TEXT NOT NULL\
   \)"
 
@@ -90,24 +91,25 @@ sqlInsertHistoryRow :: Utf8
 sqlInsertHistoryRow =
     "INSERT INTO 'main'.'pactCommands' \
     \( 'hash'\
+    \, 'txid' \
     \, 'command'\
     \, 'result'\
-    \, 'txid' \
     \, 'userSigs'\
     \) VALUES (?,?,?,?,?)"
 
 insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
 insertRow s (PublicCommand{..},CommandResult {..}) =
     execs s [hashToField _cmdHash
+            ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
             ,crToField _crResult
-            ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,userSigsToField _cmdSigs]
 
 insertCompletedCommand :: DbEnv -> [(Command ByteString, CommandResult)] -> IO ()
 insertCompletedCommand DbEnv{..} v = do
+  let sortCmds (_,cr1) (_,cr2) = compare (_crTxId cr1) (_crTxId cr2)
   eitherToError "start insert transaction" <$> exec _conn "BEGIN TRANSACTION"
-  mapM_ (insertRow _insertStatement) v
+  mapM_ (insertRow _insertStatement) $ sortBy sortCmds v
   eitherToError "end insert transaction" <$> exec _conn "END TRANSACTION"
 
 sqlQueryForExisting :: Utf8
@@ -139,7 +141,7 @@ selectCompletedCommands e v = foldM f HashMap.empty v
           r -> dbError $ "Invalid result from query: " ++ show r
 
 sqlSelectAllCommands :: Utf8
-sqlSelectAllCommands = "SELECT rowid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY rowid ASC"
+sqlSelectAllCommands = "SELECT txid,hash,command,userSigs FROM 'main'.'pactCommands' ORDER BY txid ASC"
 
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
