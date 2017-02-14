@@ -7,7 +7,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
 
-
 -- |
 -- Module      :  Pact.Server.SQLite
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -17,29 +16,38 @@
 -- SQLite backend for Pact service.
 --
 
-module Pact.Server.SQLite where
+module Pact.Server.SQLite
+  ( PSL(..), conn, log, txRecord, tableStmts, txStmts, txId
+  , psl
+  , initPSL
+  , createSchema
+  ) where
 
-import Database.SQLite3.Direct as SQ3
-import qualified Data.Text as T
-import System.Directory
-import Data.Monoid
+import Prelude hiding (log)
+
+import Control.Concurrent.MVar
 import Control.Lens
+import Control.Monad
+import Control.Monad.Catch
+
 import Data.String
 import Data.Aeson hiding ((.=))
 import qualified Data.Aeson as A
+import qualified Data.Attoparsec.Text as AP
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
+import Data.Text.Encoding
+import qualified Data.Text as T
+
+import Data.Default
+import Data.Monoid
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
+
 import Criterion hiding (env)
-import Data.Text.Encoding
+import Database.SQLite3.Direct as SQ3
 import System.CPUTime
-import Data.Default
-import Prelude hiding (log)
-import Control.Monad
-import Control.Concurrent.MVar
-import qualified Data.Attoparsec.Text as AP
-import Control.Monad.Catch
+import System.Directory
 
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Types.SQLite
@@ -48,36 +56,33 @@ import Pact.Compile
 import Pact.Eval
 import Pact.Native (initEvalEnv)
 
+data TableStmts = TableStmts
+  { sInsertReplace :: Statement
+  , sInsert :: Statement
+  , sReplace :: Statement
+  , sRead :: Statement
+  , sRecordTx :: Statement
+  }
 
-data TableStmts = TableStmts {
-      sInsertReplace :: Statement
-    , sInsert :: Statement
-    , sReplace :: Statement
-    , sRead :: Statement
-    , sRecordTx :: Statement
-}
+data TxStmts = TxStmts
+  {  tBegin :: Statement
+  , tCommit :: Statement
+  , tRollback :: Statement
+  }
 
-data TxStmts = TxStmts {
-      tBegin :: Statement
-    , tCommit :: Statement
-    , tRollback :: Statement
-}
-
-data PSL = PSL {
-      _conn :: Database
-    , _log :: forall s . Show s => (String -> s -> IO ())
-    , _txRecord :: M.Map Utf8 [TxLog]
-    , _tableStmts :: M.Map Utf8 TableStmts
-    , _txStmts :: TxStmts
-    , _txId :: Maybe TxId
-}
+data PSL = PSL
+  { _conn :: Database
+  , _log :: forall s . Show s => (String -> s -> IO ())
+  , _txRecord :: M.Map Utf8 [TxLog]
+  , _tableStmts :: M.Map Utf8 TableStmts
+  , _txStmts :: TxStmts
+  , _txId :: Maybe TxId
+  }
 makeLenses ''PSL
 
 psl :: PactDb PSL
-psl =
-  PactDb {
-
-   _readRow = \d k e ->
+psl = PactDb
+  { _readRow = \d k e ->
        case d of
            KeySets -> readSysTable e keysetsTable (asString k)
            Modules -> readSysTable e modulesTable (asString k)
@@ -134,8 +139,7 @@ psl =
       r <- qry1 m ("select txlogs from " <> tn d <> " where txid = ?")
                      [SInt (fromIntegral tid)] [RText]
       decodeBlob r
-
-}
+ }
 
 rollback :: PSL -> IO PSL
 rollback m = do
@@ -145,11 +149,10 @@ rollback m = do
     Right {} -> return ()
   return (resetTemp m)
 
-checkInTx :: String -> PSL -> (TxId -> IO a) -> IO a
-checkInTx msg m act = case _txId m of
+_checkInTx :: String -> PSL -> (TxId -> IO a) -> IO a
+_checkInTx msg m act = case _txId m of
   Just tid -> act tid
   Nothing -> throwDbError $ msg ++ ": Not in transaction"
-
 
 readUserTable :: MVar PSL -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
 readUserTable e t k = modifyMVar e $ \m -> readUserTable' m t k
@@ -238,16 +241,15 @@ decodeInt_ v = throwDbError $ "Expected single-column int, got: " ++ show v
 convertUtf8 :: IsString a => Utf8 -> a
 convertUtf8 (Utf8 t) = fromString $ T.unpack $ decodeUtf8 t
 
-decodeText :: (IsString v) => SType -> IO v
-decodeText (SText t) = return $ convertUtf8 t
-decodeText v = throwDbError $ "Expected text, got: " ++ show v
-{-# INLINE decodeText #-}
+_decodeText :: (IsString v) => SType -> IO v
+_decodeText (SText t) = return $ convertUtf8 t
+_decodeText v = throwDbError $ "Expected text, got: " ++ show v
+{-# INLINE _decodeText #-}
 
 decodeText_ :: (IsString v) => [SType] -> IO v
 decodeText_ [SText t] = return $ convertUtf8 t
 decodeText_ v = throwDbError $ "Expected single-column text, got: " ++ show v
 {-# INLINE decodeText_ #-}
-
 
 userTable :: TableName -> Utf8
 userTable tn = "UTBL_" <> (Utf8 $ encodeUtf8 $ sanitize tn)
@@ -276,7 +278,6 @@ stext :: AsString a => a -> SType
 stext a = SText $ fromString $ unpack $ asString a
 {-# INLINE stext #-}
 
-
 createUserTable' :: MVar PSL -> TableName -> ModuleName -> KeySetName -> IO ()
 createUserTable' s tn mn ksn = modifyMVar_ s $ \m -> do
   exec' (_conn m) "insert into usertables values (?,?,?)" [stext tn,stext mn,stext ksn]
@@ -298,21 +299,17 @@ createTable ut ur e = do
            mkstmt ("INSERT INTO " <> ur <> " VALUES (?,?)")
   return (over tableStmts (M.insert ut ss) e)
 
-
 createSchema :: MVar PSL -> IO ()
 createSchema e = modifyMVar_ e $ \s -> do
   exec_ (_conn s)
     "CREATE TABLE IF NOT EXISTS usertables (name TEXT PRIMARY KEY NOT NULL UNIQUE,module text NOT NULL,keyset text NOT NULL);"
   createTable keysetsTable keysetsTxRecord s >>= createTable modulesTable modulesTxRecord
 
-
 execs' :: PSL -> Utf8 -> (TableStmts -> Statement) -> [SType] -> IO ()
 execs' s tn stmtf as = do
   stmt <- return $ stmtf $ getTableStmts s tn
   execs stmt as
 {-# INLINE execs' #-}
-
-
 
 prepStmt' :: PSL -> Utf8 -> IO Statement
 prepStmt' c q = prepStmt (_conn c) q
@@ -322,7 +319,6 @@ qrys' s tn stmtf as rts = do
   stmt <- return $ stmtf $ getTableStmts s tn
   qrys stmt as rts
 {-# INLINE qrys' #-}
-
 
 initPSL :: [Pragma] -> (String -> IO ()) -> FilePath -> IO PSL
 initPSL ps logFn f = do
@@ -340,8 +336,6 @@ initPSL ps logFn f = do
   runPragmas (_conn s) ps
   return s
 
-
-
 qry1 :: PSL -> Utf8 -> [SType] -> [RType] -> IO [SType]
 qry1 e q as rts = do
   r <- qry (_conn e) q as rts
@@ -350,7 +344,6 @@ qry1 e q as rts = do
     [] -> throwDbError "qry1: no results!"
     rs -> throwDbError $ "qry1: multiple results! (" ++ show (length rs) ++ ")"
 
-
 fastNoJournalPragmas :: [Pragma]
 fastNoJournalPragmas = [
   "synchronous = OFF",
@@ -358,7 +351,6 @@ fastNoJournalPragmas = [
   "locking_mode = EXCLUSIVE",
   "temp_store = MEMORY"
   ]
-
 
 _initPSL :: IO PSL
 _initPSL = do
@@ -372,8 +364,6 @@ _run a = do
   s <- newMVar m
   a s
   void $ close (_conn m)
-
-
 
 _test1 :: IO ()
 _test1 =
@@ -412,9 +402,6 @@ begin e = do
 commit' :: MVar PSL -> IO ()
 commit' e = _commitTx psl e
 
-
-
-
 _bench :: IO ()
 _bench = _run $ \e -> do
   begin e
@@ -441,12 +428,10 @@ _bench = _run $ \e -> do
 nolog :: MVar PSL -> IO ()
 nolog e = modifyMVar_ e $ \m -> return $ m { _log = \_ _ -> return () }
 
-
 parseCompile :: T.Text -> [Term Name]
 parseCompile code = compiled where
     (Right es) = AP.parseOnly exprs code
     (Right compiled) = mapM (compile mkEmptyInfo) es
-
 
 _pact :: Bool -> IO ()
 _pact doBench = do

@@ -12,38 +12,37 @@
 --
 
 module Pact.Server.PactService
-  (initPactService
+  ( initPactService
   ) where
 
+import Prelude hiding (log,exp)
+
 import Control.Concurrent
-import Data.Default
-import Data.Aeson as A
-
-
-import Control.Monad.Reader
 import Control.Exception.Safe
-import Control.Applicative
 import Control.Lens hiding ((.=))
-import Data.Maybe
+import Control.Monad.Except
+import Control.Monad.Reader
+
+import Data.Default
+import qualified Data.HashMap.Strict as HM
+
+import Data.Aeson as A
 import qualified Text.Trifecta as TF
 import qualified Data.Attoparsec.Text as AP
-import Control.Monad.Except
-import Prelude hiding (log,exp)
-import qualified Data.HashMap.Strict as HM
 import Text.PrettyPrint.ANSI.Leijen (renderCompact,displayS)
+
 import System.Directory
 
-import Pact.Types.Runtime hiding (PublicKey)
-import Pact.Pure
-import Pact.Eval
-import Pact.Compile as Pact
-
-import Pact.Types.Server
-import Pact.Types.RPC
-import Pact.Native (initEvalEnv)
 import Pact.Types.Command
-import Pact.Server.SQLite as PactSL
+import Pact.Types.RPC
+import Pact.Types.Runtime hiding (PublicKey)
+import Pact.Types.Server
 
+import Pact.Compile as Pact
+import Pact.Eval
+import Pact.Native (initEvalEnv)
+import Pact.Pure
+import Pact.Server.SQLite as PactSL
 
 type PactMVars = (DBVar,MVar CommandState)
 
@@ -153,30 +152,3 @@ execTerms mode terms = do
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"
-
---mkRPC :: ToRPC a => a ->  CommandEntry
---mkRPC = CommandEntry . SZ.encode . PublicMessage . toStrict . A.encode . A.toJSON . toRPC
---
---mkSimplePact :: Text -> CommandEntry
---mkSimplePact = mkRPC . (`ExecMsg` A.Null)
---
---mkTestPact :: CommandEntry
---mkTestPact = mkSimplePact "(demo.transfer \"Acct1\" \"Acct2\" 1.0)"
-
-
-
---mkTestSigned :: IO ()
---mkTestSigned = do
---  (Right (msg :: PactRPC)) <- eitherDecode <$> BSL.readFile "tests/exec1.json"
---  let env@PactEnvelope {..} = PactEnvelope msg "a" "rid"
---  let (pm@PactMessage {..}) = mkPactMessage' _sk _pk  (BSL.toStrict $ A.encode env)
---      ce = CommandEntry $! SZ.encode $! PublicMessage $! _pmEnvelope
---      rpc = mkCmdRpc ce _peAlias "rid" (Digest _peAlias _pmSig _pmKey CMD $ hash $ SZ.encode $ CMDWire (ce,_peAlias,"rid"))
---      Right (c :: Command) = fromWire Nothing def rpc
---      cmdbrpc = mkCmdBatchRPC [rpc] (Digest _peAlias _pmSig _pmKey CMDB $ hash $ SZ.encode $ [rpc])
---      Right (cb :: CommandBatch) = fromWire Nothing def cmdbrpc
---  BSL.writeFile "tests/exec1-signed.json" $ encodePretty pm
---  (Just pm') <- A.decode <$> BSL.readFile "tests/exec1-signed.json"
---  print (pm == pm')
---  print c
---  print cb

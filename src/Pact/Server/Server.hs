@@ -11,32 +11,34 @@
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
 -- Launch pact dev server.
---
 
 module Pact.Server.Server
   ( serve
   ) where
 
+import Control.Concurrent
 import Control.Monad
 import Control.Monad.State
-import Control.Concurrent
-import Data.Word (Word16)
-import qualified Data.HashMap.Strict as HashMap
-import GHC.Generics
+import Control.Exception
+
 import Data.Aeson
 import qualified Data.Yaml as Y
-import Control.Exception
-import System.Log.FastLogger
 import qualified Data.ByteString.Char8 as B8
 
-import Pact.Server.PactService
+import qualified Data.HashMap.Strict as HashMap
+
+import Data.Monoid
+import Data.Word (Word16)
+import GHC.Generics
+import System.Log.FastLogger
+
+import Pact.Types.Command
+import Pact.Types.Runtime hiding (Update,(<>))
+import Pact.Types.SQLite
+import Pact.Types.Server
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
-import Pact.Types.Runtime hiding (Update,(<>))
-import Data.Monoid
-import Pact.Types.Server
-import Pact.Types.Command
-import Pact.Types.SQLite
+import Pact.Server.PactService
 
 data Config = Config {
   _port :: Word16,

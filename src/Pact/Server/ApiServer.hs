@@ -22,24 +22,28 @@ module Pact.Server.ApiServer
   ) where
 
 import Prelude hiding (log)
+
 import Control.Lens hiding ((.=))
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Arrow
+
+import Data.Aeson hiding (defaultOptions, Result(..))
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
-import Data.ByteString.Lazy (toStrict)
+import qualified Data.Text as T
+import Data.Text.Encoding
+
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Text as T
-import Data.Aeson hiding (defaultOptions, Result(..))
-import Snap.Core
+
 import Snap.CORS
-import Snap.Util.FileServe
+import Snap.Core
 import Snap.Http.Server as Snap
-import Data.Text.Encoding
-import Data.ByteString (ByteString)
+import Snap.Util.FileServe
 
 import Pact.Types.Command
 import Pact.Types.API
@@ -93,7 +97,6 @@ sendLocal = do
   r <- liftIO $ takeMVar mv
   writeResponse $ ApiSuccess $ r
 
-
 checkHistoryForResult :: HashSet RequestKey -> Api PossiblyIncompleteResults
 checkHistoryForResult rks = do
   hChan <- view aiHistoryChan
@@ -114,7 +117,6 @@ pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second c
 
 crToAr :: CommandResult -> ApiResult
 crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId
-
 
 log :: String -> Api ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)
@@ -144,7 +146,6 @@ setJSON = modifyResponse $ setHeader "Content-Type" "application/json"
 writeResponse :: ToJSON j => j -> Api ()
 writeResponse j = setJSON >> writeLBS (encode j)
 
-
 buildCmdRpc :: Command T.Text -> Api (RequestKey,Command ByteString)
 buildCmdRpc c@PublicCommand {..} = do
   log $ "Processing command with hash: " ++ show _cmdHash
@@ -169,7 +170,6 @@ serverConf port logDir =
   setAccessLog (ConfigFileLog $ logDir ++ "/access.log") $
   setPort port $
   setVerbose False defaultConfig
-
 
 registerListener :: Api ()
 registerListener = do
