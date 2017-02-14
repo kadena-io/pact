@@ -93,7 +93,7 @@ To build, you'll need a working [Haskell Stack install](https://docs.haskellstac
 
 To install for use with Atom and the command line, issue 'stack install' and then either add `$HOME/.local/bin` to your path, or symlink `$HOME/.local/bin/pact` somewhere in your PATH.
 
-Builing with GHCJS
+Building with GHCJS
 ---
 
 To build pact for browser use, add `--stack-yaml stack-ghcjs.yaml` to your stack commands. The script [web/build.sh](web/build.sh) builds Pact and minifies it; you'll need the [closure compiler](https://www.npmjs.com/package/google-closure-compiler) and a Java Runtime Environment installed.
