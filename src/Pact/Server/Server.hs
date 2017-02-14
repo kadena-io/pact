@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -62,8 +63,11 @@ usage =
 
 serve :: FilePath -> IO ()
 serve configFile = do
-  Config {..} <- Y.decodeFileEither configFile >>=
-                 either (\e -> throwIO (userError ("Error loading config: " ++ show e ++ "\n\n" ++ usage))) return
+  Config {..} <- Y.decodeFileEither configFile >>= \case
+    Left e -> do
+      putStrLn $ usage
+      throwIO (userError ("Error loading config file: " ++ show e))
+    Right v -> return v
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
