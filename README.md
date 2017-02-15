@@ -68,7 +68,7 @@ The REST API is documented at [http://pact-language.readthedocs.io/en/latest/pac
 
 * The [pact-lang-api npm package](https://www.npmjs.com/package/pact-lang-api) provides a JavaScript library to aid interaction with the API.
 
-* The [pact-todomvc](github.com/kadena-io/pact-todomvc) is a working demonstration.
+* The [pact-todomvc](https://github.com/kadena-io/pact-todomvc) is a working demonstration.
 
 #### Hosting static files.
 
