@@ -354,7 +354,7 @@ fastNoJournalPragmas = [
 
 _initPSL :: IO PSL
 _initPSL = do
-  let f = "foo.sqllite"
+  let f = "deleteme.sqllite"
   doesFileExist f >>= \b -> when b (removeFile f)
   initPSL fastNoJournalPragmas putStrLn f
 

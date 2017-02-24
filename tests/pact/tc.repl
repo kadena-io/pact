@@ -1,3 +1,5 @@
+;; NB this is both a Pact test and used in TypecheckSpec.hs tests too
+
 (env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
 (begin-tx)
 (define-keyset 'keyset (read-keyset "msgkeys"))
@@ -21,10 +23,21 @@
   (defun bad-update (name handle)
     (update persons name { "handle": handle }))
 
-  (defun addToAll (i vals:[integer]) (map (+ i) vals))
+  (defun addToAll (i:integer vals:[integer]) (map (+ i) vals))
 
   (defun unconsumed-app-typevar ()
     (if true "hello" "goodbye"))
+
+  (defschema account balance:integer)
+  (deftable accounts:{account})
+
+  (defun overload-conflict (amount from-bal:integer to-bal:integer)
+    (>= from-bal amount)
+    (- from-bal amount)
+    (+ to-bal (if true amount amount))
+    )
+
+
 
 )
 
@@ -35,10 +48,14 @@
 (use 'tctest)
 (expect-failure "missing fields" (add-person { "name": "Mary" }))
 (expect-failure "bad field"
-                (add-person { "name": "Mary", "age": 20, "dob": (parse-time "%F" "1996-12-31"), "handle": "@mary" }))
+                (add-person { "name": "Mary",
+                            "age": 20,
+                            "dob": (parse-time "%F" "1996-12-31"),
+                            "handle": "@mary" }))
 (add-person { "name": "Mary", "age": 20, "dob": (parse-time "%F" "1996-12-31") })
 (update-age "Mary" 25)
-(expect-failure "bad update"
-                (bad-update "Mary" "@mary123"))
+(expect-failure "bad update" (bad-update "Mary" "@mary123"))
 (expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
 (expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
+
+(typecheck 'tctest)

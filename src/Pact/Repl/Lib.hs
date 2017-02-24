@@ -272,10 +272,10 @@ tc i as = case as of
       case mdm of
         Nothing -> evalError' i $ "No such module: " ++ show modname
         Just md -> do
-          r :: Either SomeException ([TopLevel Node],[Failure]) <-
+          r :: Either CheckerException ([TopLevel Node],[Failure]) <-
             try $ liftIO $ typecheckModule dbg md
           case r of
-            Left e -> evalError' i $ "Typecheck failed with internal error: " ++ show e
+            Left (CheckerException ei e) -> evalError ei ("Typechecker Internal Error: " ++ e)
             Right (_,fails) -> case fails of
               [] -> return $ tStr $ "Typecheck " <> modname <> ": success"
               _ -> do

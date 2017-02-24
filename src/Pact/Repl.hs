@@ -201,7 +201,7 @@ pureEval e = do
           if null cs
           then outStrLn HErr serr
           else do
-            outStrLn HErr $ show (head cs) ++ ": " ++ show err
+            outStrLn HErr serr
             mapM_ (\c -> outStrLn HErr $ " at " ++ show c) (tail cs)
           return (Left serr)
 

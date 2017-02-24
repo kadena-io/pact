@@ -3,7 +3,7 @@
 
 name:                pact
 -- version must also be in PACT_VERSION below
-version:             2.1.0
+version:             2.1.1
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -22,7 +22,7 @@ cabal-version:       >=1.22
 
 library
   -- must be same as version above
-  cpp-options: -DPACT_VERSION="2.1.0"
+  cpp-options: -DPACT_VERSION="2.1.1 snapshot 1"
 
   exposed-modules:     Pact.Compile
                      , Pact.Eval
