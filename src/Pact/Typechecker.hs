@@ -238,21 +238,21 @@ applySchemas Pre ast = case ast of
   (Object n ps) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
     pmap <- M.fromList <$> forM ps
-      (\(k,v) -> (,) <$> asPrimString k <*> ((v,) <$> lookupTy (_aNode v)))
+      (\(k,v) -> (,) <$> asPrimString k <*> ((v,_aId (_aNode k),) <$> lookupTy (_aNode v)))
     validateSchema sch pmap
     return ast
   (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
     pmap <- M.fromList <$> forM bs
-      (\(Named bn _,v) -> (bn,) <$> ((v,) <$> lookupTy (_aNode v)))
+      (\(Named bn _ ni,v) -> (bn,) <$> ((v,ni,) <$> lookupTy (_aNode v)))
     validateSchema sch pmap
     return ast
   _ -> return ast
   where
     validateSchema sch pmap = do
       let smap = M.fromList <$> (`map` _utFields sch) $ \(Arg an aty _) -> (an,aty)
-      forM_ (M.toList pmap) $ \(k,(v,vty)) -> case M.lookup k smap of
-        Nothing -> addFailure (_aId (_aNode v)) $ "Invalid field in schema object: " ++ show k
+      forM_ (M.toList pmap) $ \(k,(v,ki,vty)) -> case M.lookup k smap of
+        Nothing -> addFailure ki $ "Invalid field in schema object: " ++ show k
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocAstTy (_aNode v) (either id id u)
@@ -534,7 +534,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
-    Named n <$> trackNode t' an
+    Named n <$> trackNode t' an <*> pure an
   tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
   ft' <- traverse toUserType _tFunType
   return $ FDefun _tInfo fn ft' args tcs _tDocs
@@ -597,10 +597,10 @@ toAST TBinding {..} = do
     case _tBindType of
       BindLet -> do
         assocAST aid v'
-        return (Named n an,v')
+        return (Named n an aid,v')
       BindSchema _ -> do
         fieldName <- asPrimString v'
-        return (Named fieldName an,Var an)
+        return (Named fieldName an aid,Var an)
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
   bt <- case _tBindType of
     BindLet -> assocAST bi (last bb) >> return BindLet

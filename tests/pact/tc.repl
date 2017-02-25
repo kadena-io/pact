@@ -20,8 +20,8 @@
   (defun update-age (name age)
     (update persons name { "age": age }))
 
-  (defun bad-update (name handle)
-    (update persons name { "handle": handle }))
+  (defun bad-update (name)
+    (update persons name { "handle": "stuff" }))
 
   (defun addToAll (i:integer vals:[integer]) (map (+ i) vals))
 

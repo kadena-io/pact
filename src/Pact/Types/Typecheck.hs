@@ -250,11 +250,12 @@ instance Pretty Node where
 -- | Pair an unescaped, unmangled "bare" name with something.
 data Named i = Named {
   _nnName :: Text,
-  _nnNamed :: i
+  _nnNamed :: i,
+  _nnId :: TcId
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance (Show i) => Show (Named i) where
-  show (Named na no) = show na ++ "(" ++ show no ++ ")"
-instance (Pretty i) => Pretty (Named i) where pretty (Named na no) = dquotes (pretty na) <+> parens (pretty no)
+  show (Named na no _) = show na ++ "(" ++ show no ++ ")"
+instance (Pretty i) => Pretty (Named i) where pretty (Named na no _) = dquotes (pretty na) <+> parens (pretty no)
 
 -- | Inlined AST.
 data AST n =
