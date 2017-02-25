@@ -121,40 +121,17 @@ solveOverloads :: TC ()
 solveOverloads = do
 
   overs <- use tcOverloads >>=
-           traverse (traverse (\i -> ((i,) . fst) <$> lookupAst "solveOverloads" i))
-
-{-
-  vts <- M.toList <$> use tcVarToTypes
-
-  let
-    -- find all overloads, edges are (typevar [-> that tracks ->] overload)
-    edges :: [(TypeVar UserType,Overload)]
-    edges = (`concatMap` vts) $ \(v,os) -> map (v,) os
-
-    -- use edges to make map of TcId (of overloaded function itself) to
-    -- a set of singleton SolveOverloads which will be merged after this
-    omap1 :: M.Map TcId (S.Set (SolveOverload TcId))
-    omap1 = M.fromListWith mappend $ (`map` edges) $ \(v,Overload r oid) ->
-                (oid,S.singleton $ SO oid (M.singleton r v) Nothing)
-
-  -- Merge the SolveOverloads into one per function.
-  omap :: [(TcId,SolveOverload (FunTypes UserType))] <-
-    fmap concat $ forM (M.toList omap1) $ \(i,sos) -> do
-    let sor = foldl1 (\(SO a b c) (SO _ e _) -> SO a (M.union b e) c) sos
-    unless (length sos == M.size (_soRoles sor)) $
-      die' i $ "Role conflict in overloads: " ++ show sos
-    use tcOverloads >>= \m -> case M.lookup (_soOverload sor) m of
-        Just (Left fts) -> return [(i,set soOverload fts sor)]
-        Just (Right _ft) -> return [] -- already solved
-        Nothing -> die def $ "Bad overload, could not deref id: " ++ show sor
--}
+           traverse (traverse (\i -> ((i,) . fst) <$> lookupAst "solveOverloads" (_aId (_aNode i))))
 
   let runSolve os = forM os $ \(o@Overload {..}) -> case _oSolved of
         Just {} -> return o
-        Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType _oRoles) Nothing _oTypes
+        Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
+
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
+
   done <- rptSolve overs
   tcOverloads .= fmap (fmap fst) done
+
   forM_ (M.toList done) $ \(i,o) -> case _oSolved o of
       Nothing -> do
         debug $ "Unable to solve overload: " ++ show (i,o)
@@ -162,42 +139,93 @@ solveOverloads = do
       Just {} -> return ()
 
 
+newtype RoleTys = RoleTys (Type UserType,AST Node,TypeVar UserType,Type UserType)
+instance Show RoleTys where show (RoleTys (a,b,c,d)) = show (a,_aId (_aNode b),c,d)
+_roleTys :: Lens' RoleTys (Type UserType,AST Node,TypeVar UserType,Type UserType)
+_roleTys f (RoleTys rt) = RoleTys <$> f rt
+
+
 -- | Attempt to solve an overload with one of its candidate types.
-tryFunType :: M.Map VarRole (TcId,TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
+tryFunType :: Overload (AST Node,TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
                TC (Maybe (FunType UserType))
 tryFunType _ r@Just {} _ = return r
-tryFunType roles _ f@(FunType as rt) = do
-  let tryRole rol fty = case M.lookup rol roles of
+tryFunType Overload {..} _ f@(FunType as rt) = do
+
+  -- see if var role unifies with with fun role. If so, return singleton list of var information
+  -- indexed by fun role.
+  let tryRole :: VarRole -> Type UserType ->
+                 TC (Maybe (VarRole,RoleTys))
+      tryRole rol fty = case M.lookup rol _oRoles of
         Nothing -> return Nothing
         Just (i,tv) -> use tcVarToTypes >>= \m -> case M.lookup tv m of
-          Nothing -> die' i $ "Bad var in funtype solver: " ++ show tv
+          Nothing -> die' (_aId (_aNode i)) $ "Bad var in overload solver: " ++ show tv
           Just ty -> case unifyTypes fty ty of
             Nothing -> return Nothing
-            Just _ -> return (Just (fty,[(i,tv,ty)]))
-  subAsM <- forM (zip as [0..]) $ \(Arg _ fty _,ai) -> tryRole (ArgVar ai) fty
-  subRolesM <- fmap (M.fromListWith (++)) . sequence . (:subAsM) <$> tryRole RetVar rt
-  case subRolesM of
-    Nothing -> return Nothing
-    Just subRoles -> do
-      debug $ "solveOverload: trying " ++ show (f,subRoles)
-      let solvedM = sequence $ (`map` M.toList subRoles) $ \(fty,tvTys) ->
+            Just _ -> return $ Just (rol,RoleTys (fty,i,tv,ty)) -- (Just (fty,[(i,tv,ty)]))
+
+  -- try arg and return roles
+  argRoles <- forM (zip as [0..]) $ \(Arg _ fty _,ai) -> tryRole (ArgVar ai) fty
+  allRoles <- (:argRoles) <$> tryRole RetVar rt
+  case sequence allRoles of
+    Nothing -> do
+      debug $ "tryFunType: failed: " ++ show f ++ ": " ++ show allRoles
+      return Nothing
+    Just ars -> do
+      let byRole = handleSpecialOverload _oSpecial $ M.fromList ars
+          byFunType = M.fromListWith (++) $ map (\(RoleTys (fty,i,tv,ty)) -> (fty,[(_aId (_aNode i),tv,ty)])) $ M.elems byRole
+
+      debug $ "tryFunType: trying " ++ show (f,byFunType)
+
+      let solvedM = sequence $ (`map` M.toList byFunType) $ \(fty,tvTys) ->
             let tys = foldl1 unifyM $ (Just fty:) $ map (Just . view _3) tvTys
                 unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
                 unifyM _ _ = Nothing
             in case tys of
               Nothing -> Nothing
               Just uty -> Just (fty,(uty,map (view _1 &&& view _2) tvTys))
+
           allConcrete = all isConcreteTy . map (fst . snd)
+
       case solvedM of
         Nothing -> return Nothing
-        Just solved | allConcrete solved -> do
-                        debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
-                        forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
-                          debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
-                          uncurry assocTy tv fty
-                          uncurry assocTy tv uty
-                        return $ Just f
-                    | otherwise -> return Nothing
+        Just solved
+          | allConcrete solved -> do
+
+              debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
+              forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
+                debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
+                uncurry assocTy tv fty
+                uncurry assocTy tv uty
+              return $ Just f
+
+          | otherwise -> do
+              debug $ "tryFunType: not all concrete: " ++ show solved
+              return Nothing
+
+
+handleSpecialOverload :: Maybe OverloadSpecial ->
+                         M.Map VarRole RoleTys ->
+                         M.Map VarRole RoleTys
+handleSpecialOverload Nothing m = m
+handleSpecialOverload (Just OAt) m =
+  case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
+    (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view (_roleTys . _2) keyArg,roleTy srcArg) of
+      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findField k u of
+        Nothing -> m
+        Just t -> unifyRet (roleTy ret) t
+      (TyPrim TyInteger,_,TyList t) -> unifyRet (roleTy ret) t
+      _ -> m
+    _ -> m
+  where
+    findField fname Schema {..} =
+      foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
+    roleTy = view (_roleTys . _4)
+    unifyRet ret ty = case unifyTypes ret ty of
+                        Nothing -> m
+                        Just e -> set (at RetVar . _Just . _roleTys . _4) (either id id e) m
+
+
+
 
 asPrimString :: AST Node -> TC Text
 asPrimString (Prim _ (PrimLit (LString s))) = return s
@@ -270,8 +298,9 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
-          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) (_aId (_aNode aa))) [0..] as
-          oload = Overload (argOvers <> M.singleton RetVar (_aId i)) fts' Nothing
+          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] as
+          ospec = if _fName == "at" then Just OAt else Nothing
+          oload = Overload (argOvers <> M.singleton RetVar a) fts' Nothing ospec
       tcOverloads %= M.insert (_aId i) oload
   return a
 processNatives _ a = return a

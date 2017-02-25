@@ -37,7 +37,11 @@
     (if true amount amount)
     )
 
+  (defun at-typed-object (person:object{person})
+    (at "age" person))
 
+  (defun at-typed-list (vals:[integer])
+    (at 1 vals))
 
 )
 
@@ -58,4 +62,4 @@
 (expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
 (expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
 
-(typecheck 'tctest true)
+(typecheck 'tctest)

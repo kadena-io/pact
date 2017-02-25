@@ -27,7 +27,8 @@ module Pact.Types.Typecheck
     UserType (..),
     TcId (..),tiInfo,tiName,tiId,
     VarRole (..),
-    Overload (..),oRoles,oTypes,oSolved,
+    OverloadSpecial (..),
+    Overload (..),oRoles,oTypes,oSolved,oSpecial,
     Failure (..),prettyFails,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
@@ -94,11 +95,14 @@ instance Pretty TcId where pretty = string . show
 data VarRole = ArgVar Int | RetVar
   deriving (Eq,Show,Ord)
 
+data OverloadSpecial = OAt deriving (Eq,Show,Enum,Ord)
+
 -- | Combine an AST id with a role.
 data Overload m = Overload {
   _oRoles :: M.Map VarRole m,
   _oTypes :: FunTypes UserType,
-  _oSolved :: Maybe (FunType UserType)
+  _oSolved :: Maybe (FunType UserType),
+  _oSpecial :: Maybe OverloadSpecial
     }
   deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
@@ -106,7 +110,8 @@ instance Pretty m => Pretty (Overload m) where
   pretty Overload {..} =
     "Types:" <$$> indent 2 (vsep (map pshow $ toList _oTypes)) <$$>
     "Roles:" <$$> indent 2 (vsep (map (\(k,v) -> pshow k <> colon <+> pretty v) (M.toList _oRoles))) <$$>
-    "Solution:" <+> pshow _oSolved
+    "Solution:" <+> pshow _oSolved <$$>
+    "Special:" <+> pshow _oSpecial
 
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
 
@@ -115,7 +120,7 @@ data TcState = TcState {
   _tcDebug :: Bool,
   _tcSupply :: Int,
   -- | Maps native app AST to an overloaded function type, and stores result of solver.
-  _tcOverloads :: M.Map TcId (Overload TcId),
+  _tcOverloads :: M.Map TcId (Overload (AST Node)),
   _tcFailures :: S.Set Failure,
   -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
@@ -147,9 +152,6 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
   deriving (Functor,Applicative,Monad,MonadState TcState,MonadIO,MonadThrow,MonadCatch)
 
 
-
-makeLenses ''TcState
-makeLenses ''Overload
 
 
 -- | Storage for literal values.
@@ -328,6 +330,10 @@ makeLenses ''Fun
 makeLenses ''TopLevel
 makeLenses ''Node
 makeLenses ''TcId
+
+makeLenses ''TcState
+makeLenses ''Overload
+
 
 
 -- | Run monad providing supply seed and debug.
