@@ -37,6 +37,7 @@ checkFuns = describe "tc.pact typecheck" $ do
   checkFun "tests/pact/tc.repl" "tctest" "will-overload-conflict"
   checkFun "tests/pact/tc.repl" "tctest" "at-typed-object"
   checkFun "tests/pact/tc.repl" "tctest" "at-typed-list"
+  checkFun "tests/pact/tc.repl" "tctest" "adults"
   checkFun "tests/pact/tc.repl" "tctest" "add-person"
   checkFun "tests/pact/tc.repl" "tctest" "update-age"
   checkFun "examples/cp/cp.repl" "cp" "issue"

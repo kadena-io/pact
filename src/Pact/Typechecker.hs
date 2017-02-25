@@ -32,7 +32,7 @@
 module Pact.Typechecker where
 
 import Control.Monad.Catch
-import Control.Lens hiding (pre,List)
+import Control.Lens hiding (pre,List,Fold)
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
@@ -277,11 +277,15 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- single funtype
     ft@FunType {} :| [] -> do
       let adjustForSpecial = case _fSpecial of
-            Just (Map,_) -> over (ftArgs . ix 0 . aType)
+            Just (Map,_) -> replaceFunTyWithReturnTy 0
+            Just (Filter,_) -> replaceFunTyWithReturnTy 0
+            Just (Fold,_) -> replaceFunTyWithReturnTy 0
+            Just (Compose,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
+            _ -> id
+          replaceFunTyWithReturnTy argIx = over (ftArgs . ix argIx . aType)
               (\ty -> case ty of
                   TyFun (FunType _ r) -> r -- replace map funty with just return val
                   _ -> ty)
-            _ -> id
           FunType {..} = mangleFunType (_aId i) $ adjustForSpecial ft
       zipWithM_ (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t) _ftArgs as
       assocAstTy i _ftReturn
@@ -581,6 +585,14 @@ toAST TApp {..} = do
             _ -> do
               -- create Var AST and append to arg list of partial apply.
               mpa <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as)))) "map-partial-apply"
+              specialOther SPartial (over (ix 0 . aAppArgs) (++ [Var mpa]) as)
+          Filter -> case as of
+            [] -> do
+              addFailure i "filter with no arguments encountered"
+              specialOther SPartial as
+            _ -> do
+              -- create Var AST and append to arg list of partial apply.
+              mpa <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as)))) "filter-partial-apply"
               specialOther SPartial (over (ix 0 . aAppArgs) (++ [Var mpa]) as)
           _ -> specialOther SPartial as
 

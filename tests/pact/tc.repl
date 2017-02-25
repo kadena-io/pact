@@ -43,6 +43,15 @@
   (defun at-typed-list (vals:[integer])
     (at 1 vals))
 
+  (defun age-gt (age person)
+    (> age (at-typed-object person)))
+
+  (defun adults ()
+    (filter (age-gt 18) (all-persons)))
+
+  (defun all-persons:[object{person}] ()
+    (map (read persons) (keys persons)))
+
 )
 
 (create-table persons)
