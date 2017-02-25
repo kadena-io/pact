@@ -61,7 +61,7 @@ die' i = die (_tiInfo i)
 
 
 debug :: String -> TC ()
-debug s = use doDebug >>= \d -> debug' d s
+debug s = use tcDebug >>= \d -> debug' d s
 
 debug' :: MonadIO m => Bool -> String -> m ()
 debug' d s = when d (liftIO $ putStrLn s)
@@ -120,15 +120,24 @@ isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 solveOverloads :: TC ()
 solveOverloads = do
 
+  overs <- use tcOverloads >>=
+           traverse (traverse (\i -> ((i,) . fst) <$> lookupAst "solveOverloads" i))
+
+{-
   vts <- M.toList <$> use tcVarToTypes
 
-  let edges :: [(TypeVar UserType,Overload)]
-      edges = (`concatMap` vts) $ \(v,Types _ os) -> map (v,) os
+  let
+    -- find all overloads, edges are (typevar [-> that tracks ->] overload)
+    edges :: [(TypeVar UserType,Overload)]
+    edges = (`concatMap` vts) $ \(v,os) -> map (v,) os
 
-      omap1 :: M.Map TcId (S.Set (SolveOverload TcId))
-      omap1 = M.fromListWith mappend $ (`map` edges) $ \(v,Overload r oid) ->
+    -- use edges to make map of TcId (of overloaded function itself) to
+    -- a set of singleton SolveOverloads which will be merged after this
+    omap1 :: M.Map TcId (S.Set (SolveOverload TcId))
+    omap1 = M.fromListWith mappend $ (`map` edges) $ \(v,Overload r oid) ->
                 (oid,S.singleton $ SO oid (M.singleton r v) Nothing)
 
+  -- Merge the SolveOverloads into one per function.
   omap :: [(TcId,SolveOverload (FunTypes UserType))] <-
     fmap concat $ forM (M.toList omap1) $ \(i,sos) -> do
     let sor = foldl1 (\(SO a b c) (SO _ e _) -> SO a (M.union b e) c) sos
@@ -138,43 +147,46 @@ solveOverloads = do
         Just (Left fts) -> return [(i,set soOverload fts sor)]
         Just (Right _ft) -> return [] -- already solved
         Nothing -> die def $ "Bad overload, could not deref id: " ++ show sor
-  let runSolve os = forM os $ \(i,o@(SO fts roles sol)) -> case sol of
-        Just _solved -> return (i,o)
-        Nothing -> ((i,) . SO fts roles) <$> foldM (tryFunType i roles) Nothing fts
+-}
+
+  let runSolve os = forM os $ \(o@Overload {..}) -> case _oSolved of
+        Just {} -> return o
+        Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType _oRoles) Nothing _oTypes
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
-  done <- rptSolve omap
-  forM_ done $ \(i,o) -> case _soSolution o of
+  done <- rptSolve overs
+  tcOverloads .= fmap (fmap fst) done
+  forM_ (M.toList done) $ \(i,o) -> case _oSolved o of
       Nothing -> do
         debug $ "Unable to solve overload: " ++ show (i,o)
-        addFailure i $ "Unable to solve overloaded type: " ++ show (_soOverload o)
-      Just ft -> tcOverloads %= M.insert i (Right ft)
+        addFailure i $ "Unable to solve overloaded function: " ++ show o
+      Just {} -> return ()
 
 
 -- | Attempt to solve an overload with one of its candidate types.
-tryFunType :: TcId -> M.Map VarRole (TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
+tryFunType :: M.Map VarRole (TcId,TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
                TC (Maybe (FunType UserType))
-tryFunType _ _ r@Just {} _ = return r
-tryFunType i roles _ f@(FunType as rt) = do
+tryFunType _ r@Just {} _ = return r
+tryFunType roles _ f@(FunType as rt) = do
   let tryRole rol fty = case M.lookup rol roles of
         Nothing -> return Nothing
-        Just tv -> use tcVarToTypes >>= \m -> case M.lookup tv m of
-          Nothing -> die def $ "Bad var in funtype solver: " ++ show tv
-          Just (Types ty _) -> case unifyTypes fty ty of
+        Just (i,tv) -> use tcVarToTypes >>= \m -> case M.lookup tv m of
+          Nothing -> die' i $ "Bad var in funtype solver: " ++ show tv
+          Just ty -> case unifyTypes fty ty of
             Nothing -> return Nothing
-            Just _ -> return (Just (fty,[(tv,ty)]))
+            Just _ -> return (Just (fty,[(i,tv,ty)]))
   subAsM <- forM (zip as [0..]) $ \(Arg _ fty _,ai) -> tryRole (ArgVar ai) fty
   subRolesM <- fmap (M.fromListWith (++)) . sequence . (:subAsM) <$> tryRole RetVar rt
   case subRolesM of
     Nothing -> return Nothing
     Just subRoles -> do
-      debug $ "solveOverload': trying " ++ show (f,subRoles)
+      debug $ "solveOverload: trying " ++ show (f,subRoles)
       let solvedM = sequence $ (`map` M.toList subRoles) $ \(fty,tvTys) ->
-            let tys = foldl1 unifyM $ (Just fty:) $ map (Just . snd) tvTys
+            let tys = foldl1 unifyM $ (Just fty:) $ map (Just . view _3) tvTys
                 unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
                 unifyM _ _ = Nothing
             in case tys of
               Nothing -> Nothing
-              Just uty -> Just (fty,(uty,map fst tvTys))
+              Just uty -> Just (fty,(uty,map (view _1 &&& view _2) tvTys))
           allConcrete = all isConcreteTy . map (fst . snd)
       case solvedM of
         Nothing -> return Nothing
@@ -182,8 +194,8 @@ tryFunType i roles _ f@(FunType as rt) = do
                         debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
                         forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
                           debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
-                          assocTy i tv fty
-                          assocTy i tv uty
+                          uncurry assocTy tv fty
+                          uncurry assocTy tv uty
                         return $ Just f
                     | otherwise -> return Nothing
 
@@ -216,7 +228,7 @@ applySchemas Pre ast = case ast of
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocAstTy (_aNode v) (either id id u)
-    lookupTy a = resolveTy =<< ((_tsType . snd) <$> lookupAst "lookupTy" (_aId a))
+    lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
     findSchema n act = do
       ty <- lookupTy n
       case ty of
@@ -258,10 +270,9 @@ processNatives Pre a@(App i FNative {..} as) = do
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
-      tcOverloads %= M.insert (_aId i) (Left fts')
-      zipWithM_ (\ai aa -> assocOverload (_aId (_aNode aa))
-                  (Overload (ArgVar ai) (_aId i))) [0..] as -- this assoc's the funty with the app ty.
-      assocOverload (_aId i) (Overload RetVar (_aId i))
+          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) (_aId (_aNode aa))) [0..] as
+          oload = Overload (argOvers <> M.singleton RetVar (_aId i)) fts' Nothing
+      tcOverloads %= M.insert (_aId i) oload
   return a
 processNatives _ a = return a
 
@@ -302,7 +313,7 @@ trackAST (Node i t) = do
   tcAstToVar %= M.insert i v
   maybe (return ()) (const (die' i $ "trackAST: var already tracked: " ++ show (i,t)))
     =<< (M.lookup v <$> use tcVarToTypes)
-  tcVarToTypes %= M.insert v (Types t [])
+  tcVarToTypes %= M.insert v t
 
 
 addFailure :: TcId -> String -> TC ()
@@ -311,7 +322,7 @@ addFailure i s = do
   tcFailures %= S.insert (Failure i s)
 
 -- | Lookup both type var and Types for AST node.
-lookupAst :: String -> TcId -> TC (TypeVar UserType,Types)
+lookupAst :: String -> TcId -> TC (TypeVar UserType,Type UserType)
 lookupAst msg i = do
   v <- lookupAstVar msg i
   (v,) <$> lookupTypes msg i v
@@ -322,7 +333,7 @@ lookupAstVar msg i = maybe (die' i $ msg ++ ": ast not already tracked: " ++ sho
        (M.lookup i <$> use tcAstToVar)
 
 -- | Lookup Types for type var. TcId is for logging only.
-lookupTypes :: String -> TcId -> TypeVar UserType -> TC Types
+lookupTypes :: String -> TcId -> TypeVar UserType -> TC (Type UserType)
 lookupTypes msg i v =
   maybe (die' i $ msg ++ ":  var not already tracked: " ++ show v) return =<<
         (M.lookup v <$> use tcVarToTypes)
@@ -342,44 +353,39 @@ assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
 assocTy ai av ty = do
   aty <- lookupTypes "assocTy" ai av
   debug $ "assocTy: " ++ show (av,aty) ++ " <=> " ++ show ty
-  unifyTypes' ai (_tsType aty) ty $ \r -> case r of
+  unifyTypes' ai aty ty $ \r -> case r of
     Left _same -> do
       -- AST type is most specialized. If assoc ty is a var, update it to point
       -- at ast type.
-      assocParams ai ty (_tsType aty)
+      assocParams ai ty aty
       case ty of
         TyVar tv -> do
           tvtysm <- M.lookup tv <$> use tcVarToTypes
           case tvtysm of
             Nothing -> do
+              -- RH is tyvar with no tracking; track as LH ty.
               debug $ "assocTy: " ++ show aty ++ " => " ++ show tv
               tcVarToTypes %= M.insert tv aty
             Just tvtys ->
-              -- substitute now for tracked var if necessary
-              unifyTypes' ai (_tsType aty) (_tsType tvtys) $ \r' ->
-                (tcVarToTypes . at tv . _Just . tsType) .= either id id r'
+              -- RH is tyvar tracking type. Unify and update tracked type.
+              unifyTypes' ai aty tvtys $ \r' ->
+                (tcVarToTypes . at tv . _Just) .= either id id r'
         _ -> debug $ "assocTy: noop: " ++ show (aty,ty)
     Right u -> do
       -- Associated ty is most specialized, simply update record for AST type.
       debug $ "assocTy: " ++ show (av,aty) ++ " <= " ++ show u
-      tcVarToTypes . at av . _Just . tsType .= u
-      assocParams ai u (_tsType aty)
+      tcVarToTypes . at av . _Just .= u
+      assocParams ai u aty
       -- if old type was var, make entry and adjust it
-      case _tsType aty of
-        TyVar atyv | u /= _tsType aty -> do
+      case aty of
+        TyVar atyv | u /= aty -> do
                        debug $ "assocTy: tracking/updating type variable " ++ show atyv ++ " <= " ++ show u
-                       alterTypes atyv (Types u []) (set tsType u)
+                       alterTypes atyv u (const u)
         _ -> return ()
 
--- | Track type to id with typechecking
-assocOverload :: TcId -> Overload -> TC ()
-assocOverload ai o = do
-  (av,aty) <- lookupAst "assocTy" ai
-  debug $ "assocOverload: " ++ show (ai,av,aty,o)
-  (tcVarToTypes . at av . _Just . tsOverloads) %= (o:)
 
 -- | Set, or update, a tracked 'Types' value.
-alterTypes :: TypeVar UserType -> Types -> (Types -> Types) -> TC ()
+alterTypes :: TypeVar UserType -> Type UserType -> (Type UserType -> Type UserType) -> TC ()
 alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 
 
@@ -391,7 +397,7 @@ assocParams i x y = case (x,y) of
   (TyList a,TyList b) -> assoc a b
   _ -> return ()
   where
-    createMaybe v = alterTypes v (Types (TyVar v) []) id
+    createMaybe v = alterTypes v (TyVar v) id
     assoc (TyVar a) b | b /= TyAny = createMaybe a >> assocTy i a b
     assoc a (TyVar b) | a /= TyAny = createMaybe b >> assocTy i b a
     assoc _ _ = return ()
@@ -409,7 +415,7 @@ assocAST ai b = do
         tcAstToVar %= fmap (\v -> if v == fv then sv else v)
         -- cleanup old var
         unless (sv == fv) $ tcVarToTypes %= M.delete fv
-  case unifyTypes (_tsType aty) (_tsType bty) of
+  case unifyTypes aty bty of
     Nothing -> addFailure bi $ "assocAST: cannot unify: " ++ show (aty,bty)
     Just (Left _) -> doSub ai av aty bi bv bty
     Just (Right _) -> doSub bi bv bty ai av aty
@@ -658,8 +664,8 @@ resolveTy rt = do
   v2Ty <- use tcVarToTypes
   let resolv tv@(TyVar v) =
         case M.lookup v v2Ty of
-          Just (Types t _) | t /= tv -> go t
-                           | otherwise -> return (Just tv)
+          Just t | t /= tv -> go t
+                 | otherwise -> return (Just tv)
           Nothing -> return (Just tv)
       resolv (TySchema s st) = fmap (TySchema s) <$> go st
       resolv (TyList l) = fmap TyList <$> go l
@@ -693,7 +699,7 @@ resolveAllTypes = do
     tysm <- M.lookup tv <$> use tcVarToTypes
     case tysm of
       Nothing -> die def $ "resolveAllTypes: untracked type var: " ++ show (i,tv)
-      Just tys -> resolveTy (_tsType tys)
+      Just tys -> resolveTy tys
   let unresolved = M.filter isUnresolvedTy ast2Ty
   if M.null unresolved then debug "Successfully resolved all types"
     else forM_ (M.toList unresolved) $ \(i,v) ->
@@ -741,7 +747,7 @@ typecheckBody (tl,bodyLens) = do
   debug "Resolve types"
   ast2Ty <- resolveAllTypes
   fails <- use tcFailures
-  dbg <- use doDebug
+  dbg <- use tcDebug
   when (dbg && not (S.null fails)) $ liftIO $ putDoc (prettyFails fails <> hardline)
   let tl' = set bodyLens schEnforced tl
   forM tl' $ \n@(Node i _) -> case M.lookup i ast2Ty of

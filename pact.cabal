@@ -22,7 +22,7 @@ cabal-version:       >=1.22
 
 library
   -- must be same as version above
-  cpp-options: -DPACT_VERSION="2.1.1 snapshot 1"
+  cpp-options: -DPACT_VERSION="2.1.1-snapshot1"
 
   exposed-modules:     Pact.Compile
                      , Pact.Eval

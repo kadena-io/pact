@@ -31,10 +31,10 @@
   (defschema account balance:integer)
   (deftable accounts:{account})
 
-  (defun overload-conflict (amount from-bal:integer to-bal:integer)
-    (>= from-bal amount)
-    (- from-bal amount)
-    (+ to-bal (if true amount amount))
+  (defun will-overload-conflict (amount)
+    (>= 0 amount)
+    (- 0 amount)
+    (if true amount amount)
     )
 
 
@@ -58,4 +58,4 @@
 (expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
 (expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
 
-(typecheck 'tctest)
+(typecheck 'tctest true)

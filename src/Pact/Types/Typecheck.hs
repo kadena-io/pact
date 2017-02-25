@@ -21,7 +21,25 @@
 -- Types for Pact typechecker.
 --
 
-module Pact.Types.Typecheck where
+module Pact.Types.Typecheck
+  (
+    CheckerException (..),
+    UserType (..),
+    TcId (..),tiInfo,tiName,tiId,
+    VarRole (..),
+    Overload (..),oRoles,oTypes,oSolved,
+    Failure (..),prettyFails,
+    TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
+    TC (..), runTC,
+    PrimValue (..),
+    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,
+    Special (..),
+    Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,fDocs,
+    Node (..),aId,aTy,
+    Named (..),
+    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,
+    Visit(..),Visitor
+  ) where
 
 import Control.Monad.Catch
 import Control.Lens hiding (pre,List)
@@ -77,39 +95,32 @@ data VarRole = ArgVar Int | RetVar
   deriving (Eq,Show,Ord)
 
 -- | Combine an AST id with a role.
-data Overload = Overload { _oRole :: VarRole, _oOverApp :: TcId }
- deriving (Eq,Ord)
+data Overload m = Overload {
+  _oRoles :: M.Map VarRole m,
+  _oTypes :: FunTypes UserType,
+  _oSolved :: Maybe (FunType UserType)
+    }
+  deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
-instance Show Overload where
-  show (Overload r ts) = show ts ++ "?" ++ (case r of ArgVar i -> show i; RetVar -> "r")
-
--- | Data structure to track the latest substituted type and any associated overloads.
-data Types = Types {
-  _tsType :: Type UserType,
-  _tsOverloads :: [Overload]
-  } deriving (Eq,Ord)
-
-instance Show Types  where
-  show (Types p []) = show p
-  show (Types p os) = show p ++ " " ++ show os
-instance Pretty Types where
-  pretty (Types p []) = pretty p
-  pretty (Types p os) = pretty p <+> pshow os
+instance Pretty m => Pretty (Overload m) where
+  pretty Overload {..} =
+    "Types:" <$$> indent 2 (vsep (map pshow $ toList _oTypes)) <$$>
+    "Roles:" <$$> indent 2 (vsep (map (\(k,v) -> pshow k <> colon <+> pretty v) (M.toList _oRoles))) <$$>
+    "Solution:" <+> pshow _oSolved
 
 data Failure = Failure TcId String deriving (Eq,Ord,Show)
-type Failures = S.Set Failure
 
 -- | Typechecker state.
 data TcState = TcState {
-  _doDebug :: Bool,
+  _tcDebug :: Bool,
   _tcSupply :: Int,
   -- | Maps native app AST to an overloaded function type, and stores result of solver.
-  _tcOverloads :: M.Map TcId (Either (FunTypes UserType) (FunType UserType)),
-  _tcFailures :: Failures,
+  _tcOverloads :: M.Map TcId (Overload TcId),
+  _tcFailures :: S.Set Failure,
   -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
   -- | Maps type vars to types.
-  _tcVarToTypes :: M.Map (TypeVar UserType) Types
+  _tcVarToTypes :: M.Map (TypeVar UserType) (Type UserType)
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> TcState
@@ -118,8 +129,7 @@ mkTcState sup dbg = TcState dbg sup def def def def
 instance Pretty TcState where
   pretty TcState {..} =
     "Overloads:" <$$>
-    indent 2 (vsep $ map (\(k,v) -> pretty k <> string "?" <+> colon <+>
-                           align (vsep (map (string . show) (toList v)))) $ M.toList _tcOverloads) <$$>
+    indent 2 (vsep $ map (\(k,v) -> pretty k <> colon <+> pretty v) $ M.toList _tcOverloads) <$$>
     "AstToVar:" <$$>
     indent 2 (vsep (map (\(k,v) -> pretty k <> colon <+> pretty v) (M.toList _tcAstToVar))) <$$>
     "VarToTypes:" <$$>
@@ -127,7 +137,7 @@ instance Pretty TcState where
     prettyFails _tcFailures
     <> hardline
 
-prettyFails :: Failures -> Doc
+prettyFails :: Foldable f => f Failure -> Doc
 prettyFails fs = "Failures:" <$$>
     indent 2 (vsep $ map (string.show) (toList fs))
 
@@ -139,7 +149,7 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 
 
 makeLenses ''TcState
-makeLenses ''Types
+makeLenses ''Overload
 
 
 -- | Storage for literal values.
@@ -328,11 +338,3 @@ runTC sup dbg a = runStateT (unTC a) (mkTcState sup dbg)
 data Visit = Pre | Post deriving (Eq,Show)
 -- | Type that can walk AST nodes with 'walkAST'
 type Visitor m n = Visit -> AST n -> m (AST n)
-
--- | Storage for overload solving.
-data SolveOverload o = SO {
-  _soOverload :: o,
-  _soRoles :: M.Map VarRole (TypeVar UserType),
-  _soSolution :: Maybe (FunType UserType)
-  } deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
-makeLenses ''SolveOverload
