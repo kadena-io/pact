@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -92,12 +93,15 @@ expr = do
        TF.try (qualified >>= \q -> inf >>= \i -> return (EAtom a (Just q) Nothing i) <?> "qual atom") <|>
        (inf >>= \i -> return (EAtom a Nothing Nothing i) <?> "bare atom")
    <|>
-   (EList <$> parens (sepBy expr spaces) <*> inf <?> "sexp")
+   (EList <$> parens (sepBy expr spaces) <*> pure Nothing <*> inf <?> "sexp")
    <|>
    do
      is <- brackets (sepBy expr spaces) <?> "list literal"
+     let lty = case nub (map expPrimTy is) of
+                 [Just ty] -> ty
+                 _ -> TyAny
      i <- inf
-     return $ EList (EAtom "list" Nothing Nothing i:is) i
+     return $ EList is (Just lty) i
    <|> do
      ps <- pairs
      let ops = map fst ps
@@ -105,6 +109,11 @@ expr = do
      if all (== ":") ops then EObject kvs <$> inf
      else if all (== ":=") ops then EBinding kvs <$> inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
+
+expPrimTy :: Exp -> Maybe (Type TypeName)
+expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
+expPrimTy ESymbol {} = Just $ TyPrim TyString
+expPrimTy _ = Nothing
 
 qualified :: (Monad m,TokenParsing m) => m Text
 qualified = char '.' *> ident style
@@ -274,9 +283,9 @@ currentModule i = use csModule >>= \m -> case m of
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType ai i =
     case es of
-      (EAtom dn Nothing ty _:EList args _:ELiteral (LString docs) _:body) ->
+      (EAtom dn Nothing ty _:EList args Nothing _:ELiteral (LString docs) _:body) ->
           mkDef dn ty args (Just docs) body
-      (EAtom dn Nothing ty _:EList args _:body) ->
+      (EAtom dn Nothing ty _:EList args Nothing _:body) ->
           mkDef dn ty args Nothing body
       _ -> syntaxError ai "Invalid def"
       where
@@ -304,8 +313,10 @@ _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 maybeTyVar :: Maybe (Type TypeName) -> Compile (Type (Term Name))
 maybeTyVar Nothing = freshTyVar
-maybeTyVar (Just t) = return (fmap (return . Name . asString) t)
+maybeTyVar (Just t) = return (liftTy t)
 
+liftTy :: Type TypeName -> Type (Term Name)
+liftTy = fmap (return . Name . asString)
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
 doStep [entity,exp] i =
@@ -318,14 +329,14 @@ doStepRollback [entity,exp,rb] i =
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
 letPair :: Exp -> Compile (Arg (Term Name), Term Name)
-letPair e@(EList [EAtom s Nothing ty _i,v] _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> mkInfo e) <*> run v
+letPair e@(EList [EAtom s Nothing ty _i,v] Nothing _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> mkInfo e) <*> run v
 letPair t = syntaxError' t "Invalid let pair"
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
 doLet (bindings:body) i = do
   bPairs <-
     case bindings of
-      (EList es _) -> forM es letPair
+      (EList es Nothing _) -> forM es letPair
       t -> syntaxError' t "Invalid let bindings"
   let bNames = map (Name . _aName . fst) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
@@ -336,12 +347,12 @@ doLet _ i = syntaxError i "Invalid let declaration"
 doLets :: [Exp] -> Info -> Compile (Term Name)
 doLets (bindings:body) i =
   case bindings of
-      e@(EList [_] _) -> doLet (e:body) i
-      (EList (e:es) _) -> let e' = head es in
-                          doLet [EList [e] (_eParsed e),
+      e@(EList [_] Nothing _) -> doLet (e:body) i
+      (EList (e:es) Nothing _) -> let e' = head es in
+                          doLet [EList [e] Nothing (_eParsed e),
                                  EList (EAtom "let*" Nothing Nothing (_eParsed e'):
-                                        EList es (_eParsed e'):body)
-                                 (_eParsed e')] i
+                                        EList es Nothing (_eParsed e'):body)
+                                   Nothing (_eParsed e')] i
       e -> syntaxError' e "Invalid let* binding"
 doLets _ i = syntaxError i "Invalid let declaration"
 
@@ -379,7 +390,7 @@ doTable es i = case es of
     mkT tn ty docs = do
       cm <- currentModule i
       tty :: Type (Term Name) <- case ty of
-        Just (TyUser ot) -> return $ TyUser (return (Name (asString ot)))
+        Just ot@TyUser {} -> return $ liftTy ot
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (TableName tn) cm tty docs i
@@ -389,7 +400,7 @@ mkInfo e = ask >>= \f -> return (f e)
 
 run :: Exp -> Compile (Term Name)
 
-run l@(EList (ea@(EAtom a q Nothing _):rest) _) = do
+run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
@@ -427,6 +438,7 @@ run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
 run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
                     | isNothing t = mkInfo e >>= mkVar s q
                     | otherwise = syntaxError' e "Invalid typed var"
+run e@(EList els (Just lty) _i) = TList <$> mapM run els <*> pure (liftTy lty) <*> mkInfo e
 run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 

@@ -20,7 +20,8 @@
 module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
-    ,reduce,resolveFreeVars,resolveArg
+    ,reduce,reduceBody
+    ,resolveFreeVars,resolveArg
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
@@ -201,7 +202,7 @@ reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TKeySet {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
-reduce (TList bs _ _) = last <$> mapM reduce bs -- note "body" usage here, bug?
+reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce (TConst _ _ t _ _) = reduce t
@@ -219,11 +220,15 @@ reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*>
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
 
+reduceBody :: Term Ref -> Eval e (Term Name)
+reduceBody (TList bs _ _) = last <$> mapM reduce bs
+reduceBody t = evalError (_tInfo t) "Expected body forms"
+
 reduceLet :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> Eval e (Term Name)
 reduceLet ps bod i = do
   ps' <- mapM (\(a,t) -> (,) <$> traverse reduce a <*> reduce t) ps
   typecheck ps'
-  reduce (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
+  reduceBody (instantiate (resolveArg i (map (mkDirect . snd) ps')) bod)
 
 
 {-# INLINE resolveArg #-}
@@ -242,7 +247,7 @@ reduceApp TDef {..} as ai = do
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
   call (StackFrame _tDefName ai (Just (fa,map (pack.abbrev) as))) $
     case _tDefType of
-      Defun -> reduce bod'
+      Defun -> reduceBody bod'
       Defpact -> applyPact bod'
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r

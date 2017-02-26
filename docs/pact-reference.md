@@ -662,13 +662,15 @@ false
 
 ### Lists {#list}
 
-List literals are created with brackets.
-This is actually a special form, which evaluates the [list](#listfun) function.
+List literals are created with brackets. Uniform literal lists
+are given a type in parsing.
 ```
 pact> [1 2 3]
 [1 2 3]
-pact> (= [1 2 3] (list 1 2 3))
-true
+pact> (typeof [1 2 3])
+"[integer]"
+pact> (typeof [1 2 true])
+"list"
 ```
 
 ### Objects {#object}

@@ -84,7 +84,7 @@ langDefs =
 
     ,defRNative "list" list
      (funType (TyList TyAny) [("elems",TyAny)])
-     "Create list from ELEMS. `(list 1 2 3)`"
+     "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. `(list 1 2 3)`"
 
     ,defNative (specialForm Filter) filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])

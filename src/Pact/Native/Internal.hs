@@ -106,7 +106,7 @@ bindReduce ps bd bi lkpFun = do
                                 Just v -> return $! (k,v)
             t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
-  call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduce bd''
+  call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduceBody bd''
 
 
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> Text -> NativeDef

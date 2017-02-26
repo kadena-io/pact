@@ -51,7 +51,7 @@ module Pact.Types.Lang
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
    mkTyVar,mkTyVar',mkSchemaVar,
    isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
-   Exp(..),eLiteral,eAtom,eBinding,eList,eObject,eParsed,eQualifier,eSymbol,eType,
+   Exp(..),eLiteral,eAtom,eBinding,eList,eLitListType,eObject,eParsed,eQualifier,eSymbol,eType,
    _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
    PublicKey(..),
    KeySet(..),
@@ -240,9 +240,9 @@ data FunType o = FunType {
   _ftReturn :: Type o
   } deriving (Eq,Ord,Functor,Foldable,Traversable)
 instance Show o => Show (FunType o) where
-  show (FunType as t) = "(" ++ unwords (map show as) ++ ")->" ++ show t
+  show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
 instance (Pretty o) => Pretty (FunType o) where
-  pretty (FunType as t) = parens (hsep (map pretty as)) PP.<> "->" PP.<> pretty t
+  pretty (FunType as t) = parens (hsep (map pretty as) <+> "->" <+> pretty t)
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -403,17 +403,23 @@ makeLenses ''TypeVar
 makeLenses ''TypeVarName
 
 
-
+-- | Pact expressions, with parsing info.
 data Exp =
+  -- | Literals
   ELiteral { _eLiteral :: !Literal, _eParsed :: !Parsed } |
+  -- | Symbol, effectively a string literal
   ESymbol { _eSymbol :: !Text, _eParsed :: !Parsed } |
+  -- | Atom, with support for type literals.
   EAtom { _eAtom :: !Text
         , _eQualifier :: !(Maybe Text)
         , _eType :: !(Maybe (Type TypeName))
         , _eParsed :: !Parsed
         } |
-  EList { _eList :: ![Exp], _eParsed :: !Parsed } |
+  -- | Lists. '_eLitListType' distinguishes literal lists (`[1 2 3]`) from body forms.
+  EList { _eList :: ![Exp], _eLitListType :: !(Maybe (Type TypeName)), _eParsed :: !Parsed } |
+  -- | Object literals.
   EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
+  -- | Special binding forms.
   EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
            deriving (Eq,Generic)
 makePrisms ''Exp
@@ -427,7 +433,8 @@ instance Show Exp where
     show (ELiteral i _) = show i
     show (ESymbol s _) = '\'':unpack s
     show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
-    show (EList ls _) = "(" ++ unwords (map show ls) ++ ")"
+    show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
+    show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
 
@@ -640,7 +647,7 @@ data Term n =
 instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show _tModuleBody ++ ")"
-    show (TList bs t _) = "[" ++ unwords (map show bs) ++ "]:" ++ show t
+    show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
       show _tFunType ++ maybeDelim " " _tDocs ++ ")"
@@ -651,8 +658,8 @@ instance Show n => Show (Term n) where
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
-    show (TObject bs ot _) =
-      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}:" ++ show ot
+    show (TObject bs _ _) =
+      "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m _) = "(TUse " ++ show m ++ ")"
@@ -666,6 +673,9 @@ instance Show n => Show (Term n) where
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tDocs ++ ")"
 
+showParamType :: Show n => Type n -> String
+showParamType TyAny = ""
+showParamType t = ":" ++ show t
 
 instance Show1 Term
 instance Eq1 Term
@@ -784,13 +794,13 @@ termEq _ _ = False
 
 abbrev :: Show t => Term t -> String
 abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
-abbrev (TList bs _ _) = concatMap abbrev bs
+abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
 abbrev TBinding {} = "<binding>"
-abbrev TObject {} = "<object>"
+abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
 abbrev (TUse m _) = "<use '" ++ show m ++ ">"
