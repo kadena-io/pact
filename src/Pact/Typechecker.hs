@@ -135,7 +135,7 @@ solveOverloads = do
   forM_ (M.toList done) $ \(i,o) -> case _oSolved o of
       Nothing -> do
         debug $ "Unable to solve overload: " ++ show (i,o)
-        addFailure i $ "Unable to solve overloaded function: " ++ show o
+        addFailure i $ "Unable to solve overloaded function: " ++ unpack (_oFunName o)
       Just {} -> return ()
 
 
@@ -276,38 +276,64 @@ processNatives Pre a@(App i FNative {..} as) = do
   case _fTypes of
     -- single funtype
     ft@FunType {} :| [] -> do
-      let adjustForSpecial = case _fSpecial of
-            Just (Map,_) -> replaceFunTyWithReturnTy 0
-            Just (Filter,_) -> replaceFunTyWithReturnTy 0
-            Just (Fold,_) -> replaceFunTyWithReturnTy 0
-            Just (Compose,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
-            _ -> id
-          replaceFunTyWithReturnTy argIx = over (ftArgs . ix argIx . aType)
-              (\ty -> case ty of
-                  TyFun (FunType _ r) -> r -- replace map funty with just return val
-                  _ -> ty)
-          FunType {..} = mangleFunType (_aId i) $ adjustForSpecial ft
-      zipWithM_ (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t) _ftArgs as
+      -- associate arg types. Note we're not storing this funtype back in the AST
+      -- so we can alter it for assoc purposes with 'adjustFunTyForSpecial'.
+      let FunType {..} = mangleFunType (_aId i) $ adjustFunTyForSpecial _fSpecial ft
+      args <- zipWithM (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t >> return (aa,t)) _ftArgs as
+      -- assoc return type
       assocAstTy i _ftReturn
-      -- the following assumes that special forms are never overloaded!
+      -- perform extra assocs for special forms
       case _fSpecial of
-        -- with-read et al have a single Binding body, associate this with return type
-        Just (_,SBinding b) -> case b of
-          (Binding bn _ _ (BindSchema sn)) -> do
-            assocAstTy bn _ftReturn
-            -- assoc schema with last ft arg
-            assocAstTy sn (_aType (last (toList _ftArgs)))
-          sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
-        _ -> return () -- todo partials etc
+        Nothing -> return ()
+        Just spec -> case (spec,args) of
+          -- bindings
+          ((_,SBinding b),_) -> case b of
+            (Binding bn _ _ (BindSchema sn)) -> do
+              -- assoc binding with app return
+              assocAstTy bn _ftReturn
+              -- assoc schema with last ft arg
+              assocAstTy sn (_aType (last (toList _ftArgs)))
+            sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
+          -- map
+          ((Map,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 1
+          -- filter
+          ((Filter,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 1
+          -- fold
+          ((Fold,_),[(partialAst,_),(_,initTy),(_,TyList tl)]) -> do
+            assocTyWithAppArg tl partialAst 1
+            assocTyWithAppArg initTy partialAst 0
+          ((Compose,_),_) -> return () -- TODO
+          _ -> return ()
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
           argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] as
           ospec = if _fName == "at" then Just OAt else Nothing
-          oload = Overload (argOvers <> M.singleton RetVar a) fts' Nothing ospec
+          oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing ospec
       tcOverloads %= M.insert (_aId i) oload
   return a
 processNatives _ a = return a
+
+-- | Used in 'processNatives' when associating AST args with fun args, so we want just
+-- the return type of the partial functions.
+adjustFunTyForSpecial :: Maybe (SpecialForm,Special Node) -> FunType UserType -> FunType UserType
+adjustFunTyForSpecial spec = case spec of
+  Just (Map,_) -> replaceFunTyWithReturnTy 0
+  Just (Filter,_) -> replaceFunTyWithReturnTy 0
+  Just (Fold,_) -> replaceFunTyWithReturnTy 0
+  Just (Compose,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
+  _ -> id
+  where
+    replaceFunTyWithReturnTy argIx =
+      over (ftArgs . ix argIx . aType) $ \ty -> case ty of
+        TyFun (FunType _ r) -> r
+        _ -> ty
+
+assocTyWithAppArg :: Type UserType -> AST Node -> Int -> TC ()
+assocTyWithAppArg tl (App _ _ as) ai = case as `atMay` ai of
+  Just a -> assocAstTy (_aNode a) tl
+  Nothing -> return ()
+assocTyWithAppArg _ _ _ = return ()
 
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
@@ -556,47 +582,44 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
+
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
   (Left Direct {}) -> die i "Native in value context"
   (Right t) -> return t
+
 toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
        "app" <> (case fun of FDefun {} -> "D"; _ -> "N") <>  _fName fun
   n <- trackIdNode i
   as <- mapM toAST _tAppArgs
-  (as',fun') <- case fun of
-    FDefun {..} -> assocAST i (last _fBody) >> return (as,fun) -- non-empty verified in 'scopeToBody'
+  let mkApp fun' as' = return $ App n fun' as'
+  case fun of
+    FDefun {..} -> do
+      assocAST i (last _fBody)
+      mkApp fun as
     FNative {..} -> case isSpecialForm (NativeDefName _fName) of
-      Nothing -> return (as,fun)
+      Nothing -> mkApp fun as
       Just sf -> do
-        let specialBind = (,) <$> notEmpty _tInfo "Expected >1 arg" (init as)
-                          <*> pure (set fSpecial (Just (sf,SBinding (last as))) fun)
-            specialOther s as' = return (as',set fSpecial (Just (sf,s)) fun)
+        let specialBind = do
+              as' <- notEmpty _tInfo "Expected >1 arg" (init as)
+              mkApp (set fSpecial (Just (sf,SBinding (last as))) fun) as'
+            specialPartial = mkApp (set fSpecial (Just (sf,SPartial)) fun)
+            addPartialArgs _ _ [] = return []
+            addPartialArgs aix argNames as' = do
+                  freshArgs <- forM argNames $ \an ->
+                    trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as')))) (an <> "-partial")
+                  return $ over (ix aix . aAppArgs) (++ map Var freshArgs) as'
         case sf of
           Bind -> specialBind
           WithRead -> specialBind
           WithDefaultRead -> specialBind
-          Map -> case as of
-            [] -> do
-              addFailure i "map with no arguments encountered"
-              specialOther SPartial as
-            _ -> do
-              -- create Var AST and append to arg list of partial apply.
-              mpa <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as)))) "map-partial-apply"
-              specialOther SPartial (over (ix 0 . aAppArgs) (++ [Var mpa]) as)
-          Filter -> case as of
-            [] -> do
-              addFailure i "filter with no arguments encountered"
-              specialOther SPartial as
-            _ -> do
-              -- create Var AST and append to arg list of partial apply.
-              mpa <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as)))) "filter-partial-apply"
-              specialOther SPartial (over (ix 0 . aAppArgs) (++ [Var mpa]) as)
-          _ -> specialOther SPartial as
+          Map -> specialPartial =<< addPartialArgs 0 ["map"] as
+          Filter -> specialPartial =<< addPartialArgs 0 ["filter"] as
+          Fold -> specialPartial =<< addPartialArgs 0 ["fold-init","fold-elem"] as
+          Compose -> specialPartial =<< addPartialArgs 0 ["compose0"] =<< addPartialArgs 1 ["compose1"] as
 
-  return $ App n fun' as'
 
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)

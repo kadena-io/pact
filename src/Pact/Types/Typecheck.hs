@@ -28,7 +28,7 @@ module Pact.Types.Typecheck
     TcId (..),tiInfo,tiName,tiId,
     VarRole (..),
     OverloadSpecial (..),
-    Overload (..),oRoles,oTypes,oSolved,oSpecial,
+    Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
     TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
@@ -99,6 +99,7 @@ data OverloadSpecial = OAt deriving (Eq,Show,Enum,Ord)
 
 -- | Combine an AST id with a role.
 data Overload m = Overload {
+  _oFunName :: Text,
   _oRoles :: M.Map VarRole m,
   _oTypes :: FunTypes UserType,
   _oSolved :: Maybe (FunType UserType),

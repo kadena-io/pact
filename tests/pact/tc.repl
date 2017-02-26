@@ -47,10 +47,23 @@
     (> age (at-typed-object person)))
 
   (defun adults ()
-    (filter (age-gt 18) (all-persons)))
+    (filter (age-gt 18) (map (read persons) (keys persons))))
 
-  (defun all-persons:[object{person}] ()
-    (map (read persons) (keys persons)))
+  (defun filter-map ()
+    (filter (> 1) (map1)))
+
+  (defun map1 ()
+    (map (mod 2) [1 2 3]))
+
+  (defun plus-int (x:integer y) (+ x y))
+
+  (defun fold1 ()
+    (fold (plus-int) 1 [2 3 4]))
+
+  ;; TODO fold fails to solve overload
+  (defun fold2 ()
+    (fold (+) 1 [2 3 4]))
+
 
 )
 

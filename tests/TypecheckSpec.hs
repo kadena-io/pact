@@ -33,13 +33,16 @@ checkFun fp mn fn = do
 
 checkFuns :: Spec
 checkFuns = describe "tc.pact typecheck" $ do
+  checkFun "tests/pact/tc.repl" "tctest" "add-person"
+  checkFun "tests/pact/tc.repl" "tctest" "update-age"
   checkFun "tests/pact/tc.repl" "tctest" "unconsumed-app-typevar"
   checkFun "tests/pact/tc.repl" "tctest" "will-overload-conflict"
   checkFun "tests/pact/tc.repl" "tctest" "at-typed-object"
   checkFun "tests/pact/tc.repl" "tctest" "at-typed-list"
   checkFun "tests/pact/tc.repl" "tctest" "adults"
-  checkFun "tests/pact/tc.repl" "tctest" "add-person"
-  checkFun "tests/pact/tc.repl" "tctest" "update-age"
+  checkFun "tests/pact/tc.repl" "tctest" "filter-map"
+  checkFun "tests/pact/tc.repl" "tctest" "map1"
+  checkFun "tests/pact/tc.repl" "tctest" "fold1"
   checkFun "examples/cp/cp.repl" "cp" "issue"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
 
