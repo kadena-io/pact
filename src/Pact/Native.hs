@@ -61,7 +61,7 @@ nativeDefs :: M.HashMap Name Ref
 nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> M.HashMap Name Ref
-moduleToMap = M.fromList . map ((Name . asString) *** Direct) . snd
+moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
 
 
 

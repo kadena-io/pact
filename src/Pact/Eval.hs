@@ -80,7 +80,7 @@ enforceKeySet i ksn ks = do
   sigs <- view eeMsgSigs
   let keys' = _pksKeys ks
       matched = S.size $ S.intersection (S.fromList keys') sigs
-      app = TApp (TVar (Name $ _pksPredFun ks) def)
+      app = TApp (TVar (Name (_pksPredFun ks) def) def)
             [toTerm (length keys'),toTerm matched] i
   app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
   r <- reduce app'
@@ -150,11 +150,11 @@ loadModule m bod1 mi = do
                 dm <- resolveRef f
                 case (dm,f) of
                   (Just t,_) -> return (Right t)
-                  (Nothing,Name fn) ->
+                  (Nothing,Name fn _) ->
                       case HM.lookup fn modDefs1 of
                         Just _ -> return (Left fn)
-                        Nothing -> evalError (_tInfo d) ("Cannot resolve \"" ++ show f ++ "\"")
-                  (Nothing,_) -> evalError (_tInfo d) ("Cannot resolve \"" ++ show f ++ "\"")
+                        Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
+                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
         return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
@@ -170,12 +170,12 @@ loadModule m bod1 mi = do
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n) = do
+resolveRef qn@(QName q n _) = do
           dsm <- firstOf (eeRefStore.rsModules.ix q._2.ix n) <$> ask
           case dsm of
             d@Just {} -> return d
             Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
-resolveRef nn@(Name _) = do
+resolveRef nn@(Name _ _) = do
           nm <- firstOf (eeRefStore.rsNatives.ix nn) <$> ask
           case nm of
             d@Just {} -> return d
@@ -309,7 +309,7 @@ resolveFreeVars i b = traverse r b where
 
 installModule :: ModuleData ->  Eval e ()
 installModule (m,defs) = do
-  (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first Name) . HM.toList $ defs)
+  (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ defs)
   (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
 
 msg :: Text -> Term n

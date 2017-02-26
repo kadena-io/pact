@@ -174,16 +174,27 @@ newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
 
-
+-- | A named reference from source.
 data Name =
-    QName { _nQual :: ModuleName, _nName :: Text } |
-    Name { _nName :: Text }
-         deriving (Eq,Ord,Generic)
+    QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
+    Name { _nName :: Text, _nInfo :: Info }
+         deriving (Generic)
 instance Show Name where
-    show (QName q n) = asString' q ++ "." ++ unpack n
-    show (Name n) = unpack n
+    show (QName q n _) = asString' q ++ "." ++ unpack n
+    show (Name n _) = unpack n
 instance ToJSON Name where toJSON = toJSON . show
-instance Hashable Name
+instance Hashable Name where
+  hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
+  hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
+instance Eq Name where
+  (QName a b _) == (QName c d _) = (a,b) == (c,d)
+  (Name a _) == (Name b _) = a == b
+  _ == _ = False
+instance Ord Name where
+  (QName a b _) `compare` (QName c d _) = (a,b) `compare` (c,d)
+  (Name a _) `compare` (Name b _) = a `compare` b
+  Name {} `compare` QName {} = LT
+  QName {} `compare` Name {} = GT
 
 
 data Literal =

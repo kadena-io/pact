@@ -281,18 +281,18 @@ currentModule i = use csModule >>= \m -> case m of
   Nothing -> syntaxError i "Must be declared within module"
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
-doDef es defType ai i =
+doDef es defType namei i =
     case es of
       (EAtom dn Nothing ty _:EList args Nothing _:ELiteral (LString docs) _:body) ->
           mkDef dn ty args (Just docs) body
       (EAtom dn Nothing ty _:EList args Nothing _:body) ->
           mkDef dn ty args Nothing body
-      _ -> syntaxError ai "Invalid def"
+      _ -> syntaxError namei "Invalid def"
       where
         mkDef dn ty dargs ddocs body = do
           args <- mapM atomVar dargs
-          let argsn = map (Name . _aName) args
-          dty <- FunType <$> pure args <*> maybeTyVar ty
+          let argsn = map (\aa -> Name (_aName aa) (_aInfo aa)) args
+          dty <- FunType <$> pure args <*> maybeTyVar namei ty
           cm <- currentModule i
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn cm defType dty db ddocs i
@@ -311,12 +311,12 @@ cToTV n | n < 26 = fromString [toC n]
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
-maybeTyVar :: Maybe (Type TypeName) -> Compile (Type (Term Name))
-maybeTyVar Nothing = freshTyVar
-maybeTyVar (Just t) = return (liftTy t)
+maybeTyVar :: Info -> Maybe (Type TypeName) -> Compile (Type (Term Name))
+maybeTyVar _ Nothing = freshTyVar
+maybeTyVar i (Just t) = return (liftTy i t)
 
-liftTy :: Type TypeName -> Type (Term Name)
-liftTy = fmap (return . Name . asString)
+liftTy :: Info -> Type TypeName -> Type (Term Name)
+liftTy i = fmap (return . (`Name` i) . asString)
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
 doStep [entity,exp] i =
@@ -329,7 +329,9 @@ doStepRollback [entity,exp,rb] i =
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
 letPair :: Exp -> Compile (Arg (Term Name), Term Name)
-letPair e@(EList [EAtom s Nothing ty _i,v] Nothing _) = (,) <$> (Arg <$> pure s <*> maybeTyVar ty <*> mkInfo e) <*> run v
+letPair e@(EList [k@(EAtom s Nothing ty _),v] Nothing _) = do
+  ki <- mkInfo k
+  (,) <$> (Arg <$> pure s <*> maybeTyVar ki ty <*> mkInfo e) <*> run v
 letPair t = syntaxError' t "Invalid let pair"
 
 doLet :: [Exp] -> Info -> Compile (Term Name)
@@ -338,7 +340,7 @@ doLet (bindings:body) i = do
     case bindings of
       (EList es Nothing _) -> forM es letPair
       t -> syntaxError' t "Invalid let bindings"
-  let bNames = map (Name . _aName . fst) bPairs
+  let bNames = map (\(aa,_) -> Name (_aName aa) (_aInfo aa)) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
   return $ TBinding bPairs bs BindLet i
 doLet _ i = syntaxError i "Invalid let declaration"
@@ -365,7 +367,7 @@ doConst es i = case es of
     mkConst dn ty v docs = do
       v' <- run v
       cm <- currentModule i
-      a <- Arg <$> pure dn <*> maybeTyVar ty <*> pure i
+      a <- Arg <$> pure dn <*> maybeTyVar i ty <*> pure i
       return $ TConst a cm v' docs i
 
 doSchema :: [Exp] -> Info -> Compile (Term Name)
@@ -377,7 +379,7 @@ doSchema es i = case es of
     mkUT utn docs as = do
       cm <- currentModule i
       fs <- forM as $ \a -> case a of
-        EAtom an Nothing ty _ai -> Arg an <$> maybeTyVar ty <*> mkInfo a
+        EAtom an Nothing ty _ai -> mkInfo a >>= \ai -> Arg an <$> maybeTyVar ai ty <*> pure ai
         _ -> syntaxError i "Invalid schema field definition"
       return $ TSchema (TypeName utn) cm docs fs i
 
@@ -390,7 +392,7 @@ doTable es i = case es of
     mkT tn ty docs = do
       cm <- currentModule i
       tty :: Type (Term Name) <- case ty of
-        Just ot@TyUser {} -> return $ liftTy ot
+        Just ot@TyUser {} -> return $ liftTy i ot
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (TableName tn) cm tty docs i
@@ -423,7 +425,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
               bi <- mkInfo be
               let mkPairs (v,k) = (,) <$> atomVar k <*> run v
               bs' <- mapNonEmpty "binding" mkPairs bs li
-              let ks = map (Name . _aName . fst) bs'
+              let ks = map (\(aa,_) -> Name (_aName aa) (_aInfo aa)) bs'
               bdg <- TBinding <$> pure bs' <*>
                    (abstract (`elemIndex` ks) <$> runBody bbody bi) <*> pure (BindSchema TyAny) <*> pure bi
               TApp <$> mkVar a q ai <*> pure (as ++ [bdg]) <*> pure li
@@ -438,12 +440,12 @@ run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
 run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
                     | isNothing t = mkInfo e >>= mkVar s q
                     | otherwise = syntaxError' e "Invalid typed var"
-run e@(EList els (Just lty) _i) = TList <$> mapM run els <*> pure (liftTy lty) <*> mkInfo e
+run e@(EList els (Just lty) _i) = mkInfo e >>= \i -> TList <$> mapM run els <*> pure (liftTy i lty) <*> pure i
 run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 
 mkVar :: Text -> Maybe Text -> Info -> Compile (Term Name)
-mkVar s q i = TVar <$> pure (maybe (Name s) (QName $ ModuleName s) q) <*> pure i
+mkVar s q i = TVar <$> pure (maybe (Name s i) (\qn -> QName (ModuleName s) qn i) q) <*> pure i
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]
@@ -456,7 +458,7 @@ runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
 atomVar :: Exp -> Compile (Arg (Term Name))
-atomVar e@(EAtom a Nothing ty _i) = Arg <$> pure a <*> maybeTyVar ty <*> mkInfo e
+atomVar e@(EAtom a Nothing ty _i) = mkInfo e >>= \i -> Arg <$> pure a <*> maybeTyVar i ty <*> pure i
 atomVar e = syntaxError' e "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
