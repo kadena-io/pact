@@ -6,8 +6,9 @@
 module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
-   KeyCmp(..),
-   cmpToOp,conjToOp,
+   Keyable,
+   KeyCmp(..),cmpToOp,
+   KeyConj(..),conjToOp,
    KeyQuery(..),kAnd,kOr,compileQuery,
    Persister(..),
    WriteType(..),throwDbError,
@@ -18,6 +19,7 @@ import Data.Aeson
 import Data.Text (Text)
 import Data.String
 import Data.Monoid
+import Data.Hashable
 
 import Pact.Types.Runtime (WriteType(..),throwDbError)
 
@@ -81,8 +83,13 @@ compileQuery keyfield (Just kq) = ("WHERE " <> qs,pms)
                 (lq,lps) = compile False l
                 (rq,rps) = compile False r
 
+class (Ord k,Show k,Eq k,Hashable k) => Keyable k
+instance Keyable Int
+instance Keyable Text
+
+
 data Persister s = Persister {
-  createTable :: forall k . Table k -> Persist s ()
+  createTable :: forall k . Keyable k => Table k -> Persist s ()
   ,
   beginTx :: Persist s ()
   ,
@@ -90,13 +97,13 @@ data Persister s = Persister {
   ,
   rollbackTx :: Persist s ()
   ,
-  queryKeys :: forall k . Table k -> Maybe (KeyQuery k) -> Persist s [k]
+  queryKeys :: forall k . Keyable k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
   ,
-  query :: forall k v . FromJSON v => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: forall k v . (Keyable k, FromJSON v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
   ,
-  readValue :: forall k v . FromJSON v => Table k -> k -> Persist s (Maybe v)
+  readValue :: forall k v . (Keyable k, FromJSON v) => Table k -> k -> Persist s (Maybe v)
   ,
-  writeValue :: forall k v . ToJSON v => Table k -> WriteType -> k -> v -> Persist s ()
+  writeValue :: forall k v . (Keyable k, ToJSON v) => Table k -> WriteType -> k -> v -> Persist s ()
   }
 
 _compileQry1 :: (String,[Int])

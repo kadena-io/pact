@@ -33,6 +33,9 @@ library
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
                      , Pact.PersistPactDb
+                     , Pact.Persist
+                     , Pact.Persist.SQLite
+                     , Pact.Persist.Pure
                      , Pact.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
