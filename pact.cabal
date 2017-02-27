@@ -32,6 +32,7 @@ library
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
+                     , Pact.PersistPactDb
                      , Pact.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib

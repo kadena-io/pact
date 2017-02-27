@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 module Pact.Persist.SQLite
-  (SQLite(..),initSQLite,persister)
+  (SQLite(..),initSQLite,persister,Pragma(..))
   where
 
 import Control.Arrow

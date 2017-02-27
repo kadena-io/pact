@@ -39,6 +39,7 @@ import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 
 import Pact.Compile as Pact
+import Pact.PersistPactDb
 import Pact.Eval
 import Pact.Native (initEvalEnv)
 import Pact.Pure

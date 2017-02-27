@@ -5,7 +5,7 @@
 
 module Pact.Persist
   (Persist,
-   Table(..),
+   Table(..),DataTable,TxTable,
    KeyCmp(..),
    cmpToOp,conjToOp,
    KeyQuery(..),kAnd,kOr,compileQuery,
@@ -23,9 +23,12 @@ import Pact.Types.Runtime (WriteType(..),throwDbError)
 
 type Persist s a = s -> IO (s,a)
 
+type DataTable = Table Text
+type TxTable = Table Int
+
 data Table k where
-  DataTable :: Text -> Table Text
-  TxTable :: Text -> Table Int
+  DataTable :: Text -> DataTable
+  TxTable :: Text -> TxTable
 
 deriving instance Show (Table k)
 deriving instance Eq (Table k)
