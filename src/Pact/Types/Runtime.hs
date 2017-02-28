@@ -142,6 +142,7 @@ integerCodec = Codec encodeInteger decodeInteger
     encodeInteger i = let (l,h) = jsIntegerBounds in
                         if i >= l && i <= h then Number (fromIntegral i)
                         else object [ field .= show i ]
+    {-# INLINE encodeInteger #-}
     decodeInteger (Number i) = return (round i)
     decodeInteger (Object o) = do
       s <- o .: field
@@ -149,6 +150,7 @@ integerCodec = Codec encodeInteger decodeInteger
         Just i -> return i
         Nothing -> fail $ "Invalid integer value: " ++ show o
     decodeInteger v = fail $ "Invalid integer value: " ++ show v
+    {-# INLINE decodeInteger #-}
     field = "_P_int"
 
 decimalCodec :: Codec Decimal
@@ -157,9 +159,11 @@ decimalCodec = Codec enc dec
     enc (Decimal dp dm) =
       object [ places .= dp,
                mantissa .= encoder integerCodec dm ]
+    {-# INLINE enc #-}
     dec = withObject "Decimal" $ \o ->
       Decimal <$> o .: places <*>
       (o .: mantissa >>= decoder integerCodec)
+    {-# INLINE dec #-}
     places = "_P_decp"
     mantissa = "_P_decm"
 
@@ -169,9 +173,11 @@ timeCodec = Codec enc dec
     enc t = object [ day .= d,
                      micros .= encoder integerCodec (fromIntegral (toMicroseconds s)) ]
       where (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
+    {-# INLINE enc #-}
     dec = withObject "UTCTime" $ \o ->
       mkUTCTime <$> (ModifiedJulianDay <$> o .: day) <*>
       (fromMicroseconds . fromIntegral <$> (o .: micros >>= decoder integerCodec))
+    {-# INLINE dec #-}
     day = "_P_timed"
     micros = "_P_timems"
 
@@ -179,14 +185,18 @@ valueCodec :: Codec Value
 valueCodec = Codec enc dec
   where
     enc v = object [field .= v]
+    {-# INLINE enc #-}
     dec = withObject "Value" $ \o -> o .: field
+    {-# INLINE dec #-}
     field = "_P_val"
 
 keysetCodec :: Codec KeySet
 keysetCodec = Codec enc dec
   where
     enc (KeySet ks p) = object [ keyf .= ks, predf .= p ]
+    {-# INLINE enc #-}
     dec  = withObject "KeySet" $ \o -> KeySet <$> o .: keyf <*> o .: predf
+    {-# INLINE dec #-}
     keyf = "_P_keys"
     predf = "_P_pred"
 
@@ -241,11 +251,13 @@ newtype Columns v = Columns { _columns :: M.Map ColumnId v }
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 instance (ToJSON v) => ToJSON (Columns v) where
     toJSON (Columns m) = object . map (\(k,v) -> asString k .= toJSON v) . M.toList $ m
+    {-# INLINE toJSON #-}
 instance (FromJSON v) => FromJSON (Columns v) where
     parseJSON = withObject "Columns" $ \o ->
                 (Columns . M.fromList) <$>
                  forM (HM.toList o)
                   (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
+    {-# INLINE parseJSON #-}
 
 makeLenses ''Columns
 
