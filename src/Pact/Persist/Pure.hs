@@ -9,7 +9,7 @@
 
 module Pact.Persist.Pure where
 
-import qualified Data.HashMap.Strict as M
+import qualified Data.Map.Strict as M
 import Control.Lens hiding (op)
 import Data.Aeson
 import Control.Monad.Reader ()
@@ -21,12 +21,12 @@ import Pact.Persist hiding (compileQuery)
 
 
 newtype Tbl k = Tbl {
-  _tbl :: M.HashMap k Value
+  _tbl :: M.Map k Value
   } deriving (Eq,Show,Monoid)
 makeLenses ''Tbl
 
 newtype Tables k = Tables {
-  _tbls :: M.HashMap (Table k) (Tbl k)
+  _tbls :: M.Map (Table k) (Tbl k)
   } deriving (Eq,Show,Monoid)
 makeLenses ''Tables
 
