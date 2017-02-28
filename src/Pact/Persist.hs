@@ -29,12 +29,15 @@ type DataTable = Table Text
 type TxTable = Table Int
 
 data Table k where
-  DataTable :: Text -> DataTable
-  TxTable :: Text -> TxTable
+  DataTable :: !Text -> DataTable
+  TxTable :: !Text -> TxTable
 
 deriving instance Show (Table k)
 deriving instance Eq (Table k)
 deriving instance Ord (Table k)
+instance Hashable k => Hashable (Table k) where
+  hashWithSalt s (DataTable t) = s `hashWithSalt` (0::Int) `hashWithSalt` t
+  hashWithSalt s (TxTable t) = s `hashWithSalt` (1::Int) `hashWithSalt` t
 
 data KeyCmp = KGT|KGTE|KEQ|KNEQ|KLT|KLTE deriving (Eq,Show,Ord,Enum)
 data KeyConj = AND|OR deriving (Eq,Show,Ord,Enum)

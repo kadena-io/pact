@@ -9,7 +9,7 @@
 
 module Pact.Persist.Pure where
 
-import qualified Data.Map.Strict as M
+import qualified Data.HashMap.Strict as M
 import Control.Lens hiding (op)
 import Data.Aeson
 import Control.Monad.Reader ()
@@ -21,19 +21,19 @@ import Pact.Persist hiding (compileQuery)
 
 
 newtype Tbl k = Tbl {
-  _tbl :: M.Map k Value
+  _tbl :: M.HashMap k Value
   } deriving (Eq,Show,Monoid)
 makeLenses ''Tbl
 
 newtype Tables k = Tables {
-  _tbls :: M.Map (Table k) (Tbl k)
+  _tbls :: M.HashMap (Table k) (Tbl k)
   } deriving (Eq,Show,Monoid)
 makeLenses ''Tables
 
 
 data Db = Db {
-  _dataTables :: Tables Text,
-  _txTables :: Tables Int
+  _dataTables :: !(Tables Text),
+  _txTables :: !(Tables Int)
   } deriving (Eq,Show)
 makeLenses ''Db
 instance Default Db where def = Db mempty mempty
@@ -43,8 +43,8 @@ tblType DataTable {} = dataTables
 tblType TxTable {} = txTables
 
 data PureDb = PureDb {
-  _committed :: Db,
-  _temp :: Db
+  _committed :: !Db,
+  _temp :: !Db
   }
 makeLenses ''PureDb
 instance Default PureDb where def = PureDb def def
@@ -52,7 +52,7 @@ instance Default PureDb where def = PureDb def def
 
 overM :: s -> Lens' s a -> (a -> IO a) -> IO s
 overM s l f = f (view l s) >>= \a -> return (set l a s)
-
+{-# INLINE overM #-}
 
 persister :: Persister PureDb
 persister = Persister {
@@ -98,16 +98,20 @@ compileQuery (Just kq) = compile kq
     compile (KQConj l o r) = conj o <$> compile l <*> compile r
     conj AND = (&&)
     conj OR = (||)
+{-# INLINE compileQuery #-}
 
 qry :: Keyable k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,Value)]
 qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
   Nothing -> throwDbError $ "query: no such table: " ++ show t
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
+{-# INLINE qry #-}
+
 
 conv :: FromJSON v => Value -> IO v
 conv v = case fromJSON v of
   Error s -> throwDbError $ "Failed to deserialize DB value: " ++ s ++ ": " ++ show v
   Success s -> return s
+{-# INLINE conv #-}
 
 
 

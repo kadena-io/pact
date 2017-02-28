@@ -35,6 +35,7 @@ import Control.Monad
 import Control.Monad.Catch
 
 import Data.Aeson hiding ((.=))
+import Data.Aeson.Lens
 import GHC.Generics
 
 import Data.Monoid
@@ -108,14 +109,24 @@ psl = PactDb
           tn KeySets = keysetsTxRecord
           tn Modules = modulesTxRecord
           tn (UserTables t) = userTxRecord t
-      fmap (fromMaybe []) <$> withDB (readValue (_persist m) (tn d) (fromIntegral tid)) m
+      fmap (convUserTxLogs d . fromMaybe []) <$> withDB (readValue (_persist m) (tn d) (fromIntegral tid)) m
  }
+
+convUserTxLogs :: Domain k v -> [TxLog] -> [TxLog]
+convUserTxLogs UserTables {} = map $ \tl -> case fromJSON (_txValue tl) of
+  Error s -> over txValue (set (key "error") (toJSON s)) tl
+  Success (v :: Columns Persistable) ->
+    set txValue (toJSON (fmap (toTerm :: Persistable -> Term Name) v)) tl
+convUserTxLogs _ = id
+{-# INLINE convUserTxLogs #-}
 
 withDB :: (p -> IO (p, a)) -> PSL p -> IO (PSL p, a)
 withDB a m = a (_db m) >>= \(s',r) -> return (set db s' m,r)
+{-# INLINE withDB #-}
 
 withDB_ :: (p -> IO (p, ())) -> PSL p -> IO (PSL p)
 withDB_ a m = fst <$> withDB a m
+{-# INLINE withDB_ #-}
 
 rollback :: PSL p -> IO (PSL p)
 rollback m = do
@@ -127,6 +138,7 @@ rollback m = do
 
 readUserTable :: MVar (PSL p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
 readUserTable e t k = modifyMVar e $ \m -> readUserTable' m t k
+{-# INLINE readUserTable #-}
 
 readUserTable' :: PSL p -> TableName -> RowKey -> IO (PSL p,Maybe (Columns Persistable))
 readUserTable' m t k = do
@@ -140,6 +152,7 @@ readSysTable e t k = modifyMVar e $ \m -> do
 
 resetTemp :: PSL p -> PSL p
 resetTemp = set txRecord M.empty . set txId Nothing
+{-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,ToJSON v) => MVar (PSL p) -> WriteType -> DataTable -> k -> v -> IO ()
 writeSys s wt tbl k v = modifyMVar_ s $ \m -> do
@@ -187,6 +200,7 @@ getUserTableInfo' e tn = modifyMVar e $ \m -> do
   case r of
     (Just (UserTableInfo mn ksn)) -> return (m',(mn,ksn))
     Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
+{-# INLINE getUserTableInfo' #-}
 
 userTable :: TableName -> DataTable
 userTable tn = DataTable $ "USER_" <> asString tn
@@ -218,6 +232,8 @@ createTable' ut ur m = do
 
 createSchema :: MVar (PSL p) -> IO ()
 createSchema e = modifyMVar_ e $ \m -> do
-  withDB_ (P.createTable (_persist m) userTableInfo) m
+  withDB_ (P.beginTx (_persist m)) m
+    >>= withDB_ (P.createTable (_persist m) userTableInfo)
     >>= createTable' keysetsTable keysetsTxRecord
     >>= createTable' modulesTable modulesTxRecord
+    >>= withDB_ (P.commitTx (_persist m))

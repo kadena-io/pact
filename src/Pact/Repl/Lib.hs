@@ -40,7 +40,8 @@ import Statistics.Resampling.Bootstrap
 import Pact.Native.Internal
 import Pact.Types.Runtime
 import Pact.Eval
-import Pact.Pure
+import Pact.Persist.Pure
+import Pact.PersistPactDb
 import Data.Semigroup
 import Pact.Typechecker
 import Pact.Types.Typecheck
@@ -56,14 +57,20 @@ instance Default LibOp where def = Noop
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
 data LibState = LibState {
-      _rlsPure :: MVar PureState
+      _rlsPure :: MVar (PSL PureDb)
     , _rlsOp :: LibOp
     , _rlsTxName :: Maybe Text
 }
 makeLenses ''LibState
 
-initLibState :: IO LibState
-initLibState = newMVar def >>= \m -> return (LibState m Noop def)
+initLibState :: Bool -> IO LibState
+initLibState dbg = do
+  m <- newMVar (PSL def persister
+                (if dbg then (\a b -> putStrLn $ a ++ ": " ++ show b)
+                 else (\_ _ -> return ()))
+                def def)
+  createSchema m
+  return (LibState m Noop def)
 
 replDefs :: NativeModule
 replDefs = ("Repl",
@@ -110,23 +117,23 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet,tTyValue]
        a = mkTyVar "a" []
 
-invokeEnv :: (MVar PureState -> IO b) -> MVar LibState -> IO b
+invokeEnv :: (MVar (PSL PureDb) -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! _rlsPure ls
 {-# INLINE invokeEnv #-}
 
 repldb :: PactDb LibState
 repldb = PactDb {
 
-    _readRow = \d k -> invokeEnv $ _readRow puredb d k
-  , _writeRow = \wt d k v -> invokeEnv $ _writeRow puredb wt d k v
-  , _keys = \t -> invokeEnv $ _keys puredb t
-  , _txids = \t tid -> invokeEnv $ _txids puredb t tid
-  , _createUserTable = \t m k -> invokeEnv $ _createUserTable puredb t m k
-  , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo puredb t
-  , _beginTx = \tid -> invokeEnv $ _beginTx puredb tid
-  , _commitTx = invokeEnv $ _commitTx puredb
-  , _rollbackTx = invokeEnv $ _rollbackTx puredb
-  , _getTxLog = \d t -> invokeEnv $ _getTxLog puredb d t
+    _readRow = \d k -> invokeEnv $ _readRow psl d k
+  , _writeRow = \wt d k v -> invokeEnv $ _writeRow psl wt d k v
+  , _keys = \t -> invokeEnv $ _keys psl t
+  , _txids = \t tid -> invokeEnv $ _txids psl t tid
+  , _createUserTable = \t m k -> invokeEnv $ _createUserTable psl t m k
+  , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo psl t
+  , _beginTx = \tid -> invokeEnv $ _beginTx psl tid
+  , _commitTx = invokeEnv $ _commitTx psl
+  , _rollbackTx = invokeEnv $ _rollbackTx psl
+  , _getTxLog = \d t -> invokeEnv $ _getTxLog psl d t
 
 }
 
