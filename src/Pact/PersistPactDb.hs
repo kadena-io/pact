@@ -20,6 +20,7 @@
 
 module Pact.PersistPactDb
   ( DbEnv(..),db,persist,log,txRecord,txId
+  , initDbEnv
   , pactdb
   , createSchema
   , createUserTable'
@@ -54,6 +55,15 @@ data DbEnv p = DbEnv
   , _txId :: Maybe TxId
   }
 makeLenses ''DbEnv
+
+initDbEnv :: p -> (String -> IO ()) -> Persister p -> DbEnv p
+initDbEnv p logFn funrec = DbEnv {
+  _db = p,
+  _persist = funrec,
+  _log = \s a -> logFn ("[PactPersist] " ++ s ++ ": " ++ show a),
+  _txRecord = M.empty,
+  _txId = Nothing
+  }
 
 data UserTableInfo = UserTableInfo {
   utModule :: ModuleName,
@@ -218,7 +228,7 @@ writeUser s wt tn rk row = runMVState s $ do
         let row' = Columns (M.union (_columns row) (_columns oldrow))
         doPersist $ \p -> writeValue p ut Update rk' row'
         finish row'
-      finish row' = txRecord %= M.insertWith (++) tt [TxLog (asString tn) (asString rk) (toJSON row')]
+      finish row' = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString tn) (asString rk) (toJSON row')]
   case (olds,wt) of
     (Nothing,Insert) -> ins
     (Just _,Insert) -> throwDbError $ "Insert: row found for key " ++ show rk

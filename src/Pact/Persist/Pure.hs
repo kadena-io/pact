@@ -7,7 +7,15 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Persist.Pure where
+module Pact.Persist.Pure
+  (
+    Tbl(..),tbl,
+    Tables(..),tbls,
+    Db(..),dataTables,txTables,
+    PureDb(..),committed,temp,
+    initPureDb,
+    persister
+  ) where
 
 import qualified Data.Map.Strict as M
 import Control.Lens hiding (op)
@@ -49,6 +57,8 @@ data PureDb = PureDb {
 makeLenses ''PureDb
 instance Default PureDb where def = PureDb def def
 
+initPureDb :: PureDb
+initPureDb = def
 
 overM :: s -> Lens' s a -> (a -> IO a) -> IO s
 overM s l f = f (view l s) >>= \a -> return (set l a s)

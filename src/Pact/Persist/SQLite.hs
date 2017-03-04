@@ -3,7 +3,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 module Pact.Persist.SQLite
-  (SQLite(..),initSQLite,persister,Pragma(..))
+  (SQLite(..),
+   initSQLite,closeSQLite,
+   persister,
+   Pragma(..))
   where
 
 import Control.Arrow
@@ -186,6 +189,10 @@ initSQLite ps logFn f = do
         }
   runPragmas (conn s) ps
   return s
+
+closeSQLite :: SQLite -> IO (Either String ())
+closeSQLite = fmap (either (Left . show) Right) . close . conn
+
 
 
 _test :: IO ()
