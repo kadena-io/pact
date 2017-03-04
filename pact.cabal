@@ -107,7 +107,6 @@ library
                   , Pact.Server.History.Service
                   , Pact.Server.History.Types
                   , Pact.Server.PactService
-                  , Pact.Server.SQLite
                   , Pact.Server.Server
                   , Pact.Types.API
                   , Pact.Types.Command

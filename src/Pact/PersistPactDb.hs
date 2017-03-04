@@ -56,8 +56,8 @@ data DbEnv p = DbEnv
   }
 makeLenses ''DbEnv
 
-initDbEnv :: p -> (String -> IO ()) -> Persister p -> DbEnv p
-initDbEnv p logFn funrec = DbEnv {
+initDbEnv :: (String -> IO ()) -> Persister p -> p -> DbEnv p
+initDbEnv logFn funrec p = DbEnv {
   _db = p,
   _persist = funrec,
   _log = \s a -> logFn ("[PactPersist] " ++ s ++ ": " ++ show a),

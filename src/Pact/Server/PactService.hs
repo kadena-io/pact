@@ -43,7 +43,8 @@ import Pact.PersistPactDb
 import Pact.Eval
 import Pact.Native (initEvalEnv)
 import Pact.Pure
-import Pact.Server.SQLite as PactSL
+
+import qualified Pact.Persist.SQLite as PSL
 
 type PactMVars = (DBVar,MVar CommandState)
 
@@ -60,7 +61,7 @@ initPactService config@CommandConfig {..} = do
       klog "Initializing pact SQLLite"
       dbExists <- doesFileExist f
       when dbExists $ klog "Deleting Existing Pact DB File" >> removeFile f
-      p <- (\a -> a { _log = \m s -> _ccDebugFn $ "[Pact SQLite] " ++ m ++ ": " ++ show s }) <$> initPSL _ccPragmas _ccDebugFn f
+      p <- initDbEnv _ccDebugFn PSL.persister <$> PSL.initSQLite _ccPragmas (\s -> _ccDebugFn $ "[Pact SQLite] " ++ s) f
       ee <- initEvalEnv p pactdb
       rv <- newMVar (CommandState $ _eeRefStore ee)
       let v = _eePactDbVar ee
@@ -70,6 +71,7 @@ initPactService config@CommandConfig {..} = do
   return CommandExecInterface
     { _ceiApplyCmd = \eMode cmd -> applyCmd config mvars eMode cmd (verifyCommand cmd)
     , _ceiApplyPPCmd = applyCmd config mvars }
+
 
 applyCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
 applyCmd _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s

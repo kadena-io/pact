@@ -68,5 +68,5 @@ assertEquals' msg a b = assertEquals msg a =<< b
 
 regressPure :: IO ()
 regressPure = do
-  let e = initDbEnv initPureDb putStrLn persister
+  let e = initDbEnv putStrLn persister initPureDb
   runRegression e

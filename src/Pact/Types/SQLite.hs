@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -25,7 +26,7 @@ module Pact.Types.SQLite
   , execs
   , execs_
   , exec'
-  , Pragma(..), runPragmas
+  , Pragma(..), runPragmas, fastNoJournalPragmas
   ) where
 
 import Database.SQLite3.Direct as SQ3
@@ -173,3 +174,13 @@ newtype Pragma = Pragma String deriving (Eq,Show,FromJSON,ToJSON,IsString)
 
 runPragmas :: Database -> [Pragma] -> IO ()
 runPragmas c = mapM_ (\(Pragma s) -> exec_ c (fromString ("PRAGMA " ++ s)))
+
+
+
+fastNoJournalPragmas :: [Pragma]
+fastNoJournalPragmas = [
+  "synchronous = OFF",
+  "journal_mode = MEMORY",
+  "locking_mode = EXCLUSIVE",
+  "temp_store = MEMORY"
+  ]

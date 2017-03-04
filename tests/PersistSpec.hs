@@ -17,6 +17,6 @@ regressSQLite = do
   let f = "deleteme.sqllite"
   doesFileExist f >>= \b -> when b (removeFile f)
   sl <- SQLite.initSQLite [] putStrLn "deleteme.sqllite"
-  runRegression (initDbEnv sl putStrLn SQLite.persister)
+  runRegression (initDbEnv putStrLn SQLite.persister sl)
   void $ SQLite.closeSQLite sl
   removeFile f
