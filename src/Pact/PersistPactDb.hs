@@ -28,11 +28,11 @@ module Pact.PersistPactDb
 
 import Prelude hiding (log)
 
-import Control.Arrow
 import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
+import Control.Monad.State.Strict
 
 import Data.Aeson hiding ((.=))
 import Data.Aeson.Lens
@@ -82,6 +82,17 @@ modulesTable = "SYS_modules"
 userTableInfo :: TableId
 userTableInfo = "SYS_usertables"
 
+type MVState p a = StateT (DbEnv p) IO a
+
+runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
+runMVState v a = modifyMVar v (runStateT a >=> \(r,m') -> return (m',r))
+{-# INLINE runMVState #-}
+
+
+doPersist :: (Persister p -> Persist p a) -> MVState p a
+doPersist f = get >>= \m -> liftIO (f (_persist m) (_db m)) >>= \(db',r) -> db .= db' >> return r
+{-# INLINE doPersist #-}
+
 
 pactdb :: PactDb (DbEnv p)
 pactdb = PactDb
@@ -97,13 +108,13 @@ pactdb = PactDb
            Modules -> writeSys e wt modulesTable k v
            (UserTables t) -> writeUser e wt t k v
 
- , _keys = \tn e -> modifyMVar e $ \m ->
-     second (map RowKey) <$> withDB (queryKeys (_persist m) (userDataTable tn) Nothing) m
+ , _keys = \tn e -> runMVState e
+     (map RowKey <$> doPersist (\p -> queryKeys p (userDataTable tn) Nothing))
 
 
- , _txids = \tn tid e -> modifyMVar e $ \m -> do
-     second (map fromIntegral) <$> withDB
-       (queryKeys (_persist m) (userTxRecord tn) (Just (KQKey KGT (fromIntegral tid)))) m
+ , _txids = \tn tid e -> runMVState e
+     (map fromIntegral <$> doPersist
+       (\p -> queryKeys p (userTxRecord tn) (Just (KQKey KGT (fromIntegral tid)))))
 
 
  , _createUserTable = \tn mn ksn e ->
@@ -111,34 +122,44 @@ pactdb = PactDb
 
  , _getUserTableInfo = \tn e -> getUserTableInfo' e tn
 
- , _beginTx = \tidm s -> modifyMVar_ s $ \m -> do
-     m' <- case _txId m of
-             Just _ -> do
-               _log m "beginTx" ("In transaction, rolling back" :: String)
-               rollback m
-             Nothing -> return m
-     (m'',()) <- withDB (P.beginTx (_persist m)) m'
-     return $ set txId tidm $ resetTemp m''
+ , _beginTx = \tidm s -> runMVState s $ doBegin tidm
 
- , _commitTx = \s -> do
-     r <- modifyMVar s $ \m -> case _txId m of
-       Nothing -> (,Just "Not in transaction") <$> rollback m
-       Just tid -> do
-         let tid' = fromIntegral tid
-         e' <- foldM (\sl (t,es) -> fst <$> writeValue (_persist m) t Write tid' es sl) (_db m) (M.toList (_txRecord m))
-         (e'',()) <- P.commitTx (_persist m) e'
-         return (resetTemp (set db e'' m),Nothing)
-     mapM_ throwDbError r
+ , _commitTx = \s -> runMVState s doCommit
 
- , _rollbackTx = \s -> modifyMVar_ s rollback
+ , _rollbackTx = \s -> runMVState s rollback
 
- , _getTxLog = \d tid e -> modifyMVar e $ \m -> do
+ , _getTxLog = \d tid e -> runMVState e $ do
       let tn :: Domain k v -> TxTable
           tn KeySets = TxTable keysetsTable
           tn Modules = TxTable modulesTable
           tn (UserTables t) = userTxRecord t
-      fmap (convUserTxLogs d . fromMaybe []) <$> withDB (readValue (_persist m) (tn d) (fromIntegral tid)) m
+      convUserTxLogs d . fromMaybe [] <$> doPersist (\p -> readValue p (tn d) (fromIntegral tid))
  }
+
+doBegin :: Maybe TxId -> MVState p ()
+doBegin tidm = do
+  use txId >>= \t -> case t of
+    Just _ -> do
+      debug "beginTx" ("In transaction, rolling back" :: String)
+      rollback
+    Nothing -> return ()
+  resetTemp
+  doPersist P.beginTx
+  txId .= tidm
+{-# INLINE doBegin #-}
+
+doCommit :: MVState p ()
+doCommit = do
+  use txId >>= \otid -> case otid of
+    Nothing -> rollback >> throwDbError "Not in transaction"
+    Just tid -> do
+      let tid' = fromIntegral tid
+      use txRecord >>= \rs -> forM_ (M.toList rs) $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+      doPersist P.commitTx
+      resetTemp
+{-# INLINE doCommit #-}
+
+
 
 convUserTxLogs :: Domain k v -> [TxLog] -> [TxLog]
 convUserTxLogs UserTables {} = map $ \tl -> case fromJSON (_txValue tl) of
@@ -148,60 +169,56 @@ convUserTxLogs UserTables {} = map $ \tl -> case fromJSON (_txValue tl) of
 convUserTxLogs _ = id
 {-# INLINE convUserTxLogs #-}
 
-withDB :: (p -> IO (p, a)) -> DbEnv p -> IO (DbEnv p, a)
-withDB a m = a (_db m) >>= \(s',r) -> return (set db s' m,r)
-{-# INLINE withDB #-}
 
-withDB_ :: (p -> IO (p, ())) -> DbEnv p -> IO (DbEnv p)
-withDB_ a m = fst <$> withDB a m
-{-# INLINE withDB_ #-}
 
-rollback :: DbEnv p -> IO (DbEnv p)
-rollback m = do
-  (r :: Either SomeException (DbEnv p)) <- try $ withDB_ (P.rollbackTx (_persist m)) m
-  m' <- case r of
-          Left e -> _log m "rollback" ("ERROR: " ++ show e) >> return m
-          Right m' -> return m'
-  return (resetTemp m')
+debug :: Show a => String -> a -> MVState p ()
+debug s a = use log >>= \l -> liftIO $ l s a
+
+rollback :: MVState p ()
+rollback = do
+  (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
+  case r of
+    Left e -> debug "rollback" ("ERROR: " ++ show e)
+    Right _ -> return ()
+  resetTemp
 
 readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
-readUserTable e t k = modifyMVar e $ \m -> readUserTable' m t k
+readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: DbEnv p -> TableName -> RowKey -> IO (DbEnv p,Maybe (Columns Persistable))
-readUserTable' m t k = do
-  withDB (readValue (_persist m) (userDataTable t) (asString k)) m
+readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns Persistable))
+readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (asString k)
 {-# INLINE readUserTable' #-}
 
 readSysTable :: FromJSON v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
-readSysTable e t k = modifyMVar e $ \m -> do
-  withDB (readValue (_persist m) t k) m
+readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t k
 {-# INLINE readSysTable #-}
 
-resetTemp :: DbEnv p -> DbEnv p
-resetTemp = set txRecord M.empty . set txId Nothing
+resetTemp :: MVState p ()
+resetTemp = txRecord .= M.empty >> txId .= Nothing
 {-# INLINE resetTemp #-}
 
 writeSys :: (AsString k,ToJSON v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
-writeSys s wt tbl k v = modifyMVar_ s $ \m -> do
-    _log m "writeSys" (tbl,asString k)
-    withDB_ (writeValue (_persist m) (DataTable tbl) wt (asString k) v) m
+writeSys s wt tbl k v = runMVState s $ do
+  debug "writeSys" (tbl,asString k)
+  doPersist $ \p -> writeValue p (DataTable tbl) wt (asString k) v
 {-# INLINE writeSys #-}
 
 writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
-writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
+writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn
       rk' = asString rk
-  (_,olds) <- readUserTable' m tn rk
+  olds <- readUserTable' tn rk
   let ins = do
-        _log m "writeUser: insert" (tn,rk)
-        finish row <$> withDB_ (writeValue (_persist m) ut Insert rk' row) m
+        debug "writeUser: insert" (tn,rk)
+        doPersist $ \p -> writeValue p ut Insert rk' row
+        finish row
       upd oldrow = do
         let row' = Columns (M.union (_columns row) (_columns oldrow))
-        finish row' <$> withDB_ (writeValue (_persist m) ut Update rk' row') m
-      finish row' m' =
-           over txRecord (M.insertWith (++) tt [TxLog (asString tn) (asString rk) (toJSON row')]) m'
+        doPersist $ \p -> writeValue p ut Update rk' row'
+        finish row'
+      finish row' = txRecord %= M.insertWith (++) tt [TxLog (asString tn) (asString rk) (toJSON row')]
   case (olds,wt) of
     (Nothing,Insert) -> ins
     (Just _,Insert) -> throwDbError $ "Insert: row found for key " ++ show rk
@@ -214,30 +231,30 @@ writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
 
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (ModuleName, KeySetName)
-getUserTableInfo' e tn = modifyMVar e $ \m -> do
-  (m',r) <- withDB (readValue (_persist m) (DataTable userTableInfo) (asString tn)) m
+getUserTableInfo' e tn = runMVState e $ do
+  r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (asString tn)
   case r of
-    (Just (UserTableInfo mn ksn)) -> return (m',(mn,ksn))
+    (Just (UserTableInfo mn ksn)) -> return (mn,ksn)
     Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
 {-# INLINE getUserTableInfo' #-}
 
 
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> KeySetName -> IO ()
-createUserTable' s tn mn ksn = modifyMVar_ s $ \m ->
-  withDB_ (writeValue (_persist m) (DataTable userTableInfo) Insert (asString tn) (UserTableInfo mn ksn)) m
-    >>= createTable' (userTable tn)
+createUserTable' s tn mn ksn = runMVState s $ do
+  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (asString tn) (UserTableInfo mn ksn)
+  createTable' (userTable tn)
 
-createTable' :: TableId -> DbEnv p -> IO (DbEnv p)
-createTable' tn m = do
-  _log m "createTable" tn
-  withDB_ (P.createTable (_persist m) (DataTable tn)) m
-    >>= withDB_ (P.createTable (_persist m) (TxTable tn))
+createTable' :: TableId -> MVState p ()
+createTable' tn = do
+  debug "createTable" tn
+  doPersist $ \p -> P.createTable p (DataTable tn)
+  doPersist $ \p -> P.createTable p (TxTable tn)
 
 
 createSchema :: MVar (DbEnv p) -> IO ()
-createSchema e = modifyMVar_ e $ \m -> do
-  withDB_ (P.beginTx (_persist m)) m
-    >>= createTable' userTableInfo
-    >>= createTable' keysetsTable
-    >>= createTable' modulesTable
-    >>= withDB_ (P.commitTx (_persist m))
+createSchema e = runMVState e $ do
+  doPersist P.beginTx
+  createTable' userTableInfo
+  createTable' keysetsTable
+  createTable' modulesTable
+  doPersist P.commitTx
