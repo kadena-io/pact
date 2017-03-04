@@ -51,8 +51,8 @@ tableName :: Table k -> Utf8
 tableName (DataTable t) = toUtf8 $ sanitize t <> "_DATA"
 tableName (TxTable t) = toUtf8 $ sanitize t <> "_TX"
 
-sanitize :: Text -> Text
-sanitize = T.replace "-" "_"
+sanitize :: TableId -> Text
+sanitize (TableId t) = T.replace "-" "_" t
 
 persister :: Persister SQLite
 persister = Persister {

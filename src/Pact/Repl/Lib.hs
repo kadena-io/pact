@@ -57,7 +57,7 @@ instance Default LibOp where def = Noop
 data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
 
 data LibState = LibState {
-      _rlsPure :: MVar (PSL PureDb)
+      _rlsPure :: MVar (DbEnv PureDb)
     , _rlsOp :: LibOp
     , _rlsTxName :: Maybe Text
 }
@@ -65,7 +65,7 @@ makeLenses ''LibState
 
 initLibState :: Bool -> IO LibState
 initLibState dbg = do
-  m <- newMVar (PSL def persister
+  m <- newMVar (DbEnv def persister
                 (if dbg then (\a b -> putStrLn $ a ++ ": " ++ show b)
                  else (\_ _ -> return ()))
                 def def)
@@ -117,23 +117,23 @@ replDefs = ("Repl",
                          TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet,tTyValue]
        a = mkTyVar "a" []
 
-invokeEnv :: (MVar (PSL PureDb) -> IO b) -> MVar LibState -> IO b
+invokeEnv :: (MVar (DbEnv PureDb) -> IO b) -> MVar LibState -> IO b
 invokeEnv f e = withMVar e $ \ls -> f $! _rlsPure ls
 {-# INLINE invokeEnv #-}
 
 repldb :: PactDb LibState
 repldb = PactDb {
 
-    _readRow = \d k -> invokeEnv $ _readRow psl d k
-  , _writeRow = \wt d k v -> invokeEnv $ _writeRow psl wt d k v
-  , _keys = \t -> invokeEnv $ _keys psl t
-  , _txids = \t tid -> invokeEnv $ _txids psl t tid
-  , _createUserTable = \t m k -> invokeEnv $ _createUserTable psl t m k
-  , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo psl t
-  , _beginTx = \tid -> invokeEnv $ _beginTx psl tid
-  , _commitTx = invokeEnv $ _commitTx psl
-  , _rollbackTx = invokeEnv $ _rollbackTx psl
-  , _getTxLog = \d t -> invokeEnv $ _getTxLog psl d t
+    _readRow = \d k -> invokeEnv $ _readRow pactdb d k
+  , _writeRow = \wt d k v -> invokeEnv $ _writeRow pactdb wt d k v
+  , _keys = \t -> invokeEnv $ _keys pactdb t
+  , _txids = \t tid -> invokeEnv $ _txids pactdb t tid
+  , _createUserTable = \t m k -> invokeEnv $ _createUserTable pactdb t m k
+  , _getUserTableInfo = \t -> invokeEnv $ _getUserTableInfo pactdb t
+  , _beginTx = \tid -> invokeEnv $ _beginTx pactdb tid
+  , _commitTx = invokeEnv $ _commitTx pactdb
+  , _rollbackTx = invokeEnv $ _rollbackTx pactdb
+  , _getTxLog = \d t -> invokeEnv $ _getTxLog pactdb d t
 
 }
 

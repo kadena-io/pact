@@ -84,7 +84,7 @@ data CommandState = CommandState {
     }
 $(makeLenses ''CommandState)
 
-data DBVar = PureVar (MVar PureState) | PSLVar (MVar (PSL SQLite))
+data DBVar = PureVar (MVar PureState) | PSLVar (MVar (DbEnv SQLite))
 
 data CommandEnv = CommandEnv {
       _ceConfig :: CommandConfig

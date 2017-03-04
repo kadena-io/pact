@@ -10,17 +10,17 @@
 {-# LANGUAGE GADTs #-}
 
 -- |
--- Module      :  Pact.Server.SQLite
+-- Module      :  Pact.Server.PersistPactDb
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- SQLite backend for Pact service.
+-- PactDb implementing pact-specific logic using a Persist implementation.
 --
 
 module Pact.PersistPactDb
-  ( PSL(..), persist, db, log, txId
-  , psl
+  ( DbEnv(..),db,persist,log,txRecord,txId
+  , pactdb
   , createSchema
   , createUserTable'
   , UserTableInfo(..)
@@ -45,22 +45,50 @@ import Data.Maybe
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Persist as P
 
-
-data PSL p = PSL
+-- | Environment/MVar variable for pactdb impl.
+data DbEnv p = DbEnv
   { _db :: p
   , _persist :: Persister p
   , _log :: forall s . Show s => (String -> s -> IO ())
   , _txRecord :: M.Map TxTable [TxLog]
   , _txId :: Maybe TxId
   }
-makeLenses ''PSL
+makeLenses ''DbEnv
 
-psl :: PactDb (PSL p)
-psl = PactDb
+data UserTableInfo = UserTableInfo {
+  utModule :: ModuleName,
+  utKeySet :: KeySetName
+  } deriving (Eq,Show,Generic)
+
+instance FromJSON UserTableInfo
+instance ToJSON UserTableInfo
+
+userTable :: TableName -> TableId
+userTable tn = TableId $ "USER_" <> asString tn
+{-# INLINE userTable #-}
+
+userDataTable :: TableName -> DataTable
+userDataTable = DataTable . userTable
+{-# INLINE userDataTable #-}
+
+userTxRecord :: TableName -> TxTable
+userTxRecord = TxTable . userTable
+{-# INLINE userTxRecord #-}
+
+keysetsTable :: TableId
+keysetsTable = "SYS_keysets"
+modulesTable :: TableId
+modulesTable = "SYS_modules"
+userTableInfo :: TableId
+userTableInfo = "SYS_usertables"
+
+
+pactdb :: PactDb (DbEnv p)
+pactdb = PactDb
   { _readRow = \d k e ->
        case d of
-           KeySets -> readSysTable e keysetsTable (asString k)
-           Modules -> readSysTable e modulesTable (asString k)
+           KeySets -> readSysTable e (DataTable keysetsTable) (asString k)
+           Modules -> readSysTable e (DataTable modulesTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
@@ -70,7 +98,7 @@ psl = PactDb
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> modifyMVar e $ \m ->
-     second (map RowKey) <$> withDB (queryKeys (_persist m) (userTable tn) Nothing) m
+     second (map RowKey) <$> withDB (queryKeys (_persist m) (userDataTable tn) Nothing) m
 
 
  , _txids = \tn tid e -> modifyMVar e $ \m -> do
@@ -106,8 +134,8 @@ psl = PactDb
 
  , _getTxLog = \d tid e -> modifyMVar e $ \m -> do
       let tn :: Domain k v -> TxTable
-          tn KeySets = keysetsTxRecord
-          tn Modules = modulesTxRecord
+          tn KeySets = TxTable keysetsTable
+          tn Modules = TxTable modulesTable
           tn (UserTables t) = userTxRecord t
       fmap (convUserTxLogs d . fromMaybe []) <$> withDB (readValue (_persist m) (tn d) (fromIntegral tid)) m
  }
@@ -120,49 +148,49 @@ convUserTxLogs UserTables {} = map $ \tl -> case fromJSON (_txValue tl) of
 convUserTxLogs _ = id
 {-# INLINE convUserTxLogs #-}
 
-withDB :: (p -> IO (p, a)) -> PSL p -> IO (PSL p, a)
+withDB :: (p -> IO (p, a)) -> DbEnv p -> IO (DbEnv p, a)
 withDB a m = a (_db m) >>= \(s',r) -> return (set db s' m,r)
 {-# INLINE withDB #-}
 
-withDB_ :: (p -> IO (p, ())) -> PSL p -> IO (PSL p)
+withDB_ :: (p -> IO (p, ())) -> DbEnv p -> IO (DbEnv p)
 withDB_ a m = fst <$> withDB a m
 {-# INLINE withDB_ #-}
 
-rollback :: PSL p -> IO (PSL p)
+rollback :: DbEnv p -> IO (DbEnv p)
 rollback m = do
-  (r :: Either SomeException (PSL p)) <- try $ withDB_ (P.rollbackTx (_persist m)) m
+  (r :: Either SomeException (DbEnv p)) <- try $ withDB_ (P.rollbackTx (_persist m)) m
   m' <- case r of
           Left e -> _log m "rollback" ("ERROR: " ++ show e) >> return m
           Right m' -> return m'
   return (resetTemp m')
 
-readUserTable :: MVar (PSL p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
+readUserTable :: MVar (DbEnv p) -> TableName -> RowKey -> IO (Maybe (Columns Persistable))
 readUserTable e t k = modifyMVar e $ \m -> readUserTable' m t k
 {-# INLINE readUserTable #-}
 
-readUserTable' :: PSL p -> TableName -> RowKey -> IO (PSL p,Maybe (Columns Persistable))
+readUserTable' :: DbEnv p -> TableName -> RowKey -> IO (DbEnv p,Maybe (Columns Persistable))
 readUserTable' m t k = do
-  withDB (readValue (_persist m) (userTable t) (asString k)) m
+  withDB (readValue (_persist m) (userDataTable t) (asString k)) m
 {-# INLINE readUserTable' #-}
 
-readSysTable :: FromJSON v => MVar (PSL p) -> DataTable -> Text -> IO (Maybe v)
+readSysTable :: FromJSON v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = modifyMVar e $ \m -> do
   withDB (readValue (_persist m) t k) m
 {-# INLINE readSysTable #-}
 
-resetTemp :: PSL p -> PSL p
+resetTemp :: DbEnv p -> DbEnv p
 resetTemp = set txRecord M.empty . set txId Nothing
 {-# INLINE resetTemp #-}
 
-writeSys :: (AsString k,ToJSON v) => MVar (PSL p) -> WriteType -> DataTable -> k -> v -> IO ()
+writeSys :: (AsString k,ToJSON v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = modifyMVar_ s $ \m -> do
     _log m "writeSys" (tbl,asString k)
-    withDB_ (writeValue (_persist m) tbl wt (asString k) v) m
+    withDB_ (writeValue (_persist m) (DataTable tbl) wt (asString k) v) m
 {-# INLINE writeSys #-}
 
-writeUser :: MVar (PSL p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
+writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
 writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
-  let ut = userTable tn
+  let ut = userDataTable tn
       tt = userTxRecord tn
       rk' = asString rk
   (_,olds) <- readUserTable' m tn rk
@@ -183,57 +211,33 @@ writeUser s wt tn rk row = modifyMVar_ s $ \m -> do
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " ++ show rk
 {-# INLINE writeUser #-}
 
-data UserTableInfo = UserTableInfo {
-  utModule :: ModuleName,
-  utKeySet :: KeySetName
-  } deriving (Eq,Show,Generic)
 
-instance FromJSON UserTableInfo
-instance ToJSON UserTableInfo
 
-userTableInfo :: DataTable
-userTableInfo = DataTable "SYS_usertables"
-
-getUserTableInfo' :: MVar (PSL p) -> TableName -> IO (ModuleName, KeySetName)
+getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (ModuleName, KeySetName)
 getUserTableInfo' e tn = modifyMVar e $ \m -> do
-  (m',r) <- withDB (readValue (_persist m) userTableInfo (asString tn)) m
+  (m',r) <- withDB (readValue (_persist m) (DataTable userTableInfo) (asString tn)) m
   case r of
     (Just (UserTableInfo mn ksn)) -> return (m',(mn,ksn))
     Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
 {-# INLINE getUserTableInfo' #-}
 
-userTable :: TableName -> DataTable
-userTable tn = DataTable $ "USER_" <> asString tn
-{-# INLINE userTable #-}
-userTxRecord :: TableName -> TxTable
-userTxRecord tn = TxTable $ "USER_" <> asString tn
-{-# INLINE userTxRecord #-}
 
-keysetsTable :: DataTable
-keysetsTable = DataTable "SYS_keysets"
-modulesTable :: DataTable
-modulesTable = DataTable "SYS_modules"
-keysetsTxRecord :: TxTable
-keysetsTxRecord = TxTable "SYS_keysets"
-modulesTxRecord :: TxTable
-modulesTxRecord = TxTable "SYS_modules"
-
-createUserTable' :: MVar (PSL p) -> TableName -> ModuleName -> KeySetName -> IO ()
+createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> KeySetName -> IO ()
 createUserTable' s tn mn ksn = modifyMVar_ s $ \m ->
-  withDB_ (writeValue (_persist m) userTableInfo Insert (asString tn) (UserTableInfo mn ksn)) m
-    >>= createTable' (userTable tn) (userTxRecord tn)
+  withDB_ (writeValue (_persist m) (DataTable userTableInfo) Insert (asString tn) (UserTableInfo mn ksn)) m
+    >>= createTable' (userTable tn)
 
-createTable' :: DataTable -> TxTable -> PSL p -> IO (PSL p)
-createTable' ut ur m = do
-  _log m "createTables" (ut,ur)
-  withDB_ (P.createTable (_persist m) ut) m
-    >>= withDB_ (P.createTable (_persist m) ur)
+createTable' :: TableId -> DbEnv p -> IO (DbEnv p)
+createTable' tn m = do
+  _log m "createTable" tn
+  withDB_ (P.createTable (_persist m) (DataTable tn)) m
+    >>= withDB_ (P.createTable (_persist m) (TxTable tn))
 
 
-createSchema :: MVar (PSL p) -> IO ()
+createSchema :: MVar (DbEnv p) -> IO ()
 createSchema e = modifyMVar_ e $ \m -> do
   withDB_ (P.beginTx (_persist m)) m
-    >>= withDB_ (P.createTable (_persist m) userTableInfo)
-    >>= createTable' keysetsTable keysetsTxRecord
-    >>= createTable' modulesTable modulesTxRecord
+    >>= createTable' userTableInfo
+    >>= createTable' keysetsTable
+    >>= createTable' modulesTable
     >>= withDB_ (P.commitTx (_persist m))

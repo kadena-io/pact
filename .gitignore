@@ -11,3 +11,4 @@ docs/_build
 /web/pact.min.js
 /web/npm-debug.log
 log/
+/deleteme.sqllite

@@ -61,7 +61,7 @@ initPactService config@CommandConfig {..} = do
       dbExists <- doesFileExist f
       when dbExists $ klog "Deleting Existing Pact DB File" >> removeFile f
       p <- (\a -> a { _log = \m s -> _ccDebugFn $ "[Pact SQLite] " ++ m ++ ": " ++ show s }) <$> initPSL _ccPragmas _ccDebugFn f
-      ee <- initEvalEnv p psl
+      ee <- initEvalEnv p pactdb
       rv <- newMVar (CommandState $ _eeRefStore ee)
       let v = _eePactDbVar ee
       klog "Creating Pact Schema"
@@ -130,7 +130,7 @@ applyExec rk (ExecMsg code edata) ks = do
                 , _eePactDbVar = mv
                 }
       runP (PureVar mv) = runEval def (evalEnv puredb mv) (execTerms _ceMode terms)
-      runP (PSLVar mv) = runEval def (evalEnv psl mv) (execTerms _ceMode terms)
+      runP (PSLVar mv) = runEval def (evalEnv pactdb mv) (execTerms _ceMode terms)
   (r,rEvalState') <- liftIO $ runP _ceDBVar
   case r of
     Right t -> do

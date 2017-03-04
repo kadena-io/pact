@@ -2,10 +2,12 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
+   TableId(..),
    Keyable,
    KeyCmp(..),cmpToOp,
    KeyConj(..),conjToOp,
@@ -21,16 +23,19 @@ import Data.String
 import Data.Monoid
 import Data.Hashable
 
-import Pact.Types.Runtime (WriteType(..),throwDbError)
+import Pact.Types.Runtime (WriteType(..),throwDbError,AsString(..))
 
 type Persist s a = s -> IO (s,a)
 
 type DataTable = Table Text
 type TxTable = Table Int
 
+newtype TableId = TableId Text
+  deriving (Eq,Show,Ord,IsString,AsString,Hashable)
+
 data Table k where
-  DataTable :: !Text -> DataTable
-  TxTable :: !Text -> TxTable
+  DataTable :: !TableId -> DataTable
+  TxTable :: !TableId -> TxTable
 
 deriving instance Show (Table k)
 deriving instance Eq (Table k)
