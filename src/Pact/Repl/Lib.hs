@@ -214,7 +214,7 @@ tx Rollback i [] = do
 tx Commit i [] = do
   newmods <- use (evalRefs.rsNew)
   setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
-  evalCommitTx (_faInfo i)
+  void $ evalCommitTx (_faInfo i)
   tid <- view eeTxId
   tname <- view eePactDbVar >>= \m -> liftIO $ modifyMVar m $ \v -> return (set rlsTxName Nothing v,view rlsTxName v)
   return $ txmsg tname tid "Commit"

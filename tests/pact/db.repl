@@ -32,7 +32,7 @@
 (expect "keys works" [ID_A] (keys persons))
 (expect "txids works" [1] (txids persons 0))
 (expect "txlog works"
-        (json [{"value":ROW_A,"key":ID_A,"table":"dbtest_persons"}])
+        (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
         (txlog persons 1))
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
