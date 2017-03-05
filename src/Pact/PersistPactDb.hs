@@ -34,6 +34,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.State.Strict
+import Data.Typeable
 
 import Data.Aeson hiding ((.=))
 import Data.Aeson.Lens
@@ -68,7 +69,8 @@ initDbEnv logFn funrec p = DbEnv {
 data UserTableInfo = UserTableInfo {
   utModule :: ModuleName,
   utKeySet :: KeySetName
-  } deriving (Eq,Show,Generic)
+  } deriving (Eq,Show,Generic,Typeable)
+instance PactValue UserTableInfo
 
 instance FromJSON UserTableInfo
 instance ToJSON UserTableInfo
@@ -200,7 +202,7 @@ readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns Persistable))
 readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (asString k)
 {-# INLINE readUserTable' #-}
 
-readSysTable :: FromJSON v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
+readSysTable :: PactValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
 readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t k
 {-# INLINE readSysTable #-}
 
@@ -208,7 +210,7 @@ resetTemp :: MVState p ()
 resetTemp = txRecord .= M.empty >> txId .= Nothing
 {-# INLINE resetTemp #-}
 
-writeSys :: (AsString k,ToJSON v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
+writeSys :: (AsString k,PactValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
   doPersist $ \p -> writeValue p (DataTable tbl) wt (asString k) v

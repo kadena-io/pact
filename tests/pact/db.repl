@@ -15,9 +15,12 @@
   (defconst ROW_A:{person}
     { 'name:"joe", 'age:46, "dob":(parse-time "%F" "1970-01-01") })
 
+  (deftable stuff)
+
 )
 
 (create-table persons)
+(create-table stuff)
 
 (commit-tx)
 
@@ -31,6 +34,8 @@
 (expect "txlog works"
         (json [{"value":ROW_A,"key":ID_A,"table":"dbtest_persons"}])
         (txlog persons 1))
+(insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
+(expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
 (env-keys ["joe"])
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
 (expect-failure "keys protected by admin key" (keys persons))

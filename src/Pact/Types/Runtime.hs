@@ -31,7 +31,7 @@
 module Pact.Types.Runtime
  ( PactError(..),
    evalError,evalError',failTx,argsError,argsError',
-   Persistable(..),
+   Persistable(..),ToPersistable(..),
    ColumnId(..),
    RowKey(..),
    Columns(..),columns,
@@ -79,6 +79,7 @@ import Data.Default
 import Data.Thyme
 import Data.Thyme.Format.Aeson ()
 import Data.Thyme.Time.Core
+import Data.Typeable
 import Data.Word
 import Control.Monad.Catch
 import GHC.Generics
@@ -236,6 +237,17 @@ instance FromJSON Persistable where
     parseJSON Null = return (PValue Null)
     parseJSON va@Array {} = return (PValue va)
 
+class ToPersistable t where
+  toPersistable :: t -> Persistable
+instance ToPersistable Literal where toPersistable = PLiteral
+instance ToPersistable KeySet where toPersistable = PKeySet
+instance ToPersistable Value where toPersistable = PValue
+instance Show n => ToPersistable (Term n) where
+  toPersistable (TLiteral v _) = toPersistable v
+  toPersistable (TKeySet ks _) = toPersistable ks
+  toPersistable (TValue v _) = toPersistable v
+  toPersistable t = toPersistable (toJSON t)
+
 -- | Row key type for user tables.
 newtype RowKey = RowKey Text
     deriving (Eq,Ord,IsString,ToTerm,AsString)
@@ -279,7 +291,7 @@ data TxLog =
       _txDomain :: !Text
     , _txKey :: !Text
     , _txValue :: !Value
-    } deriving (Eq,Show)
+    } deriving (Eq,Show,Typeable)
 makeLenses ''TxLog
 
 instance ToJSON TxLog where

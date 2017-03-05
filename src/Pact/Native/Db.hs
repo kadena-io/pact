@@ -214,11 +214,8 @@ write _ i as = argsError i as
 
 toColumns :: FunApp -> [(Term Name,Term Name)] -> Eval e (Columns Persistable)
 toColumns i = fmap (Columns . M.fromList) . mapM conv where
-    conv (TLitString k, TLiteral v _) = return (ColumnId k,PLiteral v)
-    conv (TLitString k, TKeySet ks _) = return (ColumnId k,PKeySet ks)
-    conv (TLitString k, TObject ks _ _) = toColumns i ks >>= \o' -> return (ColumnId k,PValue $ toJSON o')
-    conv (TLitString k, TValue v _) = return (ColumnId k,PValue v)
-    conv p = evalError' i $ "Invalid types in object pair: " ++ show p
+    conv (TLitString k, v) = return (ColumnId k,toPersistable v)
+    conv (k,_) = evalError' i $ "Only string keys are supported for database writes: " ++ show (k, typeof' k)
 
 
 createTable' :: RNativeFun e

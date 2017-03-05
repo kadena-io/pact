@@ -141,7 +141,7 @@ langDefs =
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row),("body",TyAny)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
-    ,defRNative "typeof" typeof' (funType tTyString [("x",a)])
+    ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
     ])
@@ -316,9 +316,9 @@ bind i [src,TBinding ps bd (BindSchema _) bi] = reduce src >>= \st -> case st of
   t -> evalError' i $ "bind: source expression must evaluate to object: " ++ show t
 bind i as = argsError' i as
 
-typeof' :: RNativeFun e
-typeof' _ [t] = return $ tStr $ either id (pack.show) $ typeof t
-typeof' i as = argsError i as
+typeof'' :: RNativeFun e
+typeof'' _ [t] = return $ tStr $ typeof' t
+typeof'' i as = argsError i as
 
 listModules :: RNativeFun e
 listModules _ _ = do

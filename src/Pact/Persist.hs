@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
@@ -8,7 +9,7 @@ module Pact.Persist
   (Persist,
    Table(..),DataTable,TxTable,
    TableId(..),
-   Keyable,
+   PactKey,PactValue,
    KeyCmp(..),cmpToOp,
    KeyConj(..),conjToOp,
    KeyQuery(..),kAnd,kOr,compileQuery,
@@ -18,12 +19,12 @@ module Pact.Persist
    ) where
 
 import Data.Aeson
-import Data.Text (Text)
 import Data.String
 import Data.Monoid
 import Data.Hashable
+import Data.Typeable
 
-import Pact.Types.Runtime (WriteType(..),throwDbError,AsString(..))
+import Pact.Types.Runtime hiding ((<>))
 
 type Persist s a = s -> IO (s,a)
 
@@ -91,13 +92,21 @@ compileQuery keyfield (Just kq) = ("WHERE " <> qs,pms)
                 (lq,lps) = compile False l
                 (rq,rps) = compile False r
 
-class (Ord k,Show k,Eq k,Hashable k) => Keyable k
-instance Keyable Int
-instance Keyable Text
 
+class (Ord k,Show k,Eq k,Hashable k) => PactKey k
+instance PactKey Int
+instance PactKey Text
+
+class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v
+instance PactValue TxLog
+instance PactValue (Columns Persistable)
+instance PactValue a => PactValue [a]
+instance PactValue Module
+instance PactValue KeySet
+instance PactValue Value
 
 data Persister s = Persister {
-  createTable :: forall k . Keyable k => Table k -> Persist s ()
+  createTable :: forall k . PactKey k => Table k -> Persist s ()
   ,
   beginTx :: Persist s ()
   ,
@@ -105,13 +114,13 @@ data Persister s = Persister {
   ,
   rollbackTx :: Persist s ()
   ,
-  queryKeys :: forall k . Keyable k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
+  queryKeys :: forall k . PactKey k => Table k -> Maybe (KeyQuery k) -> Persist s [k]
   ,
-  query :: forall k v . (Keyable k, FromJSON v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
+  query :: forall k v . (PactKey k, PactValue v) => Table k -> Maybe (KeyQuery k) -> Persist s [(k,v)]
   ,
-  readValue :: forall k v . (Keyable k, FromJSON v) => Table k -> k -> Persist s (Maybe v)
+  readValue :: forall k v . (PactKey k, PactValue v) => Table k -> k -> Persist s (Maybe v)
   ,
-  writeValue :: forall k v . (Keyable k, ToJSON v) => Table k -> WriteType -> k -> v -> Persist s ()
+  writeValue :: forall k v . (PactKey k, PactValue v) => Table k -> WriteType -> k -> v -> Persist s ()
   }
 
 _compileQry1 :: (String,[Int])

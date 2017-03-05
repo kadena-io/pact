@@ -73,7 +73,7 @@ module Pact.Types.Lang
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,
-   typeof,
+   typeof,typeof',
    pattern TLitString,pattern TLitInteger,tLit,tStr,termEq,abbrev,
    Text,pack,unpack
    ) where
@@ -751,7 +751,7 @@ toTermList ty l = TList (map toTerm (toList l)) ty def
 
 
 
-
+-- | Return a Pact type, or a String description of non-value Terms.
 typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
@@ -772,6 +772,10 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+
+-- | Return string type description.
+typeof' :: Show a => Term a -> Text
+typeof' = either id (pack . show) . typeof
 
 
 

@@ -23,26 +23,29 @@ import Data.Aeson
 import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
+import Data.Typeable
 
 import Pact.Persist hiding (compileQuery)
 
+data PValue = forall a . PactValue a => PValue a
+instance Show PValue where show (PValue a) = show a
 
 
 newtype Tbl k = Tbl {
-  _tbl :: M.Map k Value
-  } deriving (Eq,Show,Monoid)
+  _tbl :: M.Map k PValue
+  } deriving (Show,Monoid)
 makeLenses ''Tbl
 
 newtype Tables k = Tables {
   _tbls :: M.Map (Table k) (Tbl k)
-  } deriving (Eq,Show,Monoid)
+  } deriving (Show,Monoid)
 makeLenses ''Tables
 
 
 data Db = Db {
   _dataTables :: !(Tables Text),
   _txTables :: !(Tables Int)
-  } deriving (Eq,Show)
+  } deriving (Show)
 makeLenses ''Db
 instance Default Db where def = Db mempty mempty
 
@@ -88,12 +91,12 @@ persister = Persister {
       Just tb -> fmap (\nt -> M.insert t nt ts) $ overM tb tbl $ \m -> case (M.lookup k m,wt) of
         (Just _,Insert) -> throwDbError $ "Insert: value already at key: " ++ show k
         (Nothing,Update) -> throwDbError $ "Update: no value at key: " ++ show k
-        _ -> return $ M.insert k (toJSON v) m
+        _ -> return $ M.insert k (PValue v) m
 
   }
 
 
-compileQuery :: Keyable k => Maybe (KeyQuery k) -> (k -> Bool)
+compileQuery :: PactKey k => Maybe (KeyQuery k) -> (k -> Bool)
 compileQuery Nothing = const True
 compileQuery (Just kq) = compile kq
   where
@@ -110,17 +113,17 @@ compileQuery (Just kq) = compile kq
     conj OR = (||)
 {-# INLINE compileQuery #-}
 
-qry :: Keyable k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,Value)]
+qry :: PactKey k => Table k -> Maybe (KeyQuery k) -> PureDb -> IO [(k,PValue)]
 qry t kq s = case firstOf (temp . tblType t . tbls . ix t . tbl) s of
   Nothing -> throwDbError $ "query: no such table: " ++ show t
   Just m -> return $ filter (compileQuery kq . fst) $ M.toList m
 {-# INLINE qry #-}
 
 
-conv :: FromJSON v => Value -> IO v
-conv v = case fromJSON v of
-  Error s -> throwDbError $ "Failed to deserialize DB value: " ++ s ++ ": " ++ show v
-  Success s -> return s
+conv :: PactValue v => PValue -> IO v
+conv (PValue v) = case cast v of
+  Nothing -> throwDbError $ "Failed to reify DB value: " ++ show v
+  Just s -> return s
 {-# INLINE conv #-}
 
 
