@@ -57,12 +57,12 @@ import Data.HashMap.Strict (HashMap)
 
 import Prelude hiding (log,exp)
 
-import Pact.Pure
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
 import Pact.Persist.SQLite
+import Pact.Persist.Pure
 import Pact.PersistPactDb
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
@@ -85,7 +85,7 @@ data CommandState = CommandState {
     }
 $(makeLenses ''CommandState)
 
-data DBVar = PureVar (MVar PureState) | PSLVar (MVar (DbEnv SQLite))
+data DBVar = PureVar (MVar (DbEnv PureDb)) | PSLVar (MVar (DbEnv SQLite))
 
 data CommandEnv = CommandEnv {
       _ceConfig :: CommandConfig

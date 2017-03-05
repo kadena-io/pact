@@ -14,6 +14,7 @@ import Pact.Persist
 import Pact.Types.Runtime
 import Pact.Persist.Pure (initPureDb,persister)
 import Data.Aeson
+import Data.Hashable
 
 runRegression :: DbEnv p -> IO ()
 runRegression p = do
@@ -24,7 +25,8 @@ runRegression p = do
   let user1 = "user1"
       usert = UserTables user1
   createUserTable' v user1 "someModule" "someKeyset"
-  t3 <- commit v t2
+  assertEquals' "hash of commit 2" 206390449035706898 (hashWithSalt 1 <$> commit v)
+  t3 <- begin v t2
   assertEquals' "user table info correct" ("someModule","someKeyset") $ _getUserTableInfo pactdb user1 v
   let row = Columns $ M.fromList [("gah",toTerm' (LDecimal 123.454345))]
   _writeRow pactdb Insert usert "key1" (fmap toPersistable row) v
@@ -38,12 +40,13 @@ runRegression p = do
   let mod' = Module "mod1" "mod-admin-keyset" Nothing "code"
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
-  _ <- commit v t3
+  assertEquals' "hash of commit 3" (-1265590883992070683) (hashWithSalt 1 <$> commit v)
+  _t4 <- begin v t3
   tids <- _txids pactdb user1 t1 v
   assertEquals "user txids" [2] tids
   assertEquals' "user txlogs"
-    [TxLog "user1" "key1" (toJSON row),
-     TxLog "user1" "key1" (toJSON row')] $
+    [TxLog "USER_user1" "key1" (toJSON row),
+     TxLog "USER_user1" "key1" (toJSON row')] $
     _getTxLog pactdb usert (head tids) v
   _writeRow pactdb Insert usert "key2" (fmap toPersistable row) v
   assertEquals' "user insert key2 pre-rollback" (Just row) (fmap (fmap toTerm) <$> _readRow pactdb usert "key2" v)
@@ -60,8 +63,8 @@ begin v t = do
   _beginTx pactdb t v
   return (fmap succ t)
 
-commit :: MVar (DbEnv p) -> Maybe TxId -> IO (Maybe TxId)
-commit v t = _commitTx pactdb v >> begin v t
+commit :: MVar (DbEnv p) -> IO [TxLog]
+commit v = _commitTx pactdb v
 
 throwFail :: String -> IO a
 throwFail = throwIO . userError

@@ -57,11 +57,11 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx = void . rollbackTx
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e ()
+evalCommitTx :: Info -> Eval e [TxLog]
 evalCommitTx i = do
   tid <- view eeTxId
   case tid of
-    Nothing -> evalRollbackTx i
+    Nothing -> evalRollbackTx i >> return []
     Just {} -> commitTx i
 {-# INLINE evalCommitTx #-}
 

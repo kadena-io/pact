@@ -42,9 +42,9 @@ import Pact.Compile as Pact
 import Pact.PersistPactDb
 import Pact.Eval
 import Pact.Native (initEvalEnv)
-import Pact.Pure
 
 import qualified Pact.Persist.SQLite as PSL
+import qualified Pact.Persist.Pure as Pure
 
 type PactMVars = (DBVar,MVar CommandState)
 
@@ -54,7 +54,7 @@ initPactService config@CommandConfig {..} = do
   mvars <- case _ccDbFile of
     Nothing -> do
       klog "Initializing pure pact"
-      ee <- initEvalEnv def puredb
+      ee <- initEvalEnv (initDbEnv _ccDebugFn Pure.persister Pure.initPureDb) pactdb
       rv <- newMVar (CommandState $ _eeRefStore ee)
       return (PureVar $ _eePactDbVar ee,rv)
     Just f -> do
@@ -131,7 +131,7 @@ applyExec rk (ExecMsg code edata) ks = do
                 , _eePactDb = pdb
                 , _eePactDbVar = mv
                 }
-      runP (PureVar mv) = runEval def (evalEnv puredb mv) (execTerms _ceMode terms)
+      runP (PureVar mv) = runEval def (evalEnv pactdb mv) (execTerms _ceMode terms)
       runP (PSLVar mv) = runEval def (evalEnv pactdb mv) (execTerms _ceMode terms)
   (r,rEvalState') <- liftIO $ runP _ceDBVar
   case r of

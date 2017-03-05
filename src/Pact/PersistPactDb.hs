@@ -160,15 +160,17 @@ doBegin tidm = do
   txId .= tidm
 {-# INLINE doBegin #-}
 
-doCommit :: MVState p ()
+doCommit :: MVState p [TxLog]
 doCommit = do
   use txId >>= \otid -> case otid of
     Nothing -> rollback >> throwDbError "Not in transaction"
     Just tid -> do
       let tid' = fromIntegral tid
-      use txRecord >>= \rs -> forM_ (M.toList rs) $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
+      txrs <- M.toList <$> use txRecord
+      forM_ txrs $ \(t,es) -> doPersist $ \p -> writeValue p t Write tid' es
       doPersist P.commitTx
       resetTemp
+      return (concatMap snd txrs)
 {-# INLINE doCommit #-}
 
 
@@ -214,6 +216,8 @@ writeSys :: (AsString k,PactValue v) => MVar (DbEnv p) -> WriteType -> TableId -
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
   doPersist $ \p -> writeValue p (DataTable tbl) wt (asString k) v
+  record (TxTable tbl) k v
+
 {-# INLINE writeSys #-}
 
 writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persistable -> IO ()
@@ -230,7 +234,7 @@ writeUser s wt tn rk row = runMVState s $ do
         let row' = Columns (M.union (_columns row) (_columns oldrow))
         doPersist $ \p -> writeValue p ut Update rk' row'
         finish row'
-      finish row' = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString tn) (asString rk) (toJSON row')]
+      finish row' = record tt rk row'
   case (olds,wt) of
     (Nothing,Insert) -> ins
     (Just _,Insert) -> throwDbError $ "Insert: row found for key " ++ show rk
@@ -240,7 +244,8 @@ writeUser s wt tn rk row = runMVState s $ do
     (Nothing,Update) -> throwDbError $ "Update: no row found for key " ++ show rk
 {-# INLINE writeUser #-}
 
-
+record :: (AsString k, PactValue v) => TxTable -> k -> v -> MVState p ()
+record tt@(TxTable ttn) k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString ttn) (asString k) (toJSON v)]
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (ModuleName, KeySetName)
 getUserTableInfo' e tn = runMVState e $ do
@@ -253,7 +258,9 @@ getUserTableInfo' e tn = runMVState e $ do
 
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> KeySetName -> IO ()
 createUserTable' s tn mn ksn = runMVState s $ do
-  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (asString tn) (UserTableInfo mn ksn)
+  let uti = UserTableInfo mn ksn
+  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (asString tn) uti
+  record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)
 
 createTable' :: TableId -> MVState p ()

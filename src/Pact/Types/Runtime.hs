@@ -88,6 +88,7 @@ import Control.Concurrent.MVar
 import Data.Serialize (Serialize)
 import Data.Semigroup
 import Text.Read (readMaybe)
+import Data.Hashable
 
 import Pact.Types.Orphans ()
 import Pact.Types.Lang
@@ -286,13 +287,17 @@ instance AsString (Domain k v) where
     asString Modules = "SYS:Modules"
 
 -- | Transaction record.
+-- Backends are expected to return "user-visible" values
+-- for '_txValue', namely that internal JSON formats for 'Persistable'
+-- need to be converted to Term JSON formats.
 data TxLog =
     TxLog {
       _txDomain :: !Text
     , _txKey :: !Text
     , _txValue :: !Value
-    } deriving (Eq,Show,Typeable)
+    } deriving (Eq,Show,Typeable,Generic)
 makeLenses ''TxLog
+instance Hashable TxLog
 
 instance ToJSON TxLog where
     toJSON (TxLog d k v) =
@@ -336,10 +341,11 @@ data PactDb e = PactDb {
     -- | Initiate transaction. If TxId not provided, commit fails/rolls back.
   , _beginTx :: Maybe TxId -> Method e ()
     -- | Commit transaction, if in tx. If not in tx, rollback and throw error.
-  , _commitTx ::  Method e ()
+    -- Return raw TxLogs, for use in checkpointing only (not for transmission to user).
+  , _commitTx ::  Method e [TxLog]
     -- | Rollback database transaction.
   , _rollbackTx :: Method e ()
-    -- | Get transaction log for table.
+    -- | Get transaction log for table. TxLogs are expected to be user-visible format.
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
                  Domain k v -> TxId -> Method e [TxLog]
 }
@@ -495,7 +501,7 @@ beginTx :: Info -> Maybe TxId -> Eval e ()
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> Eval e ()
+commitTx :: Info -> Eval e [TxLog]
 commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx

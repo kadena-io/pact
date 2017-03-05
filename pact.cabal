@@ -37,7 +37,6 @@ library
                      , Pact.Persist
                      , Pact.Persist.SQLite
                      , Pact.Persist.Pure
-                     , Pact.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Typechecker
