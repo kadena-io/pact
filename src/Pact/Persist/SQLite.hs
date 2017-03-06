@@ -25,6 +25,7 @@ import Control.Monad.State
 
 import Pact.Persist
 import Pact.Types.SQLite
+import Pact.Types.Util (AsString(..))
 
 
 data TableStmts = TableStmts
@@ -40,8 +41,14 @@ data TxStmts = TxStmts
   , tRollback :: Statement
   }
 
+data SQLiteConfig = SQLiteConfig {
+  dbFile :: FilePath,
+  pragmas :: [Pragma]
+  }
+
 data SQLite = SQLite
   { conn :: Database
+  , config :: SQLiteConfig
   , log :: String -> IO ()
   , tableStmts :: M.Map Utf8 TableStmts
   , txStmts :: TxStmts
@@ -75,7 +82,8 @@ persister = Persister {
   readValue = \t k s -> (s,) <$> readData' t k s
   ,
   writeValue = \t wt k v s -> (s,) <$> writeData' t wt k v s
-
+  ,
+  refreshConn = \s -> (,()) <$> refresh s
 
   }
 
@@ -86,11 +94,11 @@ data KeyTys k = KeyTys {
   outFun :: SType -> IO k
   }
 
-decodeText :: SType -> IO Text
-decodeText (SText (Utf8 t)) = return $ decodeUtf8 t
+decodeText :: SType -> IO DataKey
+decodeText (SText (Utf8 t)) = return $ DataKey $ decodeUtf8 t
 decodeText v = throwDbError $ "Expected text, got: " ++ show v
 
-decodeInt :: SType -> IO Int
+decodeInt :: SType -> IO TxKey
 decodeInt (SInt i) = return $ fromIntegral i
 decodeInt v = throwDbError $ "Expected int, got: " ++ show v
 
@@ -110,9 +118,9 @@ expectTwo :: Show a => String -> [a] -> IO (a,a)
 expectTwo _ [a,b] = return (a,b)
 expectTwo desc v = throwDbError $ "Expected two-" ++ desc ++ " result, got: " ++ show v
 
-kTextTys :: KeyTys Text
-kTextTys = KeyTys "text" (SText . toUtf8) RText decodeText
-kIntTys :: KeyTys Int
+kTextTys :: KeyTys DataKey
+kTextTys = KeyTys "text" (SText . toUtf8 . asString) RText decodeText
+kIntTys :: KeyTys TxKey
 kIntTys = KeyTys "int" (SInt . fromIntegral) RInt decodeInt
 
 kTys :: Table k -> KeyTys k
@@ -183,6 +191,7 @@ initSQLite ps logFn f = do
          <*> prepStmt c "ROLLBACK TRANSACTION"
   let s = SQLite {
         conn = c,
+        config = SQLiteConfig f ps,
         log = \msg -> logFn $ "[Persist-SQLite] " ++ msg,
         tableStmts = M.empty,
         txStmts = ts
@@ -193,7 +202,11 @@ initSQLite ps logFn f = do
 closeSQLite :: SQLite -> IO (Either String ())
 closeSQLite = fmap (either (Left . show) Right) . close . conn
 
-
+refresh :: SQLite -> IO SQLite
+refresh s = do
+  void $ closeSQLite s
+  s' <- initSQLite (pragmas (config s)) (return . const ()) (dbFile (config s))
+  return $ s' { log = log s }
 
 _test :: IO ()
 _test = do
@@ -208,7 +221,9 @@ _test = do
         (s',r) <- liftIO (f s)
         put s'
         return r
-  (`evalStateT` e) $ do
+  void $ closeSQLite e
+  e' <- refresh e
+  (`evalStateT` e') $ do
     run $ beginTx p
     run $ createTable p dt
     run $ createTable p tt
@@ -221,10 +236,10 @@ _test = do
     run $ commitTx p
     run (readValue p dt "stuff") >>= (liftIO . (print :: Maybe Value -> IO ()))
     run (query p dt (Just (KQKey KEQ "stuff"))) >>=
-      (liftIO . (print :: [(Text,Value)] -> IO ()))
+      (liftIO . (print :: [(DataKey,Value)] -> IO ()))
     run (queryKeys p dt (Just (KQKey KGTE "stuff"))) >>= liftIO . print
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
-      (liftIO . (print :: [(Int,Value)] -> IO ()))
+      (liftIO . (print :: [(TxKey,Value)] -> IO ()))
     run $ beginTx p
     run $ writeValue p tt Update 2 (String "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))

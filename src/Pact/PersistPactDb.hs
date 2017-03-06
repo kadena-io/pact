@@ -121,7 +121,7 @@ pactdb = PactDb
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> runMVState e
-     (map RowKey <$> doPersist (\p -> queryKeys p (userDataTable tn) Nothing))
+     (map (RowKey . asString) <$> doPersist (\p -> queryKeys p (userDataTable tn) Nothing))
 
 
  , _txids = \tn tid e -> runMVState e
@@ -201,11 +201,11 @@ readUserTable e t k = runMVState e $ readUserTable' t k
 {-# INLINE readUserTable #-}
 
 readUserTable' :: TableName -> RowKey -> MVState p (Maybe (Columns Persistable))
-readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (asString k)
+readUserTable' t k = doPersist $ \p -> readValue p (userDataTable t) (DataKey $ asString k)
 {-# INLINE readUserTable' #-}
 
 readSysTable :: PactValue v => MVar (DbEnv p) -> DataTable -> Text -> IO (Maybe v)
-readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t k
+readSysTable e t k = runMVState e $ doPersist $ \p -> readValue p t (DataKey k)
 {-# INLINE readSysTable #-}
 
 resetTemp :: MVState p ()
@@ -215,7 +215,7 @@ resetTemp = txRecord .= M.empty >> txId .= Nothing
 writeSys :: (AsString k,PactValue v) => MVar (DbEnv p) -> WriteType -> TableId -> k -> v -> IO ()
 writeSys s wt tbl k v = runMVState s $ do
   debug "writeSys" (tbl,asString k)
-  doPersist $ \p -> writeValue p (DataTable tbl) wt (asString k) v
+  doPersist $ \p -> writeValue p (DataTable tbl) wt (DataKey $ asString k) v
   record (TxTable tbl) k v
 
 {-# INLINE writeSys #-}
@@ -224,7 +224,7 @@ writeUser :: MVar (DbEnv p) -> WriteType -> TableName -> RowKey -> Columns Persi
 writeUser s wt tn rk row = runMVState s $ do
   let ut = userDataTable tn
       tt = userTxRecord tn
-      rk' = asString rk
+      rk' = DataKey (asString rk)
   olds <- readUserTable' tn rk
   let ins = do
         debug "writeUser: insert" (tn,rk)
@@ -245,11 +245,12 @@ writeUser s wt tn rk row = runMVState s $ do
 {-# INLINE writeUser #-}
 
 record :: (AsString k, PactValue v) => TxTable -> k -> v -> MVState p ()
-record tt@(TxTable ttn) k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString ttn) (asString k) (toJSON v)]
+record tt k v = txRecord %= M.insertWith (flip (++)) tt [TxLog (asString (tableId tt)) (asString k) (toJSON v)]
+{-# INLINE record #-}
 
 getUserTableInfo' :: MVar (DbEnv p) -> TableName -> IO (ModuleName, KeySetName)
 getUserTableInfo' e tn = runMVState e $ do
-  r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (asString tn)
+  r <- doPersist $ \p -> readValue p (DataTable userTableInfo) (DataKey $ asString tn)
   case r of
     (Just (UserTableInfo mn ksn)) -> return (mn,ksn)
     Nothing -> throwDbError $ "getUserTableInfo: no such table: " ++ show tn
@@ -259,7 +260,7 @@ getUserTableInfo' e tn = runMVState e $ do
 createUserTable' :: MVar (DbEnv p) -> TableName -> ModuleName -> KeySetName -> IO ()
 createUserTable' s tn mn ksn = runMVState s $ do
   let uti = UserTableInfo mn ksn
-  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (asString tn) uti
+  doPersist $ \p -> writeValue p (DataTable userTableInfo) Insert (DataKey $ asString tn) uti
   record (TxTable userTableInfo) tn uti
   createTable' (userTable tn)
 

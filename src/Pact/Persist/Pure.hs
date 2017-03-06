@@ -43,8 +43,8 @@ makeLenses ''Tables
 
 
 data Db = Db {
-  _dataTables :: !(Tables Text),
-  _txTables :: !(Tables Int)
+  _dataTables :: !(Tables DataKey),
+  _txTables :: !(Tables TxKey)
   } deriving (Show)
 makeLenses ''Db
 instance Default Db where def = Db mempty mempty
@@ -92,7 +92,8 @@ persister = Persister {
         (Just _,Insert) -> throwDbError $ "Insert: value already at key: " ++ show k
         (Nothing,Update) -> throwDbError $ "Update: no value at key: " ++ show k
         _ -> return $ M.insert k (PValue v) m
-
+  ,
+  refreshConn = return . (,())
   }
 
 
@@ -153,10 +154,10 @@ _test = do
     run $ commitTx p
     run (readValue p dt "stuff") >>= (liftIO . (print :: Maybe Value -> IO ()))
     run (query p dt (Just (KQKey KEQ "stuff"))) >>=
-      (liftIO . (print :: [(Text,Value)] -> IO ()))
+      (liftIO . (print :: [(DataKey,Value)] -> IO ()))
     run (queryKeys p dt (Just (KQKey KGTE "stuff"))) >>= liftIO . print
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
-      (liftIO . (print :: [(Int,Value)] -> IO ()))
+      (liftIO . (print :: [(TxKey,Value)] -> IO ()))
     run $ beginTx p
     run $ writeValue p tt Update 2 (String "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
