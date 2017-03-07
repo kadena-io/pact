@@ -116,7 +116,7 @@ pollResultToReponse :: HM.HashMap RequestKey CommandResult -> ApiResponse PollRe
 pollResultToReponse m = ApiSuccess $ PollResponses $ HM.fromList $ map (second crToAr) $ HM.toList m
 
 crToAr :: CommandResult -> ApiResult
-crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId
+crToAr CommandResult {..} = ApiResult (toJSON _crResult) _crTxId Nothing
 
 log :: String -> Api ()
 log s = view aiLog >>= \f -> liftIO (f $ "[api]: " ++ s)
