@@ -65,7 +65,7 @@ data Command a = PublicCommand
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !Hash
-  } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
     toJSON (PublicCommand payload uSigs hsh) =

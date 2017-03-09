@@ -25,7 +25,7 @@ module Pact.Types.API
   , PollResponses(..)
   , ListenerRequest(..)
   , ListenerResponse
-  , ApiResult(..)
+  , ApiResult(..), arMetaData, arResult, arTxId
   ) where
 
 import Data.Aeson hiding (Success)
@@ -92,9 +92,11 @@ instance FromJSON Poll where
   parseJSON = lensyParseJSON 2
 
 data ApiResult = ApiResult {
-  _arResult :: Value,
-  _arTxId :: Maybe TxId
+  _arResult :: !Value,
+  _arTxId :: !(Maybe TxId),
+  _arMetaData :: !(Maybe Value)
   } deriving (Eq,Show,Generic)
+makeLenses ''ApiResult
 instance FromJSON ApiResult where parseJSON = lensyParseJSON 3
 instance ToJSON ApiResult where toJSON = lensyToJSON 3
 
