@@ -56,6 +56,8 @@ initPactService config@CommandConfig {..} = do
       klog "Initializing pure pact"
       ee <- initEvalEnv (initDbEnv _ccDebugFn Pure.persister Pure.initPureDb) pactdb
       rv <- newMVar (CommandState $ _eeRefStore ee)
+      klog "Creating Pact Schema"
+      createSchema (_eePactDbVar ee)
       return (PureVar $ _eePactDbVar ee,rv)
     Just f -> do
       klog "Initializing pact SQLLite"
