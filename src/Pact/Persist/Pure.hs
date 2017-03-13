@@ -9,8 +9,9 @@
 
 module Pact.Persist.Pure
   (
+    PValue (..),
     Tbl(..),tbl,
-    Tables(..),tbls,
+    Tables(..),tbls,tblType,
     Db(..),dataTables,txTables,
     PureDb(..),committed,temp,
     initPureDb,
