@@ -13,6 +13,7 @@
 
 module Pact.Server.PactService
   ( initPactService
+  , applyCmd
   ) where
 
 import Prelude hiding (log,exp)
