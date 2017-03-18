@@ -47,19 +47,22 @@ import Pact.Native (initEvalEnv)
 import qualified Pact.Persist.SQLite as PSL
 import qualified Pact.Persist.Pure as Pure
 
-type PactMVars = (DBVar,MVar CommandState)
 
 initPactService :: CommandConfig -> IO (CommandExecInterface PactRPC)
 initPactService config@CommandConfig {..} = do
   let klog s = _ccDebugFn ("[PactService] " ++ s)
-  mvars <- case _ccDbFile of
+      mkCEI :: MVar (DbEnv a) -> MVar CommandState -> CommandExecInterface PactRPC
+      mkCEI dbVar cmdVar = CommandExecInterface
+        { _ceiApplyCmd = \eMode cmd -> applyCmd config dbVar cmdVar eMode cmd (verifyCommand cmd)
+        , _ceiApplyPPCmd = applyCmd config dbVar cmdVar }
+  case _ccDbFile of
     Nothing -> do
       klog "Initializing pure pact"
       ee <- initEvalEnv (initDbEnv _ccDebugFn Pure.persister Pure.initPureDb) pactdb
       rv <- newMVar (CommandState $ _eeRefStore ee)
       klog "Creating Pact Schema"
       createSchema (_eePactDbVar ee)
-      return (PureVar $ _eePactDbVar ee,rv)
+      return $ mkCEI (_eePactDbVar ee) rv
     Just f -> do
       klog "Initializing pact SQLLite"
       dbExists <- doesFileExist f
@@ -70,15 +73,13 @@ initPactService config@CommandConfig {..} = do
       let v = _eePactDbVar ee
       klog "Creating Pact Schema"
       createSchema v
-      return (PSLVar v,rv)
-  return CommandExecInterface
-    { _ceiApplyCmd = \eMode cmd -> applyCmd config mvars eMode cmd (verifyCommand cmd)
-    , _ceiApplyPPCmd = applyCmd config mvars }
+      return $ mkCEI v rv
 
 
-applyCmd :: CommandConfig -> PactMVars -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
-applyCmd _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
-applyCmd conf@CommandConfig {..} (dbv,cv) exMode _ (ProcSucc cmd) = do
+
+applyCmd :: CommandConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
+applyCmd _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
+applyCmd conf@CommandConfig {..} dbv cv exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
   case r of
     Right cr -> do
@@ -96,13 +97,13 @@ exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
 exToTx Local = Nothing
 
-runPayload :: Command (Payload PactRPC) -> CommandM CommandResult
+runPayload :: Command (Payload PactRPC) -> CommandM p CommandResult
 runPayload c@PublicCommand{..} =
   case _pPayload _cmdPayload of
     (Exec pm) -> applyExec (cmdToRequestKey c) pm _cmdSigs
     (Continuation ym) -> applyContinuation ym _cmdSigs
 
-parse :: ExecutionMode -> Text -> CommandM [Exp]
+parse :: ExecutionMode -> Text -> CommandM p [Exp]
 parse (Transactional _) code =
     case AP.parseOnly Pact.exprs code of
       Right s -> return s
@@ -113,7 +114,7 @@ parse Local code =
       TF.Failure f -> throwCmdEx $ "Pact parse failed: " ++
                       displayS (renderCompact (TF._errDoc f)) ""
 
-applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM CommandResult
+applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM p CommandResult
 applyExec rk (ExecMsg code edata) ks = do
   CommandEnv {..} <- ask
   exps <- parse _ceMode code
@@ -134,9 +135,7 @@ applyExec rk (ExecMsg code edata) ks = do
                 , _eePactDb = pdb
                 , _eePactDbVar = mv
                 }
-      runP (PureVar mv) = runEval def (evalEnv pactdb mv) (execTerms _ceMode terms)
-      runP (PSLVar mv) = runEval def (evalEnv pactdb mv) (execTerms _ceMode terms)
-  (r,rEvalState') <- liftIO $ runP _ceDBVar
+  (r,rEvalState') <- liftIO $ runEval def (evalEnv pactdb _ceDBVar) (execTerms _ceMode terms)
   case r of
     Right t -> do
            when (_ceMode /= Local) $ liftIO $ modifyMVar_ _ceState $ \rs ->
@@ -156,5 +155,5 @@ execTerms mode terms = do
     Local -> evalRollbackTx def
   return er
 
-applyContinuation :: ContMsg -> [UserSig] -> CommandM CommandResult
+applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"

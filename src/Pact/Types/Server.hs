@@ -27,7 +27,6 @@ module Pact.Types.Server
   , CommandState(..), csRefStore
   , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
   , CommandM, runCommand, throwCmdEx
-  , DBVar(..)
   , History(..)
   , ExistenceResult(..)
   , PossiblyIncompleteResults(..)
@@ -61,8 +60,6 @@ import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
-import Pact.Persist.SQLite
-import Pact.Persist.Pure
 import Pact.PersistPactDb
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
@@ -85,12 +82,10 @@ data CommandState = CommandState {
     }
 $(makeLenses ''CommandState)
 
-data DBVar = PureVar (MVar (DbEnv PureDb)) | PSLVar (MVar (DbEnv SQLite))
-
-data CommandEnv = CommandEnv {
+data CommandEnv p = CommandEnv {
       _ceConfig :: CommandConfig
     , _ceMode :: ExecutionMode
-    , _ceDBVar :: DBVar
+    , _ceDBVar :: MVar (DbEnv p)
     , _ceState :: MVar CommandState
     }
 $(makeLenses ''CommandEnv)
@@ -100,9 +95,9 @@ instance Show CommandException where show (CommandException e) = e
 instance Exception CommandException
 
 
-type CommandM a = ReaderT CommandEnv IO a
+type CommandM p a = ReaderT (CommandEnv p) IO a
 
-runCommand :: CommandEnv -> CommandM a -> IO a
+runCommand :: CommandEnv p -> CommandM p a -> IO a
 runCommand e a = runReaderT a e
 
 throwCmdEx :: MonadThrow m => String -> m a
