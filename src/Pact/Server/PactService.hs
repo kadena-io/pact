@@ -11,10 +11,7 @@
 -- Service to provide Pact interpreter and backend.
 --
 
-module Pact.Server.PactService
-  ( initPactService
-  , applyCmd
-  ) where
+module Pact.Server.PactService where
 
 import Prelude hiding (log,exp)
 
