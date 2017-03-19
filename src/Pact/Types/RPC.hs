@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -15,14 +18,12 @@
 --
 
 module Pact.Types.RPC
---  (Command(..)
---  ) where
   where
 
 import Control.Applicative
+import Control.DeepSeq
 
 import Data.Aeson as A
-import Data.Text hiding (filter, null, all)
 
 
 import GHC.Generics hiding (from)
@@ -31,32 +32,33 @@ import Prelude hiding (log,exp)
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 
-data PactRPC =
-    Exec ExecMsg |
+data PactRPC c =
+    Exec (ExecMsg c) |
     Continuation ContMsg
-    deriving (Eq,Show)
-instance FromJSON PactRPC where
+    deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+
+instance NFData c => NFData (PactRPC c)
+instance FromJSON c => FromJSON (PactRPC c) where
     parseJSON =
         withObject "RPC" $ \o ->
             (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
-instance ToJSON PactRPC where
+instance ToJSON c => ToJSON (PactRPC c) where
     toJSON (Exec p) = object ["exec" .= p]
     toJSON (Continuation p) = object ["yield" .= p]
 
-class ToRPC a where
-    toRPC :: a -> PactRPC
-instance ToRPC ExecMsg where toRPC = Exec
-instance ToRPC ContMsg where toRPC = Continuation
 
-data ExecMsg = ExecMsg
-  { _pmCode :: Text
+
+data ExecMsg c = ExecMsg
+  { _pmCode :: c
   , _pmData :: Value
-  } deriving (Eq,Generic,Show)
-instance FromJSON ExecMsg where
+  } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
+
+instance NFData c => NFData (ExecMsg c)
+instance FromJSON c => FromJSON (ExecMsg c) where
     parseJSON =
         withObject "PactMsg" $ \o ->
             ExecMsg <$> o .: "code" <*> o .: "data"
-instance ToJSON ExecMsg where
+instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
 data ContMsg = ContMsg {
@@ -64,7 +66,9 @@ data ContMsg = ContMsg {
     , _cmStep :: Int
     , _cmRollback :: Bool
     }
-    deriving (Eq,Show)
+    deriving (Eq,Show,Generic)
+
+instance NFData ContMsg
 instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->

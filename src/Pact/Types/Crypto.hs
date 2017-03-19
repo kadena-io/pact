@@ -25,6 +25,7 @@ module Pact.Types.Crypto
 
 import Control.Applicative
 import Control.Monad.Reader
+import Control.DeepSeq
 
 import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
@@ -65,6 +66,8 @@ exportSignature (Sig s) = s
 
 data PPKScheme = ED25519
   deriving (Show, Eq, Ord, Generic)
+
+instance NFData PPKScheme
 -- default instance with only one value is empty array!!
 instance ToJSON PPKScheme where toJSON ED25519 = "ED25519"
 instance FromJSON PPKScheme where
@@ -90,6 +93,7 @@ newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
   show (Hash h) = show $ B16.encode h
+instance NFData Hash
 
 initialHash :: Hash
 initialHash = hash B.empty

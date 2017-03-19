@@ -62,6 +62,7 @@ module Pact.Types.Runtime
 
 import Control.Lens hiding (op,(.=))
 import Control.Applicative
+import Control.DeepSeq
 import Data.List
 import Control.Monad
 import Prelude hiding (exp)
@@ -354,7 +355,9 @@ data PactDb e = PactDb {
 -- | Transaction ids are non-negative 64-bit integers and
 --   are expected to be monotonically increasing.
 newtype TxId = TxId Word64
-    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON)
+    deriving (Eq,Ord,Enum,Num,Real,Integral,Bounded,Default,FromJSON,ToJSON,Generic)
+
+instance NFData TxId
 instance Show TxId where show (TxId s) = show s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 

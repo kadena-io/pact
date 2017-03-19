@@ -109,6 +109,7 @@ import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
+import Control.DeepSeq
 
 
 import Data.Serialize (Serialize)
@@ -120,14 +121,16 @@ import Pact.Types.Util
 data Parsed = Parsed {
   _pDelta :: Delta,
   _pLength :: Int
-  } deriving (Eq,Show,Ord)
+  } deriving (Eq,Show,Ord,Generic)
+
+instance NFData Parsed
 instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid,Generic,NFData)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c) | T.compareLength c maxLen == GT =
@@ -137,8 +140,9 @@ instance Pretty Code where
 
 -- | For parsed items, original code and parse info;
 -- for runtime items, nothing
-data Info = Info { _iInfo :: !(Maybe (Code,Parsed)) }
+data Info = Info { _iInfo :: !(Maybe (Code,Parsed)) } deriving (Generic)
 
+instance NFData Info
 -- show instance uses Trifecta renderings
 instance Show Info where
     show (Info Nothing) = ""
@@ -204,8 +208,10 @@ data Literal =
     LBool { _lBool :: !Bool } |
     LTime { _lTime :: !UTCTime }
           deriving (Eq,Generic)
-instance Serialize Literal
 
+
+instance Serialize Literal
+instance NFData Literal
 
 -- | ISO8601 Thyme format
 simpleISO8601 :: String
@@ -232,7 +238,7 @@ instance ToJSON Literal where
 
 
 newtype TypeName = TypeName Text
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
 
 -- | Pair a name and a type (arguments, bindings etc)
@@ -240,7 +246,9 @@ data Arg o = Arg {
   _aName :: Text,
   _aType :: Type o,
   _aInfo :: Info
-  } deriving (Eq,Ord,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+
+instance NFData o => NFData (Arg o)
 instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
@@ -249,7 +257,9 @@ instance (Pretty o) => Pretty (Arg o)
 data FunType o = FunType {
   _ftArgs :: [Arg o],
   _ftReturn :: Type o
-  } deriving (Eq,Ord,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+
+instance NFData o => NFData (FunType o)
 instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
 instance (Pretty o) => Pretty (FunType o) where
@@ -272,7 +282,9 @@ data PrimType =
   TyString |
   TyValue |
   TyKeySet
-  deriving (Eq,Ord)
+  deriving (Eq,Ord,Generic)
+
+instance NFData PrimType
 
 litToPrim :: Literal -> PrimType
 litToPrim LString {} = TyString
@@ -307,7 +319,9 @@ data SchemaType =
   TyTable |
   TyObject |
   TyBinding
-  deriving (Eq,Ord)
+  deriving (Eq,Ord,Generic)
+
+instance NFData SchemaType
 instance Show SchemaType where
   show TyTable = unpack tyTable
   show TyObject = unpack tyObject
@@ -315,14 +329,16 @@ instance Show SchemaType where
 instance Pretty SchemaType where pretty = text . show
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
-  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty)
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Hashable,Pretty,Generic,NFData)
 instance Show TypeVarName where show = unpack . _typeVarName
 
 -- | Type variables are namespaced for value types and schema types.
 data TypeVar v =
   TypeVar { _tvName :: TypeVarName, _tvConstraint :: [Type v] } |
   SchemaVar { _tvName :: TypeVarName }
-  deriving (Functor,Foldable,Traversable)
+  deriving (Functor,Foldable,Traversable,Generic)
+
+instance NFData v => NFData (TypeVar v)
 instance Eq (TypeVar v) where
   (TypeVar a _) == (TypeVar b _) = a == b
   (SchemaVar a) == (SchemaVar b) = a == b
@@ -352,7 +368,9 @@ data Type v =
   TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
-    deriving (Eq,Ord,Functor,Foldable,Traversable)
+    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+
+instance NFData v => NFData (Type v)
 
 instance (Show v) => Show (Type v) where
   show (TyPrim t) = show t
@@ -433,6 +451,9 @@ data Exp =
   -- | Special binding forms.
   EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
            deriving (Eq,Generic)
+
+instance NFData Exp
+
 makePrisms ''Exp
 
 

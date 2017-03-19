@@ -1,6 +1,8 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- |
 -- Module      :  Pact.Server.PactService
@@ -23,18 +25,17 @@ import Control.Monad.Reader
 
 import Data.Default
 import qualified Data.HashMap.Strict as HM
-
 import Data.Aeson as A
-import qualified Text.Trifecta as TF
 import qualified Data.Attoparsec.Text as AP
-import Text.PrettyPrint.ANSI.Leijen (renderCompact,displayS)
-
+import Data.Maybe
 import System.Directory
+import Data.ByteString (ByteString)
 
 import Pact.Types.Command
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
+import Pact.Types.Crypto
 
 import Pact.Compile as Pact
 import Pact.PersistPactDb
@@ -45,10 +46,10 @@ import qualified Pact.Persist.SQLite as PSL
 import qualified Pact.Persist.Pure as Pure
 
 
-initPactService :: CommandConfig -> IO (CommandExecInterface PactRPC)
+initPactService :: CommandConfig -> IO (CommandExecInterface (PactRPC ParsedCode))
 initPactService config@CommandConfig {..} = do
   let klog s = _ccDebugFn ("[PactService] " ++ s)
-      mkCEI :: MVar (DbEnv a) -> MVar CommandState -> CommandExecInterface PactRPC
+      mkCEI :: MVar (DbEnv a) -> MVar CommandState -> CommandExecInterface (PactRPC ParsedCode)
       mkCEI dbVar cmdVar = CommandExecInterface
         { _ceiApplyCmd = \eMode cmd -> applyCmd config dbVar cmdVar eMode cmd (verifyCommand cmd)
         , _ceiApplyPPCmd = applyCmd config dbVar cmdVar }
@@ -74,7 +75,28 @@ initPactService config@CommandConfig {..} = do
 
 
 
-applyCmd :: CommandConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a -> ProcessedCommand PactRPC -> IO CommandResult
+verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
+verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
+      (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
+      (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
+  where
+    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
+    parsePact :: Text -> Either String ParsedCode
+    parsePact code = ParsedCode code <$> AP.parseOnly Pact.exprs code
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+    ppcmdHash' = verifyHash _cmdHash _cmdPayload
+    mSigIssue = if all snd ppcmdSigs' then Nothing
+      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
+    toErrStr :: Either String a -> String
+    toErrStr (Right _) = ""
+    toErrStr (Left s) = s ++ "; "
+{-# INLINE verifyCommand #-}
+
+
+
+
+applyCmd :: CommandConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a ->
+            ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd conf@CommandConfig {..} dbv cv exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
@@ -94,27 +116,16 @@ exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
 exToTx Local = Nothing
 
-runPayload :: Command (Payload PactRPC) -> CommandM p CommandResult
+runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
 runPayload c@PublicCommand{..} =
   case _pPayload _cmdPayload of
     (Exec pm) -> applyExec (cmdToRequestKey c) pm _cmdSigs
     (Continuation ym) -> applyContinuation ym _cmdSigs
 
-parse :: ExecutionMode -> Text -> CommandM p [Exp]
-parse (Transactional _) code =
-    case AP.parseOnly Pact.exprs code of
-      Right s -> return s
-      Left e -> throwCmdEx $ "Pact parse failed: " ++ e
-parse Local code =
-    case TF.parseString Pact.exprs mempty (unpack code) of
-      TF.Success s -> return s
-      TF.Failure f -> throwCmdEx $ "Pact parse failed: " ++
-                      displayS (renderCompact (TF._errDoc f)) ""
 
-applyExec :: RequestKey -> ExecMsg -> [UserSig] -> CommandM p CommandResult
-applyExec rk (ExecMsg code edata) ks = do
+applyExec :: RequestKey -> ExecMsg ParsedCode -> [UserSig] -> CommandM p CommandResult
+applyExec rk (ExecMsg (ParsedCode code exps) edata) ks = do
   CommandEnv {..} <- ask
-  exps <- parse _ceMode code
   when (null exps) $ throwCmdEx "No expressions found"
   terms <- forM exps $ \exp -> case compile (mkTextInfo code) exp of
             Right r -> return r

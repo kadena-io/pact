@@ -26,6 +26,7 @@ import Data.Text.Encoding
 import qualified Data.Text as T
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
+import Control.DeepSeq
 
 instance Serialize Micro
 instance Serialize NominalDiffTime
@@ -42,6 +43,8 @@ instance Serialize A.Value where
     get = get >>= \g -> either fail return $ A.eitherDecode g
     {-# INLINE put #-}
     {-# INLINE get #-}
+
+instance NFData Delta
 
 
 -- | Atto DeltaParsing instance provides 'position' only (with no support for

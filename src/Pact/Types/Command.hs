@@ -24,8 +24,8 @@
 module Pact.Types.Command
   ( Command(..),mkCommand,mkCommand'
   , ProcessedCommand(..)
-  , verifyCommand
   , Payload(..)
+  , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
   , verifyUserSig
   , CommandError(..)
@@ -42,6 +42,7 @@ module Pact.Types.Command
 import Control.Applicative
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
+import Control.DeepSeq
 
 import Data.Aeson as A
 import Data.Maybe
@@ -78,6 +79,7 @@ instance (FromJSON a) => FromJSON (Command a) where
                 PublicCommand <$> (o .: "cmd")
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
+instance NFData a => NFData (Command a)
 
 mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Text -> a -> Command ByteString
 mkCommand creds nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce)
@@ -92,28 +94,21 @@ data ProcessedCommand a =
   ProcSucc !(Command (Payload a)) |
   ProcFail !String
   deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+instance NFData a => NFData (ProcessedCommand a)
 
-verifyCommand :: FromJSON a => Command ByteString -> ProcessedCommand a
-verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
-      (Right env', Right _, Nothing) -> ProcSucc $! orig { _cmdPayload = env' }
-      (e, h, s) -> ProcFail $! "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
-  where
-    !ppcmdPayload' = A.eitherDecodeStrict' _cmdPayload
-    !(ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
-    !ppcmdHash' = verifyHash _cmdHash _cmdPayload
-    mSigIssue = if all snd ppcmdSigs' then Nothing
-      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
-    toErrStr :: Either String a -> String
-    toErrStr (Right _) = ""
-    toErrStr (Left s) = s ++ "; "
-{-# INLINE verifyCommand #-}
-
+data ParsedCode = ParsedCode {
+  _pcCode :: !Text,
+  _pcExps :: ![Exp]
+  } deriving (Eq,Show,Generic)
+instance NFData ParsedCode
 
 
 data Payload a = Payload
   { _pPayload :: !a
   , _pNonce :: !Text
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
+
+instance NFData a => NFData (Payload a)
 instance ToJSON a => ToJSON (Payload a) where
   toJSON (Payload r rid) = object [ "payload" .= r, "nonce" .= rid]
 instance FromJSON a => FromJSON (Payload a) where
@@ -126,6 +121,7 @@ data UserSig = UserSig
   , _usPubKey :: !Text
   , _usSig :: !Text }
   deriving (Eq, Ord, Show, Generic)
+instance NFData UserSig
 
 
 instance Serialize UserSig
