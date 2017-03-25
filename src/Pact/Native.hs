@@ -28,13 +28,12 @@ import qualified Data.Attoparsec.Text as AP
 import Prelude hiding (exp)
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
-import Text.Parser.Token (natural)
 import Safe
 import Control.Arrow
 import Data.Foldable
-import Control.Applicative
 import Data.Aeson
 import Data.Maybe
+import Data.Decimal
 
 
 import Pact.Eval
@@ -127,7 +126,7 @@ langDefs =
      "Return reference tx id for pact execution."
 
     ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
-     "Parse KEY string value from top level of message data body as decimal.\
+     "Parse KEY string or number value from top level of message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
@@ -262,22 +261,31 @@ readMsg i [TLitString key] = parseMsgKey i "read-msg" key
 readMsg _ [] = TValue <$> view eeMsgBody <*> pure def
 readMsg i as = argsError i as
 
+-- | One-off type for 'readDecimal', not exported.
+newtype ParsedDecimal = ParsedDecimal Decimal
+instance FromJSON ParsedDecimal where
+  parseJSON (String s) =
+    ParsedDecimal <$> case AP.parseOnly number s of
+                        Right (LDecimal d) -> return d
+                        Right (LInteger i) -> return (fromIntegral i)
+                        _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
 
 readDecimal :: RNativeFun e
 readDecimal i [TLitString key] = do
-  (t :: T.Text) <- parseMsgKey i "read-decimal" key
-  case AP.parseOnly (negatable dec) t of
-    Right (n,r) -> return $ toTerm $ maybe r (const $ negate r) n
-    _ -> evalError' i $ "read-decimal: parse failure, expecting decimal text: " ++ show t
+  (ParsedDecimal a) <- parseMsgKey i "read-decimal" key
+  return $ toTerm a
 readDecimal i as = argsError i as
 
 -- | One-off type for 'readInteger', not exported.
 newtype ParsedInteger = ParsedInteger Integer
 instance FromJSON ParsedInteger where
   parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly (negatable natural) s of
-                        Right (n,r) -> return (maybe r (const (negate r)) n)
-                        _ -> fail $ "Failure parsing integer: " ++ show s
+    ParsedInteger <$> case AP.parseOnly number s of
+                        Right (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (Number n) = return $ ParsedInteger (round n)
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
@@ -286,9 +294,6 @@ readInteger i [TLitString key] = do
   (ParsedInteger a) <- parseMsgKey i "read-integer" key
   return $ toTerm a
 readInteger i as = argsError i as
-
-negatable :: AP.Parser a -> AP.Parser (Maybe Char,a)
-negatable p = (,) <$> optional (AP.char '-') <*> p
 
 enforce :: RNativeFun e
 enforce _ [TLiteral (LBool b) _,TLitString msg]

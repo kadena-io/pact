@@ -17,8 +17,8 @@
 module Pact.Compile
     (
      expr,exprs,exprsOnly
+    ,number
     ,compile
-    ,dec
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo,
     SyntaxError(..)
     )
@@ -47,6 +47,7 @@ import Data.Default
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.Text as T
+import Data.Char (digitToInt)
 
 import Pact.Types.Lang
 import Pact.Types.Util
@@ -59,7 +60,7 @@ symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"
 
 style :: CharParsing m => IdentifierStyle m
-style = IdentifierStyle "pact"
+style = IdentifierStyle "atom"
         (letter <|> symbols)
         (letter <|> digit <|> symbols)
         (HS.fromList ["true","false"])
@@ -75,17 +76,13 @@ expr = do
         end <- position
         let len = bytes end - bytes delt
         return $ Parsed delt (fromIntegral len)
-  TF.try (ELiteral . LDecimal <$> neg dec <*> inf <?> "Decimal literal")
+  TF.try (ELiteral <$> token number <*> inf <?> "number")
    <|>
-   (ELiteral . LInteger <$> neg natural <*> inf <?> "Integer literal")
+   (ELiteral . LString <$> stringLiteral <*> inf <?> "string")
    <|>
-   (ELiteral . LString <$> stringLiteral <*> inf <?> "String literal")
+   (ELiteral <$> bool <*> inf <?> "bool")
    <|>
-   (reserve style "true" >> ELiteral (LBool True) <$> inf <?> "Boolean true")
-   <|>
-   (reserve style "false" >> ELiteral (LBool False) <$> inf <?> "Boolean false")
-   <|>
-   (ESymbol <$> (char '\'' >> ident style) <*> inf <?> "Symbol literal")
+   (ESymbol <$> (char '\'' >> ident style) <*> inf <?> "symbol")
    <|>
    do
      a <- ident style
@@ -109,6 +106,23 @@ expr = do
      if all (== ":") ops then EObject kvs <$> inf
      else if all (== ":=") ops then EBinding kvs <$> inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
+
+number :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Literal
+number = do
+  neg <- maybe id (const negate) <$> optional (char '-')
+  num <- some digit
+  dec <- optional (char '.' *> some digit)
+  let strToNum start = foldl' (\x d -> 10*x + toInteger (digitToInt d)) start
+  case dec of
+    Nothing -> return $ LInteger (neg (strToNum 0 num))
+    Just d -> return $ LDecimal $ Decimal
+              (fromIntegral (length d))
+              (neg (strToNum (strToNum 0 num) d))
+{-# INLINE number #-}
+
+bool :: TokenParsing m => m Literal
+bool = symbol "true" *> pure (LBool True) <|> symbol "false" *> pure (LBool False)
+{-# INLINE bool #-}
 
 expPrimTy :: Exp -> Maybe (Type TypeName)
 expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
@@ -155,7 +169,7 @@ parseSchemaType tyRep sty =
 -- | Skip spaces or one-line comments
 spaces :: CharParsing m => m ()
 spaces = skipMany (skipSome space <|> oneLineComment)
-    where oneLineComment = TF.try (string ";") *> skipMany (satisfy (/= '\n'))
+    where oneLineComment = TF.try (string ";") *> skipMany (satisfy (/= '\n')) <?> "comment"
 {-# INLINE spaces #-}
 --space <?> "white space"
 
@@ -171,21 +185,10 @@ exprs = some (spaces *> expr <* spaces)
 exprsOnly :: Parser [Exp]
 exprsOnly = exprs >>= \r -> TF.eof >> return r
 
-
-neg :: (Monad m,CharParsing m,Num n) => m n -> m n
-neg p = TF.try (char '-' >> (negate <$> p)) <|> p
-
-dec :: (Monad m,CharParsing m) => m Decimal
-dec = do
-  i <- TF.some TF.digit
-  d <- TF.char '.'
-  e <- TF.some TF.digit
-  return (read (i ++ d:e))
-
 pairs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) =>
          m [(String,(Exp,Exp))]
 pairs =
-    braces $ (`sepBy` char ',')
+    braces ((`sepBy` char ',')
     (do
        spaces
        k <- expr
@@ -195,7 +198,7 @@ pairs =
        v <- expr
        spaces
        return (op,(k,v))
-    ) <?> "curly-brace pairs"
+    )) <?> "object"
 
 
 
