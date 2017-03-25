@@ -42,6 +42,8 @@ instance FromJSON c => FromJSON (PactRPC c) where
     parseJSON =
         withObject "RPC" $ \o ->
             (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
+    {-# INLINE parseJSON #-}
+
 instance ToJSON c => ToJSON (PactRPC c) where
     toJSON (Exec p) = object ["exec" .= p]
     toJSON (Continuation p) = object ["yield" .= p]
@@ -58,6 +60,8 @@ instance FromJSON c => FromJSON (ExecMsg c) where
     parseJSON =
         withObject "PactMsg" $ \o ->
             ExecMsg <$> o .: "code" <*> o .: "data"
+    {-# INLINE parseJSON #-}
+
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
@@ -73,5 +77,7 @@ instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
             ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback"
+    {-# INLINE parseJSON #-}
+
 instance ToJSON ContMsg where
     toJSON (ContMsg t s r) = object [ "txid" .= t, "step" .= s, "rollback" .= r]

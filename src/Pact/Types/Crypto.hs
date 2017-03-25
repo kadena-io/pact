@@ -59,7 +59,11 @@ instance Serialize Signature where
 instance ToJSON Signature where
   toJSON (Sig s) = toB16JSON s
 instance FromJSON Signature where
-  parseJSON s = Sig <$> parseB16JSON s
+  parseJSON = withText "Signature" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText Signature where
+  parseText s = Sig <$> parseB16Text s
+  {-# INLINE parseText #-}
 
 exportSignature :: Signature -> ByteString
 exportSignature (Sig s) = s
@@ -74,6 +78,7 @@ instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" $ \s -> case s of
     "ED25519" -> return ED25519
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
+  {-# INLINE parseJSON #-}
 instance Serialize PPKScheme
 
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
@@ -114,7 +119,11 @@ hashToB16Text (Hash h) = toB16Text h
 instance ToJSON Hash where
   toJSON = String . hashToB16Text
 instance FromJSON Hash where
-  parseJSON s = Hash <$> parseB16JSON s
+  parseJSON = withText "Hash" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText Hash where
+  parseText s = Hash <$> parseB16Text s
+  {-# INLINE parseText #-}
 
 valid :: Hash -> PublicKey -> Signature -> Bool
 valid (Hash h) = Ed25519.valid h
@@ -138,9 +147,13 @@ instance Ord PublicKey where
 instance ToJSON PublicKey where
   toJSON = toB16JSON . exportPublic
 instance FromJSON PublicKey where
-  parseJSON s = do
-    s' <- parseB16JSON s
+  parseJSON = withText "PublicKey" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText PublicKey where
+  parseText s = do
+    s' <- parseB16Text s
     failMaybe ("Public key import failed: " ++ show s) $ importPublic s'
+  {-# INLINE parseText #-}
 
 instance (ToJSON k,ToJSON v) => ToJSON (Map k v) where
   toJSON = toJSON . Map.toList
@@ -154,9 +167,13 @@ instance Ord PrivateKey where
 instance ToJSON PrivateKey where
   toJSON = toB16JSON . exportPrivate
 instance FromJSON PrivateKey where
-  parseJSON s = do
-    s' <- parseB16JSON s
+  parseJSON = withText "PrivateKey" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText PrivateKey where
+  parseText s = do
+    s' <- parseB16Text s
     failMaybe ("Private key import failed: " ++ show s) $ importPrivate s'
+  {-# INLINE parseText #-}
 
 instance Serialize PublicKey where
   put s = S.putByteString (exportPublic s)

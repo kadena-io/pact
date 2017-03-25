@@ -29,6 +29,13 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens
 
+class ParseText a where
+  parseText :: Text -> Parser a
+
+fromText :: ParseText a => Text -> Result a
+fromText = parse parseText
+{-# INLINE fromText #-}
+
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
@@ -47,11 +54,13 @@ lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
 
 parseB16JSON :: Value -> Parser ByteString
 parseB16JSON = withText "Base16" parseB16Text
+{-# INLINE parseB16JSON #-}
 
 parseB16Text :: Text -> Parser ByteString
 parseB16Text t = case B16.decode (encodeUtf8 t) of
                  (s,leftovers) | leftovers == B.empty -> return s
                                | otherwise -> fail $ "Base16 decode failed: " ++ show t
+{-# INLINE parseB16Text #-}
 
 toB16JSON :: ByteString -> Value
 toB16JSON s = String $ toB16Text s

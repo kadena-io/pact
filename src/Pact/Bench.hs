@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Pact.Bench where
 
@@ -5,14 +6,29 @@ import Criterion.Main
 
 import qualified Data.Attoparsec.Text as APT
 import Pact.Compile
-import Data.Text (pack)
+import Pact.Types.Lang
+import Data.Text (Text,pack,unpack)
+import Control.Exception
+import Control.Monad
+import Control.Arrow
+import Data.Monoid
+import Data.Default
+import Pact.Server.PactService
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
+import Pact.Types.Command
+import Control.DeepSeq
+import Data.Aeson
+import Data.Aeson.Types
+import Pact.Types.Crypto
+import Pact.Types.RPC
 
 
-longStr :: Int -> String
-longStr n = "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
+longStr :: Int -> Text
+longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
 
-exps :: [Either (String,String) String]
-exps = [
+exps :: [(String,Text)]
+exps = map (either id (unpack &&& id)) [
   Left ("longStr 10",longStr 10),
   Left ("longStr 100", longStr 100),
   Left ("longStr 1000", longStr 1000),
@@ -22,18 +38,38 @@ exps = [
   Right "(+ 1 2) (foo.bar true -23.345875)"
   ]
 
-benchParse :: String -> (String -> a) -> (a -> b) -> Benchmark
-benchParse n f p =
-  let conv (Left (m,t)) = (m,f t)
-      conv (Right t) = (t,f t)
-  in bgroup ("parser-" ++ n) $ (`map` (conv <$> exps)) $ \(bname,ex) -> bench bname $ whnf p ex
+conv :: (t -> t1) -> Either (t, t) t -> (t, t1)
+conv f (Left (m,t)) = (m,f t)
+conv f (Right t) = (t,f t)
 
-parseAttoText :: Benchmark
-parseAttoText = benchParse "attoText" pack $ \e -> case APT.parseOnly exprs e of
-      Right s -> s
-      Left er -> error $ "Pact parse failed: " ++ er
+benchParse :: Benchmark
+benchParse = bgroup "parse" $ (`map` exps) $
+             \(bname,ex) -> bench bname $ (`whnf` ex) $ \e -> case APT.parseOnly exprs e of
+               Right s -> s
+               Left er -> error $ "Pact parse failed: " ++ er
+
+benchCompile :: [(String,[Exp])] -> Benchmark
+benchCompile es = bgroup "compile" $ (`map` es) $
+  \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
+
+benchVerify :: [(String,Command ByteString)] -> Benchmark
+benchVerify cs = bgroup "verify" $ (`map` cs) $
+  \(bname,c) -> bench bname $ nf verifyCommand c
+
+eitherDie :: Either String a -> IO a
+eitherDie = either (throwIO . userError) (return $!)
+
+fromJSON' v = case fromJSON v of Error s -> Left s; Success s -> Right s
 
 main :: IO ()
-main = defaultMain [
-  parseAttoText
-  ]
+main = do
+  !pub <- eitherDie $ fromJSON' $ String "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+  !priv <- eitherDie $ fromJSON' $ String "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  !parsedExps <- mapM (mapM (eitherDie . APT.parseOnly exprs)) exps
+  let !cmds = force $ (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
+              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce"))
+  defaultMain [
+    benchParse,
+    benchCompile parsedExps,
+    benchVerify cmds
+    ]

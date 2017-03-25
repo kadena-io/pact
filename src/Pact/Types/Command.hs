@@ -79,6 +79,8 @@ instance (FromJSON a) => FromJSON (Command a) where
                 PublicCommand <$> (o .: "cmd")
                               <*> (o .: "sigs" >>= parseJSON)
                               <*> (o .: "hash")
+    {-# INLINE parseJSON #-}
+
 instance NFData a => NFData (Command a)
 
 mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Text -> a -> Command ByteString
@@ -114,6 +116,7 @@ instance ToJSON a => ToJSON (Payload a) where
 instance FromJSON a => FromJSON (Payload a) where
   parseJSON = withObject "Payload" $ \o ->
                     Payload <$> o .: "payload" <*> o .: "nonce"
+  {-# INLINE parseJSON #-}
 
 
 data UserSig = UserSig
@@ -131,13 +134,14 @@ instance ToJSON UserSig where
 instance FromJSON UserSig where
   parseJSON = withObject "UserSig" $ \o ->
     UserSig . fromMaybe ED25519 <$> o .:? "scheme" <*> o .: "pubKey" <*> o .: "sig"
+  {-# INLINE parseJSON #-}
 
 
 
 
 verifyUserSig :: Hash -> UserSig -> Bool
 verifyUserSig h UserSig{..} = case _usScheme of
-  ED25519 -> case (fromJSON (String _usPubKey),fromJSON (String _usSig)) of
+  ED25519 -> case (fromText _usPubKey,fromText _usSig) of
     (Success pk,Success sig) -> valid h pk sig
     _ -> False
 {-# INLINE verifyUserSig #-}
@@ -193,9 +197,7 @@ requestKeyToB16Text (RequestKey h) = hashToB16Text h
 
 
 newtype RequestKey = RequestKey { unRequestKey :: Hash}
-  deriving (Eq, Ord, Generic, Serialize, Hashable)
-instance ToJSON RequestKey where toJSON = String . requestKeyToB16Text
-instance FromJSON RequestKey where parseJSON v = RequestKey <$> parseJSON v
+  deriving (Eq, Ord, Generic, Serialize, Hashable, ParseText, FromJSON, ToJSON)
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
