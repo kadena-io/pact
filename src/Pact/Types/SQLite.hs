@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -27,6 +28,7 @@ module Pact.Types.SQLite
   , execs_
   , exec'
   , Pragma(..), runPragmas, fastNoJournalPragmas
+  , SQLiteConfig (..)
   ) where
 
 import Database.SQLite3.Direct as SQ3
@@ -35,10 +37,19 @@ import qualified Data.ByteString as BS
 import Control.Monad
 import Data.Int
 import Data.Aeson
+import GHC.Generics
 
 import Prelude hiding (log)
 import Control.Monad.Catch
 
+
+
+data SQLiteConfig = SQLiteConfig {
+  dbFile :: FilePath,
+  pragmas :: [Pragma]
+  } deriving (Eq,Show,Generic)
+instance FromJSON SQLiteConfig
+instance ToJSON SQLiteConfig
 
 -- | Statement input types
 data SType = SInt Int64 | SDouble Double | SText Utf8 | SBlob BS.ByteString deriving (Eq,Show)

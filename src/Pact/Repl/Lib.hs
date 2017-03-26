@@ -45,6 +45,7 @@ import Pact.PersistPactDb
 import Data.Semigroup
 import Pact.Typechecker
 import Pact.Types.Typecheck
+import Pact.Types.Logger
 
 
 
@@ -63,11 +64,10 @@ data LibState = LibState {
 }
 makeLenses ''LibState
 
-initLibState :: Bool -> IO LibState
-initLibState dbg = do
+initLibState :: Loggers -> IO LibState
+initLibState loggers = do
   m <- newMVar (DbEnv def persister
-                (if dbg then (\a b -> putStrLn $ a ++ ": " ++ show b)
-                 else (\_ _ -> return ()))
+                (newLogger loggers "Repl")
                 def def)
   createSchema m
   return (LibState m Noop def)

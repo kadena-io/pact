@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -6,6 +7,7 @@ module Pact.Persist.SQLite
   (SQLite(..),
    initSQLite,closeSQLite,
    persister,
+   SQLiteConfig(..),
    Pragma(..))
   where
 
@@ -26,6 +28,7 @@ import Control.Monad.State
 import Pact.Persist
 import Pact.Types.SQLite
 import Pact.Types.Util (AsString(..))
+import Pact.Types.Logger hiding (Logging (..))
 
 
 data TableStmts = TableStmts
@@ -41,15 +44,10 @@ data TxStmts = TxStmts
   , tRollback :: Statement
   }
 
-data SQLiteConfig = SQLiteConfig {
-  dbFile :: FilePath,
-  pragmas :: [Pragma]
-  }
-
 data SQLite = SQLite
   { conn :: Database
   , config :: SQLiteConfig
-  , log :: String -> IO ()
+  , logger :: Logger
   , tableStmts :: M.Map Utf8 TableStmts
   , txStmts :: TxStmts
   }
@@ -127,9 +125,12 @@ kTys :: Table k -> KeyTys k
 kTys DataTable {} = kTextTys
 kTys TxTable {} = kIntTys
 
+log :: SQLite -> String -> String -> IO ()
+log e = logLog (logger e)
+
 createTable' :: Table k -> SQLite -> IO SQLite
 createTable' t e = do
-  log e $ "createTable: " ++ show t
+  log e "DDL" $ "createTable: " ++ show t
   let tn = tableName t
   exec_ (conn e) $
     "CREATE TABLE " <> tn <>
@@ -183,20 +184,20 @@ writeData' t wt k v e = do
   getStmts e t >>= \s -> execs (ws s) [inFun (kTys t) k,encodeBlob v]
 
 
-initSQLite :: [Pragma] -> (String -> IO ()) -> FilePath -> IO SQLite
-initSQLite ps logFn f = do
-  c <- liftEither $ open (fromString f)
+initSQLite :: SQLiteConfig -> InitPersist SQLite
+initSQLite conf@SQLiteConfig {..} loggers = do
+  c <- liftEither $ open (fromString dbFile)
   ts <- TxStmts <$> prepStmt c "BEGIN TRANSACTION"
          <*> prepStmt c "COMMIT TRANSACTION"
          <*> prepStmt c "ROLLBACK TRANSACTION"
   let s = SQLite {
         conn = c,
-        config = SQLiteConfig f ps,
-        log = \msg -> logFn $ "[Persist-SQLite] " ++ msg,
+        config = conf,
+        logger = newLogger loggers "Persist-SQLite",
         tableStmts = M.empty,
         txStmts = ts
         }
-  runPragmas (conn s) ps
+  runPragmas (conn s) pragmas
   return s
 
 closeSQLite :: SQLite -> IO (Either String ())
@@ -205,14 +206,13 @@ closeSQLite = fmap (either (Left . show) Right) . close . conn
 refresh :: SQLite -> IO SQLite
 refresh s = do
   void $ closeSQLite s
-  s' <- initSQLite (pragmas (config s)) (return . const ()) (dbFile (config s))
-  return $ s' { log = log s }
+  initSQLite (config s) (constLoggers (logger s))
 
 _test :: IO ()
 _test = do
   let db = "log/test.sqlite"
   doesFileExist db >>= \b -> when b (removeFile db)
-  e <- initSQLite [] putStrLn db
+  e <- initSQLite (SQLiteConfig db []) alwaysLog
   let p = persister
       dt = DataTable "data"
       tt = TxTable "tx"

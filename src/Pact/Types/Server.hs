@@ -23,7 +23,7 @@
 --
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
-  , CommandConfig(..), ccDbFile, ccDebugFn, ccEntity, ccPragmas
+  , CommandConfig(..), ccSqlite, ccPact
   , CommandState(..), csRefStore
   , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
   , CommandM, runCommand, throwCmdEx
@@ -61,6 +61,7 @@ import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
 import Pact.PersistPactDb
+import Pact.Types.RPC
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
 userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
@@ -70,10 +71,8 @@ userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 
 
 data CommandConfig = CommandConfig {
-      _ccDbFile :: Maybe FilePath
-    , _ccDebugFn :: String -> IO ()
-    , _ccEntity :: Text
-    , _ccPragmas :: [Pragma]
+      _ccSqlite :: Maybe SQLiteConfig
+    , _ccPact :: PactConfig
     }
 $(makeLenses ''CommandConfig)
 
@@ -83,7 +82,7 @@ data CommandState = CommandState {
 $(makeLenses ''CommandState)
 
 data CommandEnv p = CommandEnv {
-      _ceConfig :: CommandConfig
+      _ceConfig :: PactConfig
     , _ceMode :: ExecutionMode
     , _ceDBVar :: MVar (DbEnv p)
     , _ceState :: MVar CommandState

@@ -32,6 +32,13 @@ import Prelude hiding (log,exp)
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 
+
+data PactConfig = PactConfig {
+  pactEntity :: Text
+  } deriving (Eq,Show,Generic)
+instance FromJSON PactConfig
+instance ToJSON PactConfig
+
 data PactRPC c =
     Exec (ExecMsg c) |
     Continuation ContMsg

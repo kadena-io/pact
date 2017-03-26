@@ -33,14 +33,17 @@ import Data.Monoid
 import Data.Word (Word16)
 import GHC.Generics
 import System.Log.FastLogger
+import Data.Default
 
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (Update,(<>))
 import Pact.Types.SQLite
 import Pact.Types.Server
+import Pact.Types.Logger
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
+import Pact.Types.RPC
 
 data Config = Config {
   _port :: Word16,
@@ -66,13 +69,15 @@ serve :: FilePath -> IO ()
 serve configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
-      putStrLn $ usage
+      putStrLn usage
       throwIO (userError ("Error loading config file: " ++ show e))
     Right v -> return v
   (inC,histC) <- initChans
   replayFromDisk' <- ReplayFromDisk <$> newEmptyMVar
   debugFn <- if _verbose then initFastLogger else return (return . const ())
-  let cmdConfig = CommandConfig (fmap (++ "/pact.sqlite") _persistDir) debugFn "entity" _pragmas
+  let cmdConfig = CommandConfig
+          (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
+          (PactConfig "entity")
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   link =<< async (runHistoryService histConf Nothing)
@@ -86,7 +91,7 @@ initFastLogger = do
 
 startCmdThread :: CommandConfig -> InboundPactChan -> HistoryChannel -> ReplayFromDisk -> (String -> IO ()) -> IO ()
 startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
-  CommandExecInterface {..} <- initPactService cmdConfig
+  CommandExecInterface {..} <- initPactService cmdConfig (initLoggers debugFn doLog def)
   void $ (`runStateT` (0 :: TxId)) $ do
     -- we wait for the history service to light up, possibly giving us backups from disk to replay
     replayFromDisk' <- liftIO $ takeMVar rp

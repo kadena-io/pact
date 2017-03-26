@@ -36,6 +36,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Crypto
+import Pact.Types.Logger
 
 import Pact.Compile as Pact
 import Pact.PersistPactDb
@@ -45,33 +46,41 @@ import Pact.Native (initEvalEnv)
 import qualified Pact.Persist.SQLite as PSL
 import qualified Pact.Persist.Pure as Pure
 
+mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> InitDbEnv PSL.SQLite
+mkSQLiteEnv initLog deleteOldFile c loggers = do
+  when deleteOldFile $ do
+    dbExists <- doesFileExist (PSL.dbFile c)
+    when dbExists $ do
+      logLog initLog "INIT" "Deleting Existing Pact DB File"
+      removeFile (PSL.dbFile c)
+  initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
 
-initPactService :: CommandConfig -> IO (CommandExecInterface (PactRPC ParsedCode))
-initPactService config@CommandConfig {..} = do
-  let klog s = _ccDebugFn ("[PactService] " ++ s)
-      mkCEI :: MVar (DbEnv a) -> MVar CommandState -> CommandExecInterface (PactRPC ParsedCode)
-      mkCEI dbVar cmdVar = CommandExecInterface
-        { _ceiApplyCmd = \eMode cmd -> applyCmd config dbVar cmdVar eMode cmd (verifyCommand cmd)
-        , _ceiApplyPPCmd = applyCmd config dbVar cmdVar }
-  case _ccDbFile of
+mkPureEnv :: InitDbEnv Pure.PureDb
+mkPureEnv loggers = return $ initDbEnv loggers Pure.persister Pure.initPureDb
+
+
+initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
+initPactService CommandConfig {..} loggers = do
+  let logger = newLogger loggers "PactService"
+      klog s = logLog logger "INIT" s
+      mkCEI :: DbEnv a -> IO (CommandExecInterface (PactRPC ParsedCode))
+      mkCEI p = do
+        ee <- initEvalEnv p pactdb
+        cmdVar <- newMVar (CommandState $ _eeRefStore ee)
+        let dbVar = _eePactDbVar ee
+        klog "Creating Pact Schema"
+        createSchema dbVar
+        return CommandExecInterface
+          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccPact dbVar cmdVar eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccPact dbVar cmdVar }
+  case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
-      ee <- initEvalEnv (initDbEnv _ccDebugFn Pure.persister Pure.initPureDb) pactdb
-      rv <- newMVar (CommandState $ _eeRefStore ee)
-      klog "Creating Pact Schema"
-      createSchema (_eePactDbVar ee)
-      return $ mkCEI (_eePactDbVar ee) rv
-    Just f -> do
+      mkPureEnv loggers >>= mkCEI
+    Just sqlc -> do
       klog "Initializing pact SQLLite"
-      dbExists <- doesFileExist f
-      when dbExists $ klog "Deleting Existing Pact DB File" >> removeFile f
-      p <- initDbEnv _ccDebugFn PSL.persister <$> PSL.initSQLite _ccPragmas (\s -> _ccDebugFn $ "[Pact SQLite] " ++ s) f
-      ee <- initEvalEnv p pactdb
-      rv <- newMVar (CommandState $ _eeRefStore ee)
-      let v = _eePactDbVar ee
-      klog "Creating Pact Schema"
-      createSchema v
-      return $ mkCEI v rv
+      mkSQLiteEnv logger True sqlc loggers >>= mkCEI
+
 
 
 
@@ -95,17 +104,17 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
 
 
 
-applyCmd :: CommandConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a ->
+applyCmd :: Logger -> PactConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
-applyCmd _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
-applyCmd conf@CommandConfig {..} dbv cv exMode _ (ProcSucc cmd) = do
+applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
+applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
   case r of
     Right cr -> do
-      _ccDebugFn $ "[PactService]: success for requestKey: " ++ show (cmdToRequestKey cmd)
+      logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
       return cr
     Left e -> do
-      _ccDebugFn $ "[PactService]: tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
+      logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
       return $ jsonResult exMode (cmdToRequestKey cmd) $
                CommandError "Command execution failed" (Just $ show e)
 
@@ -138,7 +147,7 @@ applyExec rk (ExecMsg (ParsedCode code exps) edata) ks = do
                 , _eeMsgSigs = userSigsToPactKeySet ks
                 , _eeMsgBody = edata
                 , _eeTxId = tid
-                , _eeEntity = _ccEntity _ceConfig
+                , _eeEntity = pactEntity _ceConfig
                 , _eePactStep = Nothing
                 , _eePactDb = pdb
                 , _eePactDbVar = mv

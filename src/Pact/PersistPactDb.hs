@@ -20,7 +20,7 @@
 
 module Pact.PersistPactDb
   ( DbEnv(..),db,persist,log,txRecord,txId
-  , initDbEnv
+  , initDbEnv, InitDbEnv
   , pactdb
   , createSchema
   , createUserTable'
@@ -46,22 +46,25 @@ import Data.Maybe
 
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Persist as P
+import Pact.Types.Logger
 
 -- | Environment/MVar variable for pactdb impl.
 data DbEnv p = DbEnv
   { _db :: p
   , _persist :: Persister p
-  , _log :: forall s . Show s => (String -> s -> IO ())
+  , _logger :: Logger
   , _txRecord :: M.Map TxTable [TxLog]
   , _txId :: Maybe TxId
   }
 makeLenses ''DbEnv
 
-initDbEnv :: (String -> IO ()) -> Persister p -> p -> DbEnv p
-initDbEnv logFn funrec p = DbEnv {
+type InitDbEnv p = Loggers -> IO (DbEnv p)
+
+initDbEnv :: Loggers -> Persister p -> p -> DbEnv p
+initDbEnv loggers funrec p = DbEnv {
   _db = p,
   _persist = funrec,
-  _log = \s a -> logFn ("[PactPersist] " ++ s ++ ": " ++ show a),
+  _logger = newLogger loggers "PactPersist",
   _txRecord = M.empty,
   _txId = Nothing
   }
@@ -95,6 +98,9 @@ userTableInfo :: TableId
 userTableInfo = "SYS_usertables"
 
 type MVState p a = StateT (DbEnv p) IO a
+instance Logging (StateT (DbEnv p) IO) where
+  log c s = use logger >>= \l -> liftIO $ logLog l c s
+  {-# INLINE log #-}
 
 runMVState :: MVar (DbEnv p) -> MVState p a -> IO a
 runMVState v a = modifyMVar v (runStateT a >=> \(r,m') -> return (m',r))
@@ -152,7 +158,7 @@ doBegin :: Maybe TxId -> MVState p ()
 doBegin tidm = do
   use txId >>= \t -> case t of
     Just _ -> do
-      debug "beginTx" ("In transaction, rolling back" :: String)
+      logError "beginTx: In transaction, rolling back"
       rollback
     Nothing -> return ()
   resetTemp
@@ -186,13 +192,13 @@ convUserTxLogs _ = id
 
 
 debug :: Show a => String -> a -> MVState p ()
-debug s a = use log >>= \l -> liftIO $ l s a
+debug s a = logDebug $ s ++ ": " ++ show a
 
 rollback :: MVState p ()
 rollback = do
   (r :: Either SomeException ()) <- try (doPersist P.rollbackTx)
   case r of
-    Left e -> debug "rollback" ("ERROR: " ++ show e)
+    Left e -> logError $ "rollback: " ++ show e
     Right _ -> return ()
   resetTemp
 
@@ -266,7 +272,7 @@ createUserTable' s tn mn ksn = runMVState s $ do
 
 createTable' :: TableId -> MVState p ()
 createTable' tn = do
-  debug "createTable" tn
+  log "DDL" $ "createTable: " ++ show tn
   doPersist $ \p -> P.createTable p (DataTable tn)
   doPersist $ \p -> P.createTable p (TxTable tn)
 

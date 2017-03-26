@@ -42,6 +42,7 @@ library
                      , Pact.Repl.Lib
                      , Pact.Typechecker
                      , Pact.Types.Lang
+                     , Pact.Types.Logger
                      , Pact.Types.Runtime
                      , Pact.Types.Typecheck
                      , Pact.Types.Orphans

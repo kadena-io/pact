@@ -16,7 +16,8 @@ module Pact.Persist
    KeyQuery(..),kAnd,kOr,compileQuery,
    Persister(..),
    WriteType(..),throwDbError,
-   Text
+   Text,
+   InitPersist
    ) where
 
 import Data.Aeson
@@ -26,6 +27,10 @@ import Data.Hashable
 import Data.Typeable
 
 import Pact.Types.Runtime hiding ((<>))
+import Pact.Types.Logger
+
+-- | Shape of a DB init function.
+type InitPersist p = Loggers -> IO p
 
 type Persist s a = s -> IO (s,a)
 

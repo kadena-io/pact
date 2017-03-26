@@ -12,11 +12,12 @@ import qualified Data.Map.Strict as M
 import Pact.PersistPactDb
 import Pact.Persist
 import Pact.Types.Runtime
-import Pact.Persist.Pure (initPureDb,persister)
+import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Data.Hashable
+import Pact.Types.Logger
 
-runRegression :: DbEnv p -> IO ()
+runRegression :: DbEnv p -> IO (MVar (DbEnv p))
 runRegression p = do
   v <- newMVar p
   createSchema v
@@ -54,6 +55,7 @@ runRegression p = do
   _rollbackTx pactdb v
   assertEquals' "rollback erases key2" Nothing $ _readRow pactdb usert "key2" v
   assertEquals' "keys" ["key1"] $ _keys pactdb user1 v
+  return v
 
 toTerm' :: ToTerm a => a -> Term Name
 toTerm' = toTerm
@@ -77,7 +79,7 @@ assertEquals msg a b | a == b = return ()
 assertEquals' :: (Eq a, Show a) => String -> a -> IO a -> IO ()
 assertEquals' msg a b = assertEquals msg a =<< b
 
-regressPure :: IO ()
+regressPure :: IO (MVar (DbEnv PureDb))
 regressPure = do
-  let e = initDbEnv putStrLn persister initPureDb
+  let e = initDbEnv alwaysLog persister initPureDb
   runRegression e
