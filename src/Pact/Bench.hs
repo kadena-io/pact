@@ -5,23 +5,20 @@ module Pact.Bench where
 import Criterion.Main
 
 import qualified Data.Attoparsec.Text as APT
+import Pact.Parse
 import Pact.Compile
 import Pact.Types.Lang
-import Data.Text (Text,pack,unpack)
 import Control.Exception
-import Control.Monad
 import Control.Arrow
-import Data.Monoid
-import Data.Default
 import Pact.Server.PactService
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Pact.Types.Command
 import Control.DeepSeq
 import Data.Aeson
-import Data.Aeson.Types
 import Pact.Types.Crypto
 import Pact.Types.RPC
+import Pact.Types.Util
 
 
 longStr :: Int -> Text
@@ -59,12 +56,10 @@ benchVerify cs = bgroup "verify" $ (`map` cs) $
 eitherDie :: Either String a -> IO a
 eitherDie = either (throwIO . userError) (return $!)
 
-fromJSON' v = case fromJSON v of Error s -> Left s; Success s -> Right s
-
 main :: IO ()
 main = do
-  !pub <- eitherDie $ fromJSON' $ String "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
-  !priv <- eitherDie $ fromJSON' $ String "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  !pub <- eitherDie $ fromText' "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+  !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !parsedExps <- mapM (mapM (eitherDie . APT.parseOnly exprs)) exps
   let !cmds = force $ (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce"))

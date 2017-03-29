@@ -34,7 +34,7 @@ import System.Directory
 import System.FilePath
 
 import Pact.Repl
-import Pact.Compile
+import Pact.Parse
 import Pact.Types.Runtime hiding ((<>))
 import Pact.Server.Server
 import Pact.Types.Version

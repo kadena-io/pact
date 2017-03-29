@@ -43,7 +43,7 @@ import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
 import Pact.Types.Runtime
-import Pact.Compile
+import Pact.Parse
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -296,9 +296,9 @@ readInteger i [TLitString key] = do
 readInteger i as = argsError i as
 
 enforce :: RNativeFun e
-enforce _ [TLiteral (LBool b) _,TLitString msg]
+enforce i [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
-    | otherwise = failTx $ unpack msg
+    | otherwise = failTx (_faInfo i) $ unpack msg
 enforce i as = argsError i as
 {-# INLINE enforce #-}
 

@@ -11,16 +11,13 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Parser and compiler.
+-- Compiler from 'Exp' -> 'Term Name'
 --
 
 module Pact.Compile
     (
-     expr,exprs,exprsOnly
-    ,number
-    ,compile
-    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo,
-    SyntaxError(..)
+     compile,compileExps
+    ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
     )
 
 where
@@ -39,174 +36,16 @@ import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
 import Control.Exception
 import Data.String
-import qualified Data.HashSet as HS
-import Text.Parser.Token.Highlight
 import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
-import Data.Decimal
-import qualified Data.Attoparsec.Text as AP
 import qualified Data.Text as T
-import Data.Char (digitToInt)
 
 import Pact.Types.Lang
 import Pact.Types.Util
+import Pact.Parse (exprsOnly,parseExprs)
+import Pact.Types.Runtime (PactError(..))
 
-data SyntaxError = SyntaxError Info String
-instance Show SyntaxError where show (SyntaxError i s) = show i ++ ": Syntax error: " ++ s
-
-
-symbols :: CharParsing m => m Char
-symbols = oneOf "%#+-_&$@<>=^?*!|/"
-
-style :: CharParsing m => IdentifierStyle m
-style = IdentifierStyle "atom"
-        (letter <|> symbols)
-        (letter <|> digit <|> symbols)
-        (HS.fromList ["true","false"])
-        Symbol
-        ReservedIdentifier
-
-
--- | Main parser for Pact expressions.
-expr :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Exp
-expr = do
-  delt <- position
-  let inf = do
-        end <- position
-        let len = bytes end - bytes delt
-        return $ Parsed delt (fromIntegral len)
-  TF.try (ELiteral <$> token number <*> inf <?> "number")
-   <|>
-   (ELiteral . LString <$> stringLiteral <*> inf <?> "string")
-   <|>
-   (ELiteral <$> bool <*> inf <?> "bool")
-   <|>
-   (ESymbol <$> (char '\'' >> ident style) <*> inf <?> "symbol")
-   <|>
-   do
-     a <- ident style
-     TF.try (typed >>= \t -> inf >>= \i -> return (EAtom a Nothing (Just t) i) <?> "typed atom") <|>
-       TF.try (qualified >>= \q -> inf >>= \i -> return (EAtom a (Just q) Nothing i) <?> "qual atom") <|>
-       (inf >>= \i -> return (EAtom a Nothing Nothing i) <?> "bare atom")
-   <|>
-   (EList <$> parens (sepBy expr spaces) <*> pure Nothing <*> inf <?> "sexp")
-   <|>
-   do
-     is <- brackets (sepBy expr spaces) <?> "list literal"
-     let lty = case nub (map expPrimTy is) of
-                 [Just ty] -> ty
-                 _ -> TyAny
-     i <- inf
-     return $ EList is (Just lty) i
-   <|> do
-     ps <- pairs
-     let ops = map fst ps
-         kvs = map snd ps
-     if all (== ":") ops then EObject kvs <$> inf
-     else if all (== ":=") ops then EBinding kvs <$> inf
-          else unexpected $ "Mixed binding/object operators: " ++ show ops
-
-number :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Literal
-number = do
-  neg <- maybe id (const negate) <$> optional (char '-')
-  num <- some digit
-  dec <- optional (char '.' *> some digit)
-  let strToNum start = foldl' (\x d -> 10*x + toInteger (digitToInt d)) start
-  case dec of
-    Nothing -> return $ LInteger (neg (strToNum 0 num))
-    Just d -> return $ LDecimal $ Decimal
-              (fromIntegral (length d))
-              (neg (strToNum (strToNum 0 num) d))
-{-# INLINE number #-}
-
-bool :: TokenParsing m => m Literal
-bool = symbol "true" *> pure (LBool True) <|> symbol "false" *> pure (LBool False)
-{-# INLINE bool #-}
-
-expPrimTy :: Exp -> Maybe (Type TypeName)
-expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
-expPrimTy ESymbol {} = Just $ TyPrim TyString
-expPrimTy _ = Nothing
-
-qualified :: (Monad m,TokenParsing m) => m Text
-qualified = char '.' *> ident style
-
-typed :: (Monad m,TokenParsing m) => m (Type TypeName)
-typed = do
-  _ <- char ':'
-  spaces
-  parseType
-
-parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
-parseType =
-  (char '[' >> parseType >>= \t -> char ']' >> return (TyList t) <?> "typed list") <|>
-  parseUserSchema <|>
-  tsymbol tyInteger *> return (TyPrim TyInteger) <|>
-  tsymbol tyDecimal *> return (TyPrim TyDecimal) <|>
-  tsymbol tyTime *> return (TyPrim TyTime) <|>
-  tsymbol tyBool *> return (TyPrim TyBool) <|>
-  tsymbol tyString *> return (TyPrim TyString) <|>
-  tsymbol tyList *> return (TyList TyAny) <|>
-  parseSchemaType tyObject TyObject <|>
-  tsymbol tyValue *> return (TyPrim TyValue) <|>
-  tsymbol tyKeySet *> return (TyPrim TyKeySet) <|>
-  parseSchemaType tyTable TyTable
-
-tsymbol :: TokenParsing m => Text -> m String
-tsymbol = symbol . unpack
-
-parseUserSchema :: (Monad m,TokenParsing m) => m (Type TypeName)
-parseUserSchema = char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type"
-
-parseSchemaType :: (Monad m,TokenParsing m) => Text -> SchemaType -> m (Type TypeName)
-parseSchemaType tyRep sty =
-  TF.try (TySchema sty <$> (tsymbol tyRep *> parseUserSchema)) <|>
-  (tsymbol tyRep *> return (TySchema sty TyAny))
-
-
-
--- | Skip spaces or one-line comments
-spaces :: CharParsing m => m ()
-spaces = skipMany (skipSome space <|> oneLineComment)
-    where oneLineComment = TF.try (string ";") *> skipMany (satisfy (/= '\n')) <?> "comment"
-{-# INLINE spaces #-}
---space <?> "white space"
-
-
-{-# INLINE expr #-}
-
--- | Parse one or more Pact expressions.
-exprs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
-exprs = some (spaces *> expr <* spaces)
-
--- | Parse one or more Pact expressions and EOF.
--- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: Parser [Exp]
-exprsOnly = exprs >>= \r -> TF.eof >> return r
-
-pairs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) =>
-         m [(String,(Exp,Exp))]
-pairs =
-    braces ((`sepBy` char ',')
-    (do
-       spaces
-       k <- expr
-       spaces
-       op <- symbol ":=" <|> symbol ":"
-       spaces
-       v <- expr
-       spaces
-       return (op,(k,v))
-    )) <?> "object"
-
-
-
-parseS :: TF.Parser a -> String -> TF.Result a
-parseS p = TF.parseString p mempty
-
-parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
-parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 
 type MkInfo = Exp -> Info
 
@@ -228,17 +67,20 @@ data CompileState = CompileState {
 instance Default CompileState where def = CompileState 0 def
 makeLenses ''CompileState
 
-type Compile a = ReaderT MkInfo (StateT CompileState (Except SyntaxError)) a
+type Compile a = ReaderT MkInfo (StateT CompileState (Except PactError)) a
 
 reserved :: [Text]
 reserved = map pack $ words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-compile :: MkInfo -> Exp -> Either SyntaxError (Term Name)
+compile :: MkInfo -> Exp -> Either PactError (Term Name)
 compile mi e = runExcept (evalStateT (runReaderT (run e) mi) def)
+
+compileExps :: Traversable t => MkInfo -> t Exp -> Either PactError (t (Term Name))
+compileExps mi exps = sequence $ compile mi <$> exps
 
 
 syntaxError :: Info -> String -> Compile a
-syntaxError i s = throwError $ SyntaxError i s
+syntaxError i s = throwError $ SyntaxError i (pack s)
 
 syntaxError' :: Exp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
@@ -470,27 +312,27 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 {-# INLINE runBody #-}
 
 
+_compileAccounts :: IO (Either PactError [Term Name])
+_compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile
 
-_parseAccounts :: IO (Result ([Exp],String))
-_parseAccounts = parseF (exprs <* TF.eof) "examples/accounts/accounts.pact"
-
-_compileAccounts :: IO (Either SyntaxError [Term Name])
-_compileAccounts = _parseAccounts >>= _compile
-
-_compile :: Result ([Exp],String) -> IO (Either SyntaxError [Term Name])
+_compile :: Result ([Exp],String) -> IO (Either PactError [Term Name])
 _compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
 _compile (Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
 
 
 _compileStr :: String -> IO [Term Name]
 _compileStr code = do
-    r <- _compile ((,code) <$> parseS exprs code)
+    r <- _compile ((,code) <$> TF.parseString exprsOnly mempty code)
     case r of Left e -> throwIO $ userError (show e)
               Right t -> return t
 
+
+_parseF :: FilePath -> IO (TF.Result ([Exp],String))
+_parseF fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx exprsOnly fp
+
 _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
-    p <- parseF exprs f
+    p <- _parseF f
     rs <- case p of
             (Failure e) -> putDoc (_errDoc e) >> error "Parse failed"
             (Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
@@ -501,7 +343,7 @@ _compileFile f = do
 _atto :: FilePath -> IO [Term Name]
 _atto fp = do
   f <- pack <$> readFile fp
-  rs <- case AP.parseOnly exprs f of
+  rs <- case parseExprs f of
     Left s -> throwIO $ userError s
     Right es -> return $ map (compile (mkStringInfo (unpack f))) es
   case sequence rs of

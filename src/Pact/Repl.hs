@@ -52,6 +52,7 @@ import Data.Monoid
 import System.FilePath
 
 import Pact.Compile
+import Pact.Parse
 import Pact.Eval
 import Pact.Types.Runtime
 import Pact.Native
@@ -166,14 +167,14 @@ handleCompile :: String -> Exp -> (Term Name -> Repl (Either String a)) -> Repl 
 handleCompile src exp a =
     case compile (mkStringInfo src) exp of
       Right t -> a t
-      Left (SyntaxError i@Info {..} e) -> do
-          case _iInfo of
+      Left er -> do
+          case _iInfo (peInfo er) of
             Just (_,d) -> do
                         mode <- use rMode
                         outStr HErr (renderPrettyString (colors mode) (_pDelta d))
-                        outStrLn HErr $ ": error: " ++ e
-            Nothing -> outStrLn HErr $ "[No location]: " ++ e
-          return (Left $ show i ++ ": " ++ show e)
+                        outStrLn HErr $ ": error: " ++ unpack (peText er)
+            Nothing -> outStrLn HErr $ "[No location]: " ++ unpack (peText er)
+          return (Left $ show er)
 
 
 compileEval :: String -> Exp -> Repl (Either String (Term Name))
@@ -185,7 +186,7 @@ pureEval e = do
   (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (TxFailure (pack $ show ex)),evalS)
+                 Left (SomeException ex) -> (Left (EvalError def (pack $ show ex)),evalS)
                  Right v -> v
   mode <- use rMode
   case r of
@@ -207,15 +208,14 @@ pureEval e = do
           return (Left serr)
 
 renderErr :: PactError -> Repl String
-renderErr (EvalError i s) = return $ renderInfo i ++ ": " ++ unpack s
-renderErr a@(ArgsError f _ _) = return $ renderInfo (_faInfo f) ++ ": " ++ show a
-renderErr a = do
-  m <- use rMode
-  let i = case m of
-            Script f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
-            _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
-  return $ renderInfo i ++ ":" ++ show a
-
+renderErr a
+  | peInfo a == def = do
+      m <- use rMode
+      let i = case m of
+                Script f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
+                _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
+      return $ renderInfo i ++ ":" ++ unpack (peText a)
+  | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ unpack (peText a)
 
 updateForOp :: a -> Repl (Either String a)
 updateForOp a = do

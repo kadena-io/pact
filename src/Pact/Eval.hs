@@ -39,7 +39,6 @@ import Safe
 import Data.Default
 import Control.Arrow hiding (app)
 import Data.Maybe
-import Text.Trifecta as TF
 import Data.Foldable
 import Data.Graph
 import qualified Data.Set as S
@@ -47,7 +46,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 
 import Pact.Types.Runtime
-import Pact.Compile
+
 
 evalBeginTx :: Info -> Eval e ()
 evalBeginTx i = beginTx i =<< view eeTxId
@@ -86,7 +85,7 @@ enforceKeySet i ksn ks = do
   r <- reduce app'
   case r of
     (TLiteral (LBool b) _) | b -> return ()
-                           | otherwise -> failTx $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
+                           | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
     _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
@@ -387,9 +386,3 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
   typecheck aps
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
-
-
-_compile :: String -> Term Name
-_compile s = let (TF.Success f) = TF.parseString expr mempty s
-                 (Right t) = compile (mkStringInfo s) f
-             in t

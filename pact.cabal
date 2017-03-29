@@ -27,12 +27,14 @@ library
   exposed-modules:     Pact.Bench
                      , Pact.Compile
                      , Pact.Eval
+                     , Pact.Interpreter
                      , Pact.Native
                      , Pact.Native.Db
                      , Pact.Native.Internal
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
+                     , Pact.Parse
                      , Pact.PersistPactDb
                      , Pact.PersistPactDb.Regression
                      , Pact.Persist

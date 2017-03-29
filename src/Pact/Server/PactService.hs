@@ -19,14 +19,10 @@ import Prelude hiding (log,exp)
 
 import Control.Concurrent
 import Control.Exception.Safe
-import Control.Lens hiding ((.=))
 import Control.Monad.Except
 import Control.Monad.Reader
 
-import Data.Default
-import qualified Data.HashMap.Strict as HM
 import Data.Aeson as A
-import qualified Data.Attoparsec.Text as AP
 import Data.Maybe
 import System.Directory
 import Data.ByteString (ByteString)
@@ -38,10 +34,10 @@ import Pact.Types.Server
 import Pact.Types.Crypto
 import Pact.Types.Logger
 
-import Pact.Compile as Pact
+import Pact.Parse (parseExprs)
 import Pact.PersistPactDb
-import Pact.Eval
 import Pact.Native (initEvalEnv)
+import Pact.Interpreter
 
 import qualified Pact.Persist.SQLite as PSL
 import qualified Pact.Persist.Pure as Pure
@@ -91,7 +87,7 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
   where
     ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
-    parsePact code = ParsedCode code <$> AP.parseOnly Pact.exprs code
+    parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
     ppcmdHash' = verifyHash _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
@@ -133,44 +129,15 @@ runPayload c@PublicCommand{..} =
 
 
 applyExec :: RequestKey -> ExecMsg ParsedCode -> [UserSig] -> CommandM p CommandResult
-applyExec rk (ExecMsg (ParsedCode code exps) edata) ks = do
+applyExec rk (ExecMsg parsedCode edata) ks = do
   CommandEnv {..} <- ask
-  when (null exps) $ throwCmdEx "No expressions found"
-  terms <- forM exps $ \exp -> case compile (mkTextInfo code) exp of
-            Right r -> return r
-            Left err -> throwCmdEx $ show err
+  when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore) <- liftIO $ readMVar _ceState
-  let tid = exToTx _ceMode
-      evalEnv :: PactDb e -> MVar e -> EvalEnv e
-      evalEnv pdb mv = EvalEnv {
-                  _eeRefStore = refStore
-                , _eeMsgSigs = userSigsToPactKeySet ks
-                , _eeMsgBody = edata
-                , _eeTxId = tid
-                , _eeEntity = pactEntity _ceConfig
-                , _eePactStep = Nothing
-                , _eePactDb = pdb
-                , _eePactDbVar = mv
-                }
-  (r,rEvalState') <- liftIO $ runEval def (evalEnv pactdb _ceDBVar) (execTerms _ceMode terms)
-  case r of
-    Right t -> do
-           when (_ceMode /= Local) $ liftIO $ modifyMVar_ _ceState $ \rs ->
-             return $ over (csRefStore.rsModules)
-                      (HM.union (HM.fromList (_rsNew (_evalRefs rEvalState')))) rs
-           return $ jsonResult _ceMode rk $ CommandSuccess t -- TODO Yield handling
-    Left e -> throwCmdEx $ "Exec failed: " ++ show e
-
-execTerms :: ExecutionMode -> [Term Name] -> Eval e (Term Name)
-execTerms mode terms = do
-  evalBeginTx def
-  er <- catchError
-        (last <$> mapM eval terms)
-        (\e -> evalRollbackTx def >> throwError e)
-  case mode of
-    Transactional _ -> void $ evalCommitTx def
-    Local -> evalRollbackTx def
-  return er
+  let evalEnv = setupEvalEnv (PactDbEnv pactdb _ceDBVar) _ceConfig _ceMode
+                (MsgData (userSigsToPactKeySet ks) edata Nothing) refStore
+  pr <- liftIO $ evalExec evalEnv parsedCode
+  void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
+  return $ jsonResult _ceMode rk $ CommandSuccess (last (erTerms pr))
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"

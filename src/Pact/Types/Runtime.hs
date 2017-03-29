@@ -30,7 +30,7 @@
 
 module Pact.Types.Runtime
  ( PactError(..),
-   evalError,evalError',failTx,argsError,argsError',
+   evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,
    Persistable(..),ToPersistable(..),
    ColumnId(..),
    RowKey(..),
@@ -43,7 +43,7 @@ module Pact.Types.Runtime
    TxId(..),
    PactStep(..),
    ModuleData,
-   RefStore(..),rsNatives,rsModules,
+   RefStore(..),rsNatives,rsModules,updateRefStore,
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactYield(..),
@@ -52,8 +52,6 @@ module Pact.Types.Runtime
    Eval(..),runEval,
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
-   PactDbException(..),
-   throwDbError,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    (<>)
@@ -97,17 +95,26 @@ import Pact.Types.Util
 
 
 data PactError =
-    EvalError Info Text |
-    ArgsError FunApp [Term Name] Text |
-    DbError Info Text |
-    TxFailure Text
+    EvalError { peInfo :: Info, peText :: Text } |
+    ArgsError { peInfo :: Info, peText :: Text } |
+    DbError { peInfo :: Info, peText :: Text } |
+    TxFailure { peInfo :: Info, peText :: Text } |
+    SyntaxError { peInfo :: Info, peText :: Text }
+
+instance Exception PactError
 
 instance Show PactError where
-    show (EvalError i s) = show i ++ ": " ++ unpack s
-    show (ArgsError FunApp {..} args s) =
-        show _faInfo ++ ": " ++ unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++ showFunTypes _faTypes
-    show (TxFailure s) = " Failure: " ++ unpack s
+    show (EvalError i s) = show i ++ ": Failure: " ++ unpack s
+    show (ArgsError i s) = show i ++ ": " ++ show s
+    show (TxFailure i s) = show i ++ ": Failure: Tx Failed: " ++ unpack s
     show (DbError i s) = show i ++ ": Failure: Database exception: " ++ unpack s
+    show (SyntaxError i s) = show i ++ ": Failure: Syntax error: " ++ unpack s
+
+mkArgsError :: FunApp -> [Term Name] -> Text -> PactError
+mkArgsError FunApp {..} args s = ArgsError _faInfo $ pack $
+  unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++
+            showFunTypes _faTypes
+
 
 evalError :: MonadError PactError m => Info -> String -> m a
 evalError i = throwError . EvalError i . pack
@@ -115,15 +122,22 @@ evalError i = throwError . EvalError i . pack
 evalError' :: MonadError PactError m => FunApp -> String -> m a
 evalError' = evalError . _faInfo
 
-failTx :: MonadError PactError m => String -> m a
-failTx = throwError . TxFailure . pack
+failTx :: MonadError PactError m => Info -> String -> m a
+failTx i = throwError . TxFailure i . pack
+
+throwDbError :: MonadThrow m => String -> m a
+throwDbError s = throwM $ DbError def (pack s)
+
+-- | Throw an error coming from an Except/Either context.
+throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
+throwEither = either throwM return
 
 
 argsError :: (MonadError PactError m) => FunApp -> [Term Name] -> m a
-argsError i as = throwError $ ArgsError i as "Invalid arguments"
+argsError i as = throwError $ mkArgsError i as "Invalid arguments"
 
 argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
-argsError' i as = throwError $ ArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+argsError' i as = throwError $ mkArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
 
 -- | Min, max values that Javascript doesn't mess up.
 --
@@ -430,6 +444,12 @@ data RefState = RefState {
 makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty def
 
+-- | Update for newly-loaded modules.
+updateRefStore :: RefState -> RefStore -> RefStore
+updateRefStore RefState {..}
+  | null _rsNew = id
+  | otherwise = over rsModules $ HM.union $ HM.fromList _rsNew
+
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.
@@ -526,10 +546,3 @@ getTxLog i d t = method i $ \db -> _getTxLog db d t
 {-# INLINE getTxLog #-}
 {-# INLINE keys #-}
 {-# INLINE txids #-}
-
-
-newtype PactDbException = PactDbException String deriving (Eq,Show)
-instance Exception PactDbException
-
-throwDbError :: MonadThrow m => String -> m a
-throwDbError s = throwM $ PactDbException s

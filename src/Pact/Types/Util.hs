@@ -36,6 +36,16 @@ fromText :: ParseText a => Text -> Result a
 fromText = parse parseText
 {-# INLINE fromText #-}
 
+resultToEither :: Result a -> Either String a
+resultToEither (Success s) = Right s
+resultToEither (Error s) = Left s
+
+fromText' :: ParseText a => Text -> Either String a
+fromText' = resultToEither . fromText
+
+fromJSON' :: FromJSON a => Value -> Either String a
+fromJSON' = resultToEither . fromJSON
+
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 

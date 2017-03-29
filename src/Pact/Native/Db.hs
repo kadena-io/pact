@@ -142,7 +142,7 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
   guardTable i table
   mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
-    Nothing -> failTx $ "read: row not found: " ++ show key
+    Nothing -> failTx (_faInfo i) $ "read: row not found: " ++ show key
     Just (Columns m) -> case cols of
         [] -> return $ (\ps -> TObject ps (_tTableType table) def) $ map (toTerm *** toTerm) $ M.toList m
         _ -> (\ps -> TObject ps (_tTableType table) def) <$> forM cols (\col ->
@@ -173,7 +173,7 @@ withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> failTx $ "with-read: row not found: " ++ show key
+        Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " ++ show key
         (Just row) -> bindToRow ps bd b row
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
