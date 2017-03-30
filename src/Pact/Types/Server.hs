@@ -25,7 +25,7 @@ module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccPact
   , CommandState(..), csRefStore
-  , CommandEnv(..), ceConfig, ceMode, ceDBVar, ceState
+  , CommandEnv(..), ceConfig, ceMode, ceDbEnv, ceState
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -62,6 +62,7 @@ import Pact.Types.SQLite
 import Pact.Types.Command
 import Pact.PersistPactDb
 import Pact.Types.RPC
+import Pact.Interpreter
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
 userSigToPactPubKey UserSig{..} = Pact.PublicKey $ encodeUtf8 _usPubKey
@@ -84,7 +85,7 @@ $(makeLenses ''CommandState)
 data CommandEnv p = CommandEnv {
       _ceConfig :: PactConfig
     , _ceMode :: ExecutionMode
-    , _ceDBVar :: MVar (DbEnv p)
+    , _ceDbEnv :: PactDbEnv p
     , _ceState :: MVar CommandState
     }
 $(makeLenses ''CommandEnv)

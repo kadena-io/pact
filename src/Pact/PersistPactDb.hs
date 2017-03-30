@@ -20,7 +20,7 @@
 
 module Pact.PersistPactDb
   ( DbEnv(..),db,persist,log,txRecord,txId
-  , initDbEnv, InitDbEnv
+  , initDbEnv
   , pactdb
   , createSchema
   , createUserTable'
@@ -57,8 +57,6 @@ data DbEnv p = DbEnv
   , _txId :: Maybe TxId
   }
 makeLenses ''DbEnv
-
-type InitDbEnv p = Loggers -> IO (DbEnv p)
 
 initDbEnv :: Loggers -> Persister p -> p -> DbEnv p
 initDbEnv loggers funrec p = DbEnv {

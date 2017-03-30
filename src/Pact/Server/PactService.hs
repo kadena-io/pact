@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BangPatterns #-}
 
 -- |
 -- Module      :  Pact.Server.PactService
@@ -24,7 +23,6 @@ import Control.Monad.Reader
 
 import Data.Aeson as A
 import Data.Maybe
-import System.Directory
 import Data.ByteString (ByteString)
 
 import Pact.Types.Command
@@ -35,40 +33,20 @@ import Pact.Types.Crypto
 import Pact.Types.Logger
 
 import Pact.Parse (parseExprs)
-import Pact.PersistPactDb
-import Pact.Native (initEvalEnv)
 import Pact.Interpreter
-
-import qualified Pact.Persist.SQLite as PSL
-import qualified Pact.Persist.Pure as Pure
-
-mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> InitDbEnv PSL.SQLite
-mkSQLiteEnv initLog deleteOldFile c loggers = do
-  when deleteOldFile $ do
-    dbExists <- doesFileExist (PSL.dbFile c)
-    when dbExists $ do
-      logLog initLog "INIT" "Deleting Existing Pact DB File"
-      removeFile (PSL.dbFile c)
-  initDbEnv loggers PSL.persister <$> PSL.initSQLite c loggers
-
-mkPureEnv :: InitDbEnv Pure.PureDb
-mkPureEnv loggers = return $ initDbEnv loggers Pure.persister Pure.initPureDb
 
 
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
-      mkCEI :: DbEnv a -> IO (CommandExecInterface (PactRPC ParsedCode))
-      mkCEI p = do
-        ee <- initEvalEnv p pactdb
-        cmdVar <- newMVar (CommandState $ _eeRefStore ee)
-        let dbVar = _eePactDbVar ee
+      mkCEI p@PactDbEnv {..} = do
+        cmdVar <- newMVar (CommandState initRefStore)
         klog "Creating Pact Schema"
-        createSchema dbVar
+        initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccPact dbVar cmdVar eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccPact dbVar cmdVar }
+          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccPact p cmdVar eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccPact p cmdVar }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -100,7 +78,7 @@ verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssu
 
 
 
-applyCmd :: Logger -> PactConfig -> MVar (DbEnv p) -> MVar CommandState -> ExecutionMode -> Command a ->
+applyCmd :: Logger -> PactConfig -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
@@ -133,7 +111,7 @@ applyExec rk (ExecMsg parsedCode edata) ks = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore) <- liftIO $ readMVar _ceState
-  let evalEnv = setupEvalEnv (PactDbEnv pactdb _ceDBVar) _ceConfig _ceMode
+  let evalEnv = setupEvalEnv _ceDbEnv _ceConfig _ceMode
                 (MsgData (userSigsToPactKeySet ks) edata Nothing) refStore
   pr <- liftIO $ evalExec evalEnv parsedCode
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
