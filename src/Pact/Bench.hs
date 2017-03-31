@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
 module Pact.Bench where
 
 import Criterion.Main
@@ -24,6 +25,9 @@ import qualified Data.Set as S
 import Data.Default
 import Pact.Types.Logger
 import System.CPUTime
+import Pact.MockDb
+import Data.String
+import qualified Data.Map.Strict as M
 
 
 longStr :: Int -> Text
@@ -57,6 +61,7 @@ benchVerify cs = bgroup "verify" $ (`map` cs) $
 eitherDie :: Either String a -> IO a
 eitherDie = either (throwIO . userError) (return $!)
 
+pactConfig :: PactConfig
 pactConfig = PactConfig "entity"
 
 loadBenchModule :: PactDbEnv e -> IO RefStore
@@ -68,11 +73,21 @@ loadBenchModule db = do
            Nothing
   erRefStore <$> evalExec (setupEvalEnv db pactConfig (Transactional 1) md initRefStore) pc
 
+parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
 
-benchPactExec bname dbEnv refStore pc = bench bname $ nfIO $ do
+benchNFIO :: NFData a => String -> IO a -> Benchmark
+benchNFIO bname = bench bname . nfIO
+
+runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
+runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  encode . erTerms <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
+  toJSON . erTerms <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
+
+mockBenchRead :: (IsString k,FromJSON v) => Domain k v -> k -> Method () (Maybe v)
+mockBenchRead KeySets _ = rc (Just $ KeySet [PublicKey "benchadmin"] ">")
+mockBenchRead UserTables {} _ = rc (Just $ Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))])
+mockBenchRead _ _ = rc Nothing
 
 
 main :: IO ()
@@ -84,12 +99,17 @@ main = do
   initSchema pureDb
   !refStore <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
-
-  let !cmds = force $ (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
+  print =<< runPactExec pureDb refStore benchCmd
+  !mockDb <- mkMockEnv def { mockRead = MockRead mockBenchRead }
+  !mRS <- loadBenchModule mockDb
+  print =<< runPactExec mockDb mRS benchCmd
+  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce"))
+
   defaultMain [
     benchParse,
     benchCompile parsedExps,
     benchVerify cmds,
-    benchPactExec "puredb" pureDb refStore benchCmd
+    benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
+    benchNFIO "mockdb" (runPactExec mockDb mRS benchCmd)
     ]

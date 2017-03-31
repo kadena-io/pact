@@ -60,7 +60,6 @@ import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
-import Pact.PersistPactDb
 import Pact.Types.RPC
 import Pact.Interpreter
 
