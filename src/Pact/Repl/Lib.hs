@@ -232,7 +232,7 @@ expectFail i as@[a,b] = do
   a' <- reduce a
   case a' of
     TLitString msg -> do
-      r <- catchError (Right <$> reduce b) (return . Left)
+      r <- catch (Right <$> reduce b) (\(e :: SomeException) -> return $ Left ())
       case r of
         Right v -> evalError' i $ "FAILURE: " ++ unpack msg ++ ": expected failure, got result = " ++ show v
         Left _ -> return $ tStr $ "Expect failure: success: " <> msg

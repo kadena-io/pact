@@ -8,6 +8,10 @@
 -- However, this is also designed to be stateless for eventual
 -- use in FFI.
 --
+-- Note that all exceptions are not caught, except insofar as to
+-- enforce transaction rollback (and then re-thrown). It is
+-- the responsibility of the calling context to catch exceptions.
+--
 module Pact.Interpreter where
 
 import Control.Concurrent
@@ -44,10 +48,10 @@ data MsgData = MsgData {
 instance Default MsgData where def = MsgData def Null def
 
 data EvalResult = EvalResult {
-  erTerms :: [Term Name],
-  erLogs :: [TxLog],
-  erRefStore :: RefStore,
-  erYield :: Maybe PactYield
+  erTerms :: ![Term Name],
+  erLogs :: ![TxLog],
+  erRefStore :: !RefStore,
+  erYield :: !(Maybe PactYield)
   } deriving (Eq,Show)
 
 
@@ -103,22 +107,21 @@ initSchema PactDbEnv {..} = createSchema pdPactDbVar
 interpret :: EvalEnv e -> [Term Name] -> IO EvalResult
 interpret evalEnv terms = do
   let tx = _eeTxId evalEnv
-  (r,state) <-
+  ((rs,logs),state) <-
     runEval def evalEnv $ evalTerms tx terms
-  (rs,logs) <- throwEither r
   let newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $ EvalResult rs logs (newRefs $ _eeRefStore evalEnv) (_evalYield state)
+  return $! EvalResult rs logs (newRefs $ _eeRefStore evalEnv) (_evalYield state)
 
 evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog])
 evalTerms tx terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))
-  handle (\(e :: SomeException) -> safeRollback >> throwM e) $
-    flip catchError (\e -> safeRollback >> throwError e) $ do
+  handle (\(e :: SomeException) -> safeRollback >> throwM e) $ do
         evalBeginTx def
         rs <- mapM eval terms
         logs <- case tx of
           Just _ -> evalCommitTx def
           Nothing -> evalRollbackTx def >> return []
         return (rs,logs)
+{-# INLINE evalTerms #-}

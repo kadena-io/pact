@@ -49,7 +49,7 @@ module Pact.Types.Runtime
    PactYield(..),
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
    EvalState(..),evalRefs,evalCallStack,evalYield,
-   Eval(..),runEval,
+   Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    module Pact.Types.Lang,
@@ -116,14 +116,14 @@ mkArgsError FunApp {..} args s = ArgsError _faInfo $ pack $
             showFunTypes _faTypes
 
 
-evalError :: MonadError PactError m => Info -> String -> m a
-evalError i = throwError . EvalError i . pack
+evalError :: MonadThrow m => Info -> String -> m a
+evalError i = throwM . EvalError i . pack
 
-evalError' :: MonadError PactError m => FunApp -> String -> m a
+evalError' :: MonadThrow m => FunApp -> String -> m a
 evalError' = evalError . _faInfo
 
-failTx :: MonadError PactError m => Info -> String -> m a
-failTx i = throwError . TxFailure i . pack
+failTx :: MonadThrow m => Info -> String -> m a
+failTx i = throwM . TxFailure i . pack
 
 throwDbError :: MonadThrow m => String -> m a
 throwDbError s = throwM $ DbError def (pack s)
@@ -133,11 +133,11 @@ throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
 throwEither = either throwM return
 
 
-argsError :: (MonadError PactError m) => FunApp -> [Term Name] -> m a
-argsError i as = throwError $ mkArgsError i as "Invalid arguments"
+argsError :: MonadThrow m => FunApp -> [Term Name] -> m a
+argsError i as = throwM $ mkArgsError i as "Invalid arguments"
 
-argsError' :: (MonadError PactError m) => FunApp -> [Term Ref] -> m a
-argsError' i as = throwError $ mkArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+argsError' :: MonadThrow m => FunApp -> [Term Ref] -> m a
+argsError' i as = throwM $ mkArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
 
 -- | Min, max values that Javascript doesn't mess up.
 --
@@ -466,14 +466,27 @@ instance Default EvalState where def = EvalState def def def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =
-    Eval { unEval :: ExceptT PactError (ReaderT (EvalEnv e) (StateT EvalState IO)) a }
-    deriving (Functor,Applicative,Monad,MonadError PactError,MonadState EvalState,
+    Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
+    deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
 
+-- | "Production" runEval throws exceptions, meaning the state can be lost,
+-- which is useful for reporting stack traces in the REPL.
+runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)
+runEval s env act = runStateT (runReaderT (unEval act) env) s
 {-# INLINE runEval #-}
-runEval :: EvalState -> EvalEnv e -> Eval e a ->
+
+-- | "Dev" runEval' is the old version that always returns the state
+-- along with the Either.
+runEval' :: EvalState -> EvalEnv e -> Eval e a ->
            IO (Either PactError a,EvalState)
-runEval s env act = runStateT (runReaderT (runExceptT (unEval act)) env) s
+runEval' s env act =
+  runStateT (catches (Right <$> runReaderT (unEval act) env)
+              [Handler (\(e :: SomeException) -> return $ Left . EvalError def . pack . show $ e),
+               Handler (\(e :: PactError) -> return $ Left e)
+              ]) s
+
+
 
 -- | Bracket interpreter action pushing and popping frame on call stack.
 call :: StackFrame -> Eval e a -> Eval e a
@@ -488,7 +501,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwError . DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwM . DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --

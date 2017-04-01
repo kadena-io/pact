@@ -184,7 +184,7 @@ compileEval src exp = handleCompile src exp $ \e -> pureEval (eval e)
 pureEval :: Show a => Eval LibState a -> Repl (Either String a)
 pureEval e = do
   (ReplState evalE evalS _ _ _) <- get
-  er <- try (liftIO $ runEval evalS evalE e)
+  er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
                  Left (SomeException ex) -> (Left (EvalError def (pack $ show ex)),evalS)
                  Right v -> v
