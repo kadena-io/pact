@@ -22,7 +22,6 @@ import Data.Default
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Control.Monad.Reader
-import Control.Monad.Except (catchError)
 import Control.Monad.Catch
 import Control.Monad.State.Strict (get)
 import Control.Lens
@@ -232,7 +231,7 @@ expectFail i as@[a,b] = do
   a' <- reduce a
   case a' of
     TLitString msg -> do
-      r <- catch (Right <$> reduce b) (\(e :: SomeException) -> return $ Left ())
+      r <- catch (Right <$> reduce b) (\(_ :: SomeException) -> return $ Left ())
       case r of
         Right v -> evalError' i $ "FAILURE: " ++ unpack msg ++ ": expected failure, got result = " ++ show v
         Left _ -> return $ tStr $ "Expect failure: success: " <> msg

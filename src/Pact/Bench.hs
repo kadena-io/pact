@@ -93,7 +93,7 @@ main :: IO ()
 main = do
   !pub <- eitherDie $ fromText' "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
   !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
-  !parsedExps <- mapM (mapM (eitherDie . parseExprs)) exps
+  !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
   initSchema pureDb
   !refStore <- loadBenchModule pureDb
