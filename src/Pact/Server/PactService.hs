@@ -22,17 +22,13 @@ import Control.Monad.Except
 import Control.Monad.Reader
 
 import Data.Aeson as A
-import Data.Maybe
-import Data.ByteString (ByteString)
 
 import Pact.Types.Command
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
-import Pact.Types.Crypto
 import Pact.Types.Logger
 
-import Pact.Parse (parseExprs)
 import Pact.Interpreter
 
 
@@ -54,26 +50,6 @@ initPactService CommandConfig {..} loggers = do
     Just sqlc -> do
       klog "Initializing pact SQLLite"
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
-
-
-
-
-verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
-verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
-      (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
-      (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
-  where
-    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
-    parsePact :: Text -> Either String ParsedCode
-    parsePact code = ParsedCode code <$> parseExprs code
-    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
-    ppcmdHash' = verifyHash _cmdHash _cmdPayload
-    mSigIssue = if all snd ppcmdSigs' then Nothing
-      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
-    toErrStr :: Either String a -> String
-    toErrStr (Right _) = ""
-    toErrStr (Left s) = s ++ "; "
-{-# INLINE verifyCommand #-}
 
 
 

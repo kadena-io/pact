@@ -184,7 +184,7 @@ writeData' t wt k v e = do
   getStmts e t >>= \s -> execs (ws s) [inFun (kTys t) k,encodeBlob v]
 
 
-initSQLite :: SQLiteConfig -> InitPersist SQLite
+initSQLite :: SQLiteConfig -> Loggers -> IO SQLite
 initSQLite conf@SQLiteConfig {..} loggers = do
   c <- liftEither $ open (fromString dbFile)
   ts <- TxStmts <$> prepStmt c "BEGIN TRANSACTION"

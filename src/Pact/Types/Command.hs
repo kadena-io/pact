@@ -27,7 +27,7 @@ module Pact.Types.Command
   , Payload(..)
   , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
-  , verifyUserSig
+  , verifyUserSig, verifyCommand
   , CommandError(..)
   , CommandSuccess(..)
   , CommandResult(..)
@@ -60,6 +60,8 @@ import Prelude hiding (log,exp)
 import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
+import Pact.Parse
+import Pact.Types.RPC
 
 
 data Command a = PublicCommand
@@ -91,6 +93,26 @@ mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
   where
     hsh = hash env
     sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
+
+
+
+verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
+verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
+      (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
+      (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
+  where
+    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
+    parsePact :: Text -> Either String ParsedCode
+    parsePact code = ParsedCode code <$> parseExprs code
+    (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
+    ppcmdHash' = verifyHash _cmdHash _cmdPayload
+    mSigIssue = if all snd ppcmdSigs' then Nothing
+      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
+    toErrStr :: Either String a -> String
+    toErrStr (Right _) = ""
+    toErrStr (Left s) = s ++ "; "
+{-# INLINE verifyCommand #-}
+
 
 data ProcessedCommand a =
   ProcSucc !(Command (Payload a)) |

@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 
 -- |
 -- Module      :  Pact.Main
@@ -36,7 +37,9 @@ import System.FilePath
 import Pact.Repl
 import Pact.Parse
 import Pact.Types.Runtime hiding ((<>))
+#if defined(BUILD_SERVER)
 import Pact.Server.Server
+#endif
 import Pact.Types.Version
 
 
@@ -44,16 +47,20 @@ data Option =
   OVersion |
   OBuiltins |
   OLoad Bool String |
-  ORepl |
-  OServer FilePath
+  ORepl
+#if defined(BUILD_SERVER)
+  | OServer FilePath
+#endif
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
 replOpts =
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
+#if defined(BUILD_SERVER)
     (OServer <$> O.strOption (O.short 's' <> O.long "serve" <> O.metavar "config" <>
                               O.help "Launch REST API server with config file")) <|>
+#endif
     (OLoad
      <$> O.flag False True
          (O.short 'r' <> O.long "findscript" <>
@@ -77,7 +84,9 @@ main = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
+#if defined(BUILD_SERVER)
     OServer conf -> serve conf
+#endif
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript fp

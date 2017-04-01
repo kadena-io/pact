@@ -10,7 +10,6 @@ import Pact.Compile
 import Pact.Types.Lang
 import Control.Exception
 import Control.Arrow
-import Pact.Server.PactService
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Pact.Types.Command
