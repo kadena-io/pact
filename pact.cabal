@@ -116,7 +116,6 @@ library
                   , Pact.Types.Crypto
                   , Pact.Types.RPC
                   , Pact.Types.SQLite
-                  , Pact.Types.Server
 
   if !impl(ghcjs) && flag(server)
     cpp-options:    -DBUILD_SERVER
@@ -127,6 +126,7 @@ library
                   , Pact.Server.History.Types
                   , Pact.Server.PactService
                   , Pact.Server.Server
+                  , Pact.Types.Server
 
 
   hs-source-dirs:      src
