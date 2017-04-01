@@ -55,7 +55,7 @@ import Data.Monoid
 
 import Pact.Types.Lang
 import Pact.Types.Util
-import Pact.Native.Internal
+import Pact.Types.Native
 
 
 data CheckerException = CheckerException Info String deriving (Eq,Ord)

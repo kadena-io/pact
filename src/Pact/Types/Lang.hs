@@ -412,6 +412,7 @@ isUnconstrainedTy :: Type v -> Bool
 isUnconstrainedTy TyAny = True
 isUnconstrainedTy (TyVar (TypeVar _ [])) = True
 isUnconstrainedTy _ = False
+{-# INLINE isUnconstrainedTy #-}
 
 -- | a `canUnifyWith` b means a "can represent/contains" b
 canUnifyWith :: Eq n => Type n -> Type n -> Bool
@@ -424,6 +425,7 @@ canUnifyWith (TyVar (TypeVar _ cs)) b = null cs || b `elem` cs
 canUnifyWith (TyList a) (TyList b) = a `canUnifyWith` b
 canUnifyWith (TySchema _ a) (TySchema _ b) = a `canUnifyWith` b
 canUnifyWith a b = a == b
+{-# INLINE canUnifyWith #-}
 
 makeLenses ''Type
 makeLenses ''FunType
@@ -793,6 +795,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+{-# INLINE typeof #-}
 
 -- | Return string type description.
 typeof' :: Show a => Term a -> Text

@@ -50,7 +50,7 @@ import Data.String
 
 import Pact.Types.Typecheck
 import Pact.Types.Runtime
-import Pact.Native.Internal
+import Pact.Types.Native
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s

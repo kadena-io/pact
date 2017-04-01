@@ -335,3 +335,8 @@ initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
 initEvalEnv e b = do
   mv <- newMVar e
   return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b
+
+
+unsetInfo :: Term a -> Term a
+unsetInfo a = set tInfo def a
+{-# INLINE unsetInfo #-}

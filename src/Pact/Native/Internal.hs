@@ -16,8 +16,16 @@
 --
 
 module Pact.Native.Internal
-
-    where
+  (success
+  ,parseMsgKey
+  ,bindReduce
+  ,defNative,defRNative
+  ,foldDefs
+  ,funType,funType'
+  ,getModule
+  ,module Pact.Types.Native
+  ,tTyInteger,tTyDecimal,tTyTime,tTyBool,tTyString,tTyValue,tTyKeySet,tTyObject
+  ) where
 
 import Control.Monad
 import Prelude hiding (exp)
@@ -29,61 +37,13 @@ import Data.Aeson
 import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
-import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Strict as HM
 
 import Pact.Types.Runtime
-
-
-data SpecialForm =
-  WithRead |
-  WithDefaultRead |
-  Bind |
-  Map |
-  Filter |
-  Fold |
-  Compose
-  deriving (Eq,Enum,Ord,Bounded)
-
-instance AsString SpecialForm where
-  asString WithRead = "with-read"
-  asString WithDefaultRead = "with-default-read"
-  asString Bind = "bind"
-  asString Map = "map"
-  asString Filter = "filter"
-  asString Fold = "fold"
-  asString Compose = "compose"
-instance Show SpecialForm where show = show . asString
-
-specialForm :: SpecialForm -> NativeDefName
-specialForm = NativeDefName . asString
-
-sfLookup :: M.Map NativeDefName SpecialForm
-sfLookup = M.fromList $ map (specialForm &&& id) [minBound .. maxBound]
-
-isSpecialForm :: NativeDefName -> Maybe SpecialForm
-isSpecialForm = (`M.lookup` sfLookup)
-
-
--- | Native function with un-reduced arguments. Must fire call stack.
-type NativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
-
--- | Native function with pre-reduced arguments, call stack fired.
-type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
-
-
-type NativeDef = (NativeDefName,Term Name)
-type NativeModule = (ModuleName,[NativeDef])
-
-void' :: (ToTerm t,Functor m) => t -> m a -> m (Term Name)
-void' = fmap . const . toTerm
+import Pact.Types.Native
 
 success :: Functor m => Text -> m a -> m (Term Name)
-success = void'
-
-unsetInfo :: Term a -> Term a
-unsetInfo a = set tInfo def a
-{-# INLINE unsetInfo #-}
+success = fmap . const . toTerm
 
 
 parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t
@@ -98,12 +58,12 @@ parseMsgKey i msg key = do
 
 bindReduce :: [(Arg (Term Ref),Term Ref)] -> Scope Int Term Ref -> Info -> (Text -> Maybe (Term Ref)) -> Eval e (Term Name)
 bindReduce ps bd bi lkpFun = do
-  !(vs :: [(Arg (Term Ref),Term Ref)]) <- forM ps $ \(k,var) -> do
+  !(vs :: [(Arg (Term Ref),Term Ref)]) <- forM ps $ mapM $ \var -> do
           var' <- reduce var
           case var' of
             (TLitString s) -> case lkpFun s of
                                 Nothing -> evalError bi $ "Bad column in binding: " ++ unpack s
-                                Just v -> return $! (k,v)
+                                Just v -> return v
             t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
   call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $! reduceBody bd''
