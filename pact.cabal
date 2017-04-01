@@ -40,6 +40,7 @@ library
                      , Pact.PersistPactDb
                      , Pact.Persist
                      , Pact.Persist.Pure
+                     , Pact.Persist.MockPersist
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Typechecker

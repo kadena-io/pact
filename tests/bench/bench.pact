@@ -9,7 +9,8 @@
  (defun keys-all (count matched) (= count matched))
 
  (defun create-account (address)
-   (insert bench-accounts address
+   ; write instead of insert here to make mocking easier
+   (write bench-accounts address
          { "balance": 0.0, "amount": 0.0, "data": "Created account" }))
 
  (defun transfer (src dest amount)

@@ -27,7 +27,9 @@ import System.CPUTime
 import Pact.MockDb
 import Data.String
 import qualified Data.Map.Strict as M
-
+import Pact.Persist.MockPersist
+import Pact.Persist
+import Unsafe.Coerce
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -83,10 +85,24 @@ runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
   toJSON . erTerms <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
 
-mockBenchRead :: (IsString k,FromJSON v) => Domain k v -> k -> Method () (Maybe v)
-mockBenchRead KeySets _ = rc (Just $ KeySet [PublicKey "benchadmin"] ">")
-mockBenchRead UserTables {} _ = rc (Just $ Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))])
-mockBenchRead _ _ = rc Nothing
+benchKeySet :: KeySet
+benchKeySet = KeySet [PublicKey "benchadmin"] ">"
+
+acctRow :: Columns Persistable
+acctRow = Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
+
+benchRead :: (IsString k,FromJSON v) => Domain k v -> k -> Method () (Maybe v)
+benchRead KeySets _ = rc (Just benchKeySet)
+benchRead UserTables {} _ = rc (Just acctRow)
+benchRead _ _ = rc Nothing
+
+benchReadValue :: (PactKey k, PactValue v) => Table k -> k -> Persist () (Maybe v)
+benchReadValue (DataTable t) _k
+  | t == "SYS_keysets" = rcp $ Just (unsafeCoerce benchKeySet)
+  | t == "USER_bench_bench-accounts" = rcp $ Just (unsafeCoerce acctRow)
+  | t == "SYS_modules" = rcp Nothing
+  | otherwise = error (show t)
+benchReadValue (TxTable _t) _k = rcp Nothing
 
 
 main :: IO ()
@@ -99,9 +115,12 @@ main = do
   !refStore <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
   print =<< runPactExec pureDb refStore benchCmd
-  !mockDb <- mkMockEnv def { mockRead = MockRead mockBenchRead }
-  !mRS <- loadBenchModule mockDb
-  print =<< runPactExec mockDb mRS benchCmd
+  !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
+  !mdbRS <- loadBenchModule mockDb
+  print =<< runPactExec mockDb mdbRS benchCmd
+  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
+  !mpdbRS <- loadBenchModule mockPersistDb
+  print =<< runPactExec mockPersistDb mpdbRS benchCmd
   !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce"))
 
@@ -110,5 +129,6 @@ main = do
     benchCompile parsedExps,
     benchVerify cmds,
     benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
-    benchNFIO "mockdb" (runPactExec mockDb mRS benchCmd)
+    benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),
+    benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd)
     ]
