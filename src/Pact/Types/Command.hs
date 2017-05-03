@@ -25,6 +25,7 @@ module Pact.Types.Command
   ( Command(..),mkCommand,mkCommand'
   , ProcessedCommand(..)
   , Payload(..)
+  , Envelope(..)
   , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
   , verifyUserSig, verifyCommand
@@ -52,6 +53,7 @@ import Data.Serialize as SZ
 import Data.String
 import Data.Text hiding (filter, null, all)
 import Data.Hashable (Hashable)
+import qualified Data.Set as S
 
 
 import GHC.Generics hiding (from)
@@ -64,44 +66,69 @@ import Pact.Parse
 import Pact.Types.RPC
 
 
-data Command a = PublicCommand
+data Envelope a =
+  PublicEnvelope {
+    _ePayload :: !a
+  } |
+  PrivateEnvelope {
+    _eFrom :: !EntityName
+  , _eTo :: !(S.Set EntityName)
+  , _ePayload :: !a
+  } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
+instance ToJSON a => ToJSON (Envelope a)where
+  toJSON PublicEnvelope{..} = toJSON _ePayload
+  toJSON PrivateEnvelope{..} = object
+    [ "msg" .= _ePayload
+    , "to" .= _eTo
+    , "from" .= _eFrom ]
+instance FromJSON a => FromJSON (Envelope a) where
+  parseJSON v = (withObject "Message" $ \o ->
+                    PrivateEnvelope <$> o .: "from"
+                    <*> o .: "to"
+                    <*> o .: "msg") v <|>
+                (PublicEnvelope <$> parseJSON v)
+
+instance Serialize a => Serialize (Envelope a)
+instance NFData a => NFData (Envelope a)
+
+data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !Hash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
 instance (Serialize a) => Serialize (Command a)
 instance (ToJSON a) => ToJSON (Command a) where
-    toJSON (PublicCommand payload uSigs hsh) =
+    toJSON (Command payload uSigs hsh) =
         object [ "cmd" .= payload
                , "sigs" .= toJSON uSigs
                , "hash" .= hsh
                ]
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
-                PublicCommand <$> (o .: "cmd")
-                              <*> (o .: "sigs" >>= parseJSON)
-                              <*> (o .: "hash")
+                Command <$> (o .: "cmd")
+                        <*> (o .: "sigs" >>= parseJSON)
+                        <*> (o .: "hash")
     {-# INLINE parseJSON #-}
 
 instance NFData a => NFData (Command a)
 
 mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Text -> a -> Command ByteString
-mkCommand creds nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce)
+mkCommand creds nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload (PublicEnvelope a) nonce)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
-mkCommand' creds env = PublicCommand env (sig <$> creds) hsh
+mkCommand' creds env = Command env (sig <$> creds) hsh
   where
     hsh = hash env
     sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
 
 
 
-verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
-verifyCommand orig@PublicCommand{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
+verifyCommand :: Command ByteString -> ProcessedCommand (Envelope (PactRPC ParsedCode))
+verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
       (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
   where
-    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
+    ppcmdPayload' = traverse (traverse (traverse parsePact)) =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
@@ -196,7 +223,7 @@ data CommandResult = CommandResult {
 
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey PublicCommand {..} = RequestKey _cmdHash
+cmdToRequestKey Command {..} = RequestKey _cmdHash
 
 
 data ExecutionMode =

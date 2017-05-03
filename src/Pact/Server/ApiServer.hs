@@ -147,7 +147,7 @@ writeResponse :: ToJSON j => j -> Api ()
 writeResponse j = setJSON >> writeLBS (encode j)
 
 buildCmdRpc :: Command T.Text -> Api (RequestKey,Command ByteString)
-buildCmdRpc c@PublicCommand {..} = do
+buildCmdRpc c@Command {..} = do
   log $ "Processing command with hash: " ++ show _cmdHash
   return (RequestKey _cmdHash,fmap encodeUtf8 c)
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -28,14 +29,16 @@ import Data.Aeson as A
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
+import Control.Lens (makeLenses)
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 
 
 data PactConfig = PactConfig {
-  pactEntity :: Text
+  _pactEntity :: EntityName
   } deriving (Eq,Show,Generic)
+makeLenses ''PactConfig
 instance FromJSON PactConfig
 instance ToJSON PactConfig
 

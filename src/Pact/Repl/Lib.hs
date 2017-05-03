@@ -186,7 +186,7 @@ setstep' s = do
   evalYield .= Nothing
 
 setentity :: RNativeFun LibState
-setentity _ [TLitString s] = setenv eeEntity s >> return (tStr "Setting entity")
+setentity _ [TLitString s] = setenv eeEntity (EntityName s) >> return (tStr "Setting entity")
 setentity i as = argsError i as
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name

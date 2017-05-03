@@ -98,7 +98,7 @@ sqlInsertHistoryRow =
     \) VALUES (?,?,?,?,?)"
 
 insertRow :: Statement -> (Command ByteString, CommandResult) -> IO ()
-insertRow s (PublicCommand{..},CommandResult {..}) =
+insertRow s (Command{..},CommandResult {..}) =
     execs s [hashToField _cmdHash
             ,SInt $ fromIntegral (fromMaybe (-1) _crTxId)
             ,SText $ Utf8 _cmdPayload
@@ -146,7 +146,7 @@ sqlSelectAllCommands = "SELECT txid,hash,command,userSigs FROM 'main'.'pactComma
 selectAllCommands :: DbEnv -> IO [Command ByteString]
 selectAllCommands e = do
   let rowToCmd [_, SText (Utf8 hash'),SText (Utf8 cmd'),SText (Utf8 userSigs')] =
-        PublicCommand { _cmdPayload = cmd'
+              Command { _cmdPayload = cmd'
                       , _cmdSigs = userSigsFromField userSigs'
                       , _cmdHash = hashFromField hash'}
       rowToCmd err = error $ "During selectAllCommands, we encountered a non-SText type: " ++ show err

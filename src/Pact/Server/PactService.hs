@@ -20,6 +20,8 @@ import Control.Concurrent
 import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
+import qualified Data.Set as S
+import Control.Lens (view)
 
 import Data.Aeson as A
 
@@ -32,7 +34,7 @@ import Pact.Types.Logger
 import Pact.Interpreter
 
 
-initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
+initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (Envelope (PactRPC ParsedCode)))
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
@@ -55,7 +57,7 @@ initPactService CommandConfig {..} loggers = do
 
 
 applyCmd :: Logger -> PactConfig -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
-            ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
+            ProcessedCommand (Envelope (PactRPC ParsedCode)) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
@@ -75,11 +77,18 @@ exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
 exToTx Local = Nothing
 
-runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
-runPayload c@PublicCommand{..} =
-  case _pPayload _cmdPayload of
-    (Exec pm) -> applyExec (cmdToRequestKey c) pm _cmdSigs
-    (Continuation ym) -> applyContinuation ym _cmdSigs
+runPayload :: Command (Payload (Envelope (PactRPC ParsedCode))) -> CommandM p CommandResult
+runPayload c@Command{..} = case _pPayload _cmdPayload of
+  PublicEnvelope rpc -> runRpc rpc
+  PrivateEnvelope from to rpc -> do
+    entName <- view (ceConfig . pactEntity)
+    mode <- view ceMode
+    if entName == from || (entName `S.member` to)
+      then runRpc rpc
+      else return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
+  where
+    runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm _cmdSigs
+    runRpc (Continuation ym) = applyContinuation ym _cmdSigs
 
 
 applyExec :: RequestKey -> ExecMsg ParsedCode -> [UserSig] -> CommandM p CommandResult

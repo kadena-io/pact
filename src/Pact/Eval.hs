@@ -270,7 +270,7 @@ applyPact (TList ss _ i) = do
   (ent,ex,rb,si) <- maybe (evalError i $ "applyPact: step not found: " ++ show idx) return $
                     steps `atMay` idx
   entr <- reduce ent
-  us <- view eeEntity
+  (EntityName us) <- view eeEntity
   case entr of
     (TLitString target)
         | target /= us -> return (tStr $ pack $ "Skip step " ++ show idx)

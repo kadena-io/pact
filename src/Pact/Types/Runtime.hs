@@ -44,6 +44,7 @@ module Pact.Types.Runtime
    PactStep(..),
    ModuleData,
    RefStore(..),rsNatives,rsModules,updateRefStore,
+   EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactYield(..),
@@ -391,6 +392,12 @@ data RefStore = RefStore {
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
+
+newtype EntityName = EntityName Text
+  deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
+instance Show EntityName where show (EntityName t) = show t
+
+
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
@@ -402,7 +409,7 @@ data EvalEnv e = EvalEnv {
       -- | Transaction id.
     , _eeTxId :: !(Maybe TxId)
       -- | Entity governing 'pact' executions.
-    , _eeEntity :: !Text
+    , _eeEntity :: !EntityName
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
