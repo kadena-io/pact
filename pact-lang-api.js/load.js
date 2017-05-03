@@ -13,7 +13,7 @@ process.argv.slice(2).forEach(function (v,i,a) {
     }
 });
 var usage = "\nload.js: create JSON for loading Pact code \n\n\
-Arguments: [-cf codefile] [-c code] -n nonce -s sk -p pk [-df datafile] [-d data] \n\n\
+Arguments: [-cf codefile] [-c code] -n nonce -s sk -p pk [-df datafile] [-d data] [-t to -f from]\n\n\
   codefile    filepath containing pact code to load \n\
   code        pact code to execute \n\
   datafile    filepath containing JSON data to accompany pact code load \n\
@@ -21,6 +21,8 @@ Arguments: [-cf codefile] [-c code] -n nonce -s sk -p pk [-df datafile] [-d data
   nonce       nonce value for data payload \n\
   sk          secret key \n\
   pk          public key \n\
+  to          Private message sender entity \n\
+  from        Private message recipient JSON list \n\
 ";
 
 function die(msg) {
@@ -37,7 +39,11 @@ function read(fp,cb) {
 }
 function go(code,data) {
     var kp = { publicKey: args.p, secretKey: args.s};
-    var msg = pact.simple.exec.createCommand(kp,args.n,code,JSON.parse(data));
+    var addy;
+    if (args.t && args.f) {
+        addy = { "from": args.f, "to": JSON.parse(args.t) };
+    }
+    var msg = pact.simple.exec.createCommand(kp,args.n,code,JSON.parse(data),addy);
     console.log(JSON.stringify(msg));
 }
 
@@ -45,6 +51,7 @@ if (!args.cf && !args.c) { dieu("Missing code or codefile argument"); }
 if (!args.n) { dieu("Missing nonce argument"); }
 if (!args.s) { dieu("Missing sk argument"); }
 if (!args.p) { dieu("Missing pk argument"); }
+if ((args.t && !args.f) || (!args.t && args.f)) { dieu("Must provide both TO and FROM when formatting private payload"); }
 
 function doData(code) {
     if (args.df) {

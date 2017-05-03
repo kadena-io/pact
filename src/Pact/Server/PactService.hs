@@ -34,7 +34,7 @@ import Pact.Types.Logger
 import Pact.Interpreter
 
 
-initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (Envelope (PactRPC ParsedCode)))
+initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
@@ -57,7 +57,7 @@ initPactService CommandConfig {..} loggers = do
 
 
 applyCmd :: Logger -> PactConfig -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
-            ProcessedCommand (Envelope (PactRPC ParsedCode)) -> IO CommandResult
+            ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
@@ -77,18 +77,21 @@ exToTx :: ExecutionMode -> Maybe TxId
 exToTx (Transactional t) = Just t
 exToTx Local = Nothing
 
-runPayload :: Command (Payload (Envelope (PactRPC ParsedCode))) -> CommandM p CommandResult
-runPayload c@Command{..} = case _pPayload _cmdPayload of
-  PublicEnvelope rpc -> runRpc rpc
-  PrivateEnvelope from to rpc -> do
-    entName <- view (ceConfig . pactEntity)
-    mode <- view ceMode
-    if entName == from || (entName `S.member` to)
-      then runRpc rpc
-      else return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
-  where
-    runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm _cmdSigs
-    runRpc (Continuation ym) = applyContinuation ym _cmdSigs
+runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
+runPayload c@Command{..} = do
+  let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm _cmdSigs
+      runRpc (Continuation ym) = applyContinuation ym _cmdSigs
+      Payload{..} = _cmdPayload
+  case _pAddress of
+    Just Address{..} -> do
+      -- simulate fake blinding if not addressed to this entity
+      entName <- view (ceConfig . pactEntity)
+      mode <- view ceMode
+      if entName == _aFrom || (entName `S.member` _aTo)
+        then runRpc _pPayload
+        else return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
+    Nothing -> runRpc _pPayload
+
 
 
 applyExec :: RequestKey -> ExecMsg ParsedCode -> [UserSig] -> CommandM p CommandResult

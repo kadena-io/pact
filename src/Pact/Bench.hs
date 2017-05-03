@@ -122,7 +122,7 @@ main = do
   !mpdbRS <- loadBenchModule mockPersistDb
   print =<< runPactExec mockPersistDb mpdbRS benchCmd
   !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
-              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce"))
+              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
 
   defaultMain [
     benchParse,

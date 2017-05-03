@@ -34,6 +34,7 @@ import Data.Word (Word16)
 import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
+import Data.Maybe
 
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (Update,(<>))
@@ -50,7 +51,8 @@ data Config = Config {
   _persistDir :: Maybe FilePath,
   _logDir :: FilePath,
   _pragmas :: [Pragma],
-  _verbose :: Bool
+  _verbose :: Bool,
+  _entity :: Maybe EntityName
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
@@ -63,6 +65,7 @@ usage =
   \             If ommitted, runs in-memory only. \n\
   \logDir     - Directory for HTTP logs \n\
   \pragmas    - SQLite pragmas to use with persistence DBs \n\
+  \entity     - Entity name for simulating privacy, defaults to \"entity\" \n\
   \\n"
 
 serve :: FilePath -> IO ()
@@ -77,7 +80,7 @@ serve configFile = do
   debugFn <- if _verbose then initFastLogger else return (return . const ())
   let cmdConfig = CommandConfig
           (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
-          (PactConfig "entity")
+          (PactConfig (fromMaybe "entity" _entity))
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   link =<< async (runHistoryService histConf Nothing)

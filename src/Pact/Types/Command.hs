@@ -24,8 +24,8 @@
 module Pact.Types.Command
   ( Command(..),mkCommand,mkCommand'
   , ProcessedCommand(..)
+  , Address(..)
   , Payload(..)
-  , Envelope(..)
   , ParsedCode(..)
   , UserSig(..),usScheme,usPubKey,usSig
   , verifyUserSig, verifyCommand
@@ -65,32 +65,6 @@ import Pact.Types.Crypto as Base
 import Pact.Parse
 import Pact.Types.RPC
 
-
-data Envelope a =
-  PublicEnvelope {
-    _ePayload :: !a
-  } |
-  PrivateEnvelope {
-    _eFrom :: !EntityName
-  , _eTo :: !(S.Set EntityName)
-  , _ePayload :: !a
-  } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
-instance ToJSON a => ToJSON (Envelope a)where
-  toJSON PublicEnvelope{..} = toJSON _ePayload
-  toJSON PrivateEnvelope{..} = object
-    [ "msg" .= _ePayload
-    , "to" .= _eTo
-    , "from" .= _eFrom ]
-instance FromJSON a => FromJSON (Envelope a) where
-  parseJSON v = (withObject "Message" $ \o ->
-                    PrivateEnvelope <$> o .: "from"
-                    <*> o .: "to"
-                    <*> o .: "msg") v <|>
-                (PublicEnvelope <$> parseJSON v)
-
-instance Serialize a => Serialize (Envelope a)
-instance NFData a => NFData (Envelope a)
-
 data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
@@ -112,8 +86,8 @@ instance (FromJSON a) => FromJSON (Command a) where
 
 instance NFData a => NFData (Command a)
 
-mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Text -> a -> Command ByteString
-mkCommand creds nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload (PublicEnvelope a) nonce)
+mkCommand :: ToJSON a => [(PPKScheme, PrivateKey, Base.PublicKey)] -> Maybe Address -> Text -> a -> Command ByteString
+mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Payload a nonce addy)
 
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = Command env (sig <$> creds) hsh
@@ -123,12 +97,12 @@ mkCommand' creds env = Command env (sig <$> creds) hsh
 
 
 
-verifyCommand :: Command ByteString -> ProcessedCommand (Envelope (PactRPC ParsedCode))
+verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
       (Right env', Right _, Nothing) -> ProcSucc $ orig { _cmdPayload = env' }
       (e, h, s) -> ProcFail $ "Invalid command: " ++ toErrStr e ++ toErrStr h ++ fromMaybe "" s
   where
-    ppcmdPayload' = traverse (traverse (traverse parsePact)) =<< A.eitherDecodeStrict' _cmdPayload
+    ppcmdPayload' = traverse (traverse parsePact) =<< A.eitherDecodeStrict' _cmdPayload
     parsePact :: Text -> Either String ParsedCode
     parsePact code = ParsedCode code <$> parseExprs code
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
@@ -153,19 +127,25 @@ data ParsedCode = ParsedCode {
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
+data Address = Address {
+    _aFrom :: EntityName
+  , _aTo :: S.Set EntityName
+  } deriving (Eq,Show,Ord,Generic)
+instance NFData Address
+instance Serialize Address
+instance ToJSON Address where toJSON = lensyToJSON 2
+instance FromJSON Address where parseJSON = lensyParseJSON 2
 
 data Payload a = Payload
   { _pPayload :: !a
   , _pNonce :: !Text
+  , _pAddress :: !(Maybe Address)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
 
 instance NFData a => NFData (Payload a)
-instance ToJSON a => ToJSON (Payload a) where
-  toJSON (Payload r rid) = object [ "payload" .= r, "nonce" .= rid]
-instance FromJSON a => FromJSON (Payload a) where
-  parseJSON = withObject "Payload" $ \o ->
-                    Payload <$> o .: "payload" <*> o .: "nonce"
-  {-# INLINE parseJSON #-}
+instance ToJSON a => ToJSON (Payload a) where toJSON = lensyToJSON 2
+instance FromJSON a => FromJSON (Payload a) where parseJSON = lensyParseJSON 2
+
 
 
 data UserSig = UserSig

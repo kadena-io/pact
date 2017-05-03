@@ -91,9 +91,9 @@ var mkPublicSend = function(cmds) {
     }
 };
 
-var simpleExecCommand = function(keyPairs, nonce, pactCode, envData) {
-  // Input: eithe a single or array of keyPairs, a nonce, pactCode, and an envData object
-  // Output: a correctly formatted JSON exec msg for pact, send it to /api/public/send
+var simpleExecCommand = function(keyPairs, nonce, pactCode, envData, addy) {
+  // Input: single or array of keyPairs, nonce, pactCode, optional address, envData object
+  // Output: a correctly formatted JSON exec msg for pact API
   // Throws PactError on maleformed inputs
   if (typeof nonce !== 'string') {
     throw new TypeError('nonce must be a string: ' + JSON.stringify(nonce));
@@ -101,11 +101,18 @@ var simpleExecCommand = function(keyPairs, nonce, pactCode, envData) {
   if (typeof pactCode !== 'string') {
     throw new TypeError('pactCode must be a string: ' + JSON.stringify(pactCode));
   }
-  var cmd = JSON.stringify({"nonce": nonce,
-                            "payload": {"exec": {
-                              "code": pactCode,
-                              "data": envData || {}
-                            }}});
+  var execRpc = { "exec": {
+      "code": pactCode,
+      "data": envData || {}
+  } };
+    var cmdj;
+    if (addy) {
+        cmdj = {"nonce": nonce, "payload": execRpc, "address": addy };
+    } else {
+        cmdj = {"nonce": nonce, "payload": execRpc };
+    }
+    var cmd = JSON.stringify(cmdj);
+
   var sigs = [];
   if (Array.isArray(keyPairs)) {
     sigs = keyPairs.map(function(kp) {return sign(cmd, kp);});

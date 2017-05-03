@@ -38,7 +38,7 @@ All endpoints are served from `api/v1`. Thus a `send` call would be sent to (htt
 
 ### `send` {#api-send}
 
-Asynchronous submit of one or more commands to the blockchain.
+Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
 
 Request JSON:
 
@@ -56,6 +56,55 @@ Request JSON:
     ]
     "cmd": {
       "nonce": "[nonce value]",
+      "payload": {
+        "exec": "[pact code]",
+        "data": {
+          /* arbitrary user data to accompany code */
+        }
+      }
+    }
+  } \\ end "Command" JSON
+}
+```
+
+Response JSON:
+
+```
+{
+  "status": "success|failure",
+  "response": {
+    "requestKeys": [
+      "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+    ]
+  }
+}
+```
+
+### `private` {#api-private}
+
+Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
+to securely encrypt for only sending and receiving entities to read.
+
+Request JSON:
+
+```javascript
+{
+  "cmds": [
+  { \\ "Command" JSON
+    "hash": "[blake2 hash in base16 of 'cmd' value]",
+    "sigs": [
+      {
+        "sig": "[crypto signature by secret key of 'hash' value]",
+        "pubKey": "[base16-format of public key of signing keypair]",
+        "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+      }
+    ]
+    "cmd": {
+      "address": {
+        "from": "[Sending entity name, must match sending entity node entity name]",
+        "to": ["A","B"] /* list of recipient entity names */
+      }
+      "nonce": "[nonce value]"
       "payload": {
         "exec": "[pact code]",
         "data": {

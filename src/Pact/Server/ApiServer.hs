@@ -48,6 +48,7 @@ import Snap.Util.FileServe
 import Pact.Types.Command
 import Pact.Types.API
 import Pact.Types.Server
+import Pact.Types.RPC
 
 data ApiEnv = ApiEnv
   { _aiLog :: String -> IO ()
@@ -75,18 +76,31 @@ noCacheStatic = do
 
 api :: Api ()
 api = route [
-       ("send",sendPublicBatch)
+       ("send",sendBatch True)
+      ,("private",sendBatch False)
       ,("poll",poll)
       ,("listen",registerListener)
       ,("local",sendLocal)
       ]
 
-sendPublicBatch :: Api ()
-sendPublicBatch = do
+sendBatch :: Bool -> Api ()
+sendBatch public = do
   (SubmitBatch cmds) <- readJSON
   when (null cmds) $ die "Empty Batch"
-  rks <- mapM queueCmds $ group 8000 cmds
+  crs <- forM cmds $ \c -> do
+    cr@(_,Command{..}) <- buildCmdRpc c
+    liftIO $ print cr
+    case eitherDecodeStrict' _cmdPayload of
+      Left e -> die $ "JSON payload decode failed: " ++ show e
+      Right (Payload{..} :: Payload (PactRPC T.Text)) -> case (public,_pAddress) of
+        (True,Nothing) -> return ()
+        (True,_) -> die "Send public: payload must not have address"
+        (False,Just {}) -> return ()
+        (False,_) -> die "Send private: payload must have address"
+    return cr
+  rks <- mapM queueCmds $ group 8000 crs
   writeResponse $ ApiSuccess $ RequestKeys $ concat rks
+
 
 sendLocal :: Api ()
 sendLocal = do
@@ -157,9 +171,8 @@ group n l
   | n > 0 = take n l : group n (drop n l)
   | otherwise = error "Negative n"
 
-queueCmds :: [Command T.Text] -> Api [RequestKey]
-queueCmds cmds = do
-  rpcs <- mapM buildCmdRpc cmds
+queueCmds :: [(RequestKey,Command ByteString)] -> Api [RequestKey]
+queueCmds rpcs = do
   hc <- view aiHistoryChan
   liftIO $ writeHistory hc $ AddNew (map snd rpcs)
   return $ fst <$> rpcs

@@ -50,7 +50,8 @@ if running on ``localhost:8080``.
 ``send``
 ~~~~~~~~
 
-Asynchronous submit of one or more commands to the blockchain.
+Asynchronous submit of one or more *public* (unencrypted) commands to
+the blockchain.
 
 Request JSON:
 
@@ -69,6 +70,57 @@ Request JSON:
         ]
         "cmd": {
           "nonce": "[nonce value]",
+          "payload": {
+            "exec": "[pact code]",
+            "data": {
+              /* arbitrary user data to accompany code */
+            }
+          }
+        }
+      } \\ end "Command" JSON
+    }
+
+Response JSON:
+
+::
+
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
+
+``private``
+~~~~~~~~~~~
+
+Asynchronous submit of one or more *private* commands to the blockchain,
+using supplied address info to securely encrypt for only sending and
+receiving entities to read.
+
+Request JSON:
+
+.. code:: javascript
+
+    {
+      "cmds": [
+      { \\ "Command" JSON
+        "hash": "[blake2 hash in base16 of 'cmd' value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]",
+            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+          }
+        ]
+        "cmd": {
+          "address": {
+            "from": "[Sending entity name, must match sending entity node entity name]",
+            "to": ["A","B"] /* list of recipient entity names */
+          }
+          "nonce": "[nonce value]"
           "payload": {
             "exec": "[pact code]",
             "data": {
@@ -799,15 +851,17 @@ Booleans are represented by ``true`` and ``false`` literals.
 Lists
 ~~~~~
 
-List literals are created with brackets. This is actually a special
-form, which evaluates the `list <#listfun>`__ function.
+List literals are created with brackets. Uniform literal lists are given
+a type in parsing.
 
 ::
 
     pact> [1 2 3]
     [1 2 3]
-    pact> (= [1 2 3] (list 1 2 3))
-    true
+    pact> (typeof [1 2 3])
+    "[integer]"
+    pact> (typeof [1 2 true])
+    "list"
 
 Objects
 ~~~~~~~
