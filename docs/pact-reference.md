@@ -10,6 +10,14 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 ===
 
+**Version 2.2.0:**
+
+* Privacy API: `private` endpoint, address fields in command
+* Typechecker support for `at`,`filter`,`map`,`fold`,`compose`
+* Persist layer standardized for easier extension
+* Library features: Interpreter module, NFData all the things, Eval uses exceptions
+* Types module breakup
+
 **Version 2.1.0:**
 
 * "pact -serve": new REST API server for app development
