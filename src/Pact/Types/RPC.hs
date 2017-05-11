@@ -80,7 +80,7 @@ data ContMsg t = ContMsg
   { _cmTxId :: !TxId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmResume :: !(Maybe t)
+  , _cmResume :: !(Maybe Value)
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData a => NFData (ContMsg a)
