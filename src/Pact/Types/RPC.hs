@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -44,7 +45,7 @@ instance ToJSON PactConfig
 
 data PactRPC c =
     Exec (ExecMsg c) |
-    Continuation ContMsg
+    Continuation (ContMsg c)
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (PactRPC c)
@@ -75,19 +76,21 @@ instance FromJSON c => FromJSON (ExecMsg c) where
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
-data ContMsg = ContMsg {
-      _cmTxId :: TxId
-    , _cmStep :: Int
-    , _cmRollback :: Bool
-    }
-    deriving (Eq,Show,Generic)
+data ContMsg t = ContMsg
+  { _cmTxId :: !TxId
+  , _cmStep :: !Int
+  , _cmRollback :: !Bool
+  , _cmResume :: !(Maybe t)
+  } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
-instance NFData ContMsg
-instance FromJSON ContMsg where
+instance NFData a => NFData (ContMsg a)
+instance FromJSON a => FromJSON (ContMsg a) where
     parseJSON =
         withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback"
+            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback" <*> o .:? "resume"
     {-# INLINE parseJSON #-}
 
-instance ToJSON ContMsg where
-    toJSON (ContMsg t s r) = object [ "txid" .= t, "step" .= s, "rollback" .= r]
+instance ToJSON a => ToJSON (ContMsg a) where
+    toJSON ContMsg{..} = object $
+      [ "txid" .= _cmTxId, "step" .= _cmStep, "rollback" .= _cmRollback] ++
+      maybe [] (\c -> ["resume" .= c]) _cmResume
