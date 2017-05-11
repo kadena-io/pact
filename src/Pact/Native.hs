@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
@@ -20,9 +21,10 @@ module Pact.Native
     ,initEvalEnv)
     where
 
-import Control.Concurrent
+import Control.Concurrent hiding (yield)
 import Control.Lens hiding (from,to,parts,Fold)
 import Control.Monad
+import Control.Monad.Reader (ask)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import Prelude hiding (exp)
@@ -31,7 +33,7 @@ import qualified Data.Text as T
 import Safe
 import Control.Arrow
 import Data.Foldable
-import Data.Aeson
+import Data.Aeson hiding ((.=))
 import Data.Maybe
 import Data.Decimal
 
@@ -143,11 +145,16 @@ langDefs =
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
+    ,defRNative "yield" yield (funType yieldv [("value",yieldv)]) "Yield object VALUE for use in next pact step."
+    ,defNative "resume" resume
+     (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
+     "Special form binds to a yielded object value from the prior step execution in a pact."
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
           c = mkTyVar "c" []
           row = mkSchemaVar "row"
+          yieldv = TySchema TyObject (mkSchemaVar "y")
           listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
           listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
           takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
@@ -312,14 +319,17 @@ pactTxId _ [] = do
 pactTxId i as = argsError i as
 
 bind :: NativeFun e
-bind i [src,TBinding ps bd (BindSchema _) bi] = reduce src >>= \st -> case st of
-  TObject o _ _ -> do
-    !m <- fmap M.fromList $ forM o $ \(k,v) -> case k of
-             TLitString k' -> return (k',liftTerm v)
-             tk -> evalError' i $ "Bad object (non-string key) in bind: " ++ show tk
-    bindReduce ps bd bi $ \s -> M.lookup s m
-  t -> evalError' i $ "bind: source expression must evaluate to object: " ++ show t
+bind _ [src,TBinding ps bd (BindSchema _) bi] =
+  reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
+
+bindObjectLookup :: Term Name -> Eval e (Text -> Maybe (Term Ref))
+bindObjectLookup TObject {..} = do
+  !m <- fmap M.fromList $ forM _tObject $ \(k,v) -> case k of
+    TLitString k' -> return (k',liftTerm v)
+    tk -> evalError _tInfo $ "Bad object (non-string key) in bind: " ++ show tk
+  return (\s -> M.lookup s m)
+bindObjectLookup t = evalError (_tInfo t) $ "bind: expected object: " ++ show t
 
 typeof'' :: RNativeFun e
 typeof'' _ [t] = return $ tStr $ typeof' t
@@ -340,3 +350,21 @@ initEvalEnv e b = do
 unsetInfo :: Term a -> Term a
 unsetInfo a = set tInfo def a
 {-# INLINE unsetInfo #-}
+
+yield :: RNativeFun e
+yield i [t@TObject {}] = do
+  eym <- use evalYield
+  case eym of
+    Nothing -> evalError' i "Yield not in defpact context"
+    Just ey -> do
+      evalYield .= Just (set peYield (Just t) ey)
+      return t
+yield i as = argsError i as
+
+resume :: NativeFun e
+resume i [TBinding ps bd (BindSchema _) bi] = do
+  rm <- firstOf (eePactStep . _Just . psResume . _Just) <$> ask
+  case rm of
+    Nothing -> evalError' i "Resume: no yielded value in context"
+    Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
+resume i as = argsError' i as

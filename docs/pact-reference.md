@@ -10,6 +10,9 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 ===
 
+**Version 2.2.1**
+* `yield` and `resume` added to defpacts
+
 **Version 2.2.0:**
 
 * Privacy API: `private` endpoint, address fields in command

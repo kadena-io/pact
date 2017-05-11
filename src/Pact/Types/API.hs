@@ -78,7 +78,7 @@ makeLenses ''SubmitBatch
 instance ToJSON SubmitBatch where
   toJSON = lensyToJSON 3
 instance FromJSON SubmitBatch where
-  parseJSON = lensyParseJSON 3
+   parseJSON = lensyParseJSON 3
 
 -- | What you get back from a SubmitBatch
 type SubmitBatchResponse = ApiResponse RequestKeys

@@ -264,7 +264,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
       ("deftable",Nothing) -> doTable rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
-          (preArgs@(_:_),be@(EBinding bs _):bbody) ->
+          (preArgs,be@(EBinding bs _):bbody) ->
             do
               as <- mapM run preArgs
               bi <- mkInfo be

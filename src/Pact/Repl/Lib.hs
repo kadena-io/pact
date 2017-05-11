@@ -83,13 +83,16 @@ replDefs = ("Repl",
      ,defRNative "env-data" setmsg (funType tTyString [("json",json)]) $
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " <>
       "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
-     ,defRNative "env-step" setstep (funType tTyString [] <>
-                                     funType tTyString [("step-idx",tTyInteger)] <>
-                                     funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)])
-      ("Modify pact step state. With no arguments, unset step. STEP-IDX sets step index for " <>
-       "current pact execution, ROLLBACK defaults to false. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defRNative "env-step"
+      setstep (funType tTyString [] <>
+               funType tTyString [("step-idx",tTyInteger)] <>
+               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
+               funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),("resume",TySchema TyObject (mkSchemaVar "y"))])
+      ("Modify pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
+       "ROLLBACK instructs to execute rollback expression, if any. RESUME sets the value of a previous YIELD step." <>
+       "Also clears last expression's yield value. `$(env-step 1)` `$(env-step 0 true)`")
      ,defRNative "env-entity" setentity (funType tTyString [("entity",tTyString)])
-      "Set environment confidential ENTITY id. `$(env-entity \"my-org\")`"
+      "Set environment confidential ENTITY id. Also clears last expression's yield value. `$(env-entity \"my-org\")`"
      ,defRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
        "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
@@ -173,11 +176,14 @@ setmsg i as = argsError i as
 setstep :: RNativeFun LibState
 setstep _ [] = setstep' Nothing >> return (tStr "Un-setting step")
 setstep _ [TLitInteger j] = do
-  setstep' (Just $ PactStep (fromIntegral j) False def)
+  setstep' (Just $ PactStep (fromIntegral j) False def def)
   return $ tStr "Setting step"
 setstep _ [TLitInteger j,TLiteral (LBool b) _] = do
-  setstep' (Just $ PactStep (fromIntegral j) b def)
+  setstep' (Just $ PactStep (fromIntegral j) b def def)
   return $ tStr "Setting step and rollback"
+setstep _ [TLitInteger j,TLiteral (LBool b) _,o@TObject{}] = do
+  setstep' (Just $ PactStep (fromIntegral j) b def (Just o))
+  return $ tStr "Setting step, rollback, and resume value"
 setstep i as = argsError i as
 
 setstep' :: Maybe PactStep -> Eval LibState ()
@@ -186,7 +192,10 @@ setstep' s = do
   evalYield .= Nothing
 
 setentity :: RNativeFun LibState
-setentity _ [TLitString s] = setenv eeEntity (EntityName s) >> return (tStr "Setting entity")
+setentity _ [TLitString s] = do
+  setenv eeEntity (EntityName s)
+  evalYield .= Nothing
+  return (tStr "Setting entity")
 setentity i as = argsError i as
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name

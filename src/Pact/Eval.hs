@@ -262,39 +262,30 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ sho
 -- defaulting to the first step.
 applyPact ::  Term Ref ->  Eval e (Term Name)
 applyPact (TList ss _ i) = do
-  steps <- forM ss $ \s ->
-           case s of
-             (TStep ent e r si) -> return (ent,e,r,si)
-             t -> evalError (_tInfo t) "applyPact: expected step"
-  (idx,doRollback) <- maybe (0,False) (_psStep &&& _psRollback) <$> view eePactStep
-  (ent,ex,rb,si) <- maybe (evalError i $ "applyPact: step not found: " ++ show idx) return $
-                    steps `atMay` idx
-  entr <- reduce ent
-  (EntityName us) <- view eeEntity
-  case entr of
-    (TLitString target)
-        | target /= us -> return (tStr $ pack $ "Skip step " ++ show idx)
-        | otherwise ->
-            case (doRollback,rb) of
-              (False,_) -> do
-                 let next | succ idx < length steps = Just (succ idx)
-                          | otherwise = Nothing
-                     rbi = fmap (const idx) rb
-                 evalStep ex (PactYield next rbi)
-              (True,Just r) -> evalStep r def
-              (True,Nothing) -> evalError si "applyPact: expected rollback"
-    t -> evalError (_tInfo t) "step entity must be String value"
+  (stepIdx,doRollback) <- maybe (0,False) (_psStep &&& _psRollback) <$> view eePactStep
+  s <- maybe (evalError i $ "applyPact: step not found: " ++ show stepIdx) return $ ss `atMay` stepIdx
+  use evalYield >>= \badY -> unless (isNothing badY) $ evalError i "Nested pact, aborting"
+  case s of
+    ts@TStep {} -> do
+      se <- reduce $ _tStepEntity ts
+      case se of
+        TLitString stepEnt -> do
+          (EntityName en) <- view eeEntity
+          if stepEnt == en
+            then do
+              evalYield .= Just (PactYield (length ss) Nothing True)
+              if doRollback
+                then case _tStepRollback ts of
+                       Nothing -> return $ tStr $ pack $ "No rollback on step " ++ show stepIdx
+                       Just rexp -> reduce rexp
+                else reduce $ _tStepExec ts
+            else do
+              evalYield .= Just (PactYield (length ss) Nothing False)
+              return $ tStr "Skip step"
+        t -> evalError (_tInfo t) "step entity must be String value"
+    t -> evalError (_tInfo t) "expected step"
 applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 
--- | Evaluate pact steps to apply one if found for this identity.
-evalStep ::  Term Ref -> PactYield ->  Eval e (Term Name)
-evalStep exp yield = do
-  oldy <- use evalYield
-  case oldy of
-    Just _ -> evalError (_tInfo exp) "Yield set more than once, aborting pact"
-    Nothing -> do
-              evalYield .= Just yield
-              reduce exp
 
 -- | Create special error form handled in 'reduceApp'
 appError :: Info -> Text -> Term n

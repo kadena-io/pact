@@ -41,13 +41,13 @@ module Pact.Types.Runtime
    Method,
    PactDb(..),
    TxId(..),
-   PactStep(..),
+   PactStep(..),psStep,psRollback,psTxId,psResume,
    ModuleData,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactYield(..),
+   PactYield(..),peStepCount,peYield,peExecuted,
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
    EvalState(..),evalRefs,evalCallStack,evalYield,
    Eval(..),runEval,runEval',
@@ -380,7 +380,9 @@ data PactStep = PactStep {
       _psStep :: !Int
     , _psRollback :: !Bool
     , _psTxId :: !TxId
+    , _psResume :: !(Maybe (Term Name))
 } deriving (Eq,Show)
+makeLenses ''PactStep
 
 type ModuleData = (Module,HM.HashMap Text Ref)
 
@@ -397,6 +399,14 @@ newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
 instance Show EntityName where show (EntityName t) = show t
 
+
+
+data PactYield = PactYield
+  { _peStepCount :: Int
+  , _peYield :: !(Maybe (Term Name))
+  , _peExecuted :: Bool
+  } deriving (Eq,Show)
+makeLenses ''PactYield
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -430,12 +440,6 @@ instance Show StackFrame where
               f (Just (dd,as)) = ", " ++ show dd ++ ", values=" ++ show as
 makeLenses ''StackFrame
 
-
-data PactYield = PactYield {
-      _pyNextStep :: !(Maybe Int)
-    , _pyFailStep :: !(Maybe Int)
-    } deriving (Eq,Show)
-instance Default PactYield where def = PactYield def def
 
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
