@@ -357,7 +357,7 @@ yield i [t@TObject {}] = do
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
     Just ey -> do
-      evalYield .= Just (set peYield (Just t) ey)
+      evalYield .= Just (set pyYield (Just t) ey)
       return t
 yield i as = argsError i as
 

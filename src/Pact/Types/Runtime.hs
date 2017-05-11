@@ -47,7 +47,7 @@ module Pact.Types.Runtime
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactYield(..),peStepCount,peYield,peExecuted,
+   PactYield(..),pyStepCount,pyYield,pyExecuted,
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
    EvalState(..),evalRefs,evalCallStack,evalYield,
    Eval(..),runEval,runEval',
@@ -402,9 +402,9 @@ instance Show EntityName where show (EntityName t) = show t
 
 
 data PactYield = PactYield
-  { _peStepCount :: Int
-  , _peYield :: !(Maybe (Term Name))
-  , _peExecuted :: Bool
+  { _pyStepCount :: Int
+  , _pyYield :: !(Maybe (Term Name))
+  , _pyExecuted :: Bool
   } deriving (Eq,Show)
 makeLenses ''PactYield
 

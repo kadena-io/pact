@@ -1,0 +1,34 @@
+(env-data { "k": { "keys": [], "pred": "<=" }})
+(begin-tx)
+(define-keyset 'k (read-keyset "k"))
+(module yieldtest 'k
+  (defpact tester (name)
+    (step-with-rollback
+     "A"
+     (let ((nameA (+ name "->A")))
+       (yield { "a-result": nameA})
+       nameA)
+     "rollback-a")
+    (step
+     "B"
+     (resume { "a-result" := ar }
+             (+ ar "->B")))))
+(commit-tx)
+(use 'yieldtest)
+
+(env-entity "A")
+(expect "step 1 executes" "stu->A" (tester "stu"))
+(env-step 1 false (yielded true))
+(env-entity "B")
+(expect "step 2 executes" "stu->A->B" (tester ""))
+(env-entity "A")
+(env-step 0 true)
+(expect "step 1 rollback executes" "rollback-a" (tester ""))
+(env-entity "B")
+(tester "")
+;; use absence of yield to test for skip
+(yielded false)
+(env-step 1 false)
+(env-entity "A")
+;; use the lack of an error to test that 1 is skipped for "A"
+(tester "")

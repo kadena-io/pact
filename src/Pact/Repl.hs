@@ -58,29 +58,9 @@ import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
+import Pact.Repl.Types
 
 
-
-data ReplMode =
-    Interactive |
-    Script String |
-    FailureTest |
-    Quiet |
-    StringEval
-    deriving (Eq,Show)
-
-data Hdl = HOut|HErr
-
-data ReplState = ReplState {
-      _rEnv :: EvalEnv LibState
-    , _rEvalState :: EvalState
-    , _rMode :: ReplMode
-    , _rOut :: String
-    , _rFile :: Maybe FilePath
-    }
-makeLenses ''ReplState
-
-type Repl a = StateT ReplState IO a
 
 repl :: IO (Either () (Term Name))
 repl = initReplState Interactive >>= \s -> runRepl s stdin

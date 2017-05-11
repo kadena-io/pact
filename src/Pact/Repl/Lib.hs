@@ -45,23 +45,9 @@ import Data.Semigroup
 import Pact.Typechecker
 import Pact.Types.Typecheck
 import Pact.Types.Logger
+import Pact.Repl.Types
 
 
-
-data LibOp =
-    Noop |
-    UpdateEnv (Endo (EvalEnv LibState)) |
-    Load FilePath Bool |
-    TcErrors [String]
-instance Default LibOp where def = Noop
-data Tx = Begin|Commit|Rollback deriving (Eq,Show,Bounded,Enum,Ord)
-
-data LibState = LibState {
-      _rlsPure :: MVar (DbEnv PureDb)
-    , _rlsOp :: LibOp
-    , _rlsTxName :: Maybe Text
-}
-makeLenses ''LibState
 
 initLibState :: Loggers -> IO LibState
 initLibState loggers = do
@@ -91,6 +77,9 @@ replDefs = ("Repl",
       ("Modify pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets the value of a previous YIELD step." <>
        "Also clears last expression's yield value. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defRNative "yielded" yielded (funType a [("expect-yield",tTyBool)]) $
+      "When EXPECT-YIELD is true, return result of yield from previous evaluation, failing if not set. " <>
+      "When EXPECT-YIELD is false, fail if the previous evaluation produced a yield."
      ,defRNative "env-entity" setentity (funType tTyString [("entity",tTyString)])
       "Set environment confidential ENTITY id. Also clears last expression's yield value. `$(env-entity \"my-org\")`"
      ,defRNative "begin-tx" (tx Begin) (funType tTyString [] <>
@@ -197,6 +186,17 @@ setentity _ [TLitString s] = do
   evalYield .= Nothing
   return (tStr "Setting entity")
 setentity i as = argsError i as
+
+yielded :: RNativeFun LibState
+yielded i [TLiteral (LBool expectYield) _] = do
+  ym <- join . fmap (firstOf (pyYield . _Just)) <$> use evalYield
+  case (ym,expectYield) of
+    (Nothing,False) -> return $ tStr "yielded: success, no yield found"
+    (Nothing,True) -> evalError' i "FAILURE: expected yield value"
+    (Just y,True) -> return y
+    (Just y,False) -> evalError' i $ "FAILURE: unexpected yield present: " ++ show y
+yielded i as = argsError i as
+
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
 txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n

@@ -43,6 +43,7 @@ library
                      , Pact.Persist.MockPersist
                      , Pact.Repl
                      , Pact.Repl.Lib
+                     , Pact.Repl.Types
                      , Pact.Typechecker
                      , Pact.Types.Lang
                      , Pact.Types.Logger
