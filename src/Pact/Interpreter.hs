@@ -48,7 +48,8 @@ data MsgData = MsgData {
 instance Default MsgData where def = MsgData def Null def
 
 data EvalResult = EvalResult {
-  erTerms :: ![Term Name],
+  erInput :: ![Term Name],
+  erOutput :: ![Term Name],
   erLogs :: ![TxLog],
   erRefStore :: !RefStore,
   erYield :: !(Maybe PactYield)
@@ -111,7 +112,7 @@ interpret evalEnv terms = do
     runEval def evalEnv $ evalTerms tx terms
   let newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $! EvalResult rs logs (newRefs $ _eeRefStore evalEnv) (_evalYield state)
+  return $! EvalResult terms rs logs (newRefs $ _eeRefStore evalEnv) (_evalYield state)
 
 evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog])
 evalTerms tx terms = do

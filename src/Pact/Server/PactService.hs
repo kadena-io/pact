@@ -103,7 +103,7 @@ applyExec rk (ExecMsg parsedCode edata) ks = do
                 (MsgData (userSigsToPactKeySet ks) edata Nothing) refStore
   pr <- liftIO $ evalExec evalEnv parsedCode
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
-  return $ jsonResult _ceMode rk $ CommandSuccess (last (erTerms pr))
+  return $ jsonResult _ceMode rk $ CommandSuccess (last (erOutput pr))
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"

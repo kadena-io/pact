@@ -83,7 +83,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erTerms <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
+  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] ">"
