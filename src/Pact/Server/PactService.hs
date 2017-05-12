@@ -105,5 +105,5 @@ applyExec rk (ExecMsg parsedCode edata) ks = do
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
   return $ jsonResult _ceMode rk $ CommandSuccess (last (erTerms pr))
 
-applyContinuation :: ContMsg ParsedCode -> [UserSig] -> CommandM p CommandResult
+applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"

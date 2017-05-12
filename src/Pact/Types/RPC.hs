@@ -45,7 +45,7 @@ instance ToJSON PactConfig
 
 data PactRPC c =
     Exec (ExecMsg c) |
-    Continuation (ContMsg c)
+    Continuation ContMsg
     deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (PactRPC c)
@@ -76,21 +76,21 @@ instance FromJSON c => FromJSON (ExecMsg c) where
 instance ToJSON c => ToJSON (ExecMsg c) where
     toJSON (ExecMsg c d) = object [ "code" .= c, "data" .= d]
 
-data ContMsg t = ContMsg
+data ContMsg = ContMsg
   { _cmTxId :: !TxId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
   , _cmResume :: !(Maybe Value)
-  } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Show,Generic)
 
-instance NFData a => NFData (ContMsg a)
-instance FromJSON a => FromJSON (ContMsg a) where
+instance NFData ContMsg
+instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
             ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback" <*> o .:? "resume"
     {-# INLINE parseJSON #-}
 
-instance ToJSON a => ToJSON (ContMsg a) where
+instance ToJSON ContMsg where
     toJSON ContMsg{..} = object $
       [ "txid" .= _cmTxId, "step" .= _cmStep, "rollback" .= _cmRollback] ++
       maybe [] (\c -> ["resume" .= c]) _cmResume
