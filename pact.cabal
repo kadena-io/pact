@@ -40,7 +40,6 @@ library
                      , Pact.PersistPactDb
                      , Pact.Persist
                      , Pact.Persist.Pure
-                     , Pact.Persist.MockPersist
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
@@ -114,6 +113,7 @@ library
                   , Pact.MockDb
                   , Pact.PersistPactDb.Regression
                   , Pact.Persist.SQLite
+                  , Pact.Persist.MockPersist
                   , Pact.Types.API
                   , Pact.Types.Command
                   , Pact.Types.Crypto

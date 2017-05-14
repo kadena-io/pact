@@ -46,7 +46,7 @@ keyDefs =
     ,defKeyPred KeysAll (==)
      "Keyset predicate function to match all keys in keyset. `(keys-all 3 3)`"
     ,defKeyPred KeysAny (keysN 1)
-     "Keyset predicate function to match all keys in keyset. `(keys-any 10 1)`"
+     "Keyset predicate function to match any (at least 1) key in keyset. `(keys-any 10 1)`"
     ,defKeyPred Keys2 (keysN 2)
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
     ])

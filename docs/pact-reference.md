@@ -12,6 +12,8 @@ Changelog
 
 **Version 2.2.1**
 * `yield` and `resume` added to defpacts
+* `yielded`, `sig-keyset` repl functions
+* JSON defaults for keysets, better dispatch of builtin preds
 
 **Version 2.2.0:**
 
@@ -418,6 +420,23 @@ contract execution and administration.
 Keysets are [defined](#define-keyset) by [reading](#read-keyset) definitions from the message
 payload. Keysets consist of a list of public keys and a *keyset predicate*.
 
+Examples of valid keyset JSON productions:
+
+```javascript
+/* examples of valid keysets */
+{
+  "fully-specified":
+    { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" }
+
+  "keysonly":
+    { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] } /* defaults to "keys-all" pred */
+
+  "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
+}
+
+```
+
+
 ### Keyset Predicates {#keysetpredicates}
 
 A keyset predicate references a function by name which will compare the public keys in the keyset
@@ -430,6 +449,8 @@ feature for Bitcoin-style "multisig" contracts (ie requiring at least two signat
 
 Pact comes with built-in keyset predicates: [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2).
 Module authors are free to define additional predicates.
+
+If a keyset predicate is not specified, it is defaulted to [keys-all](#keys-all).
 
 ### Key rotation {#keyrotation}
 
@@ -567,6 +588,11 @@ the right choice, which will fail the transaction.
 Indeed, failure is the only *non-local exit* allowed by Pact. This reflects Pact's emphasis on
 *totality*.
 
+#### Use built-in keysets
+The built-in keyset functions [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2)
+are hardcoded in the interpreter to execute quickly. Custom keysets require runtime resolution
+which is slower.
+
 ### Functional Concepts {#fp}
 
 Pact includes the functional-programming "greatest hits": [map](#map), [fold](#fold) and [filter](#filter).
@@ -648,11 +674,19 @@ The concept of pacts reflect *coroutines* in software engineering: functions tha
 entity to execute it, after which the pact "yields" execution, completing the transaction and
 initiating a signed "Resume" message into the blockchain.
 
+The function [yield](#yield) and special form [resume](#resume) allow for passing computed values
+between subsequent steps. These are not available for rollback functions however.
+
 The counterparty entity sees this "Resume" message and drops back into the pact body to find if
 the next step is targetted for it, if so executing it.
 
 Since any step can fail, steps can be designed with [rollbacks](#step-with-rollback) to undo changes
 if a subsequent step fails.
+
+Note that at this time, it is not possible to simulate multi-party defpact executions in the
+pact server environment, as this is necessarily a multi-node/multi-entity interaction. Pacts
+can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
+and [yielded](#yielded) repl functions to simulate multi-entity interactions.
 
 
 
@@ -747,8 +781,8 @@ pact> { "foo": (+ 1 2), "bar": "baz" }
 ### Bindings {#binding}
 Bindings are dictionary-like forms, also created with curly braces, to bind
 database results to variables using the `:=` operator.
-They are used in [with-read](#with-read), [with-default-read](#with-default-read), and
-[bind](#bind) to assign variables to named columns in a row, or values in an object.
+They are used in [with-read](#with-read), [with-default-read](#with-default-read),
+[bind](#bind) and [resume](#resume) to assign variables to named columns in a row, or values in an object.
 
 ```lisp
 (defun check-balance (id)
@@ -883,7 +917,7 @@ table must still be created with [create-table](#create-table).
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables
 within BINDPAIRs cannot refer to previously-declared variables in
-the same let binding; for this use (let\*){#letstar}.
+the same let binding; for this use [let\*](#letstar).
 
 ```lisp
 (let ((x 2)
@@ -892,7 +926,7 @@ the same let binding; for this use (let\*){#letstar}.
 > 10
 ```
 
-### let\* {#letstar}
+### let&#42; {#letstar}
 
 ```(let\* (BINDPAIR [BINDPAIR [...]]) BODY)```
 

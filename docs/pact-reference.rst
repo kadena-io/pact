@@ -13,6 +13,10 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 =========
 
+**Version 2.2.1** \* ``yield`` and ``resume`` added to defpacts \*
+``yielded``, ``sig-keyset`` repl functions \* JSON defaults for keysets,
+better dispatch of builtin preds
+
 **Version 2.2.0:**
 
 -  Privacy API: ``private`` endpoint, address fields in command
@@ -477,6 +481,21 @@ Keysets are `defined <#define-keyset>`__ by `reading <#read-keyset>`__
 definitions from the message payload. Keysets consist of a list of
 public keys and a *keyset predicate*.
 
+Examples of valid keyset JSON productions:
+
+.. code:: javascript
+
+    /* examples of valid keysets */
+    {
+      "fully-specified":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" }
+
+      "keysonly":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] } /* defaults to "keys-all" pred */
+
+      "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
+    }
+
 Keyset Predicates
 ~~~~~~~~~~~~~~~~~
 
@@ -493,6 +512,9 @@ layer, and is a powerful feature for Bitcoin-style "multisig" contracts
 Pact comes with built-in keyset predicates: `keys-all <#keys-all>`__,
 `keys-any <#keys-any>`__, `keys-2 <#keys-2>`__. Module authors are free
 to define additional predicates.
+
+If a keyset predicate is not specified, it is defaulted to
+`keys-all <#keys-all>`__.
 
 Key rotation
 ~~~~~~~~~~~~
@@ -675,6 +697,14 @@ transaction.
 Indeed, failure is the only *non-local exit* allowed by Pact. This
 reflects Pact's emphasis on *totality*.
 
+Use built-in keysets
+^^^^^^^^^^^^^^^^^^^^
+
+The built-in keyset functions `keys-all <#keys-all>`__,
+`keys-any <#keys-any>`__, `keys-2 <#keys-2>`__ are hardcoded in the
+interpreter to execute quickly. Custom keysets require runtime
+resolution which is slower.
+
 Functional Concepts
 ~~~~~~~~~~~~~~~~~~~
 
@@ -776,6 +806,10 @@ execute it, after which the pact "yields" execution, completing the
 transaction and initiating a signed "Resume" message into the
 blockchain.
 
+The function `yield <#yield>`__ and special form `resume <#resume>`__
+allow for passing computed values between subsequent steps. These are
+not available for rollback functions however.
+
 The counterparty entity sees this "Resume" message and drops back into
 the pact body to find if the next step is targetted for it, if so
 executing it.
@@ -783,6 +817,13 @@ executing it.
 Since any step can fail, steps can be designed with
 `rollbacks <#step-with-rollback>`__ to undo changes if a subsequent step
 fails.
+
+Note that at this time, it is not possible to simulate multi-party
+defpact executions in the pact server environment, as this is
+necessarily a multi-node/multi-entity interaction. Pacts can be tested
+in repl scripts using the `env-entity <#env-entity>`__,
+`env-step <#env-step>`__ and `yielded <#yielded>`__ repl functions to
+simulate multi-entity interactions.
 
 Syntax
 ======
@@ -891,8 +932,9 @@ Bindings
 Bindings are dictionary-like forms, also created with curly braces, to
 bind database results to variables using the ``:=`` operator. They are
 used in `with-read <#with-read>`__,
-`with-default-read <#with-default-read>`__, and `bind <#bind>`__ to
-assign variables to named columns in a row, or values in an object.
+`with-default-read <#with-default-read>`__, `bind <#bind>`__ and
+`resume <#resume>`__ to assign variables to named columns in a row, or
+values in an object.
 
 .. code:: lisp
 
@@ -1047,7 +1089,7 @@ let
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables within
 BINDPAIRs cannot refer to previously-declared variables in the same let
-binding; for this use (let\*){#letstar}.
+binding; for this use `let\* <#letstar>`__.
 
 .. code:: lisp
 
@@ -1226,7 +1268,8 @@ to run BODY.
 compose
 ~~~~~~~
 
-*x* ``(x:<a>)-><b>`` *y* ``(x:<b>)-><c>`` *value* ``<a>`` *→* ``<c>``
+*x* ``(x:<a> -> <b>)`` *y* ``(x:<b> -> <c>)`` *value* ``<a>``
+*→* ``<c>``
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of
 X.
@@ -1234,7 +1277,7 @@ X.
 .. code:: lisp
 
     pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]:*
+    ["dog" "has" "fleas"]
 
 drop
 ~~~~
@@ -1249,7 +1292,7 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
     pact> (drop 2 "vwxyz")
     "xyz"
     pact> (drop (- 2) [1 2 3 4 5])
-    [1 2 3]:*
+    [1 2 3]
 
 enforce
 ~~~~~~~
@@ -1261,12 +1304,12 @@ Fail transaction with MSG if TEST fails, or returns true.
 .. code:: lisp
 
     pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-    <interactive>:1:0: Failure: Chaos reigns
+    <interactive>:1:0:(enforce (!= (+ 2 2) 4) "Chaos...: Failure: Tx Failed: Chaos reigns
 
 filter
 ~~~~~~
 
-*app* ``(x:<a>)->bool`` *list* ``[<a>]`` *→* ``[<a>]``
+*app* ``(x:<a> -> bool)`` *list* ``[<a>]`` *→* ``[<a>]``
 
 Filter LIST by applying APP to each element to get a boolean determining
 inclusion.
@@ -1274,12 +1317,13 @@ inclusion.
 .. code:: lisp
 
     pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-    ["dog" "has" "fleas"]:*
+    ["dog" "has" "fleas"]
 
 fold
 ~~~~
 
-*app* ``(x:<b> y:<b>)-><a>`` *init* ``<a>`` *list* ``[<b>]`` *→* ``<a>``
+*app* ``(x:<b> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
+*→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
 starting with INIT.
@@ -1334,12 +1378,13 @@ list
 
 *elems* ``*`` *→* ``list``
 
-Create list from ELEMS.
+Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list
+support.
 
 .. code:: lisp
 
     pact> (list 1 2 3)
-    [1 2 3]:*
+    [1 2 3]
 
 list-modules
 ~~~~~~~~~~~~
@@ -1351,14 +1396,14 @@ List modules available for loading.
 map
 ~~~
 
-*app* ``(x:<b>)-><a>`` *list* ``[<b>]`` *→* ``[<a>]``
+*app* ``(x:<b> -> <a>)`` *list* ``[<b>]`` *→* ``[<a>]``
 
 Apply elements in LIST as last arg to APP, returning list of results.
 
 .. code:: lisp
 
     pact> (map (+ 1) [1 2 3])
-    [2 3 4]:*
+    [2 3 4]
 
 pact-txid
 ~~~~~~~~~
@@ -1372,7 +1417,8 @@ read-decimal
 
 *key* ``string`` *→* ``decimal``
 
-Parse KEY string value from top level of message data body as decimal.
+Parse KEY string or number value from top level of message data body as
+decimal.
 
 .. code:: lisp
 
@@ -1418,7 +1464,15 @@ Remove entry for KEY from OBJECT.
 .. code:: lisp
 
     pact> (remove "bar" { "foo": 1, "bar": 2 })
-    {"foo": 1}:*
+    {"foo": 1}
+
+resume
+~~~~~~
+
+*binding* ``binding:<{y}>`` *body* ``*`` *→* ``<a>``
+
+Special form binds to a yielded object value from the prior step
+execution in a pact.
 
 take
 ~~~~
@@ -1433,7 +1487,7 @@ Take COUNT values from LIST (or string). If negative, take from end.
     pact> (take 2 "abcd")
     "ab"
     pact> (take (- 3) [1 2 3 4 5])
-    [3 4 5]:*
+    [3 4 5]
 
 typeof
 ~~~~~~
@@ -1446,6 +1500,15 @@ Returns type of X as string.
 
     pact> (typeof "hello")
     "string"
+
+yield
+~~~~~
+
+*value* ``object:<{y}>`` *→* ``object:<{y}>``
+
+Yield object VALUE for use in next pact step. The object is similar to
+database row objects, in that only the top level can be binded to in
+'resume'; nested objects are converted to opaque JSON values.
 
 Database
 --------
@@ -1753,9 +1816,9 @@ Add numbers, concatenate strings/lists, or merge objects.
     pact> (+ "every" "body")
     "everybody"
     pact> (+ [1 2] [3 4])
-    [1 2 3 4]:*
+    [1 2 3 4]
     pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-    {"bar": 2, "foo": 100}:*
+    {"bar": 2, "foo": 100}
 
 \-
 ~~
@@ -2120,7 +2183,7 @@ keys-any
 
 *count* ``integer`` *matched* ``integer`` *→* ``bool``
 
-Keyset predicate function to match all keys in keyset.
+Keyset predicate function to match any (at least 1) key in keyset.
 
 .. code:: lisp
 
@@ -2200,7 +2263,8 @@ env-entity
 
 *entity* ``string`` *→* ``string``
 
-Set environment confidential ENTITY id.
+Set environment confidential ENTITY id. Also clears last expression's
+yield value.
 
 .. code:: lisp
 
@@ -2227,8 +2291,13 @@ env-step
 
 *step-idx* ``integer`` *rollback* ``bool`` *→* ``string``
 
-Modify pact step state. With no arguments, unset step. STEP-IDX sets
-step index for current pact execution, ROLLBACK defaults to false.
+*step-idx* ``integer`` *rollback* ``bool`` *resume* ``object:<{y}>``
+*→* ``string``
+
+Modify pact step state. With no arguments, unset step. With STEP-IDX,
+set step index to execute. ROLLBACK instructs to execute rollback
+expression, if any. RESUME sets the value of a previous YIELD step.Also
+clears last expression's yield value.
 
 .. code:: lisp
 
@@ -2298,6 +2367,14 @@ Rollback transaction.
 
     (rollback-tx)
 
+sig-keyset
+~~~~~~~~~~
+
+*→* ``keyset``
+
+Convenience to build a keyset from keys present in message signatures,
+using 'keys-all' as the predicate.
+
 typecheck
 ~~~~~~~~~
 
@@ -2306,3 +2383,12 @@ typecheck
 *module* ``string`` *debug* ``bool`` *→* ``string``
 
 Typecheck MODULE, optionally enabling DEBUG output.
+
+yielded
+~~~~~~~
+
+*expect-yield* ``bool`` *→* ``<a>``
+
+When EXPECT-YIELD is true, return result of yield from previous
+evaluation, failing if not set. When EXPECT-YIELD is false, fail if the
+previous evaluation produced a yield.

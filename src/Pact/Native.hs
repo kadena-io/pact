@@ -145,10 +145,13 @@ langDefs =
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
-    ,defRNative "yield" yield (funType yieldv [("value",yieldv)]) "Yield object VALUE for use in next pact step."
+    ,defRNative "yield" yield (funType yieldv [("value",yieldv)])
+     "Yield object VALUE for use in next pact step. The object is similar to database row objects, in that \
+     \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values."
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
+
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []

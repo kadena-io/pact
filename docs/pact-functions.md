@@ -30,13 +30,13 @@ pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 
 ### compose {#compose}
 
-*x*&nbsp;`(x:<a>)-><b>` *y*&nbsp;`(x:<b>)-><c>` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
+*x*&nbsp;`(x:<a> -> <b>)` *y*&nbsp;`(x:<b> -> <c>)` *value*&nbsp;`<a>` *&rarr;*&nbsp;`<c>`
 
 
 Compose X and Y, such that X operates on VALUE, and Y on the results of X. 
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog" "has" "fleas"]:*
+["dog" "has" "fleas"]
 ```
 
 
@@ -50,7 +50,7 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
 pact> (drop 2 "vwxyz")
 "xyz"
 pact> (drop (- 2) [1 2 3 4 5])
-[1 2 3]:*
+[1 2 3]
 ```
 
 
@@ -62,25 +62,25 @@ pact> (drop (- 2) [1 2 3 4 5])
 Fail transaction with MSG if TEST fails, or returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-<interactive>:1:0: Failure: Chaos reigns
+<interactive>:1:0:(enforce (!= (+ 2 2) 4) "Chaos...: Failure: Tx Failed: Chaos reigns
 ```
 
 
 ### filter {#filter}
 
-*app*&nbsp;`(x:<a>)->bool` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`(x:<a> -> bool)` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Filter LIST by applying APP to each element to get a boolean determining inclusion.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["dog" "has" "fleas"]:*
+["dog" "has" "fleas"]
 ```
 
 
 ### fold {#fold}
 
-*app*&nbsp;`(x:<b> y:<b>)-><a>` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`(x:<b> y:<b> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
 Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 
@@ -135,10 +135,10 @@ pact> (length { "a": 1, "b": 2 })
 *elems*&nbsp;`*` *&rarr;*&nbsp;`list`
 
 
-Create list from ELEMS. 
+Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. 
 ```lisp
 pact> (list 1 2 3)
-[1 2 3]:*
+[1 2 3]
 ```
 
 
@@ -152,13 +152,13 @@ List modules available for loading.
 
 ### map {#map}
 
-*app*&nbsp;`(x:<b>)-><a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
+*app*&nbsp;`(x:<b> -> <a>)` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
 Apply elements in LIST as last arg to APP, returning list of results. 
 ```lisp
 pact> (map (+ 1) [1 2 3])
-[2 3 4]:*
+[2 3 4]
 ```
 
 
@@ -175,7 +175,7 @@ Return reference tx id for pact execution.
 *key*&nbsp;`string` *&rarr;*&nbsp;`decimal`
 
 
-Parse KEY string value from top level of message data body as decimal.
+Parse KEY string or number value from top level of message data body as decimal.
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -215,8 +215,16 @@ Read KEY from top level of message data body, or data body itself if not provide
 Remove entry for KEY from OBJECT. 
 ```lisp
 pact> (remove "bar" { "foo": 1, "bar": 2 })
-{"foo": 1}:*
+{"foo": 1}
 ```
+
+
+### resume {#resume}
+
+*binding*&nbsp;`binding:<{y}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
+
+
+Special form binds to a yielded object value from the prior step execution in a pact.
 
 
 ### take {#take}
@@ -229,7 +237,7 @@ Take COUNT values from LIST (or string). If negative, take from end.
 pact> (take 2 "abcd")
 "ab"
 pact> (take (- 3) [1 2 3 4 5])
-[3 4 5]:*
+[3 4 5]
 ```
 
 
@@ -243,6 +251,14 @@ Returns type of X as string.
 pact> (typeof "hello")
 "string"
 ```
+
+
+### yield {#yield}
+
+*value*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
+
+
+Yield object VALUE for use in next pact step. The object is similar to database row objects, in that only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values.
 
 ## Database {#Database}
 
@@ -524,9 +540,9 @@ pact> (+ 5.0 0.5)
 pact> (+ "every" "body")
 "everybody"
 pact> (+ [1 2] [3 4])
-[1 2 3 4]:*
+[1 2 3 4]
 pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
-{"bar": 2, "foo": 100}:*
+{"bar": 2, "foo": 100}
 ```
 
 
@@ -871,7 +887,7 @@ true
 *count*&nbsp;`integer` *matched*&nbsp;`integer` *&rarr;*&nbsp;`bool`
 
 
-Keyset predicate function to match all keys in keyset. 
+Keyset predicate function to match any (at least 1) key in keyset. 
 ```lisp
 pact> (keys-any 10 1)
 true
@@ -945,7 +961,7 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 *entity*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set environment confidential ENTITY id. 
+Set environment confidential ENTITY id. Also clears last expression's yield value. 
 ```lisp
 (env-entity "my-org")
 ```
@@ -971,8 +987,10 @@ pact> (env-keys ["my-key" "admin-key"])
 
 *step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
+*step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
-Modify pact step state. With no arguments, unset step. STEP-IDX sets step index for current pact execution, ROLLBACK defaults to false. 
+
+Modify pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets the value of a previous YIELD step.Also clears last expression's yield value. 
 ```lisp
 (env-step 1)
 (env-step 0 true)
@@ -1039,6 +1057,14 @@ Rollback transaction.
 ```
 
 
+### sig-keyset {#sig-keyset}
+
+ *&rarr;*&nbsp;`keyset`
+
+
+Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
+
+
 ### typecheck {#typecheck}
 
 *module*&nbsp;`string` *&rarr;*&nbsp;`string`
@@ -1047,4 +1073,12 @@ Rollback transaction.
 
 
 Typecheck MODULE, optionally enabling DEBUG output.
+
+
+### yielded {#yielded}
+
+*expect-yield*&nbsp;`bool` *&rarr;*&nbsp;`<a>`
+
+
+When EXPECT-YIELD is true, return result of yield from previous evaluation, failing if not set. When EXPECT-YIELD is false, fail if the previous evaluation produced a yield.
 
