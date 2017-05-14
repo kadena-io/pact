@@ -75,18 +75,27 @@ enforceKeySetName mi mksn = do
 -- | Enforce keyset against environment
 enforceKeySet :: Info ->
              Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn ks = do
+enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
-  let keys' = _pksKeys ks
-      matched = S.size $ S.intersection (S.fromList keys') sigs
-      app = TApp (TVar (Name (_pksPredFun ks) def) def)
-            [toTerm (length keys'),toTerm matched] i
-  app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
-  r <- reduce app'
-  case r of
-    (TLiteral (LBool b) _) | b -> return ()
-                           | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
-    _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
+  let count = length _ksKeys
+      matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
+      failed = failTx i $ "Keyset failure (" ++ show _ksPredFun ++ ")" ++ maybe "" (": " ++) (fmap show ksn)
+      runBuiltIn p | p count matched = return ()
+                   | otherwise = failed
+      atLeast t m = m >= t
+  case M.lookup _ksPredFun keyPredBuiltins of
+    Just KeysAll -> runBuiltIn (\c m -> atLeast c m)
+    Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
+    Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
+    Nothing -> do
+      let app = TApp (TVar (Name _ksPredFun def) def)
+                [toTerm count,toTerm matched] i
+      app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
+      r <- reduce app'
+      case r of
+        (TLiteral (LBool b) _) | b -> return ()
+                               | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
+        _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
 

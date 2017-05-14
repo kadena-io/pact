@@ -102,6 +102,8 @@ replDefs = ("Repl",
       "Encode pact expression EXP as a JSON value. " <>
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
+     ,defRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
+     "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -301,3 +303,6 @@ tc i as = case as of
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def
 json' i as = argsError i as
+
+sigKeyset :: RNativeFun LibState
+sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (asString KeysAll)

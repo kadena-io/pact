@@ -1,7 +1,5 @@
 ;; accounts module, admin keyset, and table
 
-(use 'keysets)
-
 (define-keyset 'accounts-admin-keyset
   (read-keyset "accounts-admin-keyset"))
 

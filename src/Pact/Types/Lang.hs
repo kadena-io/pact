@@ -110,6 +110,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
 import Control.DeepSeq
+import Data.Maybe
 
 
 import Data.Serialize (Serialize)
@@ -477,9 +478,10 @@ $(makeLenses ''Exp)
 
 
 
-data PublicKey = PublicKey { _pubKey :: !BS.ByteString } deriving (Eq,Ord,Generic)
+newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 
 instance Serialize PublicKey
+instance NFData PublicKey
 instance FromJSON PublicKey where
     parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
 instance ToJSON PublicKey where
@@ -488,14 +490,20 @@ instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
-      _pksKeys :: ![PublicKey]
-    , _pksPredFun :: !Text
+      _ksKeys :: ![PublicKey]
+    , _ksPredFun :: !Text
     } deriving (Eq,Generic)
 instance Serialize KeySet
 instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
+
+-- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
+-- | the latter cases defaulting to "keys-all"
 instance FromJSON KeySet where
-    parseJSON = withObject "KeySet" $ \o ->
-                KeySet <$> o .: "keys" <*> o .: "pred"
+    parseJSON v = withObject "KeySet" (\o ->
+                    KeySet <$> o .: "keys" <*>
+                    (fromMaybe defPred <$> o .:? "pred")) v <|>
+                  (KeySet <$> parseJSON v <*> pure defPred)
+      where defPred = "keys-all"
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 

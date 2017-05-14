@@ -22,10 +22,14 @@ import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime
 
+
 keyDefs :: NativeModule
 keyDefs =
-    let keyPredArgs = funType tTyBool [("count",tTyInteger),("matched",tTyInteger)]
-        keysN n _ m = m >= n
+    let keysN n _ m = m >= n
+        defKeyPred kp pf docs =
+          defRNative (NativeDefName $ asString kp) (keyPred pf)
+          (funType tTyBool [("count",tTyInteger),("matched",tTyInteger)])
+          docs
     in
     ("Keysets",[
      defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
@@ -39,11 +43,11 @@ keyDefs =
      "Special form to enforce KEYSET-OR-NAME against message keys before running BODY. \
      \KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. \
      \`$(with-keyset 'admin-keyset ...)` `$(with-keyset (read-keyset \"keyset\") ...)`"
-    ,defRNative "keys-all" (keyPred (==)) keyPredArgs
+    ,defKeyPred KeysAll (==)
      "Keyset predicate function to match all keys in keyset. `(keys-all 3 3)`"
-    ,defRNative "keys-any" (keyPred (keysN 1)) keyPredArgs
+    ,defKeyPred KeysAny (keysN 1)
      "Keyset predicate function to match all keys in keyset. `(keys-any 10 1)`"
-    ,defRNative "keys-2" (keyPred (keysN 2)) keyPredArgs
+    ,defKeyPred Keys2 (keysN 2)
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
     ])
 

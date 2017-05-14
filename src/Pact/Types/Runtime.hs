@@ -53,12 +53,14 @@ module Pact.Types.Runtime
    Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
+   KeyPredBuiltins(..),keyPredBuiltins,
    module Pact.Types.Lang,
    module Pact.Types.Util,
    (<>)
    ) where
 
 
+import Control.Arrow
 import Control.Lens hiding (op,(.=))
 import Control.Applicative
 import Control.DeepSeq
@@ -139,6 +141,18 @@ argsError i as = throwM $ mkArgsError i as "Invalid arguments"
 
 argsError' :: MonadThrow m => FunApp -> [Term Ref] -> m a
 argsError' i as = throwM $ mkArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+
+
+
+data KeyPredBuiltins = KeysAll|KeysAny|Keys2 deriving (Eq,Show,Enum,Bounded)
+instance AsString KeyPredBuiltins where
+  asString KeysAll = "keys-all"
+  asString KeysAny = "keys-any"
+  asString Keys2 = "keys-2"
+keyPredBuiltins :: M.Map Text KeyPredBuiltins
+keyPredBuiltins = M.fromList $ map (asString &&& id) [minBound .. maxBound]
+
+
 
 -- | Min, max values that Javascript doesn't mess up.
 --

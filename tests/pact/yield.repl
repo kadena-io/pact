@@ -1,6 +1,5 @@
-(env-data { "k": { "keys": [], "pred": "<=" }})
 (begin-tx)
-(define-keyset 'k (read-keyset "k"))
+(define-keyset 'k (sig-keyset))
 (module yieldtest 'k
   (defpact tester (name)
     (step-with-rollback
