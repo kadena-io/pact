@@ -1,0 +1,43 @@
+(env-data
+ { "kall": ["a" "b" "c"]
+ , "kany": { "keys": ["a" "b" "c"], "pred": "keys-any" }
+   , "k2": { "keys": ["a" "b" "c"], "pred": "keys-2" }
+     , "custom": {"keys": ["a" "b" "c" "d"], "pred": "keys-3" }
+     })
+(define-keyset 'k (sig-keyset))
+(module keysets 'k
+  (defun keys-3 (count matched) (>= matched 3))
+  (defun test-all ()
+    (enforce-keyset (read-keyset "kall")))
+  (defun test-any ()
+    (enforce-keyset (read-keyset "kany")))
+  (defun test-2 ()
+    (enforce-keyset (read-keyset "k2")))
+  (defun test-custom ()
+    (enforce-keyset (read-keyset "custom"))))
+
+(expect-failure "all fails on none" (test-all))
+(expect-failure "any fails on none" (test-any))
+(expect-failure "2 fails on none" (test-2))
+(env-keys ["a"])
+(expect-failure "all fails on 1" (test-all))
+(expect "any succeeds on 1" true (test-any))
+(expect-failure "2 fails on 1" (test-2))
+(env-keys ["a" "BAD"])
+(expect-failure "all fails on 1+bad" (test-all))
+(expect "any succeeds on 1+bad" true (test-any))
+(expect-failure "2 fails on 1+bad" (test-2))
+(env-keys ["a" "b"])
+(expect-failure "all fails on 2" (test-all))
+(expect "any succeeds on 2" true (test-any))
+(expect "2 succeeds on 2" true (test-2))
+(env-keys ["a" "b" "BAD"])
+(expect-failure "all fails on 2+bad" (test-all))
+(expect "any succeeds on 2+bad" true (test-any))
+(expect "2 succeeds on 2+bad" true (test-2))
+(env-keys ["a" "b" "c"])
+(expect "all succeeds on 3" true (test-all))
+(expect "any succeeds on 3" true (test-any))
+(expect "2 succeeds on 3" true (test-2))
+
+(expect "custom succeeds on 3" true (test-custom))
