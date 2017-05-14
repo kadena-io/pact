@@ -10,10 +10,12 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 ===
 
-**Version 2.2.1**
-* `yield` and `resume` added to defpacts
+**Version 2.2.1:**
+
+* `yield` and `resume` added for use in defpacts
 * `yielded`, `sig-keyset` repl functions
 * JSON defaults for keysets, better dispatch of builtin preds
+* `pact-version` function added.
 
 **Version 2.2.0:**
 
@@ -41,7 +43,35 @@ As of version 2.1.0 Pact ships with a built-in HTTP server and SQLite backend. T
 blockchain applications with just the `pact` tool.
 
 To start up the server issue `pact -s config.yaml`, with a suitable config.
-[The `pact-lang-api` JS library is available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
+The `pact-lang-api` JS library is [available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
+
+### load.js
+
+The `load.js` tool can be used to format valid `send` and `private` payloads for use with a POST tool like
+Postman or even piping into `curl`.
+
+```
+$ ./load.js
+ERROR: Missing code or codefile argument
+
+load.js: create JSON for loading Pact code
+
+Arguments: [-cf codefile] [-c code] -n nonce -s sk -p pk [-df datafile] [-d data] [-t to -f from]
+
+  codefile    filepath containing pact code to load
+  code        pact code to execute
+  datafile    filepath containing JSON data to accompany pact code load
+  data        JSON string of data to accompany pact code load
+  nonce       nonce value for data payload
+  sk          secret key
+  pk          public key
+  to          Private message sender entity
+  from        Private message recipient JSON list
+
+$ ./load.js -c "(cash.read-account \"will\")" -df ../tests/cp-auth-keys.json -n "hello" -s 236270aa77997037db05201978775ea157392bed858b36ec0edf8444f6a52983 -p e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc -f Me -t "[\"You\",\"Him\",\"Her\"]"
+{"cmds":[{"hash":"3c4038053663af50a0851e8e4987f50c6147e3a1cecbce46fd6e14c04496d5ff731d6d980c9733743bb11488996e23567b34c4f91cf49fe4b5393a8a9ea8f41e","sigs":[{"sig":"587dd0972cd271d828d1b12319f8f3c2a42631b64b3f331bc0091b4f7cf0b98f20a8e3e5dd056e7fe08fe3981d24b11e4e8eb513114aed7371af3318aeb21100","pubKey":"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc"}],"cmd":"{\"nonce\":\"hello\",\"payload\":{\"exec\":{\"code\":\"(cash.read-account \\\"will\\\")\",\"data\":{\"module-admin-keyset\":{\"keys\":[\"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc\"],\"pred\":\"keys-all\"}}}},\"address\":{\"from\":\"Me\",\"to\":[\"You\",\"Him\",\"Her\"]}}"}]}
+```
+
 
 
 Endpoints

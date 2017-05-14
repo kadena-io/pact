@@ -1,8 +1,9 @@
 2.2.1
 ---
-* `yield` and `resume` added to defpacts
+* `yield` and `resume` added for use in defpacts
 * `yielded`, `sig-keyset` repl functions
 * JSON defaults for keysets, better dispatch of builtin preds
+* `pact-version` function added.
 
 2.2.0
 ---

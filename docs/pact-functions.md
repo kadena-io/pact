@@ -170,6 +170,18 @@ pact> (map (+ 1) [1 2 3])
 Return reference tx id for pact execution.
 
 
+### pact-version {#pact-version}
+
+ *&rarr;*&nbsp;`string`
+
+
+Obtain current pact build version. 
+```lisp
+pact> (pact-version)
+"2.2.1"
+```
+
+
 ### read-decimal {#read-decimal}
 
 *key*&nbsp;`string` *&rarr;*&nbsp;`decimal`

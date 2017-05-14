@@ -46,6 +46,7 @@ import Pact.Native.Ops
 import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
+import Pact.Types.Version
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -151,6 +152,8 @@ langDefs =
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
+    ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
+     "Obtain current pact build version. `(pact-version)`"
 
     ])
     where a = mkTyVar "a" []
