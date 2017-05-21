@@ -1,6 +1,6 @@
 # stack yaml for ghc builds
 
-resolver: lts-6.12
+resolver: lts-8.15
 
 packages:
 - '.'
@@ -10,9 +10,8 @@ packages:
   extra-dep: true
 
 extra-deps:
-- trifecta-1.6
-- ed25519-donna-0.1.1
-- safe-exceptions-0.1.4.0
+  - bound-2
+  - ed25519-donna-0.1.1
 
 flags: {}
 

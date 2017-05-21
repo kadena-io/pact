@@ -40,7 +40,7 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Strict as HM
 
-import Snap.CORS
+import Snap.Util.CORS
 import Snap.Core
 import Snap.Http.Server as Snap
 import Snap.Util.FileServe

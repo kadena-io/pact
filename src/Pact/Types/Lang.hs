@@ -86,7 +86,7 @@ import Data.List
 import Control.Monad
 import Prelude hiding (exp)
 import Control.Arrow hiding (app,(<+>))
-import Prelude.Extras
+import Data.Functor.Classes
 import Bound
 import Data.Text (Text,pack,unpack)
 import qualified Data.Text as T
@@ -254,6 +254,9 @@ instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
 
+instance Eq1 Arg where
+  liftEq eq (Arg a b c) (Arg m n o) = a == m && liftEq eq b n && c == o
+
 -- | Function type
 data FunType o = FunType {
   _ftArgs :: [Arg o],
@@ -265,6 +268,9 @@ instance Show o => Show (FunType o) where
   show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = parens (hsep (map pretty as) <+> "->" <+> pretty t)
+
+instance Eq1 FunType where
+  liftEq eq (FunType a b) (FunType m n) = liftEq (liftEq eq) a m && liftEq eq b n
 
 -- | use NonEmpty for function types
 type FunTypes o = NonEmpty (FunType o)
@@ -359,6 +365,11 @@ instance (Pretty v) => Pretty (TypeVar v) where
   pretty (TypeVar n cs) = angles (pretty n <+> brackets (hsep (map pretty cs)))
   pretty (SchemaVar n) = angles (braces (pretty n))
 
+instance Eq1 TypeVar where
+  liftEq eq (TypeVar a b) (TypeVar m n) = a == m && liftEq (liftEq eq) b n
+  liftEq _ (SchemaVar a) (SchemaVar m) = a == m
+  liftEq _ _ _ = False
+
 
 -- | Pact types.
 data Type v =
@@ -370,6 +381,16 @@ data Type v =
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
     deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
+
+instance Eq1 Type where
+  liftEq _ TyAny TyAny = True
+  liftEq eq (TyVar a) (TyVar m) = liftEq eq a m
+  liftEq _ (TyPrim a) (TyPrim m) = a == m
+  liftEq eq (TyList a) (TyList m) = liftEq eq a m
+  liftEq eq (TySchema a b) (TySchema m n) = a == m && liftEq eq b n
+  liftEq eq (TyFun a) (TyFun b) = liftEq eq a b
+  liftEq eq (TyUser a) (TyUser b) = eq a b
+  liftEq _ _ _ = False
 
 instance NFData v => NFData (Type v)
 
@@ -571,6 +592,10 @@ instance (Pretty n) => Pretty (BindType n) where
   pretty BindLet = "let"
   pretty (BindSchema b) = "bind" PP.<> pretty b
 
+instance Eq1 BindType where
+  liftEq _ BindLet BindLet = True
+  liftEq eq (BindSchema a) (BindSchema m) = eq a m
+  liftEq _ _ _ = False
 
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
@@ -688,7 +713,7 @@ data Term n =
 
 instance Show n => Show (Term n) where
     show TModule {..} =
-      "(TModule " ++ show _tModuleDef ++ " " ++ show _tModuleBody ++ ")"
+      "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
@@ -699,7 +724,7 @@ instance Show n => Show (Term n) where
       "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tDocs ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
-    show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show b ++ " " ++ show c ++ ")"
+    show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show (unscope b) ++ " " ++ show c ++ ")"
     show (TObject bs _ _) =
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
@@ -719,8 +744,42 @@ showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
 showParamType t = ":" ++ show t
 
-instance Show1 Term
-instance Eq1 Term
+--deriveEq1 ''Term
+-- instance Show1 Term
+instance Eq1 Term where
+  liftEq eq (TModule a b c) (TModule m n o) =
+    a == m && liftEq eq b n && c == o
+  liftEq eq (TList a b c) (TList m n o) =
+    liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
+  liftEq eq (TDef a b c d e f g) (TDef m n o p q r s) =
+    a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
+  liftEq eq (TConst a b c d e) (TConst m n o q r) =
+    liftEq (liftEq eq) a m && b == n && liftEq eq c o && d == q && e == r
+  liftEq eq (TApp a b c) (TApp m n o) =
+    liftEq eq a m && liftEq (liftEq eq) b n && c == o
+  liftEq eq (TVar a b) (TVar m n) =
+    eq a m && b == n
+  liftEq eq (TBinding a b c d) (TBinding m n o p) =
+    liftEq (\(w,x) (y,z) -> liftEq (liftEq eq) w y && liftEq eq x z) a m &&
+    liftEq eq b n && liftEq (liftEq (liftEq eq)) c o && d == p
+  liftEq eq (TObject a b c) (TObject m n o) =
+    liftEq (\(w,x) (y,z) -> liftEq eq w y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o
+  liftEq _ (TLiteral a b) (TLiteral m n) =
+    a == m && b == n
+  liftEq _ (TKeySet a b) (TKeySet m n) =
+    a == m && b == n
+  liftEq _ (TUse a b) (TUse m n) =
+    a == m && b == n
+  liftEq _ (TValue a b) (TValue m n) =
+    a == m && b == n
+  liftEq eq (TStep a b c d) (TStep m n o p) =
+    liftEq eq a m && liftEq eq b n && liftEq (liftEq eq) c o && d == p
+  liftEq eq (TSchema a b c d e) (TSchema m n o p q) =
+    a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
+  liftEq eq (TTable a b c d e) (TTable m n o p q) =
+    a == m && b == n && liftEq (liftEq eq) c o && d == p && e == q
+  liftEq _ _ _ = False
+
 
 instance Applicative Term where
     pure = return
@@ -809,10 +868,11 @@ typeof t = case t of
 typeof' :: Show a => Term a -> Text
 typeof' = either id (pack . show) . typeof
 
-
-
+pattern TLitString :: Text -> Term t
 pattern TLitString s <- TLiteral (LString s) _
+pattern TLitInteger :: Integer -> Term t
 pattern TLitInteger i <- TLiteral (LInteger i) _
+
 
 tLit :: Literal -> Term n
 tLit = (`TLiteral` def)

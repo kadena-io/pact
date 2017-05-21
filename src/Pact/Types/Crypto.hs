@@ -32,8 +32,6 @@ import qualified Crypto.Ed25519.Pure as Ed25519
 import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
 
 import Data.Hashable (Hashable)
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 import Data.Aeson as A
 
@@ -154,11 +152,6 @@ instance ParseText PublicKey where
     s' <- parseB16Text s
     failMaybe ("Public key import failed: " ++ show s) $ importPublic s'
   {-# INLINE parseText #-}
-
-instance (ToJSON k,ToJSON v) => ToJSON (Map k v) where
-  toJSON = toJSON . Map.toList
-instance (FromJSON k,Ord k,FromJSON v) => FromJSON (Map k v) where
-  parseJSON = fmap Map.fromList . parseJSON
 
 instance Eq PrivateKey where
   b == b' = exportPrivate b == exportPrivate b'
