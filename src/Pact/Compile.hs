@@ -40,11 +40,14 @@ import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
 import qualified Data.Text as T
+import Data.Text.Encoding (encodeUtf8)
 
 import Pact.Types.Lang
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
+import Pact.Types.Crypto (hash)
+
 
 
 type MkInfo = Exp -> Info
@@ -115,7 +118,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
                   Info Nothing -> "<code unavailable>"
                   Info (Just (c,_)) -> c
             return $ TModule
-              (Module (ModuleName n) (KeySetName k) docs code)
+              (Module (ModuleName n) (KeySetName k) docs code (hash $ encodeUtf8 $ _unCode code))
               (abstract (const Nothing) (TList bd TyAny li)) li
 
 doModule _ li _ = syntaxError li "Invalid module definition"

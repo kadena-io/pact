@@ -146,14 +146,18 @@ langDefs =
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
-    ,defRNative "yield" yield (funType yieldv [("value",yieldv)])
-     "Yield object VALUE for use in next pact step. The object is similar to database row objects, in that \
-     \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values."
+    ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
+     "Yield OBJECT for use with `resume` in following pact step. The object is similar to database row objects, in that \
+     \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
+     \$(yield { \"amount\": 100.0 })"
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
     ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
      "Obtain current pact build version. `(pact-version)`"
+    ,defRNative "use" use' (funType tTyString [("module",tTyString)] <>
+                            funType tTyString [("module",tTyString),("hash",tTyString)])
+     "Load MODULE into namespace, importing all definitions. With HASH argument, verify module hash before loading."
 
     ])
     where a = mkTyVar "a" []
@@ -374,3 +378,10 @@ resume i [TBinding ps bd (BindSchema _) bi] = do
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
 resume i as = argsError' i as
+
+use' :: RNativeFun e
+use' i [TLitString mn] = do
+  mm <- M.lookup (ModuleName mn) <$> view (eeRefStore.rsModules)
+  case mm of
+    Nothing -> evalError' i $ "Module " ++ show mn ++ " not found"
+    Just m -> installModule m >> return (tStr $ pack $ "Using " ++ show mn)

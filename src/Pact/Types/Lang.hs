@@ -117,6 +117,7 @@ import Data.Serialize (Serialize)
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
+import Pact.Types.Crypto (Hash(..))
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {
@@ -606,17 +607,18 @@ data Module = Module {
   , _mKeySet :: !KeySetName
   , _mDocs :: !(Maybe Text)
   , _mCode :: !Code
+  , _mHash :: !Hash
   } deriving (Eq)
 instance Show Module where
   show Module {..} =
     "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ maybeDelim " " _mDocs ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode ]
+    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash ]
     ++ maybe [] (return . ("docs" .=)) _mDocs
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code"
+    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code" <*> o .: "hash"
 
 -- | Pact evaluable term.
 data Term n =

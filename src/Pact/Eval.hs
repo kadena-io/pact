@@ -25,6 +25,7 @@ module Pact.Eval
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
+    ,installModule
     ) where
 
 import Control.Lens hiding (op)
