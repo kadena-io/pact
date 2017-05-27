@@ -34,6 +34,7 @@ import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
 import Data.Hashable (Hashable)
 
 import Data.Aeson as A
+import Data.Aeson.Types (toJSONKeyText)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -43,6 +44,7 @@ import qualified Data.Serialize as S
 import Data.String
 import Data.Maybe
 import Data.Text (Text)
+import Data.Text.Encoding
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
@@ -162,6 +164,8 @@ instance ToJSON PrivateKey where
 instance FromJSON PrivateKey where
   parseJSON = withText "PrivateKey" parseText
   {-# INLINE parseJSON #-}
+instance ToJSONKey PublicKey
+instance FromJSONKey PublicKey
 instance ParseText PrivateKey where
   parseText s = do
     s' <- parseB16Text s
@@ -174,3 +178,14 @@ instance Serialize PublicKey where
 instance Serialize PrivateKey where
   put s = S.putByteString (exportPrivate s)
   get = maybe (fail "Invalid PubKey") return =<< (importPrivate <$> S.getByteString 32)
+
+
+
+instance ToJSON ByteString where
+  toJSON = String . decodeUtf8
+instance FromJSON ByteString where
+  parseJSON = withText "ByteString" (return . encodeUtf8)
+instance ToJSONKey ByteString where
+  toJSONKey = toJSONKeyText decodeUtf8
+instance FromJSONKey ByteString where
+  fromJSONKey = FromJSONKeyText encodeUtf8
