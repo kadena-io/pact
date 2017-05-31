@@ -89,8 +89,20 @@ syntaxError' :: Exp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 
 doUse :: [Exp] -> Info -> Compile (Term Name)
-doUse [ESymbol s _] i = return $ TUse (ModuleName s) i
-doUse _ i = syntaxError i "Use only takes a module symbol name"
+doUse as i = case as of
+  [m] -> mkM m Nothing
+  [m,ELiteral (LString h) _] -> mkH h >>= mkM m
+  _ -> syntaxError i "use requires module name (symbol/string/bare atom) and optional hash"
+  where
+    mkM m h = case m of
+      (ELiteral (LString s) _) -> mk s h -- TODO deprecate
+      (ESymbol s _) -> mk s h -- TODO deprecate
+      (EAtom s Nothing Nothing _) -> mk s h
+      _ -> syntaxError i "use: module name must be symbol/string/bare atom"
+    mk s h = return $ TUse (ModuleName s) h i
+    mkH h = case fromText' h of
+      Left e -> syntaxError i $ "use: bad hash: " ++ e
+      Right mh -> return (Just mh)
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
@@ -105,7 +117,8 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TConst {} -> return d
         TSchema {} -> return d
         TTable {} -> return d
-        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable allowed in module"
+        TUse {} -> return d
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use allowed in module"
       mkModule docs body = do
         cm <- use csModule
         case cm of

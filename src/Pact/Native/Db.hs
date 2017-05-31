@@ -95,7 +95,8 @@ dbDefs =
     ,defRNative "describe-keyset" descKeySet
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
-     (funType tTyValue [("module",tTyString)]) "Get metadata for MODULE"
+     (funType tTyValue [("module",tTyString)])
+     "Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and 'code' fields."
     ])
 
 descTable :: RNativeFun e
@@ -116,7 +117,10 @@ descModule :: RNativeFun e
 descModule i [TLitString t] = do
   mods <- view (eeRefStore.rsModules.at (ModuleName t))
   case mods of
-    Just (_,m) -> (\l -> TList l TyAny def) <$> mapM deref (HM.elems m)
+    Just (Module{..},_) ->
+      return $ TObject [(tStr "name",tStr $ asString _mName),
+                        (tStr "hash", tStr $ asString _mHash),
+                        (tStr "code", tStr $ asString _mCode)] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
 

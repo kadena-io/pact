@@ -1,9 +1,12 @@
-(use 'cash)
-(use 'orders)
 
 (module cp 'cp-module-admin
 
   "Commercial paper demonstration smart contract."
+
+  (use cash
+   "b9d80d448ae26b966098cdf41b82fac26f8b4575312de2aa7a181cc31bd75399bed5b37c7062a0c4a39d1654501f32e636b4d699ce17e6e1a856fc0e5cd675c5")
+  (use orders
+   "0ab486b02965213c05aa7d34bbd526928ffeeca4fe816d02a2805f60f7ac880b475487f4398459a5c55abbe21d5e4b187fa37c9b14882581097cb8c57ccde7fe")
 
   (defschema cp-asset
     ticker:string

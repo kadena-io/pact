@@ -1,6 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -211,6 +209,11 @@ updateForOp a = do
                   when reset (initReplState mode >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
+    Print t -> do
+      let rep = case t of TLitString s -> unpack s
+                          _ -> show t
+      outStrLn HOut rep
+      return (Right a)
 
 
 -- | load and evaluate a Pact file.

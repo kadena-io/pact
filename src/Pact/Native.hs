@@ -155,10 +155,6 @@ langDefs =
      "Special form binds to a yielded object value from the prior step execution in a pact."
     ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
      "Obtain current pact build version. `(pact-version)`"
-    ,defRNative "use" use' (funType tTyString [("module",tTyString)] <>
-                            funType tTyString [("module",tTyString),("hash",tTyString)])
-     "Load MODULE into namespace, importing all definitions. With HASH argument, verify module hash before loading."
-
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -378,10 +374,3 @@ resume i [TBinding ps bd (BindSchema _) bi] = do
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
 resume i as = argsError' i as
-
-use' :: RNativeFun e
-use' i [TLitString mn] = do
-  mm <- M.lookup (ModuleName mn) <$> view (eeRefStore.rsModules)
-  case mm of
-    Nothing -> evalError' i $ "Module " ++ show mn ++ " not found"
-    Just m -> installModule m >> return (tStr $ pack $ "Using " ++ show mn)

@@ -104,6 +104,8 @@ replDefs = ("Repl",
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
      ,defRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
      "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
+     ,defRNative "print" print' (funType tTyString [("value",a)])
+     "Print a string, mainly to format newlines correctly"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -306,3 +308,7 @@ json' i as = argsError i as
 
 sigKeyset :: RNativeFun LibState
 sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (asString KeysAll)
+
+print' :: RNativeFun LibState
+print' _ [v] = setop (Print v) >> return (tStr "")
+print' i as = argsError i as

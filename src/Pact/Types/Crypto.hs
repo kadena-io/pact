@@ -94,10 +94,12 @@ hash :: ByteString -> Hash
 hash = Hash . BLAKE.hash hashLengthAsBS mempty
 {-# INLINE hash #-}
 
+-- | A BLAKE2b Hash with 64 length
 newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, Generic, Hashable)
 instance Show Hash where
   show (Hash h) = show $ B16.encode h
+instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
 
 initialHash :: Hash

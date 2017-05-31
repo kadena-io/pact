@@ -47,6 +47,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 
 import Pact.Types.Runtime
+import Pact.Types.Crypto (Hash)
 
 
 evalBeginTx :: Info -> Eval e ()
@@ -103,11 +104,7 @@ enforceKeySet i ksn KeySet{..} = do
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse mn i) = do
-  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
-  case mm of
-    Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
-    Just m -> installModule m >> return (tStr $ pack $ "Using " ++ show mn)
+eval (TUse mn h i) = evalUse mn h i >> return (tStr $ pack $ "Using " ++ show mn)
 
 
 eval t@(TModule m bod i) = do
@@ -121,9 +118,24 @@ eval t@(TModule m bod i) = do
   -- build/install module from defs
   _defs <- call (StackFrame (pack $ abbrev t) i Nothing) $ loadModule m bod i
   writeRow i Write Modules (_mName m) m
-  return $ msg $ pack $ "Loaded module " ++ show (_mName m)
+  return $ msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m)
 
 eval t = enscope t >>= reduce
+
+
+evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
+evalUse mn h i = do
+  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  case mm of
+    Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
+    Just m@(Module{..},_) -> do
+      case h of
+        Nothing -> return ()
+        Just mh | mh == _mHash -> return ()
+                | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
+                               show mh ++ ", " ++ show _mHash
+      installModule m
+
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 --
@@ -140,16 +152,16 @@ loadModule m bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
       (TList bd _ _bi) ->
-        HM.fromList <$> forM bd
-          (\t -> do
-              dn <- case t of
-                TDef {..} -> return _tDefName
-                TNative {..} -> return $ asString _tNativeName
-                TConst {..} -> return $ _aName _tConstArg
-                TSchema {..} -> return $ asString _tSchemaName
-                TTable {..} -> return $ asString _tTableName
-                _ -> evalError (_tInfo t) "Invalid module member"
-              return (dn,t))
+        fmap (HM.fromList . concat) $ forM bd $ \t -> do
+          dnm <- case t of
+            TDef {..} -> return $ Just _tDefName
+            TNative {..} -> return $ Just $ asString _tNativeName
+            TConst {..} -> return $ Just $ _aName _tConstArg
+            TSchema {..} -> return $ Just $ asString _tSchemaName
+            TTable {..} -> return $ Just $ asString _tTableName
+            TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+            _ -> evalError (_tInfo t) "Invalid module member"
+          return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->

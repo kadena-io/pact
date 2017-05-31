@@ -320,9 +320,17 @@ When a module is declared, all references to native functions
 or definitions from other modules are resolved. Resolution failure results in transaction rollback.
 
 Modules can be re-defined as controlled by their admin keyset. Module versioning is not supported,
-except by including a version sigil in the module name (e.g., "accounts-v1").
+except by including a version sigil in the module name (e.g., "accounts-v1"). However,
+*module hashes* are a powerful feature for ensuring code safety. When a module is imported with
+[use](#use), the module hash can be specified, to tie code to a particular release.
+
+As of Pact 2.2, `use` statements can be issued within a module declaration. This combined with
+module hashes provides a high level of assurance, as updated module code will fail to import
+if a dependent module has subsequently changed on the chain; this will also propagate changes
+to the loaded modules' hash, protecting downstream modules from inadvertent changes on update.
 
 Module names must be globally unique.
+
 
 #### Table Creation {#tablecreation}
 
@@ -878,7 +886,9 @@ Special forms {#special}
 
 ### defun {#defun}
 
-```(defun NAME ARGLIST [DOCSTRING] BODY...)```
+```lisp
+(defun NAME ARGLIST [DOCSTRING] BODY...)
+```
 
 Define NAME as a function, accepting ARGLIST arguments, with optional DOCSTRING.
 Arguments are in scope for BODY, one or more expressions.
@@ -891,7 +901,9 @@ Arguments are in scope for BODY, one or more expressions.
 ```
 
 ### defconst {#defconst}
-```(defun NAME VALUE [DOCSTRING])```
+```lisp
+(defun NAME VALUE [DOCSTRING])
+```
 
 Define NAME as VALUE, with option DOCSTRING.
 
@@ -903,7 +915,9 @@ Define NAME as VALUE, with option DOCSTRING.
 
 ### defpact {#defpact}
 
-```(defpact NAME ARGLIST [DOCSTRING] STEPS...)```
+```
+(defpact NAME ARGLIST [DOCSTRING] STEPS...)
+```
 
 Define NAME as a _pact_, a multistep computation intended for private transactions.
 Identical to [defun](#defun) except body must be comprised of [steps](#step).
@@ -920,7 +934,9 @@ Identical to [defun](#defun) except body must be comprised of [steps](#step).
 
 ### defschema {#defschema}
 
-```(defschema NAME [DOCSTRING] FIELDS...)```
+```
+(defschema NAME [DOCSTRING] FIELDS...)
+```
 
 Define NAME as a _schema_, which specifies a list of FIELDS. Each field
 is in the form `FIELDNAME[:FIELDTYPE]`.
@@ -936,14 +952,18 @@ is in the form `FIELDNAME[:FIELDTYPE]`.
 
 ### deftable {#deftable}
 
-```(deftable NAME[:SCHEMA] [DOCSTRING])```
+```
+(deftable NAME[:SCHEMA] [DOCSTRING])
+```
 
 Define NAME as a _table_, used in database functions. Note the
 table must still be created with [create-table](#create-table).
 
 ### let {#let}
 
-```(let (BINDPAIR [BINDPAIR [...]]) BODY)```
+```
+(let (BINDPAIR [BINDPAIR [...]]) BODY)
+```
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables
 within BINDPAIRs cannot refer to previously-declared variables in
@@ -958,7 +978,9 @@ the same let binding; for this use [let\*](#letstar).
 
 ### let&#42; {#letstar}
 
-```(let\* (BINDPAIR [BINDPAIR [...]]) BODY)```
+```
+(let\* (BINDPAIR [BINDPAIR [...]]) BODY)
+```
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables
 can reference previously declared BINDPAIRS in the same let.
@@ -973,31 +995,43 @@ each BINDPAIR; thus `let` is preferred where possible.
 ```
 
 ### step {#step}
-```(step ENTITY EXPR)```
+```
+(step ENTITY EXPR)
+```
 
 Define a step within a _pact_, which can only be executed by nodes representing ENTITY,
 in order of execution specified in containing [defpact](#defpact).
 
 ### step-with-rollback {#step-with-rollback}
-```(step-with-rollback ENTITY EXPR ROLLBACK-EXPR)```
+```
+(step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+```
 
 Define a step within a _pact_, which can only be executed by nodes representing ENTITY,
 in order of execution specified in containing [defpact](#defpact). If any subsequent
 steps fail, ROLLBACK-EXPR will be executed.
 
 ### use {#use}
-```(use MODULE-SYMBOL)```
+```
+(use MODULE)
+(use MODULE HASH)
+```
 
-Import an existing module into namespace.
+Import an existing MODULE into namespace. Can only be issued at top-level, or within a module
+declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that module
+hash matches HASH, failing if not. Use [describe-module](#describe-module) to query for the
+hash of a loaded module on the chain.
 
 ```lisp
-(use 'accounts)
+(use accounts)
 (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
 "Write succeeded"
 ```
 
 ### module {#module}
-```(module NAME KEYSET [DOCSTRING] DEFS...)```
+```
+(module NAME KEYSET [DOCSTRING] DEFS...)
+```
 
 Define and install module NAME, guarded by keyset KEYSET, with optional DOCSTRING.
 DEFS must be [defun](#defun) or [defpact](#defpact) expressions only.

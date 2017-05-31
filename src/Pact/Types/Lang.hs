@@ -68,7 +68,7 @@ module Pact.Types.Lang
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tInfo,tKeySet,
-   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModule,
+   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
@@ -132,7 +132,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid,Generic,NFData)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid,Generic,NFData,AsString)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c) | T.compareLength c maxLen == GT =
@@ -692,6 +692,7 @@ data Term n =
     } |
     TUse {
       _tModuleName :: !ModuleName
+    , _tModuleHash :: !(Maybe Hash)
     , _tInfo :: !Info
     } |
     TValue {
@@ -731,7 +732,7 @@ instance Show n => Show (Term n) where
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
-    show (TUse m _) = "(TUse " ++ show m ++ ")"
+    show (TUse m h _) = "(TUse " ++ show m ++ maybeDelim " " h ++ ")"
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
@@ -770,8 +771,8 @@ instance Eq1 Term where
     a == m && b == n
   liftEq _ (TKeySet a b) (TKeySet m n) =
     a == m && b == n
-  liftEq _ (TUse a b) (TUse m n) =
-    a == m && b == n
+  liftEq _ (TUse a b c) (TUse m n o) =
+    a == m && b == n && c == o
   liftEq _ (TValue a b) (TValue m n) =
     a == m && b == n
   liftEq eq (TStep a b c d) (TStep m n o p) =
@@ -800,7 +801,7 @@ instance Monad Term where
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
-    TUse m i >>= _ = TUse m i
+    TUse m h i >>= _ = TUse m h i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
@@ -912,7 +913,7 @@ abbrev TBinding {} = "<binding>"
 abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
-abbrev (TUse m _) = "<use '" ++ show m ++ ">"
+abbrev (TUse m h _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
