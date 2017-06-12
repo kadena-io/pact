@@ -160,7 +160,7 @@ doBegin tidm = do
       rollback
     Nothing -> return ()
   resetTemp
-  doPersist P.beginTx
+  doPersist $ \p -> P.beginTx p $ isJust tidm
   txId .= tidm
 {-# INLINE doBegin #-}
 
@@ -277,7 +277,7 @@ createTable' tn = do
 
 createSchema :: MVar (DbEnv p) -> IO ()
 createSchema e = runMVState e $ do
-  doPersist P.beginTx
+  doPersist (\p -> P.beginTx p True)
   createTable' userTableInfo
   createTable' keysetsTable
   createTable' modulesTable

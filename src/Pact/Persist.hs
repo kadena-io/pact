@@ -124,7 +124,10 @@ instance PactValue Value
 data Persister s = Persister {
   createTable :: forall k . PactKey k => Table k -> Persist s ()
   ,
-  beginTx :: Persist s ()
+  -- | Boolean argument to indicate if this is "transactional for real":
+  -- local execution mode starts a tx knowing full well it will roll back.
+  -- This allows backing layer to be aware of non-transactional exec.
+  beginTx :: Bool -> Persist s ()
   ,
   commitTx :: Persist s ()
   ,

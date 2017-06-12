@@ -75,7 +75,7 @@ persister = Persister {
       Nothing -> return (M.insert t mempty ts)
       Just _ -> throwDbError $ "createTable: already exists: " ++ show t
   ,
-  beginTx = \s -> return $ (,()) $ set temp (_committed s) s
+  beginTx = \_ s -> return $ (,()) $ set temp (_committed s) s
   ,
   commitTx = \s -> return $ (,()) $ set committed (_temp s) s
   ,
@@ -143,11 +143,11 @@ _test = do
         put s'
         return r
   (`evalStateT` e) $ do
-    run $ beginTx p
+    run $ beginTx p True
     run $ createTable p dt
     run $ createTable p tt
     run $ commitTx p
-    run $ beginTx p
+    run $ beginTx p True
     run $ writeValue p dt Insert "stuff" (String "hello")
     run $ writeValue p dt Insert "tough" (String "goodbye")
     run $ writeValue p tt Write 1 (String "txy goodness")
@@ -159,7 +159,7 @@ _test = do
     run (queryKeys p dt (Just (KQKey KGTE "stuff"))) >>= liftIO . print
     run (query p tt (Just (KQKey KGT 0 `kAnd` KQKey KLT 2))) >>=
       (liftIO . (print :: [(TxKey,Value)] -> IO ()))
-    run $ beginTx p
+    run $ beginTx p True
     run $ writeValue p tt Update 2 (String "txalicious-2!")
     run (readValue p tt 2) >>= (liftIO . (print :: Maybe Value -> IO ()))
     run $ rollbackTx p

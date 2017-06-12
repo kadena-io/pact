@@ -33,7 +33,7 @@ persister :: MockPersist -> Persister ()
 persister (MockPersist (MockQueryKeys qk) (MockQuery q) (MockReadValue rv)) = Persister {
   createTable = \_t -> rcp ()
   ,
-  beginTx = rcp ()
+  beginTx = \_t -> rcp ()
   ,
   commitTx = rcp ()
   ,
