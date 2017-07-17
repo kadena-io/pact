@@ -1,3 +1,12 @@
+2.2.2
+---
+* Module Hashes: `use` support
+* use accepts barewords
+* better output in `describe-module`
+* `list-modules` added
+* `print` REPL command
+* "transactional awareness" in Persist
+
 2.2.1
 ---
 * `yield` and `resume` added for use in defpacts

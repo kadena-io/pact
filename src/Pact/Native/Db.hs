@@ -24,7 +24,6 @@ import Control.Monad
 import Prelude hiding (exp)
 import Bound
 import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Strict as HM
 import Data.Default
 import Control.Arrow hiding (app)
 import Control.Lens hiding (from,to,(.=))

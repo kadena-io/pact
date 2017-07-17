@@ -80,7 +80,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 
 ### fold {#fold}
 
-*app*&nbsp;`(x:<b> y:<b> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`(x:<b> y:<a> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
 Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 
@@ -178,7 +178,7 @@ Return reference tx id for pact execution.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.2.1"
+"2.2.2"
 ```
 
 
@@ -267,10 +267,13 @@ pact> (typeof "hello")
 
 ### yield {#yield}
 
-*value*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
+*OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield object VALUE for use in next pact step. The object is similar to database row objects, in that only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values.
+Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. 
+```lisp
+(yield { "amount": 100.0 })
+```
 
 ## Database {#Database}
 
@@ -298,7 +301,7 @@ Get metadata for KEYSET
 *module*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for MODULE
+Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and 'code' fields.
 
 
 ### describe-table {#describe-table}
@@ -1056,6 +1059,14 @@ Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is 
 ```lisp
 (load "accounts.repl")
 ```
+
+
+### print {#print}
+
+*value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Print a string, mainly to format newlines correctly
 
 
 ### rollback-tx {#rollback-tx}

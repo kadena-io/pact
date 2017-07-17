@@ -13,6 +13,15 @@ Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
 Changelog
 =========
 
+**Version 2.2.2:**
+
+-  Module Hashes: ``use`` support
+-  use accepts barewords
+-  better output in ``describe-module``
+-  ``list-modules`` added
+-  ``print`` REPL command
+-  "transactional awareness" in Persist
+
 **Version 2.2.1:**
 
 -  ``yield`` and ``resume`` added for use in defpacts
@@ -347,7 +356,17 @@ in transaction rollback.
 
 Modules can be re-defined as controlled by their admin keyset. Module
 versioning is not supported, except by including a version sigil in the
-module name (e.g., "accounts-v1").
+module name (e.g., "accounts-v1"). However, *module hashes* are a
+powerful feature for ensuring code safety. When a module is imported
+with `use <#use>`__, the module hash can be specified, to tie code to a
+particular release.
+
+As of Pact 2.2, ``use`` statements can be issued within a module
+declaration. This combined with module hashes provides a high level of
+assurance, as updated module code will fail to import if a dependent
+module has subsequently changed on the chain; this will also propagate
+changes to the loaded modules' hash, protecting downstream modules from
+inadvertent changes on update.
 
 Module names must be globally unique.
 
@@ -1045,7 +1064,9 @@ Special forms
 defun
 ~~~~~
 
-``(defun NAME ARGLIST [DOCSTRING] BODY...)``
+.. code:: lisp
+
+    (defun NAME ARGLIST [DOCSTRING] BODY...)
 
 Define NAME as a function, accepting ARGLIST arguments, with optional
 DOCSTRING. Arguments are in scope for BODY, one or more expressions.
@@ -1060,7 +1081,9 @@ DOCSTRING. Arguments are in scope for BODY, one or more expressions.
 defconst
 ~~~~~~~~
 
-``(defun NAME VALUE [DOCSTRING])``
+.. code:: lisp
+
+    (defun NAME VALUE [DOCSTRING])
 
 Define NAME as VALUE, with option DOCSTRING.
 
@@ -1073,7 +1096,9 @@ Define NAME as VALUE, with option DOCSTRING.
 defpact
 ~~~~~~~
 
-``(defpact NAME ARGLIST [DOCSTRING] STEPS...)``
+::
+
+    (defpact NAME ARGLIST [DOCSTRING] STEPS...)
 
 Define NAME as a *pact*, a multistep computation intended for private
 transactions. Identical to `defun <#defun>`__ except body must be
@@ -1092,7 +1117,9 @@ comprised of `steps <#step>`__.
 defschema
 ~~~~~~~~~
 
-``(defschema NAME [DOCSTRING] FIELDS...)``
+::
+
+    (defschema NAME [DOCSTRING] FIELDS...)
 
 Define NAME as a *schema*, which specifies a list of FIELDS. Each field
 is in the form ``FIELDNAME[:FIELDTYPE]``.
@@ -1109,7 +1136,9 @@ is in the form ``FIELDNAME[:FIELDTYPE]``.
 deftable
 ~~~~~~~~
 
-``(deftable NAME[:SCHEMA] [DOCSTRING])``
+::
+
+    (deftable NAME[:SCHEMA] [DOCSTRING])
 
 Define NAME as a *table*, used in database functions. Note the table
 must still be created with `create-table <#create-table>`__.
@@ -1117,7 +1146,9 @@ must still be created with `create-table <#create-table>`__.
 let
 ~~~
 
-``(let (BINDPAIR [BINDPAIR [...]]) BODY)``
+::
+
+    (let (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables within
 BINDPAIRs cannot refer to previously-declared variables in the same let
@@ -1133,7 +1164,9 @@ binding; for this use `let\* <#letstar>`__.
 let\*
 ~~~~~
 
-``(let\* (BINDPAIR [BINDPAIR [...]]) BODY)``
+::
+
+    (let\* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables can
 reference previously declared BINDPAIRS in the same let. ``let\*`` is
@@ -1150,7 +1183,9 @@ expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
 step
 ~~~~
 
-``(step ENTITY EXPR)``
+::
+
+    (step ENTITY EXPR)
 
 Define a step within a *pact*, which can only be executed by nodes
 representing ENTITY, in order of execution specified in containing
@@ -1159,7 +1194,9 @@ representing ENTITY, in order of execution specified in containing
 step-with-rollback
 ~~~~~~~~~~~~~~~~~~
 
-``(step-with-rollback ENTITY EXPR ROLLBACK-EXPR)``
+::
+
+    (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 
 Define a step within a *pact*, which can only be executed by nodes
 representing ENTITY, in order of execution specified in containing
@@ -1169,20 +1206,29 @@ be executed.
 use
 ~~~
 
-``(use MODULE-SYMBOL)``
+::
 
-Import an existing module into namespace.
+    (use MODULE)
+    (use MODULE HASH)
+
+Import an existing MODULE into namespace. Can only be issued at
+top-level, or within a module declaration. MODULE can be a string,
+symbol or bare atom. With HASH, validate that module hash matches HASH,
+failing if not. Use `describe-module <#describe-module>`__ to query for
+the hash of a loaded module on the chain.
 
 .. code:: lisp
 
-    (use 'accounts)
+    (use accounts)
     (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
     "Write succeeded"
 
 module
 ~~~~~~
 
-``(module NAME KEYSET [DOCSTRING] DEFS...)``
+::
+
+    (module NAME KEYSET [DOCSTRING] DEFS...)
 
 Define and install module NAME, guarded by keyset KEYSET, with optional
 DOCSTRING. DEFS must be `defun <#defun>`__ or `defpact <#defpact>`__
@@ -1354,7 +1400,7 @@ inclusion.
 fold
 ~~~~
 
-*app* ``(x:<b> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
+*app* ``(x:<b> y:<a> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
 *→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
@@ -1454,7 +1500,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.2.1"
+    "2.2.2"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -1548,11 +1594,16 @@ Returns type of X as string.
 yield
 ~~~~~
 
-*value* ``object:<{y}>`` *→* ``object:<{y}>``
+*OBJECT* ``object:<{y}>`` *→* ``object:<{y}>``
 
-Yield object VALUE for use in next pact step. The object is similar to
-database row objects, in that only the top level can be binded to in
-'resume'; nested objects are converted to opaque JSON values.
+Yield OBJECT for use with 'resume' in following pact step. The object is
+similar to database row objects, in that only the top level can be
+binded to in 'resume'; nested objects are converted to opaque JSON
+values.
+
+.. code:: lisp
+
+    (yield { "amount": 100.0 })
 
 Database
 --------
@@ -1580,7 +1631,8 @@ describe-module
 
 *module* ``string`` *→* ``value``
 
-Get metadata for MODULE
+Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and
+'code' fields.
 
 describe-table
 ~~~~~~~~~~~~~~
@@ -2399,6 +2451,13 @@ NO-RESET is true.
 .. code:: lisp
 
     (load "accounts.repl")
+
+print
+~~~~~
+
+*value* ``<a>`` *→* ``string``
+
+Print a string, mainly to format newlines correctly
 
 rollback-tx
 ~~~~~~~~~~~
