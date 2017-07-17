@@ -1083,7 +1083,7 @@ defconst
 
 .. code:: lisp
 
-    (defun NAME VALUE [DOCSTRING])
+    (defconst NAME VALUE [DOCSTRING])
 
 Define NAME as VALUE, with option DOCSTRING.
 
