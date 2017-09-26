@@ -507,8 +507,8 @@ runEval' :: EvalState -> EvalEnv e -> Eval e a ->
            IO (Either PactError a,EvalState)
 runEval' s env act =
   runStateT (catches (Right <$> runReaderT (unEval act) env)
-              [Handler (\(e :: SomeException) -> return $ Left . EvalError def . pack . show $ e),
-               Handler (\(e :: PactError) -> return $ Left e)
+              [Handler (\(e :: PactError) -> return $ Left e)
+              ,Handler (\(e :: SomeException) -> return $ Left . EvalError def . pack . show $ e)
               ]) s
 
 
