@@ -1,3 +1,9 @@
+2.2.3
+---
+* Pact tool now supports '-a' to format API requests and '-g' to generate ED25519 keypairs
+* Fixed error output (was breaking Atom parsing)
+* Changelog removed from reference docs
+
 2.2.2
 ---
 * Module Hashes: `use` support
