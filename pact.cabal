@@ -98,12 +98,14 @@ library
                 , snap-core
                 , snap-server
                 , ed25519-donna
+                , crypto-api
                 , blake2
                 , fast-logger
                 , yaml
     exposed-modules:
                     Pact.Bench
                   , Pact.Main
+                  , Pact.ApiReq
                   , Pact.Docgen
                   , Pact.Interpreter
                   , Pact.MockDb

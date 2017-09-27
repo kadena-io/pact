@@ -68,35 +68,6 @@ config. The ``pact-lang-api`` JS library is `available via
 npm <https://www.npmjs.com/package/pact-lang-api>`__ for web
 development.
 
-load.js
--------
-
-The ``load.js`` tool can be used to format valid ``send`` and
-``private`` payloads for use with a POST tool like Postman or even
-piping into ``curl``.
-
-::
-
-    $ ./load.js
-    ERROR: Missing code or codefile argument
-
-    load.js: create JSON for loading Pact code
-
-    Arguments: [-cf codefile] [-c code] -n nonce -s sk -p pk [-df datafile] [-d data] [-t to -f from]
-
-      codefile    filepath containing pact code to load
-      code        pact code to execute
-      datafile    filepath containing JSON data to accompany pact code load
-      data        JSON string of data to accompany pact code load
-      nonce       nonce value for data payload
-      sk          secret key
-      pk          public key
-      to          Private message sender entity
-      from        Private message recipient JSON list
-
-    $ ./load.js -c "(cash.read-account \"will\")" -df ../tests/cp-auth-keys.json -n "hello" -s 236270aa77997037db05201978775ea157392bed858b36ec0edf8444f6a52983 -p e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc -f Me -t "[\"You\",\"Him\",\"Her\"]"
-    {"cmds":[{"hash":"3c4038053663af50a0851e8e4987f50c6147e3a1cecbce46fd6e14c04496d5ff731d6d980c9733743bb11488996e23567b34c4f91cf49fe4b5393a8a9ea8f41e","sigs":[{"sig":"587dd0972cd271d828d1b12319f8f3c2a42631b64b3f331bc0091b4f7cf0b98f20a8e3e5dd056e7fe08fe3981d24b11e4e8eb513114aed7371af3318aeb21100","pubKey":"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc"}],"cmd":"{\"nonce\":\"hello\",\"payload\":{\"exec\":{\"code\":\"(cash.read-account \\\"will\\\")\",\"data\":{\"module-admin-keyset\":{\"keys\":[\"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc\"],\"pred\":\"keys-all\"}}}},\"address\":{\"from\":\"Me\",\"to\":[\"You\",\"Him\",\"Her\"]}}"}]}
-
 ``cmd`` field and "Stringified" Transaction JSON
 ------------------------------------------------
 
@@ -126,8 +97,8 @@ encoded is as follows.
 
 When assembling the message, this JSON should be "stringified" and
 provided for the ``cmd`` field. If you inspect the output of the
-`load.js call above <#load-js>`__, you will see that the ``"cmd"`` field
-is a String of encoded, escaped JSON.
+`request formatter in the pact tool <#api-request-formatter>`__, you
+will see that the ``"cmd"`` field is a String of encoded, escaped JSON.
 
 Endpoints
 ---------
@@ -318,6 +289,61 @@ Response JSON:
         "data": /* data from Pact execution represented as JSON */
       }
     }
+
+API request formatter
+---------------------
+
+As of Pact 2.2.3, the ``pact`` tool now accepts the ``-a`` option to
+format API request JSON, using a YAML file describing the request. The
+output can then be used with a POST tool like Postman or even piping
+into ``curl``.
+
+For instance, a yaml file called "apireq.yaml" with the following
+contents:
+
+::
+
+    code: "(+ 1 2)"
+    data:
+      name: Stuart
+      language: Pact
+    keyPairs:
+      - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+        secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+
+can be fed into ``pact`` to obtain a valid API request:
+
+::
+
+    $ pact -a tests/apireq.yaml -l
+    {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+
+Here's an example of piping into curl, hitting a pact server running on
+port 8080:
+
+::
+
+    $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
+    {"status":"success","response":{"status":"success","data":3}}
+
+Request YAML file format
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Request yaml takes the following keys:
+
+::
+
+      code: Transaction code
+      codeFile: Transaction code file
+      data: JSON transaction data
+      dataFile: JSON transaction data file
+      keyPairs: list of key pairs for signing (use pact -g to generate): [
+        public: base 16 public key
+        secret: base 16 secret key
+        ]
+      nonce: optional request nonce, will use current time if not provided
+      from: entity name for addressing private messages
+      to: entity names for addressing private messages
 
 Concepts
 ========

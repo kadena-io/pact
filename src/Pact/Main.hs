@@ -28,28 +28,34 @@ import qualified Data.HashMap.Strict as HM
 import Prelude hiding (exp,print,putStrLn,putStr,interact)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import System.IO hiding (interact)
-import System.Exit
+import System.Exit hiding (die)
 import qualified Options.Applicative as O
 import Data.Monoid
 import System.Directory
 import System.FilePath
 
+import Crypto.Random
+import Crypto.Ed25519.Pure
+
 import Pact.Repl
 import Pact.Parse
-import Pact.Types.Runtime hiding ((<>))
+import Pact.Types.Runtime hiding ((<>),PublicKey)
 #if defined(BUILD_SERVER)
 import Pact.Server.Server
 #endif
 import Pact.Types.Version
+import Pact.ApiReq
 
 
 data Option =
-  OVersion |
-  OBuiltins |
-  OLoad Bool String |
-  ORepl
+  OVersion
+  | OBuiltins
+  | OGenKey
+  | OLoad { _oFindScript :: Bool, _oFile :: String }
+  | ORepl
+  | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
 #if defined(BUILD_SERVER)
-  | OServer FilePath
+  | OServer { _oConfigYaml :: FilePath }
 #endif
   deriving (Eq,Show)
 
@@ -57,6 +63,7 @@ replOpts :: O.Parser Option
 replOpts =
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
+    O.flag' OGenKey (O.short 'g' <> O.long "genkey" <> O.help "Generate ED25519 keypair") <|>
 #if defined(BUILD_SERVER)
     (OServer <$> O.strOption (O.short 's' <> O.long "serve" <> O.metavar "config" <>
                               O.help "Launch REST API server with config file")) <|>
@@ -67,6 +74,9 @@ replOpts =
           O.help "For .pact files, attempts to locate a .repl file to execute.")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
+    (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
+                             O.help "Format API request JSON using REQ_YAML file")
+      <*> O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")) <|>
     pure ORepl -- would be nice to bail on unrecognized args here
 
 argParser :: O.ParserInfo Option
@@ -80,7 +90,7 @@ _testArgs = O.execParserPure O.defaultPrefs argParser . words
 main :: IO ()
 main = do
   as <- O.execParser argParser
-  let exitEither _ Left {} = hPutStrLn stderr "Load failed" >> hFlush stderr >> exitFailure
+  let exitEither _ Left {} = die "Load failed"
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
@@ -97,6 +107,8 @@ main = do
               Nothing -> compileOnly fp >>= exitLoad
         | otherwise -> execScript fp >>= exitLoad
     ORepl -> repl >>= exitEither (const (return ()))
+    OGenKey -> genKeys
+    OApiReq cf l -> apiReq cf l
 
 -- | Run heuristics to find a repl script. First is the file name with ".repl" extension;
 -- if not, it will see if there is a single ".repl" file in the directory, and if so
@@ -121,9 +133,21 @@ compileOnly fp = do
   s <- initReplState (Script fp)
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 
+die :: String -> IO b
+die msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure
 
 
 echoBuiltins :: IO ()
 echoBuiltins = do
   defs <- view (eeRefStore.rsNatives) <$> initPureEvalEnv
   forM_ (sort $ HM.keys defs) print
+
+
+genKeys :: IO ()
+genKeys = do
+  g :: SystemRandom <- newGenIO
+  case generateKeyPair g of
+    Left err -> die $ show err
+    Right (s,p,_) -> do
+      putStrLn $ "public: " ++ unpack (toB16Text $ exportPublic p)
+      putStrLn $ "secret: " ++ unpack (toB16Text $ exportPrivate s)
