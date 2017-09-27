@@ -1,5 +1,8 @@
 ![](img/kadena-logo-210px.png)
 
+Pact Smart Contract Language Reference
+===
+
 This document is a reference for the Pact smart-contract language, designed for
 correct, transactional execution on a [high-performance blockchain](http://kadena.io). For more
 background, please see the [white paper](http://kadena.io/docs/Kadena-PactWhitepaper-Oct2016.pdf)
@@ -54,7 +57,7 @@ blockchain applications with just the `pact` tool.
 To start up the server issue `pact -s config.yaml`, with a suitable config.
 The `pact-lang-api` JS library is [available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
 
-### load.js
+### load.js {#load-js}
 
 The `load.js` tool can be used to format valid `send` and `private` payloads for use with a POST tool like
 Postman or even piping into `curl`.
@@ -82,23 +85,51 @@ $ ./load.js -c "(cash.read-account \"will\")" -df ../tests/cp-auth-keys.json -n 
 ```
 
 
+`cmd` field and "Stringified" Transaction JSON {#cmd-field-and-stringified-transaction-json}
+---
+
+Transactions sent into the blockchain must be hashed in order to ensure the received command is correct; this is also
+the value that is signed with the required private keys. To ensure the JSON for the transaction matches byte-for-byte
+with the value used to make the hash, the JSON must be *encoded* into the payload as a string (i.e., ["stringified"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)).
+
+The [send](#send), [private](#private), and [local](#local) endpoints support the `cmd`
+field to hold the executable code and data of the transaction as an encoded string. The format of the JSON to be
+encoded is as follows.
+
+```javascript
+{
+  "nonce": "[nonce value, needs to be unique for every call]",
+  "payload": {
+    "exec": "[pact code to be executed]",
+    "data": {
+       /* arbitrary user data to accompany code */
+    }
+  }
+}
+```
+
+When assembling the message, this JSON should be "stringified" and provided for the `cmd` field.
+If you inspect the output of the [load.js call above](#load-js), you will see that the `"cmd"` field is a
+String of encoded, escaped JSON.
+
 
 Endpoints
 ---
 
 All endpoints are served from `api/v1`. Thus a `send` call would be sent to (http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send], if running on `localhost:8080`.
 
-### `send` {#api-send}
+### /send
 
 Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
+See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
 
 Request JSON:
 
 ```javascript
 {
   "cmds": [
-  { \\ "Command" JSON
-    "hash": "[blake2 hash in base16 of 'cmd' value]",
+  {
+    "hash": "[blake2 hash in base16 of 'cmd' string value]",
     "sigs": [
       {
         "sig": "[crypto signature by secret key of 'hash' value]",
@@ -106,16 +137,10 @@ Request JSON:
         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
       }
     ]
-    "cmd": {
-      "nonce": "[nonce value]",
-      "payload": {
-        "exec": "[pact code]",
-        "data": {
-          /* arbitrary user data to accompany code */
-        }
-      }
-    }
-  } \\ end "Command" JSON
+    "cmd": "[stringified transaction JSON]"
+  }
+  // ... more commands
+  ]
 }
 ```
 
@@ -132,18 +157,19 @@ Response JSON:
 }
 ```
 
-### `private` {#api-private}
+### /private
 
 Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
 to securely encrypt for only sending and receiving entities to read.
+See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
 
 Request JSON:
 
 ```javascript
 {
   "cmds": [
-  { \\ "Command" JSON
-    "hash": "[blake2 hash in base16 of 'cmd' value]",
+  {
+    "hash": "[blake2 hash in base16 of 'cmd' string value]",
     "sigs": [
       {
         "sig": "[crypto signature by secret key of 'hash' value]",
@@ -151,20 +177,9 @@ Request JSON:
         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
       }
     ]
-    "cmd": {
-      "address": {
-        "from": "[Sending entity name, must match sending entity node entity name]",
-        "to": ["A","B"] /* list of recipient entity names */
-      }
-      "nonce": "[nonce value]"
-      "payload": {
-        "exec": "[pact code]",
-        "data": {
-          /* arbitrary user data to accompany code */
-        }
-      }
-    }
-  } \\ end "Command" JSON
+    "cmd": "[stringified transaction JSON]"
+  }
+  ]
 }
 ```
 
@@ -181,7 +196,7 @@ Response JSON:
 }
 ```
 
-### `poll` {#api-poll}
+### /poll
 
 Poll for command results.
 
@@ -212,7 +227,7 @@ Response JSON:
 }
 ```
 
-### `listen` {#api-listen}
+### /listen
 
 Blocking call to listen for a single command result, or retrieve an already-executed command.
 
@@ -239,16 +254,16 @@ Response JSON:
 }
 ```
 
-### `local` {#api-local}
+### /local
 
 Blocking/sync call to send a command for non-transactional execution. In a blockchain
 environment this would be a node-local "dirty read". Any database writes or changes
-to the environment are rolled back.
+to the environment are rolled back. See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
 
 Request JSON:
 
 ```
-{ \\ "Command" JSON
+{
   "hash": "[blake2 hash in base16 of 'cmd' value]",
   "sigs": [
     {
@@ -257,16 +272,8 @@ Request JSON:
       "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
     }
   ]
-  "cmd": {
-    "nonce": "[nonce value]",
-    "payload": {
-      "exec": "[pact code]",
-      "data": {
-        /* arbitrary user data to accompany code */
-      }
-    }
-  }
-} \\ end "Command" JSON
+  "cmd": "[stringified transaction JSON]"
+}
 ```
 Response JSON:
 
@@ -347,14 +354,14 @@ Tables are [created](#create-table) at the same time as modules. While tables ar
 modules, they are *created* "after" modules, so that the module may be redefined later without
 having to necessarily re-create the table.
 
-The relationship of modules to tables is important, as described in [Table Guards](#tableguards).
+The relationship of modules to tables is important, as described in [Table Guards](#module-table-guards).
 
 There is no restriction on how many tables may be created. Table names are namespaced with
 the module name.
 
 Tables can be typed with a [schema](#defschema).
 
-### Transaction Execution {#transactionexec}
+### Transaction Execution {#transaction-execution}
 
 "Transactions" refer to business events enacted on the blockchain, like a payment, a sale, or
 a workflow step of a complex contractual agreement. A transaction is generally a single call to
@@ -484,7 +491,7 @@ Examples of valid keyset JSON productions:
 ```
 
 
-### Keyset Predicates {#keysetpredicates}
+### Keyset Predicates {#keyset-predicates}
 
 A keyset predicate references a function by name which will compare the public keys in the keyset
 to the key or keys used to sign the blockchain message. The function accepts two arguments,
@@ -549,7 +556,7 @@ into the callsite. This is an example of the performance advantages of a Turing-
 
 ### Single-assignment Variables {#variables}
 
-Pact allows variable declarations in [let expressions](#let) and [bindings](#binding). Variables are
+Pact allows variable declarations in [let expressions](#let) and [bindings](#bindings). Variables are
 immutable: they cannot be re-assigned, or modified in-place.
 
 A common variable declaration
@@ -567,13 +574,13 @@ and does no coercion of types, so is strongly-typed nonetheless.
 
 Pact's supported types are:
 
-- [Strings](#string)
-- [Integers](#integer)
-- [Decimals](#decimal)
-- [Booleans](#boolean)
+- [Strings](#strings)
+- [Integers](#integers)
+- [Decimals](#decimals)
+- [Booleans](#booleans)
 - [Key sets](#keysets)
-- [Lists](#list)
-- [Objects](#object)
+- [Lists](#lists)
+- [Objects](#objects)
 - [Function](#defun) and [pact](#defpact) definitions
 - [JSON values](#json)
 - [Tables](#deftable)
@@ -582,7 +589,7 @@ Pact's supported types are:
 
 ### Performance {#performance}
 
-Pact is designed to maximize the performance of [transaction execution](#transactionexec), penalizing
+Pact is designed to maximize the performance of [transaction execution](#transaction-execution), penalizing
 queries and module definition in favor of fast recording of business events on the blockchain.
 Some tips for fast execution are:
 
@@ -643,7 +650,7 @@ which is slower.
 ### Functional Concepts {#fp}
 
 Pact includes the functional-programming "greatest hits": [map](#map), [fold](#fold) and [filter](#filter).
-These all employ [partial application](#partialapplication), where the list item is appended onto the application
+These all employ [partial application](#partial-application), where the list item is appended onto the application
 arguments in order to serially execute the function.
 
 ```lisp
@@ -743,7 +750,7 @@ Syntax
 Literals {#literals}
 --------
 
-### Strings {#string}
+### Strings {#strings}
 
 String literals are created with double-ticks:
 
@@ -761,7 +768,7 @@ Strings also support multiline by putting a backslash before and after whitespac
   a)
 ```
 
-### Symbols {#symbol}
+### Symbols {#symbols}
 
 Symbols are string literals representing some unique item in the runtime, like a function or a table name.
 Their representation internally is simply a string literal so their usage is idiomatic.
@@ -773,16 +780,16 @@ pact> 'a-symbol
 "a-symbol"
 ```
 
-### Integers {#integer}
+### Integers {#integers}
 
-Integer literals are unbounded positive naturals. For negative numbers use the unary [-](#n-) function.
+Integer literals are unbounded positive naturals. For negative numbers use the unary [-](#-) function.
 
 ```
 pact> 12345
 12345
 ```
 
-### Decimals {#decimal}
+### Decimals {#decimals}
 
 Decimal literals are positive decimals to exact expressed precision.
 ```
@@ -792,7 +799,7 @@ pact> 356452.23451872
 356452.23451872
 ```
 
-### Booleans {#boolean}
+### Booleans {#booleans}
 
 Booleans are represented by `true` and `false` literals.
 
@@ -801,7 +808,7 @@ pact> (and true false)
 false
 ```
 
-### Lists {#list}
+### Lists {#lists}
 
 List literals are created with brackets. Uniform literal lists
 are given a type in parsing.
@@ -814,7 +821,7 @@ pact> (typeof [1 2 true])
 "list"
 ```
 
-### Objects {#object}
+### Objects {#objects}
 
 Objects are dictionaries, created with curly-braces specifying key-value pairs
 using a colon `:`.
@@ -825,7 +832,7 @@ pact> { "foo": (+ 1 2), "bar": "baz" }
 (TObject [("foo",3),("bar","baz")])
 ```
 
-### Bindings {#binding}
+### Bindings {#bindings}
 Bindings are dictionary-like forms, also created with curly braces, to bind
 database results to variables using the `:=` operator.
 They are used in [with-read](#with-read), [with-default-read](#with-default-read),
@@ -890,7 +897,7 @@ Tables and objects can only take a schema type literal.
 ```
 
 
-Special forms {#special}
+Special forms {#special-forms}
 ---
 
 ### defun {#defun}
@@ -1073,7 +1080,7 @@ Expressions may be [literals](#literals), atoms, s-expressions, or references.
 
 Atoms are non-reserved barewords starting with a letter or allowed symbol, and containing letters,
 digits and allowed symbols. Allowed symbols are `%#+-_&$@<>=?*!|/`. Atoms must
-resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#binding) form,
+resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#bindings) form,
 or to symbols imported into the namespace with [use](#use).
 
 ### S-expressions {#sexp}
@@ -1085,10 +1092,10 @@ which case the first atom must refer to a definition.
 #### Partial application {#partialapplication}
 An application with less than the required arguments is in some contexts a valid
 *partial application* of the function. However, this is only supported in
-Pact's [functional-style functions](#fp); anywhere else this will result in a
+Pact's [functional-style functions](#functional-concepts); anywhere else this will result in a
 runtime error.
 
-### References {#reference}
+### References {#references}
 
 References are two atoms joined by a dot `.` to directly resolve to module
 definitions.

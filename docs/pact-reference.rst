@@ -1,6 +1,9 @@
 .. figure:: img/kadena-logo-210px.png
    :alt: 
 
+Pact Smart Contract Language Reference
+======================================
+
 This document is a reference for the Pact smart-contract language,
 designed for correct, transactional execution on a `high-performance
 blockchain <http://kadena.io>`__. For more background, please see the
@@ -94,6 +97,38 @@ piping into ``curl``.
     $ ./load.js -c "(cash.read-account \"will\")" -df ../tests/cp-auth-keys.json -n "hello" -s 236270aa77997037db05201978775ea157392bed858b36ec0edf8444f6a52983 -p e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc -f Me -t "[\"You\",\"Him\",\"Her\"]"
     {"cmds":[{"hash":"3c4038053663af50a0851e8e4987f50c6147e3a1cecbce46fd6e14c04496d5ff731d6d980c9733743bb11488996e23567b34c4f91cf49fe4b5393a8a9ea8f41e","sigs":[{"sig":"587dd0972cd271d828d1b12319f8f3c2a42631b64b3f331bc0091b4f7cf0b98f20a8e3e5dd056e7fe08fe3981d24b11e4e8eb513114aed7371af3318aeb21100","pubKey":"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc"}],"cmd":"{\"nonce\":\"hello\",\"payload\":{\"exec\":{\"code\":\"(cash.read-account \\\"will\\\")\",\"data\":{\"module-admin-keyset\":{\"keys\":[\"e6f65edd34986745f1d3a4a3f9706ad35a0049005d63117578a800701c9ef8cc\"],\"pred\":\"keys-all\"}}}},\"address\":{\"from\":\"Me\",\"to\":[\"You\",\"Him\",\"Her\"]}}"}]}
 
+``cmd`` field and "Stringified" Transaction JSON
+------------------------------------------------
+
+Transactions sent into the blockchain must be hashed in order to ensure
+the received command is correct; this is also the value that is signed
+with the required private keys. To ensure the JSON for the transaction
+matches byte-for-byte with the value used to make the hash, the JSON
+must be *encoded* into the payload as a string (i.e.,
+`"stringified" <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify>`__).
+
+The `send <#send>`__, `private <#private>`__, and `local <#local>`__
+endpoints support the ``cmd`` field to hold the executable code and data
+of the transaction as an encoded string. The format of the JSON to be
+encoded is as follows.
+
+.. code:: javascript
+
+    {
+      "nonce": "[nonce value, needs to be unique for every call]",
+      "payload": {
+        "exec": "[pact code to be executed]",
+        "data": {
+           /* arbitrary user data to accompany code */
+        }
+      }
+    }
+
+When assembling the message, this JSON should be "stringified" and
+provided for the ``cmd`` field. If you inspect the output of the
+`load.js call above <#load-js>`__, you will see that the ``"cmd"`` field
+is a String of encoded, escaped JSON.
+
 Endpoints
 ---------
 
@@ -102,11 +137,13 @@ sent to
 (http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send],
 if running on ``localhost:8080``.
 
-``send``
-~~~~~~~~
+/send
+~~~~~
 
 Asynchronous submit of one or more *public* (unencrypted) commands to
-the blockchain.
+the blockchain. See ```cmd`` field
+format <#cmd-field-and-stringified-transaction-json>`__ regarding the
+stringified JSON data.
 
 Request JSON:
 
@@ -114,8 +151,8 @@ Request JSON:
 
     {
       "cmds": [
-      { \\ "Command" JSON
-        "hash": "[blake2 hash in base16 of 'cmd' value]",
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
         "sigs": [
           {
             "sig": "[crypto signature by secret key of 'hash' value]",
@@ -123,16 +160,10 @@ Request JSON:
             "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
           }
         ]
-        "cmd": {
-          "nonce": "[nonce value]",
-          "payload": {
-            "exec": "[pact code]",
-            "data": {
-              /* arbitrary user data to accompany code */
-            }
-          }
-        }
-      } \\ end "Command" JSON
+        "cmd": "[stringified transaction JSON]"
+      }
+      // ... more commands
+      ]
     }
 
 Response JSON:
@@ -148,12 +179,14 @@ Response JSON:
       }
     }
 
-``private``
-~~~~~~~~~~~
+/private
+~~~~~~~~
 
 Asynchronous submit of one or more *private* commands to the blockchain,
 using supplied address info to securely encrypt for only sending and
-receiving entities to read.
+receiving entities to read. See ```cmd`` field
+format <#cmd-field-and-stringified-transaction-json>`__ regarding the
+stringified JSON data.
 
 Request JSON:
 
@@ -161,8 +194,8 @@ Request JSON:
 
     {
       "cmds": [
-      { \\ "Command" JSON
-        "hash": "[blake2 hash in base16 of 'cmd' value]",
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
         "sigs": [
           {
             "sig": "[crypto signature by secret key of 'hash' value]",
@@ -170,20 +203,9 @@ Request JSON:
             "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
           }
         ]
-        "cmd": {
-          "address": {
-            "from": "[Sending entity name, must match sending entity node entity name]",
-            "to": ["A","B"] /* list of recipient entity names */
-          }
-          "nonce": "[nonce value]"
-          "payload": {
-            "exec": "[pact code]",
-            "data": {
-              /* arbitrary user data to accompany code */
-            }
-          }
-        }
-      } \\ end "Command" JSON
+        "cmd": "[stringified transaction JSON]"
+      }
+      ]
     }
 
 Response JSON:
@@ -199,8 +221,8 @@ Response JSON:
       }
     }
 
-``poll``
-~~~~~~~~
+/poll
+~~~~~
 
 Poll for command results.
 
@@ -231,8 +253,8 @@ Response JSON:
       }
     }
 
-``listen``
-~~~~~~~~~~
+/listen
+~~~~~~~
 
 Blocking call to listen for a single command result, or retrieve an
 already-executed command.
@@ -260,18 +282,20 @@ Response JSON:
       }
     }
 
-``local``
-~~~~~~~~~
+/local
+~~~~~~
 
 Blocking/sync call to send a command for non-transactional execution. In
 a blockchain environment this would be a node-local "dirty read". Any
-database writes or changes to the environment are rolled back.
+database writes or changes to the environment are rolled back. See
+```cmd`` field format <#cmd-field-and-stringified-transaction-json>`__
+regarding the stringified JSON data.
 
 Request JSON:
 
 ::
 
-    { \\ "Command" JSON
+    {
       "hash": "[blake2 hash in base16 of 'cmd' value]",
       "sigs": [
         {
@@ -280,16 +304,8 @@ Request JSON:
           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
         }
       ]
-      "cmd": {
-        "nonce": "[nonce value]",
-        "payload": {
-          "exec": "[pact code]",
-          "data": {
-            /* arbitrary user data to accompany code */
-          }
-        }
-      }
-    } \\ end "Command" JSON
+      "cmd": "[stringified transaction JSON]"
+    }
 
 Response JSON:
 
@@ -379,7 +395,7 @@ modules, so that the module may be redefined later without having to
 necessarily re-create the table.
 
 The relationship of modules to tables is important, as described in
-`Table Guards <#tableguards>`__.
+`Table Guards <#module-table-guards>`__.
 
 There is no restriction on how many tables may be created. Table names
 are namespaced with the module name.
@@ -633,7 +649,7 @@ Single-assignment Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pact allows variable declarations in `let expressions <#let>`__ and
-`bindings <#binding>`__. Variables are immutable: they cannot be
+`bindings <#bindings>`__. Variables are immutable: they cannot be
 re-assigned, or modified in-place.
 
 A common variable declaration occurs in the `with-read <#with-read>`__
@@ -654,13 +670,13 @@ types, so is strongly-typed nonetheless.
 
 Pact's supported types are:
 
--  `Strings <#string>`__
--  `Integers <#integer>`__
--  `Decimals <#decimal>`__
--  `Booleans <#boolean>`__
+-  `Strings <#strings>`__
+-  `Integers <#integers>`__
+-  `Decimals <#decimals>`__
+-  `Booleans <#booleans>`__
 -  `Key sets <#keysets>`__
--  `Lists <#list>`__
--  `Objects <#object>`__
+-  `Lists <#lists>`__
+-  `Objects <#objects>`__
 -  `Function <#defun>`__ and `pact <#defpact>`__ definitions
 -  `JSON values <#json>`__
 -  `Tables <#deftable>`__
@@ -670,7 +686,7 @@ Performance
 ~~~~~~~~~~~
 
 Pact is designed to maximize the performance of `transaction
-execution <#transactionexec>`__, penalizing queries and module
+execution <#transaction-execution>`__, penalizing queries and module
 definition in favor of fast recording of business events on the
 blockchain. Some tips for fast execution are:
 
@@ -761,7 +777,7 @@ Functional Concepts
 
 Pact includes the functional-programming "greatest hits":
 `map <#map>`__, `fold <#fold>`__ and `filter <#filter>`__. These all
-employ `partial application <#partialapplication>`__, where the list
+employ `partial application <#partial-application>`__, where the list
 item is appended onto the application arguments in order to serially
 execute the function.
 
@@ -921,7 +937,7 @@ Integers
 ~~~~~~~~
 
 Integer literals are unbounded positive naturals. For negative numbers
-use the unary `- <#n->`__ function.
+use the unary `- <#->`__ function.
 
 ::
 
@@ -1264,7 +1280,7 @@ Atoms
 Atoms are non-reserved barewords starting with a letter or allowed
 symbol, and containing letters, digits and allowed symbols. Allowed
 symbols are ``%#+-_&$@<>=?*!|/``. Atoms must resolve to a variable bound
-by a `defun <#defun>`__, `defpact <#defpact>`__, `binding <#binding>`__
+by a `defun <#defun>`__, `defpact <#defpact>`__, `binding <#bindings>`__
 form, or to symbols imported into the namespace with `use <#use>`__.
 
 S-expressions
@@ -1280,8 +1296,9 @@ Partial application
 
 An application with less than the required arguments is in some contexts
 a valid *partial application* of the function. However, this is only
-supported in Pact's `functional-style functions <#fp>`__; anywhere else
-this will result in a runtime error.
+supported in Pact's `functional-style
+functions <#functional-concepts>`__; anywhere else this will result in a
+runtime error.
 
 References
 ~~~~~~~~~~
