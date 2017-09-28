@@ -34,6 +34,10 @@ extensions = []
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
+html_context = {
+    'metatags' : '<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" /><meta http-equiv="Pragma" content="no-cache" /><meta http-equiv="Expires" content="0" />'
+}
+
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
