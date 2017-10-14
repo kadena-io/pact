@@ -13,7 +13,10 @@ Entities
 
 An entity is currently an identity as a keypair for symmetric DH communications. Entities are intended
 to be highly-available, which means that a keypair must be replicated across local nodes, along with an
-entropy source. Messaging thus always "self-sends" to ensure replication.
+entropy source. Messaging thus always "self-sends" to ensure replication. Note that for public entities must
+be made optional, as an effective indicator of public execution.
+
+Entities are currently hard-coded into `defpact` syntax.
 
 Considerations regarding disjointedness
 ---
@@ -82,19 +85,10 @@ Final success results in a true "ack transaction" which can report success to pa
 output. [NOTE: output for steps in Pact are currently ignored].
 
 Multi-step leads directly to considerations of how to move information across the steps. Pacts offer
-yield and resume to allow messaging of an output value to the next step. (It is TBD if reverse-messaging
-is necessary for rollbacks).
+yield and resume to allow unforgeable messaging of an output value to the next step. (It is TBD if "reverse
+yielding" is necessary for rollbacks).
 
-Automation here serves to guarantee ack servicingkind of SLA on responsiveness. S
-
-It is assumed that the machine handling the
-automation has access to the cryptographic identity of the entity
-Note that automation is not required here except as a kind of SLA on responsiveness.
-
-Runtime model
----
-
-How is the state across transactions maintained? Automation implies that certain elements of
+As will be seen, rollback is private-only; currently it is hardcoded into pact syntax.
 
 
 Motivation: Public Oracle and Escrow transactions
@@ -115,148 +109,125 @@ by control flow in whatever step is active. Features like timeouts become trivia
 
 Public does require the idea of retaining capabilities from previous steps, for example in the CANCEL
 case if the second actor successfully cancels which requires some update needing the first actor's
-capabilities. However this needs to be carefully distinguished from the capabilities of the current
-step. It might be better to explicitly model this with a scope, ie `(import-capabities step action)`
+capabilities, or more positively, in the case of wanting to consume an oracle response by writing
+to the initiator's tables.
+However this needs to be carefully distinguished from the capabilities of the current
+step. It might be better to explicitly model this with a scope, ie `(import-capabilities step action)`
 with the idea that something like CANCEL authorization would have to examine only the current transaction's
-capabilities, before importing previous caps to handle a rollback-like operation. Ideally, however,
-solutions should not require the capability promotion.
+capabilities, before importing previous capabilities.
 
-Yield/Resume and application in public
+Conditional enforcement
 ---
 
-Yield essentially provides for unforgeable messaging between steps.
+The only special thing about CANCEL is the idea of enforcing a keyset as an `OR` operation. Currently
+keysets are all-or-nothing, failing the transaction. I suppose this can be programmed as
+
+```
+(enforce-one
+  [(enforce-keyset 'responder-keyset)
+   (and (enforce-timeout) (enforce-keyset 'initiator-keyset))])
+```
+
+... meaning we at least need something like the `enforce-one` form here. What sucks about this
+is the loss of executional simplicity -- what if the database was written to? Suggests that the
+yet-to-be-implemented pure-keyset-enforce-mode could be extended to enforcements in general: as long
+as they're pure, you can fail fail fail succeed with no drawbacks. Otherwise some kind of freaky
+keyset-based DSL must come into play, to avoid spaghetti of
+`(enforce (and (check-keyset k) (check-timeout)) "did timeout or keyset fail??")`.
 
 
-Pact-local capabilities
+Yield/Resume and application style
 ---
 
-The pact itself requires some kind of unforgeable capability. This can be seen as part of the
-internal state of the pact that necessarily cannot be specified by messaging, along with program
-counter.
+Yield essentially provides for unforgeable messaging between steps for both public and private.
+However, public has the additional need to inject more data in as part of a RESUME, in such a way
+as to suggest normal function application.
 
+A pact id as part of a RESUME basically authenticates the message as belonging to the active pact.
+A message can state step and other internal state but this can only be a form of verification; the
+internal step counter determines what state the pact is in.
 
+Thus, attempts to resemble normal function application are problematic. First, using a function name
+that has been "blessed" to represent the current step will still have to check that blessing according
+to the incremental counter mode, putting a weird requirement on application, or conversely requiring
+functions to specify pact interactions "intrusively", an inversion of control. The problem here
+is that these functions will be available to run as stand-alone functions, too, but presumably insofar
+as they need pact magic they will simply fail in direct application.
 
+Without function names, using arguments becomes freaky too, requiring a loosey-goosey notion of application
+(assuming that the arguments should match the step function being executed). Instead, RESUME should
+simply avail itself of the JSON payload only.
 
-
-
-So, in public, failure is a noop, meaning that steps can use normal keyset-based auth for RESUME.
-
-A "cancel" can be seen as a control-flow governed by a capability, or a straight FAILURE message.
-FAILURE handling must still be governed by a keyset anyway, so it's inappropriate for a CANCEL
-as we don't want control-flow in FAILURE. Not really sure CANCEL should be promoted to syntax-level,
-as it moves so much logic into magic. The control flow itself could be stylized however. The main
-thing CANCEL needs for escrow is a system-time.
-
-
-
-
-
-A CANCEL represents a valid path for logic, and as explicitly handled in control flow, becomes
-easy to assure correctness via capability checking, timeouts etc.
-
-
-from previous transactions can be executed
-as part of failure handling, although this alters Pact's never-catch-errors model, and requires
-that capabilities for the rollbacks have been provisioned in the previous step.
-This raises issues with control flow, as an attacker can intentionally send in a bad tx to trigger a malicious rollback.
-
-Scenario: escrow completes hopeful for success but an error occurs: retry obviously, or cancel. No automatic
-update should ensue.
-
-A CANCEL represents a valid path for logic, and as explicitly handled in control flow, becomes
-easy to assure correctness via capability checking, timeouts etc. A failure must always result in a noop,
-to respect transactionality.
-
-
-
-
-
-
-
-
-
-
-
-
-Obviously in either case this
-results in another "ack transaction", either to increment the counter once again for success, or
-rewind for failure.
-
-
-before "nacking" back to the previous step.
-
-The question however is how cross-transaction state is to be represented. Pacts use the coroutine
-model of "suspended application", with the runtime managing environmental data, a step counter and
-success/failure status; steps inter-message data via yield/resume which is necessarily part of
-the ack transaction, along with success/failure.
-
-
-yield/resume and memoizing environmental data providing the stack-snapshotting
-and counter storage.
-providing maintaining a "call stack" and counter
-
-The desire to automate a multi-tran The desire to
-automate this response drives the design of pacts, to automate the message-handling.  Failure modes are really only
-required once we go multi-step: rollbacks.
-
-Multi-step execution
----
-and orchestrate rollbacks correctly once we move into multi-step execution.
-
-Without system-level guarantees of "global" consistency, any "global" write can fail in a disjoint fashion.
-
-
-This is
-the main driver for single-actor updates, so that other participants can be messaged with the outcome.
-Most likely, this kind of ack is alway
-Note that this is not necessary for a "one-way" tx
-but only where two or more local, disjoint writes must occur; however once we've sequenced anything,
-rollbacks become necessary, indicating that failure _must_ result in an additional outcome-signalling
-transaction in order to initiate rollbacks. An open question is whether success-outcome signals are necessary in the final step.
-
-Establishing the need to signal failure to initiate rollbacks suggests making this automatic.
-
-Cancellation
+Pact-local and contract-local capabilities
 ---
 
-Cancellation was not considered initially, only arising with the public oracle/escrow cases. However once
-oracle functionality is provided, it opens the door to
+Pact-local capabilities must be unforgeable, like yield/resume and the step counter.
+Direct reification in the database is problematic, as these must not be reifiable from outside the system,
+creating a datatype that cannot be exported. A pact capability becomes a transient (memory-only)
+datatype, at which point an `(enforce-pact persisted-pactid)` is acceptable: the pact id is merely
+a pointer to the internal data accessed in `enforce-pact`; knowing the id alone grants no capabilities.
+The only issue here is if a single table wants to have a hybrid capability storage; but given the
+move to also referencing keysets via pointer (to make rotation tractable) instead of directly, this
+raises the simple notion of a CAP-TYPE and CAP-VALUE tuple. Likewise, contract-local capabilities
+can simply `(enforce-module persisted-modulename)` where again the name alone does not grant capabilities.
+The CAP-TYPE field could simply accept `(keyset|pact|module)`. Enum support would be nice for this.
 
 
+Runtime Model
+===
 
+The unforgeable aspects of pact execution require an in-memory model (or at least distinct from the
+user application db) of:
 
+- step counter
 
+- pact ID
 
+- last-yielded values
 
-Atomicity
+- overall activity status (to prevent dupe execution etc: `(NEW|ACTIVE|DONE)`)
+
+- Previous-step-capability access requires retreival of previously-validated signature public keys by step
+
+- Failure cascading is messaging-initiated and therefore forgeable. Entity signatures could be enforced to
+  at least ensure the right entity sent the failure. Some internal state must be maintained, ie a `inFailure`
+  flag, which is ignored in public application. Unsure if yield should function in reverse.
+
+- entity name as a Maybe, which doubles as a "is-private"
+
+Reconciling public and private
 ---
 
+Rollback and entity selection are unfortunately in syntax which will have to go. Public needs no
+special meta-programming or other magic, which might indicate a private-oriented syntax, with
+entity and rollback as special forms.
 
+Public therefore could be as simple as:
 
+```
+(defpact do-public-pact (name date oracle-ks initiator-ks)
+  (initiate-to-oracle oracle-ks name date)
+  (respond-from-oracle date))
+```
 
+... with private needing the `step`, `step-with-rollback`. In the above, `respond-from-oracle` would handle canceling
+with bespoke code. Alternately, `step` could accept multiple syntaxes, and we could add `step-with-cancel` to stylize
+handling a cancel. Probably the most straightforward is to have distinct syntax for each:
 
-Immediately we face disjointed datasets based strictly on the visibility regime. Indeed, at the
-blockchain level, an encrypted message has no status or results as anything else leaks information.
-However
-this also implies that actors within an encrypted transaction will face disjointed datasets
-amongst themselves. Attempts to "mirror" a counterparties' state might require leaking more
-information than desired, and would involve constant "checkpointing" between the counterparty's
-source dataset and the mirror copy. In the end, we face a model where opaque operations happen
-on a counterparty's database that differ from what any actor might enact or see in their own
-database.
+```
+;; public step
+(step (initiate-to-oracle oracle-ks name date))
 
-Nonetheless, we maintain that _Transaction success vs failure must be consistent across participants_.
-The only truly consistent record across the blockchain is simply to note that the message is ENCRYPTED,
-as recording any other state leaks information.
-The true record of any encrypted transaction on the blockchain is ENCRYPTED if we want to reflect
-a
-We've already screwed up the execution model
-enough such that for all non-participants the result can only be "IGNORE"; for participants, we
-posit that success vs failure
+;; public step with cancel, entities not allowed
+(step-with-cancel (initiate-to-oracle oracle-ks name date)
+  (cancel-me initiator-ks oracle-ks name date))
 
+;; private step
+(step 'me (do-stuff foo bar))
 
-The question becomes how to deal with non-uniform operations under the semantics of ACID or similar:
+;; private step with rollback, entity required
+(step-with-rollback 'me (do-stuff foo bar) (aw-shux baz))
+```
 
-1) Atomicity. In a simplified transfer, the debitor ensures sufficient funds, debits, and the creditor credits
-the amount. Clearly the credit "happens after" the debit, as the sufficient-funds requirement is the only
-hard rule. In a disjoint scheme, only the creditor will be able to perform the sufficient-funds check.
+Private automated acks vs. public RESUME
+---
