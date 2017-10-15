@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,6 +20,7 @@
 module Pact.Repl.Lib where
 
 import Data.Default
+import Control.Arrow ((&&&))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Control.Monad.Reader
@@ -55,7 +57,7 @@ initLibState loggers = do
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def)
+  return (LibState m Noop def def)
 
 replDefs :: NativeModule
 replDefs = ("Repl",
@@ -138,11 +140,17 @@ load _ [TLitString fn] = setop (Load (unpack fn) False) >> return (tStr $ "Loadi
 load _ [TLitString fn, TLiteral (LBool r) _] = setop (Load (unpack fn) r) >> return (tStr $ "Loading " <> fn <> "...")
 load i as = argsError i as
 
+modifyLibState :: (LibState -> (LibState,a)) -> Eval LibState a
+modifyLibState f = view eePactDbVar >>= \m -> liftIO $ modifyMVar m (return . f)
+
+setLibState :: (LibState -> LibState) -> Eval LibState ()
+setLibState f = modifyLibState (f &&& const ())
+
+viewLibState :: (LibState -> a) -> Eval LibState a
+viewLibState f = modifyLibState (id &&& f)
 
 setop :: LibOp -> Eval LibState ()
-setop v = do
-  e <- ask
-  liftIO $ modifyMVar_ (_eePactDbVar e) (return . set rlsOp v)
+setop v = setLibState $ set rlsOp v
 
 setenv :: Show a => Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
@@ -215,28 +223,37 @@ tx Begin i as = do
   tid <- fmap succ <$> view eeTxId
   setenv eeTxId tid
   evalBeginTx (_faInfo i)
-  view eePactDbVar >>= \m -> liftIO $ modifyMVar_ m (return . set rlsTxName tname)
+  setLibState $ set rlsTxName tname
   return $ txmsg tname tid "Begin"
 
 tx Rollback i [] = do
   evalRollbackTx (_faInfo i)
   tid <- view eeTxId
-  tname <- view eePactDbVar >>= \m -> liftIO $ withMVar m (return . view rlsTxName)
+  tname <- viewLibState (view rlsTxName)
   return $ txmsg tname tid "Rollback"
 tx Commit i [] = do
   newmods <- use (evalRefs.rsNew)
   setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
   void $ evalCommitTx (_faInfo i)
   tid <- view eeTxId
-  tname <- view eePactDbVar >>= \m -> liftIO $ modifyMVar m $ \v -> return (set rlsTxName Nothing v,view rlsTxName v)
+  tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)
   return $ txmsg tname tid "Commit"
 tx _ i as = argsError i as
+
+recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
+recordTest name failure = setLibState $ over rlsTests (++ [TestResult name failure])
+
+testSuccess :: Text -> Text -> Eval LibState (Term Name)
+testSuccess name msg = recordTest name Nothing >> return (tStr msg)
+
+testFailure :: FunApp -> Text -> Text -> Eval LibState (Term Name)
+testFailure i name msg = recordTest name (Just (i,msg)) >> return (tStr msg)
 
 expect :: RNativeFun LibState
 expect i [TLitString a,b,c] =
   if b `termEq` c
-  then return $ tStr $ "Expect: success: " <> a
-  else evalError' i $ "FAILURE: " ++ unpack a ++ ": expected " ++ show b ++ ", received " ++ show c
+  then testSuccess a $ "Expect: success: " <> a
+  else testFailure i a $ "FAILURE: " <> a <> ": expected " <> pack (show b) <> ", received " <> pack (show c)
 expect i as = argsError i as
 
 expectFail :: NativeFun LibState
@@ -246,8 +263,8 @@ expectFail i as@[a,b] = do
     TLitString msg -> do
       r <- catch (Right <$> reduce b) (\(_ :: SomeException) -> return $ Left ())
       case r of
-        Right v -> evalError' i $ "FAILURE: " ++ unpack msg ++ ": expected failure, got result = " ++ show v
-        Left _ -> return $ tStr $ "Expect failure: success: " <> msg
+        Right v -> testFailure i msg $ "FAILURE: " <> msg <> ": expected failure, got result = " <> pack (show v)
+        Left _ -> testSuccess msg $ "Expect failure: success: " <> msg
     _ -> argsError' i as
 expectFail i as = argsError' i as
 

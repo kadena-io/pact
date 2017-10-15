@@ -33,6 +33,9 @@
   (defun test-enforce-one ()
     (enforce-one "Should work" [(enforce "should pass this" false) (enforce-keyset 'kall)]))
 
+  (defun test-enforce-one-fail ()
+    (enforce-one "Should fail" [(enforce "should pass this" false) (enforce "should fail this" false)]))
+
 )
 
 
@@ -69,3 +72,5 @@
 (expect-failure "keyset read in enforce is impure" (test-enforce-impure-keyset))
 
 (expect "test enforce-one, keyset read in enforce-one ok" true (test-enforce-one))
+
+(expect-failure "test enforce-one all fail" (test-enforce-one-fail))

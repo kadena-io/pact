@@ -1,13 +1,17 @@
+{-# LANGUAGE RecordWildCards #-}
 module PactTestsSpec (spec) where
 
 
 import Test.Hspec
 
 import Pact.Repl
+import Pact.Repl.Types
+import Pact.Types.Runtime
 import Data.Either
 import System.Directory
 import System.FilePath
 import Control.Monad
+import Control.Concurrent
 
 spec :: Spec
 spec = do
@@ -33,5 +37,16 @@ findTests = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)
             where tdir = "tests" </> "pact"
 
 
+
+
 runScript :: String -> SpecWith ()
-runScript fp = it fp $ (fst <$> execScript' (Script fp) fp) >>= (`shouldSatisfy` isRight)
+runScript fp = describe fp $ do
+  (r,ReplState{..}) <- runIO $ execScript' (Script fp) fp
+  case r of
+    Left e -> fail e
+    Right _ -> do
+      LibState{..} <- runIO $ readMVar $ _eePactDbVar _rEnv
+      forM_ _rlsTests $ \TestResult {..} -> it (unpack trName) $ case trFailure of
+        Nothing -> return ()
+        Just (i,e) -> expectationFailure $ renderInfo (_faInfo i) ++ ": " ++ unpack e
+  -- it fp $ (fst <$> execScript' (Script fp) fp) >>= (`shouldSatisfy` isRight)

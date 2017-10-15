@@ -3,9 +3,10 @@ module Pact.Repl.Types
   ( ReplMode(..)
   , Hdl(..)
   , ReplState(..),rEnv,rEvalState,rMode,rOut,rFile
+  , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests
   , Tx(..)
   ) where
 
@@ -16,7 +17,7 @@ import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name)
+import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp)
 import Data.Text (Text)
 
 data ReplMode =
@@ -28,6 +29,11 @@ data ReplMode =
     deriving (Eq,Show)
 
 data Hdl = HOut|HErr
+
+data TestResult = TestResult
+  { trName :: Text
+  , trFailure :: Maybe (FunApp,Text)
+  }
 
 data ReplState = ReplState {
       _rEnv :: EvalEnv LibState
@@ -54,6 +60,7 @@ data LibState = LibState {
       _rlsPure :: MVar (DbEnv PureDb)
     , _rlsOp :: LibOp
     , _rlsTxName :: Maybe Text
+    , _rlsTests :: [TestResult]
 }
 
 

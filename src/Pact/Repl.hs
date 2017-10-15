@@ -271,8 +271,21 @@ interact act = isInteractive >>= \b -> when b act
 rSuccess :: Monad m => m (Either a (Term Name))
 rSuccess = return $ Right $ toTerm True
 
+-- | Workhorse to load script; also checks/reports test failures
 execScript :: FilePath -> IO (Either () (Term Name))
-execScript f = errToUnit (fst <$> execScript' (Script f) f)
+execScript f = do
+  (r,ReplState{..}) <- execScript' (Script f) f
+  case r of
+    Left _ -> return $ Left ()
+    Right t -> do
+      LibState{..} <- readMVar $ _eePactDbVar _rEnv
+      fs <- fmap sequence $ forM _rlsTests $ \TestResult{..} -> case trFailure of
+        Nothing -> return (Just ())
+        Just (i,e) -> do
+          hPutStrLn stderr $ renderInfo (_faInfo i) ++ ": " ++ unpack e
+          return Nothing
+      maybe (return $ Left ()) (const (return (Right t))) fs
+
 
 execScript' :: ReplMode -> FilePath -> IO (Either String (Term Name),ReplState)
 execScript' m fp = do
