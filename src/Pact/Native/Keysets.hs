@@ -63,7 +63,7 @@ defineKeyset i [TLitString name,TKeySet ks _] = do
   case old of
     Nothing -> writeRow (_faInfo i) Write KeySets ksn ks & success "Keyset defined"
     Just _ -> do
-             enforceKeySet (_faInfo i) (Just ksn) ks
+             runPure $ enforceKeySet (_faInfo i) (Just ksn) ks
              writeRow (_faInfo i) Write KeySets ksn ks & success "Keyset defined"
 defineKeyset i as = argsError i as
 
@@ -80,7 +80,7 @@ enforceKeyset' i [k] = do
         Just ks -> return (Just ksn,ks)
     TKeySet ks _ -> return (Nothing,ks)
     _ -> argsError i [t,toTerm ("[body...]" :: Text)]
-  enforceKeySet (_faInfo i) ksn ks
+  runPure $ enforceKeySet (_faInfo i) ksn ks
   return $ toTerm True
 enforceKeyset' i _as = argsError i []
 

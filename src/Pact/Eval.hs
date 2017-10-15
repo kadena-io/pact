@@ -26,12 +26,13 @@ module Pact.Eval
     ,checkUserType
     ,deref
     ,installModule
+    ,runPure,Purity
     ) where
 
 import Control.Lens hiding (op)
 import Control.Applicative
 import Control.Monad.Catch (throwM)
-import Control.Concurrent.MVar (newMVar)
+import Control.Concurrent.MVar
 import Data.List
 import Control.Monad
 import Prelude hiding (exp,mod)
@@ -72,14 +73,14 @@ evalCommitTx i = do
 enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
-  enforceKeySet mi (Just mksn) ks
+  runPure $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 
 -- | Enforce keyset against environment
 enforceKeySet :: Info ->
-             Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = runPure $ do
+             Maybe KeySetName -> KeySet -> Eval (Purity e) ()
+enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
       matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
@@ -402,8 +403,8 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
 
-
-runPure :: Eval NoDB a -> Eval e a
+-- | Drop into pure execution, preventing database access
+runPure :: Eval (Purity e) a -> Eval e a
 runPure a = do
   e <- purify =<< ask
   s <- get
@@ -411,22 +412,14 @@ runPure a = do
   either throwM return o
 
 
-data NoDB = NoDB
+newtype Purity e = Purity (EvalEnv e)
 
-purify :: EvalEnv e -> Eval e (EvalEnv NoDB)
-purify EvalEnv{..} = do
-  let diePure _ = evalError def "Illegal database access in pure context"
-  v <- liftIO $ newMVar NoDB -- this could be left undefined
-  return $ EvalEnv
-    _eeRefStore
-    _eeMsgSigs
-    _eeMsgBody
-    _eeTxId
-    _eeEntity
-    _eePactStep
-    v
-    PactDb {
-      _readRow = \_ _ -> diePure
+purity :: PactDb (Purity e)
+purity = PactDb {
+      _readRow = \d k e -> case d of
+          KeySets -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+          Modules -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+          _ -> diePure e
     , _writeRow = \_ _ _ _ -> diePure
     , _keys = const diePure
     , _txids = \_ _ -> diePure
@@ -437,3 +430,17 @@ purify EvalEnv{..} = do
     , _rollbackTx = diePure
     , _getTxLog = \_ _ -> diePure
     }
+       where diePure _ = evalError def "Illegal database access in pure context"
+
+purify :: EvalEnv e -> Eval e (EvalEnv (Purity e))
+purify e@EvalEnv{..} = do
+  v <- liftIO $ newMVar (Purity e)
+  return $ EvalEnv
+    _eeRefStore
+    _eeMsgSigs
+    _eeMsgBody
+    _eeTxId
+    _eeEntity
+    _eePactStep
+    v
+    purity

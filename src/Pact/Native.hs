@@ -25,6 +25,7 @@ import Control.Concurrent hiding (yield)
 import Control.Lens hiding (from,to,parts,Fold)
 import Control.Monad
 import Control.Monad.Reader (ask)
+import Control.Monad.Catch
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import Prelude hiding (exp)
@@ -117,9 +118,12 @@ langDefs =
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defRNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-     "Fail transaction with MSG if TEST fails, or returns true. \
+    ,defNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
+     "Fail transaction with MSG if pure function TEST fails, or returns true. \
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
+    ,defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
+     "Run TESTS in order (in pure context). If all fail, fail transaction. Short-circuits on first success. \
+     \`(enforce-one \"Should succeed on second test\" (enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\"))`"
 
     ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyAny)])
      "Interpolate VARS into TEMPLATE using {}. \
@@ -308,11 +312,28 @@ readInteger i [TLitString key] = do
   return $ toTerm a
 readInteger i as = argsError i as
 
-enforce :: RNativeFun e
-enforce i [TLiteral (LBool b) _,TLitString msg]
+enforce :: NativeFun e
+enforce i as = runPure (mapM reduce as >>= enforce' i)
+
+enforceOne :: NativeFun e
+enforceOne i as@[msg,TList conds _ _] = runPure $ do
+  msg' <- reduce msg >>= \m -> case m of
+    TLitString s -> return s
+    _ -> argsError' i as
+  let tryCond r@Just {} _ = return r
+      tryCond Nothing cond = catch (Just <$> reduce cond) (\(_ :: SomeException) -> return Nothing)
+  r <- foldM tryCond Nothing conds
+  case r of
+    Nothing -> failTx (_faInfo i) (unpack msg')
+    Just b -> return b
+enforceOne i as = argsError' i as
+
+
+enforce' :: RNativeFun (Purity e)
+enforce' i [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
     | otherwise = failTx (_faInfo i) $ unpack msg
-enforce i as = argsError i as
+enforce' i as = argsError i as
 {-# INLINE enforce #-}
 
 

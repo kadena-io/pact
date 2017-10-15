@@ -6,6 +6,7 @@
      , "impure": {"keys": [], "pred": "impure" }
      })
 (define-keyset 'k (sig-keyset))
+(define-keyset 'kall (read-keyset "kall"))
 (module keysets 'k
   (defschema sch value:bool)
   (deftable tbl:{sch})
@@ -18,10 +19,20 @@
     (enforce-keyset (read-keyset "k2")))
   (defun test-custom ()
     (enforce-keyset (read-keyset "custom")))
-  (defun test-impure ()
+  (defun test-impure-pred ()
     (enforce-keyset (read-keyset "impure")))
 
-  (defun impure () (insert tbl "hi" { "value": true }))
+  (defun impure () (insert tbl "hi" { "value": true }) true)
+
+  (defun test-impure-enforce ()
+    (enforce (impure) "cannot impure enforce"))
+
+  (defun test-enforce-pure-keyset ()
+    (enforce (enforce-keyset 'kall) "Fails with keyset"))
+
+  (defun test-enforce-one ()
+    (enforce-one "Should work" [(enforce "should pass this" false) (enforce-keyset 'kall)]))
+
 )
 
 
@@ -51,4 +62,10 @@
 
 (expect "custom succeeds on 3" true (test-custom))
 
-(expect-failure "impure should blow up" (test-impure))
+(expect-failure "impure keyset pred should blow up" (test-impure-pred))
+
+(expect-failure "impure enforce should blow up" (test-impure-enforce))
+
+(expect "keyset read is pure" true (test-enforce-pure-keyset))
+
+(expect "test enforce-one" true (test-enforce-one))
