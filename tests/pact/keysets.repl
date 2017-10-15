@@ -3,9 +3,12 @@
  , "kany": { "keys": ["a" "b" "c"], "pred": "keys-any" }
    , "k2": { "keys": ["a" "b" "c"], "pred": "keys-2" }
      , "custom": {"keys": ["a" "b" "c" "d"], "pred": "keys-3" }
+     , "impure": {"keys": [], "pred": "impure" }
      })
 (define-keyset 'k (sig-keyset))
 (module keysets 'k
+  (defschema sch value:bool)
+  (deftable tbl:{sch})
   (defun keys-3 (count matched) (>= matched 3))
   (defun test-all ()
     (enforce-keyset (read-keyset "kall")))
@@ -14,7 +17,13 @@
   (defun test-2 ()
     (enforce-keyset (read-keyset "k2")))
   (defun test-custom ()
-    (enforce-keyset (read-keyset "custom"))))
+    (enforce-keyset (read-keyset "custom")))
+  (defun test-impure ()
+    (enforce-keyset (read-keyset "impure")))
+
+  (defun impure () (insert tbl "hi" { "value": true }))
+)
+
 
 (expect-failure "all fails on none" (test-all))
 (expect-failure "any fails on none" (test-any))
@@ -41,3 +50,5 @@
 (expect "2 succeeds on 3" true (test-2))
 
 (expect "custom succeeds on 3" true (test-custom))
+
+(expect-failure "impure should blow up" (test-impure))

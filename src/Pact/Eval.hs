@@ -30,6 +30,8 @@ module Pact.Eval
 
 import Control.Lens hiding (op)
 import Control.Applicative
+import Control.Monad.Catch (throwM)
+import Control.Concurrent.MVar (newMVar)
 import Data.List
 import Control.Monad
 import Prelude hiding (exp,mod)
@@ -77,7 +79,7 @@ enforceKeySetName mi mksn = do
 -- | Enforce keyset against environment
 enforceKeySet :: Info ->
              Maybe KeySetName -> KeySet -> Eval e ()
-enforceKeySet i ksn KeySet{..} = do
+enforceKeySet i ksn KeySet{..} = runPure $ do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
       matched = S.size $ S.intersection (S.fromList _ksKeys) sigs
@@ -399,3 +401,39 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
   typecheck aps
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
+
+
+runPure :: Eval NoDB a -> Eval e a
+runPure a = do
+  e <- purify =<< ask
+  s <- get
+  (o,_s) <- liftIO $ runEval' s e a
+  either throwM return o
+
+
+data NoDB = NoDB
+
+purify :: EvalEnv e -> Eval e (EvalEnv NoDB)
+purify EvalEnv{..} = do
+  let diePure _ = evalError def "Illegal database access in pure context"
+  v <- liftIO $ newMVar NoDB -- this could be left undefined
+  return $ EvalEnv
+    _eeRefStore
+    _eeMsgSigs
+    _eeMsgBody
+    _eeTxId
+    _eeEntity
+    _eePactStep
+    v
+    PactDb {
+      _readRow = \_ _ -> diePure
+    , _writeRow = \_ _ _ _ -> diePure
+    , _keys = const diePure
+    , _txids = \_ _ -> diePure
+    , _createUserTable = \_ _ _ -> diePure
+    , _getUserTableInfo = const diePure
+    , _beginTx = const diePure
+    , _commitTx = diePure
+    , _rollbackTx = diePure
+    , _getTxLog = \_ _ -> diePure
+    }

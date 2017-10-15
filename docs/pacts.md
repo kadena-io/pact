@@ -85,8 +85,9 @@ Final success results in a true "ack transaction" which can report success to pa
 output. [NOTE: output for steps in Pact are currently ignored].
 
 Multi-step leads directly to considerations of how to move information across the steps. Pacts offer
-yield and resume to allow unforgeable messaging of an output value to the next step. (It is TBD if "reverse
-yielding" is necessary for rollbacks).
+yield and resume to allow messaging of an output value to the next step. (It is TBD if "reverse
+yielding" is necessary for rollbacks). Note however that this is forgeable, as it necessarily must be
+messaged.
 
 As will be seen, rollback is private-only; currently it is hardcoded into pact syntax.
 
@@ -183,23 +184,23 @@ user application db) of:
 
 - pact ID
 
-- last-yielded values
+- last-yielded values (in public only)
 
 - overall activity status (to prevent dupe execution etc: `(NEW|ACTIVE|DONE)`)
 
-- Previous-step-capability access requires retreival of previously-validated signature public keys by step
+- Public previous-step-capability access requires retreival by step index of
+  previously-validated signature public keys.
 
-- Failure cascading is messaging-initiated and therefore forgeable. Entity signatures could be enforced to
-  at least ensure the right entity sent the failure. Some internal state must be maintained, ie a `inFailure`
-  flag, which is ignored in public application. Unsure if yield should function in reverse.
+- Failure cascading and private yield values are messaging-borne and therefore forgeable.
+  Entity signatures should be enforced to at least ensure the right entity sent the failure.
 
-- entity name as a Maybe, which doubles as a "is-private"
+- entity name as a Maybe, which doubles as a "is-public".
 
 Reconciling public and private
 ---
 
-Rollback and entity selection are unfortunately in syntax which will have to go. Public needs no
-special meta-programming or other magic, which might indicate a private-oriented syntax, with
+Rollback and entity selection are in syntax. Public needs no
+special meta-programming, which might indicate a private-oriented syntax, with
 entity and rollback as special forms.
 
 Public therefore could be as simple as:
@@ -229,5 +230,28 @@ handling a cancel. Probably the most straightforward is to have distinct syntax 
 (step-with-rollback 'me (do-stuff foo bar) (aw-shux baz))
 ```
 
+The open question is to declare the whole pact public or private. Syntax can enforce that steps cannot mix public and private
+constructions.
+
 Private automated acks vs. public RESUME
 ---
+
+The big difference here is the failure flag and yield messaging. Entity auth is handled by signatures.
+
+Considerations of using private messaging over a public blockchain
+---
+This would require the chinese-wall to be implemented, which is hygeinic for private but clearly
+essential for public: the execution environment must be entirely distinct, and even off-thread/pipelined as the
+public ledger has already signed off on this payload as an ENCRYPTED no-op.
+
+It's possible if not necessarily desirable that the system can infer which tables are private through code
+analysis: any table that is touched under a pact must be private. Instead probably better to use a
+`create-private-table` to indicate the use of a given table in a private context, such that public tables
+will not be writable within a private pact execution.
+
+
+Considerations of using public-style pacts in a private blockchain
+---
+Generally, this seems unnecessary as private trust contexts don't require magic assurance of e.g. an escrow flow.
+However there seems to be no reason not to allow it. Private would need to add a system time oracle for timeouts,
+or just blow up when attempting to get system time.
