@@ -122,7 +122,7 @@ langDefs =
      "Fail transaction with MSG if pure function TEST fails, or returns true. \
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
     ,defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
-     "Run TESTS in order (in pure context). If all fail, fail transaction. Short-circuits on first success. \
+     "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
      \`(enforce-one \"Should succeed on second test\" (enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\"))`"
 
     ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyAny)])
@@ -316,7 +316,7 @@ enforce :: NativeFun e
 enforce i as = runPure (mapM reduce as >>= enforce' i)
 
 enforceOne :: NativeFun e
-enforceOne i as@[msg,TList conds _ _] = runPure $ do
+enforceOne i as@[msg,TList conds _ _] = runPureSys True $ do
   msg' <- reduce msg >>= \m -> case m of
     TLitString s -> return s
     _ -> argsError' i as
