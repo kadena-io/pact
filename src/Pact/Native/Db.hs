@@ -169,13 +169,6 @@ columnsToObject' ty cols (Columns m) = do
 
 
 
-colsToList
-  :: Eval m [(Info,ColumnId)] -> Term n -> Eval m [(Info,ColumnId)]
-colsToList _ (TList cs _ _) = forM cs $ \c -> case c of
-    TLitString col -> return (_tInfo c,ColumnId col)
-    _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
-colsToList argFail _ = argFail
-
 
 select :: NativeFun e
 select i as@[tbl',cols',app] = do

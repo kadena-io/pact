@@ -25,6 +25,7 @@ module Pact.Native.Internal
   ,getModule
   ,module Pact.Types.Native
   ,tTyInteger,tTyDecimal,tTyTime,tTyBool,tTyString,tTyValue,tTyKeySet,tTyObject
+  ,colsToList
   ) where
 
 import Control.Monad
@@ -44,6 +45,14 @@ import Pact.Types.Native
 
 success :: Functor m => Text -> m a -> m (Term Name)
 success = fmap . const . toTerm
+
+
+colsToList
+  :: Eval m [(Info,ColumnId)] -> Term n -> Eval m [(Info,ColumnId)]
+colsToList _ (TList cs _ _) = forM cs $ \c -> case c of
+    TLitString col -> return (_tInfo c,ColumnId col)
+    _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
+colsToList argFail _ = argFail
 
 
 parseMsgKey :: (FromJSON t) => FunApp -> String -> Text -> Eval e t

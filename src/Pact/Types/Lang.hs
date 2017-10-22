@@ -210,7 +210,7 @@ data Literal =
     LDecimal { _lDecimal :: !Decimal } |
     LBool { _lBool :: !Bool } |
     LTime { _lTime :: !UTCTime }
-          deriving (Eq,Generic)
+          deriving (Eq,Generic,Ord)
 
 
 instance Serialize Literal

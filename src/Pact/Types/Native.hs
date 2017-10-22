@@ -17,7 +17,6 @@ data SpecialForm =
   Compose |
   Select |
   Where |
-  Sort |
   AndF |
   OrF |
   NotF
@@ -33,7 +32,6 @@ instance AsString SpecialForm where
   asString Compose = "compose"
   asString Select = "select"
   asString Where = "where"
-  asString Sort = "sort"
   asString AndF = "and?"
   asString OrF = "or?"
   asString NotF = "not?"

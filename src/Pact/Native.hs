@@ -4,6 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TupleSections #-}
+
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -36,6 +38,8 @@ import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Maybe
 import Data.Decimal
+import Data.List
+import Data.Function (on)
 
 
 import Pact.Eval
@@ -88,10 +92,19 @@ langDefs =
      (funType (TyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. `(list 1 2 3)`"
 
+    ,defRNative "reverse" reverse' (funType (TyList a) [("l",TyList a)])
+     "Reverse a list. `(reverse [1 2 3])`"
+
     ,defNative (specialForm Filter) filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
+
+    ,defRNative "sort" sort'
+     (funType (TyList a) [("values",TyList a)] <>
+      funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
+     "Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. \
+     \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
 
     ,defNative (specialForm Where) where'
      (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",mkSchemaVar "row")])
@@ -191,7 +204,9 @@ map' i as = argsError' i as
 list :: RNativeFun e
 list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 
-
+reverse' :: RNativeFun e
+reverse' _ [l@TList{}] = return $ over tList reverse l
+reverse' i as = argsError i as
 
 fold' :: NativeFun e
 fold' i [app@TApp {},initv,l] = reduce l >>= \l' -> case l' of
@@ -402,3 +417,32 @@ where' i as@[k',app@TApp{},r'] = ((,) <$> reduce k' <*> reduce r') >>= \kr -> ca
   (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
   _ -> argsError' i as
 where' i as = argsError' i as
+
+
+sort' :: RNativeFun e
+sort' _ [TList{..}] = case nub (map typeof _tList) of
+  [ty] -> case ty of
+    Right rty@(TyPrim pty) -> case pty of
+      TyValue -> badTy (show ty)
+      TyKeySet -> badTy (show ty)
+      _ -> do
+        sl <- forM _tList $ \e -> case firstOf tLiteral e of
+          Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e
+          Just lit -> return (lit,e)
+        return $ TList (map snd $ sortBy (compare `on` fst) sl) rty def
+    _ -> badTy (show ty)
+  ts -> evalError _tInfo $ "sort: non-uniform list: " ++ show ts
+  where badTy s = evalError _tInfo $ "sort: bad list type: " ++ s
+sort' _ [fields@TList{},l@TList{}]
+  | null (_tList fields) = evalError (_tInfo fields) "Empty fields list"
+  | otherwise = do
+      sortPairs <- forM (_tList l) $ \el -> case firstOf tObject el of
+        Nothing -> evalError (_tInfo l) $ "Non-object found: " ++ show el
+        Just o -> fmap ((,el) . reverse) $ (\f -> foldM f [] (_tList fields)) $ \lits fld -> do
+          v <- lookupObj fld o
+          case firstOf tLiteral v of
+            Nothing -> evalError (_tInfo l) $ "Non-literal found at field " ++ show fld ++ ": " ++ show el
+            Just lit -> return (lit:lits)
+      return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
+
+sort' i as = argsError i as
