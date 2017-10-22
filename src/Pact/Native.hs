@@ -183,8 +183,8 @@ if' i [cond,then',else'] = reduce cond >>= \cm -> case cm of
 if' i as = argsError' i as
 
 map' :: NativeFun e
-map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
-           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply af as ai . pure)
+map' i [app@TApp {},l] = reduce l >>= \l' -> case l' of
+           TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
 
@@ -194,21 +194,21 @@ list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 
 
 fold' :: NativeFun e
-fold' i [TApp af as ai,initv,l] = reduce l >>= \l' -> case l' of
+fold' i [app@TApp {},initv,l] = reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a -> apply af as ai [r,a]) initv' ls
+                         foldM (\r a -> apply' app [r,a]) initv' ls
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
+filter' i [app@TApp {},l] = reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
                          forM ls (\a -> do
-                           t <- apply af as ai [a]
+                           t <- apply' app [a]
                            case t of
                              (TLiteral (LBool True) _) -> return [a]
-                             _ -> return [])
+                             _ -> return []) -- hmm, too permissive here, select is stricter
            t -> evalError' i $ "filter: expecting list: " ++ abbrev t
 filter' i as = argsError' i as
 
@@ -250,10 +250,10 @@ remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo ke
 remove i as = argsError i as
 
 compose :: NativeFun e
-compose _ [TApp af as ai,TApp bf bs bi,v] = do
+compose _ [appA@TApp {},appB@TApp {},v] = do
   v' <- reduce v
-  a <- apply af as ai [v']
-  apply bf bs bi [a]
+  a <- apply' appA [v']
+  apply' appB [a]
 compose i as = argsError' i as
 
 
@@ -399,6 +399,6 @@ resume i as = argsError' i as
 
 where' :: NativeFun e
 where' i as@[k',app@TApp{},r'] = ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
-  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tAppFun app) (_tAppArgs app) (_tInfo app) [v]
+  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
   _ -> argsError' i as
 where' i as = argsError' i as

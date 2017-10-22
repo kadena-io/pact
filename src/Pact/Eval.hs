@@ -27,7 +27,7 @@ module Pact.Eval
     ,deref
     ,installModule
     ,runPure,runPureSys,Purity
-    ,liftTerm,apply
+    ,liftTerm,apply,apply'
     ) where
 
 import Control.Lens hiding (op)
@@ -110,6 +110,11 @@ liftTerm a = TVar (Direct a) def
 -- | Re-application of 'f as' with additional args.
 apply :: Term Ref -> [Term Ref] -> Info -> [Term Name] ->  Eval e (Term Name)
 apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
+
+-- | Unsafe version of 'apply' where first arg is assumed to be a 'TApp',
+-- to which additional args are applied.
+apply' :: Term Ref -> [Term Name] -> Eval e (Term Name)
+apply' app as' = apply (_tAppFun app) (_tAppArgs app) (_tInfo app) as'
 
 
 -- | Evaluate top-level term.

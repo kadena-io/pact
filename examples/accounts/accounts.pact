@@ -95,12 +95,14 @@
 
   (defpact payment (payer payer-entity payee payee-entity amount date)
     "Debit PAYER at PAYER-ENTITY then credit PAYEE at PAYEE-ENTITY for AMOUNT on DATE"
-    (step 'debit-step
+    (step-with-rollback payer-entity
       (debit payer amount date
             { "payee": payee
             , "payee-entity": payee-entity
             , PACT_REF: (pact-txid)
-            }))
+            })
+      (credit payer amount date
+           { PACT_REF: (pact-txid), "note": "rollback" }))
 
     (step payee-entity
       (credit payee amount date
@@ -112,10 +114,6 @@
 
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
-    (defstep
-      ((step-rollback (credit )
-
-      ))
     (with-read accounts acct
               { "balance":= balance
               , "keyset" := ks
@@ -150,15 +148,19 @@
 
   (defconst ESCROW_ACCT "escrow-account")
 
-  (defpact two-party-escrow (deb-acct deb-keyset cred-acct cred-keyset escrow-amount timeout)
+  (defpact two-party-escrow (deb-acct deb-keyset
+                             cred-acct cred-keyset
+                             escrow-amount timeout)
     "Simple two-party escrow pact"
-    (step-with-rollback
-        (init-escrow deb-acct amount)
-        (cancel-escrow timeout deb-acct deb-keyset cred-keyset amount)
-      )
-    (step (finish-escrow deb-acct deb-keyset cred-acct cred-keyset escrow-amount)))
+    (step-with-rollback 'todo
+      (init-escrow deb-acct escrow-amount)
+      (cancel-escrow timeout deb-acct deb-keyset cred-keyset escrow-amount))
+    (step 'todo
+      (finish-escrow deb-acct deb-keyset cred-acct
+                         cred-keyset escrow-amount)))
 
-  (defun init-escrow (deb-acct amount) ;; transfer will handle deb-keyset enforce
+  (defun init-escrow (deb-acct amount)
+    ;; transfer will handle deb-keyset enforce
     (transfer deb-acct (new-pact-account ESCROW_ACCT) amount))
 
   (defun cancel-escrow (timeout deb-acct deb-keyset cred-keyset amount)
@@ -167,14 +169,18 @@
                        (enforce-keyset deb-keyset))])
     (transfer (get-pact-account ESCROW_ACCT) deb-acct amount))
 
+  (defun get-system-time () 0)
+  (defun get-pact-account (n) n)
+  (defun new-pact-account (n) n)
+
   (defun finish-escrow (deb-acct deb-keyset cred-acct cred-keyset escrow-amount)
     (enforce-keyset deb-keyset)
     (enforce-keyset cred-keyset)
-    (let ((price (read-decimal "agreed-upon-price"))
-          (delta (- escrow-amount price))
-          (escrow-acct (get-pact-account ESCROW_ACCT)))
+    (let* ((price (read-decimal "agreed-upon-price"))
+           (delta (- escrow-amount price))
+           (escrow-acct (get-pact-account ESCROW_ACCT)))
       (enforce (>= escrow-amount price) "Price cannot negotiate up")
-      (tranfser escrow-acct cred-acct price)
+      (transfer escrow-acct cred-acct price)
       (if (> delta 0)
         (transfer escrow-acct deb-acct delta))))
 

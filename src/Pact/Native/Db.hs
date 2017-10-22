@@ -186,7 +186,7 @@ select i as = argsError' i as
 
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
            Term Ref -> Term Name -> Eval e (Term Name)
-select' i _ cols' TApp{..} tbl@TTable{} = do
+select' i _ cols' app@TApp{} tbl@TTable{} = do
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
@@ -197,13 +197,13 @@ select' i _ cols' TApp{..} tbl@TTable{} = do
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: " ++ show k ++ ", table: " ++ show tbl
         Just row -> do
           let obj = columnsToObject tblTy row
-          result <- apply _tAppFun _tAppArgs _tInfo [obj]
+          result <- apply' app [obj]
           case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
-            t -> evalError _tInfo $ "select: filter returned non-boolean value: " ++ show t
+            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " ++ show t
 select' i as _ _ _ = argsError' i as
 
 

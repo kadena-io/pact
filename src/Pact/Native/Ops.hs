@@ -27,6 +27,8 @@ import Data.Semigroup
 import Pact.Native.Internal
 import Pact.Types.Runtime
 
+import Pact.Eval
+
 
 opDefs :: NativeModule
 opDefs = ("Operators",
@@ -41,6 +43,15 @@ opDefs = ("Operators",
     ,defLogic "or" (||)
     ,defLogic "and" (&&)
     ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
+
+    ,liftLogic OrF (||) "or" True
+    ,liftLogic AndF (&&) "and" False
+    ,defNative (specialForm NotF) liftNot
+     (funType tTyBool [("app",logicLam r),("value",r)])
+     ("Apply logical 'not' to the results of applying VALUE to APP. " <>
+      "`(" <> asString NotF <> " (> 20) 15)`")
+
+
     ,defRNative "-" minus (coerceBinNum <> unaryNumTys)
      "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
     ,defRNative "+" plus plusTy
@@ -67,6 +78,7 @@ opDefs = ("Operators",
           eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
                            TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
           numA = numV "a"
+          r = mkTyVar "r" []
           numV a = mkTyVar a [tTyInteger,tTyDecimal]
           coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
           unaryNumTys = unaryTy numA numA
@@ -90,12 +102,45 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
 defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> NativeDef
 defLogic n bop = defRNative n fun (binTy tTyBool tTyBool tTyBool) $
                  "Boolean logic. `(" <> asString n <> " true false)`"
-    where fun _ [TLiteral (LBool a) _,TLiteral (LBool b) _] = return $ toTerm $ a `bop` b
+    where fun _ [TLitBool a,TLitBool b] = return $ toTerm $ a `bop` b
           fun i as = argsError i as
 
 not' :: RNativeFun e
 not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
 not' i as = argsError i as
+
+logicLam :: Type v -> Type v
+logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
+
+delegateError :: String -> Term Ref -> Term Name -> Eval m a
+delegateError desc app r = evalError (_tInfo app) $ desc ++ ": Non-boolean result from delegate: " ++ show r
+
+liftLogic :: SpecialForm -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
+liftLogic n bop desc shortCircuit =
+  defNative (specialForm n) fun (funType tTyBool [("a",logicLam r),("b",logicLam r),("value",r)])
+    ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit. " <>
+    "`(" <> asString n <> " (> 20) (> 10) 15)`")
+  where
+    r = mkTyVar "r" []
+    fun _ [a@TApp{},b@TApp{},v'] = reduce v' >>= \v -> do
+      ar <- apply' a [v]
+      case ar of
+        TLitBool ab
+          | ab == shortCircuit -> return $ toTerm shortCircuit
+          | otherwise -> do
+              br <- apply' b [v]
+              case br of
+                TLitBool bb -> return $ toTerm $ bop ab bb
+                _ -> delegateError (show n) b br
+        _ -> delegateError (show n) a ar
+    fun i as = argsError' i as
+
+liftNot :: NativeFun e
+liftNot _ [app@TApp{},v'] = reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
+  TLitBool b -> return $ toTerm $ not b
+  _ -> delegateError (show NotF) app r
+liftNot i as = argsError' i as
+
 
 eq :: (Bool -> Bool) -> RNativeFun e
 eq f _ [a,b] = return $ toTerm $ f (a `termEq` b)
