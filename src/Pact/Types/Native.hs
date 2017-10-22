@@ -14,7 +14,13 @@ data SpecialForm =
   Map |
   Filter |
   Fold |
-  Compose
+  Compose |
+  Select |
+  Where |
+  Sort |
+  AndF |
+  OrF |
+  NotF
   deriving (Eq,Enum,Ord,Bounded)
 
 instance AsString SpecialForm where
@@ -25,6 +31,13 @@ instance AsString SpecialForm where
   asString Filter = "filter"
   asString Fold = "fold"
   asString Compose = "compose"
+  asString Select = "select"
+  asString Where = "where"
+  asString Sort = "sort"
+  asString AndF = "and?"
+  asString OrF = "or?"
+  asString NotF = "not?"
+
 instance Show SpecialForm where show = show . asString
 
 specialForm :: SpecialForm -> NativeDefName

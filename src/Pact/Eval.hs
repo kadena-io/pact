@@ -27,6 +27,7 @@ module Pact.Eval
     ,deref
     ,installModule
     ,runPure,runPureSys,Purity
+    ,liftTerm,apply
     ) where
 
 import Control.Lens hiding (op)
@@ -102,6 +103,13 @@ enforceKeySet i ksn KeySet{..} = do
         _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
+-- Hoist Name back to ref
+liftTerm :: Term Name -> Term Ref
+liftTerm a = TVar (Direct a) def
+
+-- | Re-application of 'f as' with additional args.
+apply :: Term Ref -> [Term Ref] -> Info -> [Term Name] ->  Eval e (Term Name)
+apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
 
 
 -- | Evaluate top-level term.

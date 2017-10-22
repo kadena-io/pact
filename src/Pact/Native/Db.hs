@@ -85,7 +85,10 @@ dbDefs =
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
-
+    ,defNative (specialForm Select) select
+      (funType (TyList a)  [("table",tableTy),("app",TyFun $ funType' tTyBool [("row",a)])])
+      "Select rows from table by applying APP to each row to get a boolean determining inclusion.\
+      \`$(select people (where \"name\" (= \"Fatima\")))`"
     ,defRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
@@ -137,22 +140,57 @@ read' :: RNativeFun e
 read' i as@(table@TTable {}:TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
-    [TList cs _ _] -> forM cs $ \c ->
-          case c of
-            TLitString col -> return $ ColumnId col
-            _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
+    [l] -> colsToList (argsError i as) l
     _ -> argsError i as
   guardTable i table
   mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " ++ show key
-    Just (Columns m) -> case cols of
-        [] -> return $ (\ps -> TObject ps (_tTableType table) def) $ map (toTerm *** toTerm) $ M.toList m
+    Just cs@(Columns m) -> case cols of
+        [] -> return $ columnsToObject (_tTableType table) cs
         _ -> (\ps -> TObject ps (_tTableType table) def) <$> forM cols (\col ->
                 case M.lookup col m of
                   Nothing -> evalError' i $ "read: invalid column: " ++ show col
                   Just v -> return (toTerm col,toTerm v))
 read' i as = argsError i as
+
+columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
+columnsToObject ty = (\ps -> TObject ps ty def) . map (toTerm *** toTerm) . M.toList . _columns
+
+
+
+colsToList
+  :: Eval m [ColumnId] -> Term n -> Eval m [ColumnId]
+colsToList _ (TList cs _ _) = forM cs $ \c -> case c of
+    TLitString col -> return $ ColumnId col
+    _ -> evalError (_tInfo c) "read: only Strings/Symbols allowed for col keys"
+colsToList argFail _ = argFail
+--
+select :: NativeFun e
+select i as@[tbl',cols',app] = do
+  cols <- reduce cols' >>= colsToList (argsError' i as)
+  reduce tbl' >>= select' i as (Just cols) app
+select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
+select i as = argsError' i as
+
+select'
+  :: FunApp -> [Term Ref] -> t -> Term Ref -> Term Name -> Eval e (Term Name)
+select' i _ cols TApp{..} tbl@TTable{} = do
+    guardTable i tbl
+    let fi = _faInfo i
+        tblTy = _tTableType tbl
+    ks <- keys fi (userTable' tbl)
+    fmap (\b -> TList b tblTy def) $ (\f -> foldM f [] ks) $ \rs k -> do
+      mrow <- traverse (return . columnsToObject tblTy) =<< readRow fi (userTable tbl) k
+      case mrow of
+        Nothing -> evalError fi $ "select: unexpected error, key not found in select: " ++ show k ++ ", table: " ++ show tbl
+        Just row -> do
+          result <- apply _tAppFun _tAppArgs _tInfo [row]
+          case result of
+            (TLiteral (LBool include) _) | include -> return $ row:rs
+                                         | otherwise -> return rs
+            t -> evalError _tInfo $ "select: filter returned non-boolean value: " ++ show t
+select' i as _ _ _ = argsError' i as
 
 
 withDefaultRead :: NativeFun e
@@ -197,7 +235,6 @@ txids' i [table@TTable {..},TLitInteger key] = do
   guardTable i table
   (\b -> TList b tTyInteger def) . map toTerm <$> txids (_faInfo i) (userTable' table) (fromIntegral key)
 txids' i as = argsError i as
-
 
 txlog :: RNativeFun e
 txlog i [table@TTable {..},TLitInteger tid] = do

@@ -178,9 +178,6 @@ if' i [cond,then',else'] = reduce cond >>= \cm -> case cm of
            t -> evalError' i $ "if: conditional not boolean: " ++ show t
 if' i as = argsError' i as
 
-apply :: Term Ref -> [Term Ref] -> Info -> [Term Name] ->  Eval e (Term Name)
-apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
-
 map' :: NativeFun e
 map' i [TApp af as ai,l] = reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply af as ai . pure)
@@ -190,8 +187,6 @@ map' i as = argsError' i as
 list :: RNativeFun e
 list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
 
-liftTerm :: Term Name -> Term Ref
-liftTerm a = TVar (Direct a) def
 
 
 fold' :: NativeFun e
