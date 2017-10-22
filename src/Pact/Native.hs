@@ -1,6 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -32,7 +31,7 @@ import Prelude hiding (exp)
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
 import Safe
-import Control.Arrow
+import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Maybe
@@ -93,6 +92,11 @@ langDefs =
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
+
+    ,defNative (specialForm Where) where'
+     (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",mkSchemaVar "row")])
+     "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. \
+     \`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"
 
      ,defNative (specialForm Compose) compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
@@ -229,15 +233,17 @@ tord f c l | c >= 0 = f (fromIntegral c) l
            | otherwise = reverse $ f (fromIntegral (negate c)) (reverse l)
 
 at' :: RNativeFun e
-at' i [TLitInteger idx,TList ls _ _] =
+at' _ [li@(TLitInteger idx),TList ls _ _] =
     case ls `atMay` fromIntegral idx of
       Just t -> return t
-      Nothing -> evalError' i $ "at: bad index " ++ show idx ++ ", length " ++ show (length ls)
-at' i [idx,TObject ls _ _] =
-    case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
-      Just v -> return v
-      Nothing -> evalError' i $ "at: key not found: " ++ show idx
+      Nothing -> evalError (_tInfo li) $ "at: bad index " ++ show idx ++ ", length " ++ show (length ls)
+at' _ [idx,TObject ls _ _] = lookupObj idx ls
 at' i as = argsError i as
+
+lookupObj :: (Eq n, Show n) => Term n -> [(Term n, Term n)] -> Eval m (Term n)
+lookupObj idx ls = case lookup (unsetInfo idx) (map (first unsetInfo) ls) of
+  Just v -> return v
+  Nothing -> evalError (_tInfo idx) $ "at: key not found: " ++ show idx
 
 remove :: RNativeFun e
 remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo key /= unsetInfo k) ps) t def
@@ -390,3 +396,9 @@ resume i [TBinding ps bd (BindSchema _) bi] = do
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
 resume i as = argsError' i as
+
+where' :: NativeFun e
+where' i as@[k',app@TApp{},r'] = ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
+  (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply (_tAppFun app) (_tAppArgs app) (_tInfo app) [v]
+  _ -> argsError' i as
+where' i as = argsError' i as
