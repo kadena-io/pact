@@ -70,8 +70,8 @@ dbDefs =
      \`$(read 'accounts id ['balance 'ccy])`"
 
     ,defNative (specialForm Select) select
-      (funType (TyList a)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",a)])] <>
-       funType (TyList a)  [("table",tableTy),("columns",TyList tTyString),("where",TyFun $ funType' tTyBool [("row",a)])])
+      (funType (TyList rowTy)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",rowTy)])] <>
+       funType (TyList rowTy)  [("table",tableTy),("columns",TyList tTyString),("where",TyFun $ funType' tTyBool [("row",rowTy)])])
       "Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.\
       \`$(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))` \
       \`$(select people (where 'age (> 30)))`?"

@@ -42,6 +42,7 @@ import qualified Data.Set as S
 import Control.Monad
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NE
 import Control.Arrow hiding ((<+>))
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
@@ -273,17 +274,35 @@ applySchemas Post a = return a
 --  2. for bindings, associate binding AST with fun return ty,
 --     associate inner binding schema type with funty last arg ty
 processNatives :: Visitor TC Node
-processNatives Pre a@(App i FNative {..} as) = do
+processNatives Pre a@(App i FNative {..} argASTs) = do
   case _fTypes of
     -- single funtype
-    ft@FunType {} :| [] -> do
-      -- associate arg types. Note we're not storing this funtype back in the AST
-      -- so we can alter it for assoc purposes with 'adjustFunTyForSpecial'.
-      let ft'@FunType {..} = mangleFunType (_aId i) $ adjustFunTyForSpecial _fSpecial ft
-      debug $ "Mangled funtype: " ++ show ft ++ " -> " ++ show ft'
-      args <- zipWithM (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t >> return (aa,t)) _ftArgs as
+    orgFunType@FunType {} :| [] -> do
+
+      let mangledFunType = mangleFunType (_aId i) orgFunType
+      debug $ "Mangled funtype: " ++ show orgFunType ++ " -> " ++ show mangledFunType
+
+      -- zip funtype 'Arg's with AST args, and assoc each.
+      args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
+        (TyFun lambdaType,partialAST@App{}) -> do
+          debug $ "associating partial AST app with lambda return type: " ++ show lambdaType
+          assocAstTy (_aNode argAST) $ _ftReturn lambdaType
+          debug "associating partial AST args with lambda arg types"
+          let lamArgTys = _ftArgs lambdaType
+              partialArgASTs = _aAppArgs partialAST
+              saturated = length partialArgASTs - length lamArgTys
+          when (saturated < 0) $
+            die' (_aId (_aNode argAST)) $ "Invalid/unsaturated partial application: " ++ show argTy
+          (\f -> zipWithM_ f lamArgTys (drop saturated partialArgASTs)) $ \(Arg _ lamArgTy _) partialArgAST ->
+            assocAstTy (_aNode partialArgAST) lamArgTy
+          return (argAST,argTy)
+        (TyFun{},_) -> die' (_aId (_aNode argAST)) $ "App required: " ++ show argTy
+        _ -> do
+          assocAstTy (_aNode argAST) argTy
+          return (argAST,argTy)
+
       -- assoc return type
-      assocAstTy i _ftReturn
+      assocAstTy i $ _ftReturn mangledFunType
       -- perform extra assocs for special forms
       case _fSpecial of
         Nothing -> return ()
@@ -292,36 +311,21 @@ processNatives Pre a@(App i FNative {..} as) = do
           ((_,SBinding b),_) -> case b of
             (Binding bn _ _ (BindSchema sn)) -> do
               -- assoc binding with app return
-              assocAstTy bn _ftReturn
+              assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
-              assocAstTy sn (_aType (last (toList _ftArgs)))
+              assocAstTy sn (_aType (last (toList $ _ftArgs mangledFunType)))
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
-          -- map
-          ((Map,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 0
-          -- filter
-          ((Filter,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 0
-          ((NotF,_),[(partialAst,_),(_,ty)]) -> assocTyWithAppArg ty partialAst 0
-          ((AndF,_),[(partial1,_),(partial2,_),(_,vty)]) -> do
-            assocTyWithAppArg vty partial1 0
-            assocTyWithAppArg vty partial2 0
-          ((OrF,_),[(partial1,_),(partial2,_),(_,vty)]) -> do
-            assocTyWithAppArg vty partial1 0
-            assocTyWithAppArg vty partial2 0
+          -- TODO the following is dodgy, schema may not be resolved.
           ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
             TyUser u -> case findSchemaField fld u of
               Nothing -> return ()
               Just fty -> assocTyWithAppArg fty partialAst 0
             _ -> return ()
-          -- fold
-          ((Fold,_),[(partialAst,_),(_,initTy),(_,TyList tl)]) -> do
-            assocTyWithAppArg tl partialAst 0
-            assocTyWithAppArg initTy partialAst 1
-          ((Compose,_),_) -> return () -- TODO
           _ -> return ()
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
-          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] as
+          argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] argASTs
           ospec | _fName == "at" = Just OAt
                 | _fName == asString Select = Just OSelect
                 | otherwise = Nothing
@@ -330,24 +334,7 @@ processNatives Pre a@(App i FNative {..} as) = do
   return a
 processNatives _ a = return a
 
--- | Used in 'processNatives' when associating AST args with fun args, so we want just
--- the return type of the partial functions.
-adjustFunTyForSpecial :: Maybe (SpecialForm,Special Node) -> FunType UserType -> FunType UserType
-adjustFunTyForSpecial spec = case spec of
-  Just (Map,_) -> replaceFunTyWithReturnTy 0
-  Just (Filter,_) -> replaceFunTyWithReturnTy 0
-  Just (Fold,_) -> replaceFunTyWithReturnTy 0
-  Just (Compose,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
-  Just (AndF,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
-  Just (OrF,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
-  Just (NotF,_) -> replaceFunTyWithReturnTy 0
-  Just (Where,_) -> replaceFunTyWithReturnTy 1
-  _ -> id
-  where
-    replaceFunTyWithReturnTy argIx =
-      over (ftArgs . ix argIx . aType) $ \ty -> case ty of
-        TyFun (FunType _ r) -> r
-        _ -> ty
+
 
 assocTyWithAppArg :: Type UserType -> AST Node -> Int -> TC ()
 assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ show (tl,offset,t)) >> case as `atMay` (length as - offset - 1 ) of
@@ -596,7 +583,6 @@ notEmpty i msg [] = die i msg
 notEmpty _ _ as = return as
 
 
-
 -- | Build ASTs from terms.
 toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
@@ -613,37 +599,44 @@ toAST TApp {..} = do
   i <- freshId _tInfo $
        "app" <> (case fun of FDefun {} -> "D"; _ -> "N") <>  _fName fun
   n <- trackIdNode i
-  as <- mapM toAST _tAppArgs
-  let mkApp fun' as' = return $ App n fun' as'
+  args <- mapM toAST _tAppArgs
+  let mkApp fun' args' = return $ App n fun' args'
   case fun of
     FDefun {..} -> do
       assocAST i (last _fBody)
-      mkApp fun as
+      mkApp fun args
     FNative {..} -> case isSpecialForm (NativeDefName _fName) of
-      Nothing -> mkApp fun as
+      Nothing -> mkApp fun args
       Just sf -> do
         let specialBind = do
-              as' <- notEmpty _tInfo "Expected >1 arg" (init as)
-              mkApp (set fSpecial (Just (sf,SBinding (last as))) fun) as'
-            specialPartial = mkApp (set fSpecial (Just (sf,SPartial)) fun)
+              args' <- notEmpty _tInfo "Expected >1 arg" (init args)
+              mkApp (set fSpecial (Just (sf,SBinding (last args))) fun) args'
+            setPartial = set fSpecial (Just (sf,SPartial))
+            specialPartial = mkApp (setPartial fun)
             addPartialArgs _ _ [] = return []
-            addPartialArgs aix argNames as' = do
+            addPartialArgs aix argNames args' = do
                   freshArgs <- forM argNames $ \an ->
-                    trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head as')))) (an <> "-partial")
-                  return $ over (ix aix . aAppArgs) (++ map Var freshArgs) as'
+                    trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head args')))) (an <> "-partial")
+                  return $ over (ix aix . aAppArgs) (++ map Var freshArgs) args'
         case sf of
           Bind -> specialBind
           WithRead -> specialBind
           WithDefaultRead -> specialBind
-          Map -> specialPartial =<< addPartialArgs 0 ["map"] as
-          Filter -> specialPartial =<< addPartialArgs 0 ["filter"] as
-          Fold -> specialPartial =<< addPartialArgs 0 ["fold-init","fold-elem"] as
-          Compose -> specialPartial =<< addPartialArgs 0 ["compose0"] =<< addPartialArgs 1 ["compose1"] as
-          Where -> specialPartial =<< addPartialArgs 1 ["where"] as
-          NotF -> specialPartial =<< addPartialArgs 0 ["not?"] as
-          AndF -> specialPartial =<< addPartialArgs 0 ["and?0"] =<< addPartialArgs 1 ["and?1"] as
-          OrF -> specialPartial =<< addPartialArgs 0 ["or?0"] =<< addPartialArgs 1 ["or?1"] as
-          Select -> specialPartial =<< addPartialArgs (if length as > 2 then 2 else 1) ["select"] as
+          -- TODO the following can be automated using funtype except Select which has override
+          Map -> specialPartial =<< addPartialArgs 0 ["map"] args
+          Filter -> specialPartial =<< addPartialArgs 0 ["filter"] args
+          Fold -> specialPartial =<< addPartialArgs 0 ["fold-init","fold-elem"] args
+          Compose -> specialPartial =<< addPartialArgs 0 ["compose0"] =<< addPartialArgs 1 ["compose1"] args
+          Where -> specialPartial =<< addPartialArgs 1 ["where"] args
+          NotF -> specialPartial =<< addPartialArgs 0 ["not?"] args
+          AndF -> specialPartial =<< addPartialArgs 0 ["and?0"] =<< addPartialArgs 1 ["and?1"] args
+          OrF -> specialPartial =<< addPartialArgs 0 ["or?0"] =<< addPartialArgs 1 ["or?1"] args
+          Select -> do
+            let mkSelect argsLen =
+                  mkApp (setPartial $ over fTypes (NE.fromList . NE.filter ((== argsLen) . length . _ftArgs)) fun)
+                        =<< addPartialArgs (pred argsLen) ["select"] args
+            mkSelect $ if length args == 2 then 2 else 3
+
 
 
 toAST TBinding {..} = do

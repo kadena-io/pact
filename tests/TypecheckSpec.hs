@@ -2,7 +2,7 @@
 module TypecheckSpec where
 
 import Test.Hspec
-import Pact.Typechecker
+import Pact.Typechecker hiding (debug)
 import Pact.Repl
 import Pact.Types.Runtime
 import Pact.Types.Typecheck
@@ -15,9 +15,9 @@ import Data.Foldable
 
 spec :: Spec
 spec = do
-  void $ runIO $ inferModule "tests/pact/tc.repl" "tctest"
-  void $ runIO $ inferModule "examples/cp/cp.repl" "cp"
-  void $ runIO $ inferModule "examples/accounts/accounts.repl" "accounts"
+  void $ runIO $ inferModule False "tests/pact/tc.repl" "tctest"
+  void $ runIO $ inferModule False "examples/cp/cp.repl" "cp"
+  void $ runIO $ inferModule False "examples/accounts/accounts.repl" "accounts"
   checkFuns
 
 topLevelChecks :: Text -> (TopLevel Node,TcState) -> Spec
@@ -46,7 +46,7 @@ checkFuns = describe "tc.pact typecheck" $ do
   checkFun "tests/pact/tc.repl" "tctest" "select1"
   checkFun "tests/pact/tc.repl" "tctest" "sort1"
   checkFun "tests/pact/tc.repl" "tctest" "sort2"
-  checkFun "tests/pact/tc.repl" "tctest" "partial1"
+  checkFun "tests/pact/tc.repl" "tctest" "partials"
   checkFun "examples/cp/cp.repl" "cp" "issue"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
 
@@ -68,10 +68,10 @@ inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
 
 
-inferModule :: FilePath -> ModuleName -> IO [TopLevel Node]
-inferModule fp mn = do
+inferModule :: Bool -> FilePath -> ModuleName -> IO [TopLevel Node]
+inferModule debug fp mn = do
   md <- loadModule fp mn
-  (tls,fails) <- typecheckModule False md
+  (tls,fails) <- typecheckModule debug md
   forM_ fails print
   return tls
 
@@ -87,13 +87,13 @@ _inferTransfer :: IO (TopLevel Node, TcState)
 _inferTransfer = inferFun True "examples/accounts/accounts.repl" "accounts" "transfer"
 
 _inferTestModule :: IO [TopLevel Node]
-_inferTestModule = inferModule "tests/pact/tc.repl" "tctest"
+_inferTestModule = inferModule True "tests/pact/tc.repl" "tctest"
 
 _inferAccounts :: IO [TopLevel Node]
-_inferAccounts = inferModule "examples/accounts/accounts.repl" "accounts"
+_inferAccounts = inferModule False "examples/accounts/accounts.repl" "accounts"
 
 _inferCP :: IO [TopLevel Node]
-_inferCP = inferModule "examples/cp/cp.repl" "cp"
+_inferCP = inferModule False "examples/cp/cp.repl" "cp"
 
 -- | prettify output of 'inferFun' runs
 _pretty :: (TopLevel Node, TcState) -> IO ()
