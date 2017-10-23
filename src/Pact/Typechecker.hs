@@ -206,25 +206,26 @@ tryFunType Overload {..} _ f@(FunType as rt) = do
 handleSpecialOverload :: Maybe OverloadSpecial ->
                          M.Map VarRole RoleTys ->
                          M.Map VarRole RoleTys
-handleSpecialOverload Nothing m = m
 handleSpecialOverload (Just OAt) m =
   case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
     (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view (_roleTys . _2) keyArg,roleTy srcArg) of
-      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findField k u of
+      (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findSchemaField k u of
         Nothing -> m
         Just t -> unifyRet (roleTy ret) t
       (TyPrim TyInteger,_,TyList t) -> unifyRet (roleTy ret) t
       _ -> m
     _ -> m
   where
-    findField fname Schema {..} =
-      foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
     roleTy = view (_roleTys . _4)
     unifyRet ret ty = case unifyTypes ret ty of
                         Nothing -> m
                         Just e -> set (at RetVar . _Just . _roleTys . _4) (either id id e) m
+handleSpecialOverload _ m = m
 
 
+findSchemaField :: Text -> UserType -> Maybe (Type UserType)
+findSchemaField fname Schema {..} =
+      foldl (\r Arg {..} -> mplus (if _aName == fname then Just _aType else Nothing) r) Nothing _utFields
 
 
 asPrimString :: AST Node -> TC Text
@@ -278,7 +279,8 @@ processNatives Pre a@(App i FNative {..} as) = do
     ft@FunType {} :| [] -> do
       -- associate arg types. Note we're not storing this funtype back in the AST
       -- so we can alter it for assoc purposes with 'adjustFunTyForSpecial'.
-      let FunType {..} = mangleFunType (_aId i) $ adjustFunTyForSpecial _fSpecial ft
+      let ft'@FunType {..} = mangleFunType (_aId i) $ adjustFunTyForSpecial _fSpecial ft
+      debug $ "Mangled funtype: " ++ show ft ++ " -> " ++ show ft'
       args <- zipWithM (\(Arg _ t _) aa -> assocAstTy (_aNode aa) t >> return (aa,t)) _ftArgs as
       -- assoc return type
       assocAstTy i _ftReturn
@@ -295,20 +297,34 @@ processNatives Pre a@(App i FNative {..} as) = do
               assocAstTy sn (_aType (last (toList _ftArgs)))
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- map
-          ((Map,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 1
+          ((Map,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 0
           -- filter
-          ((Filter,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 1
+          ((Filter,_),[(partialAst,_),(_,TyList tl)]) -> assocTyWithAppArg tl partialAst 0
+          ((NotF,_),[(partialAst,_),(_,ty)]) -> assocTyWithAppArg ty partialAst 0
+          ((AndF,_),[(partial1,_),(partial2,_),(_,vty)]) -> do
+            assocTyWithAppArg vty partial1 0
+            assocTyWithAppArg vty partial2 0
+          ((OrF,_),[(partial1,_),(partial2,_),(_,vty)]) -> do
+            assocTyWithAppArg vty partial1 0
+            assocTyWithAppArg vty partial2 0
+          ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
+            TyUser u -> case findSchemaField fld u of
+              Nothing -> return ()
+              Just fty -> assocTyWithAppArg fty partialAst 0
+            _ -> return ()
           -- fold
           ((Fold,_),[(partialAst,_),(_,initTy),(_,TyList tl)]) -> do
-            assocTyWithAppArg tl partialAst 1
-            assocTyWithAppArg initTy partialAst 0
+            assocTyWithAppArg tl partialAst 0
+            assocTyWithAppArg initTy partialAst 1
           ((Compose,_),_) -> return () -- TODO
           _ -> return ()
     -- multiple funtypes
     fts -> do
       let fts' = fmap (mangleFunType (_aId i)) fts
           argOvers = mconcat $ zipWith (\n aa -> M.singleton (ArgVar n) aa) [0..] as
-          ospec = if _fName == "at" then Just OAt else Nothing
+          ospec | _fName == "at" = Just OAt
+                | _fName == asString Select = Just OSelect
+                | otherwise = Nothing
           oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing ospec
       tcOverloads %= M.insert (_aId i) oload
   return a
@@ -322,6 +338,10 @@ adjustFunTyForSpecial spec = case spec of
   Just (Filter,_) -> replaceFunTyWithReturnTy 0
   Just (Fold,_) -> replaceFunTyWithReturnTy 0
   Just (Compose,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
+  Just (AndF,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
+  Just (OrF,_) -> replaceFunTyWithReturnTy 0 . replaceFunTyWithReturnTy 1
+  Just (NotF,_) -> replaceFunTyWithReturnTy 0
+  Just (Where,_) -> replaceFunTyWithReturnTy 1
   _ -> id
   where
     replaceFunTyWithReturnTy argIx =
@@ -330,7 +350,7 @@ adjustFunTyForSpecial spec = case spec of
         _ -> ty
 
 assocTyWithAppArg :: Type UserType -> AST Node -> Int -> TC ()
-assocTyWithAppArg tl (App _ _ as) ai = case as `atMay` ai of
+assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ show (tl,offset,t)) >> case as `atMay` (length as - offset - 1 ) of
   Just a -> assocAstTy (_aNode a) tl
   Nothing -> return ()
 assocTyWithAppArg _ _ _ = return ()
@@ -619,6 +639,11 @@ toAST TApp {..} = do
           Filter -> specialPartial =<< addPartialArgs 0 ["filter"] as
           Fold -> specialPartial =<< addPartialArgs 0 ["fold-init","fold-elem"] as
           Compose -> specialPartial =<< addPartialArgs 0 ["compose0"] =<< addPartialArgs 1 ["compose1"] as
+          Where -> specialPartial =<< addPartialArgs 1 ["where"] as
+          NotF -> specialPartial =<< addPartialArgs 0 ["not?"] as
+          AndF -> specialPartial =<< addPartialArgs 0 ["and?0"] =<< addPartialArgs 1 ["and?1"] as
+          OrF -> specialPartial =<< addPartialArgs 0 ["or?0"] =<< addPartialArgs 1 ["or?1"] as
+          Select -> specialPartial =<< addPartialArgs (if length as > 2 then 2 else 1) ["select"] as
 
 
 toAST TBinding {..} = do

@@ -95,7 +95,7 @@ instance Pretty TcId where pretty = string . show
 data VarRole = ArgVar Int | RetVar
   deriving (Eq,Show,Ord)
 
-data OverloadSpecial = OAt deriving (Eq,Show,Enum,Ord)
+data OverloadSpecial = OAt | OSelect deriving (Eq,Show,Enum,Ord)
 
 -- | Combine an AST id with a role.
 data Overload m = Overload {

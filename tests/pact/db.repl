@@ -36,6 +36,10 @@
         (txlog persons 1))
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
+
+(expect "select works" [ROW_A] (select persons (where 'age (= 46))))
+(expect "select works (miss)" [] (select persons (where 'age (= 45))))
+
 (env-keys ["joe"])
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
 (expect-failure "keys protected by admin key" (keys persons))

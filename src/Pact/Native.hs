@@ -107,7 +107,7 @@ langDefs =
      \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
 
     ,defNative (specialForm Where) where'
-     (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",mkSchemaVar "row")])
+     (funType tTyBool [("field",tTyString),("app",lam a tTyBool),("value",tTyObject (mkSchemaVar "row"))])
      "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. \
      \`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"
 

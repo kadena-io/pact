@@ -52,6 +52,11 @@
   (defun filter-map ()
     (filter (> 1) (map1)))
 
+  (defun three-arg (a) (> a 1))
+
+  (defun filter-map12 ()
+    (filter (three-arg 1) [1 2 3]))
+
   (defun map1 ()
     (map (mod 2) [1 2 3]))
 
@@ -63,6 +68,28 @@
   ;; TODO fold fails to solve overload
   (defun fold2 ()
     (fold (+) 1 [2 3 4]))
+
+  (defun select1 ()
+    (select persons (age-gt 18)))
+
+  (defun sort1 ()
+    (sort [3 1 2]))
+
+  (defun sort2 ()
+    (sort ['age] (map (read persons) (keys persons))))
+
+  (defun partials ()
+    (not? (= 10) 20)
+    (and? (= 10) (> 20) 10)
+    (or? (= 10) (> 20) 10)
+    (and? (not? (= 10)) (> 20) 10)
+    )
+
+
+  (defun checkWhere ()
+    (let ((sam:object{person} { 'name: "Sam", 'age: 23, 'dob: (parse-time "%F" "1996-12-31") }))
+      (where "age" (= 10) sam)))
+
 
 
 )

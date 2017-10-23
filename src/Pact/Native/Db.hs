@@ -196,6 +196,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
               | include -> case cols' of
                   Nothing -> return (obj:rs)
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
+              | otherwise -> return rs
             t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " ++ show t
 select' i as _ _ _ = argsError' i as
 
