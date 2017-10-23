@@ -11,30 +11,16 @@ data SpecialForm =
   WithRead |
   WithDefaultRead |
   Bind |
-  Map |
-  Filter |
-  Fold |
-  Compose |
   Select |
-  Where |
-  AndF |
-  OrF |
-  NotF
+  Where
   deriving (Eq,Enum,Ord,Bounded)
 
 instance AsString SpecialForm where
   asString WithRead = "with-read"
   asString WithDefaultRead = "with-default-read"
   asString Bind = "bind"
-  asString Map = "map"
-  asString Filter = "filter"
-  asString Fold = "fold"
-  asString Compose = "compose"
   asString Select = "select"
   asString Where = "where"
-  asString AndF = "and?"
-  asString OrF = "or?"
-  asString NotF = "not?"
 
 instance Show SpecialForm where show = show . asString
 

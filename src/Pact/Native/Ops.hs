@@ -44,12 +44,12 @@ opDefs = ("Operators",
     ,defLogic "and" (&&)
     ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
 
-    ,liftLogic OrF (||) "or" True
-    ,liftLogic AndF (&&) "and" False
-    ,defNative (specialForm NotF) liftNot
+    ,liftLogic "or?" (||) "or" True
+    ,liftLogic "and?" (&&) "and" False
+    ,defNative "not?" liftNot
      (funType tTyBool [("app",logicLam r),("value",r)])
      ("Apply logical 'not' to the results of applying VALUE to APP. " <>
-      "`(" <> asString NotF <> " (> 20) 15)`")
+      "`(not? (> 20) 15)`")
 
 
     ,defRNative "-" minus (coerceBinNum <> unaryNumTys)
@@ -115,9 +115,9 @@ logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
 delegateError :: String -> Term Ref -> Term Name -> Eval m a
 delegateError desc app r = evalError (_tInfo app) $ desc ++ ": Non-boolean result from delegate: " ++ show r
 
-liftLogic :: SpecialForm -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
+liftLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Text -> Bool -> NativeDef
 liftLogic n bop desc shortCircuit =
-  defNative (specialForm n) fun (funType tTyBool [("a",logicLam r),("b",logicLam r),("value",r)])
+  defNative n fun (funType tTyBool [("a",logicLam r),("b",logicLam r),("value",r)])
     ("Apply logical '" <> desc <> "' to the results of applying VALUE to A and B, with short-circuit. " <>
     "`(" <> asString n <> " (> 20) (> 10) 15)`")
   where
@@ -138,7 +138,7 @@ liftLogic n bop desc shortCircuit =
 liftNot :: NativeFun e
 liftNot _ [app@TApp{},v'] = reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
-  _ -> delegateError (show NotF) app r
+  _ -> delegateError "not?" app r
 liftNot i as = argsError' i as
 
 

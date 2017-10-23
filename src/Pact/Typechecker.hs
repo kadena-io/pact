@@ -605,37 +605,35 @@ toAST TApp {..} = do
     FDefun {..} -> do
       assocAST i (last _fBody)
       mkApp fun args
-    FNative {..} -> case isSpecialForm (NativeDefName _fName) of
-      Nothing -> mkApp fun args
-      Just sf -> do
-        let specialBind = do
-              args' <- notEmpty _tInfo "Expected >1 arg" (init args)
-              mkApp (set fSpecial (Just (sf,SBinding (last args))) fun) args'
-            setPartial = set fSpecial (Just (sf,SPartial))
-            specialPartial = mkApp (setPartial fun)
-            addPartialArgs _ _ [] = return []
-            addPartialArgs aix argNames args' = do
-                  freshArgs <- forM argNames $ \an ->
-                    trackIdNode =<< freshId (_tiInfo (_aId (_aNode (head args')))) (an <> "-partial")
-                  return $ over (ix aix . aAppArgs) (++ map Var freshArgs) args'
-        case sf of
-          Bind -> specialBind
-          WithRead -> specialBind
-          WithDefaultRead -> specialBind
-          -- TODO the following can be automated using funtype except Select which has override
-          Map -> specialPartial =<< addPartialArgs 0 ["map"] args
-          Filter -> specialPartial =<< addPartialArgs 0 ["filter"] args
-          Fold -> specialPartial =<< addPartialArgs 0 ["fold-init","fold-elem"] args
-          Compose -> specialPartial =<< addPartialArgs 0 ["compose0"] =<< addPartialArgs 1 ["compose1"] args
-          Where -> specialPartial =<< addPartialArgs 1 ["where"] args
-          NotF -> specialPartial =<< addPartialArgs 0 ["not?"] args
-          AndF -> specialPartial =<< addPartialArgs 0 ["and?0"] =<< addPartialArgs 1 ["and?1"] args
-          OrF -> specialPartial =<< addPartialArgs 0 ["or?0"] =<< addPartialArgs 1 ["or?1"] args
-          Select -> do
-            let mkSelect argsLen =
-                  mkApp (setPartial $ over fTypes (NE.fromList . NE.filter ((== argsLen) . length . _ftArgs)) fun)
-                        =<< addPartialArgs (pred argsLen) ["select"] args
-            mkSelect $ if length args == 2 then 2 else 3
+    FNative {} -> do
+      let special = isSpecialForm (NativeDefName $ _fName fun)
+          argCount = length args
+      -- handle select special overload selection
+      fun' <- case special of
+        Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
+          ft@[_] -> return $ set fTypes (NE.fromList ft) fun
+          _ -> die _tInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
+        _ -> return fun
+      args' <- if NE.length (_fTypes fun') > 1 then return args else do
+        let funType = NE.head (_fTypes fun')
+        (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST -> do
+          case argTy of
+            TyFun lambdaTy -> (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
+              freshArg <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode argAST'))) (lamArgName <> "-partial")
+              debug $ "Adding fresh arg to partial application: " ++ show freshArg
+              return $ over aAppArgs (++ [Var freshArg]) argAST'
+            _ -> return argAST
+      case special of
+        Nothing -> mkApp fun' args'
+        Just sf -> do
+          let specialBind = do
+                args'' <- notEmpty _tInfo "Expected >1 arg" (init args')
+                mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
+          case sf of
+            Bind -> specialBind
+            WithRead -> specialBind
+            WithDefaultRead -> specialBind
+            _ -> mkApp fun' args'
 
 
 

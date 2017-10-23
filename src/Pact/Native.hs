@@ -78,12 +78,12 @@ langDefs =
      "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
      \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
 
-    ,defNative (specialForm Map) map'
+    ,defNative "map" map'
      (funType (TyList a) [("app",lam b a),("list",TyList b)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
      \`(map (+ 1) [1 2 3])`"
 
-    ,defNative (specialForm Fold) fold'
+    ,defNative "fold" fold'
      (funType a [("app",lam2 b a a),("init",a),("list",TyList b)])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
@@ -95,7 +95,7 @@ langDefs =
     ,defRNative "reverse" reverse' (funType (TyList a) [("l",TyList a)])
      "Reverse a list. `(reverse [1 2 3])`"
 
-    ,defNative (specialForm Filter) filter'
+    ,defNative "filter" filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
      "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
@@ -111,7 +111,7 @@ langDefs =
      "Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. \
      \`(filter (where 'age (> 20)) [{'name: \"Mary\",'age: 30} {'name: \"Juan\",'age: 15}])`"
 
-     ,defNative (specialForm Compose) compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
+     ,defNative "compose" compose (funType c [("x",lam a b),("y", lam b c),("value",a)])
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
