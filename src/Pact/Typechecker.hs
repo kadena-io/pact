@@ -115,7 +115,7 @@ walkAST f t@App {} = do
   f Post t'
 walkAST f t@Step {} = do
   Step {..} <- f Pre t
-  t' <- Step _aNode <$> walkAST f _aEntity <*> walkAST f _aExec <*> traverse (walkAST f) _aRollback
+  t' <- Step _aNode <$> traverse (walkAST f) _aEntity <*> walkAST f _aExec <*> traverse (walkAST f) _aRollback
   f Post t'
 
 isConcreteTy :: Type n -> Bool
@@ -702,8 +702,10 @@ toAST TTable {..} = do
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = do
-  ent <- toAST _tStepEntity
-  assocAstTy (_aNode ent) $ TyPrim TyString
+  ent <- forM _tStepEntity $ \e -> do
+    e' <- toAST e
+    assocAstTy (_aNode e') $ TyPrim TyString
+    return e'
   si <- freshId _tInfo "step"
   sn <- trackIdNode si
   ex <- toAST _tStepExec

@@ -9,6 +9,8 @@
 \ Version: 0.1                  \
 \ Author: Stuart Popejoy"
 
+  (use system)
+
   (defschema account
     "Row type for accounts table."
      balance:decimal
@@ -148,39 +150,39 @@
 
   (defconst ESCROW_ACCT "escrow-account")
 
-  (defpact two-party-escrow (deb-acct deb-keyset
-                             cred-acct cred-keyset
-                             escrow-amount timeout)
+  (defpact two-party-escrow (deb-acct deb-keyset:string
+                             cred-acct cred-keyset:string
+                             escrow-amount:decimal timeout)
     "Simple two-party escrow pact"
-    (step-with-rollback 'todo
+    (step-with-rollback
       (init-escrow deb-acct escrow-amount)
       (cancel-escrow timeout deb-acct deb-keyset cred-keyset escrow-amount))
-    (step 'todo
+    (step
       (finish-escrow deb-acct deb-keyset cred-acct
                          cred-keyset escrow-amount)))
 
   (defun init-escrow (deb-acct amount)
     ;; transfer will handle deb-keyset enforce
-    (transfer deb-acct (new-pact-account ESCROW_ACCT) amount))
+    (transfer deb-acct (new-pact-account ESCROW_ACCT) amount (get-system-time)))
 
-  (defun cancel-escrow (timeout deb-acct deb-keyset cred-keyset amount)
-    (enforce-one [(enforce-keyset cred-keyset)
+  (defun cancel-escrow (timeout deb-acct deb-keyset:string cred-keyset:string amount)
+    (enforce-one "Cancel can only be effected by creditor, or debitor after timeout"
+                 [(enforce-keyset cred-keyset)
                   (and (enforce (> (get-system-time) timeout) "Timeout expired")
                        (enforce-keyset deb-keyset))])
-    (transfer (get-pact-account ESCROW_ACCT) deb-acct amount))
+    (transfer (get-pact-account ESCROW_ACCT) deb-acct amount (get-system-time)))
 
-  (defun get-system-time () 0)
-  (defun get-pact-account (n) n)
-  (defun new-pact-account (n) n)
 
-  (defun finish-escrow (deb-acct deb-keyset cred-acct cred-keyset escrow-amount)
+  (defun finish-escrow (deb-acct deb-keyset:string
+                        cred-acct cred-keyset:string
+                        escrow-amount:decimal)
     (enforce-keyset deb-keyset)
     (enforce-keyset cred-keyset)
     (let* ((price (read-decimal "agreed-upon-price"))
            (delta (- escrow-amount price))
            (escrow-acct (get-pact-account ESCROW_ACCT)))
       (enforce (>= escrow-amount price) "Price cannot negotiate up")
-      (transfer escrow-acct cred-acct price)
+      (transfer escrow-acct cred-acct price (get-system-time))
       (if (> delta 0)
         (transfer escrow-acct deb-acct delta))))
 

@@ -180,13 +180,15 @@ liftTy :: Info -> Type TypeName -> Type (Term Name)
 liftTy i = fmap (return . (`Name` i) . asString)
 
 doStep :: [Exp] -> Info -> Compile (Term Name)
+doStep [exp] i = TStep Nothing <$> run exp <*> pure Nothing <*> pure i
 doStep [entity,exp] i =
-    TStep <$> run entity <*> run exp <*> pure Nothing <*> pure i
+    TStep <$> (Just <$> run entity) <*> run exp <*> pure Nothing <*> pure i
 doStep _ i = syntaxError i "Invalid step definition"
 
 doStepRollback :: [Exp] -> Info -> Compile (Term Name)
+doStepRollback [exp,rb] i = TStep Nothing <$> run exp <*> (Just <$> run rb) <*> pure i
 doStepRollback [entity,exp,rb] i =
-    TStep <$> run entity <*> run exp <*> (Just <$> run rb) <*> pure i
+    TStep <$> (Just <$> run entity) <*> run exp <*> (Just <$> run rb) <*> pure i
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
 letPair :: Exp -> Compile (Arg (Term Name), Term Name)

@@ -701,7 +701,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TStep {
-      _tStepEntity :: !(Term n)
+      _tStepEntity :: !(Maybe (Term n))
     , _tStepExec :: !(Term n)
     , _tStepRollback :: !(Maybe (Term n))
     , _tInfo :: !Info
@@ -777,7 +777,7 @@ instance Eq1 Term where
   liftEq _ (TValue a b) (TValue m n) =
     a == m && b == n
   liftEq eq (TStep a b c d) (TStep m n o p) =
-    liftEq eq a m && liftEq eq b n && liftEq (liftEq eq) c o && d == p
+    liftEq (liftEq eq) a m && liftEq eq b n && liftEq (liftEq eq) c o && d == p
   liftEq eq (TSchema a b c d e) (TSchema m n o p q) =
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e) (TTable m n o p q) =
@@ -804,7 +804,7 @@ instance Monad Term where
     TKeySet k i >>= _ = TKeySet k i
     TUse m h i >>= _ = TUse m h i
     TValue v i >>= _ = TValue v i
-    TStep ent e r i >>= f = TStep (ent >>= f) (e >>= f) (fmap (>>= f) r) i
+    TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
 

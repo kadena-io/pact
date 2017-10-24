@@ -291,7 +291,7 @@ data AST n =
   } |
   Step {
   _aNode :: n,
-  _aEntity :: AST n,
+  _aEntity :: Maybe (AST n),
   _aExec :: AST n,
   _aRollback :: Maybe (AST n)
   }

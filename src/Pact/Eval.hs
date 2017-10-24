@@ -304,22 +304,24 @@ applyPact (TList ss _ i) = do
   use evalYield >>= \badY -> unless (isNothing badY) $ evalError i "Nested pact, aborting"
   case s of
     ts@TStep {} -> do
-      se <- reduce $ _tStepEntity ts
-      case se of
-        TLitString stepEnt -> do
-          (EntityName en) <- view eeEntity
-          if stepEnt == en
-            then do
+      se <- traverse reduce (_tStepEntity ts)
+      let execStep = do
               evalYield .= Just (PactYield (length ss) Nothing True)
               if doRollback
                 then case _tStepRollback ts of
                        Nothing -> return $ tStr $ pack $ "No rollback on step " ++ show stepIdx
                        Just rexp -> reduce rexp
                 else reduce $ _tStepExec ts
+      case se of
+        Just (TLitString stepEnt) -> do
+          (EntityName en) <- view eeEntity
+          if stepEnt == en
+            then execStep
             else do
               evalYield .= Just (PactYield (length ss) Nothing False)
               return $ tStr "Skip step"
-        t -> evalError (_tInfo t) "step entity must be String value"
+        Just t -> evalError (_tInfo t) "step entity must be String value"
+        Nothing -> execStep
     t -> evalError (_tInfo t) "expected step"
 applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 
