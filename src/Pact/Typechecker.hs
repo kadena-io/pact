@@ -60,6 +60,9 @@ die i s = throwM $ CheckerException i s
 die' :: MonadThrow m => TcId -> String -> m a
 die' i = die (_tiInfo i)
 
+die'' :: MonadThrow m => AST Node -> String -> m a
+die'' = die' . _aId . _aNode
+
 
 
 debug :: String -> TC ()
@@ -432,7 +435,7 @@ assocAstTy (Node ai _) ty = do
 -- is "just a type" is problematic, creating much cruft in here.
 assocTy :: TcId -> TypeVar UserType -> Type UserType -> TC ()
 assocTy ai av ty = do
-  aty <- lookupTypes "assocTy" ai av
+  aty <- resolveTy =<< lookupTypes "assocTy" ai av
   debug $ "assocTy: " ++ show (av,aty) ++ " <=> " ++ show ty
   unifyTypes' ai aty ty $ \r -> case r of
     Left _same -> do
@@ -611,8 +614,7 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
 
 toAST TApp {..} = do
   fun <- toFun _tAppFun
-  i <- freshId _tInfo $
-       "app" <> (case fun of FDefun {} -> "D"; _ -> ":") <>  _fName fun
+  i <- freshId _tInfo $ _fName fun
   n <- trackIdNode i
   args <- mapM toAST _tAppArgs
   let mkApp fun' args' = return $ App n fun' args'
@@ -632,11 +634,15 @@ toAST TApp {..} = do
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
         (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST -> do
-          case argTy of
-            TyFun lambdaTy -> (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
-              freshArg <- trackIdNode =<< freshId (_tiInfo (_aId (_aNode argAST'))) (lamArgName <> "-partial")
-              debug $ "Adding fresh arg to partial application: " ++ show freshArg
-              return $ over aAppArgs (++ [Var freshArg]) argAST'
+          case (argTy,argAST) of
+            (TyFun lambdaTy,App{}) -> do
+              (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
+                freshArg <- trackIdNode =<<
+                  freshId (_tiInfo (_aId (_aNode argAST')))
+                  (_fName (_aAppFun argAST) <> "_" <> lamArgName <> "_p")
+                debug $ "Adding fresh arg to partial application: " ++ show freshArg
+                return $ over aAppArgs (++ [Var freshArg]) argAST'
+            (TyFun t,_) -> die'' argAST $ "App required for funtype argument: " ++ show t
             _ -> return argAST
       case special of
         Nothing -> mkApp fun' args'

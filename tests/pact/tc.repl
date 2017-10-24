@@ -69,7 +69,11 @@
     (fold (+) 1 [2 3 4]))
 
   (defun select1 ()
+    (select persons ['name 'dob] (where "age" (<= 18)))
     (select persons (where "age" (<= 18))))
+
+  (defun select2 ()
+    (select persons (not? (and? (where "name" (= "Sam")) (where "age" (<= 18))))))
 
 
   (defun sort1 ()
