@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -117,6 +118,20 @@ walkAST f t@Step {} = do
 isConcreteTy :: Type n -> Bool
 isConcreteTy ty = not (isAnyTy ty || isVarTy ty)
 
+
+data RoleTys = RoleTys
+  { _rtCandArgTy :: Type UserType
+  , _rtAST :: AST Node
+  , _rtTyVar :: TypeVar UserType
+  , _rtResolvedTy :: Type UserType
+  }
+instance Show RoleTys where
+  show (RoleTys a b c d) =
+    "RoleTys { candArgTy=" ++ show a ++ ", AST=" ++ show (_aNode b) ++ ", tyVar=" ++ show c ++ ", resolvedTy=" ++ show d ++ "}"
+makeLenses ''RoleTys
+
+
+
 -- | Run through all overloads attempting to find all-concrete type solution for each.
 solveOverloads :: TC ()
 solveOverloads = do
@@ -140,42 +155,42 @@ solveOverloads = do
       Just {} -> return ()
 
 
-newtype RoleTys = RoleTys (Type UserType,AST Node,TypeVar UserType,Type UserType)
-instance Show RoleTys where show (RoleTys (a,b,c,d)) = show (a,_aId (_aNode b),c,d)
-_roleTys :: Lens' RoleTys (Type UserType,AST Node,TypeVar UserType,Type UserType)
-_roleTys f (RoleTys rt) = RoleTys <$> f rt
-
-
 -- | Attempt to solve an overload with one of its candidate types.
 tryFunType :: Overload (AST Node,TypeVar UserType) -> Maybe (FunType UserType) -> FunType UserType ->
                TC (Maybe (FunType UserType))
 tryFunType _ r@Just {} _ = return r
-tryFunType Overload {..} _ f@(FunType as rt) = do
+tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
 
   -- see if var role unifies with with fun role. If so, return singleton list of var information
   -- indexed by fun role.
   let tryRole :: VarRole -> Type UserType ->
                  TC (Maybe (VarRole,RoleTys))
-      tryRole rol fty = case M.lookup rol _oRoles of
+      tryRole rol candArgTy = case M.lookup rol _oRoles of
         Nothing -> return Nothing
-        Just (i,tv) -> use tcVarToTypes >>= \m -> case M.lookup tv m of
-          Nothing -> die' (_aId (_aNode i)) $ "Bad var in overload solver: " ++ show tv
-          Just ty -> case unifyTypes fty ty of
-            Nothing -> return Nothing
-            Just _ -> return $ Just (rol,RoleTys (fty,i,tv,ty)) -- (Just (fty,[(i,tv,ty)]))
+        -- resolve typevar at role
+        Just (roleAST,roleTyVar) -> use tcVarToTypes >>= \m -> case M.lookup roleTyVar m of
+          Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar
+          Just ty -> do
+            roleResolvedTy <- resolveTy ty
+            case unifyTypes candArgTy roleResolvedTy of
+              Nothing -> return Nothing
+              Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
 
   -- try arg and return roles
-  argRoles <- forM (zip as [0..]) $ \(Arg _ fty _,ai) -> tryRole (ArgVar ai) fty
-  allRoles <- (:argRoles) <$> tryRole RetVar rt
+  argRoles <- forM (zip candArgs [0..]) $ \(Arg _ candArgTy _,ai) -> tryRole (ArgVar ai) candArgTy
+  allRoles <- (:argRoles) <$> tryRole RetVar candRetTy
   case sequence allRoles of
     Nothing -> do
-      debug $ "tryFunType: failed: " ++ show f ++ ": " ++ show allRoles
+      debug $ "tryFunType: failed: " ++ show cand ++ ": " ++ show allRoles
       return Nothing
     Just ars -> do
-      let byRole = handleSpecialOverload _oSpecial $ M.fromList ars
-          byFunType = M.fromListWith (++) $ map (\(RoleTys (fty,i,tv,ty)) -> (fty,[(_aId (_aNode i),tv,ty)])) $ M.elems byRole
 
-      debug $ "tryFunType: trying " ++ show (f,byFunType)
+      debug $ "tryFunType: roles: " ++ show (cand,allRoles)
+
+      let byRole = handleSpecialOverload _oSpecial $ M.fromList ars
+          byFunType = M.fromListWith (++) $ map (\(RoleTys fty i tv ty) -> (fty,[(_aId (_aNode i),tv,ty)])) $ M.elems byRole
+
+      debug $ "tryFunType: trying " ++ show (cand,byFunType)
 
       let solvedM = sequence $ (`map` M.toList byFunType) $ \(fty,tvTys) ->
             let tys = foldl1 unifyM $ (Just fty:) $ map (Just . view _3) tvTys
@@ -192,12 +207,12 @@ tryFunType Overload {..} _ f@(FunType as rt) = do
         Just solved
           | allConcrete solved -> do
 
-              debug $ "Solved overload with " ++ show f ++ ": " ++ show solved
+              debug $ "Solved overload with " ++ show cand ++ ": " ++ show solved
               forM_ solved $ \(fty,(uty,tvs)) -> forM_ tvs $ \tv -> do
                 debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
                 uncurry assocTy tv fty
                 uncurry assocTy tv uty
-              return $ Just f
+              return $ Just cand
 
           | otherwise -> do
               debug $ "tryFunType: not all concrete: " ++ show solved
@@ -209,7 +224,7 @@ handleSpecialOverload :: Maybe OverloadSpecial ->
                          M.Map VarRole RoleTys
 handleSpecialOverload (Just OAt) m =
   case (M.lookup (ArgVar 0) m,M.lookup (ArgVar 1) m,M.lookup RetVar m) of
-    (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view (_roleTys . _2) keyArg,roleTy srcArg) of
+    (Just keyArg,Just srcArg,Just ret) -> case (roleTy keyArg,view rtAST keyArg,roleTy srcArg) of
       (TyPrim TyString,Prim _ (PrimLit (LString k)),TySchema TyObject (TyUser u)) -> case findSchemaField k u of
         Nothing -> m
         Just t -> unifyRet (roleTy ret) t
@@ -217,10 +232,10 @@ handleSpecialOverload (Just OAt) m =
       _ -> m
     _ -> m
   where
-    roleTy = view (_roleTys . _4)
+    roleTy = view rtResolvedTy
     unifyRet ret ty = case unifyTypes ret ty of
                         Nothing -> m
-                        Just e -> set (at RetVar . _Just . _roleTys . _4) (either id id e) m
+                        Just e -> set (at RetVar . _Just . rtResolvedTy) (either id id e) m
 handleSpecialOverload _ m = m
 
 
@@ -597,7 +612,7 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
 toAST TApp {..} = do
   fun <- toFun _tAppFun
   i <- freshId _tInfo $
-       "app" <> (case fun of FDefun {} -> "D"; _ -> "N") <>  _fName fun
+       "app" <> (case fun of FDefun {} -> "D"; _ -> ":") <>  _fName fun
   n <- trackIdNode i
   args <- mapM toAST _tAppArgs
   let mkApp fun' args' = return $ App n fun' args'

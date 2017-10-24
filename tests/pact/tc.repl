@@ -65,12 +65,12 @@
   (defun fold1 ()
     (fold (plus-int) 1 [2 3 4]))
 
-  ;; TODO fold fails to solve overload
   (defun fold2 ()
     (fold (+) 1 [2 3 4]))
 
   (defun select1 ()
-    (select persons (age-gt 18)))
+    (select persons (where "age" (<= 18))))
+
 
   (defun sort1 ()
     (sort [3 1 2]))

@@ -43,6 +43,7 @@ checkFuns = describe "tc.pact typecheck" $ do
   checkFun "tests/pact/tc.repl" "tctest" "filter-map"
   checkFun "tests/pact/tc.repl" "tctest" "map1"
   checkFun "tests/pact/tc.repl" "tctest" "fold1"
+  checkFun "tests/pact/tc.repl" "tctest" "fold2"
   checkFun "tests/pact/tc.repl" "tctest" "select1"
   checkFun "tests/pact/tc.repl" "tctest" "sort1"
   checkFun "tests/pact/tc.repl" "tctest" "sort2"
