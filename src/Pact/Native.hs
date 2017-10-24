@@ -142,9 +142,9 @@ langDefs =
      "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
      \`(enforce-one \"Should succeed on second test\" (enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\"))`"
 
-    ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyAny)])
+    ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
      "Interpolate VARS into TEMPLATE using {}. \
-     \`(format \"My {} has {}\" \"dog\" \"fleas\")`"
+     \`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"
 
     ,defRNative "pact-txid" pactTxId (funType tTyInteger [])
      "Return reference tx id for pact execution."
@@ -274,7 +274,7 @@ compose i as = argsError' i as
 
 
 format :: RNativeFun e
-format i (TLitString s:es) = do
+format i [TLitString s,TList es _ _] = do
   let parts = T.splitOn "{}" s
       plen = length parts
       rep (TLitString t) = t

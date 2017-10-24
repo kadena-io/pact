@@ -6,7 +6,7 @@
   (use cash
    "b9d80d448ae26b966098cdf41b82fac26f8b4575312de2aa7a181cc31bd75399bed5b37c7062a0c4a39d1654501f32e636b4d699ce17e6e1a856fc0e5cd675c5")
   (use orders
-   "0ab486b02965213c05aa7d34bbd526928ffeeca4fe816d02a2805f60f7ac880b475487f4398459a5c55abbe21d5e4b187fa37c9b14882581097cb8c57ccde7fe")
+   "00e031d8abcab35ff3dc9f5e17d1bc55a3af1e7bcd235b88295390a6771fcae70e29f5fc0582b723d8ffa6673d05587aab9864de5443ffcc55c300db5524f3f5")
 
   (defschema cp-asset
     ticker:string
@@ -64,7 +64,7 @@
         (issue-inventory issuer cusip 1 cost date)
 
         (format "Issued {}/{} with discount {}, cost {}, settlement date {}"
-            ticker cusip discount cost settlement-date)
+            [ticker cusip discount cost settlement-date])
         )
   )
 
@@ -72,7 +72,7 @@
 
   (defun inventory-key (owner:string cusip:string)
     "Make composite key from OWNER and CUSIP"
-    (format "{}:{}" owner cusip)
+    (format "{}:{}" [owner cusip])
   )
 
   (defun issue-inventory (owner cusip qty price date)

@@ -55,7 +55,7 @@
       "seller" := seller,
       "buyer" := buyer
       }
-      (enforce (= ostatus status) (format "order must be {}" status))
+      (enforce (= ostatus status) (format "order must be {}" [status]))
       {"cusip": cusip,
        "qty": qty,
        "price": price,

@@ -183,11 +183,15 @@
            (escrow-acct (get-pact-account ESCROW_ACCT)))
       (enforce (>= escrow-amount price) "Price cannot negotiate up")
       (transfer escrow-acct cred-acct price (get-system-time))
-      (if (> delta 0)
+      (if (> delta 0.0)
         (transfer escrow-acct deb-acct delta))))
 
 
+  (defun get-pact-account (pfx:string) (format "%s-%s" [pfx (pact-txid)]))
 
+  (defun new-pact-account (pfx)
+    (get-pact-account pfx)
+  )
 
 
 )
