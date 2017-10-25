@@ -17,6 +17,7 @@
      amount:decimal
      ccy:string
      keyset:keyset
+     auth:string
      date:time
      data
      )
@@ -24,12 +25,16 @@
   (deftable accounts:{account}
     "Main table for accounts module.")
 
+  (defconst AUTH_KEYSET 'K
+  "Indicates keyset-governed account")
+
   (defun create-account (address keyset ccy date)
     (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
       , "ccy": ccy
       , "keyset": keyset
+      , "auth": AUTH_KEYSET
       , "date": date
       , "data": "Created account"
       }
@@ -39,9 +44,10 @@
     "transfer AMOUNT from SRC to DEST"
     ;read balance and row-level keyset from src
     (with-read accounts src { "balance":= src-balance
-                            , "keyset" := src-ks }
+                            , "keyset" := src-ks
+                            , "auth" := auth }
       (check-balance src-balance amount)
-      (enforce-keyset src-ks)
+      (enforce-auth src-ks auth)
       (with-read accounts dest
                  { "balance":= dest-balance }
         (update accounts src
@@ -58,6 +64,12 @@
                 , "data": { "transfer-from": src }
                 }
         ))))
+
+  (defun enforce-auth (keyset:keyset auth)
+    (if (= auth AUTH_KEYSET)
+      (enforce-keyset keyset)
+      (enforce (= auth (format "%s" [(pact-txid)]))
+        "Invalid access of pact account")))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -150,34 +162,45 @@
 
   (defconst ESCROW_ACCT "escrow-account")
 
-  (defpact two-party-escrow (deb-acct deb-keyset:string
-                             cred-acct cred-keyset:string
+  (defpact two-party-escrow (deb-acct cred-acct
                              escrow-amount:decimal timeout)
     "Simple two-party escrow pact"
     (step-with-rollback
       (init-escrow deb-acct escrow-amount)
-      (cancel-escrow timeout deb-acct deb-keyset cred-keyset escrow-amount))
+      (cancel-escrow timeout deb-acct cred-acct escrow-amount))
     (step
-      (finish-escrow deb-acct deb-keyset cred-acct
-                         cred-keyset escrow-amount)))
+      (finish-escrow deb-acct cred-acct
+                     escrow-amount)))
+
+  (defun get-acct-keyset (acct)
+    ( with-read accounts acct { 'keyset := k } k))
+
+  (defun enforce-acct-keyset (acct)
+    (let ((k (get-acct-keyset acct)))
+      (enforce-keyset k)))
 
   (defun init-escrow (deb-acct amount)
     ;; transfer will handle deb-keyset enforce
-    (transfer deb-acct (new-pact-account ESCROW_ACCT) amount (get-system-time)))
+    (with-read accounts deb-acct { 'ccy:= ccy, 'keyset:= k }
+      (let ((pact-acct (new-pact-account ESCROW_ACCT ccy k)))
+        (transfer deb-acct pact-acct amount (get-system-time)))))
 
-  (defun cancel-escrow (timeout deb-acct deb-keyset:string cred-keyset:string amount)
-    (enforce-one "Cancel can only be effected by creditor, or debitor after timeout"
-                 [(enforce-keyset cred-keyset)
-                  (and (enforce (> (get-system-time) timeout) "Timeout expired")
-                       (enforce-keyset deb-keyset))])
-    (transfer (get-pact-account ESCROW_ACCT) deb-acct amount (get-system-time)))
+  (defun cancel-escrow (timeout deb-acct cred-acct amount)
+    (let ((dk (get-acct-keyset deb-acct))
+          (ck (get-acct-keyset cred-acct))
+          (systime (get-system-time)))
+      (enforce-one
+        "Cancel can only be effected by creditor, or debitor after timeout"
+        [(enforce-keyset ck)
+         (and (enforce (>= systime timeout) "Timeout expired")
+              (enforce-keyset dk))])
+      (transfer (get-pact-account ESCROW_ACCT) deb-acct amount (get-system-time))))
 
 
-  (defun finish-escrow (deb-acct deb-keyset:string
-                        cred-acct cred-keyset:string
+  (defun finish-escrow (deb-acct cred-acct
                         escrow-amount:decimal)
-    (enforce-keyset deb-keyset)
-    (enforce-keyset cred-keyset)
+    (enforce-acct-keyset deb-acct)
+    (enforce-acct-keyset cred-acct)
     (let* ((price (read-decimal "agreed-upon-price"))
            (delta (- escrow-amount price))
            (escrow-acct (get-pact-account ESCROW_ACCT)))
@@ -187,11 +210,21 @@
         (transfer escrow-acct deb-acct delta))))
 
 
-  (defun get-pact-account (pfx:string) (format "%s-%s" [pfx (pact-txid)]))
+  (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-txid)]))
 
-  (defun new-pact-account (pfx)
-    (get-pact-account pfx)
-  )
+  (defun new-pact-account (pfx ccy ks)
+    (let ((a (get-pact-account pfx)))
+      (insert accounts a
+        { "balance": 0.0
+        , "amount": 0.0
+        , "ccy": ccy
+        , "keyset": ks
+        , "auth": (format "%s" [(pact-txid)])
+        , "date": (get-system-time)
+        , "data": "Created pact account"
+        }
+      )
+      a))
 
 
 )

@@ -2,11 +2,12 @@
 (define-keyset 'k (sig-keyset))
 (module system 'k
   (defschema sysdata curtime:time)
-  (deftable tbl:{sysdata})
+  (deftable systbl:{sysdata})
   (defconst KEY "sys")
-  (defun set-system-time (curtime) (write tbl KEY { 'curtime: curtime }))
-  (defun get-system-time () (at 'curtime (read tbl KEY)))
+  (defun set-system-time (curtime) (write systbl KEY { 'curtime: curtime }))
+  (defun get-system-time () (at 'curtime (read systbl KEY)))
 )
+(create-table systbl)
 (commit-tx)
 (env-keys ["accountadmin" "user123" "user456"])
 (env-data { "accounts-admin-keyset": ["accountadmin"] })
@@ -15,7 +16,8 @@
 (commit-tx)
 (typecheck 'accounts)
 (expect "test const evaluation" "ref" accounts.PACT_REF)
-(env-data { "123-keyset": { "keys" : ["user123"], "pred": "keys-all" }, "456-keyset": { "keys": ["user456"], "pred": "keys-some" } })
+(env-data { "123-keyset": { "keys" : ["user123"], "pred": "keys-all" },
+             "456-keyset": { "keys": ["user456"], "pred": "keys-any" } })
 (begin-tx)
 (use 'accounts)
 (create-account "123" (read-keyset "123-keyset") "USD" (time "2016-07-22T11:26:35Z"))
@@ -26,11 +28,14 @@
 (use 'accounts)
 (transfer "123" "456" 5.0 (time "2016-07-22T11:26:35Z"))
 (commit-tx)
+(begin-tx)
 (expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
 (expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
 
 (env-keys ["user123" "user456"])
 (expect-failure "should not allow read" (with-read accounts "123" { "balance" := b } b))
+
+;; test private pact 'payment'
 
 (env-keys ["user123" "accountadmin"])
 (env-entity "us")
@@ -48,3 +53,33 @@
 (env-entity "them")
 (payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
 (expect "balance of 456 after credit step" 17.0 (with-read accounts "456" { "balance" := b } b))
+(commit-tx)
+
+;; test public pact escrow
+(begin-tx)
+(module test 'k
+  (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
+  )
+(commit-tx)
+
+(env-keys ["user123"])
+(env-step 0)
+
+(begin-tx)
+(system.set-system-time (time "2017-01-01T12:00:00Z"))
+(two-party-escrow "123" "456" 2.00 test.TIMEOUT)
+(expect "2.0 escrowed" 227.0 (at "balance" (read-account-user "123")))
+(commit-tx)
+
+
+(begin-tx)
+(env-step 0 true)
+;; debtor cannot cancel
+(expect-failure "creditor cancel pre-timeout"
+  (two-party-escrow "123" "456" 2.00 test.TIMEOUT))
+(expect "still escrowed" 227.0 (at "balance" (read-account-user "123")))
+
+(system.set-system-time test.TIMEOUT)
+;; debtor can cancel
+(two-party-escrow "123" "456" 2.00 test.TIMEOUT)
+(expect "escrow canceled" 229.0 (at "balance" (read-account-user "123")))
