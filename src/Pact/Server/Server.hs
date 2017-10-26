@@ -80,7 +80,7 @@ serve configFile = do
   debugFn <- if _verbose then initFastLogger else return (return . const ())
   let cmdConfig = CommandConfig
           (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
-          (PactConfig (fromMaybe "entity" _entity))
+          _entity
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   link =<< async (runHistoryService histConf Nothing)

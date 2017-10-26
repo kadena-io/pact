@@ -15,19 +15,25 @@
 (commit-tx)
 (use 'yieldtest)
 
-(env-entity "A")
-(expect "step 1 executes" "stu->A" (tester "stu"))
-(env-step 1 false (yielded true))
 (env-entity "B")
-(expect "step 2 executes" "stu->A->B" (tester ""))
+(tester "stu")
+(expect "step 0 skips B" false (at "executed" (pact-state)))
+
 (env-entity "A")
+(expect "step 0 executes" "stu->A" (tester "stu"))
+;; set resume for step 1
+(env-step 1 false (at "yield" (pact-state)))
+(env-entity "B")
+(expect "step 1 executes" "stu->A->B" (tester "stu"))
+;; test 1 skips A
+(env-entity "A")
+(tester "stu")
+(expect "step 1 skips A" false (at "executed" (pact-state)))
+
+;; test rollback
 (env-step 0 true)
-(expect "step 1 rollback executes" "rollback-a" (tester ""))
+(expect "step 1 rollback executes" "rollback-a" (tester "stu"))
+;; test no rollback for B
 (env-entity "B")
-(tester "")
-;; use absence of yield to test for skip
-(yielded false)
-(env-step 1 false)
-(env-entity "A")
-;; use the lack of an error to test that 1 is skipped for "A"
-(tester "")
+(tester "stu")
+(expect "step 0 rollback skips B" false (at "executed" (pact-state)))

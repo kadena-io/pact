@@ -1,8 +1,9 @@
-(env-data { "k": { "keys": ["admin"], "pred": "=" } })
+(env-data { "k": { "keys": ["admin"], "pred": "=" },
+            "k2": { "keys": ["admin"], "pred": "=" } })
 (env-keys ["admin"])
 (begin-tx)
-(define-keyset 'k (read-keyset "k"))
-(module dbtest 'k
+(define-keyset 'dbtest-admin (read-keyset "k"))
+(module dbtest 'dbtest-admin
 
   (defschema person
     name:string
@@ -15,9 +16,15 @@
   (defconst ROW_A:{person}
     { 'name:"joe", 'age:46, "dob":(parse-time "%F" "1970-01-01") })
 
+  (defun read-persons (k) (read persons k))
+
   (deftable stuff)
 
-)
+  )
+(define-keyset 'dbtest2-admin (read-keyset "k2"))
+(module dbtest2 'dbtest2-admin
+  (defun read-persons2 (k)
+    (read-persons k)))
 
 (create-table persons)
 (create-table stuff)
@@ -41,6 +48,11 @@
 (expect "select works (miss)" [] (select persons (where 'age (= 45))))
 
 (env-keys ["joe"])
+
+(expect "read-persons works w/o admin key" ROW_A (read-persons ID_A))
+(expect "read-persons2 works w/o admin key" ROW_A (dbtest2.read-persons2 ID_A))
+
+
 (expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
 (expect-failure "keys protected by admin key" (keys persons))
 (expect-failure "txids protected by admin key" (txids persons 0))

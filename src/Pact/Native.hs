@@ -36,7 +36,6 @@ import Safe
 import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
-import Data.Maybe
 import Data.Decimal
 import Data.List
 import Data.Function (on)
@@ -146,8 +145,8 @@ langDefs =
      "Interpolate VARS into TEMPLATE using {}. \
      \`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"
 
-    ,defRNative "pact-txid" pactTxId (funType tTyInteger [])
-     "Return reference tx id for pact execution."
+    ,defRNative "pact-id" pactId (funType tTyInteger [])
+     "Return ID if called during current pact execution, failing if not."
 
     ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as decimal.\
@@ -353,13 +352,11 @@ enforce' i as = argsError i as
 {-# INLINE enforce #-}
 
 
-pactTxId :: RNativeFun e
-pactTxId _ [] = do
-  pm <- view eePactStep
-  case pm of
-    Just p -> return (toTerm (_psTxId p))
-    Nothing -> toTerm . fromMaybe (-1) <$> view eeTxId
-pactTxId i as = argsError i as
+pactId :: RNativeFun e
+pactId i [] = use evalPactExec >>= \pe -> case pe of
+  Nothing -> evalError' i "pact-id: not in pact execution"
+  Just PactExec{..} -> return $ toTerm _pePactId
+pactId i as = argsError i as
 
 bind :: NativeFun e
 bind _ [src,TBinding ps bd (BindSchema _) bi] =
@@ -396,11 +393,11 @@ unsetInfo a = set tInfo def a
 
 yield :: RNativeFun e
 yield i [t@TObject {}] = do
-  eym <- use evalYield
+  eym <- use evalPactExec
   case eym of
     Nothing -> evalError' i "Yield not in defpact context"
-    Just ey -> do
-      evalYield .= Just (set pyYield (Just t) ey)
+    Just {} -> do
+      (evalPactExec . _Just . peYield) .= Just t
       return t
 yield i as = argsError i as
 

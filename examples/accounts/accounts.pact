@@ -42,42 +42,17 @@
 
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
-    ;read balance and row-level keyset from src
-    (with-read accounts src { "balance":= src-balance
-                            , "keyset" := src-ks
-                            , "auth" := auth }
-      (check-balance src-balance amount)
-      (enforce-auth src-ks auth)
-      (with-read accounts dest
-                 { "balance":= dest-balance }
-        (update accounts src
-                { "balance": (- src-balance amount)
-                , "amount": (- amount)
-                , "date": date
-                , "data": { "transfer-to": dest }
-                }
-        )
-        (update accounts dest
-                { "balance": (+ dest-balance amount)
-                , "amount": amount
-                , "date": date
-                , "data": { "transfer-from": src }
-                }
-        ))))
-
-  (defun enforce-auth (keyset:keyset auth)
-    (if (= auth AUTH_KEYSET)
-      (enforce-keyset keyset)
-      (enforce (= auth (format "%s" [(pact-txid)]))
-        "Invalid access of pact account")))
+    (debit src amount date { "transfer-to": dest })
+    (credit dest amount date { "transfer-from": src }))
 
   (defun read-account-user (id)
     "Read data for account ID"
     (with-read accounts id
               { "balance":= b
               , "ccy":= c
-              , "keyset" := ks }
-      (enforce-keyset ks)
+              , "keyset" := ks
+              , "auth" := auth }
+      (enforce-auth ks auth)
       { "balance": b, "ccy": c }
       ))
 
@@ -113,27 +88,36 @@
       (debit payer amount date
             { "payee": payee
             , "payee-entity": payee-entity
-            , PACT_REF: (pact-txid)
+            , PACT_REF: (pact-id)
             })
       (credit payer amount date
-           { PACT_REF: (pact-txid), "note": "rollback" }))
+           { PACT_REF: (pact-id), "note": "rollback" }))
 
     (step payee-entity
       (credit payee amount date
             { "payer": payer
             , "payer-entity": payer-entity
-            , PACT_REF: (pact-txid)
+            , PACT_REF: (pact-id)
             }
       )))
+
+
+  (defun enforce-auth (keyset:keyset auth)
+    (if (= auth AUTH_KEYSET)
+      (enforce-keyset keyset)
+      (enforce (= auth (format "%s" [(pact-id)]))
+        "Invalid access of pact account")))
+
 
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
     (with-read accounts acct
               { "balance":= balance
               , "keyset" := ks
+              , "auth" := auth
               }
       (check-balance balance amount)
-      (enforce-keyset ks)
+      (enforce-auth ks auth)
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
@@ -201,16 +185,18 @@
                         escrow-amount:decimal)
     (enforce-acct-keyset deb-acct)
     (enforce-acct-keyset cred-acct)
-    (let* ((price (read-decimal "agreed-upon-price"))
+    (let* ((price (read-decimal "final-price"))
            (delta (- escrow-amount price))
            (escrow-acct (get-pact-account ESCROW_ACCT)))
       (enforce (>= escrow-amount price) "Price cannot negotiate up")
       (transfer escrow-acct cred-acct price (get-system-time))
       (if (> delta 0.0)
-        (transfer escrow-acct deb-acct delta))))
+        (transfer escrow-acct deb-acct delta (get-system-time))
+        "noop")
+      (format "Escrow completed with {} paid and {} refunded" [price delta])))
 
 
-  (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-txid)]))
+  (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-id)]))
 
   (defun new-pact-account (pfx ccy ks)
     (let ((a (get-pact-account pfx)))
@@ -219,7 +205,7 @@
         , "amount": 0.0
         , "ccy": ccy
         , "keyset": ks
-        , "auth": (format "%s" [(pact-txid)])
+        , "auth": (format "%s" [(pact-id)])
         , "date": (get-system-time)
         , "data": "Created pact account"
         }

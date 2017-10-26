@@ -62,8 +62,8 @@ benchVerify cs = bgroup "verify" $ (`map` cs) $
 eitherDie :: Either String a -> IO a
 eitherDie = either (throwIO . userError) (return $!)
 
-pactConfig :: PactConfig
-pactConfig = PactConfig "entity"
+entity :: Maybe EntityName
+entity = Just $ EntityName "entity"
 
 loadBenchModule :: PactDbEnv e -> IO RefStore
 loadBenchModule db = do
@@ -72,7 +72,7 @@ loadBenchModule db = do
   let md = MsgData S.empty
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
-  erRefStore <$> evalExec (setupEvalEnv db pactConfig (Transactional 1) md initRefStore) pc
+  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore) pc
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -83,7 +83,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv pactConfig t def refStore) pc
+  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t def refStore) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] ">"

@@ -41,15 +41,16 @@ module Pact.Types.Runtime
    Method,
    PactDb(..),
    TxId(..),
-   PactStep(..),psStep,psRollback,psTxId,psResume,
+   PactId(..),
+   PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
    StackFrame(..),sfName,sfLoc,sfApp,
-   PactYield(..),pyStepCount,pyYield,pyExecuted,
+   PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
-   EvalState(..),evalRefs,evalCallStack,evalYield,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,
    Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
@@ -390,10 +391,15 @@ instance NFData TxId
 instance Show TxId where show (TxId s) = show s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
 
+newtype PactId = PactId Text
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
+instance Show PactId where show (PactId s) = show s
+
+-- | Environment setup for pact execution.
 data PactStep = PactStep {
       _psStep :: !Int
     , _psRollback :: !Bool
-    , _psTxId :: !TxId
+    , _psPactId :: !PactId
     , _psResume :: !(Maybe (Term Name))
 } deriving (Eq,Show)
 makeLenses ''PactStep
@@ -414,13 +420,15 @@ newtype EntityName = EntityName Text
 instance Show EntityName where show (EntityName t) = show t
 
 
-
-data PactYield = PactYield
-  { _pyStepCount :: Int
-  , _pyYield :: !(Maybe (Term Name))
-  , _pyExecuted :: Bool
+-- | Runtime capture of pact execution.
+data PactExec = PactExec
+  { _peStepCount :: Int
+  , _peYield :: !(Maybe (Term Name))
+  , _peExecuted :: Bool
+  , _peStep :: Int
+  , _pePactId :: PactId
   } deriving (Eq,Show)
-makeLenses ''PactYield
+makeLenses ''PactExec
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -430,10 +438,10 @@ data EvalEnv e = EvalEnv {
     , _eeMsgSigs :: !(S.Set PublicKey)
       -- | JSON body accompanying message.
     , _eeMsgBody :: !Value
-      -- | Transaction id.
+      -- | Transaction id. 'Nothing' indicates local execution.
     , _eeTxId :: !(Maybe TxId)
-      -- | Entity governing 'pact' executions.
-    , _eeEntity :: !EntityName
+      -- | Entity governing private/encrypted 'pact' executions.
+    , _eeEntity :: !(Maybe EntityName)
       -- | Step value for 'pact' executions.
     , _eePactStep :: !(Maybe PactStep)
       -- | Back-end state MVar.
@@ -481,8 +489,8 @@ data EvalState = EvalState {
       _evalRefs :: !RefState
       -- | Current call stack.
     , _evalCallStack :: ![StackFrame]
-      -- | Lame implementation of a yield coming back from a 'pact' execution.
-    , _evalYield :: !(Maybe PactYield)
+      -- | Pact execution trace, if any
+    , _evalPactExec :: !(Maybe PactExec)
     }
 makeLenses ''EvalState
 instance Show EvalState where

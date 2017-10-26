@@ -52,7 +52,7 @@ data EvalResult = EvalResult {
   erOutput :: ![Term Name],
   erLogs :: ![TxLog],
   erRefStore :: !RefStore,
-  erYield :: !(Maybe PactYield)
+  erExec :: !(Maybe PactExec)
   } deriving (Eq,Show)
 
 
@@ -66,15 +66,15 @@ evalContinuation :: EvalEnv e -> Term Name -> IO EvalResult
 evalContinuation ee pact = interpret ee [pact]
 
 
-setupEvalEnv :: PactDbEnv e -> PactConfig -> ExecutionMode ->
+setupEvalEnv :: PactDbEnv e -> Maybe EntityName -> ExecutionMode ->
                 MsgData -> RefStore -> EvalEnv e
-setupEvalEnv dbEnv pactConfig mode msgData refStore =
+setupEvalEnv dbEnv ent mode msgData refStore =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
   , _eeMsgBody = mdData msgData
   , _eeTxId = modeToTx mode
-  , _eeEntity = _pactEntity pactConfig
+  , _eeEntity = ent
   , _eePactStep = mdStep msgData
   , _eePactDb = pdPactDb dbEnv
   , _eePactDbVar = pdPactDbVar dbEnv
@@ -112,7 +112,7 @@ interpret evalEnv terms = do
     runEval def evalEnv $ evalTerms tx terms
   let newRefs oldStore | isNothing tx = oldStore
                        | otherwise = updateRefStore (_evalRefs state) oldStore
-  return $! EvalResult terms rs logs (newRefs $ _eeRefStore evalEnv) (_evalYield state)
+  return $! EvalResult terms rs logs (newRefs $ _eeRefStore evalEnv) (_evalPactExec state)
 
 evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog])
 evalTerms tx terms = do

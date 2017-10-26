@@ -59,6 +59,9 @@
 (begin-tx)
 (module test 'k
   (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
+  (defun run-escrow () (two-party-escrow "123" "456" 2.00 TIMEOUT))
+  (defun reset-time () (system.set-system-time (time "2017-01-01T12:00:00Z")))
+  (defun get-balance (acct) (at "balance" (read-account-user acct)))
   )
 (commit-tx)
 
@@ -66,20 +69,58 @@
 (env-step 0)
 
 (begin-tx)
-(system.set-system-time (time "2017-01-01T12:00:00Z"))
-(two-party-escrow "123" "456" 2.00 test.TIMEOUT)
-(expect "2.0 escrowed" 227.0 (at "balance" (read-account-user "123")))
+(test.reset-time)
+(test.run-escrow)
+(expect "2.0 escrowed" 227.0 (test.get-balance "123"))
 (commit-tx)
 
 
+;;test cancel
 (begin-tx)
 (env-step 0 true)
 ;; debtor cannot cancel
-(expect-failure "creditor cancel pre-timeout"
-  (two-party-escrow "123" "456" 2.00 test.TIMEOUT))
-(expect "still escrowed" 227.0 (at "balance" (read-account-user "123")))
+(expect-failure "creditor cancel pre-timeout" (test.run-escrow))
+(expect "still escrowed" 227.0 (test.get-balance "123"))
 
 (system.set-system-time test.TIMEOUT)
 ;; debtor can cancel
-(two-party-escrow "123" "456" 2.00 test.TIMEOUT)
-(expect "escrow canceled" 229.0 (at "balance" (read-account-user "123")))
+(test.run-escrow)
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+(expect "still escrowed" 227.0 (test.get-balance "123"))
+(begin-tx)
+;; creditor can cancel immediately
+(test.reset-time)
+(env-keys ["user456"])
+(env-step 0 true)
+(test.run-escrow)
+(env-keys ["user123"]) ; for balance check
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+;; creditor cannot finish alone
+(env-step 1)
+(env-keys ["user456"])
+(expect-failure "creditor cannot finish alone" (test.run-escrow))
+;; debtor cannot finish alone
+(env-step 1)
+(env-keys ["user123"])
+(expect-failure "debtor cannot finish alone" (test.run-escrow))
+;; both can, but price cannot be nego'd up
+(env-step 1)
+(env-keys ["user123" "user456"])
+(env-data { "final-price": 2.75 })
+(expect-failure "price cannot nego up" (test.run-escrow))
+
+(env-step 1)
+(env-data { "final-price": 1.75 })
+(test.run-escrow)
+(expect "seller paid 1.75" 18.75 (test.get-balance "456"))
+(expect "buyer refunded .25" 227.25 (test.get-balance "123"))
+
+
+
+
+
+;

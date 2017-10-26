@@ -30,18 +30,9 @@ import Data.Aeson as A
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
-import Control.Lens (makeLenses)
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
-
-
-data PactConfig = PactConfig {
-  _pactEntity :: EntityName
-  } deriving (Eq,Show,Generic)
-makeLenses ''PactConfig
-instance FromJSON PactConfig
-instance ToJSON PactConfig
 
 data PactRPC c =
     Exec (ExecMsg c) |

@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- |
 -- Module      :  Pact.Repl.Lib
@@ -32,6 +33,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
+import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Criterion
 import Criterion.Types
@@ -76,14 +78,17 @@ replDefs = ("Repl",
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool),("resume",TySchema TyObject (mkSchemaVar "y"))])
-      ("Modify pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
-       "ROLLBACK instructs to execute rollback expression, if any. RESUME sets the value of a previous YIELD step." <>
-       "Also clears last expression's yield value. `$(env-step 1)` `$(env-step 0 true)`")
-     ,defRNative "yielded" yielded (funType a [("expect-yield",tTyBool)]) $
-      "When EXPECT-YIELD is true, return result of yield from previous evaluation, failing if not set. " <>
-      "When EXPECT-YIELD is false, fail if the previous evaluation produced a yield."
-     ,defRNative "env-entity" setentity (funType tTyString [("entity",tTyString)])
-      "Set environment confidential ENTITY id. Also clears last expression's yield value. `$(env-entity \"my-org\")`"
+      ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
+       "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
+       "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
+     ,defRNative "pact-state" pactState (funType (tTyObject TyAny) [])
+      ("Inspect state from previous pact execution. Returns object with fields " <>
+      "'yield': yield result or 'false' if none; 'step': executed step; " <>
+      "'executed': indicates if step was skipped because entity did not match. `$(pact-state)`")
+     ,defRNative "env-entity" setentity
+      (funType tTyString [] <> funType tTyString [("entity",tTyString)])
+      ("Set environment confidential ENTITY id, or unset with no argument. " <>
+      "Clears any previous pact execution state. `$(env-entity \"my-org\")` `$(env-entity)`")
      ,defRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
        "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
@@ -175,40 +180,45 @@ setmsg i as = argsError i as
 
 
 setstep :: RNativeFun LibState
-setstep _ [] = setstep' Nothing >> return (tStr "Un-setting step")
-setstep _ [TLitInteger j] = do
-  setstep' (Just $ PactStep (fromIntegral j) False def def)
-  return $ tStr "Setting step"
-setstep _ [TLitInteger j,TLiteral (LBool b) _] = do
-  setstep' (Just $ PactStep (fromIntegral j) b def def)
-  return $ tStr "Setting step and rollback"
-setstep _ [TLitInteger j,TLiteral (LBool b) _,o@TObject{}] = do
-  setstep' (Just $ PactStep (fromIntegral j) b def (Just o))
-  return $ tStr "Setting step, rollback, and resume value"
-setstep i as = argsError i as
-
-setstep' :: Maybe PactStep -> Eval LibState ()
-setstep' s = do
-  setenv eePactStep s
-  evalYield .= Nothing
+setstep i as = case as of
+  [] -> setstep' Nothing >> return (tStr "Un-setting step")
+  [TLitInteger j] -> do
+    setstep' (Just $ PactStep (fromIntegral j) False def def)
+    return $ tStr "Setting step"
+  [TLitInteger j,TLiteral (LBool b) _] -> do
+    setstep' (Just $ PactStep (fromIntegral j) b def def)
+    return $ tStr "Setting step and rollback"
+  [TLitInteger j,TLiteral (LBool b) _,o@TObject{}] -> do
+    setstep' (Just $ PactStep (fromIntegral j) b def (Just o))
+    return $ tStr "Setting step, rollback, and resume value"
+  _ -> argsError i as
+  where
+    setstep' s = do
+      setenv eePactStep s
+      evalPactExec .= Nothing
 
 setentity :: RNativeFun LibState
-setentity _ [TLitString s] = do
-  setenv eeEntity (EntityName s)
-  evalYield .= Nothing
-  return (tStr "Setting entity")
-setentity i as = argsError i as
+setentity i as = case as of
+  [TLitString s] -> do
+    setenv eeEntity $ Just (EntityName s)
+    evalPactExec .= Nothing
+    return (tStr $ "Set entity to " <> s)
+  [] -> do
+    setenv eeEntity Nothing
+    evalPactExec .= Nothing
+    return (tStr "Unset entity")
+  _ -> argsError i as
 
-yielded :: RNativeFun LibState
-yielded i [TLiteral (LBool expectYield) _] = do
-  ym <- join . fmap (firstOf (pyYield . _Just)) <$> use evalYield
-  case (ym,expectYield) of
-    (Nothing,False) -> return $ tStr "yielded: success, no yield found"
-    (Nothing,True) -> evalError' i "FAILURE: expected yield value"
-    (Just y,True) -> return y
-    (Just y,False) -> evalError' i $ "FAILURE: unexpected yield present: " ++ show y
-yielded i as = argsError i as
-
+pactState :: RNativeFun LibState
+pactState i [] = do
+  e <- use evalPactExec
+  case e of
+    Nothing -> evalError' i "pact-state: no pact exec in context"
+    Just PactExec{..} -> return $ (\o -> TObject o TyAny def)
+      [(tStr "yield",fromMaybe (toTerm False) _peYield)
+      ,(tStr "executed",toTerm _peExecuted)
+      ,(tStr "step",toTerm _peStep)]
+pactState i as = argsError i as
 
 txmsg :: Maybe Text -> Maybe TxId -> Text -> Term Name
 txmsg n tid s = tStr $ s <> " Tx " <> pack (show tid) <> maybe "" (": " <>) n

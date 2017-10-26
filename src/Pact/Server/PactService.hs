@@ -43,8 +43,8 @@ initPactService CommandConfig {..} loggers = do
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccPact p cmdVar eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccPact p cmdVar }
+          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -56,7 +56,7 @@ initPactService CommandConfig {..} loggers = do
 
 
 
-applyCmd :: Logger -> PactConfig -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
+applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
@@ -84,12 +84,12 @@ runPayload c@Command{..} = do
       Payload{..} = _cmdPayload
   case _pAddress of
     Just Address{..} -> do
-      -- simulate fake blinding if not addressed to this entity
-      entName <- view (ceConfig . pactEntity)
+      -- simulate fake blinding if not addressed to this entity or no entity specified
+      ent <- view ceEntity
       mode <- view ceMode
-      if entName == _aFrom || (entName `S.member` _aTo)
-        then runRpc _pPayload
-        else return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
+      case ent of
+        Just entName | entName == _aFrom || (entName `S.member` _aTo) -> runRpc _pPayload
+        _ -> return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
     Nothing -> runRpc _pPayload
 
 
@@ -99,7 +99,7 @@ applyExec rk (ExecMsg parsedCode edata) ks = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore) <- liftIO $ readMVar _ceState
-  let evalEnv = setupEvalEnv _ceDbEnv _ceConfig _ceMode
+  let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData (userSigsToPactKeySet ks) edata Nothing) refStore
   pr <- liftIO $ evalExec evalEnv parsedCode
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)

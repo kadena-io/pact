@@ -298,30 +298,34 @@ reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ sho
 -- | Apply a pactdef, which will execute a step based on env 'PactStep'
 -- defaulting to the first step.
 applyPact ::  Term Ref ->  Eval e (Term Name)
-applyPact (TList ss _ i) = do
-  (stepIdx,doRollback) <- maybe (0,False) (_psStep &&& _psRollback) <$> view eePactStep
-  s <- maybe (evalError i $ "applyPact: step not found: " ++ show stepIdx) return $ ss `atMay` stepIdx
-  use evalYield >>= \badY -> unless (isNothing badY) $ evalError i "Nested pact, aborting"
+applyPact (TList steps _ i) = do
+  -- only one pact allowed in a transaction
+  use evalPactExec >>= \bad -> unless (isNothing bad) $ evalError i "Nested pact execution, aborting"
+  -- get step from environment or create a new one
+  PactStep{..} <- view eePactStep >>= \ps -> case ps of
+    Nothing -> view eeTxId >>= \tid ->
+      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack .show) tid) Nothing
+    Just v -> return v
+  -- retrieve indicated step from code
+  s <- maybe (evalError i $ "applyPact: step not found: " ++ show _psStep) return $ steps `atMay` _psStep
   case s of
-    ts@TStep {} -> do
-      se <- traverse reduce (_tStepEntity ts)
-      let execStep = do
-              evalYield .= Just (PactYield (length ss) Nothing True)
-              if doRollback
-                then case _tStepRollback ts of
-                       Nothing -> return $ tStr $ pack $ "No rollback on step " ++ show stepIdx
-                       Just rexp -> reduce rexp
-                else reduce $ _tStepExec ts
-      case se of
-        Just (TLitString stepEnt) -> do
-          (EntityName en) <- view eeEntity
-          if stepEnt == en
-            then execStep
-            else do
-              evalYield .= Just (PactYield (length ss) Nothing False)
-              return $ tStr "Skip step"
+    step@TStep {} -> do
+      stepEntity <- traverse reduce (_tStepEntity step)
+      let
+        initExec executing = evalPactExec .= Just (PactExec (length steps) Nothing executing _psStep _psPactId)
+        execStep = do
+          initExec True
+          case (_psRollback,_tStepRollback step) of
+            (False,_) -> reduce $ _tStepExec step
+            (True,Just rexp) -> reduce rexp
+            (True,Nothing) -> return $ tStr $ pack $ "No rollback on step " ++ show _psStep
+      case stepEntity of
+        Just (TLitString se) -> view eeEntity >>= \envEnt -> case envEnt of
+          Just (EntityName en) | se == en -> execStep -- matched for "private" step exec
+                               | otherwise -> initExec False >> return (tStr "Skip step")
+          Nothing -> evalError (_tInfo step) "Private step executed against non-private environment"
         Just t -> evalError (_tInfo t) "step entity must be String value"
-        Nothing -> execStep
+        Nothing -> execStep -- "public" step exec
     t -> evalError (_tInfo t) "expected step"
 applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 

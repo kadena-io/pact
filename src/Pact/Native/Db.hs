@@ -278,7 +278,7 @@ guardTable :: Show n => FunApp -> Term n -> Eval e ()
 guardTable i TTable {..} = do
   let findMod _ r@Just {} = r
       findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  r <- foldr findMod Nothing <$> use evalCallStack
+  r <- foldr findMod Nothing . reverse <$> use evalCallStack
   case r of
     (Just mn) | mn == _tModule -> return ()
     _ -> do
