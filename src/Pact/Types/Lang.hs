@@ -65,6 +65,7 @@ module Pact.Types.Lang
    BindType(..),
    TableName(..),
    Module(..),
+   ConstVal(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tInfo,tKeySet,
@@ -621,6 +622,21 @@ instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
     o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code" <*> o .: "hash"
 
+data ConstVal n =
+  CVRaw { _cvRaw :: !n } |
+  CVEval { _cvRaw :: !n
+         , _cvEval :: !n }
+  deriving (Eq,Functor,Foldable,Traversable,Generic)
+
+instance Show o => Show (ConstVal o) where
+  show (CVRaw r) = show r
+  show (CVEval _ e) = show e
+
+instance Eq1 ConstVal where
+  liftEq eq (CVRaw a) (CVRaw b) = eq a b
+  liftEq eq (CVEval a c) (CVEval b d) = eq a b && eq c d
+  liftEq _ _ _ = False
+
 -- | Pact evaluable term.
 data Term n =
     TModule {
@@ -652,7 +668,7 @@ data Term n =
     TConst {
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !ModuleName
-    , _tConstVal :: !(Term n)
+    , _tConstVal :: !(ConstVal (Term n))
     , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
     } |
@@ -758,7 +774,7 @@ instance Eq1 Term where
   liftEq eq (TDef a b c d e f g) (TDef m n o p q r s) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
   liftEq eq (TConst a b c d e) (TConst m n o q r) =
-    liftEq (liftEq eq) a m && b == n && liftEq eq c o && d == q && e == r
+    liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
   liftEq eq (TApp a b c) (TApp m n o) =
     liftEq eq a m && liftEq (liftEq eq) b n && c == o
   liftEq eq (TVar a b) (TVar m n) =
@@ -795,7 +811,7 @@ instance Monad Term where
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
-    TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (c >>= f) t i
+    TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i

@@ -231,7 +231,7 @@ doConst es i = case es of
       v' <- run v
       cm <- currentModule i
       a <- Arg <$> pure dn <*> maybeTyVar i ty <*> pure i
-      return $ TConst a cm v' docs i
+      return $ TConst a cm (CVRaw v') docs i
 
 doSchema :: [Exp] -> Info -> Compile (Term Name)
 doSchema es i = case es of

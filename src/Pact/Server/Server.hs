@@ -34,7 +34,6 @@ import Data.Word (Word16)
 import GHC.Generics
 import System.Log.FastLogger
 import Data.Default
-import Data.Maybe
 
 import Pact.Types.Command
 import Pact.Types.Runtime hiding (Update,(<>))
@@ -44,7 +43,6 @@ import Pact.Types.Logger
 import Pact.Server.ApiServer
 import Pact.Server.History.Service
 import Pact.Server.PactService
-import Pact.Types.RPC
 
 data Config = Config {
   _port :: Word16,

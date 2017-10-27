@@ -13,7 +13,7 @@
   (deftable persons:{person})
 
   (defconst ID_A "A")
-  (defconst ROW_A:{person}
+  (defconst ROW_A:object{person}
     { 'name:"joe", 'age:46, "dob":(parse-time "%F" "1970-01-01") })
 
   (defun read-persons (k) (read persons k))

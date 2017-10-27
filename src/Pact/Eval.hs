@@ -31,6 +31,7 @@ module Pact.Eval
     ) where
 
 import Control.Lens hiding (op)
+import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
 import Control.Concurrent.MVar
@@ -199,8 +200,9 @@ loadModule m bod1 mi = do
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
       dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-  installModule (m,defs)
-  (evalRefs.rsNew) %= ((_mName m,(m,defs)):)
+  evaluatedDefs <- traverse (runPure . evalConsts) defs
+  installModule (m,evaluatedDefs)
+  (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
   return modDefs1
 
 
@@ -222,6 +224,18 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right d) = d
 unify m (Left f) = m HM.! f
 
+evalConsts :: Ref -> Eval e Ref
+evalConsts (Ref r) = case r of
+  c@TConst {..} -> case _tConstVal of
+    CVRaw raw -> do
+      v <- reduce =<< traverse evalConsts raw
+      traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
+      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tDocs _tInfo)
+    _ -> return $ Ref c
+  _ -> Ref <$> traverse evalConsts r
+evalConsts r = return r
+
+
 deref :: Ref -> Eval e (Term Name)
 deref (Direct n) = return n
 deref (Ref r) = reduce r
@@ -241,7 +255,9 @@ reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
-reduce (TConst _ _ t _ _) = reduce t
+reduce TConst {..} = case _tConstVal of
+  CVEval _ t -> reduce t
+  CVRaw a -> evalError _tInfo $ "internal error: reduce: unevaluated const: " ++ show a
 reduce (TObject ps t i) =
   TObject <$> forM ps (\(k,v) -> (,) <$> reduce k <*> reduce v) <*> traverse reduce t <*> pure i
 reduce (TBinding ps bod c i) = case c of
