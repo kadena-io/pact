@@ -46,7 +46,8 @@ module Pact.Types.Runtime
    ModuleData,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePure,
+   Pure(..),
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
@@ -430,6 +431,8 @@ data PactExec = PactExec
   } deriving (Eq,Show)
 makeLenses ''PactExec
 
+data Pure = PureNoDb | PureSysRead deriving (Eq,Show,Ord,Bounded,Enum)
+
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
       -- | Environment references.
@@ -448,6 +451,8 @@ data EvalEnv e = EvalEnv {
     , _eePactDbVar :: MVar e
       -- | Back-end function record.
     , _eePactDb :: PactDb e
+      -- | Pure indicator
+    , _eePure :: Maybe Pure
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 

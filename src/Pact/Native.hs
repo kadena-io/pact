@@ -328,10 +328,10 @@ readInteger i [TLitString key] = do
 readInteger i as = argsError i as
 
 enforce :: NativeFun e
-enforce i as = runPure (mapM reduce as >>= enforce' i)
+enforce i as = runPure (_faInfo i) (mapM reduce as >>= enforce' i)
 
 enforceOne :: NativeFun e
-enforceOne i as@[msg,TList conds _ _] = runPureSys True $ do
+enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) PureSysRead $ do
   msg' <- reduce msg >>= \m -> case m of
     TLitString s -> return s
     _ -> argsError' i as
@@ -384,7 +384,7 @@ listModules _ _ = do
 initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
 initEvalEnv e b = do
   mv <- newMVar e
-  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b
+  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b def
 
 
 unsetInfo :: Term a -> Term a

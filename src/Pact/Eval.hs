@@ -50,6 +50,7 @@ import Data.Graph
 import qualified Data.Set as S
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+import Unsafe.Coerce
 
 import Pact.Types.Runtime
 import Pact.Types.Crypto (Hash)
@@ -75,7 +76,7 @@ evalCommitTx i = do
 enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
-  runPure $ enforceKeySet mi (Just mksn) ks
+  runPure mi $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment
@@ -200,7 +201,9 @@ loadModule m bod1 mi = do
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
       dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-  evaluatedDefs <- traverse (runPure . evalConsts) defs
+      evalConstRef r@(Ref t) = runPure (_tInfo t) $ evalConsts r
+      evalConstRef r@(Direct t) = runPure (_tInfo t) $ evalConsts r
+  evaluatedDefs <- traverse evalConstRef defs
   installModule (m,evaluatedDefs)
   (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
   return modDefs1
@@ -438,26 +441,35 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
 
 -- | Drop into pure execution, preventing database access, but potentially allowing system table reads
-runPureSys :: Bool -> Eval (Purity e) a -> Eval e a
-runPureSys allowSys a = do
-  e <- purify allowSys =<< ask
-  s <- get
-  (o,_s) <- liftIO $ runEval' s e a
-  either throwM return o
+runPureSys :: Info -> Pure -> Eval (Purity e) a -> Eval e a
+runPureSys i pure' a = do
+  env <- ask
+  case (pure',_eePure env) of
+    (_,Nothing) -> go env -- launch new pure
+    (PureNoDb,Just PureSysRead) -> go env -- launch from SysRead into NoDb
+    (PureSysRead,Just PureNoDb) -> evalError i "internal error: attempting pure+sysread in pure context"
+    _ -> unsafeCoerce a -- same, just coerce and do it. would love to get type-level confirm of this
+    where go env = do
+            pureEnv <- purify pure' env
+            s <- get
+            (o,_s) <- liftIO $ runEval' s pureEnv a
+            either throwM return o
 
 -- | Drop into pure execution, preventing database access.
-runPure :: Eval (Purity e) a -> Eval e a
-runPure = runPureSys False
+runPure :: Info -> Eval (Purity e) a -> Eval e a
+runPure i = runPureSys i PureNoDb
 
 newtype Purity e = Purity (EvalEnv e)
 
-purity :: Bool -> PactDb (Purity e)
-purity allowSys = PactDb {
-      _readRow = if allowSys then \d k e -> case d of
-                   KeySets -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-                   Modules -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-                   _ -> diePure e
-                 else \_ _ -> diePure
+purity :: Pure -> PactDb (Purity e)
+purity pure' = PactDb {
+      _readRow = case pure' of
+          PureSysRead -> \d k e -> case d of
+            KeySets -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+            Modules -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+            _ -> diePure e
+          PureNoDb -> \_ _ -> diePure
+
     , _writeRow = \_ _ _ _ -> diePure
     , _keys = const diePure
     , _txids = \_ _ -> diePure
@@ -470,8 +482,8 @@ purity allowSys = PactDb {
     }
        where diePure _ = evalError def "Illegal database access in pure context"
 
-purify :: Bool -> EvalEnv e -> Eval e (EvalEnv (Purity e))
-purify allowSys e@EvalEnv{..} = do
+purify :: Pure -> EvalEnv e -> Eval e (EvalEnv (Purity e))
+purify pure' e@EvalEnv{..} = do
   v <- liftIO $ newMVar (Purity e)
   return $ EvalEnv
     _eeRefStore
@@ -481,4 +493,5 @@ purify allowSys e@EvalEnv{..} = do
     _eeEntity
     _eePactStep
     v
-    (purity allowSys)
+    (purity pure')
+    (Just pure')
