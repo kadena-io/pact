@@ -1,12 +1,13 @@
 ;; accounts module, admin keyset, and table
 
+(enforce-version "2.2.4")
+
 (define-keyset 'accounts-admin-keyset
   (read-keyset "accounts-admin-keyset"))
 
 (module accounts 'accounts-admin-keyset
-  "Simple account functionality. \
-\ Tables used: 'accounts        \
-\ Version: 0.1                  \
+  "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
+\ Version: 0.2                                                                 \
 \ Author: Stuart Popejoy"
 
   (use system)

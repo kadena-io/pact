@@ -173,8 +173,13 @@ langDefs =
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
+
     ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
      "Obtain current pact build version. `(pact-version)`"
+
+    ,defRNative "enforce-version" enforceVersion (funType tTyBool [("required-version",tTyString)])
+    "Enforce current pact version as at least REQUIRED-VERSION, matching from the left. \
+    \`(enforce-version \"2.2\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -443,3 +448,18 @@ sort' _ [fields@TList{},l@TList{}]
       return $ TList (map snd $ sortBy (compare `on` fst) sortPairs) (_tListType l) def
 
 sort' i as = argsError i as
+
+
+enforceVersion :: RNativeFun e
+enforceVersion i [TLitString match] = (toTerm True <$) $ foldM go False $ zip (T.splitOn "." pactVersion) (T.splitOn "." match)
+  where
+    parseNum fullV s = case AP.parseOnly (AP.many1 AP.digit) s of
+      Left _ -> evalError' i $ "Invalid version component: " ++ show (fullV,s)
+      Right v -> return v
+    go True _ = return True
+    go _ (pv,mv) = do
+      pv' <- parseNum pactVersion pv
+      mv' <- parseNum match mv
+      when (mv' > pv') $ evalError' i $ "Invalid pact version " ++ show pactVersion ++ ", required: " ++ show match
+      return (mv' < pv')
+enforceVersion i as = argsError i as
