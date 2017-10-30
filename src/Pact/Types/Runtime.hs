@@ -46,8 +46,8 @@ module Pact.Types.Runtime
    ModuleData,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
-   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePure,
-   Pure(..),
+   EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,
+   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
    RefState(..),rsLoaded,rsLoadedModules,rsNew,
@@ -431,7 +431,22 @@ data PactExec = PactExec
   } deriving (Eq,Show)
 makeLenses ''PactExec
 
-data Pure = PureNoDb | PureSysRead deriving (Eq,Show,Ord,Bounded,Enum)
+-- | Indicates level of db access offered in current Eval monad.
+data Purity =
+  -- | No database access at all.
+  PNoDb |
+  -- | Access to read of module, keyset systables.
+  PSysRead |
+  -- | All database access allowed (normal).
+  PImpure
+  deriving (Eq,Show,Ord,Bounded,Enum)
+instance Default Purity where def = PImpure
+
+-- | Marker class for 'PNoDb' environments.
+class PureNoDb e where
+-- | Marker class for 'PSysRead' environments.
+-- SysRead supports pure operations as well.
+class PureNoDb e => PureSysRead e where
 
 -- | Interpreter reader environment, parameterized over back-end MVar state type.
 data EvalEnv e = EvalEnv {
@@ -452,7 +467,7 @@ data EvalEnv e = EvalEnv {
       -- | Back-end function record.
     , _eePactDb :: PactDb e
       -- | Pure indicator
-    , _eePure :: Maybe Pure
+    , _eePurity :: Purity
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
@@ -597,3 +612,55 @@ getTxLog i d t = method i $ \db -> _getTxLog db d t
 {-# INLINE getTxLog #-}
 {-# INLINE keys #-}
 {-# INLINE txids #-}
+
+
+--
+-- Purity stuff.
+--
+
+newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+instance PureNoDb (EnvNoDb e)
+newtype EnvSysRead e = EnvSysRead (EvalEnv e)
+instance PureSysRead (EnvSysRead e)
+instance PureNoDb (EnvSysRead e)
+
+diePure :: Method e a
+diePure _ = evalError def "Illegal database access in pure context"
+
+-- | Construct a delegate pure eval environment.
+mkPureEnv :: (EvalEnv e -> f) -> Purity ->
+             (forall k v . (IsString k,FromJSON v) =>
+              Domain k v -> k -> Method f (Maybe v)) ->
+             EvalEnv e -> Eval e (EvalEnv f)
+mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
+  v <- liftIO $ newMVar (holder env)
+  return $ EvalEnv
+    _eeRefStore
+    _eeMsgSigs
+    _eeMsgBody
+    _eeTxId
+    _eeEntity
+    _eePactStep
+    v
+    PactDb {
+      _readRow = readRowImpl
+    , _writeRow = \_ _ _ _ -> diePure
+    , _keys = const diePure
+    , _txids = \_ _ -> diePure
+    , _createUserTable = \_ _ _ -> diePure
+    , _getUserTableInfo = const diePure
+    , _beginTx = const diePure
+    , _commitTx = diePure
+    , _rollbackTx = diePure
+    , _getTxLog = \_ _ -> diePure
+    }
+    purity
+
+mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
+mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\_ _ -> diePure)
+
+mkSysReadEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysRead e))
+mkSysReadEnv = mkPureEnv EnvSysRead PSysRead $ \d k e -> case d of
+  KeySets -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+  Modules -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
+  _ -> diePure e

@@ -328,10 +328,10 @@ readInteger i [TLitString key] = do
 readInteger i as = argsError i as
 
 enforce :: NativeFun e
-enforce i as = runPure (_faInfo i) (mapM reduce as >>= enforce' i)
+enforce i as = runPure (mapM reduce as >>= enforce' i)
 
 enforceOne :: NativeFun e
-enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) PureSysRead $ do
+enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ do
   msg' <- reduce msg >>= \m -> case m of
     TLitString s -> return s
     _ -> argsError' i as
@@ -344,7 +344,7 @@ enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) PureSysRead $ do
 enforceOne i as = argsError' i as
 
 
-enforce' :: RNativeFun (Purity e)
+enforce' :: PureNoDb e => RNativeFun e
 enforce' i [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
     | otherwise = failTx (_faInfo i) $ unpack msg

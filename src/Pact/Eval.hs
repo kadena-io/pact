@@ -34,7 +34,6 @@ import Control.Lens hiding (op)
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
-import Control.Concurrent.MVar
 import Data.List
 import Control.Monad
 import Prelude hiding (exp,mod)
@@ -76,12 +75,12 @@ evalCommitTx i = do
 enforceKeySetName ::  Info -> KeySetName ->  Eval e ()
 enforceKeySetName mi mksn = do
   ks <- maybe (evalError mi $ "No such keyset: " ++ show mksn) return =<< readRow mi KeySets mksn
-  runPure mi $ enforceKeySet mi (Just mksn) ks
+  runPure $ enforceKeySet mi (Just mksn) ks
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment
-enforceKeySet :: Info ->
-             Maybe KeySetName -> KeySet -> Eval (Purity e) ()
+enforceKeySet :: PureNoDb e => Info ->
+             Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys
@@ -201,8 +200,8 @@ loadModule m bod1 mi = do
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
       dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-      evalConstRef r@(Ref t) = runPure (_tInfo t) $ evalConsts r
-      evalConstRef r@(Direct t) = runPure (_tInfo t) $ evalConsts r
+      evalConstRef r@Ref {} = runPure $ evalConsts r
+      evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
   installModule (m,evaluatedDefs)
   (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
@@ -227,7 +226,7 @@ unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right d) = d
 unify m (Left f) = m HM.! f
 
-evalConsts :: Ref -> Eval e Ref
+evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
   c@TConst {..} -> case _tConstVal of
     CVRaw raw -> do
@@ -440,58 +439,19 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
 
--- | Drop into pure execution, preventing database access, but potentially allowing system table reads
-runPureSys :: Info -> Pure -> Eval (Purity e) a -> Eval e a
-runPureSys i pure' a = do
-  env <- ask
-  case (pure',_eePure env) of
-    (_,Nothing) -> go env -- launch new pure
-    (PureNoDb,Just PureSysRead) -> go env -- launch from SysRead into NoDb
-    (PureSysRead,Just PureNoDb) -> evalError i "internal error: attempting pure+sysread in pure context"
-    _ -> unsafeCoerce a -- same, just coerce and do it. would love to get type-level confirm of this
-    where go env = do
-            pureEnv <- purify pure' env
-            s <- get
-            (o,_s) <- liftIO $ runEval' s pureEnv a
-            either throwM return o
+runPure :: Eval (EnvNoDb e) a -> Eval e a
+runPure action = ask >>= \env -> case _eePurity env of
+  PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkNoDbEnv env >>= runPure' action
 
--- | Drop into pure execution, preventing database access.
-runPure :: Info -> Eval (Purity e) a -> Eval e a
-runPure i = runPureSys i PureNoDb
+runPureSys :: Info -> Eval (EnvSysRead e) a -> Eval e a
+runPureSys i action = ask >>= \env -> case _eePurity env of
+  PNoDb -> evalError i "internal error: attempting sysread in pure context"
+  PSysRead -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkSysReadEnv env >>= runPure' action
 
-newtype Purity e = Purity (EvalEnv e)
-
-purity :: Pure -> PactDb (Purity e)
-purity pure' = PactDb {
-      _readRow = case pure' of
-          PureSysRead -> \d k e -> case d of
-            KeySets -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-            Modules -> withMVar e $ \(Purity EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-            _ -> diePure e
-          PureNoDb -> \_ _ -> diePure
-
-    , _writeRow = \_ _ _ _ -> diePure
-    , _keys = const diePure
-    , _txids = \_ _ -> diePure
-    , _createUserTable = \_ _ _ -> diePure
-    , _getUserTableInfo = const diePure
-    , _beginTx = const diePure
-    , _commitTx = diePure
-    , _rollbackTx = diePure
-    , _getTxLog = \_ _ -> diePure
-    }
-       where diePure _ = evalError def "Illegal database access in pure context"
-
-purify :: Pure -> EvalEnv e -> Eval e (EvalEnv (Purity e))
-purify pure' e@EvalEnv{..} = do
-  v <- liftIO $ newMVar (Purity e)
-  return $ EvalEnv
-    _eeRefStore
-    _eeMsgSigs
-    _eeMsgBody
-    _eeTxId
-    _eeEntity
-    _eePactStep
-    v
-    (purity pure')
-    (Just pure')
+runPure' :: Eval f b -> EvalEnv f -> Eval e b
+runPure' action pureEnv = do
+  s <- get
+  (o,_s) <- liftIO $ runEval' s pureEnv action
+  either throwM return o
