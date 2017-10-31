@@ -390,6 +390,39 @@ mean Pact cannot *record* transactions using relational techniques -- for exampl
 are used in a Sales table would involve the code looking up the Customer record before writing
 to the Sales table.
 
+### Queries and Performance {#queryperformance}
+
+As of Pact 2.3, Pact offers a powerful query mechanism for selecting multiple rows from a table.
+While visually similar to SQL, the [select](#select) and [where](#where) operations offer a
+_streaming interface_ to a table, where the user provides filter functions, and then operates
+on the rowset as a list datastructure using [sort](#sort) and other functions.
+
+```lisp
+
+;; the following selects Programmers with salaries >= 90000 and sorts by age descending
+
+(reverse (sort ['age]
+  (select 'employees ['first-name,'last-name,'age]
+    (and? (where 'title (= "Programmer"))
+          (where 'salary (< 90000))))))
+
+;; the same quert could be performed on a list with 'filter':
+
+(reverse (sort ['age]
+  (filter (and? (where 'title (= "Programmer"))
+                (where 'salary (< 90000)))
+          employees)))
+
+```
+
+In a transactional setting, Pact database interactions are optimized for single-row reads and writes,
+meaning such queries can be slow and prohibitively expensive computationally. However, using the
+[local](#local) execution capability, Pact can utilize the user filter functions on the streaming
+results, offering excellent performance.
+
+The best practice is therefore to use select operations via local, non-transactional operations,
+and avoid using select on large tables in the transactional setting.
+
 ### No Nulls {#nonulls}
 
 Pact has no concept of a NULL value in its database metaphor. The main function for computing
@@ -629,6 +662,11 @@ the right choice, which will fail the transaction.
 Indeed, failure is the only *non-local exit* allowed by Pact. This reflects Pact's emphasis on
 *totality*.
 
+Note that [enforce-one](#enforce-one) (added in Pact 2.3) allows for testing a list of enforcements such that
+if any pass, the whole expression passes. This is the sole example in Pact of "exception catching"
+in that a failed enforcement simply results in the next test being executed, short-circuiting
+on success.
+
 #### Use built-in keysets
 The built-in keyset functions [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2)
 are hardcoded in the interpreter to execute quickly. Custom keysets require runtime resolution
@@ -646,6 +684,12 @@ arguments in order to serially execute the function.
 ```
 
 Pact also has [compose](#compose), which allows "chaining" applications in a functional style.
+
+### Pure execution {#pure}
+In certain contexts Pact can guarantee that computation is "pure", which simply means
+that the database state will not be accessed or modified. Currently, `enforce`, `enforce-one`
+and keyset predicate evaluation are all executed in a pure context. [defconst](#defconst)
+memoization is also pure.
 
 ### LISP {#lisp}
 
@@ -704,30 +748,80 @@ This does not affect Pact execution; however, database data can no longer enact 
 transaction", meaning we need a new concept to handle enacting a single transaction over
 multiple disjoint datasets.
 
-### Pacts {#pacts}
+### Confidential Pacts {#confidential-pacts}
 
-Pacts are multi-step sequential transactions that are defined as a single body of code called
-a [pact](#defpact). With a pact, participants ensure they are executing an identical code path,
-even as they execute distinct "steps" in that path.
+An important feature for confidentiality in Pact is the ability to orchestrate disjoint
+transactions in sequence to be executed by targeted entities. This is described in the next section.
 
-The concept of pacts reflect *coroutines* in software engineering: functions that can *yield* and
-*resume* computation "in the middle of" their body. A [step](#step) in a pact designates a target
-entity to execute it, after which the pact "yields" execution, completing the transaction and
-initiating a signed "Resume" message into the blockchain.
+Asynchronous Transaction Automation with "Pacts" {#pacts}
+---
 
-The function [yield](#yield) and special form [resume](#resume) allow for passing computed values
-between subsequent steps. These are not available for rollback functions however.
+"Pacts" are multi-stage sequential transactions that are defined as a single body of code called
+a [pact](#defpact). Definining a multi-step interaction as a pact ensures that transaction participants will
+enact an agreed sequence of operations, and offers a special "execution scope" that can be used
+to create and manage data resources only during the lifetime of a given multi-stage interaction.
 
-The counterparty entity sees this "Resume" message and drops back into the pact body to find if
-the next step is targetted for it, if so executing it.
+Pacts are a form of *coroutine*, which is a function that has multiple exit and re-entry points. Pacts
+are composed of [steps](#step) such that only a single step is executed in a given blockchain transaction.
+Steps can only be executed in strict sequential order.
 
-Since any step can fail, steps can be designed with [rollbacks](#step-with-rollback) to undo changes
-if a subsequent step fails.
+A pact is defined with arguments, similarly to function definition. However, arguments values are only
+evaluated in the execution of the initial step, after which those values are available unchanged to subsequent steps.
+To share new values
+with subsequent steps, a step can [yield](#yield) values which the subsequent step can recover using
+the special [resume](#resume) binding form.
 
-Note that at this time, it is not possible to simulate multi-party defpact executions in the
-pact server environment, as this is necessarily a multi-node/multi-entity interaction. Pacts
+Pacts are designed to run in one of two different contexts, private and public. A private pact is
+indicated by each step identifying a single entity to execute the step, while public steps do
+not have entity indicators. A pact can only be uniformly public or private: if some steps
+has entity indicators and others do not, this results in an error at load time.
+
+### Public Pacts
+Public pacts are comprised of steps that can only execute in strict sequence. Any enforcement of who can execute a step
+happens within the code of the step expression. All steps are "manually" initiated by some participant
+in the transaction with RESUME commands sent into the blockchain.
+
+### Private Pacts
+Private pacts are comprised of steps that execute in sequence where each step only executes on entity
+nodes as selected by the provided 'entity' argument in the step; other entity nodes "skip" the step.
+Private pacts are executed automatically by the blockchain platform after the initial step is sent
+in, with the executing entity's node automatically sending the RESUME command for the next step.
+
+### Failures, Rollbacks and Cancels
+
+Failure handling is dramatically different in public and private pacts.
+
+In public pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
+this step with a partipant sending in a CANCEL message before the next step is executed. Failures
+in public steps are no different than a failure in a non-pact transaction: all changes are rolled back.
+Pacts can therefore only be canceled explicitly and should be modeled to offer all necessary cancel options.
+
+In private pacts, the sequential execution of steps is automated by the blockchain platform itself. A failure
+results in a ROLLBACK message being sent from the executing entity node which will trigger any rollback expression
+specified in the previous step, to be executed by that step's entity. This failure will then "cascade" to the
+previous step as a new ROLLBACK transaction, completing when the first step is rolled back.
+
+### Yield and Resume
+
+A step can yield values to the following step using [yield](#yield) and [resume](#resume). In public,
+this is an unforgeable value as it is maintained within the blockchain pact scope. In private this is
+simply a value sent with a RESUME message from the executed entity.
+
+### Pact execution scope and `pact-id`
+
+Every time a pact is initiated, it is given a unique ID which is retrievable using the [pact-id](#pact-id)
+function, which will return the ID of the currently executing pact, or fail if not running within a pact
+scope. This mechanism can thus be used to guard access to resources, analogous to the use of keysets and
+signatures. The classic use of this is to create escrow accounts that can only be used within the context
+of a given pact, eliminating the need for a trusted third party for many use-cases.
+
+### Testing pacts
+
+Pacts
 can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
-and [yielded](#yielded) repl functions to simulate multi-entity interactions.
+and [pact-state](#pact-state) repl functions to simulate pact executions.
+
+It is not possible yet (as of Pact 2.3.0) to simulate pact execution in the pact server API.
 
 
 
@@ -908,7 +1002,7 @@ Arguments are in scope for BODY, one or more expressions.
 (defun NAME VALUE [DOCSTRING])
 ```
 
-Define NAME as VALUE, with option DOCSTRING.
+Define NAME as VALUE, with option DOCSTRING. Value is evaluated upon module load and "memoized".
 
 ```lisp
 (defconst COLOR_RED="#FF0000" "Red in hex")
@@ -923,7 +1017,10 @@ Define NAME as VALUE, with option DOCSTRING.
 ```
 
 Define NAME as a _pact_, a multistep computation intended for private transactions.
-Identical to [defun](#defun) except body must be comprised of [steps](#step).
+Identical to [defun](#defun) except body must be comprised of [steps](#step) to be
+executed in strict sequential order. Steps must uniformly be "public" (no entity indicator)
+or "private" (with entity indicator). With private steps, failures result in a reverse-sequence
+"rollback cascade".
 
 ```lisp
 (defpact payment (payer payer-entity payee
@@ -999,20 +1096,25 @@ each BINDPAIR; thus `let` is preferred where possible.
 
 ### step {#step}
 ```
+(step EXPR)
 (step ENTITY EXPR)
 ```
 
-Define a step within a _pact_, which can only be executed by nodes representing ENTITY,
+Define a step within a [defpact](#defpact) such that any prior steps will be executed in prior transactions,
+and later steps in later transactions. With ENTITY, indicates that this step is intended for confidential transactions
+such that only ENTITY will execute the step, while other participants will "skip" the step.
 in order of execution specified in containing [defpact](#defpact).
 
 ### step-with-rollback {#step-with-rollback}
 ```
+(step-with-rollback EXPR ROLLBACK-EXPR)
 (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 ```
 
-Define a step within a _pact_, which can only be executed by nodes representing ENTITY,
-in order of execution specified in containing [defpact](#defpact). If any subsequent
-steps fail, ROLLBACK-EXPR will be executed.
+Define a step within a [defpact](#defpact) similarly to [step](#step) but specifying ROLLBACK-EXPR.
+With ENTITY, ROLLBACK-EXPR will only be executed upon failure of a subsequent step, as part of a reverse-sequence "rollback
+cascade" going back from the step that failed to the first step. Without ENTITY,
+ROLLBACK-EXPR functions as a "cancel function" to be explicitly executed by a participant.
 
 ### use {#use}
 ```

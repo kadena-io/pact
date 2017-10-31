@@ -26,7 +26,6 @@ import qualified Data.HashMap.Strict as HM
 import Pact.Types.Runtime
 import Pact.Compile
 import Pact.Eval
-import Pact.Types.RPC
 import Pact.Types.Command
 import Pact.Native (nativeDefs)
 import Pact.PersistPactDb
@@ -78,6 +77,7 @@ setupEvalEnv dbEnv ent mode msgData refStore =
   , _eePactStep = mdStep msgData
   , _eePactDb = pdPactDb dbEnv
   , _eePactDbVar = pdPactDbVar dbEnv
+  , _eePurity = PImpure
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing

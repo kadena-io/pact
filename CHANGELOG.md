@@ -1,3 +1,17 @@
+2.3.0
+---
+* "Pure" execution capability, used in keyset enforcement
+* `enforce-one` added
+* Pact tests counted in HUnit results
+* defpact overhaul to support public/escrow
+* New query model: `select`, `where`, `and?/or?/not?`
+* `reverse` and `sort` added
+* Better typechecking on partial application, TC bugfixes
+* BREAKING: `format` takes list instead of var args
+* BREAKING: `pact-id` replaces `pact-txid`
+* Consts memoized at load
+* `enforce-version` added
+
 2.2.3
 ---
 * Pact tool now supports '-a' to format API requests and '-g' to generate ED25519 keypairs

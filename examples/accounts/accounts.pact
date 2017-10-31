@@ -7,9 +7,10 @@
 
 (module accounts 'accounts-admin-keyset
   "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
-\ Version: 0.2                                                                 \
-\ Author: Stuart Popejoy"
+\  Version: 0.2                                                                \
+\  Author: Stuart Popejoy"
 
+  ;; mock preview of system library with get-current-time
   (use system)
 
   (defschema account
@@ -18,7 +19,7 @@
      amount:decimal
      ccy:string
      keyset:keyset
-     auth:string
+     auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
      date:time
      data
      )
@@ -27,7 +28,10 @@
     "Main table for accounts module.")
 
   (defconst AUTH_KEYSET 'K
-  "Indicates keyset-governed account")
+    "Indicates keyset-governed account")
+
+  (defconst ADMIN_KEYSET (read-keyset "accounts-admin-keyset"))
+
 
   (defun create-account (address keyset ccy date)
     (insert accounts address
@@ -199,13 +203,13 @@
 
   (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-id)]))
 
-  (defun new-pact-account (pfx ccy ks)
+  (defun new-pact-account (pfx ccy)
     (let ((a (get-pact-account pfx)))
       (insert accounts a
         { "balance": 0.0
         , "amount": 0.0
         , "ccy": ccy
-        , "keyset": ks
+        , "keyset": ADMIN_KEYSET
         , "auth": (format "%s" [(pact-id)])
         , "date": (get-system-time)
         , "data": "Created pact account"

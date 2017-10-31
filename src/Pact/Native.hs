@@ -139,7 +139,7 @@ langDefs =
      \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
     ,defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
      "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
-     \`(enforce-one \"Should succeed on second test\" (enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\"))`"
+     \`(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])`"
 
     ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
      "Interpolate VARS into TEMPLATE using {}. \
@@ -177,9 +177,12 @@ langDefs =
     ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
      "Obtain current pact build version. `(pact-version)`"
 
-    ,defRNative "enforce-version" enforceVersion (funType tTyBool [("required-version",tTyString)])
-    "Enforce current pact version as at least REQUIRED-VERSION, matching from the left. \
-    \`(enforce-version \"2.2\")`"
+    ,defRNative "enforce-pact-version" enforceVersion
+     (funType tTyBool [("min-version",tTyString)] <>
+      funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
+    "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
+    \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'. \
+    \`(enforce-pact-version \"2.3\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -451,15 +454,24 @@ sort' i as = argsError i as
 
 
 enforceVersion :: RNativeFun e
-enforceVersion i [TLitString match] = (toTerm True <$) $ foldM go False $ zip (T.splitOn "." pactVersion) (T.splitOn "." match)
+enforceVersion i as = case as of
+  [TLitString minVersion] -> doMin minVersion >> return (toTerm True)
+  [TLitString minVersion,TLitString maxVersion] ->
+    doMin minVersion >> doMax maxVersion >> return (toTerm True)
+  _ -> argsError i as
   where
-    parseNum fullV s = case AP.parseOnly (AP.many1 AP.digit) s of
-      Left _ -> evalError' i $ "Invalid version component: " ++ show (fullV,s)
-      Right v -> return v
-    go True _ = return True
-    go _ (pv,mv) = do
-      pv' <- parseNum pactVersion pv
-      mv' <- parseNum match mv
-      when (mv' > pv') $ evalError' i $ "Invalid pact version " ++ show pactVersion ++ ", required: " ++ show match
-      return (mv' < pv')
-enforceVersion i as = argsError i as
+    doMin = doMatch "minimum" (>) (<)
+    doMax = doMatch "maximum" (<) (>)
+    doMatch msg failCmp succCmp fullV =
+      foldM_ matchPart False $ zip (T.splitOn "." pactVersion) (T.splitOn "." fullV)
+      where
+        parseNum orgV s = case AP.parseOnly (AP.many1 AP.digit) s of
+          Left _ -> evalError' i $ "Invalid version component: " ++ show (orgV,s)
+          Right v -> return v
+        matchPart True _ = return True
+        matchPart _ (pv,mv)  = do
+          pv' <- parseNum pactVersion pv
+          mv' <- parseNum fullV mv
+          when (mv' `failCmp` pv') $ evalError' i $
+            "Invalid pact version " ++ show pactVersion ++ ", " ++ msg ++ " allowed: " ++ show fullV
+          return (mv' `succCmp` pv')
