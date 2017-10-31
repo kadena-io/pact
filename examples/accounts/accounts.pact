@@ -1,6 +1,6 @@
 ;; accounts module, admin keyset, and table
 
-(enforce-pact-version "2.2.4")
+(enforce-pact-version "2.3")
 
 (define-keyset 'accounts-admin-keyset
   (read-keyset "accounts-admin-keyset"))
