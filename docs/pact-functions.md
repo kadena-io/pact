@@ -59,10 +59,36 @@ pact> (drop (- 2) [1 2 3 4 5])
 *test*&nbsp;`bool` *msg*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Fail transaction with MSG if TEST fails, or returns true. 
+Fail transaction with MSG if pure function TEST fails, or returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
-<interactive>:1:0:(enforce (!= (+ 2 2) 4) "Chaos...: Failure: Tx Failed: Chaos reigns
+<interactive>:0:0: Chaos reigns
+```
+
+
+### enforce-one {#enforce-one}
+
+*msg*&nbsp;`string` *tests*&nbsp;`[bool]` *&rarr;*&nbsp;`bool`
+
+
+Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. 
+```lisp
+pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
+true
+```
+
+
+### enforce-pact-version {#enforce-pact-version}
+
+*min-version*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+*min-version*&nbsp;`string` *max-version*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'. 
+```lisp
+pact> (enforce-pact-version "2.3")
+true
 ```
 
 
@@ -92,12 +118,12 @@ pact> (fold (+) 0 [100 10 5])
 
 ### format {#format}
 
-*template*&nbsp;`string` *vars*&nbsp;`*` *&rarr;*&nbsp;`string`
+*template*&nbsp;`string` *vars*&nbsp;`list` *&rarr;*&nbsp;`string`
 
 
 Interpolate VARS into TEMPLATE using {}. 
 ```lisp
-pact> (format "My {} has {}" "dog" "fleas")
+pact> (format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
 ```
 
@@ -162,12 +188,12 @@ pact> (map (+ 1) [1 2 3])
 ```
 
 
-### pact-txid {#pact-txid}
+### pact-id {#pact-id}
 
  *&rarr;*&nbsp;`integer`
 
 
-Return reference tx id for pact execution.
+Return ID if called during current pact execution, failing if not.
 
 
 ### pact-version {#pact-version}
@@ -178,7 +204,7 @@ Return reference tx id for pact execution.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.2.2"
+"2.3.0"
 ```
 
 
@@ -239,6 +265,34 @@ pact> (remove "bar" { "foo": 1, "bar": 2 })
 Special form binds to a yielded object value from the prior step execution in a pact.
 
 
+### reverse {#reverse}
+
+*l*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+
+Reverse a list. 
+```lisp
+pact> (reverse [1 2 3])
+[3 2 1]
+```
+
+
+### sort {#sort}
+
+*values*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+
+*fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
+
+
+Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. 
+```lisp
+pact> (sort [3 1 2])
+[1 2 3]
+pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
+[{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+```
+
+
 ### take {#take}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
@@ -262,6 +316,18 @@ Returns type of X as string.
 ```lisp
 pact> (typeof "hello")
 "string"
+```
+
+
+### where {#where}
+
+*field*&nbsp;`string` *app*&nbsp;`(x:<a> -> bool)` *value*&nbsp;`object:<{row}>` *&rarr;*&nbsp;`bool`
+
+
+Utility for use in 'filter' and 'select' applying APP to FIELD in VALUE. 
+```lisp
+pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
+[{"name": "Juan", "age": 15}]
 ```
 
 
@@ -344,6 +410,20 @@ Return all keys in TABLE.
 Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. 
 ```lisp
 (read 'accounts id ['balance 'ccy])
+```
+
+
+### select {#select}
+
+*table*&nbsp;`table:<{row}>` *where*&nbsp;`(row:object:<{row}> -> bool)` *&rarr;*&nbsp;`[object:<{row}>]`
+
+*table*&nbsp;`table:<{row}>` *columns*&nbsp;`[string]` *where*&nbsp;`(row:object:<{row}> -> bool)` *&rarr;*&nbsp;`[object:<{row}>]`
+
+
+Select full rows or COLUMNS from table by applying WHERE to each row to get a boolean determining inclusion.
+```lisp
+(select people ['firstName,'lastName] (where 'name (= "Fatima")))
+(select people (where 'age (> 30)))
 ```
 
 
@@ -715,6 +795,18 @@ false
 ```
 
 
+### and? {#and?}
+
+*a*&nbsp;`(x:<r> -> bool)` *b*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+
+
+Apply logical 'and' to the results of applying VALUE to A and B, with short-circuit. 
+```lisp
+pact> (and? (> 20) (> 10) 15)
+false
+```
+
+
 ### ceiling {#ceiling}
 
 *x*&nbsp;`decimal` *prec*&nbsp;`integer` *&rarr;*&nbsp;`decimal`
@@ -809,6 +901,18 @@ true
 ```
 
 
+### not? {#not?}
+
+*app*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+
+
+Apply logical 'not' to the results of applying VALUE to APP. 
+```lisp
+pact> (not? (> 20) 15)
+false
+```
+
+
 ### or {#or}
 
 *x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
@@ -817,6 +921,18 @@ true
 Boolean logic. 
 ```lisp
 pact> (or true false)
+true
+```
+
+
+### or? {#or?}
+
+*a*&nbsp;`(x:<r> -> bool)` *b*&nbsp;`(x:<r> -> bool)` *value*&nbsp;`<r>` *&rarr;*&nbsp;`bool`
+
+
+Apply logical 'or' to the results of applying VALUE to A and B, with short-circuit. 
+```lisp
+pact> (or? (> 20) (> 10) 15)
 true
 ```
 
@@ -973,12 +1089,15 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 
 ### env-entity {#env-entity}
 
+ *&rarr;*&nbsp;`string`
+
 *entity*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-Set environment confidential ENTITY id. Also clears last expression's yield value. 
+Set environment confidential ENTITY id, or unset with no argument. Clears any previous pact execution state. 
 ```lisp
 (env-entity "my-org")
+(env-entity)
 ```
 
 
@@ -1005,7 +1124,7 @@ pact> (env-keys ["my-key" "admin-key"])
 *step-idx*&nbsp;`integer` *rollback*&nbsp;`bool` *resume*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`string`
 
 
-Modify pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets the value of a previous YIELD step.Also clears last expression's yield value. 
+Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'.Clears any previous pact execution state. 
 ```lisp
 (env-step 1)
 (env-step 0 true)
@@ -1061,6 +1180,17 @@ Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is 
 ```
 
 
+### pact-state {#pact-state}
+
+ *&rarr;*&nbsp;`object`
+
+
+Inspect state from previous pact execution. Returns object with fields 'yield': yield result or 'false' if none; 'step': executed step; 'executed': indicates if step was skipped because entity did not match. 
+```lisp
+(pact-state)
+```
+
+
 ### print {#print}
 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
@@ -1096,12 +1226,4 @@ Convenience to build a keyset from keys present in message signatures, using 'ke
 
 
 Typecheck MODULE, optionally enabling DEBUG output.
-
-
-### yielded {#yielded}
-
-*expect-yield*&nbsp;`bool` *&rarr;*&nbsp;`<a>`
-
-
-When EXPECT-YIELD is true, return result of yield from previous evaluation, failing if not set. When EXPECT-YIELD is false, fail if the previous evaluation produced a yield.
 
