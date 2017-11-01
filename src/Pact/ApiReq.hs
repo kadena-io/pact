@@ -79,7 +79,7 @@ apiReq fp local = do
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReqExec :: FilePath -> IO (ApiReq,Command Text)
+mkApiReqExec :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
 mkApiReqExec fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
@@ -102,7 +102,7 @@ mkApiReqExec fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  (ar,) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
+  ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
 
 
 mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
