@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -71,16 +72,16 @@ instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 apiReq :: FilePath -> Bool -> IO ()
 apiReq fp local = do
-  exec <- mkApiReqExec fp
+  (_,exec) <- mkApiReqExec fp
   if local then
     BSL.putStrLn $ encode exec
     else
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReqExec :: FilePath -> IO (Command Text)
+mkApiReqExec :: FilePath -> IO (ApiReq,Command Text)
 mkApiReqExec fp = do
-  ApiReq {..} <- either (dieAR . show) return =<<
+  ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
   oldCwd <- getCurrentDirectory
   liftIO $ setCurrentDirectory (takeDirectory fp)
@@ -101,7 +102,8 @@ mkApiReqExec fp = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  mkExec code cdata addy _ylKeyPairs _ylNonce
+  (ar,) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
+
 
 mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy kps ridm = do
