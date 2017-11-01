@@ -40,17 +40,41 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ```
 
 
+### contains {#contains}
+
+*value*&nbsp;`<a>` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`bool`
+
+*key*&nbsp;`<a>` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`bool`
+
+*value*&nbsp;`string` *string*&nbsp;`string` *&rarr;*&nbsp;`bool`
+
+
+Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry. 
+```lisp
+pact> (contains 2 [1 2 3])
+true
+pact> (contains 'name { 'name: "Ted", 'age: 72 })
+true
+pact> (contains "foo" "foobar")
+true
+```
+
+
 ### drop {#drop}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
+*keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
-Drop COUNT values from LIST (or string). If negative, drop from end.
+
+Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.
 ```lisp
 pact> (drop 2 "vwxyz")
 "xyz"
 pact> (drop (- 2) [1 2 3 4 5])
 [1 2 3]
+pact> (drop ['name] { 'name: "Vlad", 'active: false})
+{"active": false}
 ```
 
 
@@ -204,7 +228,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.0"
+"2.3.1"
 ```
 
 
@@ -297,13 +321,17 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
 
+*keys*&nbsp;`[string]` *object*&nbsp;`object:<{o}>` *&rarr;*&nbsp;`object:<{o}>`
 
-Take COUNT values from LIST (or string). If negative, take from end. 
+
+Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. 
 ```lisp
 pact> (take 2 "abcd")
 "ab"
 pact> (take (- 3) [1 2 3 4 5])
 [3 4 5]
+pact> (take ['name] { 'name: "Vlad", 'active: false})
+{"name": "Vlad"}
 ```
 
 
