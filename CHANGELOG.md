@@ -2,6 +2,9 @@
 ---
 * `contains` added
 * `drop`, `take` for objects
+* allow empty objects
+* short-circuiting `and`,`or`
+* `constantly`, `identity` added
 
 
 2.3.0

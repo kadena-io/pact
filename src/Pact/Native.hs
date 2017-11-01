@@ -190,10 +190,20 @@ langDefs =
      funType tTyBool [("value",tTyString),("string",tTyString)])
     "Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry. \
     \`(contains 2 [1 2 3])` `(contains 'name { 'name: \"Ted\", 'age: 72 })` `(contains \"foo\" \"foobar\")`"
+
+    ,defNative "constantly" constantly
+     (funType a [("value",a),("ignore1",b)] <>
+      funType a [("value",a),("ignore1",b),("ignore2",c)] <>
+      funType a [("value",a),("ignore1",b),("ignore2",c),("ignore3",d)])
+     "Ignore (lazily) arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
+    ,defRNative "identity" identity (funType a [("value",a)])
+     "Return provided value. `(map (identity) [1 2 3])`"
+
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
           c = mkTyVar "c" []
+          d = mkTyVar "d" []
           row = mkSchemaVar "row"
           yieldv = TySchema TyObject (mkSchemaVar "y")
           obj = tTyObject (mkSchemaVar "o")
@@ -502,3 +512,12 @@ searchTermList :: (Foldable t, Eq n) => Term n -> t (Term n) -> Bool
 searchTermList val = foldl search False
   where search True _ = True
         search _ t = t `termEq` val
+
+
+constantly :: NativeFun e
+constantly _ (v:_) = reduce v
+constantly i as = argsError' i as
+
+identity :: RNativeFun e
+identity _ [a] = return a
+identity i as = argsError i as

@@ -40,8 +40,8 @@ opDefs = ("Operators",
      "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
     ,defRNative "!=" (eq not) eqTy
      "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
-    ,defLogic "or" (||)
-    ,defLogic "and" (&&)
+    ,defLogic "or" (||) True
+    ,defLogic "and" (&&) False
     ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
 
     ,liftLogic "or?" (||) "or" True
@@ -99,11 +99,18 @@ defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("pr
               | otherwise = evalError' i "Negative precision not allowed"
           fun i as = argsError i as
 
-defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> NativeDef
-defLogic n bop = defRNative n fun (binTy tTyBool tTyBool tTyBool) $
-                 "Boolean logic. `(" <> asString n <> " true false)`"
-    where fun _ [TLitBool a,TLitBool b] = return $ toTerm $ a `bop` b
-          fun i as = argsError i as
+defLogic :: NativeDefName -> (Bool -> Bool -> Bool) -> Bool -> NativeDef
+defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
+                 "Boolean logic with short-circuit. `(" <> asString n <> " true false)`"
+    where
+      fun :: NativeFun e
+      fun i as@[a,b] = reduce a >>= \a' -> case a' of
+        TLitBool x | x == shortC -> return $ toTerm True
+                   | otherwise -> reduce b >>= \b' -> case b' of
+                       TLitBool y -> return $ toTerm $ x `bop` y
+                       _ -> argsError' i as
+        _ -> argsError' i as
+      fun i as = argsError' i as
 
 not' :: RNativeFun e
 not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a

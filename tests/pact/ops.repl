@@ -41,6 +41,10 @@
 (expect "and" true (and true true))
 (expect "or" false (and true false))
 (expect "not" true (not false))
+(expect "and short-circuit" true
+        (and false (enforce false "shouldn't happen")))
+(expect "or short-circuit" true
+        (or true (enforce false "shouldn't happen")))
 
 "===== comparators, eq"
 (expect "< decimal decimal" true (< 10.0 11.0))

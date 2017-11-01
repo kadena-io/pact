@@ -40,6 +40,22 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ```
 
 
+### constantly {#constantly}
+
+*value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *&rarr;*&nbsp;`<a>`
+
+*value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *ignore2*&nbsp;`<c>` *&rarr;*&nbsp;`<a>`
+
+*value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *ignore2*&nbsp;`<c>` *ignore3*&nbsp;`<d>` *&rarr;*&nbsp;`<a>`
+
+
+Ignore (lazily) arguments IGNORE* and return VALUE. 
+```lisp
+pact> (filter (constantly true) [1 2 3])
+[1 2 3]
+```
+
+
 ### contains {#contains}
 
 *value*&nbsp;`<a>` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`bool`
@@ -149,6 +165,18 @@ Interpolate VARS into TEMPLATE using {}.
 ```lisp
 pact> (format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
+```
+
+
+### identity {#identity}
+
+*value*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
+
+
+Return provided value. 
+```lisp
+pact> (map (identity) [1 2 3])
+[1 2 3]
 ```
 
 
@@ -816,7 +844,7 @@ pact> (abs (- 10 23))
 *x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
-Boolean logic. 
+Boolean logic with short-circuit. 
 ```lisp
 pact> (and true false)
 false
@@ -946,7 +974,7 @@ false
 *x*&nbsp;`bool` *y*&nbsp;`bool` *&rarr;*&nbsp;`bool`
 
 
-Boolean logic. 
+Boolean logic with short-circuit. 
 ```lisp
 pact> (or true false)
 true
