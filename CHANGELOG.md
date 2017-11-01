@@ -1,3 +1,9 @@
+2.3.1
+---
+* `contains` added
+* `drop`, `take` for objects
+
+
 2.3.0
 ---
 * "Pure" execution capability, used in keyset enforcement

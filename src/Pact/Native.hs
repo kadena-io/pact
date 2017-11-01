@@ -23,7 +23,7 @@ module Pact.Native
     where
 
 import Control.Concurrent hiding (yield)
-import Control.Lens hiding (from,to,parts,Fold)
+import Control.Lens hiding (from,to,parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (ask)
 import Control.Monad.Catch
@@ -119,12 +119,12 @@ langDefs =
      \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
 
     ,defRNative "take" take' takeDrop
-     "Take COUNT values from LIST (or string). If negative, take from end. \
-     \`(take 2 \"abcd\")` `(take (- 3) [1 2 3 4 5])`"
+     "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. \
+     \`(take 2 \"abcd\")` `(take (- 3) [1 2 3 4 5])` `(take ['name] { 'name: \"Vlad\", 'active: false})`"
 
     ,defRNative "drop" drop' takeDrop
-     "Drop COUNT values from LIST (or string). If negative, drop from end.\
-     \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])`"
+     "Drop COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, drop from end.\
+     \`(drop 2 \"vwxyz\")` `(drop (- 2) [1 2 3 4 5])` `(drop ['name] { 'name: \"Vlad\", 'active: false})`"
 
     ,defRNative "remove" remove (funType (tTyObject (mkSchemaVar "o")) [("key",tTyString),("object",tTyObject (mkSchemaVar "o"))])
      "Remove entry for KEY from OBJECT. `(remove \"bar\" { \"foo\": 1, \"bar\": 2 })`"
@@ -183,15 +183,24 @@ langDefs =
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \
     \Version values are matched numerically from the left, such that '2', '2.2', and '2.2.3' would all allow '2.2.3'. \
     \`(enforce-pact-version \"2.3\")`"
+
+    ,defRNative "contains" contains
+    (funType tTyBool [("value",a),("list",TyList a)] <>
+     funType tTyBool [("key",a),("object",tTyObject (mkSchemaVar "o"))] <>
+     funType tTyBool [("value",tTyString),("string",tTyString)])
+    "Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry. \
+    \`(contains 2 [1 2 3])` `(contains 'name { 'name: \"Ted\", 'age: 72 })` `(contains \"foo\" \"foobar\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
           c = mkTyVar "c" []
           row = mkSchemaVar "row"
           yieldv = TySchema TyObject (mkSchemaVar "y")
+          obj = tTyObject (mkSchemaVar "o")
           listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
           listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
-          takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)]
+          takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
+                     funType obj [("keys",TyList tTyString),("object",obj)]
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
 
@@ -243,11 +252,16 @@ length' i as = argsError i as
 take' :: RNativeFun e
 take' _ [TLitInteger c,TList l t _] = return $ TList (tord take c l) t def
 take' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord take c (unpack l)
+take' _ [l@TList {},TObject {..}] =
+  return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> searchTermList k (_tList l)
+
 take' i as = argsError i as
 
 drop' :: RNativeFun e
 drop' _ [TLitInteger c,TList l t _] = return $ TList (tord drop c l) t def
 drop' _ [TLitInteger c,TLitString l] = return $ toTerm $ pack $ tord drop c (unpack l)
+drop' _ [l@TList {},TObject {..}] =
+  return $ toTObject _tObjectType def $ (`filter` _tObject) $ \(k,_) -> not $ searchTermList k (_tList l)
 drop' i as = argsError i as
 
 tord :: (Int -> [a] -> [a]) -> Integer -> [a] -> [a]
@@ -475,3 +489,16 @@ enforceVersion i as = case as of
           when (mv' `failCmp` pv') $ evalError' i $
             "Invalid pact version " ++ show pactVersion ++ ", " ++ msg ++ " allowed: " ++ show fullV
           return (mv' `succCmp` pv')
+
+contains :: RNativeFun e
+contains _i [val,TList {..}] = return $ toTerm $ searchTermList val _tList
+contains _i [k,TObject {..}] = return $ toTerm $ foldl search False _tObject
+  where search True _ = True
+        search _ (t,_) = t `termEq` k
+contains _i [TLitString s,TLitString t] = return $ toTerm $ T.isInfixOf s t
+contains i as = argsError i as
+
+searchTermList :: (Foldable t, Eq n) => Term n -> t (Term n) -> Bool
+searchTermList val = foldl search False
+  where search True _ = True
+        search _ t = t `termEq` val

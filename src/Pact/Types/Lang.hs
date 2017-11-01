@@ -73,7 +73,7 @@ module Pact.Types.Lang
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
-   toTermList,
+   toTermList,toTObject,toTList,
    typeof,typeof',
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
@@ -855,6 +855,13 @@ instance ToTerm KeySet where toTerm = (`TKeySet` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
+
+
+toTObject :: Type (Term n) -> Info -> [(Term n,Term n)] -> Term n
+toTObject ty i ps = TObject ps ty i
+
+toTList :: Type (Term n) -> Info -> [Term n] -> Term n
+toTList ty i vs = TList vs ty i
 
 toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
 toTermList ty l = TList (map toTerm (toList l)) ty def

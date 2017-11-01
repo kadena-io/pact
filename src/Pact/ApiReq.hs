@@ -21,6 +21,7 @@ module Pact.ApiReq
      KeyPair(..)
     ,ApiReq(..)
     ,apiReq
+    ,mkApiReqExec
     ) where
 
 import Control.Monad.State.Strict
@@ -70,6 +71,15 @@ instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 apiReq :: FilePath -> Bool -> IO ()
 apiReq fp local = do
+  exec <- mkApiReqExec fp
+  if local then
+    BSL.putStrLn $ encode exec
+    else
+    BSL.putStrLn $ encode $ SubmitBatch [exec]
+  return ()
+
+mkApiReqExec :: FilePath -> IO (Command Text)
+mkApiReqExec fp = do
   ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
   oldCwd <- getCurrentDirectory
@@ -91,13 +101,7 @@ apiReq fp local = do
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
-  exec <- mkExec code cdata addy _ylKeyPairs _ylNonce
-  if local then
-    BSL.putStrLn $ encode exec
-    else
-    BSL.putStrLn $ encode $ SubmitBatch [exec]
-  return ()
-
+  mkExec code cdata addy _ylKeyPairs _ylNonce
 
 mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy kps ridm = do
