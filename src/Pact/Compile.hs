@@ -296,7 +296,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
 
 run e@(EObject bs _i) = do
   i <- mkInfo e
-  TObject <$> mapNonEmpty "object" (\(k,v) -> (,) <$> run k <*> run v) bs i <*> pure TyAny <*> pure i
+  TObject <$> mapM (\(k,v) -> (,) <$> run k <*> run v) bs <*> pure TyAny <*> pure i
 run e@(EBinding _ _i) = syntaxError' e "Unexpected binding"
 run e@(ESymbol s _i) = TLiteral (LString s) <$> mkInfo e
 run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
