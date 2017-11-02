@@ -1,15 +1,16 @@
 # stack yaml for ghcjs builds
 
-resolver: lts-6.19
-compiler: ghcjs-0.2.0.9006019_ghc-7.10.3
+resolver: lts-7.19
+compiler: ghcjs-0.2.1.9007019_ghc-8.0.1
 compiler-check: match-exact
 
 setup-info:
   ghcjs:
     source:
-      ghcjs-0.2.0.9006019_ghc-7.10.3:
-        url: http://ghcjs.tolysz.org/lts-6.19-9006019.tar.gz
-        sha1: ef4264d5a93b269ee4ec8f9d5139da030331d65a
+      ghcjs-0.2.1.9007019_ghc-8.0.1:
+           url: http://ghcjs.tolysz.org/ghc-8.0-2017-02-05-lts-7.19-9007019.tar.gz
+           sha1: d2cfc25f9cda32a25a87d9af68891b2186ee52f9
+
 
 
 packages:
@@ -20,7 +21,10 @@ packages:
   extra-dep: true
 
 extra-deps:
-- trifecta-1.6
+  - trifecta-1.6
+  - bound-2
+  - ed25519-donna-0.1.1
+  - hashable-1.2.6.1
 
 flags:
   thyme:

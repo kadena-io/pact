@@ -49,12 +49,12 @@ fromJSON' = resultToEither . fromJSON
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
-lensyToJSON
-  :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
+-- lensyToJSON
+--   :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
 lensyToJSON n = genericToJSON (lensyOptions n)
 
-lensyParseJSON
-  :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
+-- lensyParseJSON
+--   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
 lensyConstructorToNiceJson :: Int -> String -> String
