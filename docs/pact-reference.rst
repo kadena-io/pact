@@ -1574,13 +1574,53 @@ X.
     pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
     ["dog" "has" "fleas"]
 
+constantly
+~~~~~~~~~~
+
+*value* ``<a>`` *ignore1* ``<b>`` *→* ``<a>``
+
+*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *→* ``<a>``
+
+*value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *ignore3* ``<d>``
+*→* ``<a>``
+
+Ignore (lazily) arguments IGNORE\* and return VALUE.
+
+.. code:: lisp
+
+    pact> (filter (constantly true) [1 2 3])
+    [1 2 3]
+
+contains
+~~~~~~~~
+
+*value* ``<a>`` *list* ``[<a>]`` *→* ``bool``
+
+*key* ``<a>`` *object* ``object:<{o}>`` *→* ``bool``
+
+*value* ``string`` *string* ``string`` *→* ``bool``
+
+Test that LIST or STRING contains VALUE, or that OBJECT has KEY entry.
+
+.. code:: lisp
+
+    pact> (contains 2 [1 2 3])
+    true
+    pact> (contains 'name { 'name: "Ted", 'age: 72 })
+    true
+    pact> (contains "foo" "foobar")
+    true
+
 drop
 ~~~~
 
 *count* ``integer`` *list* ``<a[[<l>],string]>``
 *→* ``<a[[<l>],string]>``
 
-Drop COUNT values from LIST (or string). If negative, drop from end.
+*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
+
+Drop COUNT values from LIST (or string), or entries having keys in KEYS
+from OBJECT. If COUNT is negative, drop from end.
 
 .. code:: lisp
 
@@ -1588,6 +1628,8 @@ Drop COUNT values from LIST (or string). If negative, drop from end.
     "xyz"
     pact> (drop (- 2) [1 2 3 4 5])
     [1 2 3]
+    pact> (drop ['name] { 'name: "Vlad", 'active: false})
+    {"active": false}
 
 enforce
 ~~~~~~~
@@ -1670,6 +1712,18 @@ Interpolate VARS into TEMPLATE using {}.
     pact> (format "My {} has {}" ["dog" "fleas"])
     "My dog has fleas"
 
+identity
+~~~~~~~~
+
+*value* ``<a>`` *→* ``<a>``
+
+Return provided value.
+
+.. code:: lisp
+
+    pact> (map (identity) [1 2 3])
+    [1 2 3]
+
 if
 ~~
 
@@ -1747,7 +1801,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.3.0"
+    "2.3.1"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -1846,7 +1900,10 @@ take
 *count* ``integer`` *list* ``<a[[<l>],string]>``
 *→* ``<a[[<l>],string]>``
 
-Take COUNT values from LIST (or string). If negative, take from end.
+*keys* ``[string]`` *object* ``object:<{o}>`` *→* ``object:<{o}>``
+
+Take COUNT values from LIST (or string), or entries having keys in KEYS
+from OBJECT. If COUNT is negative, take from end.
 
 .. code:: lisp
 
@@ -1854,6 +1911,8 @@ Take COUNT values from LIST (or string). If negative, take from end.
     "ab"
     pact> (take (- 3) [1 2 3 4 5])
     [3 4 5]
+    pact> (take ['name] { 'name: "Vlad", 'active: false})
+    {"name": "Vlad"}
 
 typeof
 ~~~~~~
@@ -2409,7 +2468,7 @@ and
 
 *x* ``bool`` *y* ``bool`` *→* ``bool``
 
-Boolean logic.
+Boolean logic with short-circuit.
 
 .. code:: lisp
 
@@ -2545,7 +2604,7 @@ or
 
 *x* ``bool`` *y* ``bool`` *→* ``bool``
 
-Boolean logic.
+Boolean logic with short-circuit.
 
 .. code:: lisp
 
