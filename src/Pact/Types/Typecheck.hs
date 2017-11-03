@@ -201,7 +201,9 @@ instance Pretty t => Pretty (TopLevel t) where
 data Special t =
   SPartial |
   SBinding (AST t)
-  deriving (Eq,Show,Functor,Foldable,Traversable)
+  deriving (Eq,Show,Functor,Foldable)
+
+instance Traversable Special where traverse = undefined
 
 
 -- | A native or user function.

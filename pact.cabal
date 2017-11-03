@@ -40,12 +40,10 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
-                     , Pact.Typechecker
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
                      , Pact.Types.Runtime
-                     , Pact.Types.Typecheck
                      , Pact.Types.Orphans
                      , Pact.Types.Util
                      , Pact.Types.Version
@@ -116,6 +114,10 @@ library
                   , Pact.Types.Crypto
                   , Pact.Types.RPC
                   , Pact.Types.SQLite
+                  , Pact.Types.Typecheck
+                  , Pact.Typechecker
+
+
 
   if !impl(ghcjs) && flag(server)
     cpp-options:    -DBUILD_SERVER
@@ -139,11 +141,11 @@ executable pact
     main-is:             Repl.hs
   if impl(ghcjs)
     main-is:             ReplGhcjs.hs
-    -- build-depends:
-    --              ghcjs-base
+    build-depends:
+                 ghcjs-base
     cpp-options:  -DGHCJS_BROWSER
 
-  build-depends:       base < 5
+  build-depends:       base
                      , pact
   hs-source-dirs:      executables
   ghc-options:         -Wall -threaded -rtsopts

@@ -46,9 +46,7 @@ import Pact.Types.Lang
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
-import Pact.Types.Crypto (hash)
-
-
+--import Pact.Types.Crypto (hash)
 
 type MkInfo = Exp -> Info
 

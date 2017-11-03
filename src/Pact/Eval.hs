@@ -52,8 +52,8 @@ import Control.Monad.Reader
 import Unsafe.Coerce
 
 import Pact.Types.Runtime
-import Pact.Types.Crypto (Hash)
-
+import Pact.Types.Util
+--import Pact.Types.Crypto (Hash)
 
 evalBeginTx :: Info -> Eval e ()
 evalBeginTx i = beginTx i =<< view eeTxId

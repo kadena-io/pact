@@ -169,15 +169,15 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   let tryRole :: VarRole -> Type UserType ->
                  TC (Maybe (VarRole,RoleTys))
       tryRole rol candArgTy = case M.lookup rol _oRoles of
-        Nothing -> return Nothing
+        Nothing -> return (Nothing :: Maybe (VarRole,RoleTys))
         -- resolve typevar at role
         Just (roleAST,roleTyVar) -> use tcVarToTypes >>= \m -> case M.lookup roleTyVar m of
-          Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar
+          Nothing -> ((die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar) :: TC (Maybe (VarRole,RoleTys)))
           Just ty -> do
             roleResolvedTy <- resolveTy ty
             case unifyTypes candArgTy roleResolvedTy of
-              Nothing -> return Nothing
-              Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
+              Nothing -> return (Nothing :: Maybe (VarRole,RoleTys))
+              Just _ -> return (Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy) :: Maybe (VarRole,RoleTys))
 
   -- try arg and return roles
   argRoles <- forM (zip candArgs [0..]) $ \(Arg _ candArgTy _,ai) -> tryRole (ArgVar ai) candArgTy
@@ -185,7 +185,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   case sequence allRoles of
     Nothing -> do
       debug $ "tryFunType: failed: " ++ show cand ++ ": " ++ show allRoles
-      return Nothing
+      return (Nothing :: Maybe (FunType UserType))
     Just ars -> do
 
       debug $ "tryFunType: roles: " ++ show (cand,allRoles)
@@ -200,13 +200,13 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
                 unifyM (Just a) (Just b) = either id id <$> unifyTypes a b
                 unifyM _ _ = Nothing
             in case tys of
-              Nothing -> Nothing
-              Just uty -> Just (fty,(uty,map (view _1 &&& view _2) tvTys))
+              Nothing -> (Nothing :: Maybe (Type UserType, (Type UserType, [(TcId, TypeVar UserType)])))
+              Just uty -> (Just (fty,(uty,map (view _1 &&& view _2) tvTys)) :: Maybe (Type UserType, (Type UserType, [(TcId, TypeVar UserType)])))
 
           allConcrete = all isConcreteTy . map (fst . snd)
 
       case solvedM of
-        Nothing -> return Nothing
+        Nothing -> return (Nothing :: Maybe (FunType UserType))
         Just solved
           | allConcrete solved -> do
 
@@ -215,11 +215,11 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
                 debug $ "Adjusting type for solution: " ++ show (tv,fty,uty)
                 uncurry assocTy tv fty
                 uncurry assocTy tv uty
-              return $ Just cand
+              return $ (Just cand :: Maybe (FunType UserType))
 
           | otherwise -> do
               debug $ "tryFunType: not all concrete: " ++ show solved
-              return Nothing
+              return (Nothing :: Maybe (FunType UserType))
 
 
 handleSpecialOverload :: Maybe OverloadSpecial ->
@@ -477,8 +477,8 @@ alterTypes v newVal upd = tcVarToTypes %= M.alter (Just . maybe newVal upd) v
 assocParams :: TcId -> Type UserType -> Type UserType -> TC ()
 assocParams i x y = case (x,y) of
   _ | x == y -> return ()
-  (TySchema _ a,TySchema _ b) -> assoc a b
-  (TyList a,TyList b) -> assoc a b
+  (TySchema _ (a :: Type UserType),TySchema _ (b :: Type UserType)) -> assoc a b
+  (TyList (a :: Type UserType),TyList (b :: Type UserType)) -> assoc a b
   _ -> return ()
   where
     createMaybe v = alterTypes v (TyVar v) id

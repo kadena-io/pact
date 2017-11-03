@@ -1,8 +1,9 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -21,6 +22,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.ByteString.Char8 as BS8
 import Data.Char
 import Data.Text (Text,pack)
 import Data.Text.Encoding
@@ -28,6 +30,13 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens
+import Control.DeepSeq
+import Data.Hashable (Hashable)
+import qualified Data.Hashable as H
+import Data.Serialize (Serialize)
+import qualified Data.Serialize as S
+
+
 
 class ParseText a where
   parseText :: Text -> Parser a
@@ -56,6 +65,50 @@ lensyToJSON n = genericToJSON (lensyOptions n)
 -- lensyParseJSON
 --   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
 lensyParseJSON n = genericParseJSON (lensyOptions n)
+
+newtype Hash = Hash { unHash :: ByteString }
+  deriving (Eq, Ord, Generic, Hashable)
+instance Show Hash where
+  show (Hash h) = show $ B16.encode h
+instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
+instance NFData Hash
+
+hash :: ByteString -> Hash
+hash = Hash . B16.encode . BS8.pack . show . H.hash
+
+-- NB: this hash is also used for the bloom filter, which needs 32bit keys
+-- if you want to change this, you need to retool the bloom filter as well
+-- So long as this is divisible by 4 you're fine
+hashLengthAsBS :: Int
+hashLengthAsBS = 64
+
+hashLengthAsBase16 :: Int
+hashLengthAsBase16 = hashLengthAsBS * 2
+
+initialHash :: Hash
+initialHash = hash B.empty
+
+instance Serialize Hash where
+  put (Hash h) = S.put h
+  get = do
+    raw <- S.get >>= S.getByteString
+    if hashLengthAsBS == B.length raw
+      then return $ Hash raw
+      else fail $ "Unable to decode hash, wrong length: "
+                ++ show (B.length raw)
+                ++ " from original bytestring " ++ show raw
+
+hashToB16Text :: Hash -> Text
+hashToB16Text (Hash h) = toB16Text h
+
+instance ToJSON Hash where
+  toJSON = String . hashToB16Text
+instance FromJSON Hash where
+  parseJSON = withText "Hash" parseText
+  {-# INLINE parseJSON #-}
+instance ParseText Hash where
+  parseText s = Hash <$> parseB16Text s
+  {-# INLINE parseText #-}
 
 lensyConstructorToNiceJson :: Int -> String -> String
 lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName

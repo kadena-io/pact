@@ -119,7 +119,7 @@ import Data.Serialize (Serialize)
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
-import Pact.Types.Crypto (Hash(..))
+--import Pact.Types.Crypto (Hash(..))
 
 -- | Code location, length from parsing.
 data Parsed = Parsed {

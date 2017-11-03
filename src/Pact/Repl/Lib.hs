@@ -38,6 +38,8 @@ import Data.Maybe
 import Criterion
 import Criterion.Types
 import Statistics.Resampling.Bootstrap
+import Pact.Types.Typecheck
+import Pact.Typechecker
 #endif
 
 import Pact.Native.Internal
@@ -46,8 +48,6 @@ import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
 import Data.Semigroup
-import Pact.Typechecker
-import Pact.Types.Typecheck
 import Pact.Types.Logger
 import Pact.Repl.Types
 
@@ -306,8 +306,8 @@ bench' i as = do
 bench' i _ = evalError' i "Benchmarking not supported in GHCJS"
 #endif
 
-
 tc :: RNativeFun LibState
+#if !defined(ghcjs_HOST_OS)
 tc i as = case as of
   [TLitString s] -> go s False
   [TLitString s,TLiteral (LBool d) _] -> go s d
@@ -327,7 +327,9 @@ tc i as = case as of
               _ -> do
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
-
+#else
+tc i _ = evalError' i "Typecheck not supported in GHCJS"
+#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def

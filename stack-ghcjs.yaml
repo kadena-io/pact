@@ -19,6 +19,9 @@ packages:
     git: git@github.com:kadena-io/thyme.git
     commit: a7046f53cdae22ee87691938c789dcaa3bfb596c
   extra-dep: true
+- location:
+   git: https://github.com/ghcjs/ghcjs-base.git
+   commit: eacf95aac3061275699563e1802eabe4a8f4aaec
 
 extra-deps:
   - trifecta-1.6
