@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 -- Module      :  Pact.Types.PureBlake2
@@ -13,11 +14,12 @@ module Pact.Types.Blake2b where
 
 import Data.Word
 import Data.Bits
-import Data.ByteString as B (ByteString,index,pack,unpack,length)
+import Data.ByteString as B (ByteString,index,pack,unpack,length,take,splitAt,null)
 import Data.Vector as V (Vector,(//),(!),fromList,(++))
 import Control.Lens ((&))
 import Prelude as P
 import Numeric
+import Data.Monoid
 import Control.Monad
 
 
@@ -118,17 +120,17 @@ sigma = mk [
 
 
 -- | Compression function. "last" flag indicates last block.
-blake2b_compress rounds ctx last =
+blake2b_compress ctx last =
   let
     v1 = (_h ctx `cat` blake2b_iv) &
       (\v -> upd v 12 ((v `at` 12) `xor` _t0 ctx)) &                                  -- low 64 bits of offset
       (\v -> upd v 13 ((v `at` 13) `xor` _t1 ctx)) &                                  -- high 64 bits
       (\v -> if last then upd v 14 (complement (v `at` 14)) else v) -- last block flag set ?
     m = mk $ (`map` [0..15]) $ \i -> b2b_get64 (8 * i) (_b ctx)         -- get little-endian words
-    v2 = (\f -> foldl f v1 [0..(pred rounds)]) $ runRound m
+    v2 = (\f -> foldl f v1 [0..11]) $ runRound m
     h = mk $ (`map` [0..7]) $ \i ->
-          (_h ctx `at` i) `xor` (v2 `at` i) `xor` (v2 `at` i + 8)
-  in (ctx { _h = h },m,v2)
+          (_h ctx `at` i) `xor` (v2 `at` i) `xor` (v2 `at` (i + 8))
+  in ctx { _h = h }
 
 runRound m v i = let sigma' = sigma `at` i
       in v &                -- 12 rounds
@@ -145,13 +147,13 @@ runRound m v i = let sigma' = sigma `at` i
 --      1 <= outlen <= 64 gives the digest size in bytes.
 --      Secret key (also <= 64 bytes) is optional (keylen = 0).
 
-blake2b_init :: Word64 -> [Word8] -> Either String Blake2BCtx
+blake2b_init :: Word64 -> ByteString -> Either String Blake2BCtx
 blake2b_init outlen key
   | outlen == 0 || outlen > 64 = Left $ "outlen must be > 0 and <= 64 bytes" P.++ show outlen
-  | P.length key > 64 = Left "Key must be <= 64 bytes"
+  | B.length key > 64 = Left "Key must be <= 64 bytes"
   | otherwise = Right $
     let keylen :: Word64
-        keylen = fromIntegral $ P.length key
+        keylen = fromIntegral $ B.length key
         iv = blake2b_iv
     in Blake2BCtx
           -- state, "param block"
@@ -165,16 +167,36 @@ blake2b_init outlen key
           } &
           (\ctx -> if keylen > 0 then blake2b_update ctx key & (\c -> c { _c = 128}) else ctx)
 
-blake2b_update :: Blake2BCtx -> [Word8] -> Blake2BCtx
-blake2b_update = undefined
+slice c l bs = go (B.splitAt (if c >= l then l else l - c) bs) where
+  go (x,y) | B.null y = [x]
+           | otherwise = x:(go (B.splitAt l y))
+
+
+blake2b_update :: Blake2BCtx -> ByteString -> Blake2BCtx
+blake2b_update ctx bs = foldl update ctx (slice (_c ctx) 128 bs)
+  where update cx s = resetMaybe cx & cpyBuf s
+        resetMaybe cx
+          | _c cx < 128 = cx
+          | otherwise =
+              let t0 = _t0 cx + 128
+                  t1 = _t1 cx + (if t0 < 128 then 1 else 0)
+              in (blake2b_compress (cx { _t0 = t0, _t1 = t1 }) False) { _c = 0 }
+        cpyBuf s cx = cx {
+          _b = B.take (_c cx) (_b cx) <> s,
+          _c = B.length s + _c cx
+          }
+
 
 testM = mk (0x636261:replicate 15 0)
 
-testC = let Right c = blake2b_init 64 [] in c { _b = testB "abc" }
+testC = let Right c = blake2b_init 32 mempty in c -- { _b = mk128B "abc" }
 
-testB b = pack $ take 128 $ unpack b P.++ replicate 128 0
+mk128B b = pack $ P.take 128 $ unpack b P.++ replicate 128 0
+
+inB :: ByteString
+inB = "akjsvhsjkdfhvjsakhfvjkdhsvnfklsjanvskdjvkdjsvfksdhnvkjdfavksnksjnfajvjklsnkjsfdajkldahvfadvndfjvalkhfnvkdfjsnvkljnkfkajsdnaskjskdjvfsfvkkdsadshfjkalsvaklsdhvnlksfjvnskdhnhjdnshsdfkvnfvads"
 
 -- testCtx = Blake2BCtx testM
 
 hex :: (Show a,Integral a,Functor f,Foldable f) => f a -> f String
-hex = fmap (reverse . take 16 . (P.++ "0000000000000000") . reverse . (`showHex` ""))
+hex = fmap (reverse . P.take 16 . (P.++ "0000000000000000") . reverse . (`showHex` ""))
