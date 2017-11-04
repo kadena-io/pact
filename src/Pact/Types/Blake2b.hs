@@ -14,7 +14,7 @@ module Pact.Types.Blake2b where
 
 import Data.Word
 import Data.Bits
-import Data.ByteString as B (ByteString,index,pack,length,take,splitAt,null,replicate)
+import Data.ByteString as B (ByteString,index,unpack,pack,length,take,splitAt,null,replicate)
 import Data.Vector as V (Vector,(//),(!),fromList,(++))
 import Control.Lens ((&),(<&>))
 import Prelude as P hiding (last)
@@ -29,8 +29,12 @@ data Blake2BCtx = Blake2BCtx
   , _t1 :: I         --                         1
   , _c :: Int        -- pointer for b[]
   , _outlen :: Int   -- digest size
-  } deriving (Eq,Show)
-
+  } deriving (Eq)
+instance Show Blake2BCtx where
+  show (Blake2BCtx b h t0 t1 c outlen) =
+    "Blake2BCtx {_b=pack" P.++ show (unpack b) P.++ ", _h=mk" P.++ show h P.++
+    ", _t0=" P.++ show t0 P.++ ", _t1=" P.++ show t1 P.++ ", _c=" P.++ show c P.++
+    ", _outlen=" P.++ show outlen P.++ "}"
 type I = Word64
 type V = Vector
 
@@ -138,7 +142,7 @@ runRound m v i = let sigma' = sigma `at` i
 --      Secret key (also <= 64 bytes) is optional (keylen = 0).
 blake2b_init :: Word64 -> ByteString -> Either String Blake2BCtx
 blake2b_init outlen key
-  | outlen == 0 || outlen > 64 = Left $ "outlen must be > 0 and <= 64 bytes" P.++ show outlen
+  | outlen < 1 || outlen > 64 = Left $ "outlen must be > 0 and <= 64 bytes" P.++ show outlen
   | B.length key > 64 = Left "Key must be <= 64 bytes"
   | otherwise = Right $
     let keylen :: Word64
@@ -172,7 +176,7 @@ blake2b_update bs ctx = foldl update ctx (slice (_c ctx) 128 bs)
                   t1 = _t1 cx + (if t0 < 128 then 1 else 0)
               in (blake2b_compress (cx { _t0 = t0, _t1 = t1 }) False) { _c = 0 }
         cpyBuf s cx = cx {
-          _b = B.take (_c cx) (_b cx) <> s,
+          _b = B.take (_c cx) (_b cx) <> s <> B.replicate (128 - _c cx - B.length s) 0,
           _c = B.length s + _c cx
           }
 

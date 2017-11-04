@@ -61,13 +61,25 @@ static const uint8_t sigma[12][16] = {
     };
 
 
-void printv(char* n, uint64_t v[]) {
-  printf("%s:\n",n);
-    for (int i = 0; i < 16; i++) {
-      printf("  %02d: %llu\n",i,v[i]);
+void printv(char* n, int len, uint64_t v[]) {
+  printf("%s [",n);
+    for (int i = 0; i < len; i++) {
+      if (i>0) printf(",");
+      printf("%llu",v[i]);
     }
-
+  printf("]");
 }
+
+void printb(char* n, int len, uint8_t v[]) {
+  printf("%s [",n);
+    for (int i = 0; i < len; i++) {
+      if (i>0) printf(",");
+      printf("%d",v[i]);
+    }
+  printf("]");
+}
+
+
 // Compression function. "last" flag indicates last block.
 
 static void blake2b_compress(blake2b_ctx *ctx, int last)
@@ -195,20 +207,81 @@ int blake2b(void *out, size_t outlen,
 }
 
 void printctx(blake2b_ctx ctx) {
-    printf ("ctx: b=[");
-    for (int i = 0 ; i < 128; i++) {
-      printf ("%d,", ctx.b[i]);
-    }
-    printf ("],\n  h=[");
-    for (int i = 0 ; i < 8; i++) {
-      printf ("%llu,", ctx.h[i]);
-    }
-    printf ("],\n  t=[");
-    for (int i = 0 ; i < 2; i++) {
-      printf ("%llu,", ctx.t[i]);
-    }
-    printf ("],\n  c=%lu, outlen=%lu\n",ctx.c,ctx.outlen);
+  printf("Blake2BCtx {");
+  printb("_b=pack",128,ctx.b);
+  printv(",_h=mk",8,ctx.h);
+  printf(",_t0=%llu,_t1=%llu,_c=%lu,_outlen=%lu}\n",ctx.t[0],ctx.t[1],ctx.c,ctx.outlen);
 }
+
+
+
+
+static void selftest_seq(uint8_t *out, size_t len, uint32_t seed)
+{
+    size_t i;
+    uint32_t t, a , b;
+
+    a = 0xDEAD4BAD * seed;              // prime
+    b = 1;
+
+    for (i = 0; i < len; i++) {         // fill the buf
+        t = a + b;
+        a = b;
+        b = t;
+        out[i] = (t >> 24) & 0xFF;
+    }
+}
+
+int blake2b_selftest() {
+    // grand hash of hash results
+    const uint8_t blake2b_res[32] = {
+        0xC2, 0x3A, 0x78, 0x00, 0xD9, 0x81, 0x23, 0xBD,
+        0x10, 0xF5, 0x06, 0xC6, 0x1E, 0x29, 0xDA, 0x56,
+        0x03, 0xD7, 0x63, 0xB8, 0xBB, 0xAD, 0x2E, 0x73,
+        0x7F, 0x5E, 0x76, 0x5A, 0x7B, 0xCC, 0xD4, 0x75
+    };
+    // parameter sets
+    const size_t b2b_md_len[4] = { 20, 32, 48, 64 };
+    const size_t b2b_in_len[6] = { 0, 3, 128, 129, 255, 1024 };
+
+    size_t i, j, outlen, inlen;
+    uint8_t in[1024], md[64], key[64];
+    blake2b_ctx ctx;
+
+    // 256-bit hash for testing
+    if (blake2b_init(&ctx, 32, NULL, 0))
+        return -1;
+
+    for (i = 0; i < 4; i++) {
+        outlen = b2b_md_len[i];
+        for (j = 0; j < 6; j++) {
+            inlen = b2b_in_len[j];
+            printf("outlen=%lu,inlen=%lu\n",outlen,inlen);
+            selftest_seq(in, inlen, inlen);     // unkeyed hash
+            printb("in",inlen,in);printf("\n");
+            blake2b(md, outlen, NULL, 0, in, inlen);
+            printb("bl1",outlen,md);printf("\n");
+            blake2b_update(&ctx, md, outlen);   // hash the hash
+            printctx(ctx);
+            selftest_seq(key, outlen, outlen);  // keyed hash
+            printb("key",outlen,key);printf("\n");
+            blake2b(md, outlen, key, outlen, in, inlen);
+            printb("bl2",outlen,md);printf("\n");
+            blake2b_update(&ctx, md, outlen);   // hash the hash
+            printctx(ctx);
+        }
+    }
+
+    // compute and compare the hash of hashes
+    blake2b_final(&ctx, md);
+    for (i = 0; i < 32; i++) {
+        if (md[i] != blake2b_res[i])
+            return -1;
+    }
+
+    return 0;
+}
+
 
 int main() {
 
@@ -256,6 +329,9 @@ int main() {
       printf("%d,",o[i]);
     }
     printf("]\n");
+
+
+    printf("test: %d", blake2b_selftest());
 
   return 0;
 }

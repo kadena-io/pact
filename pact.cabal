@@ -40,6 +40,8 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
+                     , Pact.Types.Blake2b
+                     , Pact.Types.Hash
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
@@ -47,6 +49,7 @@ library
                      , Pact.Types.Orphans
                      , Pact.Types.Util
                      , Pact.Types.Version
+
 
   -- other-extensions:
   build-depends:       Decimal
