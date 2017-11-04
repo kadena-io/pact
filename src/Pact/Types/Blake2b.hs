@@ -21,12 +21,14 @@ import Prelude as P hiding (last)
 import Data.Monoid
 
 
+type V = Vector
+
 -- | state context
 data Blake2BCtx = Blake2BCtx
   { _b :: ByteString -- 128 input buffer
-  , _h :: V I        --   8 chained state
-  , _t0 :: I         --   total number of bytes 0
-  , _t1 :: I         --                         1
+  , _h :: V Word64        --   8 chained state
+  , _t0 :: Word64         --   total number of bytes 0
+  , _t1 :: Word64         --                         1
   , _c :: Int        -- pointer for b[]
   , _outlen :: Int   -- digest size
   } deriving (Eq)
@@ -35,30 +37,34 @@ instance Show Blake2BCtx where
     "Blake2BCtx {_b=pack" P.++ show (unpack b) P.++ ", _h=mk" P.++ show h P.++
     ", _t0=" P.++ show t0 P.++ ", _t1=" P.++ show t1 P.++ ", _c=" P.++ show c P.++
     ", _outlen=" P.++ show outlen P.++ "}"
-type I = Word64
-type V = Vector
+
 
 at :: V a -> Int -> a
 at v i = v ! i
 
-upd :: V a -> Int -> a -> V a
-upd v i l = v // [(i,l)]
+
+upd :: Int -> (V a -> a -> a) -> V a -> V a
+upd i f v = v // [(i,f v (v ! i))]
+
 
 mk :: [a] -> V a
 mk = fromList
 
-cat :: V I -> V I -> V I
+cat :: V Word64 -> V Word64 -> V Word64
 cat = (V.++)
 
+-- | flipped foldl
+ffoldl :: Foldable t => b -> t a -> (b -> a -> b) -> b
+ffoldl i l f = foldl f i l
 
 
 -- | Cyclic right rotation.
-rotr64 :: I -> Int -> I
+rotr64 :: Word64 -> Int -> Word64
 rotr64 x y = (x `shiftR` y) `xor` (x `shiftL` (64 - y))
 
 -- | Little-endian byte access.
 
-b2b_get64 :: Int -> ByteString -> I
+b2b_get64 :: Int -> ByteString -> Word64
 b2b_get64 o p =
   let ix64 i = fromIntegral $ index p (o+i)
   in
@@ -73,20 +79,20 @@ b2b_get64 o p =
 
 
 -- | G Mixing function.
-b2b_g :: Int -> Int -> Int -> Int -> I -> I -> V I -> V I
-b2b_g a b c d x y v' =
+b2b_g :: Int -> Int -> Int -> Int -> Word64 -> Word64 -> V Word64 -> V Word64
+b2b_g a b c d x' y' v' =
   v' &
-  (\v -> upd v a $ (v `at` a) + (v `at` b) + x) &
-  (\v -> upd v d $ rotr64 ((v `at` d) `xor` (v `at` a)) 32) &
-  (\v -> upd v c $ (v `at` c) + (v `at` d)) &
-  (\v -> upd v b $ rotr64 ((v `at` b) `xor` (v `at` c)) 24) &
-  (\v -> upd v a $ (v `at` a) + (v `at` b) + y) &
-  (\v -> upd v d $ rotr64 ((v `at` d) `xor` (v `at` a)) 16) &
-  (\v -> upd v c $ (v `at` c) + (v `at` d)) &
-  (\v -> upd v b $ rotr64 ((v `at` b) `xor` (v `at` c)) 63)
+  upd a (\v x -> x + (v `at` b) + x') &
+  upd d (\v x -> rotr64 (x `xor` (v `at` a)) 32) &
+  upd c (\v x -> x + (v `at` d)) &
+  upd b (\v x -> rotr64 (x `xor` (v `at` c)) 24) &
+  upd a (\v x -> x + (v `at` b) + y') &
+  upd d (\v x -> rotr64 (x `xor` (v `at` a)) 16) &
+  upd c (\v x -> x + (v `at` d)) &
+  upd b (\v x -> rotr64 (x `xor` (v `at` c)) 63)
 
 -- | Initialization Vector.
-blake2b_iv :: V I
+blake2b_iv :: V Word64
 blake2b_iv = mk [
     0x6A09E667F3BCC908, 0xBB67AE8584CAA73B,
     0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
@@ -116,26 +122,25 @@ blake2b_compress :: Blake2BCtx -> Bool -> Blake2BCtx
 blake2b_compress ctx last =
   let
     v1 = (_h ctx `cat` blake2b_iv) &
-      (\v -> upd v 12 ((v `at` 12) `xor` _t0 ctx)) &                    -- low 64 bits of offset
-      (\v -> upd v 13 ((v `at` 13) `xor` _t1 ctx)) &                    -- high 64 bits
-      (\v -> if last then upd v 14 (complement (v `at` 14)) else v)     -- last block flag set ?
+      upd 12 (\_ x -> (x `xor` _t0 ctx)) &                    -- low 64 bits of offset
+      upd 13 (\_ x -> (x `xor` _t1 ctx)) &                    -- high 64 bits
+      (if last then upd 14 (\_ x -> complement x) else id)     -- last block flag set ?
     m = mk $ (`map` [0..15]) $ \i -> b2b_get64 (8 * i) (_b ctx)         -- get little-endian words
-    v2 = (\f -> foldl f v1 [0..11]) $ runRound m                        -- 12 rounds
+    v2 = ffoldl v1 sigma $ runRound m                        -- 12 rounds
     h = mk $ (`map` [0..7]) $ \i ->
           (_h ctx `at` i) `xor` (v2 `at` i) `xor` (v2 `at` (i + 8))
   in ctx { _h = h }
 
-runRound :: V I -> V I -> Int -> V I
-runRound m v i = let sigma' = sigma `at` i
-      in v &
-        b2b_g 0 4  8 12 (m `at` (sigma' `at`  0)) (m `at` (sigma' `at`  1)) &
-        b2b_g 1 5  9 13 (m `at` (sigma' `at`  2)) (m `at` (sigma' `at`  3)) &
-        b2b_g 2 6 10 14 (m `at` (sigma' `at`  4)) (m `at` (sigma' `at`  5)) &
-        b2b_g 3 7 11 15 (m `at` (sigma' `at`  6)) (m `at` (sigma' `at`  7)) &
-        b2b_g 0 5 10 15 (m `at` (sigma' `at`  8)) (m `at` (sigma' `at`  9)) &
-        b2b_g 1 6 11 12 (m `at` (sigma' `at` 10)) (m `at` (sigma' `at` 11)) &
-        b2b_g 2 7  8 13 (m `at` (sigma' `at` 12)) (m `at` (sigma' `at` 13)) &
-        b2b_g 3 4  9 14 (m `at` (sigma' `at` 14)) (m `at` (sigma' `at` 15))
+runRound :: V Word64 -> V Word64 -> V Int -> V Word64
+runRound m v s = v &
+  b2b_g 0 4  8 12 (m `at` (s `at`  0)) (m `at` (s `at`  1)) &
+  b2b_g 1 5  9 13 (m `at` (s `at`  2)) (m `at` (s `at`  3)) &
+  b2b_g 2 6 10 14 (m `at` (s `at`  4)) (m `at` (s `at`  5)) &
+  b2b_g 3 7 11 15 (m `at` (s `at`  6)) (m `at` (s `at`  7)) &
+  b2b_g 0 5 10 15 (m `at` (s `at`  8)) (m `at` (s `at`  9)) &
+  b2b_g 1 6 11 12 (m `at` (s `at` 10)) (m `at` (s `at` 11)) &
+  b2b_g 2 7  8 13 (m `at` (s `at` 12)) (m `at` (s `at` 13)) &
+  b2b_g 3 4  9 14 (m `at` (s `at` 14)) (m `at` (s `at` 15))
 
 -- | Initialize the hashing context "ctx" with optional key "key".
 --      1 <= outlen <= 64 gives the digest size in bytes.
@@ -149,9 +154,9 @@ blake2b_init outlen key
         keylen = fromIntegral $ B.length key
         iv = blake2b_iv
     in Blake2BCtx
-          -- state, "param block"
-          { _h = upd iv 0 $
-                 (iv `at` 0) `xor` 0x01010000 `xor` (keylen `shiftL` 8) `xor` outlen
+          {
+            -- state, "param block"
+            _h = upd 0 (\_ x -> x `xor` 0x01010000 `xor` (keylen `shiftL` 8) `xor` outlen) iv
           , _t0 = 0 -- input count low word
           , _t1 = 0 -- input count high word
           , _c = 0  -- pointer within buffer
@@ -160,6 +165,9 @@ blake2b_init outlen key
           } &
           (\ctx -> if keylen > 0 then blake2b_update key ctx & (\c -> c { _c = 128}) else ctx)
 
+-- | Slice a bytestring into segments: 'slice c l bs' means the first
+-- segment will be length c but no longer than l, and the following will
+-- be length l, with the last being whatever remains.
 slice :: Int -> Int -> ByteString -> [ByteString]
 slice c l bs = go (B.splitAt (if c >= l then l else l - c) bs) where
   go (x,y) | B.null y = [x]
@@ -167,9 +175,11 @@ slice c l bs = go (B.splitAt (if c >= l then l else l - c) bs) where
 
 -- | Add "inlen" bytes from "in" into the hash.
 blake2b_update :: ByteString -> Blake2BCtx -> Blake2BCtx
-blake2b_update bs ctx = foldl update ctx (slice (_c ctx) 128 bs)
-  where update cx s = resetMaybe cx & cpyBuf s
-        resetMaybe cx
+blake2b_update bs ctx
+  | B.null bs = ctx
+  | otherwise = ffoldl ctx (slice (_c ctx) 128 bs) $ \cx s ->
+      resetMaybe cx & cpyBuf s
+  where resetMaybe cx
           | _c cx < 128 = cx
           | otherwise =
               let t0 = _t0 cx + 128
@@ -192,20 +202,13 @@ blake2b_final ctx = finalCompress ctx & conv where
   conv cx = B.pack $ (`map` [0 .. pred (_outlen cx)]) $ \i ->
     fromIntegral $ ((_h cx `at` (i `shiftR` 3)) `shiftR` (8 * (i .&. 7))) .&. 0xFF
 
+-- | All together now! 'blake2b outlen key inB' hashes inB, with
+-- optional key (empty means no key), to length outlen.
 blake2b :: Int -> ByteString -> ByteString -> Either String ByteString
 blake2b outlen key inB =
   blake2b_init (fromIntegral outlen) key <&>
   (blake2b_final . blake2b_update inB)
 
---
--- Test values
--- TODO: test with keys
---
-
+-- Test value
 _ctx32 :: Blake2BCtx
 _ctx32 = let Right c = blake2b_init 32 mempty in c
-
-_inB :: ByteString
-_inB = "akjsvhsjkdfhvjsakhfvjkdhsvnfklsjanvskdjvkdjsvfksdhnvkjdfavksnksjnfa" <>
-       "jvjklsnkjsfdajkldahvfadvndfjvalkhfnvkdfjsnvkljnkfkajsdnaskjskdjvfsf" <>
-       "vkkdsadshfjkalsvaklsdhvnlksfjvnskdhnhjdnshsdfkvnfvads"

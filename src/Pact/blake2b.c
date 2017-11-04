@@ -80,6 +80,13 @@ void printb(char* n, int len, uint8_t v[]) {
 }
 
 
+void printctx(blake2b_ctx ctx) {
+  printf("ctx: Blake2BCtx {");
+  printb("_b=pack",128,ctx.b);
+  printv(",_h=mk",8,ctx.h);
+  printf(",_t0=%llu,_t1=%llu,_c=%lu,_outlen=%lu}\n",ctx.t[0],ctx.t[1],ctx.c,ctx.outlen);
+}
+
 // Compression function. "last" flag indicates last block.
 
 static void blake2b_compress(blake2b_ctx *ctx, int last)
@@ -146,6 +153,7 @@ int blake2b_init(blake2b_ctx *ctx, size_t outlen,
         ctx->c = 128;                   // at the end
     }
 
+
     return 0;
 }
 
@@ -200,18 +208,17 @@ int blake2b(void *out, size_t outlen,
 
     if (blake2b_init(&ctx, outlen, key, keylen))
         return -1;
+    printf("init: outlen=%lu keylen=%lu\n",outlen,keylen);
+    printf("pre-update_");
+    printctx(ctx);
     blake2b_update(&ctx, in, inlen);
+    printf("post-update_");
+    printctx(ctx);
     blake2b_final(&ctx, out);
 
     return 0;
 }
 
-void printctx(blake2b_ctx ctx) {
-  printf("Blake2BCtx {");
-  printb("_b=pack",128,ctx.b);
-  printv(",_h=mk",8,ctx.h);
-  printf(",_t0=%llu,_t1=%llu,_c=%lu,_outlen=%lu}\n",ctx.t[0],ctx.t[1],ctx.c,ctx.outlen);
-}
 
 
 
@@ -256,17 +263,17 @@ int blake2b_selftest() {
         outlen = b2b_md_len[i];
         for (j = 0; j < 6; j++) {
             inlen = b2b_in_len[j];
-            printf("outlen=%lu,inlen=%lu\n",outlen,inlen);
+            printf("outlen: %lu,inlen: %lu\n",outlen,inlen);
             selftest_seq(in, inlen, inlen);     // unkeyed hash
-            printb("in",inlen,in);printf("\n");
+            printb("in:",inlen,in);printf("\n");
             blake2b(md, outlen, NULL, 0, in, inlen);
-            printb("bl1",outlen,md);printf("\n");
+            printb("bl1:",outlen,md);printf("\n");
             blake2b_update(&ctx, md, outlen);   // hash the hash
             printctx(ctx);
             selftest_seq(key, outlen, outlen);  // keyed hash
-            printb("key",outlen,key);printf("\n");
+            printb("key:",outlen,key);printf("\n");
             blake2b(md, outlen, key, outlen, in, inlen);
-            printb("bl2",outlen,md);printf("\n");
+            printb("bl2:",outlen,md);printf("\n");
             blake2b_update(&ctx, md, outlen);   // hash the hash
             printctx(ctx);
         }

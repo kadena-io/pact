@@ -25,7 +25,6 @@ blake2b_res = pack [
 b2b_md_len :: [Int]; b2b_md_len = [ 20, 32, 48, 64 ];
 b2b_in_len :: [Int]; b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ];
 
-ffoldl i l f = foldl f i l
 
 selftest_seq :: Int -> Word32 -> ByteString
 selftest_seq len seed =
