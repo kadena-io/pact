@@ -8,7 +8,9 @@ import Data.Bits
 import Data.Either
 
 spec :: Spec
-spec = describe "blake2b_selftest" blake2b_selftest
+spec = do
+  describe "blake2b_selftest" blake2b_selftest
+  describe "blake2s_selftest" blake2s_selftest
 
 -- test from RFC7693
 
@@ -57,3 +59,36 @@ blake2b_selftest = do
       res = blake2b_final cxr
 
   it "final hash correct" $ res `shouldBe` blake2b_res
+
+
+-- | Grand hash of hash results.
+blake2s_res :: ByteString
+blake2s_res = pack [
+        0x6A, 0x41, 0x1F, 0x08, 0xCE, 0x25, 0xAD, 0xCD,
+        0xFB, 0x02, 0xAB, 0xA6, 0x41, 0x45, 0x1C, 0xEC,
+        0x53, 0xC5, 0x98, 0xB2, 0x4F, 0x4F, 0xC7, 0x87,
+        0xFB, 0xDC, 0x88, 0x79, 0x7F, 0x4C, 0x1D, 0xFE
+    ];
+
+-- Parameter sets.
+b2s_md_len :: [Int]; b2s_md_len = [ 16, 20, 28, 32 ];
+b2s_in_len :: [Int]; b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ];
+
+blake2s_selftest :: Spec
+blake2s_selftest = do
+  let ctxm = blake2s_init 32 mempty
+  it "init succeeds" $ isRight ctxm
+  let (Right cxinit) = ctxm
+
+      cxr = ffoldl cxinit b2s_md_len $
+        \c outlen -> ffoldl c b2s_in_len $ \cx0 inlen ->
+          let inB = selftest_seq inlen (fromIntegral inlen)
+              (Right md0) = blake2s outlen mempty inB
+              cx1 = blake2s_update md0 cx0
+              key = selftest_seq outlen (fromIntegral outlen)
+              (Right md1) = blake2s outlen key inB
+          in blake2s_update md1 cx1
+
+      res = blake2s_final cxr
+
+  it "final hash correct" $ res `shouldBe` blake2s_res
