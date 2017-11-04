@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 
 -- |
 -- Module      :  Pact.Types.Crypto
@@ -18,9 +18,9 @@ module Pact.Types.Crypto
   ( PublicKey, importPublic, exportPublic
   , PrivateKey, importPrivate, exportPrivate
   , Signature(..), exportSignature
-  , sign, valid, verifyHash
+  , sign, valid
   , PPKScheme(..)
-  , Hash(..), initialHash, hash, hashLengthAsBS, hashLengthAsBase16, hashToB16Text
+  , Hash(..), initialHash, hashLengthAsBS, hashLengthAsBase16, hashToB16Text
   ) where
 
 import Control.Applicative
@@ -29,27 +29,21 @@ import Control.DeepSeq
 
 import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
-import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
-
-import Data.Hashable (Hashable)
 
 import Data.Aeson as A
 import Data.Aeson.Types (toJSONKeyText)
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Base16 as B16
 import Data.Serialize as SZ hiding (get)
 import qualified Data.Serialize as S
-import Data.String
 import Data.Maybe
-import Data.Text (Text)
 import Data.Text.Encoding
 
 import GHC.Generics hiding (from)
 import Prelude hiding (log,exp)
 
 import Pact.Types.Util
+import Pact.Types.Hash
 
 deriving instance Eq Signature
 deriving instance Ord Signature
@@ -81,51 +75,6 @@ instance FromJSON PPKScheme where
   {-# INLINE parseJSON #-}
 instance Serialize PPKScheme
 
--- NB: this hash is also used for the bloom filter, which needs 32bit keys
--- if you want to change this, you need to retool the bloom filter as well
--- So long as this is divisible by 4 you're fine
-hashLengthAsBS :: Int
-hashLengthAsBS = 64
-
-hashLengthAsBase16 :: Int
-hashLengthAsBase16 = hashLengthAsBS * 2
-
-hash :: ByteString -> Hash
-hash = Hash . BLAKE.hash hashLengthAsBS mempty
-{-# INLINE hash #-}
-
--- | A BLAKE2b Hash with 64 length
-newtype Hash = Hash { unHash :: ByteString }
-  deriving (Eq, Ord, Generic, Hashable)
-instance Show Hash where
-  show (Hash h) = show $ B16.encode h
-instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
-instance NFData Hash
-
-initialHash :: Hash
-initialHash = hash B.empty
-
-instance Serialize Hash where
-  put (Hash h) = S.put h
-  get = do
-    raw <- S.get >>= S.getByteString
-    if hashLengthAsBS == B.length raw
-      then return $ Hash raw
-      else fail $ "Unable to decode hash, wrong length: "
-                ++ show (B.length raw)
-                ++ " from original bytestring " ++ show raw
-
-hashToB16Text :: Hash -> Text
-hashToB16Text (Hash h) = toB16Text h
-
-instance ToJSON Hash where
-  toJSON = String . hashToB16Text
-instance FromJSON Hash where
-  parseJSON = withText "Hash" parseText
-  {-# INLINE parseJSON #-}
-instance ParseText Hash where
-  parseText s = Hash <$> parseB16Text s
-  {-# INLINE parseText #-}
 
 valid :: Hash -> PublicKey -> Signature -> Bool
 valid (Hash h) = Ed25519.valid h
@@ -136,11 +85,6 @@ sign (Hash h) = Ed25519.sign h
 {-# INLINE sign #-}
 
 
-verifyHash :: Hash -> ByteString -> Either String Hash
-verifyHash h b = if hash b == h
-  then Right h
-  else Left $ "Hash Mismatch, received " ++ show h ++ " but our hashing resulted in " ++ show (hash b)
-{-# INLINE verifyHash #-}
 
 instance Eq PublicKey where
   b == b' = exportPublic b == exportPublic b'

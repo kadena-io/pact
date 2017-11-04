@@ -62,6 +62,7 @@ import Prelude hiding (log,exp)
 import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
+import Pact.Types.Hash
 import Pact.Parse
 import Pact.Types.RPC
 

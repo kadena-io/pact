@@ -31,7 +31,6 @@ import Database.SQLite3.Direct
 
 import Pact.Types.Command
 import Pact.Types.Runtime
-import Pact.Types.Crypto
 import Pact.Types.SQLite
 
 import Pact.Server.History.Types

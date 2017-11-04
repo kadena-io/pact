@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE CPP #-}
 
 -- |
 -- Module      :  Pact.Types.Util
@@ -22,7 +23,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Lazy.Char8 as BSL8
-import qualified Data.ByteString.Char8 as BS8
 import Data.Char
 import Data.Text (Text,pack)
 import Data.Text.Encoding
@@ -32,7 +32,6 @@ import Control.Concurrent
 import Control.Lens
 import Control.DeepSeq
 import Data.Hashable (Hashable)
-import qualified Data.Hashable as H
 import Data.Serialize (Serialize)
 import qualified Data.Serialize as S
 
@@ -58,12 +57,16 @@ fromJSON' = resultToEither . fromJSON
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
--- lensyToJSON
---   :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
+#if !defined(ghcjs_HOST_OS)
+lensyToJSON
+  :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
+#endif
 lensyToJSON n = genericToJSON (lensyOptions n)
 
--- lensyParseJSON
---   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
+#if !defined(ghcjs_HOST_OS)
+lensyParseJSON
+  :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
+#endif
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
 newtype Hash = Hash { unHash :: ByteString }
@@ -73,9 +76,6 @@ instance Show Hash where
 instance AsString Hash where asString (Hash h) = decodeUtf8 (B16.encode h)
 instance NFData Hash
 
-hash :: ByteString -> Hash
-hash = Hash . B16.encode . BS8.pack . show . H.hash
-
 -- NB: this hash is also used for the bloom filter, which needs 32bit keys
 -- if you want to change this, you need to retool the bloom filter as well
 -- So long as this is divisible by 4 you're fine
@@ -84,9 +84,6 @@ hashLengthAsBS = 64
 
 hashLengthAsBase16 :: Int
 hashLengthAsBase16 = hashLengthAsBS * 2
-
-initialHash :: Hash
-initialHash = hash B.empty
 
 instance Serialize Hash where
   put (Hash h) = S.put h
