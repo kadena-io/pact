@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
--- Module      :  Pact.Types.PureBlake2
+-- Module      :  Crypto.Hash.Blake2Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Pure implementation of BLAKE2b for use in GHCJS.
+-- Native haskell implementation of BLAKE2b.
 -- Adapted from C code in https://github.com/mjosaarinen/blake2_mjosref
 --
 
-module Pact.Types.Blake2b where
+module Crypto.Hash.Blake2Native where
 
 import Data.Word
 import Data.Bits
@@ -331,7 +331,3 @@ blake2s :: Int -> ByteString -> ByteString -> Either String ByteString
 blake2s outlen key inB =
   blake2s_init (fromIntegral outlen) key <&>
   (blake2s_final . blake2s_update inB)
-
--- Test value, 64bit
-_ctx32 :: Blake2Ctx Word64
-_ctx32 = let Right c = blake2b_init 32 mempty in c

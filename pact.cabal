@@ -40,7 +40,6 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
-                     , Pact.Types.Blake2b
                      , Pact.Types.Hash
                      , Pact.Types.Lang
                      , Pact.Types.Logger
@@ -49,6 +48,7 @@ library
                      , Pact.Types.Orphans
                      , Pact.Types.Util
                      , Pact.Types.Version
+                     , Crypto.Hash.Blake2Native
 
 
   -- other-extensions:

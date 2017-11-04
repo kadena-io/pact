@@ -1,7 +1,7 @@
-module Blake2bSpec where
+module Blake2Spec where
 
 import Test.Hspec
-import Pact.Types.Blake2b
+import Crypto.Hash.Blake2Native
 import Data.Word
 import Data.ByteString (ByteString,pack)
 import Data.Bits

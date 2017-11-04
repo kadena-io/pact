@@ -16,7 +16,7 @@ hash = Hash . BLAKE.hash hashLengthAsBS mempty
 
 #else
 
-import Pact.Types.Blake2b
+import Crypto.Hash.Blake2Native
 
 hash :: ByteString -> Hash
 hash bs = let (Right h) = blake2b hashLengthAsBS mempty bs in Hash h
