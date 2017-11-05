@@ -164,7 +164,7 @@ pureEval e = do
   (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
-                 Left (SomeException ex) -> (Left (EvalError def (pack $ show ex)),evalS)
+                 Left (SomeException ex) -> (Left (EvalError def def (pack $ show ex)),evalS)
                  Right v -> v
   mode <- use rMode
   case r of
@@ -175,15 +175,22 @@ pureEval e = do
     Left err -> do
         serr <- renderErr err
         if mode == FailureTest || mode == StringEval
-        then return (Left serr)
-        else do
-          let cs = _evalCallStack es
-          if null cs
-          then outStrLn HErr serr
+          then return (Left serr)
           else do
-            outStrLn HErr serr
-            mapM_ (\c -> outStrLn HErr $ " at " ++ show c) (tail cs)
-          return (Left serr)
+            let cs = peCallStack err
+            if null cs
+              then outStrLn HErr serr
+              else do
+              -- synthesize error at outer callsite
+              let lastErr = last cs
+                  outerErr = err { peInfo = _sfLoc lastErr }
+              if peInfo outerErr == peInfo err
+                then outStrLn HErr serr
+                else do
+                renderErr outerErr >>= outStrLn HErr
+                outStrLn HErr (" at " ++ serr)
+              mapM_ (\c -> outStrLn HErr $ " at " ++ show c) cs
+            return (Left serr)
 
 renderErr :: PactError -> Repl String
 renderErr a

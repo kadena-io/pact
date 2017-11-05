@@ -288,6 +288,9 @@ resolveArg :: Info -> [Term n] -> Int -> Term n
 resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at index " ++ show i) $
                      as `atMay` i
 
+appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e a -> Eval e a
+appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) as)))
+
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
@@ -297,7 +300,7 @@ reduceApp TDef {..} as ai = do
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
-  call (StackFrame _tDefName ai (Just (fa,map (pack.abbrev) as))) $
+  appCall fa ai as $
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
@@ -306,8 +309,9 @@ reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
-  _nativeFun _tNativeFun
-  (FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)) as
+  let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)
+  in appCall fa ai as $ _nativeFun _tNativeFun fa as
+
 reduceDirect (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r
 

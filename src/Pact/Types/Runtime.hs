@@ -62,7 +62,7 @@ module Pact.Types.Runtime
    ) where
 
 
-import Control.Arrow
+import Control.Arrow ((&&&))
 import Control.Lens hiding (op,(.=))
 import Control.Applicative
 import Control.DeepSeq
@@ -99,50 +99,33 @@ import Pact.Types.Lang
 import Pact.Types.Util
 
 
+data StackFrame = StackFrame {
+      _sfName :: !Text
+    , _sfLoc :: !Info
+    , _sfApp :: Maybe (FunApp,[Text])
+    }
+instance Show StackFrame where
+    show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
+      Nothing -> unpack n
+      Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
+makeLenses ''StackFrame
+
+
 data PactError =
-    EvalError { peInfo :: Info, peText :: Text } |
-    ArgsError { peInfo :: Info, peText :: Text } |
-    DbError { peInfo :: Info, peText :: Text } |
-    TxFailure { peInfo :: Info, peText :: Text } |
-    SyntaxError { peInfo :: Info, peText :: Text }
+    EvalError { peInfo :: Info, peCallStack :: [StackFrame], peText :: Text } |
+    ArgsError { peInfo :: Info, peCallStack :: [StackFrame], peText :: Text } |
+    DbError { peInfo :: Info, peCallStack :: [StackFrame], peText :: Text } |
+    TxFailure { peInfo :: Info, peCallStack :: [StackFrame], peText :: Text } |
+    SyntaxError { peInfo :: Info, peCallStack :: [StackFrame], peText :: Text }
 
 instance Exception PactError
 
 instance Show PactError where
-    show (EvalError i s) = show i ++ ": Failure: " ++ unpack s
-    show (ArgsError i s) = show i ++ ": " ++ show s
-    show (TxFailure i s) = show i ++ ": Failure: Tx Failed: " ++ unpack s
-    show (DbError i s) = show i ++ ": Failure: Database exception: " ++ unpack s
-    show (SyntaxError i s) = show i ++ ": Failure: Syntax error: " ++ unpack s
-
-mkArgsError :: FunApp -> [Term Name] -> Text -> PactError
-mkArgsError FunApp {..} args s = ArgsError _faInfo $ pack $
-  unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++
-            showFunTypes _faTypes
-
-
-evalError :: MonadThrow m => Info -> String -> m a
-evalError i = throwM . EvalError i . pack
-
-evalError' :: MonadThrow m => FunApp -> String -> m a
-evalError' = evalError . _faInfo
-
-failTx :: MonadThrow m => Info -> String -> m a
-failTx i = throwM . TxFailure i . pack
-
-throwDbError :: MonadThrow m => String -> m a
-throwDbError s = throwM $ DbError def (pack s)
-
--- | Throw an error coming from an Except/Either context.
-throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
-throwEither = either throwM return
-
-
-argsError :: MonadThrow m => FunApp -> [Term Name] -> m a
-argsError i as = throwM $ mkArgsError i as "Invalid arguments"
-
-argsError' :: MonadThrow m => FunApp -> [Term Ref] -> m a
-argsError' i as = throwM $ mkArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+    show (EvalError i _ s) = show i ++ ": Failure: " ++ unpack s
+    show (ArgsError i _ s) = show i ++ ": " ++ show s
+    show (TxFailure i _ s) = show i ++ ": Failure: Tx Failed: " ++ unpack s
+    show (DbError i _ s) = show i ++ ": Failure: Database exception: " ++ unpack s
+    show (SyntaxError i _ s) = show i ++ ": Failure: Syntax error: " ++ unpack s
 
 
 
@@ -471,17 +454,6 @@ data EvalEnv e = EvalEnv {
     } -- deriving (Eq,Show)
 makeLenses ''EvalEnv
 
-data StackFrame = StackFrame {
-      _sfName :: !Text
-    , _sfLoc :: !Info
-    , _sfApp :: Maybe (FunApp,[Text])
-    }
-instance Show StackFrame where
-    show (StackFrame n i a) = renderInfo i ++ ": " ++ unpack n ++ f a
-        where f Nothing = ""
-              f (Just (dd,as)) = ", " ++ show dd ++ ", values=" ++ show as
-makeLenses ''StackFrame
-
 
 
 -- | Dynamic storage for namespace-loaded modules, and new modules compiled in current tx.
@@ -536,7 +508,7 @@ runEval' :: EvalState -> EvalEnv e -> Eval e a ->
 runEval' s env act =
   runStateT (catches (Right <$> runReaderT (unEval act) env)
               [Handler (\(e :: PactError) -> return $ Left e)
-              ,Handler (\(e :: SomeException) -> return $ Left . EvalError def . pack . show $ e)
+              ,Handler (\(e :: SomeException) -> return $ Left . EvalError def def . pack . show $ e)
               ]) s
 
 
@@ -554,7 +526,7 @@ call s act = do
 method :: Info -> (PactDb e -> Method e a) -> Eval e a
 method i f = do
   EvalEnv {..} <- ask
-  handleAll (throwM . DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
+  handleAll (throwErr DbError i . pack . show) (liftIO $ f _eePactDb _eePactDbVar)
 
 
 --
@@ -614,6 +586,39 @@ getTxLog i d t = method i $ \db -> _getTxLog db d t
 {-# INLINE txids #-}
 
 
+
+throwArgsError :: FunApp -> [Term Name] -> Text -> Eval e a
+throwArgsError FunApp {..} args s = throwErr ArgsError _faInfo $ pack $
+  unpack s ++ ", received [" ++ intercalate "," (map abbrev args) ++ "] for " ++
+            showFunTypes _faTypes
+
+throwErr :: (Info -> [StackFrame] -> Text -> PactError) -> Info -> Text -> Eval e a
+throwErr ctor i err = get >>= \s -> throwM (ctor i (_evalCallStack s) err)
+
+evalError :: Info -> String -> Eval e a
+evalError i = throwErr EvalError i . pack
+
+evalError' :: FunApp -> String -> Eval e a
+evalError' = evalError . _faInfo
+
+failTx :: Info -> String -> Eval e a
+failTx i = throwErr TxFailure i . pack
+
+throwDbError :: MonadThrow m => String -> m a
+throwDbError s = throwM $ DbError def def (pack s)
+
+-- | Throw an error coming from an Except/Either context.
+throwEither :: (MonadThrow m,Exception e) => Either e a -> m a
+throwEither = either throwM return
+
+
+argsError :: FunApp -> [Term Name] -> Eval e a
+argsError i as = throwArgsError i as "Invalid arguments"
+
+argsError' :: FunApp -> [Term Ref] -> Eval e a
+argsError' i as = throwArgsError i (map (toTerm.pack.abbrev) as) "Invalid arguments"
+
+
 --
 -- Purity stuff.
 --
@@ -625,7 +630,7 @@ instance PureSysRead (EnvSysRead e)
 instance PureNoDb (EnvSysRead e)
 
 diePure :: Method e a
-diePure _ = evalError def "Illegal database access in pure context"
+diePure _ = throwM $ EvalError def def "Illegal database access in pure context"
 
 -- | Construct a delegate pure eval environment.
 mkPureEnv :: (EvalEnv e -> f) -> Purity ->

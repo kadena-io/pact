@@ -81,7 +81,7 @@ compileExps mi exps = sequence $ compile mi <$> exps
 
 
 syntaxError :: Info -> String -> Compile a
-syntaxError i s = throwError $ SyntaxError i (pack s)
+syntaxError i s = throwError $ SyntaxError i def (pack s)
 
 syntaxError' :: Exp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
