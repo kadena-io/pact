@@ -16,7 +16,7 @@ import Pact.Persist.Pure (initPureDb,persister,PureDb)
 import Data.Aeson
 import Data.Hashable
 import Pact.Types.Logger
-import qualified Pact.Types.Crypto as Crypto
+import qualified Pact.Types.Hash as H
 
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
@@ -40,7 +40,7 @@ runRegression p = do
   let ks = KeySet [PublicKey "skdjhfskj"] "predfun"
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  let mod' = Module "mod1" "mod-admin-keyset" Nothing "code" (Crypto.hash "code")
+  let mod' = Module "mod1" "mod-admin-keyset" Nothing "code" (H.hash "code")
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
   assertEquals' "hash of commit 3" 8465858150773128197 (hashWithSalt 1 <$> commit v)

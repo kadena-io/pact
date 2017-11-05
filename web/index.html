@@ -43,7 +43,7 @@
                 { "balance": (- from-bal amount) })
         (update payments-table to
                 { "balance": (+ to-bal amount) })
-        (format "{} paid {} {}" from to amount))))
+        (format "{} paid {} {}" [from to amount]))))
 
 )
 (commit-tx)
