@@ -121,7 +121,7 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = evalUse mn h i >> return (tStr $ pack $ "Using " ++ show mn)
 
 
-eval t@(TModule m bod i) = do
+eval (TModule m bod i) = do
   -- enforce old module keysets
   oldM <- readRow i Modules (_mName m)
   case oldM of
@@ -130,7 +130,7 @@ eval t@(TModule m bod i) = do
   -- enforce new module keyset
   enforceKeySetName i (_mKeySet m)
   -- build/install module from defs
-  _defs <- call (StackFrame (pack $ abbrev t) i Nothing) $ loadModule m bod i
+  _defs <- loadModule m bod i
   writeRow i Write Modules (_mName m) m
   return $ msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m)
 
@@ -179,7 +179,6 @@ loadModule m bod1 mi = do
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
-      call (StackFrame (pack $ abbrev d) (_tInfo d) Nothing) $
       do
         d' <- forM d $ \(f :: Name) -> do
                 dm <- resolveRef f
@@ -193,7 +192,8 @@ loadModule m bod1 mi = do
         return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
-              CyclicSCC vs -> evalError mi $ "Recursion detected: " ++ show vs
+              CyclicSCC vs ->
+                evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
   let defs :: HM.HashMap Text Ref
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
