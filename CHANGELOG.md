@@ -1,3 +1,10 @@
+2.3.2
+---
+* ghcjs build working, typechecking not supported in browser yet
+* native blake2 support, only for ghcjs
+* Restore callstack, better rendering, runtime errors at top callsite
+
+
 2.3.1
 ---
 * `contains` added
