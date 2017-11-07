@@ -49,6 +49,8 @@ library
                      , Pact.Types.Util
                      , Pact.Types.Version
                      , Crypto.Hash.Blake2Native
+                  , Pact.Types.Typecheck
+                  , Pact.Typechecker
 
 
   -- other-extensions:
@@ -117,8 +119,6 @@ library
                   , Pact.Types.Crypto
                   , Pact.Types.RPC
                   , Pact.Types.SQLite
-                  , Pact.Types.Typecheck
-                  , Pact.Typechecker
 
 
 

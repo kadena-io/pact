@@ -1,12 +1,8 @@
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -63,7 +59,7 @@ data CheckerException = CheckerException Info String deriving (Eq,Ord)
 instance Exception CheckerException
 instance Show CheckerException where show (CheckerException i s) = renderInfo i ++ ": " ++ s
 
--- | Model a user type. Currently only Schemas are supported.
+-- | Model a user type. Currently only Schemas are supported..
 data UserType = Schema {
   _utName :: TypeName,
   _utModule :: ModuleName,

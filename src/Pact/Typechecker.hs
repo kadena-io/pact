@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -827,17 +826,17 @@ singLens = iso pure head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {}) = typecheckBody (f,tlFun . fBody)
+typecheck f@(TopFun FDefun {}) = typecheckBody f (tlFun . fBody)
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
-  typecheckBody (c,tlConstVal . singLens)
+  typecheckBody c (tlConstVal . singLens)
 typecheck tl = return tl
 
 
 -- | Workhorse function. Perform AST substitutions, associate types, solve overloads,
 -- enforce schemas, resolve all type variables, populate back into AST.
-typecheckBody :: (TopLevel Node,Traversal' (TopLevel Node) [AST Node]) -> TC (TopLevel Node)
-typecheckBody (tl,bodyLens) = do
+typecheckBody :: TopLevel Node -> Traversal' (TopLevel Node) [AST Node] -> TC (TopLevel Node)
+typecheckBody tl bodyLens = do
   let body = view bodyLens tl
   debug "Substitute defuns"
   appSub <- mapM (walkAST $ substAppDefun Nothing) body
