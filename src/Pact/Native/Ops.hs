@@ -105,7 +105,7 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
     where
       fun :: NativeFun e
       fun i as@[a,b] = reduce a >>= \a' -> case a' of
-        TLitBool x | x == shortC -> return $ toTerm True
+        TLitBool x | x == shortC -> return $ toTerm x
                    | otherwise -> reduce b >>= \b' -> case b' of
                        TLitBool y -> return $ toTerm $ x `bop` y
                        _ -> argsError' i as

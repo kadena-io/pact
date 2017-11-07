@@ -38,10 +38,16 @@
 (expect-failure "div by 0, decimal" (/ 11.0 0.0))
 
 "===== logic"
-(expect "and" true (and true true))
-(expect "or" false (and true false))
+(expect "andTT" true (and true true))
+(expect "andTF" false (and true false))
+(expect "andFT" false (and false true))
+(expect "andFF" false (and false false))
+(expect "orTT" true (or true true))
+(expect "orTF" true (or true false))
+(expect "orFT" true (or false true))
+(expect "orFF" false (or false false))
 (expect "not" true (not false))
-(expect "and short-circuit" true
+(expect "and short-circuit" false
         (and false (enforce false "shouldn't happen")))
 (expect "or short-circuit" true
         (or true (enforce false "shouldn't happen")))
