@@ -1,3 +1,7 @@
+2.3.3
+---
+* Bugfix for `and` regression
+
 2.3.2
 ---
 * ghcjs build working, typechecking not supported in browser yet
