@@ -41,7 +41,7 @@ findTests = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)
 
 runScript :: String -> SpecWith ()
 runScript fp = describe fp $ do
-  (r,ReplState{..}) <- runIO $ execScript' (Script fp) fp
+  (r,ReplState{..}) <- runIO $ execScript' (Script False fp) fp
   case r of
     Left e -> fail e
     Right _ -> do
