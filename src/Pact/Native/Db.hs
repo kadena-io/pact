@@ -29,6 +29,8 @@ import Control.Arrow hiding (app)
 import Control.Lens hiding (from,to,(.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -280,8 +282,18 @@ guardTable i TTable {..} = do
       findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
   r <- foldr findMod Nothing . reverse <$> use evalCallStack
   case r of
-    (Just mn) | mn == _tModule -> return ()
+    (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
     _ -> do
       m <- getModule (_faInfo i) _tModule
       enforceKeySetName (_faInfo i) (_mKeySet m)
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
+
+enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
+enforceBlessedHashes i mn h = do
+  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  case mm of
+    Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
+    Just (Module{..},_)
+      | h `HS.member` _mBlessed -> return ()
+      | otherwise -> evalError' i $
+                     "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
