@@ -77,7 +77,7 @@ replOpts =
          (O.short 'r' <> O.long "findscript" <>
           O.help "For .pact files, attempts to locate a .repl file to execute.")
      <*> O.flag False True
-         (O.short 'd' <> O.long "debug" <> O.help "Log intermediate output")
+         (O.short 't' <> O.long "trace" <> O.help "Show trace output")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
     (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
@@ -144,7 +144,7 @@ compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
   src <- readFile fp
-  s <- initReplState (Script fp)
+  s <- initReplState (Script False fp)
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 
 die :: String -> IO b

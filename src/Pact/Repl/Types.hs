@@ -22,7 +22,7 @@ import Data.Text (Text)
 
 data ReplMode =
     Interactive |
-    Script String |
+    Script { rmTrace :: Bool, rmFile :: FilePath } |
     FailureTest |
     Quiet |
     StringEval |
