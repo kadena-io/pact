@@ -25,7 +25,8 @@ data ReplMode =
     Script String |
     FailureTest |
     Quiet |
-    StringEval
+    StringEval |
+    StdinPipe
     deriving (Eq,Show)
 
 data Hdl = HOut|HErr

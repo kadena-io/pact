@@ -1,3 +1,7 @@
+2.3.4
+---
+* `pact` tool improvements: better stdin support, '-d' for debug output of load
+
 2.3.3
 ---
 * Bugfix for `and` regression

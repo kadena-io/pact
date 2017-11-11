@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 name:                pact
-version:             2.3.3
+version:             2.3.4
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -89,6 +89,8 @@ library
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.12
                      , vector-space >= 0.10.4 && < 0.11
+  if !impl(ghcjs) && !os(windows)
+    build-depends:   unix
 
   if !impl(ghcjs)
     build-depends:

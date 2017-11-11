@@ -20,7 +20,7 @@
 
 module Pact.Repl
     (
-     repl,runRepl
+     repl,runRepl,repl'
     ,evalRepl,ReplMode(..)
     ,execScript,execScript'
     ,initEvalEnv,initPureEvalEnv,initReplState
@@ -61,7 +61,10 @@ import Pact.Repl.Types
 
 
 repl :: IO (Either () (Term Name))
-repl = initReplState Interactive >>= \s -> runRepl s stdin
+repl = repl' Interactive
+
+repl' :: ReplMode -> IO (Either () (Term Name))
+repl' m = initReplState m >>= \s -> runRepl s stdin
 
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
@@ -169,7 +172,7 @@ pureEval e = do
   mode <- use rMode
   case r of
     Right a -> do
-        when (mode == Interactive || mode == StringEval) $ outStrLn HOut (show a)
+        when (mode == Interactive || mode == StringEval || mode == StdinPipe) $ outStrLn HOut (show a)
         rEvalState .= es
         updateForOp a
     Left err -> do
@@ -279,9 +282,9 @@ rSuccess :: Monad m => m (Either a (Term Name))
 rSuccess = return $ Right $ toTerm True
 
 -- | Workhorse to load script; also checks/reports test failures
-execScript :: FilePath -> IO (Either () (Term Name))
-execScript f = do
-  (r,ReplState{..}) <- execScript' (Script f) f
+execScript :: Bool -> FilePath -> IO (Either () (Term Name))
+execScript dolog f = do
+  (r,ReplState{..}) <- execScript' (if dolog then StdinPipe else Script f) f
   case r of
     Left _ -> return $ Left ()
     Right t -> do
@@ -329,10 +332,10 @@ _run :: String -> IO ()
 _run cmd = void $ evalRepl Interactive cmd
 
 _testAccounts :: IO ()
-_testAccounts = void $ execScript "examples/accounts/accounts.repl"
+_testAccounts = void $ execScript False "examples/accounts/accounts.repl"
 
 _testBench :: IO ()
-_testBench = void $ execScript "tests/bench/bench"
+_testBench = void $ execScript False "tests/bench/bench"
 
 _testCP :: IO ()
-_testCP = void $ execScript "examples/cp/cp.repl"
+_testCP = void $ execScript False "examples/cp/cp.repl"
