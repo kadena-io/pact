@@ -232,7 +232,7 @@ tx Begin i as = do
              _ -> argsError i as
   tid <- fmap succ <$> view eeTxId
   setenv eeTxId tid
-  evalBeginTx (_faInfo i)
+  evalBeginTx (_faInfo i) -- TODO the previous setenv won't take effect here!
   setLibState $ set rlsTxName tname
   return $ txmsg tname tid "Begin"
 
@@ -244,6 +244,7 @@ tx Rollback i [] = do
 tx Commit i [] = do
   newmods <- use (evalRefs.rsNew)
   setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
+  evalRefs.rsNew .= def -- TODO fix tx semantics.
   void $ evalCommitTx (_faInfo i)
   tid <- view eeTxId
   tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)

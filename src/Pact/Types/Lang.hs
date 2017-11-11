@@ -614,7 +614,7 @@ data Module = Module {
   } deriving (Eq)
 instance Show Module where
   show Module {..} =
-    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ maybeDelim " " _mDocs ++ ")"
+    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
     ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed ]

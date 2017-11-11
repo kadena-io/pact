@@ -21,6 +21,7 @@ module Pact.Native.Db
     where
 
 import Control.Monad
+-- import Control.Monad.IO.Class
 import Prelude hiding (exp)
 import Bound
 import qualified Data.Map.Strict as M
@@ -103,7 +104,7 @@ dbDefs =
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     "Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and 'code' fields."
+     "Get metadata for MODULE. Returns a object with 'name', 'hash', 'blessed', and 'code' fields."
     ])
 
 descTable :: RNativeFun e
@@ -127,6 +128,7 @@ descModule i [TLitString t] = do
     Just (Module{..},_) ->
       return $ TObject [(tStr "name",tStr $ asString _mName),
                         (tStr "hash", tStr $ asString _mHash),
+                        (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
                         (tStr "code", tStr $ asString _mCode)] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
@@ -294,6 +296,7 @@ enforceBlessedHashes i mn h = do
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
     Just (Module{..},_)
-      | h `HS.member` _mBlessed -> return ()
+      | h == _mHash -> return () -- current version ok
+      | h `HS.member` _mBlessed -> return () -- hash is blessed
       | otherwise -> evalError' i $
                      "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h

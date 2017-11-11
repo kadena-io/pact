@@ -91,6 +91,9 @@ langDefs =
      (funType (TyList TyAny) [("elems",TyAny)])
      "Create list from ELEMS. Deprecated in Pact 2.1.1 with literal list support. `(list 1 2 3)`"
 
+    ,defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
+     "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
+
     ,defRNative "reverse" reverse' (funType (TyList a) [("l",TyList a)])
      "Reverse a list. `(reverse [1 2 3])`"
 
@@ -229,6 +232,12 @@ map' i as = argsError' i as
 
 list :: RNativeFun e
 list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here
+
+makeList :: RNativeFun e
+makeList i [TLitInteger len,value] = case typeof value of
+  Right ty -> return $ toTList ty def $ replicate (fromIntegral len) value
+  Left ty -> evalError' i $ "make-list: invalid value type: " ++ show ty
+makeList i as = argsError i as
 
 reverse' :: RNativeFun e
 reverse' _ [l@TList{}] = return $ over tList reverse l
