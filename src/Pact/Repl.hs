@@ -46,7 +46,7 @@ import Text.Trifecta as TF hiding (line,err,try,newline)
 import System.IO hiding (interact)
 import Text.Trifecta.Delta
 import Control.Concurrent
-import Data.Monoid
+import Data.Monoid (appEndo)
 import System.FilePath
 
 import Pact.Compile
@@ -162,7 +162,7 @@ compileEval :: String -> Exp -> Repl (Either String (Term Name))
 compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 
-pureEval :: Show a => Info -> Eval LibState a -> Repl (Either String a)
+pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))
 pureEval ei e = do
   (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
@@ -217,7 +217,7 @@ renderErr a
       return $ renderInfo i ++ ":" ++ unpack (peText a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ unpack (peText a)
 
-updateForOp :: a -> Repl (Either String a)
+updateForOp :: Term Name -> Repl (Either String (Term Name))
 updateForOp a = do
   mv <- use (rEnv.eePactDbVar)
   mode <- use rMode
@@ -236,6 +236,27 @@ updateForOp a = do
                           _ -> show t
       outStrLn HOut rep
       return (Right a)
+    Tx i t n -> doTx i t n
+
+doTx :: Info -> Tx -> Maybe Text -> Repl (Either String (Term Name))
+doTx i t n = do
+  e <- case t of
+    Begin -> do
+      tid <- fmap succ <$> use (rEnv.eeTxId)
+      rEnv.eeTxId .= tid
+      return $ evalBeginTx i
+    Rollback -> return $ evalRollbackTx i
+    Commit -> return $ void $ evalCommitTx i
+  pureEval i (e >> return (tStr "")) >>= \r -> forM r $ \_ -> do
+    case t of
+      Commit -> do
+        newmods <- use (rEvalState.evalRefs.rsNew)
+        rEnv.eeRefStore.rsModules %= HM.union (HM.fromList newmods)
+      _ -> return ()
+    rEvalState .= def
+    useReplLib
+    tid <- use $ rEnv . eeTxId
+    return $ tStr $ tShow t <> " Tx " <> tShow tid <> maybe "" (": " <>) n
 
 
 -- | load and evaluate a Pact file.

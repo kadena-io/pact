@@ -230,25 +230,13 @@ tx Begin i as = do
              [TLitString n] -> return $ Just n
              [] -> return Nothing
              _ -> argsError i as
-  tid <- fmap succ <$> view eeTxId
-  setenv eeTxId tid
-  evalBeginTx (_faInfo i) -- TODO the previous setenv won't take effect here!
+  setop $ Tx (_faInfo i) Begin tname
   setLibState $ set rlsTxName tname
-  return $ txmsg tname tid "Begin"
-
-tx Rollback i [] = do
-  evalRollbackTx (_faInfo i)
-  tid <- view eeTxId
-  tname <- viewLibState (view rlsTxName)
-  return $ txmsg tname tid "Rollback"
-tx Commit i [] = do
-  newmods <- use (evalRefs.rsNew)
-  setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
-  evalRefs.rsNew .= def -- TODO fix tx semantics.
-  void $ evalCommitTx (_faInfo i)
-  tid <- view eeTxId
+  return (tStr "")
+tx t i [] = do
   tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)
-  return $ txmsg tname tid "Commit"
+  setop (Tx (_faInfo i) t tname)
+  return (tStr "")
 tx _ i as = argsError i as
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()

@@ -29,6 +29,7 @@
 (transfer "123" "456" 5.0 (time "2016-07-22T11:26:35Z"))
 (commit-tx)
 (begin-tx)
+(use 'accounts)
 (expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
 (expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
 
@@ -59,9 +60,9 @@
 (begin-tx)
 (module test 'k
   (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
-  (defun run-escrow () (two-party-escrow "123" "456" 2.00 TIMEOUT))
+  (defun run-escrow () (accounts.two-party-escrow "123" "456" 2.00 TIMEOUT))
   (defun reset-time () (system.set-system-time (time "2017-01-01T12:00:00Z")))
-  (defun get-balance (acct) (at "balance" (read-account-user acct)))
+  (defun get-balance (acct) (at "balance" (accounts.read-account-user acct)))
   )
 (commit-tx)
 

@@ -187,3 +187,6 @@ infixr 5 <$$>
 -- | Pretty show.
 pshow :: Show a => a -> Doc
 pshow = text . show
+
+tShow :: Show a => a -> Text
+tShow = pack . show
