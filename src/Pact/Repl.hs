@@ -20,7 +20,7 @@
 
 module Pact.Repl
     (
-     repl,runRepl
+     repl,runRepl,repl'
     ,evalRepl,ReplMode(..)
     ,execScript,execScript'
     ,initEvalEnv,initPureEvalEnv,initReplState
@@ -61,7 +61,10 @@ import Pact.Repl.Types
 
 
 repl :: IO (Either () (Term Name))
-repl = initReplState Interactive >>= \s -> runRepl s stdin
+repl = repl' Interactive
+
+repl' :: ReplMode -> IO (Either () (Term Name))
+repl' m = initReplState m >>= \s -> runRepl s stdin
 
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
@@ -107,7 +110,7 @@ getDelta :: Repl Delta
 getDelta = do
   m <- use rMode
   case m of
-    (Script file) -> return $ Directed (BS.fromString file) 0 0 0 0
+    (Script _ file) -> return $ Directed (BS.fromString file) 0 0 0 0
     _ -> return mempty
 
 checkMultiline :: Handle -> String -> Repl String
@@ -156,11 +159,11 @@ handleCompile src exp a =
 
 
 compileEval :: String -> Exp -> Repl (Either String (Term Name))
-compileEval src exp = handleCompile src exp $ \e -> pureEval (eval e)
+compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 
-pureEval :: Show a => Eval LibState a -> Repl (Either String a)
-pureEval e = do
+pureEval :: Show a => Info -> Eval LibState a -> Repl (Either String a)
+pureEval ei e = do
   (ReplState evalE evalS _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
@@ -169,7 +172,7 @@ pureEval e = do
   mode <- use rMode
   case r of
     Right a -> do
-        when (mode == Interactive || mode == StringEval) $ outStrLn HOut (show a)
+        doOut ei mode a
         rEvalState .= es
         updateForOp a
     Left err -> do
@@ -192,12 +195,24 @@ pureEval e = do
               mapM_ (\c -> outStrLn HErr $ " at " ++ show c) cs
             return (Left serr)
 
+doOut :: Show t => Info -> ReplMode -> t -> Repl ()
+doOut ei mode a = case mode of
+  Interactive -> plainOut
+  StringEval -> plainOut
+  StdinPipe -> plainOut
+  Script True _ -> lineOut
+  _ -> return ()
+  where
+    plainOut = outStrLn HOut (show a)
+    lineOut = do
+      outStrLn HErr $ renderInfo ei ++ ":Trace: " ++ show a
+
 renderErr :: PactError -> Repl String
 renderErr a
   | peInfo a == def = do
       m <- use rMode
       let i = case m of
-                Script f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
+                Script _ f -> Info (Just (mempty,Parsed (Directed (BS.fromString f) 0 0 0 0) 0))
                 _ -> Info (Just (mempty,Parsed (Lines 0 0 0 0) 0))
       return $ renderInfo i ++ ":" ++ unpack (peText a)
   | otherwise = return $ renderInfo (peInfo a) ++ ": " ++ unpack (peText a)
@@ -279,9 +294,9 @@ rSuccess :: Monad m => m (Either a (Term Name))
 rSuccess = return $ Right $ toTerm True
 
 -- | Workhorse to load script; also checks/reports test failures
-execScript :: FilePath -> IO (Either () (Term Name))
-execScript f = do
-  (r,ReplState{..}) <- execScript' (Script f) f
+execScript :: Bool -> FilePath -> IO (Either () (Term Name))
+execScript dolog f = do
+  (r,ReplState{..}) <- execScript' (Script dolog f) f
   case r of
     Left _ -> return $ Left ()
     Right t -> do
@@ -322,17 +337,17 @@ evalString showLog cmd = do
 
 
 _eval :: String -> IO (Term Name)
-_eval cmd = evalRepl (Script "_eval") cmd >>= \r ->
+_eval cmd = evalRepl (Script True "_eval") cmd >>= \r ->
             case r of Left e -> throwM (userError $ " Failure: " ++ show e); Right v -> return v
 
 _run :: String -> IO ()
 _run cmd = void $ evalRepl Interactive cmd
 
 _testAccounts :: IO ()
-_testAccounts = void $ execScript "examples/accounts/accounts.repl"
+_testAccounts = void $ execScript False "examples/accounts/accounts.repl"
 
 _testBench :: IO ()
-_testBench = void $ execScript "tests/bench/bench"
+_testBench = void $ execScript False "tests/bench/bench"
 
 _testCP :: IO ()
-_testCP = void $ execScript "examples/cp/cp.repl"
+_testCP = void $ execScript False "examples/cp/cp.repl"

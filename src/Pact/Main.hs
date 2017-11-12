@@ -43,6 +43,10 @@ import Pact.Types.Runtime hiding ((<>),PublicKey)
 #if defined(BUILD_SERVER)
 import Pact.Server.Server
 #endif
+#ifndef mingw32_HOST_OS
+import System.Posix.Terminal (queryTerminal)
+import System.Posix.IO (stdInput)
+#endif
 import Pact.Types.Version
 import Pact.ApiReq
 
@@ -51,7 +55,7 @@ data Option =
   OVersion
   | OBuiltins
   | OGenKey
-  | OLoad { _oFindScript :: Bool, _oFile :: String }
+  | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
 #if defined(BUILD_SERVER)
@@ -72,6 +76,8 @@ replOpts =
      <$> O.flag False True
          (O.short 'r' <> O.long "findscript" <>
           O.help "For .pact files, attempts to locate a .repl file to execute.")
+     <*> O.flag False True
+         (O.short 't' <> O.long "trace" <> O.help "Show trace output")
      <*> O.argument O.str
         (O.metavar "FILE" <> O.help "File path to compile (if .pact extension) or execute.")) <|>
     (OApiReq <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
@@ -99,16 +105,24 @@ main = do
 #endif
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
-    OLoad findScript fp
+    OLoad findScript dolog fp
         | isPactFile fp -> do
             script <- if findScript then locatePactReplScript fp else return Nothing
             case script of
-              Just s -> execScript s >>= exitLoad
+              Just s -> execScript dolog s >>= exitLoad
               Nothing -> compileOnly fp >>= exitLoad
-        | otherwise -> execScript fp >>= exitLoad
-    ORepl -> repl >>= exitEither (const (return ()))
+        | otherwise -> execScript dolog fp >>= exitLoad
+    ORepl -> getMode >>= repl' >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l -> apiReq cf l
+
+getMode :: IO ReplMode
+#ifdef mingw32_HOST_OS
+getMode = return Interactive
+#else
+getMode = queryTerminal stdInput >>= \isatty ->
+  return $ if isatty then Interactive else StdinPipe
+#endif
 
 -- | Run heuristics to find a repl script. First is the file name with ".repl" extension;
 -- if not, it will see if there is a single ".repl" file in the directory, and if so
@@ -130,7 +144,7 @@ compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
   src <- readFile fp
-  s <- initReplState (Script fp)
+  s <- initReplState (Script False fp)
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 
 die :: String -> IO b

@@ -54,7 +54,7 @@ checkFuns = describe "tc.pact typecheck" $ do
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
-  (r,s) <- execScript' (Script fp) fp
+  (r,s) <- execScript' (Script False fp) fp
   either (die def) (const (return ())) r
   case view (rEnv . eeRefStore . rsModules . at mn) s of
     Just m -> return m

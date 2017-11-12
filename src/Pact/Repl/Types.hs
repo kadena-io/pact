@@ -22,10 +22,11 @@ import Data.Text (Text)
 
 data ReplMode =
     Interactive |
-    Script String |
+    Script { rmTrace :: Bool, rmFile :: FilePath } |
     FailureTest |
     Quiet |
-    StringEval
+    StringEval |
+    StdinPipe
     deriving (Eq,Show)
 
 data Hdl = HOut|HErr
