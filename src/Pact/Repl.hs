@@ -57,6 +57,7 @@ import Pact.Native
 import Pact.Repl.Lib
 import Pact.Types.Logger
 import Pact.Repl.Types
+import Pact.Types.Hash
 
 
 
@@ -82,7 +83,7 @@ initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
   ls <- initLibState neverLog
-  set eeTxId (Just 0) <$> initEvalEnv ls repldb
+  set eeTxId (Just 0) <$> initEvalEnv ls repldb initialHash
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a

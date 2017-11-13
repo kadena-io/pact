@@ -39,6 +39,8 @@ import Data.Aeson hiding ((.=))
 import Data.Decimal
 import Data.List
 import Data.Function (on)
+import Data.ByteString.Lazy (toStrict)
+import Data.Text.Encoding
 
 
 import Pact.Eval
@@ -50,6 +52,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
+import Pact.Types.Hash
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -162,6 +165,9 @@ langDefs =
      \List -> value, Object -> value. NB value types are not introspectable in pact. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
+    ,defRNative "tx-hash" txHash (funType tTyString [])
+     "Obtain hash of current transaction as a string. `(tx-hash)`"
+
     ,defNative (specialForm Bind) bind
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row),("body",TyAny)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
@@ -201,6 +207,10 @@ langDefs =
      "Ignore (lazily) arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
+
+    ,defRNative "hash" hash' (funType tTyString [("value",a)])
+     "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
+     \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
     ])
     where a = mkTyVar "a" []
@@ -422,10 +432,10 @@ listModules _ _ = do
   return $ toTermList tTyString $ map asString $ M.keys mods
 
 
-initEvalEnv :: e -> PactDb e -> IO (EvalEnv e)
-initEvalEnv e b = do
+initEvalEnv :: e -> PactDb e -> Hash -> IO (EvalEnv e)
+initEvalEnv e b h = do
   mv <- newMVar e
-  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b def
+  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b def h
 
 
 unsetInfo :: Term a -> Term a
@@ -530,3 +540,14 @@ constantly i as = argsError' i as
 identity :: RNativeFun e
 identity _ [a] = return a
 identity i as = argsError i as
+
+hash' :: RNativeFun e
+hash' i as = case as of
+  [TLitString s] -> go $ encodeUtf8 s
+  [a] -> go $ toStrict $ encode a
+  _ -> argsError i as
+  where go = return . tStr . asString . hash
+
+txHash :: RNativeFun e
+txHash _ [] = (tStr . asString) <$> view eeHash
+txHash i as = argsError i as
