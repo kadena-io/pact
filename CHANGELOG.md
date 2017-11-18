@@ -1,3 +1,7 @@
+2.3.5
+---
+* Fix issue where extra parens silently ignored in repl scripts/prompt
+
 2.3.4
 ---
 * `pact` tool improvements: better stdin support, '-d' for debug output of load

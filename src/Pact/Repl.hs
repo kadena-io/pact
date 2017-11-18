@@ -97,7 +97,7 @@ loop h abortOnError lastResult = do
     r <- if null line then rSuccess
          else do
            d <- getDelta
-           errToUnit $ parsedCompileEval line $ TF.parseString exprs d line
+           errToUnit $ parsedCompileEval line $ TF.parseString exprsOnly d line
     case r of
       Left _ | abortOnError -> do
                  outStrLn HErr "Aborting execution"
@@ -252,7 +252,7 @@ loadFile f = do
       restoreFile = rFile .= curFileM
   rFile .= Just computedPath
   catch (do
-          pr <- TF.parseFromFileEx exprs computedPath
+          pr <- TF.parseFromFileEx exprsOnly computedPath
           src <- liftIO $ readFile computedPath
           when (isPactFile f) $ rEvalState.evalRefs.rsLoaded .= HM.empty
           r <- parsedCompileEval src pr
@@ -267,6 +267,7 @@ loadFile f = do
 out :: ReplMode -> Hdl -> Bool -> String -> Repl ()
 out m hdl newline str =
   case m of
+    Quiet -> return ()
     StringEval -> rOut %= (\s -> s ++ str ++ (if newline then "\n" else ""))
     _ -> liftIO $ do
            let h = case hdl of HOut -> stdout; HErr -> stderr

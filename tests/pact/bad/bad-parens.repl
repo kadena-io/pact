@@ -1,0 +1,6 @@
+
+(define-keyset 'k (sig-keyset))
+(module parensfordays 'k
+  (defun foo () 1))))))
+
+1
