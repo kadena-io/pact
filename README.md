@@ -1,9 +1,14 @@
+## Note: this is a fork of the original project - probably best to use the original
+
+I am likely to sometimes break the code here :-)
+
+Better to use the original: repository for [Pact](http://kadena.io/pact)
+
 The Pact Programming Language
 ===
 
-[![Build Status](https://travis-ci.org/kadena-io/pact.svg?branch=master)](https://travis-ci.org/kadena-io/pact)
 
-This is the source code repository for [Pact](http://kadena.io/pact), a language for developing
+This is a fork of the kadena.io/pact project. Pact is a language for developing
 smart contracts to run on a [fast deterministic blockchain](http://kadena.io).
 
 Quick Start: Browser
