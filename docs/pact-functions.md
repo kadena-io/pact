@@ -256,7 +256,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.2"
+"2.3.5"
 ```
 
 
@@ -592,6 +592,18 @@ pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 ```
 
 
+### format-time {#format-time}
+
+*format*&nbsp;`string` *time*&nbsp;`time` *&rarr;*&nbsp;`string`
+
+
+Format TIME using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+```lisp
+pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
+"2016-07-22"
+```
+
+
 ### hours {#hours}
 
 *n*&nbsp;`decimal` *&rarr;*&nbsp;`decimal`
@@ -625,7 +637,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 *format*&nbsp;`string` *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using FORMAT. See [strftime docs](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html#index-strftime) for format info. 
+Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
 ```lisp
 pact> (parse-time "%F" "2016-09-12")
 "2016-09-12T00:00:00Z"

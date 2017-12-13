@@ -29,15 +29,16 @@ import Pact.Types.Runtime
 import Pact.Native.Internal
 
 
+timedoc :: Text
+timedoc = "See [\"Time Formats\" docs](#time-formats) for supported formats."
+
 timeDefs :: NativeModule
 timeDefs = ("Time",
     [defRNative "time" time (funType tTyTime [("utcval",tTyString)]) $
      "Construct time from UTCVAL using ISO8601 format (" <> pack simpleISO8601 <> "). " <>
      "`(time \"2016-07-22T11:26:35Z\")`"
     ,defRNative "parse-time" parseTime' (funType tTyTime [("format",tTyString),("utcval",tTyString)])
-     "Construct time from UTCVAL using FORMAT. \
-     \See [strftime docs](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html#index-strftime) \
-     \for format info. `(parse-time \"%F\" \"2016-09-12\")`"
+     ("Construct time from UTCVAL using FORMAT. " <> timedoc <> "`(parse-time \"%F\" \"2016-09-12\")`")
     ,defRNative "add-time" addTime (funType tTyTime [("time",tTyTime),("seconds",tTyDecimal)] <>
                                     funType tTyTime [("time",tTyTime),("seconds",tTyInteger)])
      "Add SECONDS to TIME; SECONDS can be integer or decimal. \
@@ -52,6 +53,8 @@ timeDefs = ("Time",
      \`(add-time (time \"2016-07-22T12:00:00Z\") (hours 1))`"
     ,defRNative "days" (timeMult $ 60 * 60 * 24) multType "N days, for use with 'add-time' \
      \`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
+    ,defRNative "format-time" formatTime' (funType tTyString [("format",tTyString),("time",tTyTime)])
+    ("Format TIME using FORMAT. " <> timedoc <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`")
     ])
     where multType = funType tTyDecimal [("n",tTyDecimal)] <>
                      funType tTyDecimal [("n",tTyInteger)]
@@ -70,6 +73,12 @@ parseTime' i [TLitString fmt,TLitString s] =
     Nothing -> evalError' i $ "Failed to parse time '" ++ unpack s ++ "' with format: " ++ unpack fmt
     Just t -> return (tLit (LTime t))
 parseTime' i as = argsError i as
+
+formatTime' :: RNativeFun e
+formatTime' _ [TLitString fmt,TLiteral (LTime t) _] =
+  return $ toTerm $ pack $ formatTime defaultTimeLocale (unpack fmt) t
+formatTime' i as = argsError i as
+
 
 addTime :: RNativeFun e
 addTime _ [TLiteral (LTime t) _,TLiteral (LDecimal r) _] = return $ doTimeAdd t r
