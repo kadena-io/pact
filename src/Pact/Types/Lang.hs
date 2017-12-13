@@ -113,6 +113,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
 import Control.DeepSeq
 import Data.Maybe
+import qualified Data.HashMap.Strict as HM
 
 
 import Data.Serialize (Serialize)
@@ -829,6 +830,8 @@ instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
+    parseJSON (Array a) = (toTList TyAny def . toList) <$> mapM parseJSON a
+    parseJSON (Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first toTerm) (HM.toList o)
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 
