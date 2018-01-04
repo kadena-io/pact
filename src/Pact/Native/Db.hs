@@ -95,6 +95,10 @@ dbDefs =
     ,defRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
+    ,defRNative "keylog" keylog
+     (funType (TyList tTyValue) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
+      "Return updates to TABLE for a KEY in transactions at or after TXID.\
+      \`$(keylog 'accounts \"Alice\" 123485945)`"
     ,defRNative "describe-table" descTable
      (funType tTyValue [("table",tTyString)]) "Get metadata for TABLE"
     ,defRNative "describe-keyset" descKeySet
@@ -249,6 +253,15 @@ txlog i [table@TTable {..},TLitInteger tid] = do
   guardTable i table
   (`TValue` def) . toJSON <$> getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog i as = argsError i as
+
+keylog :: RNativeFun e
+keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
+  guardTable i table
+  tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
+  logs <- fmap concat $ forM tids $ \tid -> getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+  return $ toTList tTyValue def $ map (toTerm . toJSON) $ (`filter` logs) $ \TxLog {..} -> _txKey == key
+keylog i as = argsError i as
+
 
 write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do

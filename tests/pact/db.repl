@@ -41,6 +41,11 @@
 (expect "txlog works"
         (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
         (txlog persons 1))
+
+(expect "keylog works"
+        [(json {"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"})]
+        (keylog persons ID_A 0))
+
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
 
@@ -57,3 +62,4 @@
 (expect-failure "keys protected by admin key" (keys persons))
 (expect-failure "txids protected by admin key" (txids persons 0))
 (expect-failure "txlog protected by admin key" (txlog persons 2))
+(expect-failure "keylogs protected by admin key" (keylog persons "" 2))

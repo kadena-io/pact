@@ -7,7 +7,6 @@ import Test.Hspec
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Types.Runtime
-import Data.Either
 import System.Directory
 import System.FilePath
 import Control.Monad
@@ -49,4 +48,3 @@ runScript fp = describe fp $ do
       forM_ _rlsTests $ \TestResult {..} -> it (unpack trName) $ case trFailure of
         Nothing -> return ()
         Just (i,e) -> expectationFailure $ renderInfo (_faInfo i) ++ ": " ++ unpack e
-  -- it fp $ (fst <$> execScript' (Script fp) fp) >>= (`shouldSatisfy` isRight)
