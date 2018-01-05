@@ -46,7 +46,7 @@ $ pact
 pact> (+ 1 2)
 3
 pact> (+ "hello, " "world")
-"hello world"
+"hello, world"
 ```
 
 There are [examples](examples/) in this source repository of working smart contracts which you can load into Atom to get started.
