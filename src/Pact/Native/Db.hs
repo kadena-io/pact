@@ -259,7 +259,7 @@ keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
   guardTable i table
   tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
   logs <- fmap concat $ forM tids $ \tid -> getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
-  return $ toTList tTyValue def $ map (toTerm . toJSON) $ (`filter` logs) $ \TxLog {..} -> _txKey == key
+  return $ toTList tTyValue def $ map (toTerm . toJSON . _txValue) $ (`filter` logs) $ \TxLog {..} -> _txKey == key
 keylog i as = argsError i as
 
 

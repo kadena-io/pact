@@ -43,7 +43,7 @@
         (txlog persons 1))
 
 (expect "keylog works"
-        [(json {"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"})]
+        [(json ROW_A)]
         (keylog persons ID_A 0))
 
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
