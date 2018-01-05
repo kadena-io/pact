@@ -9,7 +9,7 @@ packages:
     commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
   extra-dep: true
 - location:
-    git: git@github.com:kadena-io/thyme.git
+    git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   extra-dep: true
 
