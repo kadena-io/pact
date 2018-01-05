@@ -50,6 +50,7 @@ import qualified Data.Set as S
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
+import Data.Aeson (Value)
 
 import Pact.Types.Runtime
 
@@ -61,7 +62,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx = void . rollbackTx
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog]
+evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
   tid <- view eeTxId
   case tid of

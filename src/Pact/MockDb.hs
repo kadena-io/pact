@@ -29,12 +29,12 @@ newtype MockGetUserTableInfo =
 instance Default MockGetUserTableInfo where def = MockGetUserTableInfo (\_t -> rc ("",""))
 
 newtype MockCommitTx =
-  MockCommitTx (Method () [TxLog])
+  MockCommitTx (Method () [TxLog Value])
 instance Default MockCommitTx where def = MockCommitTx (rc [])
 
 newtype MockGetTxLog =
   MockGetTxLog (forall k v . (IsString k,FromJSON v) =>
-                 Domain k v -> TxId -> Method () [TxLog])
+                 Domain k v -> TxId -> Method () [TxLog v])
 instance Default MockGetTxLog where def = MockGetTxLog (\_t _i -> rc [])
 
 data MockDb = MockDb {

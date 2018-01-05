@@ -1957,7 +1957,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.3.5"
+    "2.3.6"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -2159,6 +2159,18 @@ already exists for KEY.
 .. code:: lisp
 
     (insert 'accounts { "balance": 0.0, "note": "Created account." })
+
+keylog
+~~~~~~
+
+*table* ``table:<{row}>`` *key* ``string`` *txid* ``integer``
+*→* ``[object:<{row}>]``
+
+Return updates to TABLE for a KEY in transactions at or after TXID.
+
+.. code:: lisp
+
+    (keylog 'accounts "Alice" 123485945)
 
 keys
 ~~~~

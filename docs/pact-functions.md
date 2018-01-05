@@ -256,7 +256,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.5"
+"2.3.6"
 ```
 
 
@@ -442,6 +442,17 @@ Get metadata for TABLE
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
 ```lisp
 (insert 'accounts { "balance": 0.0, "note": "Created account." })
+```
+
+
+### keylog {#keylog}
+
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:<{row}>]`
+
+
+Return updates to TABLE for a KEY in transactions at or after TXID.
+```lisp
+(keylog 'accounts "Alice" 123485945)
 ```
 
 

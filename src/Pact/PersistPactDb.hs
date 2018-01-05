@@ -37,7 +37,6 @@ import Control.Monad.State.Strict
 import Data.Typeable
 
 import Data.Aeson hiding ((.=))
-import Data.Aeson.Lens
 import GHC.Generics
 
 import Data.Monoid
@@ -53,7 +52,7 @@ data DbEnv p = DbEnv
   { _db :: p
   , _persist :: Persister p
   , _logger :: Logger
-  , _txRecord :: M.Map TxTable [TxLog]
+  , _txRecord :: M.Map TxTable [TxLog Value]
   , _txId :: Maybe TxId
   }
 makeLenses ''DbEnv
@@ -144,12 +143,8 @@ pactdb = PactDb
 
  , _rollbackTx = \s -> runMVState s rollback
 
- , _getTxLog = \d tid e -> runMVState e $ do
-      let tn :: Domain k v -> TxTable
-          tn KeySets = TxTable keysetsTable
-          tn Modules = TxTable modulesTable
-          tn (UserTables t) = userTxRecord t
-      convUserTxLogs d . fromMaybe [] <$> doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+ , _getTxLog = \d tid e -> runMVState e $ getLogs d tid
+
  }
 
 doBegin :: Maybe TxId -> MVState p ()
@@ -164,7 +159,7 @@ doBegin tidm = do
   txId .= tidm
 {-# INLINE doBegin #-}
 
-doCommit :: MVState p [TxLog]
+doCommit :: MVState p [TxLog Value]
 doCommit = do
   use txId >>= \otid -> case otid of
     Nothing -> rollback >> throwDbError "Not in transaction"
@@ -178,14 +173,17 @@ doCommit = do
 {-# INLINE doCommit #-}
 
 
-
-convUserTxLogs :: Domain k v -> [TxLog] -> [TxLog]
-convUserTxLogs UserTables {} = map $ \tl -> case fromJSON (_txValue tl) of
-  Error s -> over txValue (set (key "error") (toJSON s)) tl
-  Success (v :: Columns Persistable) ->
-    set txValue (toJSON (fmap (toTerm :: Persistable -> Term Name) v)) tl
-convUserTxLogs _ = id
-{-# INLINE convUserTxLogs #-}
+getLogs :: FromJSON v => Domain k v -> TxId -> MVState p [TxLog v]
+getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn d) (fromIntegral tid))
+  where
+    tn :: Domain k v -> TxTable
+    tn KeySets = TxTable keysetsTable
+    tn Modules = TxTable modulesTable
+    tn (UserTables t) = userTxRecord t
+    convLog tl = case fromJSON (_txValue tl) of
+      Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " ++ s
+      Success v -> return $ set txValue v tl
+{-# INLINE getLogs #-}
 
 
 
