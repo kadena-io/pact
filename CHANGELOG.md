@@ -1,3 +1,9 @@
+2.3.6
+---
+* Support for reading JSON arrays/objects to pact lists/objects
+* Microsecond support in time objects
+* new `keylog` function for obtaining logs by key
+
 2.3.5
 ---
 * Fix issue where extra parens silently ignored in repl scripts/prompt
