@@ -261,7 +261,7 @@ keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
   guardTable i table
   tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
   logs <- fmap concat $ forM tids $ \tid -> fmap (map (tid,)) $ getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
-  let toTxidObj (t,r) = toTObject TyAny def [(toTerm (asString t),columnsToObject _tTableType (_txValue r))]
+  let toTxidObj (t,r) = toTObject TyAny def [(tStr "txid", toTerm t),(tStr "value",columnsToObject _tTableType (_txValue r))]
   return $ toTList tTyValue def $ map toTxidObj $ (`filter` logs) $ \(_,TxLog {..}) -> _txKey == key
 keylog i as = argsError i as
 
