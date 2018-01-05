@@ -374,6 +374,7 @@ newtype TxId = TxId Word64
 instance NFData TxId
 instance Show TxId where show (TxId s) = show s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
+instance AsString TxId where asString = pack . show
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)

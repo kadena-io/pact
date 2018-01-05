@@ -256,7 +256,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.6"
+"2.3.7"
 ```
 
 
@@ -447,10 +447,10 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 ### keylog {#keylog}
 
-*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object:<{row}>]`
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object]`
 
 
-Return updates to TABLE for a KEY in transactions at or after TXID.
+Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid. 
 ```lisp
 (keylog 'accounts "Alice" 123485945)
 ```

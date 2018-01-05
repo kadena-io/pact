@@ -42,7 +42,7 @@
         (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
         (txlog persons 1))
 
-(expect "keylog works" [ROW_A] (keylog persons ID_A 1))
+(expect "keylog works" [{"1": ROW_A}] (keylog persons ID_A 1))
 
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))

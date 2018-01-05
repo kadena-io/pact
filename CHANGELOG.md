@@ -1,3 +1,7 @@
+2.3.7
+---
+* `keylog` returns rows indexed by txid
+
 2.3.6
 ---
 * Support for reading JSON arrays/objects to pact lists/objects

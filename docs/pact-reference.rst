@@ -1957,7 +1957,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.3.6"
+    "2.3.7"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -2164,9 +2164,10 @@ keylog
 ~~~~~~
 
 *table* ``table:<{row}>`` *key* ``string`` *txid* ``integer``
-*→* ``[object:<{row}>]``
+*→* ``[object]``
 
-Return updates to TABLE for a KEY in transactions at or after TXID.
+Return updates to TABLE for a KEY in transactions at or after TXID, in a
+list of objects indexed by txid.
 
 .. code:: lisp
 
