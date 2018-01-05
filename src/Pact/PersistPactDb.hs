@@ -130,7 +130,7 @@ pactdb = PactDb
 
  , _txids = \tn tid e -> runMVState e
      (map fromIntegral <$> doPersist
-       (\p -> queryKeys p (userTxRecord tn) (Just (KQKey KGT (fromIntegral tid)))))
+       (\p -> queryKeys p (userTxRecord tn) (Just (KQKey KGTE (fromIntegral tid)))))
 
 
  , _createUserTable = \tn mn ksn e ->

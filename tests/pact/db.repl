@@ -37,14 +37,14 @@
 (expect-failure "dupe key should fail" (insert persons ID_A ROW_A))
 (commit-tx)
 (expect "keys works" [ID_A] (keys persons))
-(expect "txids works" [1] (txids persons 0))
+(expect "txids works" [1] (txids persons 1))
 (expect "txlog works"
         (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
         (txlog persons 1))
 
 (expect "keylog works"
         [(json ROW_A)]
-        (keylog persons ID_A 0))
+        (keylog persons ID_A 1))
 
 (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
 (expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
