@@ -48,7 +48,7 @@ parserAsInt :: Parser Decimal
 parserAsInt = many1 digit >>= return . read
 
 supportedOpSyms :: Parser String
-supportedOpSyms = Parsec.try (string ">=" <|> string "<=" <|> string "==") <|> string ">" <|> string "=" <|> string "<"
+supportedOpSyms = Parsec.try (string ">=" <|> string "<=" <|> string "==") <|> string ">" <|> string "!=" <|> string "<"
 
 parseColRange :: Parser ProverTest
 parseColRange = do
