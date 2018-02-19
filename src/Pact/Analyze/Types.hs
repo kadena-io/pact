@@ -131,10 +131,10 @@ instance SmtEncoding CompiledSmt where
     Just cmt -> SmtShow.showSL _smtCmd ++ " ; \"" ++ cmt ++ "\""
 
 isCmpOperator :: String -> Bool
-isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "="]
+isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "=", "!="]
 
 isLogicalOperator :: String -> Bool
-isLogicalOperator s = Set.member s $ Set.fromList ["=", "and", "or", "not", "!="]
+isLogicalOperator s = Set.member s $ Set.fromList ["and", "or", "not"]
 
 isNumericalOperator :: String -> Bool
 isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/", "abs", "^"]
