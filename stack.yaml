@@ -5,7 +5,7 @@ resolver: lts-6.12
 packages:
 - '.'
 - location:
-    git: git@bitbucket.org:spopejoy/pact.git
+    git: git@github.com:kadena-io/pact.git
     commit: 36854a3b62df954deee39a90fc591e3faf4618c4
   extra-dep: true
 - location:
