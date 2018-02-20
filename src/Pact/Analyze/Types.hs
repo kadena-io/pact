@@ -37,7 +37,6 @@ import Pact.Typecheck hiding (debug)
 import Pact.Types
 import Pact.Repl
 import Data.Aeson hiding (Object)
-import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
