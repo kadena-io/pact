@@ -112,7 +112,7 @@ main = do
               Just s -> execScript dolog s >>= exitLoad
               Nothing -> compileOnly fp >>= exitLoad
         | otherwise -> execScript dolog fp >>= exitLoad
-    ORepl -> getMode >>= repl' >>= exitEither (const (return ()))
+    ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l -> apiReq cf l
 
