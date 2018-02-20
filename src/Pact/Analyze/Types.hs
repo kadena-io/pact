@@ -214,10 +214,16 @@ showTermForFmt t@(TermQualIdentifier _) = do
         SymString -> t
         SymTime -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Time to String"
         SymDecimal -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Decimal to String"
-        ty -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from: " ++ show ty
 showTermForFmt t@(TermSpecConstant (SpecConstantString _)) = return t
 showTermForFmt t@(TermSpecConstant (SpecConstantNumeral _)) = return $ TermQualIdentifierT (QIdentifier (ISymbol "int.to.str")) [t]
-showTermForFmt t@(TermSpecConstant (SpecConstantDecimal _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from literal: " ++ SmtShow.showSL t
+showTermForFmt t@(TermSpecConstant (SpecConstantDecimal _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from decimal literal: " ++ SmtShow.showSL t
+showTermForFmt t@(TermSpecConstant (SpecConstantHexadecimal _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from hex literal: " ++ SmtShow.showSL t
+showTermForFmt t@(TermSpecConstant (SpecConstantBinary _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from binary literal: " ++ SmtShow.showSL t
+showTermForFmt t@(TermQualIdentifierT _ _) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: TermQualIdentifierT: " ++ SmtShow.showSL t
+showTermForFmt t@(TermLet _ _) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: TermLet: " ++ SmtShow.showSL t
+showTermForFmt t@(TermForall _ _) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: TermForall: " ++ SmtShow.showSL t
+showTermForFmt t@(TermExists _ _) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: TermExists: " ++ SmtShow.showSL t
+showTermForFmt t@(TermAnnot _ _) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: TermAnnot: " ++ SmtShow.showSL t
 
 
 boolAsStrTerm :: Smt.Term -> Smt.Term
