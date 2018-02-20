@@ -202,6 +202,8 @@ mSymVarFromTerm (TermQualIdentifier (QIdentifier (ISymbol svName'))) = do
 mSymVarFromTerm _ = return Nothing
 
 showTermForFmt :: Smt.Term -> SmtCompiler Smt.Term
+showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "true"))) = return $ TermSpecConstant (SpecConstantString "\"true\"")
+showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "false"))) = return $ TermSpecConstant (SpecConstantString "\"false\"")
 showTermForFmt t@(TermQualIdentifier _) = do
   mt <- mSymVarFromTerm t
   case mt of
@@ -213,8 +215,6 @@ showTermForFmt t@(TermQualIdentifier _) = do
         SymTime -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Time to String"
         SymDecimal -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion of Decimal to String"
         ty -> throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from: " ++ show ty
-showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "true"))) = return $ TermSpecConstant (SpecConstantString "\"true\"")
-showTermForFmt (TermQualIdentifier (QIdentifier (ISymbol "false"))) = return $ TermSpecConstant (SpecConstantString "\"false\"")
 showTermForFmt t@(TermSpecConstant (SpecConstantString _)) = return t
 showTermForFmt t@(TermSpecConstant (SpecConstantNumeral _)) = return $ TermQualIdentifierT (QIdentifier (ISymbol "int.to.str")) [t]
 showTermForFmt t@(TermSpecConstant (SpecConstantDecimal _)) = throw $ SmtCompilerException "showTermForFmt" $ "Unsupported: (during format) conversion to String from literal: " ++ SmtShow.showSL t
