@@ -208,7 +208,7 @@ pipeLoop h lastResult = do
   isEof <- liftIO (hIsEOF h)
   let retVal = maybe rSuccess (return.Right) lastResult
   if isEof then retVal else do
-    line <- trim <$> liftIO (hGetLine h) >>= checkMultiline h
+    line <- trim <$> liftIO (hGetLine h)
     r <- if null line then rSuccess
          else do
            d <- getDelta
@@ -225,19 +225,6 @@ getDelta = do
   case m of
     (Script _ file) -> return $ Directed (BS.fromString file) 0 0 0 0
     _ -> return mempty
-
--- TODO(joel) can we remove this style of multiline support?
-checkMultiline :: Handle -> String -> Repl String
-checkMultiline h l | last3 == "<<<" = runMulti allButLast3
-                 where revl = reverse l
-                       last3 = take 3 revl
-                       allButLast3 = reverse (drop 3 revl)
-                       runMulti s = do
-                         isEof <- liftIO $ hIsEOF h
-                         if isEof then return s else do
-                           line <- trim <$> liftIO (hGetLine h)
-                           if line == "" then return (trim s) else runMulti (s ++ " " ++ line)
-checkMultiline _ l = return l
 
 handleParse :: TF.Result [Exp] -> ([Exp] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
