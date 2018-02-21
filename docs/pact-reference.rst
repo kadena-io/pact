@@ -670,7 +670,7 @@ be achieved:
       (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
     (defun read-balance (id)
-      (with-read { "balance":= bal, "keyset":= ks }
+      (with-read accounts id { "balance":= bal, "keyset":= ks }
         (enforce-keyset ks)
         (format "Your balance is {}" bal)))
 
