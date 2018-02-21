@@ -8,6 +8,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE GADTs #-}
 
 module Pact.Analyze.Types
@@ -33,8 +34,10 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.RWS.Strict
 import Control.Exception
 import Control.Lens hiding ((.=), op)
-import Pact.Typecheck hiding (debug)
-import Pact.Types
+import Pact.Typechecker hiding (debug)
+import Pact.Types.Lang
+import Pact.Types.Runtime
+import Pact.Types.Typecheck
 import Pact.Repl
 import Data.Aeson hiding (Object)
 import qualified Data.Set as Set
@@ -44,6 +47,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.Default
 import GHC.Generics
 import Data.Thyme.Clock.POSIX
+import qualified Data.Text as T
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
@@ -75,7 +79,7 @@ data SymType = SymInteger
   | SymTime
   deriving (Show, Eq, Ord, Generic, ToJSON)
 
-newtype SymName = SymName { unSymName :: String } deriving (Show, Eq, Ord)
+newtype SymName = SymName { unSymName :: Text } deriving (Show, Eq, Ord)
 instance ToJSON SymName where
   toJSON (SymName s) = toJSON s
 
@@ -85,9 +89,9 @@ data TableAccess =
   deriving (Show, Eq, Generic, ToJSON)
 
 data OfTableColumn = OfTableColumn
-  { _otcTable :: String
-  , _otcColumn :: String
-  , _otcKey :: Smt.Term
+  { _otcTable  :: Text
+  , _otcColumn :: Text
+  , _otcKey    :: Smt.Term
   , _otcAccess :: TableAccess
   } deriving (Show, Eq, Generic)
 
@@ -116,7 +120,7 @@ data SmtOperator where
 
 data CompiledSmt = CompiledSmt
   { _smtCmd :: Command
-  , _smtComment :: Maybe String
+  , _smtComment :: Maybe Text
   } deriving (Show, Eq)
 
 type SmtCompiler a = RWST CompilerConf [CompiledSmt] CompilerState IO a
@@ -127,21 +131,9 @@ class SmtEncoding a where
 instance SmtEncoding CompiledSmt where
   encodeSmt CompiledSmt{..} = case _smtComment of
     Nothing -> SmtShow.showSL _smtCmd
-    Just cmt -> SmtShow.showSL _smtCmd ++ " ; \"" ++ cmt ++ "\""
+    Just cmt -> SmtShow.showSL _smtCmd ++ " ; \"" ++ T.unpack cmt ++ "\""
 
-isCmpOperator :: String -> Bool
-isCmpOperator s = Set.member s $ Set.fromList [">", "<", ">=", "<=", "=", "!="]
-
-isLogicalOperator :: String -> Bool
-isLogicalOperator s = Set.member s $ Set.fromList ["and", "or", "not"]
-
-isNumericalOperator :: String -> Bool
-isNumericalOperator s = Set.member s $ Set.fromList ["+", "-", "*", "/", "abs", "^"]
-
-isBasicOperator :: String -> Bool
-isBasicOperator s = isCmpOperator s || isLogicalOperator s || isNumericalOperator s
-
-basicOperatorToQualId :: String -> SmtOperator
+basicOperatorToQualId :: Text -> SmtOperator
 basicOperatorToQualId o
   | o == ">" = SingleLevelOp $ QIdentifier $ ISymbol ">"
   | o == ">=" = SingleLevelOp $ QIdentifier $ ISymbol ">="
@@ -158,15 +150,14 @@ basicOperatorToQualId o
   | o == "/" = SingleLevelOp $ QIdentifier $ ISymbol "/"
   | o == "!=" = DoubleLevelOp (QIdentifier $ ISymbol "not") (QIdentifier $ ISymbol "=")
   | o == "^" = TwoArgOp $ QIdentifier $ ISymbol "^"
-  | otherwise = throw $ SmtCompilerException "basicOperatorToQualId" $ "operator not supported -> " ++ o
+  | otherwise = throw $ SmtCompilerException "basicOperatorToQualId" $ "operator not supported -> " ++ T.unpack o
 
-unsupportedOperators :: String -> Bool
-unsupportedOperators s = Set.member s $ Set.fromList ["log", "ln", "ceiling", "floor", "mod"]
+isUnsupportedOperator :: Text -> Maybe Text
+isUnsupportedOperator s = if isUnsupported then Just s else Nothing
+  where
+    isUnsupported = Set.member s $ Set.fromList ["log", "ln", "ceiling", "floor", "mod"]
 
-isUnsupportedOperator :: String -> Maybe String
-isUnsupportedOperator s = if unsupportedOperators s then Just s else Nothing
-
-isInsertOrUpdate :: Fun Node -> Maybe String
+isInsertOrUpdate :: Fun Node -> Maybe Text
 isInsertOrUpdate (NativeFunc "insert") = Just "insert"
 isInsertOrUpdate (NativeFunc "update") = Just "update"
 isInsertOrUpdate _ = Nothing
@@ -175,14 +166,17 @@ ofPrimType :: Node -> Maybe PrimType
 ofPrimType (Node _ (TyPrim ty)) = Just ty
 ofPrimType _ = Nothing
 
-ofBasicOperators :: String -> Either String String
-ofBasicOperators s = if isBasicOperator s then Right s else Left s
-
-tcIdToUniqueId :: TcId -> String
-tcIdToUniqueId (TcId _ name' nonce') = name' ++ show nonce'
+ofBasicOperators :: Text -> Either Text Text
+ofBasicOperators s = if isBasic then Right s else Left s
+  where
+    isBasic     = isCmp || isLogical || isNumerical
+    -- FIXME: inefficient
+    isCmp       = Set.member s $ Set.fromList [">", "<", ">=", "<=", "=", "!="]
+    isLogical   = Set.member s $ Set.fromList ["and", "or", "not"]
+    isNumerical = Set.member s $ Set.fromList ["+", "-", "*", "/", "abs", "^"]
 
 tcIdToSymName :: TcId -> SymName
-tcIdToSymName = SymName . tcIdToUniqueId
+tcIdToSymName (TcId _info name nonce) = SymName $ "v-" <> name <> T.pack (show nonce)
 
 nodeToTerm :: Node -> SmtCompiler Smt.Term
 nodeToTerm n = do
@@ -190,10 +184,11 @@ nodeToTerm n = do
   case Map.lookup n csVars' of
     Nothing -> do
       throw $ SmtCompilerException "nodeToTerm" ("Variable " ++ show n ++ "not found in: " ++ (show csVars'))
-    Just SymVar{..} -> return $ TermQualIdentifier $ QIdentifier $ ISymbol $ unSymName _svName
+    Just SymVar{..} -> return $ TermQualIdentifier $ QIdentifier $ ISymbol $ T.unpack $ unSymName _svName
 
 mSymVarFromTerm :: Smt.Term -> SmtCompiler (Maybe (Node,SymVar))
-mSymVarFromTerm (TermQualIdentifier (QIdentifier (ISymbol svName'))) = do
+mSymVarFromTerm (TermQualIdentifier (QIdentifier (ISymbol svName''))) = do
+  let svName' = T.pack svName''
   svs <- Map.toList . (Map.filter (\SymVar{..}-> svName' == unSymName _svName)) <$> use csVars
   case svs of
     [] -> return $ Nothing
@@ -255,7 +250,7 @@ mkSymVar node'@(Node tcId _) = newVar
     newVar = SymVar { _svName = convName, _svNode = node', _svType = convType }
 
 symVarToDeclareConst :: SymVar -> Command
-symVarToDeclareConst SymVar{..} = DeclareFun (unSymName _svName) [] (symTypeToSortId _svType)
+symVarToDeclareConst SymVar{..} = DeclareFun (T.unpack $ unSymName _svName) [] (symTypeToSortId _svType)
 
 -- | Everything is obvious except for time, which works like this:
 -- `\(LTime (t :: UTCTime)) -> (init $ show (t ^. posixTime)` :: Smt.Decimal)
@@ -271,8 +266,8 @@ literalToTerm (LTime t) = TermSpecConstant $ SpecConstantDecimal $ init $ show (
 boolAsTerm :: Bool -> Smt.Term
 boolAsTerm b = TermQualIdentifier $ QIdentifier $ ISymbol (if b then "true" else "false")
 
-stringAsTerm :: String -> Smt.Term
-stringAsTerm = TermSpecConstant . SpecConstantString . show
+textAsTerm :: Text -> Smt.Term
+textAsTerm = TermSpecConstant . SpecConstantString . show . T.unpack
 
 eqAsQID :: QualIdentifier
 eqAsQID = QIdentifier $ ISymbol "="
@@ -290,14 +285,14 @@ implication t1 t2 = TermQualIdentifierT implQID [t1, t2]
   where
     implQID = QIdentifier (ISymbol "=>")
 
-assertEquality :: InIf -> Smt.Term -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
+assertEquality :: InIf -> Smt.Term -> Smt.Term -> Maybe Text -> SmtCompiler CompiledSmt
 assertEquality inIf t1 t2 cmt = assertTerm inIf (TermQualIdentifierT eqAsQID [t1, t2]) cmt
 
 -- | Assert a Smt.Term. If you're in an If block, then imply the assertion (i.e. the ifCond being true implies Smt.Term)
 -- ex: NoIf -> `(assert <term>) ; cmt`
 -- ex: IfTrue -> `(assert (=> <ifCond> <term>)) ; cmt`
 -- ex: IfFalse -> `(assert (=> (not <ifCond>) <term>)) ; cmt`
-assertTerm :: InIf -> Smt.Term -> Maybe String -> SmtCompiler CompiledSmt
+assertTerm :: InIf -> Smt.Term -> Maybe Text -> SmtCompiler CompiledSmt
 assertTerm NoIf t1 cmt = return $ CompiledSmt (Assert t1) cmt
 assertTerm (IfTrue node) t1 cmt = do
   node' <- nodeToTerm node
@@ -310,7 +305,7 @@ assertTerm (IfFalse node) t1 cmt = do
 trackNewNode :: Node -> SmtCompiler ()
 trackNewNode n = do
   debug $ show n
-  newSv <- return $ mkSymVar n
+  let newSv = mkSymVar n
   csVars' <- use csVars
   if Map.member n csVars'
   then throw $ SmtCompilerException "trackNewNode" $ "node is already tracked:\n" ++ show n ++ "\n" ++ show csVars'
@@ -346,8 +341,8 @@ data ParentRel =
   HasRelation Node
   deriving (Show, Eq)
 
-addToNodeTcIdName :: String -> Node -> Node
-addToNodeTcIdName s = over (aId.tiName) (\x -> x ++ "-" ++ s)
+addToNodeTcIdName :: Text -> Node -> Node
+addToNodeTcIdName t = over (aId.tiName) (<> "-" <> t)
 
 -- | handling if branches is crazy. Use this example to get a handle on what's going on here.
 -- NB: we need to handle if there are assertions of the body of ifTrue etc... hence the implication trick
@@ -382,15 +377,15 @@ mkIteNodes (Node _ ty) = throw $ SmtCompilerException "mkIteNodes" $ "only ifs t
 
 -- | bind variables encountered in a let
 bindNewVar :: InIf -> (Named Node, AST Node) -> SmtCompiler ()
-bindNewVar inIf ((Named n node'), ast') = do
+bindNewVar inIf ((Named n node' _tcId), ast') = do
   trackNewNode node'
   asTerm <- nodeToTerm node'
   resTerm <- compileNode inIf ast'
-  when (asTerm /= resTerm) $ assertEquality inIf asTerm resTerm (Just $ "binding " ++ n) >>= tellCmd
+  when (asTerm /= resTerm) $ assertEquality inIf asTerm resTerm (Just $ "binding " <> n) >>= tellCmd
 
 -- | bind variables read from the DB
-bindTableVar :: InIf -> TableAccess -> String -> Smt.Term -> (Named Node, AST Node) -> SmtCompiler ()
-bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
+bindTableVar :: InIf -> TableAccess -> Text -> Smt.Term -> (Named Node, AST Node) -> SmtCompiler ()
+bindTableVar inIf ta table' key' orig@(Named column' node' _tcId, _) = do
   let otc' = OfTableColumn { _otcTable = table', _otcColumn = column', _otcKey = key', _otcAccess = ta}
   bindNewVar inIf orig
   symVar' <- Map.lookup node' <$> use csVars
@@ -400,44 +395,116 @@ bindTableVar inIf ta table' key' orig@(Named column' node', _) = do
       csTableAssoc %= Map.insert s otc'
 
 -- | construct names for variables that are to be written to the DB
-prepTableBindSite :: String -> Int -> String -> (AST Node, AST Node) -> (Named Node, AST Node)
-prepTableBindSite tableId objNonce fn (Prim _ (PrimLit (LString field)), ast') =
-  let newNode = (addToNodeTcIdName (tableId ++ "-" ++ fn ++ "-" ++ field) (_aNode ast'))
-  in (Named field (set (aId.tiId) objNonce newNode),ast')
-prepTableBindSite tableId _ _ (Prim _ _, err) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in snd position: " ++ show err
-prepTableBindSite tableId _ _ (err, _) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ tableId ++ " given incorrect datatype in first position: " ++ show err
+prepTableBindSite :: Text -> TcId -> Text -> (AST Node, AST Node) -> (Named Node, AST Node)
+prepTableBindSite tableId tcId fn (Prim _ (PrimLit (LString field)), ast') =
+  let newNode = addToNodeTcIdName (tableId <> "-" <> fn <> "-" <> field) (_aNode ast')
+      objNonce = tcId ^. tiId
+  in (Named field (set (aId.tiId) objNonce newNode) tcId, ast')
+prepTableBindSite tableId _ _ (Prim _ _, err) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ T.unpack tableId ++ " given incorrect datatype in snd position: " ++ show err
+prepTableBindSite tableId _ _ (err, _) = throw $ SmtCompilerException "prepTableBindSite" $ "prepTableBindSite for table " ++ T.unpack tableId ++ " given incorrect datatype in first position: " ++ show err
 
 -- helper patterns
+pattern OfPrimType :: PrimType -> Node
 pattern OfPrimType pType <- (ofPrimType -> Just pType)
+
+pattern RawTableName :: Text -> AST Node
 pattern RawTableName t <- (Table (Node (TcId _ t _) _))
+
+pattern NativeFunc :: forall a. Text -> Fun a
 pattern NativeFunc f <- (FNative _ f _ _)
+
+pattern UserFunc :: forall a. Text -> [Named a] -> [AST a] -> Fun a
 pattern UserFunc name' args bdy <- (FDefun _ name' _ args bdy _)
+
+pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
-pattern NodeNonce i <- (Node (TcId _ _ i) _)
 
 -- compileNode's Patterns
+
+pattern AST_Var :: forall a. a -> AST a
 pattern AST_Var var <- (Var var)
+
+pattern AST_Lit :: forall a. Literal -> AST a
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
+
+pattern AST_NegativeVar :: forall a. a -> AST a
 pattern AST_NegativeVar var' <- (App _ (NativeFunc "-") [AST_Var var'])
+
+pattern AST_NegativeLit :: forall a. Literal -> AST a
 pattern AST_NegativeLit lit' <- (App _ (NativeFunc "-") [AST_Lit lit'])
+
+pattern AST_NFun :: forall a. a -> Text -> [AST a] -> AST a
 pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
-pattern AST_NFun_Basic fn' args' <- AST_NFun _ (ofBasicOperators -> Right fn') args'
-pattern AST_UFun name' node' bdy' args' <- (App node' (UserFunc name' _ bdy') args')
-pattern AST_Enforce node' app' msg' <- (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
-pattern AST_If node' cond' ifTrue' ifFalse' <- (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
-pattern AST_EnforceKeyset node' keyset' <- (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
+
+pattern AST_NFun_Basic :: forall a. Text -> [AST a] -> AST a
+pattern AST_NFun_Basic fn' args' <-
+  AST_NFun _ (ofBasicOperators -> Right fn') args'
+
+pattern AST_UFun :: forall a. Text -> a -> [AST a] -> [AST a] -> AST a
+pattern AST_UFun name' node' bdy' args' <-
+  (App node' (UserFunc name' _ bdy') args')
+
+pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
+pattern AST_Enforce node' app' msg' <-
+  (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
+
+pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
+pattern AST_If node' cond' ifTrue' ifFalse' <-
+  (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
+
+pattern AST_EnforceKeyset :: forall a. a -> Text -> AST a
+pattern AST_EnforceKeyset node' keyset' <-
+  (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
+
+pattern AST_Binding :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
-pattern AST_WithRead node' table' key' bindings' bdy' <- (App node' (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy')) [RawTableName table', key'])
+
+pattern AST_WithRead :: Node
+                     -> Text
+                     -> AST Node
+                     -> [(Named Node, AST Node)]
+                     -> [AST Node]
+                     -> AST Node
+pattern AST_WithRead node' table' key' bindings' bdy' <-
+  (App node'
+       (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy'))
+       [RawTableName table', key'])
+
+pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- (Object objNode kvs)
-pattern AST_InsertOrUpdate node' fnName' table' key' objNonce' kvs' <- (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj (NodeNonce objNonce') kvs'])
-pattern AST_Format node' fmtStr' args' <- (App node' (NativeFunc "format") (AST_Lit (LString fmtStr'):args'))
+
+pattern AST_InsertOrUpdate node' fnName' table' key' tcId' kvs' <-
+  (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj (Node tcId' _) kvs'])
+
+pattern AST_InsertOrUpdate :: Node
+                           -> Text
+                           -> Text
+                           -> AST Node
+                           -> TcId
+                           -> [(AST Node, AST Node)]
+                           -> AST Node
+
+pattern AST_Format :: forall a. a -> Text -> [AST a] -> AST a
+pattern AST_Format node' fmtStr' args' <-
+  (App node' (NativeFunc "format") (AST_Lit (LString fmtStr'):args'))
 
 -- Unsupported currently
+
+pattern AST_Read :: forall a. AST a
 pattern AST_Read <- (App _ (NativeFunc "read") _)
+
+pattern AST_AddTime :: forall a. AST a
 pattern AST_AddTime <- (App _ (NativeFunc "add-time") _)
+
+pattern AST_Days :: forall a. AST a
 pattern AST_Days <- (App _ (NativeFunc "days") _)
+
+pattern AST_Bind :: forall a. AST a
 pattern AST_Bind <- (App _ (NativeFuncSpecial "bind" _) _)
-pattern AST_UnsupportedOp s <- (App _ (NativeFunc (isUnsupportedOperator -> Just s)) _ )
+
+pattern AST_UnsupportedOp :: forall a. Text -> AST a
+pattern AST_UnsupportedOp s <-
+  (App _ (NativeFunc (isUnsupportedOperator -> Just s)) _ )
 
 -- | the wrapper
 compileBody :: InIf -> ParentRel -> [AST Node] -> SmtCompiler ()
@@ -495,7 +562,7 @@ compileNode _ AST_Read = throw $ SmtCompilerException "compileNode does not supp
 compileNode _ AST_AddTime = throw $ SmtCompilerException "compileNode" "does not yet support add-time"
 compileNode _ AST_Days = throw $ SmtCompilerException "compileNode" "does not yet support days"
 compileNode _ AST_Bind = throw $ SmtCompilerException "compileNode" "does not yet support bind"
-compileNode _ (AST_UnsupportedOp s) = throw $ SmtCompilerException "compileNode" $ "Apologies, the operator " ++ s ++ " is not yet supported"
+compileNode _ (AST_UnsupportedOp s) = throw $ SmtCompilerException "compileNode" $ "Apologies, the operator " ++ T.unpack s ++ " is not yet supported"
 compileNode inIf (AST_NFun_Basic fn args) = do
   args' <- mapM (compileNode inIf) args
   case basicOperatorToQualId fn of
@@ -505,7 +572,7 @@ compileNode inIf (AST_NFun_Basic fn args) = do
 compileNode inIf (AST_Enforce node' app' msg') = do
   trackNewNode node'
   action <- compileNode inIf app'
-  assertTerm inIf action (Just $ "enforces: " ++ msg') >>= tellCmd
+  assertTerm inIf action (Just $ "enforces: " <> msg') >>= tellCmd
   nodeToTerm node'
 compileNode inIf (AST_EnforceKeyset node' ks) = do
   let newNode = (addToNodeTcIdName ks node')
@@ -519,12 +586,12 @@ compileNode inIf (AST_WithRead node' table' key' bindings' bdy') = do
   mapM_ (bindTableVar inIf TableRead table' keyTerm) bindings'
   compileBody inIf (HasRelation node') bdy'
   nodeToTerm node'
-compileNode inIf (AST_InsertOrUpdate node' fn' table' key' objNonce' kvs') = do
+compileNode inIf (AST_InsertOrUpdate node' fn' table' key' tcId' kvs') = do
   trackNewNode node'
   asTerm <- nodeToTerm node'
   keyTerm <- compileNode inIf key'
-  mapM_ (bindTableVar inIf TableWrite table' keyTerm) (prepTableBindSite table' objNonce' fn' <$> kvs')
-  assertEquality inIf asTerm (stringAsTerm $ fn' ++ " succeeded") Nothing >>= tellCmd
+  mapM_ (bindTableVar inIf TableWrite table' keyTerm) (prepTableBindSite table' tcId' fn' <$> kvs')
+  assertEquality inIf asTerm (textAsTerm $ fn' <> " succeeded") Nothing >>= tellCmd
   return $ asTerm
 compileNode inIf (AST_Format node' fmtStr' args') = do
   trackNewNode node'
@@ -532,16 +599,16 @@ compileNode inIf (AST_Format node' fmtStr' args') = do
   prepedFmt <- return $ parseFmtStr fmtStr'
   terms' <- mapM (\n -> compileNode inIf n >>= showTermForFmt) args'
   fmtAsStr <- return $ TermQualIdentifierT (QIdentifier $ ISymbol "str.++") $ constructFmt prepedFmt terms'
-  assertEquality inIf asTerm fmtAsStr (Just $ "interpreting " ++ fmtStr') >>= tellCmd
+  assertEquality inIf asTerm fmtAsStr (Just $ "interpreting " <> fmtStr') >>= tellCmd
   return $ asTerm
 -- #END# Handle Natives Section
 
 -- #BEGIN# Handle User Functions Section
 compileNode inIf (AST_UFun name' node' bdy' _args') = do
-  debug $ "Entered Defun " ++ name'
+  debug $ "Entered Defun " <> T.unpack name'
   trackNewNode node'
   compileBody inIf (HasRelation node') bdy'
-  debug $ "Leaving Defun " ++ name'
+  debug $ "Leaving Defun " <> T.unpack name'
   nodeToTerm node'
 -- #END# Handle User Functions Section
 compileNode _ err = throw $ SmtCompilerException "compileNode" $ "unsupported construct: " ++ show err
@@ -566,24 +633,24 @@ dumpModelsOnSat = CompiledSmt (SetOption (OptionAttr (AttributeVal ":dump-models
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
-  (r,s) <- execScript' (Script fp) fp
+  (r,s) <- execScript' (Script False fp) fp
   either (die def) (const (return ())) r
   case view (rEnv . eeRefStore . rsModules . at mn) s of
     Just m -> return m
     Nothing -> die def $ "Module not found: " ++ show (fp,mn)
 
-loadFun :: FilePath -> ModuleName -> String -> IO Ref
+loadFun :: FilePath -> ModuleName -> Text -> IO Ref
 loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
   Just f -> return f
 
-inferFun :: Bool -> FilePath -> ModuleName -> String -> IO (TopLevel Node, TcState)
+inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState)
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
 
-runCompiler :: String -> String -> String -> IO ()
+runCompiler :: String -> Text -> Text -> IO ()
 runCompiler = runCompilerDebug False
 
-runCompilerDebug :: Bool -> String -> String -> String -> IO ()
+runCompilerDebug :: Bool -> String -> Text -> Text -> IO ()
 runCompilerDebug dbg replPath' modName' funcName' = do
   f <- fst <$> inferFun False replPath' (ModuleName modName') funcName'
   r <- analyzeFunction f dbg
@@ -606,18 +673,17 @@ _parseSmtCmd s = let (Right f) = Parsec.parse SmtParser.parseCommand "" s in f
 --       ]}
 
 data FmtStr = Placeholder
-            | FmtStrLit String
+            | FmtStrLit Text
             deriving (Show, Eq)
 
-parseFmtStr :: String -> [FmtStr]
-parseFmtStr s = case Parsec.parse prs "" s of
+parseFmtStr :: Text -> [FmtStr]
+parseFmtStr t = case Parsec.parse prs "" t of
   Left err -> throw $ SmtCompilerException "parseFmtStr" $ show err
   Right v -> v
   where
     prs = (`manyTill` eof) $  (Parsec.try $ string "{}" >> return Placeholder)
-                          <|> (Parsec.try $ do str <- manyTill anyChar (Parsec.try $ lookAhead $ string "{}")
-                                               return $ FmtStrLit str)
-                          <|> (Parsec.try $ many anyChar >>= return . FmtStrLit)
+                          <|> (Parsec.try $ FmtStrLit . T.pack <$> manyTill anyChar (Parsec.try $ lookAhead $ string "{}"))
+                          <|> (Parsec.try $ FmtStrLit . T.pack <$> many anyChar)
 
 constructFmt :: [FmtStr] -> [Smt.Term] -> [Smt.Term]
 constructFmt [] [] = []

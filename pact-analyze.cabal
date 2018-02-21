@@ -30,7 +30,7 @@ library
                      , lens
                      , data-default
                      , mtl >= 2.2.1
-                     , pact
+                     , pact >= 2.3
                      , parsec
                      , groom
                      , transformers

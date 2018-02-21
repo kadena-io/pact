@@ -7,13 +7,16 @@ module Pact.Analyze.DSL
   ) where
 
 import Pact.Analyze.Types
-import Pact.Typecheck hiding (debug)
-import Pact.Types
+import Pact.Types.Lang
+import Pact.Types.Typecheck
 
 import Control.Exception
 import Data.Decimal
 import qualified Data.Map.Strict as Map
+import Data.Monoid ((<>))
 import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as T
 
 import SmtLib.Syntax.Syntax
 import qualified SmtLib.Syntax.Syntax as Smt
@@ -30,12 +33,12 @@ data ProverTest =
   deriving (Show, Eq)
 
 data ProveProperty = ProveProperty
-  { _dtTable :: String
-  , _dtColumn :: String
-  , _dtTests :: [ProverTest]
+  { _dtTable  :: Text
+  , _dtColumn :: Text
+  , _dtTests  :: [ProverTest]
   } deriving (Show, Eq)
 
-type Parser a = Parsec String () a
+type Parser a = Parsec Text () a
 
 parseAsDecimal :: Parser Decimal
 parseAsDecimal = do
@@ -63,16 +66,16 @@ parseColRange = do
 parseConservesMass :: Parser ProverTest
 parseConservesMass = spaces >> string "ConservesMass" >> spaces >> return ConservesMass
 
-parseColName :: Parser (String,String)
+parseColName :: Parser (Text, Text)
 parseColName = do
   _ <- spaces >> char '\''
-  module' <- many1 (noneOf ".")
+  module' <- T.pack <$> many1 (noneOf ".")
   _ <- char '.'
-  table' <- many1 (noneOf ".")
+  table' <- T.pack <$> many1 (noneOf ".")
   _ <- char '.'
-  column' <- many1 (noneOf "'")
+  column' <- T.pack <$> many1 (noneOf "'")
   _ <- char '\''
-  return (module' ++ "." ++ table', column')
+  return (module' <> "." <> table', column')
 
 parseProveTest :: Parser [ProverTest]
 parseProveTest = do
@@ -92,8 +95,7 @@ parseProperty = do
 parseDocString :: Parser [ProveProperty]
 parseDocString = do
   _ <- manyTill anyChar (lookAhead $ Parsec.try $ string "{-#")
-  pp <- many1 parseProperty
-  return pp
+  many1 parseProperty
 
 getTestsFromDoc :: TopLevel Node -> [ProveProperty]
 getTestsFromDoc (TopFun (FDefun{..})) = case _fDocs of
@@ -103,24 +105,27 @@ getTestsFromDoc (TopFun (FDefun{..})) = case _fDocs of
     Right pps -> pps
 getTestsFromDoc _ = throw $ SmtCompilerException "getTestsFromDoc" "Not given a top-level defun"
 
-renderProverTest :: String -> String -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
+smtVar :: SymName -> QualIdentifier
+smtVar (SymName sn) = QIdentifier (ISymbol $ T.unpack sn)
+
+renderProverTest :: Text -> Text -> ([SymName], [SymName]) -> ProverTest -> [Smt.Command]
 renderProverTest table' column' (reads', writes') ColumnRange{..} =
     preamble ++ (constructDomainAssertion <$> reads') ++ [constructRangeAssertion] ++ exitCmds
   where
-    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability (by attempting to violate it) for: " ++ table' ++ "." ++ column' ++ "\""]
-    constructDomainAssertion (SymName sn) = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
-                                         [TermQualIdentifier (QIdentifier (ISymbol sn))
+    preamble = [Push 1, Echo $ "\"Verifying Domain and Range Stability (by attempting to violate it) for: " ++ T.unpack table' ++ "." ++ T.unpack column' ++ "\""]
+    constructDomainAssertion symName = Assert (TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
+                                         [TermQualIdentifier (smtVar symName)
                                          ,TermSpecConstant (SpecConstantDecimal $ show _ptcValue)])
-    constructIndividualRangeAsserts (SymName sn) = TermQualIdentifierT (QIdentifier (ISymbol "not"))
+    constructIndividualRangeAsserts symName = TermQualIdentifierT (QIdentifier (ISymbol "not"))
                                                    [TermQualIdentifierT (QIdentifier (ISymbol _ptcFunc))
-                                                    [TermQualIdentifier (QIdentifier (ISymbol sn)),TermSpecConstant (SpecConstantDecimal $ show _ptcValue)]]
+                                                    [TermQualIdentifier (smtVar symName),TermSpecConstant (SpecConstantDecimal $ show _ptcValue)]]
     constructRangeAssertion = Assert (TermQualIdentifierT (QIdentifier (ISymbol "or")) (constructIndividualRangeAsserts <$> writes'))
     exitCmds = [Echo "\"Domain/Range relation holds IFF unsat\"", CheckSat, Pop 1]
 renderProverTest table' column' (reads', writes') ConservesMass =
     preamble ++ [mkRelation] ++ exitCmds
   where
-    preamble = [Push 1, Echo $ "\"Verifying mass conservation (by attempting to violate it) for: " ++ table' ++ "." ++ column' ++ "\""]
-    symNameToTerm (SymName sn) = TermQualIdentifier (QIdentifier (ISymbol sn))
+    preamble = [Push 1, Echo $ "\"Verifying mass conservation (by attempting to violate it) for: " ++ T.unpack table' ++ "." ++ T.unpack column' ++ "\""]
+    symNameToTerm symName = TermQualIdentifier (smtVar symName)
     mkRelation = Assert (TermQualIdentifierT
                          (QIdentifier (ISymbol "not"))
                          [TermQualIdentifierT (QIdentifier (ISymbol "="))
@@ -130,8 +135,13 @@ renderProverTest table' column' (reads', writes') ConservesMass =
     exitCmds = [Echo "\"Mass is conserved IFF unsat\"", CheckSat, Pop 1]
 
 -- | Go through declared variables and gather a list of those read from a given table's column and those written to it
-varsFromTable :: TableAccess -> String -> String -> CompilerState -> [SymName]
-varsFromTable ta table' column' (CompilerState _ tvars) = _svName <$> (Set.toList $ Map.keysSet $ Map.filter (\OfTableColumn{..} -> ta == _otcAccess && table' == _otcTable && column' == _otcColumn) tvars)
+varsFromTable :: TableAccess -> Text -> Text -> CompilerState -> [SymName]
+varsFromTable ta table' column' (CompilerState _ tvars) = _svName <$>
+    (Set.toList . Map.keysSet . Map.filter relevantTvar) tvars
+  where
+    relevantTvar OfTableColumn{..} = ta      == _otcAccess
+                                  && table'  == _otcTable
+                                  && column' == _otcColumn
 
 renderTestsFromState :: CompilerState -> ProveProperty -> [String]
 renderTestsFromState cs ProveProperty{..} =
@@ -151,11 +161,11 @@ analyzeAndRenderTests dbg tf = try $ do
   case analysisRes of
     Left err -> throw err
     Right (compState, compiledFn) -> do
-      pps <- return $ getTestsFromDoc tf
-      tests <- return $ renderTestsFromState compState <$> pps
+      let pps = getTestsFromDoc tf
+          tests = renderTestsFromState compState <$> pps
       return $ (encodeSmt <$> compiledFn) ++ concat tests
 
-_compileTests :: Bool -> FilePath -> String -> String -> IO ()
+_compileTests :: Bool -> FilePath -> Text -> Text -> IO ()
 _compileTests dbg fp mod' func = do
   f <- fst <$> inferFun False fp (ModuleName mod') func
   res <- analyzeAndRenderTests dbg f

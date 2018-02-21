@@ -1,25 +1,29 @@
 # stack yaml for ghc builds
 
-resolver: lts-6.12
+resolver: lts-8.15
 
 packages:
 - '.'
 - location:
     git: git@github.com:kadena-io/pact.git
-    commit: 36854a3b62df954deee39a90fc591e3faf4618c4
+    commit: d1f2892bc739c1f8fb26b59b4e7528a592d5d12d
   extra-dep: true
 - location:
     git: git@github.com:buckie/Hsmtlib.git
-    commit: 1fec7492100c0ff72bdb87ffc841eabfdce2a27f
+    commit: f39f51be1c0793646f1a5a1eae1160c37dddfb57
   extra-dep: true
 - location:
     git: git@github.com:buckie/SmtLib.git
-    commit: d954aaf13e0418dfc354828ab1db0afdff212fd7
+    commit: 76f78603a84175e70c55a5de59fab7733337119b
+  extra-dep: true
+- location:
+    git: https://github.com/kadena-io/thyme.git
+    commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   extra-dep: true
 
 extra-deps:
-- trifecta-1.6
-- show-prettyprint-0.1.2
+  - bound-2.0.1
+  - ed25519-donna-0.1.1
 
 flags: {}
 
