@@ -47,10 +47,11 @@ import Text.Trifecta as TF hiding (line,err,try,newline)
 import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
-import Data.Monoid
+import Data.Monoid hiding ((<>))
 import System.Console.Haskeline
-  (runInputT, defaultSettings, withInterrupt, InputT, getInputLine,
-   handleInterrupt)
+  (runInputT, withInterrupt, InputT, getInputLine, handleInterrupt,
+   CompletionFunc, completeQuotedWord, completeWord, listFiles,
+   filenameWordBreakChars, Settings(Settings), simpleCompletion)
 import System.FilePath
 
 import Pact.Compile
@@ -66,10 +67,38 @@ import Pact.Repl.Types
 interactiveRepl :: IO (Either () (Term Name))
 interactiveRepl = generalRepl Interactive
 
+completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
+completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
+  completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
+    modules <- gets (^. rEnv . eeRefStore . rsModules)
+    let namesInModules = concat $ modules ^.. traverse . _2 . to HM.keys
+        allNames = concat
+          [ namesInModules
+          , nameOfModule <$> HM.keys modules
+          , unName <$> HM.keys nativeDefs
+          ]
+        matchingNames = filter (str `isPrefixOf`) (unpack <$> allNames)
+    pure $ simpleCompletion <$> matchingNames
+
+  where
+    unName :: Name -> Text
+    unName (QName _ name _) = name
+    unName (Name    name _) = name
+
+    nameOfModule :: ModuleName -> Text
+    nameOfModule (ModuleName name) = name
+
+replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
+replSettings = Settings
+  completeFn
+  Nothing -- don't write history
+  True -- automatically add each line to history
+
 generalRepl :: ReplMode -> IO (Either () (Term Name))
 generalRepl m = initReplState m >>= \s -> case m of
-  Interactive -> runInputT defaultSettings $ withInterrupt $
-    haskelineLoop (setReplLib s) Nothing
+  Interactive -> evalStateT
+    (runInputT replSettings (withInterrupt (haskelineLoop Nothing)))
+    (setReplLib s)
   _StdInPipe -> runPipedRepl s stdin
 
 isPactFile :: String -> Bool
@@ -93,28 +122,39 @@ initPureEvalEnv = do
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
 
--- | Main loop for interactive input
-haskelineLoop
-  :: ReplState -> Maybe (Term Name) -> InputT IO (Either () (Term Name))
-haskelineLoop state lastResult =
+type HaskelineRepl = InputT (StateT ReplState IO)
+
+-- | Main loop for interactive input.
+--
+-- Swallows ctrl-c, requiring ctrl-d to exit. Includes autocomplete and
+-- readline.
+--
+-- We need to lift get / put because InputT for some reason doesn't have a
+-- MonadState instance.
+haskelineLoop :: Maybe (Term Name) -> HaskelineRepl (Either () (Term Name))
+haskelineLoop lastResult =
   let
     loop' = do
+      replState <- lift get
       line <- getInputLine "pact> "
       -- TODO(joel) multiline support (count parens)
       case line of
         Nothing -> rSuccess
         Just input -> do
-          (r, state') <-
+          (ret, state') <-
             if null input
-            then (,state) <$> rSuccess
-            else liftIO $ (`runStateT` state) $ errToUnit $
+            then (,replState) <$> rSuccess
+            -- TODO: move parsedCompileEval out of Repl monad we don't have to
+            -- liftIO / runStateT
+            else liftIO $ (`runStateT` replState) $ errToUnit $
               parsedCompileEval input $ TF.parseString exprsOnly mempty input
-          case r of
-            Left _  -> haskelineLoop state' Nothing
-            Right t -> haskelineLoop state' (Just t)
+          lift $ put state'
+          case ret of
+            Left _  -> haskelineLoop Nothing
+            Right t -> haskelineLoop (Just t)
     interruptHandler = do
       liftIO $ putStrLn "Type ctrl-d to exit pact"
-      haskelineLoop state lastResult
+      haskelineLoop lastResult
   in handleInterrupt interruptHandler loop'
 
 -- | Main loop for non-interactive (piped) input
