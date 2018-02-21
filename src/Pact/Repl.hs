@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -20,7 +21,7 @@
 
 module Pact.Repl
     (
-     repl,runRepl,repl'
+     interactiveRepl,generalRepl
     ,evalRepl,ReplMode(..)
     ,execScript,execScript'
     ,initEvalEnv,initPureEvalEnv,initReplState
@@ -41,12 +42,15 @@ import Data.Char
 import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (exp,print,putStrLn,putStr,interact)
+import Prelude hiding (exp,print,putStrLn,putStr)
 import Text.Trifecta as TF hiding (line,err,try,newline)
-import System.IO hiding (interact)
+import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
 import Data.Monoid
+import System.Console.Haskeline
+  (runInputT, defaultSettings, withInterrupt, InputT, getInputLine,
+   handleInterrupt)
 import System.FilePath
 
 import Pact.Compile
@@ -59,12 +63,14 @@ import Pact.Types.Logger
 import Pact.Repl.Types
 
 
+interactiveRepl :: IO (Either () (Term Name))
+interactiveRepl = generalRepl Interactive
 
-repl :: IO (Either () (Term Name))
-repl = repl' Interactive
-
-repl' :: ReplMode -> IO (Either () (Term Name))
-repl' m = initReplState m >>= \s -> runRepl s stdin
+generalRepl :: ReplMode -> IO (Either () (Term Name))
+generalRepl m = initReplState m >>= \s -> case m of
+  Interactive -> runInputT defaultSettings $ withInterrupt $
+    haskelineLoop (setReplLib s) Nothing
+  _StdInPipe -> runPipedRepl s stdin
 
 isPactFile :: String -> Bool
 isPactFile fp = endsWith fp ".pact"
@@ -72,9 +78,9 @@ isPactFile fp = endsWith fp ".pact"
 endsWith :: Eq a => [a] -> [a] -> Bool
 endsWith v s = s == reverse (take (length s) (reverse v))
 
-runRepl :: ReplState -> Handle -> IO (Either () (Term Name))
-runRepl s@ReplState{..} h =
-    evalStateT (useReplLib >> loop h (_rMode /= Interactive && _rMode /= FailureTest) Nothing) s
+runPipedRepl :: ReplState -> Handle -> IO (Either () (Term Name))
+runPipedRepl s@ReplState{..} h =
+    evalStateT (useReplLib >> pipeLoop h Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> m ReplState
 initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def def)
@@ -87,9 +93,33 @@ initPureEvalEnv = do
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
 errToUnit a = either (const (Left ())) Right <$> a
 
-loop :: Handle -> Bool -> Maybe (Term Name) -> Repl (Either () (Term Name))
-loop h abortOnError lastResult = do
-  interact $ outStr HOut "pact> "
+-- | Main loop for interactive input
+haskelineLoop
+  :: ReplState -> Maybe (Term Name) -> InputT IO (Either () (Term Name))
+haskelineLoop state lastResult =
+  let
+    loop' = do
+      line <- getInputLine "pact> "
+      -- TODO(joel) multiline support (count parens)
+      case line of
+        Nothing -> rSuccess
+        Just input -> do
+          (r, state') <-
+            if null input
+            then (,state) <$> rSuccess
+            else liftIO $ (`runStateT` state) $ errToUnit $
+              parsedCompileEval input $ TF.parseString exprsOnly mempty input
+          case r of
+            Left _  -> haskelineLoop state' Nothing
+            Right t -> haskelineLoop state' (Just t)
+    interruptHandler = do
+      liftIO $ putStrLn "Type ctrl-d to exit pact"
+      haskelineLoop state lastResult
+  in handleInterrupt interruptHandler loop'
+
+-- | Main loop for non-interactive (piped) input
+pipeLoop :: Handle -> Maybe (Term Name) -> Repl (Either () (Term Name))
+pipeLoop h lastResult = do
   isEof <- liftIO (hIsEOF h)
   let retVal = maybe rSuccess (return.Right) lastResult
   if isEof then retVal else do
@@ -99,12 +129,10 @@ loop h abortOnError lastResult = do
            d <- getDelta
            errToUnit $ parsedCompileEval line $ TF.parseString exprsOnly d line
     case r of
-      Left _ | abortOnError -> do
-                 outStrLn HErr "Aborting execution"
-                 return r
-             | otherwise -> loop h abortOnError Nothing
-      Right t -> loop h abortOnError (Just t)
-
+      Left _ -> do
+        outStrLn HErr "Aborting execution"
+        return r
+      Right t -> pipeLoop h (Just t)
 
 getDelta :: Repl Delta
 getDelta = do
@@ -113,6 +141,7 @@ getDelta = do
     (Script _ file) -> return $ Directed (BS.fromString file) 0 0 0 0
     _ -> return mempty
 
+-- TODO(joel) can we remove this style of multiline support?
 checkMultiline :: Handle -> String -> Repl String
 checkMultiline h l | last3 == "<<<" = runMulti allButLast3
                  where revl = reverse l
@@ -121,7 +150,6 @@ checkMultiline h l | last3 == "<<<" = runMulti allButLast3
                        runMulti s = do
                          isEof <- liftIO $ hIsEOF h
                          if isEof then return s else do
-                           interact $ outStr HOut "> "
                            line <- trim <$> liftIO (hGetLine h)
                            if line == "" then return (trim s) else runMulti (s ++ " " ++ line)
 checkMultiline _ l = return l
@@ -285,12 +313,6 @@ trim :: String -> String
 trim = dropWhileEnd isSpace . dropWhile isSpace
 
 
-isInteractive :: Repl Bool
-isInteractive = (== Interactive) <$> use rMode
-
-interact :: Repl () -> Repl ()
-interact act = isInteractive >>= \b -> when b act
-
 rSuccess :: Monad m => m (Either a (Term Name))
 rSuccess = return $ Right $ toTerm True
 
@@ -317,7 +339,10 @@ execScript' m fp = do
 
 
 useReplLib :: Repl ()
-useReplLib = rEvalState.evalRefs.rsLoaded %= HM.union (moduleToMap replDefs)
+useReplLib = id %= setReplLib
+
+setReplLib :: ReplState -> ReplState
+setReplLib = rEvalState.evalRefs.rsLoaded %~ HM.union (moduleToMap replDefs)
 
 
 evalRepl' :: String -> Repl (Either String (Term Name))
