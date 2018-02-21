@@ -37,13 +37,18 @@ import Control.Monad.Catch
 import Control.Monad.State.Strict
 import Data.Aeson hiding ((.=))
 import qualified Data.Aeson as A
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Text as Text
+import Data.Text.Encoding (encodeUtf8)
+import GHC.Word (Word8)
 import Prelude hiding (exp,print,putStrLn,putStr)
 import Text.Trifecta as TF hiding (line,err,try,newline)
+import qualified Text.Trifecta.Delta as TF
 import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
@@ -97,7 +102,7 @@ replSettings = Settings
 generalRepl :: ReplMode -> IO (Either () (Term Name))
 generalRepl m = initReplState m >>= \s -> case m of
   Interactive -> evalStateT
-    (runInputT replSettings (withInterrupt (haskelineLoop Nothing)))
+    (runInputT replSettings (withInterrupt (haskelineLoop [] Nothing)))
     (setReplLib s)
   _StdInPipe -> runPipedRepl s stdin
 
@@ -128,34 +133,67 @@ type HaskelineRepl = InputT (StateT ReplState IO)
 --
 -- Swallows ctrl-c, requiring ctrl-d to exit. Includes autocomplete and
 -- readline.
---
--- We need to lift get / put because InputT for some reason doesn't have a
--- MonadState instance.
-haskelineLoop :: Maybe (Term Name) -> HaskelineRepl (Either () (Term Name))
-haskelineLoop lastResult =
+haskelineLoop :: [String] -> Maybe (Term Name) -> HaskelineRepl (Either () (Term Name))
+haskelineLoop prevLines lastResult =
   let
-    loop' = do
-      replState <- lift get
-      line <- getInputLine "pact> "
-      -- TODO(joel) multiline support (count parens)
+    getNonEmptyInput = do
+      let lineHeader = if null prevLines then "pact> " else "....> "
+      line <- getInputLine lineHeader
+
       case line of
         Nothing -> rSuccess
-        Just input -> do
-          (ret, state') <-
-            if null input
-            then (,replState) <$> rSuccess
-            -- TODO: move parsedCompileEval out of Repl monad we don't have to
-            -- liftIO / runStateT
-            else liftIO $ (`runStateT` replState) $ errToUnit $
-              parsedCompileEval input $ TF.parseString exprsOnly mempty input
-          lift $ put state'
-          case ret of
-            Left _  -> haskelineLoop Nothing
-            Right t -> haskelineLoop (Just t)
+        Just "" -> haskelineLoop prevLines lastResult
+        -- TODO: move parsedCompileEval out of Repl monad so we don't have to
+        -- liftIO / runStateT
+        Just input -> handleMultilineInput (prevLines <> [input])
+
+    handleMultilineInput multilineInput =
+      let joinedInput = unlines multilineInput
+      in case TF.parseString exprsOnly mempty joinedInput of
+
+           -- Check where our parser crashed to see if it's at the end of
+           -- input. If so, we can assume it unexpectedly hit EOF,
+           -- indicating open parens / continuing input.
+           Failure (ErrInfo _ [TF.Lines x y z w])
+             -- check we've consumed:
+             -- * n + 1 newlines (unlines concats a newline at the end)
+             | x == fromIntegral (length prevLines + 1) &&
+             -- * and 0 chars on the last line
+               y == 0 &&
+             -- * all the bytes
+               z == fromIntegral (utf8BytesLength joinedInput) &&
+             -- * but none since the trailing newline
+               w == 0
+
+               -- If so, continue accepting input
+               -> haskelineLoop multilineInput lastResult
+
+           Failure e -> do
+             liftIO $ print e
+             haskelineLoop [] Nothing
+
+           -- We need to lift get / put because InputT for some reason doesn't
+           -- have a MonadState instance.
+           parsed -> do
+             replState <- lift get
+             (ret, state') <- liftIO $ (`runStateT` replState) $
+               errToUnit $ parsedCompileEval joinedInput parsed
+             lift $ put state'
+             case ret of
+               Left _  -> haskelineLoop [] Nothing
+               Right t -> haskelineLoop [] (Just t)
+
     interruptHandler = do
       liftIO $ putStrLn "Type ctrl-d to exit pact"
-      haskelineLoop lastResult
-  in handleInterrupt interruptHandler loop'
+      haskelineLoop [] lastResult
+
+  in handleInterrupt interruptHandler getNonEmptyInput
+
+toUTF8Bytes :: String -> [Word8]
+toUTF8Bytes = BS.unpack . encodeUtf8 . Text.pack
+
+utf8BytesLength :: String -> Int
+utf8BytesLength = length . toUTF8Bytes
 
 -- | Main loop for non-interactive (piped) input
 pipeLoop :: Handle -> Maybe (Term Name) -> Repl (Either () (Term Name))
