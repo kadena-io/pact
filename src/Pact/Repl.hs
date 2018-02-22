@@ -189,8 +189,6 @@ handleMultilineInput input prevLines lastResult =
            Left _  -> haskelineLoop [] Nothing
            Right t -> haskelineLoop [] (Just t)
 
---stateM :: MonadState s m => (
-
 toUTF8Bytes :: String -> [Word8]
 toUTF8Bytes = BS.unpack . encodeUtf8 . Text.pack
 
