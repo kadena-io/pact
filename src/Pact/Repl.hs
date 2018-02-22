@@ -70,8 +70,8 @@ interactiveRepl = generalRepl Interactive
 completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
-    modules <- gets (^. rEnv . eeRefStore . rsModules)
-    let namesInModules = concat $ modules ^.. traverse . _2 . to HM.keys
+    modules <- use (rEnv . eeRefStore . rsModules)
+    let namesInModules = toListOf (traverse . _2 . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
           , nameOfModule <$> HM.keys modules
