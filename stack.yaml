@@ -1,6 +1,6 @@
 # stack yaml for ghc builds
 
-resolver: lts-8.15
+resolver: lts-10.6
 
 packages:
 - '.'
