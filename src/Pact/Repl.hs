@@ -141,53 +141,60 @@ haskelineLoop prevLines lastResult =
       line <- getInputLine lineHeader
 
       case line of
-        Nothing -> rSuccess
+        Nothing -> maybe rSuccess (return.Right) lastResult
         Just "" -> haskelineLoop prevLines lastResult
         -- TODO: move parsedCompileEval out of Repl monad so we don't have to
         -- liftIO / runStateT
-        Just input -> handleMultilineInput (prevLines <> [input])
-
-    handleMultilineInput multilineInput =
-      let joinedInput = unlines multilineInput
-      in case TF.parseString exprsOnly mempty joinedInput of
-
-           -- Check where our parser crashed to see if it's at the end of
-           -- input. If so, we can assume it unexpectedly hit EOF,
-           -- indicating open parens / continuing input.
-           Failure (ErrInfo _ [TF.Lines x y z w])
-             -- check we've consumed:
-             -- * n + 1 newlines (unlines concats a newline at the end)
-             | x == fromIntegral (length prevLines + 1) &&
-             -- * and 0 chars on the last line
-               y == 0 &&
-             -- * all the bytes
-               z == fromIntegral (utf8BytesLength joinedInput) &&
-             -- * but none since the trailing newline
-               w == 0
-
-               -- If so, continue accepting input
-               -> haskelineLoop multilineInput lastResult
-
-           Failure e -> do
-             liftIO $ print e
-             haskelineLoop [] Nothing
-
-           -- We need to lift get / put because InputT for some reason doesn't
-           -- have a MonadState instance.
-           parsed -> do
-             replState <- lift get
-             (ret, state') <- liftIO $ (`runStateT` replState) $
-               errToUnit $ parsedCompileEval joinedInput parsed
-             lift $ put state'
-             case ret of
-               Left _  -> haskelineLoop [] Nothing
-               Right t -> haskelineLoop [] (Just t)
+        Just input -> handleMultilineInput input prevLines lastResult
 
     interruptHandler = do
       liftIO $ putStrLn "Type ctrl-d to exit pact"
       haskelineLoop [] lastResult
 
   in handleInterrupt interruptHandler getNonEmptyInput
+
+-- | Interactive multiline input loop.
+handleMultilineInput
+  :: String   -- ^ latest input line
+  -> [String] -- ^ previous input lines
+  -> Maybe (Term Name) -- ^ previous result
+  -> HaskelineRepl (Either () (Term Name))
+handleMultilineInput input prevLines lastResult =
+  let multilineInput = prevLines <> [input]
+      joinedInput = unlines multilineInput
+  in case TF.parseString exprsOnly mempty joinedInput of
+
+       -- Check where our parser crashed to see if it's at the end of
+       -- input. If so, we can assume it unexpectedly hit EOF,
+       -- indicating open parens / continuing input.
+       Failure (ErrInfo _ [TF.Lines x y z w])
+         -- check we've consumed:
+         -- * n + 1 newlines (unlines concats a newline at the end)
+         | x == fromIntegral (length prevLines + 1) &&
+         -- * and 0 chars on the last line
+           y == 0 &&
+         -- * all the bytes
+           z == fromIntegral (utf8BytesLength joinedInput) &&
+         -- * but none since the trailing newline
+           w == 0
+
+           -- If so, continue accepting input
+           -> haskelineLoop multilineInput lastResult
+
+       Failure e -> do
+         liftIO $ print e
+         haskelineLoop [] Nothing
+
+       -- We need to lift get / put because InputT for some reason doesn't
+       -- have a MonadState instance.
+       parsed -> do
+         replState <- lift get
+         (ret, state') <- liftIO $ (`runStateT` replState) $
+           errToUnit $ parsedCompileEval joinedInput parsed
+         lift $ put state'
+         case ret of
+           Left _  -> haskelineLoop [] Nothing
+           Right t -> haskelineLoop [] (Just t)
 
 toUTF8Bytes :: String -> [Word8]
 toUTF8Bytes = BS.unpack . encodeUtf8 . Text.pack
