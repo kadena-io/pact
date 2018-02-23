@@ -143,8 +143,6 @@ haskelineLoop prevLines lastResult =
       case line of
         Nothing -> maybe rSuccess (return.Right) lastResult
         Just "" -> haskelineLoop prevLines lastResult
-        -- TODO: move parsedCompileEval out of Repl monad so we don't have to
-        -- liftIO / runStateT
         Just input -> handleMultilineInput input prevLines lastResult
 
     interruptHandler = do
@@ -185,13 +183,8 @@ handleMultilineInput input prevLines lastResult =
          liftIO $ print e
          haskelineLoop [] Nothing
 
-       -- We need to lift get / put because InputT for some reason doesn't
-       -- have a MonadState instance.
        parsed -> do
-         replState <- lift get
-         (ret, state') <- liftIO $ (`runStateT` replState) $
-           errToUnit $ parsedCompileEval joinedInput parsed
-         lift $ put state'
+         ret <- lift $ errToUnit $ parsedCompileEval joinedInput parsed
          case ret of
            Left _  -> haskelineLoop [] Nothing
            Right t -> haskelineLoop [] (Just t)
