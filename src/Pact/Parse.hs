@@ -1,8 +1,10 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -14,14 +16,15 @@
 
 module Pact.Parse
     (
-     expr,exprs,exprsOnly
+     exprsOnly
     ,parseExprs
     ,number
+    ,PactParser(unPactParser)
     )
 
 where
 
-import Text.Trifecta as TF hiding (spaces)
+import Text.Trifecta as TF
 import Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.List
@@ -30,12 +33,24 @@ import Prelude hiding (exp)
 import Data.String
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight
+import Text.Parser.Token.Style
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
 
 import Pact.Types.Lang
 
+newtype PactParser p a = PactParser { unPactParser :: p a }
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, DeltaParsing)
+
+type P a = forall m. (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => PactParser m a
+
+instance TokenParsing p => TokenParsing (PactParser p) where
+  someSpace   = PactParser $ buildSomeSpaceParser someSpace $ CommentStyle "" "" ";" False
+  nesting     = PactParser . nesting . unPactParser
+  semi        = token $ char ';' <?> ";"
+  highlight h = PactParser . highlight h . unPactParser
+  token p     = p <* whiteSpace
 
 symbols :: CharParsing m => m Char
 symbols = oneOf "%#+-_&$@<>=^?*!|/"
@@ -48,9 +63,8 @@ style = IdentifierStyle "atom"
         Symbol
         ReservedIdentifier
 
-
 -- | Main parser for Pact expressions.
-expr :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Exp
+expr :: P Exp
 expr = do
   delt <- position
   let inf = do
@@ -63,7 +77,7 @@ expr = do
    <|>
    (ELiteral <$> bool <*> inf <?> "bool")
    <|>
-   (ESymbol <$> (char '\'' >> ident style) <*> inf <?> "symbol")
+   (ESymbol <$> (symbolic '\'' >> ident style) <*> inf <?> "symbol")
    <|>
    do
      a <- ident style
@@ -71,10 +85,10 @@ expr = do
        TF.try (qualified >>= \q -> inf >>= \i -> return (EAtom a (Just q) Nothing i) <?> "qual atom") <|>
        (inf >>= \i -> return (EAtom a Nothing Nothing i) <?> "bare atom")
    <|>
-   (EList <$> parens (sepBy expr spaces) <*> pure Nothing <*> inf <?> "sexp")
+   (EList <$> parens (many expr) <*> pure Nothing <*> inf <?> "sexp")
    <|>
    do
-     is <- brackets (sepBy expr spaces) <?> "list literal"
+     is <- brackets (many expr) <?> "list literal"
      let lty = case nub (map expPrimTy is) of
                  [Just ty] -> ty
                  _ -> TyAny
@@ -87,12 +101,18 @@ expr = do
      if all (== ":") ops then EObject kvs <$> inf
      else if all (== ":=") ops then EBinding kvs <$> inf
           else unexpected $ "Mixed binding/object operators: " ++ show ops
+{-# INLINE expr #-}
 
-number :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m Literal
+number :: P Literal
 number = do
+  -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
+  -- than `symbolic :: TokenParsing m => Char -> m Char` here. We use the char
+  -- parser because we want to disallow whitespace following the negative sign
+  -- (token parsers apply `whiteSpace` after every token). With a whitespace we
+  -- consider this an expression rather than a literal.
   neg <- maybe id (const negate) <$> optional (char '-')
   num <- some digit
-  dec <- optional (char '.' *> some digit)
+  dec <- optional (dot *> some digit)
   let strToNum start = foldl' (\x d -> 10*x + toInteger (digitToInt d)) start
   case dec of
     Nothing -> return $ LInteger (neg (strToNum 0 num))
@@ -101,7 +121,7 @@ number = do
               (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
 
-bool :: TokenParsing m => m Literal
+bool :: P Literal
 bool = symbol "true" *> pure (LBool True) <|> symbol "false" *> pure (LBool False)
 {-# INLINE bool #-}
 
@@ -110,18 +130,15 @@ expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
 expPrimTy ESymbol {} = Just $ TyPrim TyString
 expPrimTy _ = Nothing
 
-qualified :: (Monad m,TokenParsing m) => m Text
-qualified = char '.' *> ident style
+qualified :: P Text
+qualified = dot *> ident style
 
-typed :: (Monad m,TokenParsing m) => m (Type TypeName)
-typed = do
-  _ <- char ':'
-  spaces
-  parseType
+typed :: P (Type TypeName)
+typed = colon *> parseType
 
-parseType :: (Monad m,TokenParsing m) => m (Type TypeName)
+parseType :: P (Type TypeName)
 parseType =
-  (char '[' >> parseType >>= \t -> char ']' >> return (TyList t) <?> "typed list") <|>
+  (brackets (parseType >>= \t -> return (TyList t) <?> "typed list")) <|>
   parseUserSchema <|>
   tsymbol tyInteger *> return (TyPrim TyInteger) <|>
   tsymbol tyDecimal *> return (TyPrim TyDecimal) <|>
@@ -134,58 +151,39 @@ parseType =
   tsymbol tyKeySet *> return (TyPrim TyKeySet) <|>
   parseSchemaType tyTable TyTable
 
-tsymbol :: TokenParsing m => Text -> m String
+tsymbol :: Text -> P String
 tsymbol = symbol . unpack
 
-parseUserSchema :: (Monad m,TokenParsing m) => m (Type TypeName)
-parseUserSchema = char '{' >> ident style >>= \t -> char '}' >> return (TyUser (fromString t)) <?> "user type"
+parseUserSchema :: P (Type TypeName)
+parseUserSchema = braces $ ident style >>= \t -> return  (TyUser (fromString t)) <?> "user type"
 
-parseSchemaType :: (Monad m,TokenParsing m) => Text -> SchemaType -> m (Type TypeName)
+parseSchemaType :: Text -> SchemaType -> P (Type TypeName)
 parseSchemaType tyRep sty =
   TF.try (TySchema sty <$> (tsymbol tyRep *> parseUserSchema)) <|>
   (tsymbol tyRep *> return (TySchema sty TyAny))
 
-
-
--- | Skip spaces or one-line comments
-spaces :: CharParsing m => m ()
-spaces = skipMany (skipSome space <|> oneLineComment)
-    where oneLineComment = TF.try (string ";") *> skipMany (satisfy (/= '\n')) <?> "comment"
-{-# INLINE spaces #-}
---space <?> "white space"
-
-
-{-# INLINE expr #-}
-
 -- | Parse one or more Pact expressions.
-exprs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
-exprs = some (spaces *> expr <* spaces)
+exprs :: P [Exp]
+exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
 -- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: Parser [Exp]
-exprsOnly = exprs <* TF.eof
+exprsOnly :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
+exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
-pairs :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) =>
-         m [(String,(Exp,Exp))]
+pairs :: P [(String,(Exp,Exp))]
 pairs =
-    braces ((`sepBy` char ',')
+    braces ((`sepBy` comma)
     (do
-       spaces
        k <- expr
-       spaces
        op <- symbol ":=" <|> symbol ":"
-       spaces
        v <- expr
-       spaces
        return (op,(k,v))
     )) <?> "object"
 
-
 -- | "Production" parser: atto, parse multiple exps.
 parseExprs :: Text -> Either String [Exp]
-parseExprs = AP.parseOnly exprs
-
+parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
 _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
