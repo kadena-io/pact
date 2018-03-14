@@ -190,3 +190,12 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+  other-modules:
+                Blake2Spec
+              , DocgenSpec
+              , KeysetSpec
+              , PactTestsSpec
+              , ParserSpec
+              , PersistSpec
+              , TypecheckSpec
+              , TypesSpec
