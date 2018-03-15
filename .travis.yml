@@ -202,7 +202,6 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack --no-terminal $ARGS test
       stack build --no-terminal --test --ghc-options="-Werror" $ARGS 
       stack exec -- bench +RTS -K1k
       ;;
