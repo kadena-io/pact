@@ -184,6 +184,7 @@ install:
   case "$BUILD" in
     stack)
       stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
+      curl -sL https://raw.github.com/ndmitchell/hlint/master/misc/travis.sh | sh -s .
       ;;
     cabal)
       cabal --version
