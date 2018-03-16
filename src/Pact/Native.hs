@@ -329,7 +329,7 @@ readMsg i as = argsError i as
 newtype ParsedDecimal = ParsedDecimal Decimal
 instance FromJSON ParsedDecimal where
   parseJSON (String s) =
-    ParsedDecimal <$> case AP.parseOnly number s of
+    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
                         Right (LDecimal d) -> return d
                         Right (LInteger i) -> return (fromIntegral i)
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
@@ -347,7 +347,7 @@ readDecimal i as = argsError i as
 newtype ParsedInteger = ParsedInteger Integer
 instance FromJSON ParsedInteger where
   parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly number s of
+    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
                         Right (LInteger i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (Number n) = return $ ParsedInteger (round n)
