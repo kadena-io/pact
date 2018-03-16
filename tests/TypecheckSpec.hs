@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module TypecheckSpec where
+module TypecheckSpec (spec) where
 
 import Test.Hspec
 import Pact.Typechecker hiding (debug)

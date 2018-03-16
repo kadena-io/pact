@@ -1,0 +1,20 @@
+- package:
+  - name: pact
+  - section:
+    - name: exe:pact
+    - message:
+      - name: Module not compiled
+      - module: Repl.hs 
+    - message:
+      - name: Redundant build-depends entry
+      - depends:
+        - base
+        - ghcjs-base
+        - pact
+  - section:
+    - name: library
+    - message:
+      - name: Redundant build-depends entry
+      - depends:
+        - hspec
+        - stm

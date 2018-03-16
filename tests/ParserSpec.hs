@@ -1,4 +1,4 @@
-module ParserSpec where
+module ParserSpec (spec) where
 
 import Test.Hspec
 import Pact.Repl

@@ -1,4 +1,4 @@
-module Blake2Spec where
+module Blake2Spec (spec) where
 
 import Test.Hspec
 import Crypto.Hash.Blake2Native
