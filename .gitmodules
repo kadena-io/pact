@@ -1,0 +1,3 @@
+[submodule "thyme"]
+	path = thyme
+	url = https://github.com/kadena-io/thyme.git
