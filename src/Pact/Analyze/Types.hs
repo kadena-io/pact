@@ -25,6 +25,7 @@ module Pact.Analyze.Types
   ) where
 
 import Control.Arrow ((>>>))
+import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
@@ -131,6 +132,7 @@ instance Mergeable CheckState where
 
 data CompileFailure
   = MalformedArithmeticOp ArithOp [Term Integer]
+  deriving Show
 
 type M = RWST Env () CheckState (Except CompileFailure)
 
@@ -505,6 +507,7 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) db
       case translateBodyBool (AstNodeOf <$> body') of
         Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
         Just body'' -> do
+          compileFailureVar <- newEmptyMVar
           thmResult <- prove $ do
             argVars <- forM argTys $ \(Arg name ty _info) -> do
               let name' = T.unpack name
@@ -518,14 +521,16 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) db
                 state0 = CheckState Running
 
             case runExcept $ runRWST action env0 state0 of
-              --
-              -- TODO: FIXME
-              --
-              Left _cf -> error "encountered CompileFailure"
-              Right (res, cstate, ()) ->
-                pure $ res .== true
+              Left cf -> do
+                liftIO $ putMVar compileFailureVar cf
+                pure false
+              Right (res, cstate, ()) -> pure $ res .== true
 
-          pure $ Right thmResult
+          mVarVal <- tryTakeMVar compileFailureVar
+          case mVarVal of
+            Nothing -> pure $ Right thmResult
+            -- TODO: return the failure instead of showing it
+            Just cf -> pure $ Left $ SmtCompilerException "analyzeFunction" (show cf)
 
 analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
