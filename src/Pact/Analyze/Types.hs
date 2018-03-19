@@ -31,7 +31,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.Trans.RWS.Strict
 import Control.Exception
-import Control.Lens hiding ((.=), op)
+import Control.Lens hiding (op)
 import Data.Data
 import qualified Data.Decimal as Decimal
 import Pact.Typechecker hiding (debug)
@@ -40,7 +40,7 @@ import Pact.Types.Runtime hiding (Term)
 import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Repl
-import Data.Aeson hiding (Object)
+import Data.Aeson hiding (Object, (.=))
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -58,6 +58,8 @@ import qualified Data.Text as T
 
 import qualified Text.Parsec as Parsec
 import Text.Parsec hiding (parse, try)
+
+import Debug.Trace
 
 -- !!! Orphan needed for dev, delete when finished
 -- instance ToJSON Node where
@@ -97,12 +99,29 @@ data Env = Env
   } deriving Show
 makeLenses ''Env
 
+data Status = Running | Thrown
+  deriving (Eq, Show)
+
+instance Mergeable Status where
+  symbolicMerge _f _t a b
+    | a == b = a
+    | otherwise =
+      error $ "Status: No least-upper-bound for " ++ show (a, b)
+
 data CheckState = CheckState
-  {
+  { _status :: Status
   } deriving (Show, Eq)
 makeLenses ''CheckState
 
-type M a = RWST Env () CheckState IO a
+instance Mergeable CheckState where
+  symbolicMerge f t (CheckState s1) (CheckState s2) = CheckState
+    (symbolicMerge f t s1 s2)
+
+type M = RWS Env () CheckState
+
+instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWS r w s a) where
+  symbolicMerge f t l r = RWST $ \r' s -> Identity $
+    symbolicMerge f t (runRWS l r' s) (runRWS r r' s)
 
 isUnsupportedOperator :: Text -> Maybe Text
 isUnsupportedOperator s = if isUnsupported then Just s else Nothing
@@ -268,20 +287,20 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 class Storable a where
 
 data Term ret where
-  IfThenElse ::  Term Bool -> Term a -> Term a -> Term a
-  Enforce    ::            Term Bool -> String -> Term ()
-  Sequence   ::             [Term b] -> Term a -> Term a
-  Value      ::                          SBV a -> Term a
-  Read       ::                   Term Integer -> Term a
-  Let        ::    String  -> Term a -> Term b -> Term b
-  Var        ::                         String -> Term a
-  Write      ::         Term Integer -> Term a -> Term ()
-  Throw      ::                         String -> Term ()
-  Arith      ::      ArithOp -> [Term Integer] -> Term Integer
-  Comparison ::               Term a -> Term a -> Term Bool
+  IfThenElse ::    Term Bool -> Term a -> Term a -> Term a
+  Enforce    ::              Term Bool -> String -> Term ()
+  Sequence   ::   SymWord b =>  Term b -> Term a -> Term a
+  Literal    ::                            SBV a -> Term a
+  Read       ::                     Term Integer -> Term a
+  Let        ::      String  -> Term a -> Term b -> Term b
+  Var        ::                           String -> Term a
+  Write      ::           Term Integer -> Term a -> Term ()
+  Throw      ::                           String -> Term ()
+  Arith      ::        ArithOp -> [Term Integer] -> Term Integer
+  Comparison :: ComparisonOp -> Term a -> Term a -> Term Bool
 
 instance Num (Term Integer) where
-  fromInteger = Value . fromInteger
+  fromInteger = Literal . fromInteger
   x + y = Arith Add [x, y]
   x * y = Arith Mul [x, y]
   abs x = Arith Abs [x]
@@ -289,13 +308,15 @@ instance Num (Term Integer) where
   negate x = Arith Negate [x]
 
 translateBody :: [AstNodeOf ()] -> Maybe (Term ())
-translateBody ast' = do
-  -- results <- mapM translateNode ast'
-  undefined -- TODO make sequence
+translateBody ast
+  | length ast >= 1 = do
+    ast' <- runReaderT (mapM translateNodeUnit ast) (Env Map.empty)
+    Just $ foldr1 Sequence ast'
+  | otherwise = Nothing
 
 integerLit :: Literal -> Maybe (Term Integer)
 integerLit = \case
-  LInteger i -> Just (Value (literal i))
+  LInteger i -> Just (Literal (literal i))
   _          -> Nothing
 
 newtype AstNodeOf a = AstNodeOf { unAstNodeOf :: AST Node }
@@ -304,8 +325,8 @@ type TranslateM = ReaderT Env Maybe
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
-  AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Value (literal i))
-  AST_Lit         (LInteger i)  -> pure (Value (literal i))
+  AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Literal (literal i))
+  AST_Lit         (LInteger i)  -> pure (Literal (literal i))
   AST_NegativeVar (Node tcId _) -> pure $ Arith Negate [Var (tcIdToName tcId)]
   AST_Var         (Node tcId _) -> pure $ Var (tcIdToName tcId)
   AST_Days days -> do
@@ -315,9 +336,18 @@ translateNodeInt = unAstNodeOf >>> \case
     | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
 
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
-translateNodeBool = unAstNodeOf >>> \case
-  AST_Lit (LBool b)     -> pure (Value (literal b))
+translateNodeBool (AstNodeOf node) = traceShowM ("bool node", node) >> case node of
+  AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
+  AST_NFun_Basic fn args -> case (fn, args) of
+    -- TODO: this could compare integer, decimal, string, or time. use the node
+    -- to decide which to dispatch to
+    (">", [a, b]) -> Comparison Gt
+      <$> translateNodeInt (AstNodeOf a)
+      <*> translateNodeInt (AstNodeOf b)
+    ("<", [a, b]) -> Comparison Lt
+      <$> translateNodeInt (AstNodeOf a)
+      <*> translateNodeInt (AstNodeOf b)
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
@@ -331,7 +361,7 @@ mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) ->
-    pure (Value (literal (mkDecimal d)))
+    pure (Literal (literal (mkDecimal d)))
   AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
 
 -- translateNodeString
@@ -346,8 +376,17 @@ translateNodeTime = unAstNodeOf >>> \case
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyTime -> undefined
 
+translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
+translateNodeUnit (AstNodeOf node) = traceShowM ("unit node", node) >> case node of
+  AST_If _ cond tBranch fBranch -> IfThenElse
+    <$> translateNodeBool (AstNodeOf cond)
+    <*> translateNodeUnit (AstNodeOf tBranch)
+    <*> translateNodeUnit (AstNodeOf fBranch)
+
 translateNode :: AstNodeOf a -> TranslateM (Term a)
-translateNode = unAstNodeOf >>> \case
+translateNode = unAstNodeOf >>> traceShowId >>> \case
+  -- App (Node _id (TyPrim TyBool)) _ _ -> translateNodeBool
+
   AST_Lit lit                                         -> undefined
   AST_Var var                                         -> undefined
   AST_Binding node' bindings' body'                   -> undefined
@@ -368,10 +407,30 @@ translateNode = unAstNodeOf >>> \case
   AST_UFun name' node' body' _args'                   -> undefined
 
 declareTopLevelVars :: M ()
-declareTopLevelVars = undefined
+-- TODO(joel)
+declareTopLevelVars = pure ()
 
-symbolicEval :: Term a -> M (SBV a)
-symbolicEval = undefined
+addPathCondition :: SBool -> M a -> M a
+addPathCondition cond = id -- local (& path %~ cons cond)
+
+symbolicEval :: SymWord a => Term a -> M (SBV a)
+symbolicEval = \case
+  IfThenElse cond lAst rAst -> do
+    condVal <- symbolicEval cond
+    ite (condVal .== true)
+      (addPathCondition (condVal .== true) (symbolicEval lAst))
+      (addPathCondition (condVal .== false) (symbolicEval rAst))
+  Enforce cond msg -> do
+    condVal <- symbolicEval cond
+    ite (condVal .== true)
+      -- (if msg == "keyset"
+      --   then local (& insideEnforceKeyset .~ True) (eval guarded)
+      --   else eval guarded
+      -- )
+      (pure (literal ()))
+      (status .= Thrown >> pure (literal ()))
+  Sequence a b -> symbolicEval a >> symbolicEval b
+  Literal a -> pure a
 
 analyzeFunction
   :: TopLevel Node
@@ -381,16 +440,17 @@ analyzeFunction (TopFun (FDefun _ _ _ args' body' _)) dbg = do
   -- TODO what type should this be?
   case translateBody (AstNodeOf <$> body') of
     Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
-    Just body'' -> do
-      (_, cstate, res) <- runRWST
-        (declareTopLevelVars >> symbolicEval body'')
-        (Env Map.empty)
-        (CheckState{})
-      pure $ Right cstate
+    Just body'' ->
+      let (_, cstate, res) = runRWS
+            (declareTopLevelVars >> symbolicEval body'')
+            (Env Map.empty)
+            (CheckState Running)
+      in pure $ Right cstate
 analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
+  -- XXX(joel): I don't think we should execScript' here
   (r,s) <- execScript' (Script False fp) fp
   either (die def) (const (return ())) r
   case view (rEnv . eeRefStore . rsModules . at mn) s of
