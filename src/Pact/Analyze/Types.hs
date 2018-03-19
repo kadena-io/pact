@@ -26,7 +26,7 @@ module Pact.Analyze.Types
 
 import Control.Arrow ((>>>))
 import Control.Monad
-import Control.Monad.Error (throwError)
+import Control.Monad.Except (ExceptT(..), Except, runExcept)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.Trans.RWS.Strict
@@ -69,6 +69,8 @@ tcIdToName :: TcId -> Text
 -- XXX(joel): major hack: How do we consistently get the same name from a `Var`
 -- (which holds `TcId`) and an `Arg`?
 tcIdToName (TcId _info name nonce) = last $ T.splitOn "_" name
+
+-- TODO: get rid of SmtCompilerException
 
 data SmtCompilerException =
   SmtCompilerException
@@ -114,6 +116,8 @@ data Status = Running | Thrown
 instance Mergeable Status where
   symbolicMerge _f _t a b
     | a == b = a
+    -- TODO: we need an approach where we support the tx aborting only on one
+    --       side of a conditional:
     | otherwise = error $ "Status: No least-upper-bound for " ++ show (a, b)
 
 data CheckState = CheckState
@@ -125,11 +129,21 @@ instance Mergeable CheckState where
   symbolicMerge f t (CheckState s1) (CheckState s2) = CheckState
     (symbolicMerge f t s1 s2)
 
-type M = RWS Env () CheckState
+data CompileFailure
+  = Fail
 
-instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWS r w s a) where
-  symbolicMerge f t l r = RWST $ \r' s -> Identity $
-    symbolicMerge f t (runRWS l r' s) (runRWS r r' s)
+type M = RWST Env () CheckState (Except CompileFailure)
+
+instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWST r w s (Except e) a) where
+  symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
+    -- NOTE: this propagates either failure if one side fails:
+    let run act = runExcept $ runRWST act r s
+     in sequence [run left, run right] <&> \[leftRes, rightRes] ->
+         symbolicMerge
+           force
+           test
+           leftRes
+           rightRes
 
 isUnsupportedOperator :: Text -> Maybe Text
 isUnsupportedOperator s = if isUnsupported then Just s else Nothing
@@ -499,12 +513,17 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) db
                 TyPrim TyBool    -> mkAVar <$> sBool name'
               pure (name, var)
 
-            let (res, cstate, ()) = runRWS
-                  (declareTopLevelVars >> symbolicEval body'')
-                  (Env (Map.fromList argVars))
-                  (CheckState Running)
+            let action = declareTopLevelVars >> symbolicEval body''
+                env0   = Env (Map.fromList argVars)
+                state0 = CheckState Running
 
-            pure $ res .== true
+            case runExcept $ runRWST action env0 state0 of
+              --
+              -- TODO: FIXME
+              --
+              Left _cf -> error "encountered CompileFailure"
+              Right (res, cstate, ()) ->
+                pure $ res .== true
 
           pure $ Right thmResult
 
