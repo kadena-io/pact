@@ -12,4 +12,5 @@ runDemo = do
   let (path, modName, funName) = case as of
         [a, b, c] -> (a, T.pack b, T.pack c)
         _ -> ("examples/analyze-tests/analyze-tests.repl", "analyze-tests", "pay")
-  _compileTests False path modName funName
+  putStrLn "demo"
+  -- _compileTests False path modName funName
