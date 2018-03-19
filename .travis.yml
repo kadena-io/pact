@@ -204,6 +204,7 @@ script:
     stack)
       stack build --no-terminal --test --ghc-options="-Werror" $ARGS 
       curl -sL https://raw.github.com/ndmitchell/hlint/master/misc/travis.sh | sh -s .
+      curl -sL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
       stack exec -- bench +RTS -K1k
       ;;
     cabal)
