@@ -81,13 +81,13 @@ module Pact.Types.Lang
    ) where
 
 
-import Control.Lens hiding (op,(.=))
+import Control.Lens hiding ((.=))
 import Text.Trifecta.Delta hiding (Columns)
 import Control.Applicative
 import Data.List
 import Control.Monad
-import Prelude hiding (exp)
-import Control.Arrow hiding (app,(<+>))
+import Prelude
+import Control.Arrow hiding ((<+>))
 import Data.Functor.Classes
 import Bound
 import Data.Text (Text,pack,unpack)

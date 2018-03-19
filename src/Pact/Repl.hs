@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -46,7 +45,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import GHC.Word (Word8)
-import Prelude hiding (exp,print,putStrLn,putStr)
+import Prelude hiding (exp,print,putStrLn)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import qualified Text.Trifecta.Delta as TF
 import System.IO

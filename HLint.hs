@@ -8,3 +8,6 @@ ignore "Use newtype instead of data"
 ignore "Use camelCase"
 ignore "Reduce duplication"
 ignore "Use <$>"
+ignore "Redundant bracket"
+ignore "Use lambda-case"
+ignore "Use $>" -- added temporarily

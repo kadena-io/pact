@@ -32,7 +32,7 @@
 module Pact.Typechecker where
 
 import Control.Monad.Catch
-import Control.Lens hiding (pre,List,Fold)
+import Control.Lens hiding (List,Fold)
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
@@ -45,7 +45,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Control.Arrow hiding ((<+>))
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 
 
