@@ -333,19 +333,25 @@ instance Num (Term Integer) where
   signum x = Arith Signum [x]
   negate x = Arith Negate [x]
 
-translateBodyUnit :: [AstNodeOf ()] -> Maybe (Term ())
-translateBodyUnit ast
+translateBody
+  :: (Show a, SymWord a)
+  => (AstNodeOf a -> TranslateM (Term a))
+  -> [AstNodeOf a]
+  -> Maybe (Term a)
+translateBody translator ast
   | length ast >= 1 = do
-    ast' <- runReaderT (mapM translateNodeUnit ast) (Env Map.empty)
+    ast' <- runReaderT (mapM translator ast) (Env Map.empty)
     Just $ foldr1 Sequence ast'
   | otherwise = Nothing
 
+translateBodyUnit :: [AstNodeOf ()] -> Maybe (Term ())
+translateBodyUnit = translateBody translateNodeUnit
+
 translateBodyBool :: [AstNodeOf Bool] -> Maybe (Term Bool)
-translateBodyBool ast
-  | length ast >= 1 = do
-    ast' <- runReaderT (mapM translateNodeBool ast) (Env Map.empty)
-    Just $ foldr1 Sequence ast'
-  | otherwise = Nothing
+translateBodyBool = translateBody translateNodeBool
+
+translateBodyInt :: [AstNodeOf Integer] -> Maybe (Term Integer)
+translateBodyInt = translateBody translateNodeInt
 
 integerLit :: Literal -> Maybe (Term Integer)
 integerLit = \case
@@ -502,37 +508,47 @@ analyzeFunction
   -> IO (Either SmtCompilerException ThmResult)
 analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) dbg =
   case retTy of
-    TyPrim TyBool ->
-      -- TODO what type should this be?
-      case translateBodyBool (AstNodeOf <$> body') of
-        Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
-        Just body'' -> do
-          compileFailureVar <- newEmptyMVar
-          thmResult <- prove $ do
-            argVars <- forM argTys $ \(Arg name ty _info) -> do
-              let name' = T.unpack name
-              var <- case ty of
-                TyPrim TyInteger -> mkAVar <$> sInteger name'
-                TyPrim TyBool    -> mkAVar <$> sBool name'
-              pure (name, var)
-
-            let action = declareTopLevelVars >> symbolicEval body''
-                env0   = Env (Map.fromList argVars)
-                state0 = CheckState Running
-
-            case runExcept $ runRWST action env0 state0 of
-              Left cf -> do
-                liftIO $ putMVar compileFailureVar cf
-                pure false
-              Right (res, cstate, ()) -> pure $ res .== true
-
-          mVarVal <- tryTakeMVar compileFailureVar
-          case mVarVal of
-            Nothing -> pure $ Right thmResult
-            -- TODO: return the failure instead of showing it
-            Just cf -> pure $ Left $ SmtCompilerException "analyzeFunction" (show cf)
+    TyPrim TyInteger -> analyzeFunction' translateBodyInt (.== 1) body' argTys
+    TyPrim TyBool    -> analyzeFunction' translateBodyBool (.== true) body' argTys
 
 analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+
+analyzeFunction'
+  :: (Show a, SymWord a)
+  => ([AstNodeOf a] -> Maybe (Term a))
+  -> (SBV a -> SBV Bool)
+  -> [AST Node]
+  -> [Arg UserType]
+  -> IO (Either SmtCompilerException ThmResult)
+analyzeFunction' translator p body' argTys =
+  -- TODO what type should this be?
+  case translator (AstNodeOf <$> body') of
+    Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
+    Just body'' -> do
+      compileFailureVar <- newEmptyMVar
+      thmResult <- prove $ do
+        argVars <- forM argTys $ \(Arg name ty _info) -> do
+          let name' = T.unpack name
+          var <- case ty of
+            TyPrim TyInteger -> mkAVar <$> sInteger name'
+            TyPrim TyBool    -> mkAVar <$> sBool name'
+          pure (name, var)
+
+        let action = declareTopLevelVars >> symbolicEval body''
+            env0   = Env (Map.fromList argVars)
+            state0 = CheckState Running
+
+        case runExcept $ runRWST action env0 state0 of
+          Left cf -> do
+            liftIO $ putMVar compileFailureVar cf
+            pure false
+          Right (res, cstate, ()) -> pure (p res)
+
+      mVarVal <- tryTakeMVar compileFailureVar
+      case mVarVal of
+        Nothing -> pure $ Right thmResult
+        -- TODO: return the failure instead of showing it
+        Just cf -> pure $ Left $ SmtCompilerException "analyzeFunction" (show cf)
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
