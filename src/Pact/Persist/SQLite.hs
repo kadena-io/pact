@@ -81,7 +81,7 @@ persister = Persister {
   ,
   writeValue = \t wt k v s -> (s,) <$> writeData' t wt k v s
   ,
-  refreshConn = \s -> (,()) <$> refresh s
+  refreshConn = fmap (, ()) . refresh
 
   }
 

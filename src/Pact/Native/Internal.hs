@@ -1,6 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -29,7 +27,7 @@ module Pact.Native.Internal
   ) where
 
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Data.Default
 import Pact.Eval
 import Unsafe.Coerce

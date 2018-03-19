@@ -9,7 +9,7 @@ import Pact.Types.Typecheck
 import Data.Default
 import Control.Lens
 import qualified Data.HashMap.Strict as HM
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<>))
 import Control.Monad
 import Data.Foldable
 

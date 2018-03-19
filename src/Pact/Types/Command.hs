@@ -51,13 +51,13 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Serialize as SZ
 import Data.String
-import Data.Text hiding (filter, null, all)
+import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
 
 
-import GHC.Generics hiding (from)
-import Prelude hiding (log,exp)
+import GHC.Generics
+import Prelude
 
 import Pact.Types.Runtime
 import Pact.Types.Orphans ()

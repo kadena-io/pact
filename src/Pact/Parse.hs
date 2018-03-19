@@ -29,7 +29,7 @@ import Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.List
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Data.String
 import qualified Data.HashSet as HS
 import Text.Parser.Token.Highlight

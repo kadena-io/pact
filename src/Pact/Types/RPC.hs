@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -28,8 +27,8 @@ import Control.DeepSeq
 import Data.Aeson as A
 
 
-import GHC.Generics hiding (from)
-import Prelude hiding (log,exp)
+import GHC.Generics
+import Prelude
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()

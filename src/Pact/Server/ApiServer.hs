@@ -23,7 +23,7 @@ module Pact.Server.ApiServer
 
 import Prelude hiding (log)
 
-import Control.Lens hiding ((.=))
+import Control.Lens
 import Control.Concurrent
 import Control.Monad.Reader
 import Control.Arrow
@@ -109,7 +109,7 @@ sendLocal = do
   c <- view aiInboundPactChan
   liftIO $ writeInbound c (LocalCmd cmd mv)
   r <- liftIO $ takeMVar mv
-  writeResponse $ ApiSuccess $ r
+  writeResponse $ ApiSuccess r
 
 checkHistoryForResult :: HashSet RequestKey -> Api PossiblyIncompleteResults
 checkHistoryForResult rks = do

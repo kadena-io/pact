@@ -21,5 +21,5 @@ main = do
       Just log' <- fromJSVal log
       Just cmd' <- fromJSVal cmd
       r <- evalString log' cmd'
-      toJSVal_aeson $ r
+      toJSVal_aeson r
     evalCmd callback

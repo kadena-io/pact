@@ -21,12 +21,12 @@ module Pact.Native.Db
     where
 
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Bound
 import qualified Data.Map.Strict as M
 import Data.Default
 import Control.Arrow hiding (app)
-import Control.Lens hiding (from,to,(.=))
+import Control.Lens hiding ((.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
 
