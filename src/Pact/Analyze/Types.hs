@@ -321,16 +321,17 @@ translateNodeBool = unAstNodeOf >>> \case
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
-  { decimalMantissa :: !Integer
-  , decimalPlaces :: !Word8
+  { decimalPlaces :: !Word8
+  , decimalMantissa :: !Integer
   } deriving (Show, Read, Eq, Ord, Data, HasKind, SymWord)
+
+mkDecimal :: Decimal.Decimal -> Decimal
+mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 
 translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) ->
-    let mantissa = Decimal.decimalMantissa d
-        places   = Decimal.decimalPlaces d
-    in pure (Value (literal (Decimal mantissa places)))
+    pure (Value (literal (mkDecimal d)))
   AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
 
 -- translateNodeString
