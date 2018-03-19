@@ -26,7 +26,7 @@ module Pact.Analyze.Types
 
 import Control.Arrow ((>>>))
 import Control.Monad
-import Control.Monad.Except (ExceptT(..), Except, runExcept)
+import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.Trans.RWS.Strict
@@ -130,7 +130,7 @@ instance Mergeable CheckState where
     (symbolicMerge f t s1 s2)
 
 data CompileFailure
-  = Fail
+  = MalformedArithmeticOp ArithOp [Term Integer]
 
 type M = RWST Env () CheckState (Except CompileFailure)
 
@@ -481,7 +481,7 @@ symbolicEval = \case
       (Abs, [x])    -> pure $ abs x
       (Signum, [x]) -> pure $ signum x
       (Negate, [x]) -> pure $ negate x
-      _             -> status .= Thrown >> pure 0
+      _             -> throwError $ MalformedArithmeticOp op args
 
   Comparison op x y -> do
     x' <- symbolicEval x
