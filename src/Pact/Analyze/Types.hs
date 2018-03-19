@@ -31,7 +31,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.Trans.RWS.Strict
 import Control.Exception
-import Control.Lens hiding (op)
+import Control.Lens hiding (op, (.>))
 import Data.Data
 import qualified Data.Decimal as Decimal
 import Pact.Typechecker hiding (debug)
@@ -65,8 +65,8 @@ import Debug.Trace
 -- instance ToJSON Node where
 --   toJSON = toJSON . show
 
-tcIdToName :: TcId -> String
-tcIdToName (TcId _info name nonce) = "v-" <> T.unpack name <> show nonce
+tcIdToName :: TcId -> Text
+tcIdToName (TcId _info name nonce) = "v-" <> name <> T.pack (show nonce)
 
 data SmtCompilerException =
   SmtCompilerException
@@ -95,7 +95,7 @@ data AVar = forall a. Eq a => AVar (SBV a)
 deriving instance Show AVar
 
 data Env = Env
-  { scope :: Map Text AVar
+  { _scope :: Map Text AVar
   } deriving Show
 makeLenses ''Env
 
@@ -289,15 +289,17 @@ class Storable a where
 data Term ret where
   IfThenElse ::    Term Bool -> Term a -> Term a -> Term a
   Enforce    ::              Term Bool -> String -> Term ()
-  Sequence   ::   SymWord b =>  Term b -> Term a -> Term a
+  Sequence   ::   (Show b, SymWord b) =>  Term b -> Term a -> Term a
   Literal    ::                            SBV a -> Term a
   Read       ::                     Term Integer -> Term a
-  Let        ::      String  -> Term a -> Term b -> Term b
-  Var        ::                           String -> Term a
-  Write      ::           Term Integer -> Term a -> Term ()
+  Let        ::   Show a =>   String  -> Term a -> Term b -> Term b
+  Var        ::                           Text -> Term a
+  Write      ::   Show a =>        Term Integer -> Term a -> Term ()
   Throw      ::                           String -> Term ()
   Arith      ::        ArithOp -> [Term Integer] -> Term Integer
-  Comparison :: ComparisonOp -> Term a -> Term a -> Term Bool
+  Comparison :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+
+deriving instance Show a => (Show (Term a))
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
@@ -307,10 +309,17 @@ instance Num (Term Integer) where
   signum x = Arith Signum [x]
   negate x = Arith Negate [x]
 
-translateBody :: [AstNodeOf ()] -> Maybe (Term ())
-translateBody ast
+translateBodyUnit :: [AstNodeOf ()] -> Maybe (Term ())
+translateBodyUnit ast
   | length ast >= 1 = do
     ast' <- runReaderT (mapM translateNodeUnit ast) (Env Map.empty)
+    Just $ foldr1 Sequence ast'
+  | otherwise = Nothing
+
+translateBodyBool :: [AstNodeOf Bool] -> Maybe (Term Bool)
+translateBodyBool ast
+  | length ast >= 1 = do
+    ast' <- runReaderT (mapM translateNodeBool ast) (Env Map.empty)
     Just $ foldr1 Sequence ast'
   | otherwise = Nothing
 
@@ -348,6 +357,10 @@ translateNodeBool (AstNodeOf node) = traceShowM ("bool node", node) >> case node
     ("<", [a, b]) -> Comparison Lt
       <$> translateNodeInt (AstNodeOf a)
       <*> translateNodeInt (AstNodeOf b)
+  AST_If _ cond tBranch fBranch -> IfThenElse
+    <$> translateNodeBool (AstNodeOf cond)
+    <*> translateNodeBool (AstNodeOf tBranch)
+    <*> translateNodeBool (AstNodeOf fBranch)
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
@@ -413,8 +426,8 @@ declareTopLevelVars = pure ()
 addPathCondition :: SBool -> M a -> M a
 addPathCondition cond = id -- local (& path %~ cons cond)
 
-symbolicEval :: SymWord a => Term a -> M (SBV a)
-symbolicEval = \case
+symbolicEval :: (Show a, SymWord a) => Term a -> M (SBV a)
+symbolicEval = traceShowId >>> \case
   IfThenElse cond lAst rAst -> do
     condVal <- symbolicEval cond
     ite (condVal .== true)
@@ -432,20 +445,50 @@ symbolicEval = \case
   Sequence a b -> symbolicEval a >> symbolicEval b
   Literal a -> pure a
 
+  Var name -> do
+    val <- views scope (Map.lookup name)
+    -- XXX how to cast this?
+    maybe (status .= Thrown >> undefined) (\(AVar x) -> pure x) val
+
+  Arith op args -> do
+    args' <- forM args symbolicEval
+    case (op, args') of
+      (Add, [x, y]) -> pure $ x + y
+      (Mul, [x, y]) -> pure $ x * y
+      (Abs, [x])    -> pure $ abs x
+      (Signum, [x]) -> pure $ signum x
+      (Negate, [x]) -> pure $ negate x
+      _             -> status .= Thrown >> pure 0
+
+  Comparison op x y -> do
+    x' <- symbolicEval x
+    y' <- symbolicEval y
+    pure $ case op of
+      Gt  -> x' .> y'
+      Lt  -> x' .< y'
+      Gte -> x' .>= y'
+      Lte -> x' .<= y'
+      Eq  -> x' .== y'
+      Neq -> x' ./= y'
+
 analyzeFunction
   :: TopLevel Node
   -> Bool
   -> IO (Either SmtCompilerException CheckState)
-analyzeFunction (TopFun (FDefun _ _ _ args' body' _)) dbg = do
-  -- TODO what type should this be?
-  case translateBody (AstNodeOf <$> body') of
-    Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
-    Just body'' ->
-      let (_, cstate, res) = runRWS
-            (declareTopLevelVars >> symbolicEval body'')
-            (Env Map.empty)
-            (CheckState Running)
-      in pure $ Right cstate
+-- TODO: add args to scope
+analyzeFunction (TopFun (FDefun _ _ ty@(FunType _argTys retTy) args' body' _)) dbg =
+  case traceShow ty retTy of
+    TyPrim TyBool ->
+      -- TODO what type should this be?
+      case translateBodyBool (AstNodeOf <$> body') of
+        Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
+        Just body'' ->
+          let (_, cstate, res) = runRWS
+                (declareTopLevelVars >> symbolicEval body'')
+                (Env Map.empty)
+                (CheckState Running)
+          in pure $ Right cstate
+
 analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
