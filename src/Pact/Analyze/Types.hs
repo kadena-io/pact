@@ -48,6 +48,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.Default
 import GHC.Generics
 import Data.SBV hiding (name)
+import qualified Data.SBV.Internals as SBVI
 import Data.Thyme.Clock.POSIX
 import qualified Data.Text as T
 
@@ -59,14 +60,15 @@ import qualified Data.Text as T
 import qualified Text.Parsec as Parsec
 import Text.Parsec hiding (parse, try)
 
-import Debug.Trace
-
 -- !!! Orphan needed for dev, delete when finished
 -- instance ToJSON Node where
 --   toJSON = toJSON . show
 
 tcIdToName :: TcId -> Text
-tcIdToName (TcId _info name nonce) = "v-" <> name <> T.pack (show nonce)
+-- tcIdToName (TcId _info name nonce) = traceShow (name, nonce) $ "v-" <> name <> T.pack (show nonce)
+-- XXX(joel): major hack: How do we consistently get the same name from a `Var`
+-- (which holds `TcId`) and an `Arg`?
+tcIdToName (TcId _info name nonce) = last $ T.splitOn "_" name
 
 data SmtCompilerException =
   SmtCompilerException
@@ -91,8 +93,15 @@ data TableAccess =
   TableWrite
   deriving (Show, Eq, Generic, ToJSON)
 
-data AVar = forall a. Eq a => AVar (SBV a)
-deriving instance Show AVar
+-- | Low-level, untyped variable.
+data AVar = AVar SBVI.SVal
+  deriving (Eq, Show)
+
+unsafeCastAVar :: AVar -> SBV a
+unsafeCastAVar (AVar sval) = SBVI.SBV sval
+
+mkAVar :: SBV a -> AVar
+mkAVar (SBVI.SBV sval) = AVar sval
 
 data Env = Env
   { _scope :: Map Text AVar
@@ -105,8 +114,7 @@ data Status = Running | Thrown
 instance Mergeable Status where
   symbolicMerge _f _t a b
     | a == b = a
-    | otherwise =
-      error $ "Status: No least-upper-bound for " ++ show (a, b)
+    | otherwise = error $ "Status: No least-upper-bound for " ++ show (a, b)
 
 data CheckState = CheckState
   { _status :: Status
@@ -345,7 +353,7 @@ translateNodeInt = unAstNodeOf >>> \case
     | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
 
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
-translateNodeBool (AstNodeOf node) = traceShowM ("bool node", node) >> case node of
+translateNodeBool (AstNodeOf node) = case node of
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
   AST_NFun_Basic fn args -> case (fn, args) of
@@ -390,14 +398,14 @@ translateNodeTime = unAstNodeOf >>> \case
     | seconds ^. aNode . aTy == TyPrim TyTime -> undefined
 
 translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
-translateNodeUnit (AstNodeOf node) = traceShowM ("unit node", node) >> case node of
+translateNodeUnit (AstNodeOf node) = case node of
   AST_If _ cond tBranch fBranch -> IfThenElse
     <$> translateNodeBool (AstNodeOf cond)
     <*> translateNodeUnit (AstNodeOf tBranch)
     <*> translateNodeUnit (AstNodeOf fBranch)
 
 translateNode :: AstNodeOf a -> TranslateM (Term a)
-translateNode = unAstNodeOf >>> traceShowId >>> \case
+translateNode = unAstNodeOf >>> \case
   -- App (Node _id (TyPrim TyBool)) _ _ -> translateNodeBool
 
   AST_Lit lit                                         -> undefined
@@ -427,7 +435,7 @@ addPathCondition :: SBool -> M a -> M a
 addPathCondition cond = id -- local (& path %~ cons cond)
 
 symbolicEval :: (Show a, SymWord a) => Term a -> M (SBV a)
-symbolicEval = traceShowId >>> \case
+symbolicEval = \case
   IfThenElse cond lAst rAst -> do
     condVal <- symbolicEval cond
     ite (condVal .== true)
@@ -446,9 +454,10 @@ symbolicEval = traceShowId >>> \case
   Literal a -> pure a
 
   Var name -> do
-    val <- views scope (Map.lookup name)
-    -- XXX how to cast this?
-    maybe (status .= Thrown >> undefined) (\(AVar x) -> pure x) val
+    -- Assume the term is well-scoped after typechecking
+    Just val <- view (scope . at name)
+    -- Assume the variable is well-typed after typechecking
+    pure $ unsafeCastAVar val
 
   Arith op args -> do
     args' <- forM args symbolicEval
@@ -474,20 +483,30 @@ symbolicEval = traceShowId >>> \case
 analyzeFunction
   :: TopLevel Node
   -> Bool
-  -> IO (Either SmtCompilerException CheckState)
--- TODO: add args to scope
-analyzeFunction (TopFun (FDefun _ _ ty@(FunType _argTys retTy) args' body' _)) dbg =
-  case traceShow ty retTy of
+  -> IO (Either SmtCompilerException ThmResult)
+analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) dbg =
+  case retTy of
     TyPrim TyBool ->
       -- TODO what type should this be?
       case translateBodyBool (AstNodeOf <$> body') of
         Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
-        Just body'' ->
-          let (_, cstate, res) = runRWS
-                (declareTopLevelVars >> symbolicEval body'')
-                (Env Map.empty)
-                (CheckState Running)
-          in pure $ Right cstate
+        Just body'' -> do
+          thmResult <- prove $ do
+            argVars <- forM argTys $ \(Arg name ty _info) -> do
+              let name' = T.unpack name
+              var <- case ty of
+                TyPrim TyInteger -> mkAVar <$> sInteger name'
+                TyPrim TyBool    -> mkAVar <$> sBool name'
+              pure (name, var)
+
+            let (res, cstate, ()) = runRWS
+                  (declareTopLevelVars >> symbolicEval body'')
+                  (Env (Map.fromList argVars))
+                  (CheckState Running)
+
+            pure $ res .== true
+
+          pure $ Right thmResult
 
 analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
