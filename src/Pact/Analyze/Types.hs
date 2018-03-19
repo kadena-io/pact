@@ -132,6 +132,7 @@ instance Mergeable CheckState where
 
 data CompileFailure
   = MalformedArithmeticOp ArithOp [Term Integer]
+  | MalformedComparison
   deriving Show
 
 type M = RWST Env () CheckState (Except CompileFailure)
@@ -378,15 +379,44 @@ translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool (AstNodeOf node) = case node of
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
-  AST_NFun_Basic fn args -> case (fn, args) of
-    -- TODO: this could compare integer, decimal, string, or time. use the node
-    -- to decide which to dispatch to
-    (">", [a, b]) -> Comparison Gt
-      <$> translateNodeInt (AstNodeOf a)
-      <*> translateNodeInt (AstNodeOf b)
-    ("<", [a, b]) -> Comparison Lt
-      <$> translateNodeInt (AstNodeOf a)
-      <*> translateNodeInt (AstNodeOf b)
+
+  AST_NFun_Basic fn args -> do
+    let mkComparison
+          :: (Show a, SymWord a)
+          => (AstNodeOf a -> TranslateM (Term a))
+          -> TranslateM (Term Bool)
+        mkComparison translate = case (fn, args) of
+          -- TODO: this could compare integer, decimal, string, or time. use the node
+          -- to decide which to dispatch to
+          (">", [a, b]) -> Comparison Gt
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          ("<", [a, b]) -> Comparison Lt
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          ("<=", [a, b]) -> Comparison Lte
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          (">=", [a, b]) -> Comparison Gte
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          ("=", [a, b]) -> Comparison Eq
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          ("!=", [a, b]) -> Comparison Neq
+            <$> translate (AstNodeOf a)
+            <*> translate (AstNodeOf b)
+          _ -> lift Nothing -- throwError MalformedComparison
+
+    -- integer, decimal, string, and time are all comparable. Use the type of
+    -- the first argument to decide which to use.
+    case args ^? ix 0 . aNode . aTy of
+      Just (TyPrim TyInteger) -> mkComparison translateNodeInt
+      Just (TyPrim TyDecimal) -> mkComparison translateNodeDecimal
+      -- Just (TyPrim TyString) -> mkComparison translateNodeString
+      Just (TyPrim TyTime) -> mkComparison translateNodeTime
+      _ -> lift Nothing -- throwError MalformedComparison
+
   AST_If _ cond tBranch fBranch -> IfThenElse
     <$> translateNodeBool (AstNodeOf cond)
     <*> translateNodeBool (AstNodeOf tBranch)
