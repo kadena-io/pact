@@ -135,18 +135,33 @@ data CompileFailure
   | MalformedComparison
   deriving Show
 
-type M = RWST Env () CheckState (Except CompileFailure)
+newtype CheckLog
+  = CheckLog ()
+
+instance Mergeable CheckLog where
+  --
+  -- NOTE: If we change the underlying representation of CheckLog to a list,
+  -- the default Mergeable instance for this will have the wrong semantics, as
+  -- it requires that lists have the same length.
+  --
+  symbolicMerge f t (CheckLog ()) (CheckLog ()) = CheckLog ()
+
+instance Monoid CheckLog where
+  mempty = CheckLog ()
+  mappend _ _ = CheckLog ()
+
+type M = RWST Env CheckLog CheckState (Except CompileFailure)
 
 instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWST r w s (Except e) a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
     -- NOTE: this propagates either failure if one side fails:
     let run act = runExcept $ runRWST act r s
-     in sequence [run left, run right] <&> \[leftRes, rightRes] ->
-         symbolicMerge
-           force
-           test
-           leftRes
-           rightRes
+    in sequence [run left, run right] <&> \[leftTup, rightTup] ->
+        symbolicMerge
+          force
+          test
+          leftTup
+          rightTup
 
 isUnsupportedOperator :: Text -> Maybe Text
 isUnsupportedOperator s = if isUnsupported then Just s else Nothing
@@ -572,7 +587,7 @@ analyzeFunction' translator p body' argTys =
           Left cf -> do
             liftIO $ putMVar compileFailureVar cf
             pure false
-          Right (res, cstate, ()) -> pure (p res)
+          Right (res, cstate, _log) -> pure (p res)
 
       mVarVal <- tryTakeMVar compileFailureVar
       case mVarVal of
