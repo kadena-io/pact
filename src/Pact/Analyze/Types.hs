@@ -106,10 +106,10 @@ unsafeCastAVar (AVar sval) = SBVI.SBV sval
 mkAVar :: SBV a -> AVar
 mkAVar (SBVI.SBV sval) = AVar sval
 
-data Env = Env
+data CheckEnv = CheckEnv
   { _scope :: Map Text AVar
   } deriving Show
-makeLenses ''Env
+makeLenses ''CheckEnv
 
 data Status = Running | Thrown
   deriving (Eq, Show)
@@ -150,7 +150,7 @@ instance Monoid CheckLog where
   mempty = CheckLog ()
   mappend _ _ = CheckLog ()
 
-type M = RWST Env CheckLog CheckState (Except CompileFailure)
+type M = RWST CheckEnv CheckLog CheckState (Except CompileFailure)
 
 instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWST r w s (Except e) a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
@@ -356,7 +356,7 @@ translateBody
   -> Maybe (Term a)
 translateBody translator ast
   | length ast >= 1 = do
-    ast' <- runReaderT (mapM translator ast) (Env Map.empty)
+    ast' <- runReaderT (mapM translator ast) (CheckEnv Map.empty)
     Just $ foldr1 Sequence ast'
   | otherwise = Nothing
 
@@ -376,7 +376,7 @@ integerLit = \case
 
 newtype AstNodeOf a = AstNodeOf { unAstNodeOf :: AST Node }
 
-type TranslateM = ReaderT Env Maybe
+type TranslateM = ReaderT CheckEnv Maybe
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
@@ -580,7 +580,7 @@ analyzeFunction' translator p body' argTys =
           pure (name, var)
 
         let action = declareTopLevelVars >> symbolicEval body''
-            env0   = Env (Map.fromList argVars)
+            env0   = CheckEnv (Map.fromList argVars)
             state0 = CheckState Running
 
         case runExcept $ runRWST action env0 state0 of
