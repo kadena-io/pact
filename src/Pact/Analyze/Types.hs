@@ -36,6 +36,7 @@ import Control.Exception
 import Control.Lens hiding (op, (.>))
 import Data.Data
 import qualified Data.Decimal as Decimal
+import Data.Thyme
 import Pact.Typechecker hiding (debug)
 import Pact.Types.Lang hiding (Term)
 import Pact.Types.Runtime hiding (Term)
@@ -359,6 +360,9 @@ data Term ret where
   Arith      ::        ArithOp -> [Term Integer] -> Term Integer
   Comparison :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
 
+  AddTimeInt :: Term Time -> Term Integer -> Term Time
+  AddTimeDec :: Term Time -> Term Decimal -> Term Time
+
 deriving instance Show a => (Show (Term a))
 
 instance Num (Term Integer) where
@@ -465,21 +469,29 @@ mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 
 translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
-  AST_Lit (LDecimal d) ->
-    pure (Literal (literal (mkDecimal d)))
+  AST_Lit (LDecimal d) -> pure (Literal (literal (mkDecimal d)))
   AST_Var n -> Var <$> view (ix n)
 
 -- translateNodeString
 
--- I copied this from Data.SBV.Examples.Puzzles.U2Bridge but it will definitely
--- not work in practice.
-type Time = Word32
+type Time = Int64
+
+mkTime :: UTCTime -> Time
+mkTime utct = utct ^. _utctDayTime . microseconds
 
 translateNodeTime :: AstNodeOf Time -> TranslateM (Term Time)
 translateNodeTime = unAstNodeOf >>> \case
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyTime -> undefined
+    | seconds ^. aNode . aTy == TyPrim TyInteger -> AddTimeInt
+      <$> translateNodeTime (AstNodeOf time)
+      <*> translateNodeInt (AstNodeOf seconds)
+    | seconds ^. aNode . aTy == TyPrim TyDecimal -> AddTimeDec
+      <$> translateNodeTime (AstNodeOf time)
+      <*> translateNodeDecimal (AstNodeOf seconds)
+
+  AST_Lit (LTime t) -> pure (Literal (literal (mkTime t)))
+  AST_Var n -> Var <$> view (ix n)
 
 translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
 translateNodeUnit (AstNodeOf node) = case node of
@@ -497,7 +509,6 @@ translateNode = unAstNodeOf >>> \case
   AST_Binding node' bindings' body'                   -> undefined
   AST_If node' cond' ifTrue' ifFalse'                 -> undefined
   AST_Read                                            -> undefined
-  AST_AddTime _ _                                     -> undefined
   AST_Days _                                          -> undefined
   AST_Bind                                            -> undefined
   AST_UnsupportedOp s                                 -> lift Nothing
@@ -556,6 +567,16 @@ symbolicEval = \case
       Lte -> x' .<= y'
       Eq  -> x' .== y'
       Neq -> x' ./= y'
+
+  AddTimeInt time secs -> do
+    time' <- symbolicEval time
+    secs' <- symbolicEval secs
+    pure $ time' + sFromIntegral secs'
+
+  -- AddTimeDec time secs -> do
+  --   time' <- symbolicEval time
+  --   secs' <- symbolicEval secs
+  --   pure $ time' + sFromIntegral secs'
 
 analyzeFunction
   :: TopLevel Node
