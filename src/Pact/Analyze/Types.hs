@@ -526,18 +526,18 @@ declareTopLevelVars :: M ()
 -- TODO(joel)
 declareTopLevelVars = pure ()
 
-symbolicEval :: (Show a, SymWord a) => Term a -> M (SBV a)
-symbolicEval = \case
+evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
+evalTerm = \case
   IfThenElse cond then' else' -> do
-    testPasses <- symbolicEval cond
-    ite testPasses (symbolicEval then') (symbolicEval else')
+    testPasses <- evalTerm cond
+    ite testPasses (evalTerm then') (evalTerm else')
 
   Enforce cond _msg -> do
-    cond <- symbolicEval cond
+    cond <- evalTerm cond
     succeeds %= (&&& cond)
     pure $ literal ()
 
-  Sequence a b -> symbolicEval a *> symbolicEval b
+  Sequence a b -> evalTerm a *> evalTerm b
 
   Literal a -> pure a
 
@@ -548,7 +548,7 @@ symbolicEval = \case
     pure $ unsafeCastAVar val
 
   Arith op args -> do
-    args' <- forM args symbolicEval
+    args' <- forM args evalTerm
     case (op, args') of
       (Add, [x, y]) -> pure $ x + y
       (Mul, [x, y]) -> pure $ x * y
@@ -558,8 +558,8 @@ symbolicEval = \case
       _             -> throwError $ MalformedArithmeticOp op args
 
   Comparison op x y -> do
-    x' <- symbolicEval x
-    y' <- symbolicEval y
+    x' <- evalTerm x
+    y' <- evalTerm y
     pure $ case op of
       Gt  -> x' .> y'
       Lt  -> x' .< y'
@@ -624,7 +624,7 @@ analyzeFunction' translator p body' argTys nodeNames =
             TyPrim TyBool    -> mkAVar <$> sBool name'
           pure (name, var)
 
-        let action = declareTopLevelVars >> symbolicEval body''
+        let action = declareTopLevelVars >> evalTerm body''
             env0   = CheckEnv (Map.fromList argVars)
             state0 = initialCheckState
 
