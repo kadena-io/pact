@@ -66,12 +66,6 @@ import Text.Parsec hiding (parse, try)
 -- instance ToJSON Node where
 --   toJSON = toJSON . show
 
-tcIdToName :: TcId -> Text
--- tcIdToName (TcId _info name nonce) = traceShow (name, nonce) $ "v-" <> name <> T.pack (show nonce)
--- XXX(joel): major hack: How do we consistently get the same name from a `Var`
--- (which holds `TcId`) and an `Arg`?
-tcIdToName (TcId _info name nonce) = last $ T.splitOn "_" name
-
 -- TODO: get rid of SmtCompilerException
 
 data SmtCompilerException =
@@ -375,41 +369,38 @@ instance Num (Term Integer) where
   signum x = Arith Signum [x]
   negate x = Arith Negate [x]
 
+newtype AstNodeOf a = AstNodeOf { unAstNodeOf :: AST Node }
+
+type TranslateM = ReaderT (Map Node Text) Maybe
+
 translateBody
   :: (Show a, SymWord a)
   => (AstNodeOf a -> TranslateM (Term a))
   -> [AstNodeOf a]
-  -> Maybe (Term a)
+  -> TranslateM (Term a)
 translateBody translator ast
   | length ast >= 1 = do
-    ast' <- runReaderT (mapM translator ast) (CheckEnv Map.empty)
-    Just $ foldr1 Sequence ast'
-  | otherwise = Nothing
+    ast' <- mapM translator ast
+    pure $ foldr1 Sequence ast'
+  | otherwise = lift Nothing
 
-translateBodyUnit :: [AstNodeOf ()] -> Maybe (Term ())
+translateBodyUnit :: [AstNodeOf ()] -> TranslateM (Term ())
 translateBodyUnit = translateBody translateNodeUnit
 
-translateBodyBool :: [AstNodeOf Bool] -> Maybe (Term Bool)
+translateBodyBool :: [AstNodeOf Bool] -> TranslateM (Term Bool)
 translateBodyBool = translateBody translateNodeBool
 
-translateBodyInt :: [AstNodeOf Integer] -> Maybe (Term Integer)
+translateBodyInt :: [AstNodeOf Integer] -> TranslateM (Term Integer)
 translateBodyInt = translateBody translateNodeInt
-
-integerLit :: Literal -> Maybe (Term Integer)
-integerLit = \case
-  LInteger i -> Just (Literal (literal i))
-  _          -> Nothing
-
-newtype AstNodeOf a = AstNodeOf { unAstNodeOf :: AST Node }
-
-type TranslateM = ReaderT CheckEnv Maybe
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
   AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Literal (literal i))
   AST_Lit         (LInteger i)  -> pure (Literal (literal i))
-  AST_NegativeVar (Node tcId _) -> pure $ Arith Negate [Var (tcIdToName tcId)]
-  AST_Var         (Node tcId _) -> pure $ Var (tcIdToName tcId)
+  AST_NegativeVar n -> do
+    name <- view (ix n)
+    pure $ Arith Negate [Var name]
+  AST_Var         n -> Var <$> view (ix n)
   AST_Days days -> do
     days' <- translateNodeInt (AstNodeOf days)
     pure $ Arith Mul [60 * 60 * 24, days']
@@ -419,7 +410,7 @@ translateNodeInt = unAstNodeOf >>> \case
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool (AstNodeOf node) = case node of
   AST_Lit (LBool b)     -> pure (Literal (literal b))
-  AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
+  AST_Var n -> Var <$> view (ix n)
 
   AST_NFun_Basic fn args -> do
     let mkComparison
@@ -476,7 +467,7 @@ translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) ->
     pure (Literal (literal (mkDecimal d)))
-  AST_Var (Node tcId _) -> pure (Var (tcIdToName tcId))
+  AST_Var n -> Var <$> view (ix n)
 
 -- translateNodeString
 
@@ -569,28 +560,43 @@ symbolicEval = \case
 analyzeFunction
   :: TopLevel Node
   -> IO (Either SmtCompilerException ThmResult)
-analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) =
-  case retTy of
-    TyPrim TyInteger -> analyzeFunction' translateBodyInt (.== 1) body' argTys
-    TyPrim TyBool    -> analyzeFunction' translateBodyBool (.== true) body' argTys
+analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) =
+  let argNodes :: [Node]
+      argNodes = _nnNamed <$> args
+
+      -- extract the typechecker's name for a node, eg "analyze-tests.layup_x".
+      nodeNames :: [Text]
+      nodeNames = _tiName . _aId <$> argNodes
+
+      nodeNames' :: Map Node Text
+      nodeNames' = Map.fromList $ zip argNodes nodeNames
+
+      argTys :: [(Text, Type UserType)]
+      argTys = zip nodeNames (_aTy <$> argNodes)
+  in case retTy of
+       TyPrim TyInteger ->
+         analyzeFunction' translateBodyInt (.== 1) body' argTys nodeNames'
+       TyPrim TyBool    ->
+         analyzeFunction' translateBodyBool (.== true) body' argTys nodeNames'
 
 analyzeFunction _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 analyzeFunction'
   :: (Show a, SymWord a)
-  => ([AstNodeOf a] -> Maybe (Term a))
+  => ([AstNodeOf a] -> TranslateM (Term a))
   -> (SBV a -> SBV Bool)
   -> [AST Node]
-  -> [Arg UserType]
+  -> [(Text, Type UserType)]
+  -> Map Node Text
   -> IO (Either SmtCompilerException ThmResult)
-analyzeFunction' translator p body' argTys =
+analyzeFunction' translator p body' argTys nodeNames =
   -- TODO what type should this be?
-  case translator (AstNodeOf <$> body') of
+  case runReaderT (translator (AstNodeOf <$> body')) nodeNames of
     Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
       thmResult <- prove $ do
-        argVars <- forM argTys $ \(Arg name ty _info) -> do
+        argVars <- forM argTys $ \(name, ty) -> do
           let name' = T.unpack name
           var <- case ty of
             TyPrim TyInteger -> mkAVar <$> sInteger name'
