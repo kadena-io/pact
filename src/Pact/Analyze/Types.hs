@@ -17,6 +17,7 @@
 module Pact.Analyze.Types
   ( runCompiler
   , runCompilerDebug
+  , runCompilerTest
   , analyzeFunction
   , TableAccess(..)
   , CheckState(..)
@@ -646,3 +647,8 @@ runCompilerDebug dbg replPath' modName' funcName' = do
   putStrLn $ case r of
     Left err  -> show err
     Right res -> show res
+
+runCompilerTest :: String -> Text -> Text -> IO (Either SmtCompilerException ThmResult)
+runCompilerTest replPath modName funcName = do
+  f <- fst <$> inferFun False replPath (ModuleName modName) funcName
+  analyzeFunction f False

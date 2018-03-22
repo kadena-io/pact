@@ -24,6 +24,7 @@ packages:
 extra-deps:
   - bound-2.0.1
   - ed25519-donna-0.1.1
+  - easytest-0.1
 
 flags: {}
 
