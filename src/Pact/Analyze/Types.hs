@@ -356,7 +356,6 @@ data Term ret where
   Let        :: (Show a)            => String       -> Term a -> Term b -> Term b
   Var        ::                        Text         ->                     Term a
   Write      :: (Show a)            => Term Integer -> Term a ->           Term ()
-  Throw      ::                        String       ->                     Term ()
   Arith      ::                        ArithOp      -> [Term Integer]   -> Term Integer
   Comparison :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
 
