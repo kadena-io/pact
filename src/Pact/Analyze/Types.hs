@@ -136,17 +136,11 @@ data LatticeCheckState
   deriving (Show, Eq, Generic, Mergeable)
 makeLenses ''LatticeCheckState
 
-instance Default LatticeCheckState where
-  def = LatticeCheckState true
-
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalCheckState
   = GlobalCheckState ()
   deriving (Show, Eq)
 makeLenses ''GlobalCheckState
-
-instance Default GlobalCheckState where
-  def = GlobalCheckState ()
 
 data CheckState
   = CheckState
@@ -156,18 +150,18 @@ data CheckState
   deriving (Show, Eq)
 makeLenses ''CheckState
 
-instance Default CheckState where
-  def = CheckState
-    { _latticeState = def
-    , _globalState  = def
-    }
-
 instance Mergeable CheckState where
   -- NOTE: We discard the left global state because this is out-of-date and was
   -- already fed to the right computation -- we use the updated right global
   -- state.
   symbolicMerge force test (CheckState lls _) (CheckState rls rgs) =
     CheckState (symbolicMerge force test lls rls) rgs
+
+initialCheckState :: CheckState
+initialCheckState = CheckState
+  { _latticeState = LatticeCheckState true
+  , _globalState  = GlobalCheckState ()
+  }
 
 succeeds :: Lens' CheckState SBool
 succeeds = latticeState.lcsSucceeds
@@ -605,7 +599,7 @@ analyzeFunction' translator p body' argTys =
 
         let action = declareTopLevelVars >> symbolicEval body''
             env0   = CheckEnv (Map.fromList argVars)
-            state0 = def
+            state0 = initialCheckState
 
         case runExcept $ runRWST action env0 state0 of
           Left cf -> do
