@@ -650,4 +650,4 @@ runCompilerDebug dbg replPath' modName' funcName' = do
 runCompilerTest :: String -> Text -> Text -> IO (Either SmtCompilerException ThmResult)
 runCompilerTest replPath modName funcName = do
   f <- fst <$> inferFun False replPath (ModuleName modName) funcName
-  analyzeFunction f False
+  analyzeFunction f
