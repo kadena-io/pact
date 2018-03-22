@@ -348,16 +348,16 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 class Storable a where
 
 data Term ret where
-  IfThenElse ::    Term Bool -> Term a -> Term a -> Term a
-  Enforce    ::              Term Bool -> String -> Term ()
-  Sequence   ::   (Show b, SymWord b) =>  Term b -> Term a -> Term a
-  Literal    ::                            SBV a -> Term a
-  Read       ::                     Term Integer -> Term a
-  Let        ::   Show a =>   String  -> Term a -> Term b -> Term b
-  Var        ::                           Text -> Term a
-  Write      ::   Show a =>        Term Integer -> Term a -> Term ()
-  Throw      ::                           String -> Term ()
-  Arith      ::        ArithOp -> [Term Integer] -> Term Integer
+  IfThenElse ::                        Term Bool    -> Term a -> Term a -> Term a
+  Enforce    ::                        Term Bool    -> String ->           Term ()
+  Sequence   :: (Show b, SymWord b) => Term b       -> Term a ->           Term a
+  Literal    ::                        SBV a        ->                     Term a
+  Read       ::                        Term Integer ->                     Term a
+  Let        :: (Show a)            => String       -> Term a -> Term b -> Term b
+  Var        ::                        Text         ->                     Term a
+  Write      :: (Show a)            => Term Integer -> Term a ->           Term ()
+  Throw      ::                        String       ->                     Term ()
+  Arith      ::                        ArithOp      -> [Term Integer]   -> Term Integer
   Comparison :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
 
   AddTimeInt :: Term Time -> Term Integer -> Term Time
