@@ -111,30 +111,6 @@ data CheckEnv = CheckEnv
   } deriving Show
 makeLenses ''CheckEnv
 
-data Status = Running | Thrown
-  deriving (Eq, Show)
-
-instance Mergeable Status where
-  symbolicMerge _f _t a b
-    | a == b = a
-    -- TODO: we need an approach where we support the tx aborting only on one
-    --       side of a conditional:
-    | otherwise = error $ "Status: No least-upper-bound for " ++ show (a, b)
-
-data CheckState = CheckState
-  { _status :: Status
-  } deriving (Show, Eq)
-makeLenses ''CheckState
-
-instance Mergeable CheckState where
-  symbolicMerge f t (CheckState s1) (CheckState s2) = CheckState
-    (symbolicMerge f t s1 s2)
-
-data CompileFailure
-  = MalformedArithmeticOp ArithOp [Term Integer]
-  | MalformedComparison
-  deriving Show
-
 newtype CheckLog
   = CheckLog ()
 
@@ -151,18 +127,72 @@ instance Monoid CheckLog where
   mempty = CheckLog ()
   mappend _ _ = CheckLog ()
 
+-- Checking state that is split before, and merged after, conditionals.
+data LatticeCheckState
+  = LatticeCheckState
+    { _lcsSucceeds :: SBool
+    }
+  deriving (Show, Eq, Generic, Mergeable)
+makeLenses ''LatticeCheckState
+
+instance Default LatticeCheckState where
+  def = LatticeCheckState true
+
+-- Checking state that is transferred through every computation, in-order.
+newtype GlobalCheckState
+  = GlobalCheckState ()
+  deriving (Show, Eq)
+makeLenses ''GlobalCheckState
+
+instance Default GlobalCheckState where
+  def = GlobalCheckState ()
+
+data CheckState
+  = CheckState
+    { _latticeState :: LatticeCheckState
+    , _globalState  :: GlobalCheckState
+    }
+  deriving (Show, Eq)
+makeLenses ''CheckState
+
+instance Default CheckState where
+  def = CheckState
+    { _latticeState = def
+    , _globalState  = def
+    }
+
+instance Mergeable CheckState where
+  -- NOTE: We discard the left global state because this is out-of-date and was
+  -- already fed to the right computation -- we use the updated right global
+  -- state.
+  symbolicMerge force test (CheckState lls _) (CheckState rls rgs) =
+    CheckState (symbolicMerge force test lls rls) rgs
+
+succeeds :: Lens' CheckState SBool
+succeeds = latticeState.lcsSucceeds
+
+data CompileFailure
+  = MalformedArithmeticOp ArithOp [Term Integer]
+  | MalformedComparison
+  deriving Show
+
 type M = RWST CheckEnv CheckLog CheckState (Except CompileFailure)
 
-instance (Mergeable w, Mergeable s, Mergeable a) => Mergeable (RWST r w s (Except e) a) where
+instance (Mergeable w, Mergeable a) => Mergeable (RWST r w CheckState (Except e) a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
-    -- NOTE: this propagates either failure if one side fails:
-    let run act = runExcept $ runRWST act r s
-    in sequence [run left, run right] <&> \[leftTup, rightTup] ->
-        symbolicMerge
-          force
-          test
-          leftTup
-          rightTup
+    --
+    -- We explicitly propagate only the "global" portion of the state from the
+    -- left to the right computation. And then the only lattice state, and not
+    -- global state, is merged (per CheckState's Mergeable instance.)
+    --
+    -- If either side fails, the entire merged computation fails.
+    --
+    let run act = runExcept . runRWST act r
+    in do
+      lTup <- run left s
+      let gs = lTup ^. _2.globalState
+      rTup <- run right $ s & globalState .~ gs
+      return $ symbolicMerge force test lTup rTup
 
 isUnsupportedOperator :: Text -> Maybe Text
 isUnsupportedOperator s = if isUnsupported then Just s else Nothing
@@ -499,26 +529,19 @@ declareTopLevelVars :: M ()
 -- TODO(joel)
 declareTopLevelVars = pure ()
 
-addPathCondition :: SBool -> M a -> M a
-addPathCondition cond = id -- local (& path %~ cons cond)
-
 symbolicEval :: (Show a, SymWord a) => Term a -> M (SBV a)
 symbolicEval = \case
-  IfThenElse cond lAst rAst -> do
-    condVal <- symbolicEval cond
-    ite (condVal .== true)
-      (addPathCondition (condVal .== true) (symbolicEval lAst))
-      (addPathCondition (condVal .== false) (symbolicEval rAst))
-  Enforce cond msg -> do
-    condVal <- symbolicEval cond
-    ite (condVal .== true)
-      -- (if msg == "keyset"
-      --   then local (& insideEnforceKeyset .~ True) (eval guarded)
-      --   else eval guarded
-      -- )
-      (pure (literal ()))
-      (status .= Thrown >> pure (literal ()))
-  Sequence a b -> symbolicEval a >> symbolicEval b
+  IfThenElse cond then' else' -> do
+    testPasses <- symbolicEval cond
+    ite testPasses (symbolicEval then') (symbolicEval else')
+
+  Enforce cond _msg -> do
+    cond <- symbolicEval cond
+    succeeds %= (&&& cond)
+    pure $ literal ()
+
+  Sequence a b -> symbolicEval a *> symbolicEval b
+
   Literal a -> pure a
 
   Var name -> do
@@ -582,7 +605,7 @@ analyzeFunction' translator p body' argTys =
 
         let action = declareTopLevelVars >> symbolicEval body''
             env0   = CheckEnv (Map.fromList argVars)
-            state0 = CheckState Running
+            state0 = def
 
         case runExcept $ runRWST action env0 state0 of
           Left cf -> do
