@@ -142,9 +142,10 @@ instance Mergeable CheckLog where
   --
   -- NOTE: If we change the underlying representation of CheckLog to a list,
   -- the default Mergeable instance for this will have the wrong semantics, as
-  -- it requires that lists have the same length.
+  -- it requires that lists have the same length. We more likely want to use
+  -- monoidal semantics for anything we log:
   --
-  symbolicMerge f t (CheckLog ()) (CheckLog ()) = CheckLog ()
+  symbolicMerge f t (CheckLog log1) (CheckLog log2) = CheckLog $ log1 <> log2
 
 instance Monoid CheckLog where
   mempty = CheckLog ()
