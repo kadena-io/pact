@@ -574,14 +574,13 @@ symbolicEval = \case
 
 analyzeFunction
   :: TopLevel Node
-  -> Bool
   -> IO (Either SmtCompilerException ThmResult)
-analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) dbg =
+analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args' body' _)) =
   case retTy of
     TyPrim TyInteger -> analyzeFunction' translateBodyInt (.== 1) body' argTys
     TyPrim TyBool    -> analyzeFunction' translateBodyBool (.== true) body' argTys
 
-analyzeFunction _ _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+analyzeFunction _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 analyzeFunction'
   :: (Show a, SymWord a)
@@ -642,8 +641,8 @@ runCompiler = runCompilerDebug False
 
 runCompilerDebug :: Bool -> String -> Text -> Text -> IO ()
 runCompilerDebug dbg replPath' modName' funcName' = do
-  f <- fst <$> inferFun False replPath' (ModuleName modName') funcName'
-  r <- analyzeFunction f dbg
+  f <- fst <$> inferFun dbg replPath' (ModuleName modName') funcName'
+  r <- analyzeFunction f
   putStrLn $ case r of
     Left err  -> show err
     Right res -> show res
