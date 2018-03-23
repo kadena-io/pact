@@ -568,13 +568,13 @@ evalTerm = \case
       Neq -> x' ./= y'
 
   AddTimeInt time secs -> do
-    time' <- symbolicEval time
-    secs' <- symbolicEval secs
+    time' <- evalTerm time
+    secs' <- evalTerm secs
     pure $ time' + sFromIntegral secs'
 
   -- AddTimeDec time secs -> do
-  --   time' <- symbolicEval time
-  --   secs' <- symbolicEval secs
+  --   time' <- evalTerm time
+  --   secs' <- evalTerm secs
   --   pure $ time' + sFromIntegral secs'
 
 analyzeFunction
