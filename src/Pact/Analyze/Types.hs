@@ -666,9 +666,14 @@ translateNode = unAstNodeOf >>> \case
   AST_Format node' fmtStr' args'                      -> undefined
   AST_UFun name' node' body' _args'                   -> undefined
 
-declareTopLevelVars :: M ()
--- TODO(joel)
-declareTopLevelVars = pure ()
+processArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
+processArgs argTys = fmap Map.fromList $ forM argTys $ \(name, ty) -> do
+  let name' = T.unpack name
+  var <- case ty of
+    TyPrim TyInteger -> mkAVar <$> sInteger name'
+    TyPrim TyBool    -> mkAVar <$> sBool name'
+  pure (name, var)
+
 
 evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
 evalTerm = \case
@@ -768,15 +773,10 @@ analyzeFunction' translator p body' argTys nodeNames =
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
       thmResult <- prove $ do
-        argVars <- forM argTys $ \(name, ty) -> do
-          let name' = T.unpack name
-          var <- case ty of
-            TyPrim TyInteger -> mkAVar <$> sInteger name'
-            TyPrim TyBool    -> mkAVar <$> sBool name'
-          pure (name, var)
+        scope0 <- processArgs argTys
 
-        let action = declareTopLevelVars >> evalTerm body''
-            env0   = CheckEnv (Map.fromList argVars)
+        let action = evalTerm body''
+            env0   = CheckEnv scope0
             state0 = initialCheckState
 
         case runExcept $ runRWST action env0 state0 of
