@@ -19,7 +19,6 @@ module Pact.Analyze.Types
   , runCompilerDebug
   , runCompilerTest
   , analyzeFunction
-  , TableAccess(..)
   , CheckState(..)
   , SmtCompilerException(..)
   , inferFun
@@ -87,10 +86,10 @@ data SymType = SymInteger
   | SymTime
   deriving (Show, Eq, Ord, Generic, ToJSON)
 
-data TableAccess =
-  TableRead |
-  TableWrite
-  deriving (Show, Eq, Generic, ToJSON)
+-- data TableAccess =
+--   TableRead |
+--   TableWrite
+--   deriving (Show, Eq, Generic, ToJSON)
 
 -- | Low-level, untyped variable.
 data AVar = AVar SBVI.SVal
@@ -348,19 +347,26 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 class Storable a where
 
 data Term ret where
-  IfThenElse ::                        Term Bool    -> Term a -> Term a -> Term a
-  Enforce    ::                        Term Bool    -> String ->           Term ()
-  Sequence   :: (Show b, SymWord b) => Term b       -> Term a ->           Term a
-  Literal    ::                        SBV a        ->                     Term a
-  Read       ::                        Term Integer ->                     Term a
-  Let        :: (Show a)            => String       -> Term a -> Term b -> Term b
-  Var        ::                        Text         ->                     Term a
-  Write      :: (Show a)            => Term Integer -> Term a ->           Term ()
-  Arith      ::                        ArithOp      -> [Term Integer]   -> Term Integer
-  Comparison :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
-
-  AddTimeInt :: Term Time -> Term Integer -> Term Time
-  AddTimeDec :: Term Time -> Term Decimal -> Term Time
+  IfThenElse     ::                        Term Bool    -> Term a -> Term a -> Term a
+  Enforce        ::                        Term Bool    -> String ->           Term ()
+  Sequence       :: (Show b, SymWord b) => Term b       -> Term a ->           Term a
+  Literal        ::                        SBV a        ->                     Term a
+  --
+  -- TODO: change read/write to use strings -> objects
+  --
+  Read           ::                        Term Integer ->                     Term a
+  Write          :: (Show a)            => Term Integer -> Term a ->           Term ()
+  Let            :: (Show a)            => String       -> Term a -> Term b -> Term b
+  Var            ::                        Text         ->                     Term a
+  Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
+  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+  AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
+  AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
+  NameAuthorized ::                        KeySetName   ->                     Term Bool
+  --
+  -- TODO: figure out the object representation we use here:
+  --
+  -- ObjAuthorized  ::                     Term Obj     ->                     Term Bool
 
 deriving instance Show a => (Show (Term a))
 
@@ -372,7 +378,48 @@ instance Num (Term Integer) where
   signum x = Arith Signum [x]
   negate x = Arith Negate [x]
 
-newtype AstNodeOf a = AstNodeOf { unAstNodeOf :: AST Node }
+data DomainProperty where
+  TableWrite       :: TableName  ->             DomainProperty -- anything in table is written
+  TableRead        :: TableName  ->             DomainProperty -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnId -> DomainProperty -- particular column is written
+  --
+  CellIncrease     :: TableName  -> ColumnId -> DomainProperty -- any cell at all in col increases
+  ColumnConserves  :: TableName  -> ColumnId -> DomainProperty -- sum of all changes in col is 0
+  --
+  KsNameAuthorized :: KeySetName ->             DomainProperty -- keyset authorized by name
+  Abort            ::                           DomainProperty
+  Success          ::                           DomainProperty
+  --
+  -- TODO: row-level keyset enforcement seems like it needs some form of
+  --       unification, so that using a variable we can connect >1 domain
+  --       property?
+  --
+  --       e.g.: forall row. RowWrite("balances", r) `Implies` RowKsEnforced(r)
+  --
+  --       RowKsEnforced  :: RowUid    ->            DomainProperty
+  --       RowWrite       :: TableName -> RowUid  -> DomainProperty
+  --
+  -- TODO: Add DomainProperty/ies for constraining function arguments
+  --       - e.g.: x > 10 `Implies` table_write(t0)
+  --
+  -- TODO: possibly allow use of input as parameter to domain properties
+  --       - e.g.: column_increases_by(t0, x)     [where x is function input]
+  --
+
+data Property where
+  Implies :: Property       -> Property -> Property
+  Not     :: Property       ->             Property
+  And     :: Property       -> Property -> Property
+  Or      :: Property       -> Property -> Property
+  Occurs  :: DomainProperty ->             Property
+
+data Check where
+  Satisfiable :: Property -> Check
+  Valid       :: Property -> Check
+
+newtype AstNodeOf a
+  = AstNodeOf
+    { unAstNodeOf :: AST Node }
 
 type TranslateM = ReaderT (Map Node Text) Maybe
 
