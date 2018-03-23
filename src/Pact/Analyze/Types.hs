@@ -1,18 +1,19 @@
 {-# language DeriveAnyClass     #-}
 {-# language DeriveDataTypeable #-}
 {-# language DeriveGeneric      #-}
-{-# language RecordWildCards    #-}
 {-# language FlexibleContexts   #-}
+{-# language FlexibleInstances  #-}
+{-# language GADTs              #-}
 {-# language LambdaCase         #-}
+{-# language MultiWayIf         #-}
 {-# language OverloadedStrings  #-}
 {-# language PatternSynonyms    #-}
+{-# language Rank2Types         #-}
+{-# language RecordWildCards    #-}
+{-# language StandaloneDeriving #-}
 {-# language TemplateHaskell    #-}
 {-# language TypeApplications   #-}
 {-# language ViewPatterns       #-}
-{-# language Rank2Types         #-}
-{-# language GADTs              #-}
-{-# language StandaloneDeriving #-}
-{-# language FlexibleInstances  #-}
 
 module Pact.Analyze.Types
   ( runCompiler
@@ -43,6 +44,7 @@ import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Repl
 import Data.Aeson hiding (Object, (.=))
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -161,7 +163,8 @@ succeeds :: Lens' CheckState SBool
 succeeds = latticeState.lcsSucceeds
 
 data CompileFailure
-  = MalformedArithmeticOp ArithOp [Term Integer]
+  = MalformedArithOp ArithOp [Term Integer]
+  | UnsupportedArithOp ArithOp
   | MalformedComparison
   deriving Show
 
@@ -197,14 +200,22 @@ ofPrimType :: Node -> Maybe PrimType
 ofPrimType (Node _ (TyPrim ty)) = Just ty
 ofPrimType _ = Nothing
 
+comparisonOperators, logicalOperators, numericalOperators :: Set Text
+comparisonOperators = Set.fromList [">", "<", ">=", "<=", "=", "!="]
+logicalOperators    = Set.fromList ["and", "or", "not"]
+numericalOperators  = Set.fromList ["+", "-", "*", "/", "abs", "^"]
+
+isComparison, isLogical, isNumerical :: Text -> Bool
+isComparison s = Set.member s comparisonOperators
+isLogical    s = Set.member s logicalOperators
+isNumerical  s = Set.member s numericalOperators
+
 ofBasicOperators :: Text -> Either Text Text
 ofBasicOperators s = if isBasic then Right s else Left s
   where
-    isBasic     = isCmp || isLogical || isNumerical
-    -- FIXME: inefficient
-    isCmp       = Set.member s $ Set.fromList [">", "<", ">=", "<=", "=", "!="]
-    isLogical   = Set.member s $ Set.fromList ["and", "or", "not"]
-    isNumerical = Set.member s $ Set.fromList ["+", "-", "*", "/", "abs", "^"]
+    isBasic = Set.member s
+      (comparisonOperators <> logicalOperators <> numericalOperators)
+
 
 {-
 convertType :: Node -> SymType
@@ -338,7 +349,37 @@ pattern AST_UnsupportedOp :: forall a. Text -> AST a
 pattern AST_UnsupportedOp s <-
   (App _ (NativeFunc (isUnsupportedOperator -> Just s)) _ )
 
-data ArithOp = Add | Mul | Abs | Signum | Negate
+data ArithOp
+  = Sub -- "-" Integer / Decimal
+  | Add -- "+"
+  | Mul -- "*"
+  | Div -- "/"
+
+  | Pow -- "^"
+  | Sqrt -- "sqrt"
+  | Mod -- "mod"
+  | Log -- "log"
+  | Ln -- "ln"
+
+  | Exp -- "exp"
+  | Abs -- "abs"
+  | Round -- "round"
+  | Ceiling -- "ceiling"
+  | Floor -- "floor"
+
+  -- Extras not necessarily in pact
+  -- @Signum@ because we want (Term Integer) to be a Num instance
+  | Signum
+  -- @Negate@ because @-@ is overloaded in pact to mean "minus" or "negate"
+  | Negate
+  deriving (Show, Eq, Ord)
+
+unsupportedArithOps :: Set ArithOp
+unsupportedArithOps = Set.fromList
+  -- TODO(joel) support Exp with svExp?
+  [Pow, Sqrt, Log, Ln, Exp, Round, Ceiling, Floor]
+
+data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)
 
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
@@ -360,6 +401,7 @@ data Term ret where
   Var            ::                        Text         ->                     Term a
   Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+  Logical        :: LogicalOp -> [Term a] -> Term a
   AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
   AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
   NameAuthorized ::                        KeySetName   ->                     Term Bool
@@ -457,6 +499,46 @@ translateNodeInt = unAstNodeOf >>> \case
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
 
+  -- TODO(joel): do this for decimal (etc) as well
+  AST_NFun_Basic fn args -> case (fn, args) of
+    ("-", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Sub [a', b']
+    ("-", [a]) -> Arith Negate . pure <$> translateNodeInt (AstNodeOf a)
+    ("+", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Add [a', b']
+    ("*", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Mul [a', b']
+    ("/", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Div [a', b']
+    ("^", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Pow [a', b']
+    ("sqrt", [a]) -> Arith Sqrt . pure <$> translateNodeInt (AstNodeOf a)
+    ("mod", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Mod [a', b']
+    ("log", [a, b]) -> do
+      a' <- translateNodeInt (AstNodeOf a)
+      b' <- translateNodeInt (AstNodeOf b)
+      pure $ Arith Log [a', b']
+    ("ln", [a]) -> Arith Ln . pure <$> translateNodeInt (AstNodeOf a)
+    ("exp", [a]) -> Arith Pow . pure <$> translateNodeInt (AstNodeOf a)
+    ("abs", [a]) -> Arith Abs . pure <$> translateNodeInt (AstNodeOf a)
+
+    ("round", [a]) -> Arith Round . pure <$> translateNodeInt (AstNodeOf a)
+    ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNodeInt (AstNodeOf a)
+    ("floor", [a]) -> Arith Floor . pure <$> translateNodeInt (AstNodeOf a)
+
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool (AstNodeOf node) = case node of
   AST_Lit (LBool b)     -> pure (Literal (literal b))
@@ -490,14 +572,30 @@ translateNodeBool (AstNodeOf node) = case node of
             <*> translate (AstNodeOf b)
           _ -> lift Nothing -- throwError MalformedComparison
 
-    -- integer, decimal, string, and time are all comparable. Use the type of
-    -- the first argument to decide which to use.
-    case args ^? ix 0 . aNode . aTy of
-      Just (TyPrim TyInteger) -> mkComparison translateNodeInt
-      Just (TyPrim TyDecimal) -> mkComparison translateNodeDecimal
-      -- Just (TyPrim TyString) -> mkComparison translateNodeString
-      Just (TyPrim TyTime) -> mkComparison translateNodeTime
-      _ -> lift Nothing -- throwError MalformedComparison
+        mkLogical :: TranslateM (Term Bool)
+        mkLogical = case (fn, args) of
+          ("and", [a, b]) -> do
+            a' <- translateNodeBool (AstNodeOf a)
+            b' <- translateNodeBool (AstNodeOf b)
+            pure $ Logical AndOp [a', b']
+          ("or", [a, b]) -> do
+            a' <- translateNodeBool (AstNodeOf a)
+            b' <- translateNodeBool (AstNodeOf b)
+            pure $ Logical OrOp [a', b']
+          ("not", [a]) -> do
+            a' <- translateNodeBool (AstNodeOf a)
+            pure $ Logical NotOp [a']
+
+    if
+      -- integer, decimal, string, and time are all comparable. Use the type of
+      -- the first argument to decide which to use.
+      | isComparison fn -> case args ^? ix 0 . aNode . aTy of
+        Just (TyPrim TyInteger) -> mkComparison translateNodeInt
+        Just (TyPrim TyDecimal) -> mkComparison translateNodeDecimal
+        -- Just (TyPrim TyString) -> mkComparison translateNodeString
+        Just (TyPrim TyTime) -> mkComparison translateNodeTime
+        _ -> lift Nothing -- throwError MalformedComparison
+      | isLogical fn -> mkLogical
 
   AST_If _ cond tBranch fBranch -> IfThenElse
     <$> translateNodeBool (AstNodeOf cond)
@@ -593,15 +691,22 @@ evalTerm = \case
     -- Assume the variable is well-typed after typechecking
     pure $ unsafeCastAVar val
 
-  Arith op args -> do
-    args' <- forM args evalTerm
-    case (op, args') of
-      (Add, [x, y]) -> pure $ x + y
-      (Mul, [x, y]) -> pure $ x * y
-      (Abs, [x])    -> pure $ abs x
-      (Signum, [x]) -> pure $ signum x
-      (Negate, [x]) -> pure $ negate x
-      _             -> throwError $ MalformedArithmeticOp op args
+  Arith op args ->
+    if op `Set.member` unsupportedArithOps
+    then throwError $ UnsupportedArithOp op
+    else do
+
+            args' <- forM args evalTerm
+            case (op, args') of
+              (Sub, [x, y]) -> pure $ x - y
+              (Add, [x, y]) -> pure $ x + y
+              (Mul, [x, y]) -> pure $ x * y
+              (Div, [x, y]) -> pure $ x `sDiv` y
+              (Mod, [x, y]) -> pure $ x `sMod` y
+              (Abs, [x])    -> pure $ abs x
+              (Signum, [x]) -> pure $ signum x
+              (Negate, [x]) -> pure $ negate x
+              _             -> throwError $ MalformedArithOp op args
 
   Comparison op x y -> do
     x' <- evalTerm x
