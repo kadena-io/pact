@@ -14,6 +14,7 @@
 {-# language TemplateHaskell    #-}
 {-# language TypeApplications   #-}
 {-# language ViewPatterns       #-}
+{-# language TupleSections      #-}
 
 module Pact.Analyze.Types
   ( runCompiler
@@ -49,7 +50,8 @@ import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.HashMap.Strict as HM
-import Data.Default
+import Data.Default (def)
+import Data.Traversable (for)
 import GHC.Generics
 import Data.SBV hiding (name)
 import qualified Data.SBV.Internals as SBVI
@@ -104,7 +106,8 @@ mkAVar :: SBV a -> AVar
 mkAVar (SBVI.SBV sval) = AVar sval
 
 data CheckEnv = CheckEnv
-  { _scope :: Map Text AVar
+  { _scope     :: Map Text AVar
+  , _nameAuths :: Map KeySetName SBool
   } deriving Show
 makeLenses ''CheckEnv
 
@@ -166,6 +169,7 @@ data CompileFailure
   = MalformedArithOp ArithOp [Term Integer]
   | UnsupportedArithOp ArithOp
   | MalformedComparison
+  | KeySetNameNotFound KeySetName
   deriving Show
 
 type M = RWST CheckEnv CheckLog CheckState (Except CompileFailure)
@@ -409,6 +413,14 @@ data Term ret where
   -- TODO: figure out the object representation we use here:
   --
   -- ObjAuthorized  ::                     Term Obj     ->                     Term Bool
+  --
+  -- TODO: we will also want to handle cases where load a keyset object by its
+  -- name, and then use the object: e.g.:
+  --
+  --   (defconst ADMIN_KEYSET (read-keyset "accounts-admin-keyset"))
+  --
+  --  and then ADMIN_KEYSET is used in the code
+  --
 
 deriving instance Show a => (Show (Term a))
 
@@ -429,8 +441,8 @@ data DomainProperty where
   ColumnConserves  :: TableName  -> ColumnId -> DomainProperty -- sum of all changes in col is 0
   --
   KsNameAuthorized :: KeySetName ->             DomainProperty -- keyset authorized by name
-  Abort            ::                           DomainProperty
-  Success          ::                           DomainProperty
+  Aborts           ::                           DomainProperty
+  Succeeds         ::                           DomainProperty
   --
   -- TODO: row-level keyset enforcement seems like it needs some form of
   --       unification, so that using a variable we can connect >1 domain
@@ -666,14 +678,17 @@ translateNode = unAstNodeOf >>> \case
   AST_Format node' fmtStr' args'                      -> undefined
   AST_UFun name' node' body' _args'                   -> undefined
 
-processArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
-processArgs argTys = fmap Map.fromList $ forM argTys $ \(name, ty) -> do
+allocateArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
+allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
   var <- case ty of
     TyPrim TyInteger -> mkAVar <$> sInteger name'
     TyPrim TyBool    -> mkAVar <$> sBool name'
   pure (name, var)
 
+allocateNameAuths :: [KeySetName] -> Symbolic (Map KeySetName SBool)
+allocateNameAuths names = fmap Map.fromList $ for names $ \ksn@(KeySetName s) ->
+  (ksn,) <$> sBool ("auth_" <> T.unpack s)
 
 evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
 evalTerm = \case
@@ -734,6 +749,17 @@ evalTerm = \case
   --   secs' <- evalTerm secs
   --   pure $ time' + sFromIntegral secs'
 
+getNameAuth :: KeySetName -> M SBool
+getNameAuth ksn = maybe (throwError $ KeySetNameNotFound ksn) pure
+              =<< view (nameAuths.at ksn)
+
+evalDomainProperty :: DomainProperty -> M SBool
+evalDomainProperty Succeeds = use succeeds
+evalDomainProperty Aborts = bnot <$> evalDomainProperty Succeeds
+evalDomainProperty (KsNameAuthorized ksn) = getNameAuth ksn
+-- evalDomainProperty (TableRead tn) = _todoRead
+-- evalDomainProperty (TableWrite tn) = _todoWrite
+
 analyzeFunction
   :: TopLevel Node
   -> IO (Either SmtCompilerException ThmResult)
@@ -773,10 +799,11 @@ analyzeFunction' translator p body' argTys nodeNames =
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
       thmResult <- prove $ do
-        scope0 <- processArgs argTys
+        scope0 <- allocateArgs argTys
+        nameAuths <- allocateNameAuths [] -- TODO(bts): implement this!
 
         let action = evalTerm body''
-            env0   = CheckEnv scope0
+            env0   = CheckEnv scope0 nameAuths
             state0 = initialCheckState
 
         case runExcept $ runRWST action env0 state0 of
