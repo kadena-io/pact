@@ -39,14 +39,14 @@ module Pact.Types.Typecheck
   ) where
 
 import Control.Monad.Catch
-import Control.Lens hiding (pre,List)
+import Control.Lens hiding (List)
 import Data.Default
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Monad.State
-import Data.Aeson hiding (Object, (.=))
+import Data.Aeson hiding (Object)
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import Data.Monoid
 
 import Pact.Types.Lang

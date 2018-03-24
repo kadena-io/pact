@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -18,7 +17,7 @@ module Pact.Native.Time
     where
 
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Data.Thyme
 import Data.Decimal
 import System.Locale

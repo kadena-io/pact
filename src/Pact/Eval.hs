@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -30,13 +29,13 @@ module Pact.Eval
     ,liftTerm,apply,apply'
     ) where
 
-import Control.Lens hiding (op)
+import Control.Lens
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
 import Data.List
 import Control.Monad
-import Prelude hiding (exp,mod)
+import Prelude
 import Bound
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M

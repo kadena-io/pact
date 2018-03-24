@@ -63,12 +63,12 @@ module Pact.Types.Runtime
 
 
 import Control.Arrow ((&&&))
-import Control.Lens hiding (op,(.=))
+import Control.Lens hiding ((.=))
 import Control.Applicative
 import Control.DeepSeq
 import Data.List
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader

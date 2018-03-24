@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -14,7 +13,7 @@
 
 module Pact.Server.PactService where
 
-import Prelude hiding (log,exp)
+import Prelude
 
 import Control.Concurrent
 import Control.Exception.Safe

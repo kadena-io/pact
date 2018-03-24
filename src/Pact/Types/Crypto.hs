@@ -34,13 +34,13 @@ import Data.Aeson as A
 import Data.Aeson.Types (toJSONKeyText)
 
 import Data.ByteString (ByteString)
-import Data.Serialize as SZ hiding (get)
+import Data.Serialize as SZ
 import qualified Data.Serialize as S
 import Data.Maybe
 import Data.Text.Encoding
 
-import GHC.Generics hiding (from)
-import Prelude hiding (log,exp)
+import GHC.Generics
+import Prelude
 
 import Pact.Types.Util
 import Pact.Types.Hash

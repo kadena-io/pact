@@ -11,12 +11,10 @@
 
 module Pact.Native.Keysets where
 
-
-import Control.Lens hiding (from,to,parts)
+import Control.Lens
 import Control.Monad
 import Data.Default
-import Prelude hiding (exp)
-
+import Prelude
 
 import Pact.Eval
 import Pact.Native.Internal

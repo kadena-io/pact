@@ -23,13 +23,13 @@ module Pact.Native
     where
 
 import Control.Concurrent hiding (yield)
-import Control.Lens hiding (from,to,parts,Fold,contains)
+import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (ask)
 import Control.Monad.Catch
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
-import Prelude hiding (exp)
+import Prelude
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
 import Safe
