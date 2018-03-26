@@ -530,7 +530,7 @@ translateNodeBool (AstNodeOf node) = case node of
       | isComparison fn -> case args ^? ix 0 . aNode . aTy of
         Just (TyPrim TyInteger) -> mkComparison translateNodeInt
         Just (TyPrim TyDecimal) -> mkComparison translateNodeDecimal
-        -- Just (TyPrim TyString) -> mkComparison translateNodeString
+        Just (TyPrim TyString) -> mkComparison translateNodeStr
         Just (TyPrim TyTime) -> mkComparison translateNodeTime
         _ -> lift Nothing -- throwError MalformedComparison
       | isLogical fn -> mkLogical
@@ -623,6 +623,7 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyBool    -> mkAVar <$> sBool name'
     TyPrim TyDecimal -> mkAVar <$> sDecimal name'
     TyPrim TyTime    -> mkAVar <$> sInt64 name'
+    TyPrim TyString  -> mkAVar <$> sString name'
   pure (name, var)
 
 evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
