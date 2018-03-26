@@ -593,28 +593,6 @@ translateNodeUnit (AstNodeOf node) = case node of
     <*> translateNodeUnit (AstNodeOf tBranch)
     <*> translateNodeUnit (AstNodeOf fBranch)
 
-translateNode :: AstNodeOf a -> TranslateM (Term a)
-translateNode = unAstNodeOf >>> \case
-  -- App (Node _id (TyPrim TyBool)) _ _ -> translateNodeBool
-
-  AST_Lit _lit                                        -> undefined
-  AST_Var _var                                        -> undefined
-  -- AST_Binding _node' _bindings' _body'                -> undefined
-  AST_If _node' _cond' _ifTrue' _ifFalse'             -> undefined
-  -- AST_Read                                            -> undefined
-  AST_Days _                                          -> undefined
-  -- AST_Bind                                            -> undefined
-  -- AST_UnsupportedOp _s                                -> lift Nothing
-  AST_NFun_Basic _fn _args                            -> undefined
-  -- AST_Enforce _node' app' msg'                     -> do
-  --   app''  <- translateNodeBool (AstNodeOf app')
-  --   pure $ Enforce app'' (T.unpack msg')
-  -- AST_EnforceKeyset _node' _ks                        -> undefined
-  -- AST_WithRead _node' _table' _key' _bindings' _body' -> undefined
-  -- AST_InsertOrUpdate _node' _fn' _table' _key' _tcId' _kvs' -> undefined
-  -- AST_Format _node' _fmtStr' _args'                   -> undefined
-  -- AST_UFun _name' _node' _body' _args'                -> undefined
-
 allocateArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
