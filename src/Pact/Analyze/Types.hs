@@ -24,6 +24,9 @@ module Pact.Analyze.Types
   , CheckState(..)
   , SmtCompilerException(..)
   , inferFun
+  , Check(..)
+  , DomainProperty(..)
+  , Property(..)
   ) where
 
 import Control.Arrow ((>>>))
@@ -44,7 +47,7 @@ import Pact.Types.Runtime hiding (Term)
 import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Repl
-import Data.Aeson hiding (Object, (.=))
+import Data.Aeson hiding (Object, Success, (.=))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -53,7 +56,8 @@ import qualified Data.HashMap.Strict as HM
 import Data.Default (def)
 import Data.Traversable (for)
 import GHC.Generics
-import Data.SBV hiding (name)
+import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
 -- import Data.Thyme.Clock.POSIX
 import qualified Data.Text as T
@@ -99,7 +103,7 @@ mkAVar (SBVI.SBV sval) = AVar sval
 
 data CheckEnv = CheckEnv
   { _scope     :: Map Text AVar
-  , _nameAuths :: Map KeySetName SBool
+  , _nameAuths :: SArray String Bool
   } deriving Show
 makeLenses ''CheckEnv
 
@@ -161,7 +165,6 @@ data CompileFailure
   = MalformedArithOp ArithOp [Term Integer]
   | UnsupportedArithOp ArithOp
   | MalformedComparison
-  | KeySetNameNotFound KeySetName
   deriving Show
 
 type M = RWST CheckEnv CheckLog CheckState (Except CompileFailure)
@@ -351,8 +354,8 @@ data DomainProperty where
   ColumnConserves  :: TableName  -> ColumnId -> DomainProperty -- sum of all changes in col is 0
   --
   KsNameAuthorized :: KeySetName ->             DomainProperty -- keyset authorized by name
-  Aborts           ::                           DomainProperty
-  Succeeds         ::                           DomainProperty
+  Abort            ::                           DomainProperty
+  Success          ::                           DomainProperty
   --
   -- TODO: row-level keyset enforcement seems like it needs some form of
   --       unification, so that using a variable we can connect >1 domain
@@ -413,6 +416,9 @@ translateBodyDecimal = translateBody translateNodeDecimal
 
 translateBodyTime :: [AstNodeOf Time] -> TranslateM (Term Time)
 translateBodyTime = translateBody translateNodeTime
+
+translateBodyStr :: [AstNodeOf String] -> TranslateM (Term String)
+translateBodyStr = translateBody translateNodeStr
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
@@ -534,6 +540,13 @@ translateNodeBool (AstNodeOf node) = case node of
     <*> translateNodeBool (AstNodeOf tBranch)
     <*> translateNodeBool (AstNodeOf fBranch)
 
+translateNodeStr :: AstNodeOf String -> TranslateM (Term String)
+translateNodeStr (AstNodeOf node) = case node of
+  AST_Lit (LString t) -> pure $ Literal $ literal $ T.unpack t
+  --
+  -- TODO: more cases. string ops, etc.
+  --
+
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
   { decimalPlaces :: !Word8
@@ -551,8 +564,6 @@ translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) -> pure (Literal (literal (mkDecimal d)))
   AST_Var n            -> Var <$> view (ix n)
   _                    -> lift Nothing
-
--- translateNodeString
 
 type Time = Int64
 
@@ -614,10 +625,6 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyTime    -> mkAVar <$> sInt64 name'
   pure (name, var)
 
-allocateNameAuths :: [KeySetName] -> Symbolic (Map KeySetName SBool)
-allocateNameAuths names = fmap Map.fromList $ for names $ \ksn@(KeySetName s) ->
-  (ksn,) <$> sBool ("auth_" <> T.unpack s)
-
 evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
@@ -677,21 +684,36 @@ evalTerm = \case
   --   secs' <- evalTerm secs
   --   pure $ time' + sFromIntegral secs'
 
-getNameAuth :: KeySetName -> M SBool
-getNameAuth ksn = maybe (throwError $ KeySetNameNotFound ksn) pure
-              =<< view (nameAuths.at ksn)
-
 evalDomainProperty :: DomainProperty -> M SBool
-evalDomainProperty Succeeds = use succeeds
-evalDomainProperty Aborts = bnot <$> evalDomainProperty Succeeds
-evalDomainProperty (KsNameAuthorized ksn) = getNameAuth ksn
+evalDomainProperty Success = use succeeds
+evalDomainProperty Abort = bnot <$> evalDomainProperty Success
+evalDomainProperty (KsNameAuthorized (KeySetName n)) = do
+  arr <- view nameAuths
+  pure $ readArray arr (literal $ T.unpack n)
 -- evalDomainProperty (TableRead tn) = _todoRead
 -- evalDomainProperty (TableWrite tn) = _todoWrite
 
+evalProperty :: Property -> M SBool
+evalProperty (p1 `Implies` p2) = do
+  b1 <- evalProperty p1
+  b2 <- evalProperty p2
+  pure $ b1 ==> b2
+evalProperty (p1 `And` p2) = do
+  b1 <- evalProperty p1
+  b2 <- evalProperty p2
+  pure $ b1 &&& b2
+evalProperty (p1 `Or` p2) = do
+  b1 <- evalProperty p1
+  b2 <- evalProperty p2
+  pure $ b1 ||| b2
+evalProperty (Not p) = bnot <$> evalProperty p
+evalProperty (Occurs dp) = evalDomainProperty dp
+
 analyzeFunction
   :: TopLevel Node
-  -> IO (Either SmtCompilerException ThmResult)
-analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) =
+  -> Check
+  -> IO CheckResult
+analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) check =
   let argNodes :: [Node]
       argNodes = _nnNamed <$> args
 
@@ -704,53 +726,103 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) =
 
       argTys :: [(Text, Type UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
-  in case retTy of
-       -- Note(joel): All of these predicates are completely meaningless
-       -- defaults.
-       TyPrim TyInteger ->
-         analyzeFunction' translateBodyInt (.== 1) body' argTys nodeNames'
-       TyPrim TyBool    ->
-         analyzeFunction' translateBodyBool (.== true) body' argTys nodeNames'
-       TyPrim TyDecimal ->
-         analyzeFunction' translateBodyDecimal (.== literal (mkDecimal 1)) body' argTys nodeNames'
-       TyPrim TyTime ->
-         analyzeFunction' translateBodyTime (.== 0) body' argTys nodeNames'
 
-analyzeFunction _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+  in case retTy of
+       TyPrim TyString  ->
+         analyzeFunction' translateBodyStr check body' argTys nodeNames'
+       TyPrim TyInteger ->
+         analyzeFunction' translateBodyInt check body' argTys nodeNames'
+       TyPrim TyBool    ->
+         analyzeFunction' translateBodyBool check body' argTys nodeNames'
+       TyPrim TyDecimal ->
+         analyzeFunction' translateBodyDecimal check body' argTys nodeNames'
+       TyPrim TyTime ->
+         analyzeFunction' translateBodyTime check body' argTys nodeNames'
+
+analyzeFunction _ _ = pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+
+checkProperty :: Check -> Property
+checkProperty (Satisfiable p) = p
+checkProperty (Valid p) = p
+
+data CheckFailure
+  = Invalid SBVI.SMTModel
+  | Unsatisfiable
+  | Unknown String -- reason
+  | SatExtensionField SBVI.SMTModel
+  | ProofError [String]
+  --
+  -- TODO: maybe remove this constructor from from CheckFailure. regardless, we
+  --       need to get rid of SmtCompilerException
+  --
+  | CheckCompilationFailed SmtCompilerException
+  deriving (Show)
+
+data CheckSuccess
+  = SatisfiedProperty SBVI.SMTModel
+  | ProvedTheorem
+  deriving (Show)
+
+type CheckResult
+  = Either CheckFailure CheckSuccess
+
+-- This does not use the underlying property -- this merely dispatches to
+-- sat/prove appropriately, and accordingly translates sat/unsat to
+-- semantically-meaningful results.
+runCheck :: Provable a => Check -> a -> IO CheckResult
+runCheck (Satisfiable _prop) provable = do
+  (SatResult smtRes) <- sat provable
+  pure $ case smtRes of
+    SBV.Unsatisfiable _config -> Left Unsatisfiable
+    SBV.Satisfiable _config model -> Right $ SatisfiedProperty model
+    SBV.SatExtField _config model -> Left $ SatExtensionField model
+    SBV.Unknown _config reason -> Left $ Unknown reason
+    SBV.ProofError _config strs -> Left $ ProofError strs
+runCheck (Valid _prop) provable = do
+  (ThmResult smtRes) <- prove provable
+  pure $ case smtRes of
+    SBV.Unsatisfiable _config -> Right ProvedTheorem
+    SBV.Satisfiable _config model -> Left $ Invalid model
+    SBV.SatExtField _config model -> Left $ SatExtensionField model
+    SBV.Unknown _config reason -> Left $ Unknown reason
+    SBV.ProofError _config strs -> Left $ ProofError strs
 
 analyzeFunction'
   :: (Show a, SymWord a)
   => ([AstNodeOf a] -> TranslateM (Term a))
-  -> (SBV a -> SBV Bool)
+  -> Check
   -> [AST Node]
   -> [(Text, Type UserType)]
   -> Map Node Text
-  -> IO (Either SmtCompilerException ThmResult)
-analyzeFunction' translator p body' argTys nodeNames =
+  -> IO CheckResult
+analyzeFunction' translator check body' argTys nodeNames =
   -- TODO what type should this be?
   case runReaderT (translator (AstNodeOf <$> body')) nodeNames of
-    Nothing -> pure $ Left $ SmtCompilerException "analyzeFunction" "could not translate node"
+    Nothing -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "could not translate node"
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
-      thmResult <- prove $ do
+      checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
-        nameAuths <- allocateNameAuths [] -- TODO(bts): implement this!
+        nameAuths <- newArray "nameAuthorizations"
 
-        let action = evalTerm body''
+        let prop   = checkProperty check
             env0   = CheckEnv scope0 nameAuths
             state0 = initialCheckState
+            action = evalTerm body''
+                  *> evalProperty prop
 
         case runExcept $ runRWST action env0 state0 of
           Left cf -> do
             liftIO $ putMVar compileFailureVar cf
             pure false
-          Right (res, cstate, _log) -> pure (p res)
+          Right (propResult, _env, _log) ->
+            pure propResult
 
       mVarVal <- tryTakeMVar compileFailureVar
       case mVarVal of
-        Nothing -> pure $ Right thmResult
+        Nothing -> pure checkResult
         -- TODO: return the failure instead of showing it
-        Just cf -> pure $ Left $ SmtCompilerException "analyzeFunction" (show cf)
+        Just cf -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" (show cf)
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
@@ -769,18 +841,18 @@ loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
 inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState)
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
 
-runCompiler :: String -> Text -> Text -> IO ()
+runCompiler :: String -> Text -> Text -> Check -> IO ()
 runCompiler = runCompilerDebug False
 
-runCompilerDebug :: Bool -> String -> Text -> Text -> IO ()
-runCompilerDebug dbg replPath' modName' funcName' = do
-  f <- fst <$> inferFun dbg replPath' (ModuleName modName') funcName'
-  r <- analyzeFunction f
+runCompilerDebug :: Bool -> String -> Text -> Text -> Check -> IO ()
+runCompilerDebug dbg replPath' modName' funcName' check = do
+  fun <- fst <$> inferFun dbg replPath' (ModuleName modName') funcName'
+  r <- analyzeFunction fun check
   putStrLn $ case r of
     Left err  -> show err
     Right res -> show res
 
-runCompilerTest :: String -> Text -> Text -> IO (Either SmtCompilerException ThmResult)
-runCompilerTest replPath modName funcName = do
-  f <- fst <$> inferFun False replPath (ModuleName modName) funcName
-  analyzeFunction f
+runCompilerTest :: String -> Text -> Text -> Check -> IO CheckResult
+runCompilerTest replPath modName funcName check = do
+  fun <- fst <$> inferFun False replPath (ModuleName modName) funcName
+  analyzeFunction fun check

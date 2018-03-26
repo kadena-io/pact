@@ -16,4 +16,5 @@ runDemo = do
   putStrLn "demo"
 
   -- _compileTests False path modName funName
-  runCompiler path modName funName
+  let prop = Satisfiable $ Occurs Success
+  runCompiler path modName funName prop
