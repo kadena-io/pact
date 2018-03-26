@@ -102,8 +102,8 @@ mkAVar :: SBV a -> AVar
 mkAVar (SBVI.SBV sval) = AVar sval
 
 data CheckEnv = CheckEnv
-  { _scope     :: Map Text AVar
-  , _nameAuths :: SArray String Bool
+  { _scope     :: Map Text AVar      -- used with 'local' in a stack fashion
+  , _nameAuths :: SArray String Bool -- read-only
   } deriving Show
 makeLenses ''CheckEnv
 
