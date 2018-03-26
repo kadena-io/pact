@@ -110,6 +110,10 @@ makeLenses ''CheckEnv
 newtype CheckLog
   = CheckLog ()
 
+instance Monoid CheckLog where
+  mempty = CheckLog ()
+  mappend _ _ = CheckLog ()
+
 instance Mergeable CheckLog where
   --
   -- NOTE: If we change the underlying representation of CheckLog to a list,
@@ -117,11 +121,7 @@ instance Mergeable CheckLog where
   -- it requires that lists have the same length. We more likely want to use
   -- monoidal semantics for anything we log:
   --
-  symbolicMerge _f _t (CheckLog log1) (CheckLog log2) = CheckLog $ log1 <> log2
-
-instance Monoid CheckLog where
-  mempty = CheckLog ()
-  mappend _ _ = CheckLog ()
+  symbolicMerge _f _t = mappend
 
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeCheckState
