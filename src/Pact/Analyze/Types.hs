@@ -321,7 +321,7 @@ data Term ret where
   Logical        :: LogicalOp -> [Term a] -> Term a
   AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
   AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
-  NameAuthorized ::                        KeySetName   ->                     Term Bool
+  NameAuthorized ::                        Term String  ->                     Term Bool
   --
   -- TODO: figure out the object representation we use here:
   --
@@ -604,6 +604,11 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyString  -> mkAVar <$> sString name'
   pure (name, var)
 
+namedAuth :: SString -> M SBool
+namedAuth str = do
+  arr <- view nameAuths
+  pure $ readArray arr str
+
 evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
@@ -663,12 +668,13 @@ evalTerm = \case
   --   secs' <- evalTerm secs
   --   pure $ time' + sFromIntegral secs'
 
+  NameAuthorized str -> namedAuth =<< evalTerm str
+
 evalDomainProperty :: DomainProperty -> M SBool
 evalDomainProperty Success = use succeeds
 evalDomainProperty Abort = bnot <$> evalDomainProperty Success
-evalDomainProperty (KsNameAuthorized (KeySetName n)) = do
-  arr <- view nameAuths
-  pure $ readArray arr (literal $ T.unpack n)
+evalDomainProperty (KsNameAuthorized (KeySetName n)) =
+  namedAuth $ literal $ T.unpack n
 -- evalDomainProperty (TableRead tn) = _todoRead
 -- evalDomainProperty (TableWrite tn) = _todoWrite
 
