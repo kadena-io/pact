@@ -20,6 +20,10 @@ packages:
     git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   extra-dep: true
+- location:
+    git: https://github.com/LeventErkok/sbv.git
+    commit: 61df55efe65045f2e1953136977652cd12fb9445 # symbolic_strings branch
+  extra-dep: true
 
 extra-deps:
   - bound-2.0.1
