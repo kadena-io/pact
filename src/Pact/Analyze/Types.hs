@@ -55,16 +55,8 @@ import Data.Traversable (for)
 import GHC.Generics
 import Data.SBV hiding (name)
 import qualified Data.SBV.Internals as SBVI
-import Data.Thyme.Clock.POSIX
+-- import Data.Thyme.Clock.POSIX
 import qualified Data.Text as T
-
--- import SmtLib.Syntax.Syntax
--- import qualified SmtLib.Syntax.Syntax as Smt
--- import qualified SmtLib.Syntax.ShowSL as SmtShow
--- import qualified SmtLib.Parsers.CommandsParsers as SmtParser
-
-import qualified Text.Parsec as Parsec
-import Text.Parsec hiding (parse, try)
 
 -- !!! Orphan needed for dev, delete when finished
 -- instance ToJSON Node where
@@ -121,7 +113,7 @@ instance Mergeable CheckLog where
   -- it requires that lists have the same length. We more likely want to use
   -- monoidal semantics for anything we log:
   --
-  symbolicMerge f t (CheckLog log1) (CheckLog log2) = CheckLog $ log1 <> log2
+  symbolicMerge _f _t (CheckLog log1) (CheckLog log2) = CheckLog $ log1 <> log2
 
 instance Monoid CheckLog where
   mempty = CheckLog ()
@@ -190,20 +182,6 @@ instance (Mergeable w, Mergeable a) => Mergeable (RWST r w CheckState (Except e)
       rTup <- run right $ s & globalState .~ gs
       return $ symbolicMerge force test lTup rTup
 
-isUnsupportedOperator :: Text -> Maybe Text
-isUnsupportedOperator s = if isUnsupported then Just s else Nothing
-  where
-    isUnsupported = Set.member s $ Set.fromList ["log", "ln", "ceiling", "floor", "mod"]
-
-isInsertOrUpdate :: Fun Node -> Maybe Text
-isInsertOrUpdate (NativeFunc "insert") = Just "insert"
-isInsertOrUpdate (NativeFunc "update") = Just "update"
-isInsertOrUpdate _ = Nothing
-
-ofPrimType :: Node -> Maybe PrimType
-ofPrimType (Node _ (TyPrim ty)) = Just ty
-ofPrimType _ = Nothing
-
 comparisonOperators, logicalOperators, numericalOperators :: Set Text
 comparisonOperators = Set.fromList [">", "<", ">=", "<=", "=", "!="]
 logicalOperators    = Set.fromList ["and", "or", "not"]
@@ -251,20 +229,8 @@ symTypeToSortId SymTime = SortId $ ISymbol "Real"
 --   LTime t    -> literal $ init $ show (t ^. posixTime)
 
 -- helper patterns
-pattern OfPrimType :: PrimType -> Node
-pattern OfPrimType pType <- (ofPrimType -> Just pType)
-
-pattern RawTableName :: Text -> AST Node
-pattern RawTableName t <- (Table (Node (TcId _ t _) _))
-
 pattern NativeFunc :: forall a. Text -> Fun a
 pattern NativeFunc f <- (FNative _ f _ _)
-
-pattern UserFunc :: forall a. Text -> [Named a] -> [AST a] -> Fun a
-pattern UserFunc name' args bdy <- (FDefun _ name' _ args bdy _)
-
-pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
-pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
 
 -- compileNode's Patterns
 
@@ -287,71 +253,17 @@ pattern AST_NFun_Basic :: forall a. Text -> [AST a] -> AST a
 pattern AST_NFun_Basic fn' args' <-
   AST_NFun _ (ofBasicOperators -> Right fn') args'
 
-pattern AST_UFun :: forall a. Text -> a -> [AST a] -> [AST a] -> AST a
-pattern AST_UFun name' node' bdy' args' <-
-  (App node' (UserFunc name' _ bdy') args')
-
-pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
-pattern AST_Enforce node' app' msg' <-
-  (App node' (NativeFunc "enforce") [app', AST_Lit (LString msg')])
-
 pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
 pattern AST_If node' cond' ifTrue' ifFalse' <-
   (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
 
-pattern AST_EnforceKeyset :: forall a. a -> Text -> AST a
-pattern AST_EnforceKeyset node' keyset' <-
-  (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
-
-pattern AST_Binding :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
-
-pattern AST_WithRead :: Node
-                     -> Text
-                     -> AST Node
-                     -> [(Named Node, AST Node)]
-                     -> [AST Node]
-                     -> AST Node
-pattern AST_WithRead node' table' key' bindings' bdy' <-
-  (App node'
-       (NativeFuncSpecial "with-read" (AST_Binding _ bindings' bdy'))
-       [RawTableName table', key'])
-
-pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
-pattern AST_Obj objNode kvs <- (Object objNode kvs)
-
-pattern AST_InsertOrUpdate node' fnName' table' key' tcId' kvs' <-
-  (App node' (isInsertOrUpdate -> (Just fnName')) [RawTableName table', key', AST_Obj (Node tcId' _) kvs'])
-
-pattern AST_InsertOrUpdate :: Node
-                           -> Text
-                           -> Text
-                           -> AST Node
-                           -> TcId
-                           -> [(AST Node, AST Node)]
-                           -> AST Node
-
-pattern AST_Format :: forall a. a -> Text -> [AST a] -> AST a
-pattern AST_Format node' fmtStr' args' <-
-  (App node' (NativeFunc "format") (AST_Lit (LString fmtStr'):args'))
-
 -- Unsupported currently
-
-pattern AST_Read :: forall a. AST a
-pattern AST_Read <- (App _ (NativeFunc "read") _)
 
 pattern AST_AddTime :: forall a. AST a -> AST a -> AST a
 pattern AST_AddTime time seconds <- (App _ (NativeFunc "add-time") [time, seconds])
 
 pattern AST_Days :: forall a. AST a -> AST a
 pattern AST_Days days <- (App _ (NativeFunc "days") [days])
-
-pattern AST_Bind :: forall a. AST a
-pattern AST_Bind <- (App _ (NativeFuncSpecial "bind" _) _)
-
-pattern AST_UnsupportedOp :: forall a. Text -> AST a
-pattern AST_UnsupportedOp s <-
-  (App _ (NativeFunc (isUnsupportedOperator -> Just s)) _ )
 
 data ArithOp
   = Sub -- "-" Integer / Decimal
@@ -388,8 +300,6 @@ data LogicalOp = AndOp | OrOp | NotOp
 
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
-
-class Storable a where
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a -> Term a -> Term a
@@ -475,6 +385,7 @@ newtype AstNodeOf a
   = AstNodeOf
     { unAstNodeOf :: AST Node }
 
+-- TODO(joel): more informative failure info (Either)
 type TranslateM = ReaderT (Map Node Text) Maybe
 
 translateBody
@@ -496,6 +407,12 @@ translateBodyBool = translateBody translateNodeBool
 
 translateBodyInt :: [AstNodeOf Integer] -> TranslateM (Term Integer)
 translateBodyInt = translateBody translateNodeInt
+
+translateBodyDecimal :: [AstNodeOf Decimal] -> TranslateM (Term Decimal)
+translateBodyDecimal = translateBody translateNodeDecimal
+
+translateBodyTime :: [AstNodeOf Time] -> TranslateM (Term Time)
+translateBodyTime = translateBody translateNodeTime
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
@@ -551,6 +468,8 @@ translateNodeInt = unAstNodeOf >>> \case
     ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNodeInt (AstNodeOf a)
     ("floor", [a]) -> Arith Floor . pure <$> translateNodeInt (AstNodeOf a)
 
+  _ -> lift Nothing
+
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool (AstNodeOf node) = case node of
   AST_Lit (LBool b)     -> pure (Literal (literal b))
@@ -597,6 +516,7 @@ translateNodeBool (AstNodeOf node) = case node of
           ("not", [a]) -> do
             a' <- translateNodeBool (AstNodeOf a)
             pure $ Logical NotOp [a']
+          _ -> lift Nothing
 
     if
       -- integer, decimal, string, and time are all comparable. Use the type of
@@ -623,10 +543,14 @@ data Decimal = Decimal
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 
+sDecimal :: String -> Symbolic (SBV Decimal)
+sDecimal = symbolic
+
 translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) -> pure (Literal (literal (mkDecimal d)))
-  AST_Var n -> Var <$> view (ix n)
+  AST_Var n            -> Var <$> view (ix n)
+  _                    -> lift Nothing
 
 -- translateNodeString
 
@@ -649,6 +573,8 @@ translateNodeTime = unAstNodeOf >>> \case
   AST_Lit (LTime t) -> pure (Literal (literal (mkTime t)))
   AST_Var n -> Var <$> view (ix n)
 
+  _ -> lift Nothing
+
 translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
 translateNodeUnit (AstNodeOf node) = case node of
   AST_If _ cond tBranch fBranch -> IfThenElse
@@ -660,23 +586,23 @@ translateNode :: AstNodeOf a -> TranslateM (Term a)
 translateNode = unAstNodeOf >>> \case
   -- App (Node _id (TyPrim TyBool)) _ _ -> translateNodeBool
 
-  AST_Lit lit                                         -> undefined
-  AST_Var var                                         -> undefined
-  AST_Binding node' bindings' body'                   -> undefined
-  AST_If node' cond' ifTrue' ifFalse'                 -> undefined
-  AST_Read                                            -> undefined
+  AST_Lit _lit                                        -> undefined
+  AST_Var _var                                        -> undefined
+  -- AST_Binding _node' _bindings' _body'                -> undefined
+  AST_If _node' _cond' _ifTrue' _ifFalse'             -> undefined
+  -- AST_Read                                            -> undefined
   AST_Days _                                          -> undefined
-  AST_Bind                                            -> undefined
-  AST_UnsupportedOp s                                 -> lift Nothing
-  AST_NFun_Basic fn args                              -> undefined
-  -- AST_Enforce _node' app' msg'                        -> do
+  -- AST_Bind                                            -> undefined
+  -- AST_UnsupportedOp _s                                -> lift Nothing
+  AST_NFun_Basic _fn _args                            -> undefined
+  -- AST_Enforce _node' app' msg'                     -> do
   --   app''  <- translateNodeBool (AstNodeOf app')
   --   pure $ Enforce app'' (T.unpack msg')
-  AST_EnforceKeyset node' ks                          -> undefined
-  AST_WithRead node' table' key' bindings' body'      -> undefined
-  AST_InsertOrUpdate node' fn' table' key' tcId' kvs' -> undefined
-  AST_Format node' fmtStr' args'                      -> undefined
-  AST_UFun name' node' body' _args'                   -> undefined
+  -- AST_EnforceKeyset _node' _ks                        -> undefined
+  -- AST_WithRead _node' _table' _key' _bindings' _body' -> undefined
+  -- AST_InsertOrUpdate _node' _fn' _table' _key' _tcId' _kvs' -> undefined
+  -- AST_Format _node' _fmtStr' _args'                   -> undefined
+  -- AST_UFun _name' _node' _body' _args'                -> undefined
 
 allocateArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
@@ -684,6 +610,8 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   var <- case ty of
     TyPrim TyInteger -> mkAVar <$> sInteger name'
     TyPrim TyBool    -> mkAVar <$> sBool name'
+    TyPrim TyDecimal -> mkAVar <$> sDecimal name'
+    TyPrim TyTime    -> mkAVar <$> sInt64 name'
   pure (name, var)
 
 allocateNameAuths :: [KeySetName] -> Symbolic (Map KeySetName SBool)
@@ -777,10 +705,16 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) =
       argTys :: [(Text, Type UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
   in case retTy of
+       -- Note(joel): All of these predicates are completely meaningless
+       -- defaults.
        TyPrim TyInteger ->
          analyzeFunction' translateBodyInt (.== 1) body' argTys nodeNames'
        TyPrim TyBool    ->
          analyzeFunction' translateBodyBool (.== true) body' argTys nodeNames'
+       TyPrim TyDecimal ->
+         analyzeFunction' translateBodyDecimal (.== literal (mkDecimal 1)) body' argTys nodeNames'
+       TyPrim TyTime ->
+         analyzeFunction' translateBodyTime (.== 0) body' argTys nodeNames'
 
 analyzeFunction _ = pure $ Left $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
