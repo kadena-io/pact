@@ -47,6 +47,7 @@ import Pact.Types.Lang hiding (Term)
 import Pact.Types.Runtime hiding (Term)
 import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
+import Pact.Types.Version (pactVersion)
 import Pact.Repl
 import Data.Aeson hiding (Object, Success, (.=))
 import Data.Set (Set)
@@ -290,18 +291,19 @@ data Term ret where
   --
   -- TODO: change read/write to use strings -> objects
   --
-  Read           ::                        Term Integer ->                       Term a
-  Write          :: (Show a)            => Term Integer -> Term a   ->           Term String
-  Let            :: (Show a)            => String       -> Term a   -> Term b -> Term b
-  Var            ::                        Text         ->                       Term a
-  Arith          ::                        ArithOp      -> [Term Integer]     -> Term Integer
-  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a   -> Term a -> Term Bool
-  Logical        ::                        LogicalOp    -> [Term a] ->           Term a
-  AddTimeInt     ::                        Term Time    -> Term Integer       -> Term Time
-  AddTimeDec     ::                        Term Time    -> Term Decimal       -> Term Time
-  NameAuthorized ::                        Term String  ->                       Term Bool
+  Read           ::                        Term Integer ->                     Term a
+  Write          :: (Show a)            => Term Integer -> Term a ->           Term ()
+  Let            :: (Show a)            => String       -> Term a -> Term b -> Term b
+  Var            ::                        Text         ->                     Term a
+  Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
+  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+  Logical        :: LogicalOp -> [Term a] -> Term a
+  AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
+  AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
+  NameAuthorized ::                        Term String  ->                     Term Bool
 
-  Concat         ::                        Term String  -> Term String        -> Term String
+  Concat         ::                        Term String  -> Term String      -> Term String
+  PactVersion    ::                                                            Term String
 
   --
   -- TODO: figure out the object representation we use here:
@@ -503,6 +505,8 @@ translateNodeStr = unAstNodeOf >>> \case
   AST_NFun_Basic "+" [a, b] -> Concat
     <$> translateNodeStr (AstNodeOf a)
     <*> translateNodeStr (AstNodeOf b)
+
+  AST_NFun_Basic "pact-version" [] -> pure PactVersion
   --
   -- TODO: more cases.
   --
@@ -626,6 +630,7 @@ evalTerm = \case
   NameAuthorized str -> namedAuth =<< evalTerm str
 
   Concat str1 str2 -> (.++) <$> evalTerm str1 <*> evalTerm str2
+  PactVersion -> pure $ literal $ T.unpack pactVersion
 
 evalDomainProperty :: DomainProperty -> M SBool
 evalDomainProperty Success = use succeeds
