@@ -38,10 +38,10 @@ suite = tests
       expectPass code $ Valid $ Occurs Success
   , scope "success" $ do
       let code =
-             [text|
-               (defun test:bool ()
-                 (enforce false "cannot pass"))
-             |]
+            [text|
+              (defun test:bool ()
+                (enforce false "cannot pass"))
+            |]
       expectPass code $ Satisfiable $ Occurs Abort
       expectPass code $ Valid $ Occurs Abort
 
