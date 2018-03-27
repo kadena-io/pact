@@ -393,35 +393,6 @@ newtype AstNodeOf a
 -- TODO(joel): more informative failure info (Either)
 type TranslateM = ReaderT (Map Node Text) Maybe
 
-translateBody
-  :: (Show a, SymWord a)
-  => (AstNodeOf a -> TranslateM (Term a))
-  -> [AstNodeOf a]
-  -> TranslateM (Term a)
-translateBody translator ast
-  | length ast >= 1 = do
-    ast' <- mapM translator ast
-    pure $ foldr1 Sequence ast'
-  | otherwise = lift Nothing
-
-translateBodyUnit :: [AstNodeOf ()] -> TranslateM (Term ())
-translateBodyUnit = translateBody translateNodeUnit
-
-translateBodyBool :: [AstNodeOf Bool] -> TranslateM (Term Bool)
-translateBodyBool = translateBody translateNodeBool
-
-translateBodyInt :: [AstNodeOf Integer] -> TranslateM (Term Integer)
-translateBodyInt = translateBody translateNodeInt
-
-translateBodyDecimal :: [AstNodeOf Decimal] -> TranslateM (Term Decimal)
-translateBodyDecimal = translateBody translateNodeDecimal
-
-translateBodyTime :: [AstNodeOf Time] -> TranslateM (Term Time)
-translateBodyTime = translateBody translateNodeTime
-
-translateBodyStr :: [AstNodeOf String] -> TranslateM (Term String)
-translateBodyStr = translateBody translateNodeStr
-
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
   AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Literal (literal i))
@@ -716,15 +687,15 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
 
   in case retTy of
        TyPrim TyString  ->
-         analyzeFunction' translateBodyStr check body' argTys nodeNames'
+         analyzeFunction' translateNodeStr check body' argTys nodeNames'
        TyPrim TyInteger ->
-         analyzeFunction' translateBodyInt check body' argTys nodeNames'
+         analyzeFunction' translateNodeInt check body' argTys nodeNames'
        TyPrim TyBool    ->
-         analyzeFunction' translateBodyBool check body' argTys nodeNames'
+         analyzeFunction' translateNodeBool check body' argTys nodeNames'
        TyPrim TyDecimal ->
-         analyzeFunction' translateBodyDecimal check body' argTys nodeNames'
+         analyzeFunction' translateNodeDecimal check body' argTys nodeNames'
        TyPrim TyTime ->
-         analyzeFunction' translateBodyTime check body' argTys nodeNames'
+         analyzeFunction' translateNodeTime check body' argTys nodeNames'
 
 analyzeFunction _ _ = pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
@@ -775,9 +746,20 @@ runCheck (Valid _prop) provable = do
     SBV.Unknown _config reason -> Left $ Unknown reason
     SBV.ProofError _config strs -> Left $ ProofError strs
 
+translateBody
+  :: (Show a, SymWord a)
+  => (AstNodeOf a -> TranslateM (Term a))
+  -> [AstNodeOf a]
+  -> TranslateM (Term a)
+translateBody translator ast
+  | length ast >= 1 = do
+    ast' <- mapM translator ast
+    pure $ foldr1 Sequence ast'
+  | otherwise = lift Nothing
+
 analyzeFunction'
   :: (Show a, SymWord a)
-  => ([AstNodeOf a] -> TranslateM (Term a))
+  => (AstNodeOf a -> TranslateM (Term a))
   -> Check
   -> [AST Node]
   -> [(Text, Type UserType)]
@@ -785,7 +767,7 @@ analyzeFunction'
   -> IO CheckResult
 analyzeFunction' translator check body' argTys nodeNames =
   -- TODO what type should this be?
-  case runReaderT (translator (AstNodeOf <$> body')) nodeNames of
+  case runReaderT (translateBody translator (AstNodeOf <$> body')) nodeNames of
     Nothing -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "could not translate node"
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
