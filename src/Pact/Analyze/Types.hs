@@ -330,6 +330,9 @@ data Term ret where
   AddTimeInt     ::                        Term Time    -> Term Integer       -> Term Time
   AddTimeDec     ::                        Term Time    -> Term Decimal       -> Term Time
   NameAuthorized ::                        Term String  ->                       Term Bool
+
+  Concat         ::                        Term String  -> Term String        -> Term String
+
   --
   -- TODO: figure out the object representation we use here:
   --
@@ -527,8 +530,11 @@ translateNodeBool = unAstNodeOf >>> \case
 translateNodeStr :: AstNodeOf String -> TranslateM (Term String)
 translateNodeStr = unAstNodeOf >>> \case
   AST_Lit (LString t) -> pure $ Literal $ literal $ T.unpack t
+  AST_NFun_Basic "+" [a, b] -> Concat
+    <$> translateNodeStr (AstNodeOf a)
+    <*> translateNodeStr (AstNodeOf b)
   --
-  -- TODO: more cases. string ops, etc.
+  -- TODO: more cases.
   --
 
   ast -> throwError $ UnexpectedNode "translateNodeStr" ast
@@ -648,6 +654,8 @@ evalTerm = \case
   --   pure $ time' + sFromIntegral secs'
 
   NameAuthorized str -> namedAuth =<< evalTerm str
+
+  Concat str1 str2 -> (.++) <$> evalTerm str1 <*> evalTerm str2
 
 evalDomainProperty :: DomainProperty -> M SBool
 evalDomainProperty Success = use succeeds
