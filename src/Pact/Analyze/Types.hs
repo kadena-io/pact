@@ -20,6 +20,7 @@ module Pact.Analyze.Types
   ( runCompiler
   , runCompilerDebug
   , runCompilerTest
+  , runTest
   , analyzeFunction
   , CheckState(..)
   , SmtCompilerException(..)
@@ -35,6 +36,7 @@ import Control.Monad
 import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
+import Control.Monad.State.Strict (runStateT)
 import Control.Monad.Trans.RWS.Strict
 import Control.Exception
 import Control.Lens hiding (op, (.>))
@@ -740,6 +742,7 @@ data CheckFailure
   -- TODO: maybe remove this constructor from from CheckFailure. regardless, we
   --       need to get rid of SmtCompilerException
   --
+  | CodeCompilationFailed String
   | CheckCompilationFailed SmtCompilerException
   deriving (Show)
 
@@ -809,12 +812,15 @@ analyzeFunction' translator check body' argTys nodeNames =
         -- TODO: return the failure instead of showing it
         Just cf -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" (show cf)
 
+rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
+rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
+
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
   -- XXX(joel): I don't think we should execScript' here
   (r,s) <- execScript' (Script False fp) fp
   either (die def) (const (return ())) r
-  case view (rEnv . eeRefStore . rsModules . at mn) s of
+  case view (rsModuleData mn) s of
     Just m -> return m
     Nothing -> die def $ "Module not found: " ++ show (fp,mn)
 
@@ -841,3 +847,21 @@ runCompilerTest :: String -> Text -> Text -> Check -> IO CheckResult
 runCompilerTest replPath modName funcName check = do
   fun <- fst <$> inferFun False replPath (ModuleName modName) funcName
   analyzeFunction fun check
+
+runTest :: String -> Check -> IO CheckResult
+runTest code check = do
+  (eTerm, replState) <- initReplState StringEval >>= runStateT (evalRepl' code)
+  case eTerm of
+    Left err ->
+      pure $ Left $ CodeCompilationFailed err
+    Right _t ->
+      case view (rsModuleData "test") replState of
+        Nothing ->
+          pure $ Left $ CodeCompilationFailed "expected module 'test'"
+        Just (_mod, modRefs) ->
+          case HM.lookup "test" modRefs of
+            Nothing ->
+              pure $ Left $ CodeCompilationFailed "expected function 'test'"
+            Just ref -> do
+              (fun, _tcState) <- runTC 0 False $ typecheckTopLevel ref
+              analyzeFunction fun check

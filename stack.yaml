@@ -5,8 +5,10 @@ resolver: lts-8.15
 packages:
 - '.'
 - location:
-    git: git@github.com:kadena-io/pact.git
-    commit: d1f2892bc739c1f8fb26b59b4e7528a592d5d12d
+    # Until https://github.com/kadena-io/pact/pull/32 is merged
+    #git: git@github.com:kadena-io/pact.git
+    git: git@github.com:bts/pact.git
+    commit: a22575c782885dce0597f4393ab95da9688b3255
   extra-dep: true
 - location:
     git: git@github.com:buckie/Hsmtlib.git
