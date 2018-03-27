@@ -37,10 +37,10 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (runStateT)
 import Control.Monad.Trans.RWS.Strict
-import Control.Exception
 import Control.Lens hiding (op, (.>))
 import Data.Data
 import qualified Data.Decimal as Decimal
+import Data.Text (Text)
 import Data.Thyme
 import Pact.Typechecker hiding (debug)
 import Pact.Types.Lang hiding (Term)
@@ -149,13 +149,18 @@ initialCheckState = CheckState
 succeeds :: Lens' CheckState SBool
 succeeds = latticeState.lcsSucceeds
 
-data CompileFailure
+data AnalyzeFailure
   = MalformedArithOp ArithOp [Term Integer]
   | UnsupportedArithOp ArithOp
-  | MalformedComparison
+  | MalformedComparison Text [AST Node]
+  | MalformedLogicalOp Text [AST Node]
+  -- | Some translator received a node it didn't expect
+  | UnexpectedNode String (AST Node)
+  -- | 'translateBody' expects at least one node in a function body.
+  | EmptyBody
   deriving Show
 
-type M = RWST CheckEnv CheckLog CheckState (Except CompileFailure)
+type M = RWST CheckEnv CheckLog CheckState (Except AnalyzeFailure)
 
 instance (Mergeable w, Mergeable a) => Mergeable (RWST r w CheckState (Except e) a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
@@ -376,8 +381,7 @@ newtype AstNodeOf a
   = AstNodeOf
     { unAstNodeOf :: AST Node }
 
--- TODO(joel): more informative failure info (Either)
-type TranslateM = ReaderT (Map Node Text) Maybe
+type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
@@ -433,7 +437,7 @@ translateNodeInt = unAstNodeOf >>> \case
     ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNodeInt (AstNodeOf a)
     ("floor", [a]) -> Arith Floor . pure <$> translateNodeInt (AstNodeOf a)
 
-  _ -> lift Nothing
+  ast -> throwError $ UnexpectedNode "translateNodeInt" ast
 
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool (AstNodeOf node) = case node of
@@ -466,7 +470,7 @@ translateNodeBool (AstNodeOf node) = case node of
           ("!=", [a, b]) -> Comparison Neq
             <$> translate (AstNodeOf a)
             <*> translate (AstNodeOf b)
-          _ -> lift Nothing -- throwError MalformedComparison
+          _ -> throwError $ MalformedComparison fn args
 
         mkLogical :: TranslateM (Term Bool)
         mkLogical = case (fn, args) of
@@ -481,7 +485,7 @@ translateNodeBool (AstNodeOf node) = case node of
           ("not", [a]) -> do
             a' <- translateNodeBool (AstNodeOf a)
             pure $ Logical NotOp [a']
-          _ -> lift Nothing
+          _ -> throwError $ MalformedLogicalOp fn args
 
     if
       -- integer, decimal, string, and time are all comparable. Use the type of
@@ -491,7 +495,7 @@ translateNodeBool (AstNodeOf node) = case node of
         Just (TyPrim TyDecimal) -> mkComparison translateNodeDecimal
         Just (TyPrim TyString) -> mkComparison translateNodeStr
         Just (TyPrim TyTime) -> mkComparison translateNodeTime
-        _ -> lift Nothing -- throwError MalformedComparison
+        _ -> throwError $ MalformedComparison fn args
       | isLogical fn -> mkLogical
 
   AST_If _ cond tBranch fBranch -> IfThenElse
@@ -522,7 +526,7 @@ translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) -> pure (Literal (literal (mkDecimal d)))
   AST_Var n            -> Var <$> view (ix n)
-  _                    -> lift Nothing
+  n                    -> throwError $ UnexpectedNode "translateNodeDecimal" n
 
 type Time = Int64
 
@@ -543,7 +547,7 @@ translateNodeTime = unAstNodeOf >>> \case
   AST_Lit (LTime t) -> pure (Literal (literal (mkTime t)))
   AST_Var n -> Var <$> view (ix n)
 
-  _ -> lift Nothing
+  n -> throwError $ UnexpectedNode "translateNodeTime" n
 
 translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
 translateNodeUnit (AstNodeOf node) = case node of
@@ -695,6 +699,7 @@ data CheckFailure
   | Unknown String -- reason
   | SatExtensionField SBVI.SMTModel
   | ProofError [String]
+  | AnalyzeFailure AnalyzeFailure
 
   --
   -- TODO: maybe remove this constructor from from CheckFailure.
@@ -740,7 +745,7 @@ translateBody translator ast
   | length ast >= 1 = do
     ast' <- mapM translator ast
     pure $ foldr1 Sequence ast'
-  | otherwise = lift Nothing
+  | otherwise = throwError EmptyBody
 
 analyzeFunction'
   :: (Show a, SymWord a)
@@ -752,9 +757,9 @@ analyzeFunction'
   -> IO CheckResult
 analyzeFunction' translator check body' argTys nodeNames =
   -- TODO what type should this be?
-  case runReaderT (translateBody translator (AstNodeOf <$> body')) nodeNames of
-    Nothing -> pure $ Left $ CodeCompilationFailed "could not translate node"
-    Just body'' -> do
+  case runExcept $ runReaderT (translateBody translator (AstNodeOf <$> body')) nodeNames of
+    Left reason -> pure $ Left $ AnalyzeFailure reason
+    Right body'' -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
@@ -774,10 +779,9 @@ analyzeFunction' translator check body' argTys nodeNames =
             pure propResult
 
       mVarVal <- tryTakeMVar compileFailureVar
-      case mVarVal of
-        Nothing -> pure checkResult
-        -- TODO: return the failure instead of showing it
-        Just cf -> pure $ Left $ CodeCompilationFailed (show cf)
+      pure $ case mVarVal of
+        Nothing -> checkResult
+        Just cf -> Left (AnalyzeFailure cf)
 
 rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
 rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
