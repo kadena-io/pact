@@ -22,8 +22,7 @@ wrap code =
   |]
 
 expectPass :: Text -> Check -> Test ()
-expectPass code check = (expectRight =<< io (runTest (wrap code) check))
-                     *> pure ()
+expectPass code check = expectRight =<< io (runTest (wrap code) check)
 
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectLeft =<< io (runTest (wrap code) check)
