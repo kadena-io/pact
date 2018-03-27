@@ -848,9 +848,10 @@ runCompilerTest replPath modName funcName check = do
   fun <- fst <$> inferFun False replPath (ModuleName modName) funcName
   analyzeFunction fun check
 
-runTest :: String -> Check -> IO CheckResult
+runTest :: Text -> Check -> IO CheckResult
 runTest code check = do
-  (eTerm, replState) <- initReplState StringEval >>= runStateT (evalRepl' code)
+  replState0 <- initReplState StringEval
+  (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
   case eTerm of
     Left err ->
       pure $ Left $ CodeCompilationFailed err

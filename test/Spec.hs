@@ -8,8 +8,8 @@ import           NeatInterpolation
 
 import           Pact.Analyze.Types
 
-wrap :: Text -> String
-wrap code = T.unpack $
+wrap :: Text -> Text
+wrap code =
   [text|
     (env-keys ["admin"])
     (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
