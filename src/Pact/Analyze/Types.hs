@@ -299,14 +299,14 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a -> Term a -> Term a
-  Enforce        ::                        Term Bool    -> String ->           Term ()
+  Enforce        ::                        Term Bool    -> Text   ->           Term Bool
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a ->           Term a
   Literal        ::                        SBV a        ->                     Term a
   --
   -- TODO: change read/write to use strings -> objects
   --
   Read           ::                        Term Integer ->                     Term a
-  Write          :: (Show a)            => Term Integer -> Term a ->           Term ()
+  Write          :: (Show a)            => Term Integer -> Term a ->           Term String
   Let            :: (Show a)            => String       -> Term a -> Term b -> Term b
   Var            ::                        Text         ->                     Term a
   Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
@@ -549,13 +549,6 @@ translateNodeTime = unAstNodeOf >>> \case
 
   n -> throwError $ UnexpectedNode "translateNodeTime" n
 
-translateNodeUnit :: AstNodeOf () -> TranslateM (Term ())
-translateNodeUnit (AstNodeOf node) = case node of
-  AST_If _ cond tBranch fBranch -> IfThenElse
-    <$> translateNodeBool (AstNodeOf cond)
-    <*> translateNodeUnit (AstNodeOf tBranch)
-    <*> translateNodeUnit (AstNodeOf fBranch)
-
 allocateArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
@@ -581,7 +574,7 @@ evalTerm = \case
   Enforce cond _msg -> do
     cond <- evalTerm cond
     succeeds %= (&&& cond)
-    pure $ literal ()
+    pure true
 
   Sequence a b -> evalTerm a *> evalTerm b
 
