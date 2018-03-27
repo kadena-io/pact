@@ -11,6 +11,11 @@ packages:
     commit: a22575c782885dce0597f4393ab95da9688b3255
   extra-dep: true
 - location:
+    # Until easytest with expectLeft is on hackage
+    git: git@github.com:joelburget/easytest.git
+    commit: 9cb3e154730daa3444ebd3d07e8d2b47ebc8ead1
+  extra-dep: true
+- location:
     git: git@github.com:buckie/Hsmtlib.git
     commit: f39f51be1c0793646f1a5a1eae1160c37dddfb57
   extra-dep: true
@@ -30,7 +35,7 @@ packages:
 extra-deps:
   - bound-2.0.1
   - ed25519-donna-0.1.1
-  - easytest-0.1
+  #- easytest-0.1
 
 flags: {}
 

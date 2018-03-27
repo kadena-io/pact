@@ -27,16 +27,37 @@ suite = tests
          "examples/analyze-tests/analyze-tests.repl" "analyze-tests" "layup" $
            Valid $ Occurs Success
        expectRight result
-       pure ()
+       ok
   , do let code =
              [text|
-               (defun test:bool (x: integer)
+               (defun test:bool (x:integer)
                  (if (< x 10) true false))
              |]
-           prop = Valid $ Occurs Success
-       result <- io $ runTest (wrap code) prop
-       expectRight result
-       pure ()
+       expectRight =<< io (runTest (wrap code) $ Valid $ Occurs Success)
+       ok
+  , do let code =
+             [text|
+               (defun test:bool ()
+                 (enforce false "cannot pass"))
+             |]
+       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Abort)
+       expectRight =<< io (runTest (wrap code) $ Valid $ Occurs Abort)
+       -- expected failures:
+       expectLeft  =<< io (runTest (wrap code) $ Satisfiable $ Occurs Success)
+       ok
+  , do let code =
+             [text|
+               (defun test:bool (x:integer)
+                 (if (< x 10)
+                   (enforce (< x 5) "abort sometimes")
+                   true))
+             |]
+       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Abort)
+       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Not $ Occurs Abort)
+       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Success)
+       -- expected failure:
+       expectLeft  =<< io (runTest (wrap code) $ Valid $ Occurs Abort)
+       ok
   ]
 
 main :: IO ()

@@ -251,7 +251,11 @@ pattern AST_NFun_Basic fn' args' <-
 
 pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
 pattern AST_If node' cond' ifTrue' ifFalse' <-
-  (App node' (NativeFunc "if") [cond', ifTrue', ifFalse'])
+  App node' (NativeFunc "if") [cond', ifTrue', ifFalse']
+
+pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
+pattern AST_Enforce node' cond msg' <-
+  App node' (NativeFunc "enforce") [cond, AST_Lit (LString msg')]
 
 -- Unsupported currently
 
@@ -443,6 +447,10 @@ translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool = unAstNodeOf >>> \case
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var n -> Var <$> view (ix n)
+
+  AST_Enforce _ cond msg -> do
+    condTerm <- translateNodeBool (AstNodeOf cond)
+    return $ Enforce condTerm msg
 
   AST_NFun_Basic fn args -> do
     let mkComparison
