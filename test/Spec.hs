@@ -29,35 +29,37 @@ expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
 suite :: Test ()
 suite = tests
-  [ do let code =
-             [text|
-               (defun test:bool (x:integer)
-                 (if (< x 10) true false))
-             |]
-       expectPass code $ Valid $ Occurs Success
-
-  , do let code =
+  [ scope "success" $ do
+      let code =
+            [text|
+              (defun test:bool (x:integer)
+                (if (< x 10) true false))
+            |]
+      expectPass code $ Valid $ Occurs Success
+  , scope "success" $ do
+      let code =
              [text|
                (defun test:bool ()
                  (enforce false "cannot pass"))
              |]
-       expectPass code $ Satisfiable $ Occurs Abort
-       expectPass code $ Valid $ Occurs Abort
+      expectPass code $ Satisfiable $ Occurs Abort
+      expectPass code $ Valid $ Occurs Abort
 
-       expectFail code $ Satisfiable $ Occurs Success
+      expectFail code $ Satisfiable $ Occurs Success
 
-  , do let code =
-             [text|
-               (defun test:bool (x:integer)
-                 (if (< x 10)
-                   (enforce (< x 5) "abort sometimes")
-                   true))
-             |]
-       expectPass code $ Satisfiable $ Occurs Abort
-       expectPass code $ Satisfiable $ Not $ Occurs Abort
-       expectPass code $ Satisfiable $ Occurs Success
+  , scope "success" $ do
+      let code =
+            [text|
+              (defun test:bool (x:integer)
+                (if (< x 10)
+                  (enforce (< x 5) "abort sometimes")
+                  true))
+            |]
+      expectPass code $ Satisfiable $ Occurs Abort
+      expectPass code $ Satisfiable $ Not $ Occurs Abort
+      expectPass code $ Satisfiable $ Occurs Success
 
-       expectFail code $ Valid $ Occurs Abort
+      expectFail code $ Valid $ Occurs Abort
   ]
 
 main :: IO ()
