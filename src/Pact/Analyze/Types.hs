@@ -257,6 +257,17 @@ pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
 pattern AST_Enforce node' cond msg' <-
   App node' (NativeFunc "enforce") [cond, AST_Lit (LString msg')]
 
+--
+-- TODO: [ ] enforce-keyset for names
+--
+-- pattern AST_EnforceNamedKeyset :: forall a. a -> Text -> AST a
+-- pattern AST_EnforceNamedKeyset node' keyset' <-
+--   (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
+
+--
+-- TODO: [ ] AST_EnforceObjKeyset
+--
+
 -- Unsupported currently
 
 pattern AST_AddTime :: forall a. AST a -> AST a -> AST a
@@ -315,7 +326,7 @@ data Term ret where
   Var            ::                        Text         ->                       Term a
   Arith          ::                        ArithOp      -> [Term Integer]     -> Term Integer
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a   -> Term a -> Term Bool
-  Logical        ::                        LogicalOp    -> [Term a] -> Term a
+  Logical        ::                        LogicalOp    -> [Term a] ->           Term a
   AddTimeInt     ::                        Term Time    -> Term Integer       -> Term Time
   AddTimeDec     ::                        Term Time    -> Term Decimal       -> Term Time
   NameAuthorized ::                        Term String  ->                       Term Bool
