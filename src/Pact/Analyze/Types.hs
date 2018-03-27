@@ -194,36 +194,6 @@ ofBasicOperators s = if isBasic then Right s else Left s
     isBasic = Set.member s
       (comparisonOperators <> logicalOperators <> numericalOperators)
 
-
-{-
-convertType :: Node -> SymType
-convertType (OfPrimType TyInteger) = SymInteger
-convertType (OfPrimType TyBool) = SymBool
-convertType (OfPrimType TyDecimal) = SymDecimal
-convertType (OfPrimType TyString) = SymString
-convertType (OfPrimType TyTime) = SymTime
-convertType n = throw $ SmtCompilerException "convertType" $ "node's type is not supported: " ++ show n
-
-symTypeToSortId :: SymType -> Sort
-symTypeToSortId SymInteger = SortId $ ISymbol "Int"
-symTypeToSortId SymBool = SortId $ ISymbol "Bool"
-symTypeToSortId SymDecimal = SortId $ ISymbol "Real"
-symTypeToSortId SymString = SortId $ ISymbol "String"
-symTypeToSortId SymTime = SortId $ ISymbol "Real"
--}
-
--- | Everything is obvious except for time, which works like this:
--- `\(LTime (t :: UTCTime)) -> (init $ show (t ^. posixTime)` :: Smt.Decimal)
--- Decimals (which are actually Reals) are strings in the SMT parser (dunno why)
--- so we convert to POSIX time and show, getting `<some numbers>.<some more numbers>s` and use init to remove the trailing `s`
--- literalToTerm :: Literal -> Term a
--- literalToTerm = Value . \case
---   LBool v    -> literal v
---   LString v  -> literal (show v)
---   LInteger v -> literal v
---   LDecimal v -> literal (show v)
---   LTime t    -> literal $ init $ show (t ^. posixTime)
-
 -- helper patterns
 pattern NativeFunc :: forall a. Text -> Fun a
 pattern NativeFunc f <- (FNative _ f _ _)
