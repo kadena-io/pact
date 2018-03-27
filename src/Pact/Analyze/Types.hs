@@ -23,7 +23,6 @@ module Pact.Analyze.Types
   , runTest
   , analyzeFunction
   , CheckState(..)
-  , SmtCompilerException(..)
   , inferFun
   , Check(..)
   , DomainProperty(..)
@@ -67,19 +66,6 @@ import qualified Data.Text as T
 -- !!! Orphan needed for dev, delete when finished
 -- instance ToJSON Node where
 --   toJSON = toJSON . show
-
--- TODO: get rid of SmtCompilerException
-
-data SmtCompilerException =
-  SmtCompilerException
-  { _smteSrc :: String
-  , _smteErr :: String }
-  deriving (Eq)
-
-instance Show SmtCompilerException where
-  show (SmtCompilerException src err) = src ++ ": " ++ err
-
-instance Exception SmtCompilerException
 
 data SymType = SymInteger
   | SymDecimal
@@ -697,7 +683,7 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
        TyPrim TyTime ->
          analyzeFunction' translateNodeTime check body' argTys nodeNames'
 
-analyzeFunction _ _ = pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 checkProperty :: Check -> Property
 checkProperty (Satisfiable p) = p
@@ -709,12 +695,11 @@ data CheckFailure
   | Unknown String -- reason
   | SatExtensionField SBVI.SMTModel
   | ProofError [String]
+
   --
-  -- TODO: maybe remove this constructor from from CheckFailure. regardless, we
-  --       need to get rid of SmtCompilerException
+  -- TODO: maybe remove this constructor from from CheckFailure.
   --
   | CodeCompilationFailed String
-  | CheckCompilationFailed SmtCompilerException
   deriving (Show)
 
 data CheckSuccess
@@ -768,7 +753,7 @@ analyzeFunction'
 analyzeFunction' translator check body' argTys nodeNames =
   -- TODO what type should this be?
   case runReaderT (translateBody translator (AstNodeOf <$> body')) nodeNames of
-    Nothing -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" "could not translate node"
+    Nothing -> pure $ Left $ CodeCompilationFailed "could not translate node"
     Just body'' -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
@@ -792,7 +777,7 @@ analyzeFunction' translator check body' argTys nodeNames =
       case mVarVal of
         Nothing -> pure checkResult
         -- TODO: return the failure instead of showing it
-        Just cf -> pure $ Left $ CheckCompilationFailed $ SmtCompilerException "analyzeFunction" (show cf)
+        Just cf -> pure $ Left $ CodeCompilationFailed (show cf)
 
 rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
 rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
