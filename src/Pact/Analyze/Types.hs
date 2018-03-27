@@ -440,7 +440,7 @@ translateNodeInt = unAstNodeOf >>> \case
   ast -> throwError $ UnexpectedNode "translateNodeInt" ast
 
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
-translateNodeBool (AstNodeOf node) = case node of
+translateNodeBool = unAstNodeOf >>> \case
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var n -> Var <$> view (ix n)
 
@@ -503,12 +503,16 @@ translateNodeBool (AstNodeOf node) = case node of
     <*> translateNodeBool (AstNodeOf tBranch)
     <*> translateNodeBool (AstNodeOf fBranch)
 
+  ast -> throwError $ UnexpectedNode "translateNodeBool" ast
+
 translateNodeStr :: AstNodeOf String -> TranslateM (Term String)
-translateNodeStr (AstNodeOf node) = case node of
+translateNodeStr = unAstNodeOf >>> \case
   AST_Lit (LString t) -> pure $ Literal $ literal $ T.unpack t
   --
   -- TODO: more cases. string ops, etc.
   --
+
+  ast -> throwError $ UnexpectedNode "translateNodeStr" ast
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
