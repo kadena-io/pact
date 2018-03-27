@@ -23,12 +23,7 @@ wrap code =
 
 suite :: Test ()
 suite = tests
-  [ do result <- io $ runCompilerTest
-         "examples/analyze-tests/analyze-tests.repl" "analyze-tests" "layup" $
-           Valid $ Occurs Success
-       expectRight result
-       ok
-  , do let code =
+  [ do let code =
              [text|
                (defun test:bool (x:integer)
                  (if (< x 10) true false))
