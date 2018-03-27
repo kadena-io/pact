@@ -21,6 +21,13 @@ wrap code =
     (commit-tx)
   |]
 
+expectPass :: Text -> Check -> Test ()
+expectPass code check = (expectRight =<< io (runTest (wrap code) check))
+                     *> pure ()
+
+expectFail :: Text -> Check -> Test ()
+expectFail code check = expectLeft =<< io (runTest (wrap code) check)
+
 suite :: Test ()
 suite = tests
   [ do let code =
@@ -28,18 +35,18 @@ suite = tests
                (defun test:bool (x:integer)
                  (if (< x 10) true false))
              |]
-       expectRight =<< io (runTest (wrap code) $ Valid $ Occurs Success)
-       ok
+       expectPass code $ Valid $ Occurs Success
+
   , do let code =
              [text|
                (defun test:bool ()
                  (enforce false "cannot pass"))
              |]
-       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Abort)
-       expectRight =<< io (runTest (wrap code) $ Valid $ Occurs Abort)
-       -- expected failures:
-       expectLeft  =<< io (runTest (wrap code) $ Satisfiable $ Occurs Success)
-       ok
+       expectPass code $ Satisfiable $ Occurs Abort
+       expectPass code $ Valid $ Occurs Abort
+
+       expectFail code $ Satisfiable $ Occurs Success
+
   , do let code =
              [text|
                (defun test:bool (x:integer)
@@ -47,12 +54,11 @@ suite = tests
                    (enforce (< x 5) "abort sometimes")
                    true))
              |]
-       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Abort)
-       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Not $ Occurs Abort)
-       expectRight =<< io (runTest (wrap code) $ Satisfiable $ Occurs Success)
-       -- expected failure:
-       expectLeft  =<< io (runTest (wrap code) $ Valid $ Occurs Abort)
-       ok
+       expectPass code $ Satisfiable $ Occurs Abort
+       expectPass code $ Satisfiable $ Not $ Occurs Abort
+       expectPass code $ Satisfiable $ Occurs Success
+
+       expectFail code $ Valid $ Occurs Abort
   ]
 
 main :: IO ()
