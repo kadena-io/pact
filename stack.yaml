@@ -11,11 +11,6 @@ packages:
     commit: a22575c782885dce0597f4393ab95da9688b3255
   extra-dep: true
 - location:
-    # Until easytest with expectLeft and unit return types is on hackage
-    git: git@github.com:joelburget/easytest.git
-    commit: ef5d4e9fd03c1008c810ee09a4f4c459d4e26bdb
-  extra-dep: true
-- location:
     git: git@github.com:buckie/Hsmtlib.git
     commit: f39f51be1c0793646f1a5a1eae1160c37dddfb57
   extra-dep: true
@@ -35,7 +30,7 @@ packages:
 extra-deps:
   - bound-2.0.1
   - ed25519-donna-0.1.1
-  #- easytest-0.1
+  - easytest-0.2
 
 flags: {}
 
