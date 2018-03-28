@@ -16,6 +16,13 @@ wrap code =
     (begin-tx)
     (define-keyset 'ks (read-keyset "keyset"))
     (module test 'ks
+      (defschema account
+        "Row type for accounts table."
+         balance:integer
+         data
+         )
+      (deftable accounts:{account}
+        "Main table for accounts module.")
       $code
       )
     (commit-tx)
@@ -75,6 +82,27 @@ suite = tests
 
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
+
+  , scope "conserves-masss" $ do
+      let code =
+            [text|
+              (defun test:string (from to amount)
+                  "Transfer money between accounts"
+                  (with-read accounts from { "balance":= from-bal }
+                    (with-read accounts to { "balance":= to-bal }
+                        (enforce (>= from-bal amount) "Insufficient Funds")
+                        (update accounts from
+                                { "balance": (- from-bal amount) })
+                        (update accounts to
+                                { "balance": (+ to-bal amount) })
+                    )
+                  )
+                )
+            |]
+
+      -- PROVE 'analyze-tests.accounts.balance' [ConservesMass, Column >= 0]
+      expectPass code $ Valid $ Occurs $ ColumnConserves "accounts" "balance"
+      expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
 
   --
   -- NOTE: this is pending fixes to pact's typechecker.

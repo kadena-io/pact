@@ -63,6 +63,8 @@ import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 
+import Debug.Trace
+
 -- | Low-level, untyped variable.
 data AVar = AVar SBVI.SVal
   deriving (Eq, Show)
@@ -283,6 +285,8 @@ data Term ret where
   Concat         ::                        Term String  -> Term String      -> Term String
   PactVersion    ::                                                            Term String
 
+  WithRead       :: (Show a) => Text -> Term String -> [Text] -> Term a -> Term a
+
   --
   -- TODO: figure out the object representation we use here:
   --
@@ -495,7 +499,36 @@ translateNodeStr = unAstNodeOf >>> \case
   -- TODO: more cases.
   --
 
+  AST_WithRead _node table key bindings body -> do
+    traceShowM bindings
+    let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
+    WithRead table
+      <$> translateNodeStr (AstNodeOf key)
+      <*> pure bindings'
+      -- XXX: translateNode type
+      <*> translateBody translateNodeStr (AstNodeOf <$> body)
+
   ast -> throwError $ UnexpectedNode "translateNodeStr" ast
+
+pattern AST_WithRead :: Node
+                     -> Text
+                     -> AST Node
+                     -> [(Named Node, AST Node)]
+                     -> [AST Node]
+                     -> AST Node
+pattern AST_WithRead node table key bindings body <-
+  (App node
+       (NativeFuncSpecial "with-read" (AST_Binding _ bindings body))
+       [RawTableName table, key])
+
+pattern AST_Binding :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
+
+pattern RawTableName :: Text -> AST Node
+pattern RawTableName t <- (Table (Node (TcId _ t _) _))
+
+pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
+pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 data Decimal = Decimal
@@ -623,6 +656,8 @@ evalDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
 -- evalDomainProperty (TableRead tn) = _todoRead
 -- evalDomainProperty (TableWrite tn) = _todoWrite
+-- evalDomainProperty (ColumnConserves tableName colName)
+-- evalDomainProperty (CellIncrease tableName colName)
 
 evalProperty :: Property -> M SBool
 evalProperty (p1 `Implies` p2) = do
@@ -669,6 +704,7 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
          analyzeFunction' translateNodeDecimal check body' argTys nodeNames'
        TyPrim TyTime ->
          analyzeFunction' translateNodeTime check body' argTys nodeNames'
+       _ -> error $ "can't analyze ret of: " ++ show retTy
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
