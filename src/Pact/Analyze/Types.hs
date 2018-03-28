@@ -146,9 +146,9 @@ data AnalyzeFailure
   | UnhandledTerm String (Term Int64)
   deriving Show
 
-type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
+type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
-instance (Mergeable w, Mergeable a) => Mergeable (RWST r w AnalyzeState (Except e) a) where
+instance (Mergeable a) => Mergeable (AnalyzeM a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
@@ -547,12 +547,12 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyString  -> mkAVar <$> sString name'
   pure (name, var)
 
-namedAuth :: SString -> M SBool
+namedAuth :: SString -> AnalyzeM SBool
 namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
-evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
+evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
@@ -616,7 +616,7 @@ evalTerm = \case
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
-evalDomainProperty :: DomainProperty -> M SBool
+evalDomainProperty :: DomainProperty -> AnalyzeM SBool
 evalDomainProperty Success = use succeeds
 evalDomainProperty Abort = bnot <$> evalDomainProperty Success
 evalDomainProperty (KsNameAuthorized (KeySetName n)) =
@@ -624,7 +624,7 @@ evalDomainProperty (KsNameAuthorized (KeySetName n)) =
 -- evalDomainProperty (TableRead tn) = _todoRead
 -- evalDomainProperty (TableWrite tn) = _todoWrite
 
-evalProperty :: Property -> M SBool
+evalProperty :: Property -> AnalyzeM SBool
 evalProperty (p1 `Implies` p2) = do
   b1 <- evalProperty p1
   b2 <- evalProperty p2
