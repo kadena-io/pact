@@ -22,7 +22,7 @@ module Pact.Analyze.Types
   , runCompilerTest
   , runTest
   , analyzeFunction
-  , CheckState(..)
+  , AnalyzeState(..)
   , inferFun
   , Check(..)
   , DomainProperty(..)
@@ -73,22 +73,22 @@ unsafeCastAVar (AVar sval) = SBVI.SBV sval
 mkAVar :: SBV a -> AVar
 mkAVar (SBVI.SBV sval) = AVar sval
 
-data CheckEnv = CheckEnv
+data AnalyzeEnv = AnalyzeEnv
   { _scope     :: Map Text AVar      -- used with 'local' in a stack fashion
   , _nameAuths :: SArray String Bool -- read-only
   } deriving Show
-makeLenses ''CheckEnv
+makeLenses ''AnalyzeEnv
 
-newtype CheckLog
-  = CheckLog ()
+newtype AnalyzeLog
+  = AnalyzeLog ()
 
-instance Monoid CheckLog where
-  mempty = CheckLog ()
-  mappend _ _ = CheckLog ()
+instance Monoid AnalyzeLog where
+  mempty = AnalyzeLog ()
+  mappend _ _ = AnalyzeLog ()
 
-instance Mergeable CheckLog where
+instance Mergeable AnalyzeLog where
   --
-  -- NOTE: If we change the underlying representation of CheckLog to a list,
+  -- NOTE: If we change the underlying representation of AnalyzeLog to a list,
   -- the default Mergeable instance for this will have the wrong semantics, as
   -- it requires that lists have the same length. We more likely want to use
   -- monoidal semantics for anything we log:
@@ -96,42 +96,42 @@ instance Mergeable CheckLog where
   symbolicMerge _f _t = mappend
 
 -- Checking state that is split before, and merged after, conditionals.
-data LatticeCheckState
-  = LatticeCheckState
-    { _lcsSucceeds :: SBool
+data LatticeAnalyzeState
+  = LatticeAnalyzeState
+    { _lasSucceeds :: SBool
     }
   deriving (Show, Eq, Generic, Mergeable)
-makeLenses ''LatticeCheckState
+makeLenses ''LatticeAnalyzeState
 
 -- Checking state that is transferred through every computation, in-order.
-newtype GlobalCheckState
-  = GlobalCheckState ()
+newtype GlobalAnalyzeState
+  = GlobalAnalyzeState ()
   deriving (Show, Eq)
-makeLenses ''GlobalCheckState
+makeLenses ''GlobalAnalyzeState
 
-data CheckState
-  = CheckState
-    { _latticeState :: LatticeCheckState
-    , _globalState  :: GlobalCheckState
+data AnalyzeState
+  = AnalyzeState
+    { _latticeState :: LatticeAnalyzeState
+    , _globalState  :: GlobalAnalyzeState
     }
   deriving (Show, Eq)
-makeLenses ''CheckState
+makeLenses ''AnalyzeState
 
-instance Mergeable CheckState where
+instance Mergeable AnalyzeState where
   -- NOTE: We discard the left global state because this is out-of-date and was
   -- already fed to the right computation -- we use the updated right global
   -- state.
-  symbolicMerge force test (CheckState lls _) (CheckState rls rgs) =
-    CheckState (symbolicMerge force test lls rls) rgs
+  symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
+    AnalyzeState (symbolicMerge force test lls rls) rgs
 
-initialCheckState :: CheckState
-initialCheckState = CheckState
-  { _latticeState = LatticeCheckState true
-  , _globalState  = GlobalCheckState ()
+initialAnalyzeState :: AnalyzeState
+initialAnalyzeState = AnalyzeState
+  { _latticeState = LatticeAnalyzeState true
+  , _globalState  = GlobalAnalyzeState ()
   }
 
-succeeds :: Lens' CheckState SBool
-succeeds = latticeState.lcsSucceeds
+succeeds :: Lens' AnalyzeState SBool
+succeeds = latticeState.lasSucceeds
 
 data AnalyzeFailure
   = MalformedArithOp ArithOp [Term Integer]
@@ -144,14 +144,14 @@ data AnalyzeFailure
   | EmptyBody
   deriving Show
 
-type M = RWST CheckEnv CheckLog CheckState (Except AnalyzeFailure)
+type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
-instance (Mergeable w, Mergeable a) => Mergeable (RWST r w CheckState (Except e) a) where
+instance (Mergeable w, Mergeable a) => Mergeable (RWST r w AnalyzeState (Except e) a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
-    -- global state, is merged (per CheckState's Mergeable instance.)
+    -- global state, is merged (per AnalyzeState's Mergeable instance.)
     --
     -- If either side fails, the entire merged computation fails.
     --
@@ -748,8 +748,8 @@ analyzeFunction' translator check body' argTys nodeNames =
         nameAuths <- newArray "nameAuthorizations"
 
         let prop   = checkProperty check
-            env0   = CheckEnv scope0 nameAuths
-            state0 = initialCheckState
+            env0   = AnalyzeEnv scope0 nameAuths
+            state0 = initialAnalyzeState
             action = evalTerm body''
                   *> evalProperty prop
 
