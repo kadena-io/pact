@@ -262,26 +262,25 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
 data Term ret where
-  IfThenElse     ::                        Term Bool    -> Term a   -> Term a -> Term a
-  Enforce        ::                        Term Bool    ->                       Term Bool
-  Sequence       :: (Show b, SymWord b) => Term b       -> Term a   ->           Term a
-  Literal        ::                        SBV a        ->                       Term a
-  --
-  -- TODO: change read/write to use strings -> objects
-  --
-  Read           ::                        Term Integer ->                     Term a
-  Write          :: (Show a)            => Term Integer -> Term a ->           Term ()
-  Let            :: (Show a)            => String       -> Term a -> Term b -> Term b
-  Var            ::                        Text         ->                     Term a
-  Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
-  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
-  Logical        :: LogicalOp -> [Term a] -> Term a
-  AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
-  AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
-  NameAuthorized ::                        Term String  ->                     Term Bool
-
-  Concat         ::                        Term String  -> Term String      -> Term String
-  PactVersion    ::                                                            Term String
+  IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
+  Enforce        ::                        Term Bool    ->                             Term Bool
+  Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
+  Literal        ::                        SBV a        ->                             Term a
+  -- TODO: Read should return an object, probably parameterized by a schema:
+  Read           ::                        TableName    -> Term String    ->           Term Bool
+  -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
+  --         the object should likewise probably be parameterized by a schema.
+  Write          ::                        TableName    -> Term String    ->           Term String
+  Let            :: (Show a)            => Text         -> Term a         -> Term b -> Term b
+  Var            ::                        Text         ->                             Term a
+  Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
+  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
+  Logical        ::                        LogicalOp    -> [Term a]       ->           Term a
+  AddTimeInt     ::                        Term Time    -> Term Integer   ->           Term Time
+  AddTimeDec     ::                        Term Time    -> Term Decimal   ->           Term Time
+  NameAuthorized ::                        Term String  ->                             Term Bool
+  Concat         ::                        Term String  -> Term String    ->           Term String
+  PactVersion    ::                                                                    Term String
 
   --
   -- TODO: figure out the object representation we use here:
