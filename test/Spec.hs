@@ -60,6 +60,17 @@ suite = tests
       expectPass code $ Satisfiable $ Occurs Success
 
       expectFail code $ Valid $ Occurs Abort
+
+  , scope "enforce-keyset.name" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-keyset 'ks))
+            |]
+      expectPass code $ Satisfiable $ Occurs Abort
+      expectPass code $ Satisfiable $ Occurs Success
+      expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
+                                  `Implies` Occurs Abort
   ]
 
 main :: IO ()

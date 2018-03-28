@@ -208,36 +208,29 @@ pattern AST_Lit :: forall a. Literal -> AST a
 pattern AST_Lit lit <- (Prim _ (PrimLit lit))
 
 pattern AST_NegativeVar :: forall a. a -> AST a
-pattern AST_NegativeVar var' <- (App _ (NativeFunc "-") [AST_Var var'])
+pattern AST_NegativeVar var <- (App _ (NativeFunc "-") [AST_Var var])
 
 pattern AST_NegativeLit :: forall a. Literal -> AST a
-pattern AST_NegativeLit lit' <- (App _ (NativeFunc "-") [AST_Lit lit'])
+pattern AST_NegativeLit lit <- (App _ (NativeFunc "-") [AST_Lit lit])
 
 pattern AST_NFun :: forall a. a -> Text -> [AST a] -> AST a
-pattern AST_NFun node' fn' args' <- (App node' (NativeFunc fn') args')
+pattern AST_NFun node fn args <- (App node (NativeFunc fn) args)
 
 pattern AST_NFun_Basic :: forall a. Text -> [AST a] -> AST a
-pattern AST_NFun_Basic fn' args' <-
-  AST_NFun _ (ofBasicOperators -> Right fn') args'
+pattern AST_NFun_Basic fn args <-
+  AST_NFun _ (ofBasicOperators -> Right fn) args
 
 pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
-pattern AST_If node' cond' ifTrue' ifFalse' <-
-  App node' (NativeFunc "if") [cond', ifTrue', ifFalse']
+pattern AST_If node cond then' else' <-
+  App node (NativeFunc "if") [cond, then', else']
 
 pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
-pattern AST_Enforce node' cond msg' <-
-  App node' (NativeFunc "enforce") [cond, AST_Lit (LString msg')]
+pattern AST_Enforce node cond msg <-
+  App node (NativeFunc "enforce") [cond, AST_Lit (LString msg)]
 
---
--- TODO: [ ] enforce-keyset for names
---
--- pattern AST_EnforceNamedKeyset :: forall a. a -> Text -> AST a
--- pattern AST_EnforceNamedKeyset node' keyset' <-
---   (App node' (NativeFunc "enforce-keyset") [AST_Lit (LString keyset')])
-
---
--- TODO: [ ] AST_EnforceObjKeyset
---
+pattern AST_EnforceKeyset :: forall a. AST a -> AST a
+pattern AST_EnforceKeyset ks <-
+  App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
 
 -- Unsupported currently
 
@@ -285,7 +278,7 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a   -> Term a -> Term a
-  Enforce        ::                        Term Bool    -> Text     ->           Term Bool
+  Enforce        ::                        Term Bool    ->                       Term Bool
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a   ->           Term a
   Literal        ::                        SBV a        ->                       Term a
   --
@@ -434,9 +427,15 @@ translateNodeBool = unAstNodeOf >>> \case
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var n -> Var <$> view (ix n)
 
-  AST_Enforce _ cond msg -> do
+  AST_Enforce _ cond _msg -> do
     condTerm <- translateNodeBool (AstNodeOf cond)
-    return $ Enforce condTerm msg
+    return $ Enforce condTerm
+
+  AST_EnforceKeyset ks
+    | ks ^? aNode.aTy == Just (TyPrim TyString)
+    -> do
+      ksNameTerm <- translateNodeStr (AstNodeOf ks)
+      return $ Enforce $ NameAuthorized ksNameTerm
 
   AST_NFun_Basic fn args -> do
     let mkComparison
@@ -574,7 +573,7 @@ evalTerm = \case
     testPasses <- evalTerm cond
     ite testPasses (evalTerm then') (evalTerm else')
 
-  Enforce cond _msg -> do
+  Enforce cond -> do
     cond <- evalTerm cond
     succeeds %= (&&& cond)
     pure true
@@ -630,6 +629,7 @@ evalTerm = \case
   NameAuthorized str -> namedAuth =<< evalTerm str
 
   Concat str1 str2 -> (.++) <$> evalTerm str1 <*> evalTerm str2
+
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
 evalDomainProperty :: DomainProperty -> M SBool
