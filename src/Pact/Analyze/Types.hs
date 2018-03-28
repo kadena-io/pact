@@ -142,6 +142,8 @@ data AnalyzeFailure
   | UnexpectedNode String (AST Node)
   -- | 'translateBody' expects at least one node in a function body.
   | EmptyBody
+  -- | A node we have a good reason not to handle
+  | UnhandledTerm String (Term Int64)
   deriving Show
 
 type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
@@ -604,10 +606,9 @@ evalTerm = \case
     secs' <- evalTerm secs
     pure $ time' + sFromIntegral secs'
 
-  -- AddTimeDec time secs -> do
-  --   time' <- evalTerm time
-  --   secs' <- evalTerm secs
-  --   pure $ time' + sFromIntegral secs'
+  n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
+    "We don't support adding decimals to time yet"
+    n
 
   NameAuthorized str -> namedAuth =<< evalTerm str
 
