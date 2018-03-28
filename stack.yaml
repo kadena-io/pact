@@ -24,7 +24,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/LeventErkok/sbv.git
-    commit: 61df55efe65045f2e1953136977652cd12fb9445 # symbolic_strings branch
+    commit: 55d4288c9a088852625a69d49644beb85446ec1c # symbolic_strings branch
   extra-dep: true
 
 extra-deps:
