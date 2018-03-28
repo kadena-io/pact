@@ -36,6 +36,7 @@ suite = tests
                 (if (< x 10) true false))
             |]
       expectPass code $ Valid $ Occurs Success
+
   , scope "success" $ do
       let code =
             [text|
@@ -61,7 +62,7 @@ suite = tests
 
       expectFail code $ Valid $ Occurs Abort
 
-  , scope "enforce-keyset.name" $ do
+  , scope "enforce-keyset.name.static" $ do
       let code =
             [text|
               (defun test:bool ()
@@ -74,6 +75,18 @@ suite = tests
 
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
+
+  --
+  -- NOTE: this is pending fixes to pact's typechecker.
+  --
+  -- , scope "enforce-keyset.name.dynamic" $ do
+  --     let code =
+  --           [text|
+  --             (defun test:bool ()
+  --               (enforce-keyset (+ "k" "s")))
+  --           |]
+  --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
+  --                                 `Implies` Occurs Abort
   ]
 
 main :: IO ()

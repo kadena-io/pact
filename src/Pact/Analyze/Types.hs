@@ -698,8 +698,8 @@ data CheckFailure
   | Unknown String -- reason
   | SatExtensionField SBVI.SMTModel
   | ProofError [String]
+  | TypecheckFailure (Set TC.Failure)
   | AnalyzeFailure AnalyzeFailure
-
   --
   -- TODO: maybe remove this constructor from from CheckFailure.
   --
@@ -807,16 +807,28 @@ runCompiler = runCompilerDebug False
 
 runCompilerDebug :: Bool -> String -> Text -> Text -> Check -> IO ()
 runCompilerDebug dbg replPath' modName' funcName' check = do
-  fun <- fst <$> inferFun dbg replPath' (ModuleName modName') funcName'
-  r <- analyzeFunction fun check
-  putStrLn $ case r of
-    Left err  -> show err
-    Right res -> show res
+  (fun, tcState) <- inferFun dbg replPath' (ModuleName modName') funcName'
+  let failures = tcState ^. tcFailures
+  if Set.null failures
+  then do
+    r <- analyzeFunction fun check
+    putStrLn $ case r of
+      Left err  -> show err
+      Right res -> show res
+  else putStrLn $ "typechecking failed: " ++ show failures
+
+failedTcOrAnalyze :: TcState -> TopLevel Node -> Check -> IO CheckResult
+failedTcOrAnalyze tcState fun check =
+    if Set.null failures
+    then analyzeFunction fun check
+    else pure $ Left $ TypecheckFailure failures
+  where
+    failures = tcState ^. tcFailures
 
 runCompilerTest :: String -> Text -> Text -> Check -> IO CheckResult
 runCompilerTest replPath modName funcName check = do
-  fun <- fst <$> inferFun False replPath (ModuleName modName) funcName
-  analyzeFunction fun check
+  (fun, tcState) <- inferFun False replPath (ModuleName modName) funcName
+  failedTcOrAnalyze tcState fun check
 
 runTest :: Text -> Check -> IO CheckResult
 runTest code check = do
@@ -834,5 +846,5 @@ runTest code check = do
             Nothing ->
               pure $ Left $ CodeCompilationFailed "expected function 'test'"
             Just ref -> do
-              (fun, _tcState) <- runTC 0 False $ typecheckTopLevel ref
-              analyzeFunction fun check
+              (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+              failedTcOrAnalyze tcState fun check
