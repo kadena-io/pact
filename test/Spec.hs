@@ -71,6 +71,9 @@ suite = tests
       expectPass code $ Satisfiable $ Occurs Success
       expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
                                   `Implies` Occurs Abort
+
+      expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
+                                  `Implies` Occurs Abort
   ]
 
 main :: IO ()
