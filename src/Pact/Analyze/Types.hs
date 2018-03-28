@@ -61,24 +61,7 @@ import GHC.Generics
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
--- import Data.Thyme.Clock.POSIX
 import qualified Data.Text as T
-
--- !!! Orphan needed for dev, delete when finished
--- instance ToJSON Node where
---   toJSON = toJSON . show
-
-data SymType = SymInteger
-  | SymDecimal
-  | SymBool
-  | SymString
-  | SymTime
-  deriving (Show, Eq, Ord, Generic, ToJSON)
-
--- data TableAccess =
---   TableRead |
---   TableWrite
---   deriving (Show, Eq, Generic, ToJSON)
 
 -- | Low-level, untyped variable.
 data AVar = AVar SBVI.SVal
