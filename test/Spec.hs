@@ -27,6 +27,12 @@ expectPass code check = expectRight =<< io (runTest (wrap code) check)
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
+--
+-- For now, we're not testing conditionals or sequence on their own, but as
+-- they affect other "features". e.g. we test enforce.conditional or
+-- enforce.sequence, but Not sequence.enforce or conditional.enforce.
+--
+
 suite :: Test ()
 suite = tests
   [ scope "success" $ do
@@ -36,8 +42,9 @@ suite = tests
                 (if (< x 10) true false))
             |]
       expectPass code $ Valid $ Occurs Success
+      expectPass code $ Valid $ Not $ Occurs Abort
 
-  , scope "success" $ do
+  , scope "enforce.trivial" $ do
       let code =
             [text|
               (defun test:bool ()
@@ -48,7 +55,7 @@ suite = tests
 
       expectFail code $ Satisfiable $ Occurs Success
 
-  , scope "success" $ do
+  , scope "enforce.conditional" $ do
       let code =
             [text|
               (defun test:bool (x:integer)
@@ -61,6 +68,30 @@ suite = tests
       expectPass code $ Satisfiable $ Occurs Success
 
       expectFail code $ Valid $ Occurs Abort
+
+  , scope "enforce.sequence" $ do
+      let code =
+            [text|
+              (defun test:bool (x:integer)
+                (enforce (> x 0) "positive")
+                (enforce false "impossible")
+                (if (< x 10)
+                  true
+                  false))
+            |]
+      expectPass code $ Valid $ Occurs Abort
+
+   , scope "enforce.sequence" $ do
+      let code =
+            [text|
+              (defun test:bool (x:integer)
+                (enforce (> x 0) "positive")
+                (if (< x 10)
+                  true
+                  false))
+            |]
+      expectPass code $ Satisfiable $ Occurs Abort
+      expectPass code $ Satisfiable $ Occurs Success
 
   , scope "enforce-keyset.name.static" $ do
       let code =
@@ -77,7 +108,7 @@ suite = tests
                                   `Implies` Occurs Abort
 
   --
-  -- NOTE: this is pending fixes to pact's typechecker.
+  -- TODO: this is pending fixes to pact's typechecker.
   --
   -- , scope "enforce-keyset.name.dynamic" $ do
   --     let code =
@@ -88,12 +119,15 @@ suite = tests
   --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
   --                                 `Implies` Occurs Abort
 
+  --
+  -- TODO: enforce-keyset.object
+  --
+
   , scope "table-write.insert" $ do
       let code =
             [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
 
               (defun test:string ()
                 (insert tokens "stu" {"balance": 5}))
@@ -104,9 +138,8 @@ suite = tests
   , scope "table-write.update" $ do
       let code =
             [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
 
               (defun test:string ()
                 (update tokens "stu" {"balance": 5}))
@@ -116,21 +149,19 @@ suite = tests
   , scope "table-write.write" $ do
       let code =
             [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
 
               (defun test:string ()
                 (write tokens "stu" {"balance": 5}))
             |]
       expectPass code $ Valid $ Occurs $ TableWrite "tokens"
 
-  , scope "table-write.conditionals" $ do
+  , scope "table-write.conditional" $ do
       let code =
             [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
 
               (defun test:string (x:bool)
                 (if x
@@ -140,6 +171,26 @@ suite = tests
       expectPass code $ Satisfiable $ Occurs $ TableWrite "tokens"
       expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
+
+  , scope "sequence.monomorphic" $ do
+      let code =
+            [text|
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
+
+              (defun test:string (x:bool)
+                "before"
+                (if x
+                  (insert tokens "stu" {"balance": 5})
+                  "didn't write")
+                "after")
+            |]
+      expectPass code $ Satisfiable $ Occurs $ TableWrite "tokens"
+      expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
+
+  --
+  -- TODO: need sequence.polymorphic
+  --
 
   --
   -- TODO: test table-level reads, but to implement this we need to support
