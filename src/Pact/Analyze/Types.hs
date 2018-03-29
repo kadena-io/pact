@@ -493,7 +493,7 @@ translateNodeStr = unAstNodeOf >>> \case
     <$> translateNodeStr (AstNodeOf a)
     <*> translateNodeStr (AstNodeOf b)
 
-  AST_NFun_Basic "pact-version" [] -> pure PactVersion
+  AST_NFun _node "pact-version" [] -> pure PactVersion
   --
   -- TODO: more cases.
   --
