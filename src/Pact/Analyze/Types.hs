@@ -392,15 +392,21 @@ type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
-  AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Literal (literal i))
-  AST_Lit         (LInteger i)  -> pure (Literal (literal i))
+  AST_NegativeLit (LInteger i) ->
+    Arith Negate . pure <$> pure (Literal (literal i))
+
+  AST_Lit (LInteger i) -> pure (Literal (literal i))
+
   AST_NegativeVar n -> do
     name <- view (ix n)
     pure $ Arith Negate [Var name]
+
   AST_Var         n -> Var <$> view (ix n)
+
   AST_Days days -> do
     days' <- translateNodeInt (AstNodeOf days)
     pure $ Arith Mul [60 * 60 * 24, days']
+
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
 
@@ -448,7 +454,8 @@ translateNodeInt = unAstNodeOf >>> \case
 
 translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool = unAstNodeOf >>> \case
-  AST_Lit (LBool b)     -> pure (Literal (literal b))
+  AST_Lit (LBool b) -> pure (Literal (literal b))
+
   AST_Var n -> Var <$> view (ix n)
 
   AST_Enforce _ cond _msg -> do
@@ -578,6 +585,7 @@ translateNodeTime = unAstNodeOf >>> \case
       <*> translateNodeDecimal (AstNodeOf seconds)
 
   AST_Lit (LTime t) -> pure (Literal (literal (mkTime t)))
+
   AST_Var n -> Var <$> view (ix n)
 
   n -> throwError $ UnexpectedNode "translateNodeTime" n
