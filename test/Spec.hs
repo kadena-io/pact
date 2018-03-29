@@ -88,7 +88,7 @@ suite = tests
   --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
   --                                 `Implies` Occurs Abort
 
-  , scope "write.insert" $ do
+  , scope "table-write.insert" $ do
       let code =
             [text|
               (defschema tokens-table
@@ -101,7 +101,31 @@ suite = tests
       expectPass code $ Valid $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
 
-  , scope "write.insert.conditionals" $ do
+  , scope "table-write.update" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string ()
+                (update tokens "stu" {"balance": 5}))
+            |]
+      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+
+  , scope "table-write.write" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string ()
+                (write tokens "stu" {"balance": 5}))
+            |]
+      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+
+  , scope "table-write.conditionals" $ do
       let code =
             [text|
               (defschema tokens-table
@@ -117,29 +141,10 @@ suite = tests
       expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
 
-  , scope "write.update" $ do
-      let code =
-            [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
-
-              (defun test:string ()
-                (update tokens "stu" {"balance": 5}))
-            |]
-      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
-
-  , scope "write.write" $ do
-      let code =
-            [text|
-              (defschema tokens-table
-                balance:integer)
-              (deftable tokens:{tokens-table})
-
-              (defun test:string ()
-                (write tokens "stu" {"balance": 5}))
-            |]
-      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+  --
+  -- TODO: test table-level reads, but to implement this we need to support
+  --       objects.
+  --
   ]
 
 main :: IO ()
