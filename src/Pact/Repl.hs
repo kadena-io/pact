@@ -21,7 +21,7 @@
 module Pact.Repl
     (
      interactiveRepl,generalRepl
-    ,evalRepl,ReplMode(..)
+    ,evalRepl,evalRepl',ReplMode(..)
     ,execScript,execScript'
     ,initEvalEnv,initPureEvalEnv,initReplState
     ,handleParse,handleCompile
