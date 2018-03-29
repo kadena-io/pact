@@ -10,6 +10,7 @@
 {-# language PatternSynonyms    #-}
 {-# language Rank2Types         #-}
 {-# language RecordWildCards    #-}
+{-# language ScopedTypeVariables #-}
 {-# language StandaloneDeriving #-}
 {-# language TemplateHaskell    #-}
 {-# language TypeApplications   #-}
@@ -150,11 +151,23 @@ initialAnalyzeState = AnalyzeState
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
 
-tableRead :: Lens' AnalyzeState (SFunArray TableName Bool)
-tableRead = latticeState.lasTableRead
+mkSymArrayLens
+  :: forall s array k v. (SymWord k, SymWord v, SymArray array)
+  => Lens' s (array k v)
+  -> (SBV k) -> Lens' s (SBV v)
+mkSymArrayLens sArr symKey = lens getter setter
+  where
+    getter :: s -> SBV v
+    getter s = readArray (s ^. sArr) symKey
 
-tableWritten :: Lens' AnalyzeState (SFunArray TableName Bool)
-tableWritten = latticeState.lasTableWritten
+    setter :: s -> SBV v -> s
+    setter s symVal = over sArr (\arr -> writeArray arr symKey symVal) s
+
+tableRead :: TableName -> Lens' AnalyzeState SBool
+tableRead tn = mkSymArrayLens (latticeState.lasTableRead) (literal tn)
+
+tableWritten :: TableName -> Lens' AnalyzeState SBool
+tableWritten tn = mkSymArrayLens (latticeState.lasTableWritten) (literal tn)
 
 data AnalyzeFailure
   = MalformedArithOp ArithOp [Term Integer]
@@ -602,11 +615,7 @@ evalTerm = \case
 
   Read tn rowId -> do
     rId <- evalTerm rowId -- TODO: use this
-    --
-    -- TODO: we can probably make this significantly nicer:
-    -- e.g.: tableRead tn .= true
-    --
-    tableRead %= \arr -> writeArray arr (literal tn) true
+    tableRead tn .= true
     pure $ literal () -- TODO: this should instead return a symbolic object
 
   --
@@ -614,8 +623,7 @@ evalTerm = \case
   -- of Pact.Types.Runtime's WriteType.
   --
   Write tn rowId {- obj -} -> do
-    -- TODO: could be nicer
-    tableWritten %= \arr -> writeArray arr (literal tn) true
+    tableWritten tn .= true
     --
     -- TODO: make a constant on the pact side that this uses:
     --
@@ -677,10 +685,8 @@ evalDomainProperty Success = use succeeds
 evalDomainProperty Abort = bnot <$> evalDomainProperty Success
 evalDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
-evalDomainProperty (TableRead tn) =
-  readArray <$> use tableRead <*> pure (literal tn)
-evalDomainProperty (TableWrite tn) =
-  readArray <$> use tableWritten <*> pure (literal tn)
+evalDomainProperty (TableRead tn) = use $ tableRead tn
+evalDomainProperty (TableWrite tn) = use $ tableWritten tn
 
 evalProperty :: Property -> AnalyzeM SBool
 evalProperty (p1 `Implies` p2) = do
