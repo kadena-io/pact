@@ -272,6 +272,7 @@ data Term ret where
   --         the object should likewise probably be parameterized by a schema.
   Write          ::                        TableName    -> Term String    ->           Term String
   Let            :: (Show a)            => Text         -> Term a         -> Term b -> Term b
+  -- TODO: Binding
   Var            ::                        Text         ->                             Term a
   Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
@@ -348,6 +349,9 @@ newtype AstNodeOf a
   = AstNodeOf
     { unAstNodeOf :: AST Node }
 
+--
+-- TODO: this should probably have its own TranslateFailure type?
+--
 type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
