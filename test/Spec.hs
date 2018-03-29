@@ -101,6 +101,22 @@ suite = tests
       expectPass code $ Valid $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
 
+  , scope "write.insert.conditionals" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string (x:bool)
+                (if x
+                  (insert tokens "stu" {"balance": 5})
+                  "didn't write"))
+            |]
+      expectPass code $ Satisfiable $ Occurs $ TableWrite "tokens"
+      expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
+      expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
+
   , scope "write.update" $ do
       let code =
             [text|

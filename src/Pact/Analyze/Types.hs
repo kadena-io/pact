@@ -523,6 +523,11 @@ translateNodeStr = unAstNodeOf >>> \case
     | any (name ==) ["insert", "update", "write"]
     -> Write (TableName tn) <$> translateNodeStr (AstNodeOf row)
 
+  AST_If _ cond tBranch fBranch -> IfThenElse
+    <$> translateNodeBool (AstNodeOf cond)
+    <*> translateNodeStr (AstNodeOf tBranch)
+    <*> translateNodeStr (AstNodeOf fBranch)
+
   ast -> throwError $ UnexpectedNode "translateNodeStr" ast
 
 -- Pact uses Data.Decimal which is arbitrary-precision
