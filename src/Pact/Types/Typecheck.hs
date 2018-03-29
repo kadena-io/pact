@@ -34,7 +34,7 @@ module Pact.Types.Typecheck
     Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,fDocs,
     Node (..),aId,aTy,
     Named (..),
-    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,
+    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,aTableName,
     Visit(..),Visitor
   ) where
 
@@ -283,7 +283,8 @@ data AST n =
   _aNode :: n
   } |
   Table {
-  _aNode :: n
+  _aNode :: n,
+  _aTableName :: TableName
   } |
   Step {
   _aNode :: n,

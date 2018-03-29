@@ -697,7 +697,9 @@ toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
   ty <- TySchema TyTable <$> traverse toUserType _tTableType
-  Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
+  Table
+    <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
+    <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = do
