@@ -37,7 +37,7 @@ import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (runStateT)
-import Control.Monad.Trans.RWS.Strict
+import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>))
 import Data.Data
 import qualified Data.Decimal as Decimal
@@ -307,7 +307,7 @@ data Term ret where
   -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
   --         the object should likewise probably be parameterized by a schema.
   Write          ::                        TableName    -> Term String    ->           Term String
-  Let            :: (Show a)            => Text         -> Term a         -> Term b -> Term b
+  Let            :: (Show a, SymWord a) => Text         -> Term a         -> Term b -> Term b
   -- TODO: Binding
   Var            ::                        Text         ->                             Term a
   Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
@@ -629,7 +629,10 @@ evalTerm = \case
     --
     pure $ literal "Write succeeded"
 
-  -- TODO Let
+  Let name rhs body -> do
+    val <- evalTerm rhs
+    local (scope.at name ?~ mkAVar val) $
+      evalTerm body
 
   Var name -> do
     -- Assume the term is well-scoped after typechecking
