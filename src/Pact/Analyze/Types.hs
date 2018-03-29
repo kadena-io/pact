@@ -42,14 +42,15 @@ import Data.Data
 import qualified Data.Decimal as Decimal
 import Data.Text (Text)
 import Data.Thyme
+import Data.String (IsString(..))
 import Pact.Typechecker hiding (debug)
-import Pact.Types.Lang hiding (Term)
-import Pact.Types.Runtime hiding (Term)
+import Pact.Types.Lang hiding (Term, TableName)
+import qualified Pact.Types.Lang as Lang
+import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
 import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
 import Pact.Repl
-import Data.Aeson hiding (Object, Success, (.=))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -95,12 +96,24 @@ instance Mergeable AnalyzeLog where
   --
   symbolicMerge _f _t = mappend
 
+newtype TableName
+  = TableName Text
+  deriving (Eq, Ord, Read, Data, Show)
+
+deriving instance HasKind TableName
+deriving instance SymWord TableName
+
+instance IsString TableName where
+  fromString = TableName . T.pack
+
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds :: SBool
+    { _lasSucceeds     :: SBool
+    , _lasTableRead    :: SFunArray TableName Bool
+    , _lasTableWritten :: SFunArray TableName Bool
     }
-  deriving (Show, Eq, Generic, Mergeable)
+  deriving (Show, Generic, Mergeable)
 makeLenses ''LatticeAnalyzeState
 
 -- Checking state that is transferred through every computation, in-order.
@@ -114,7 +127,7 @@ data AnalyzeState
     { _latticeState :: LatticeAnalyzeState
     , _globalState  :: GlobalAnalyzeState
     }
-  deriving (Show, Eq)
+  deriving (Show)
 makeLenses ''AnalyzeState
 
 instance Mergeable AnalyzeState where
@@ -126,12 +139,22 @@ instance Mergeable AnalyzeState where
 
 initialAnalyzeState :: AnalyzeState
 initialAnalyzeState = AnalyzeState
-  { _latticeState = LatticeAnalyzeState true
+  { _latticeState = LatticeAnalyzeState
+      { _lasSucceeds     = true
+      , _lasTableRead    = (mkSFunArray $ const false)
+      , _lasTableWritten = (mkSFunArray $ const false)
+      }
   , _globalState  = GlobalAnalyzeState ()
   }
 
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
+
+tableRead :: Lens' AnalyzeState (SFunArray TableName Bool)
+tableRead = latticeState.lasTableRead
+
+tableWritten :: Lens' AnalyzeState (SFunArray TableName Bool)
+tableWritten = latticeState.lasTableWritten
 
 data AnalyzeFailure
   = MalformedArithOp ArithOp [Term Integer]
@@ -267,7 +290,7 @@ data Term ret where
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
   Literal        ::                        SBV a        ->                             Term a
   -- TODO: Read should return an object, probably parameterized by a schema:
-  Read           ::                        TableName    -> Term String    ->           Term Bool
+  Read           ::                        TableName    -> Term String    ->           Term ()
   -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
   --         the object should likewise probably be parameterized by a schema.
   Write          ::                        TableName    -> Term String    ->           Term String
@@ -489,14 +512,16 @@ translateNodeBool = unAstNodeOf >>> \case
 translateNodeStr :: AstNodeOf String -> TranslateM (Term String)
 translateNodeStr = unAstNodeOf >>> \case
   AST_Lit (LString t) -> pure $ Literal $ literal $ T.unpack t
+
   AST_NFun_Basic "+" [a, b] -> Concat
     <$> translateNodeStr (AstNodeOf a)
     <*> translateNodeStr (AstNodeOf b)
 
   AST_NFun _node "pact-version" [] -> pure PactVersion
-  --
-  -- TODO: more cases.
-  --
+
+  AST_NFun _node name [(Table _tnode (Lang.TableName tn)), row, _obj]
+    | any (name ==) ["insert", "update", "write"]
+    -> Write (TableName tn) <$> translateNodeStr (AstNodeOf row)
 
   ast -> throwError $ UnexpectedNode "translateNodeStr" ast
 
@@ -570,6 +595,29 @@ evalTerm = \case
 
   Literal a -> pure a
 
+  Read tn rowId -> do
+    rId <- evalTerm rowId -- TODO: use this
+    --
+    -- TODO: we can probably make this significantly nicer:
+    -- e.g.: tableRead tn .= true
+    --
+    tableRead %= \arr -> writeArray arr (literal tn) true
+    pure $ literal () -- TODO: this should instead return a symbolic object
+
+  --
+  -- TODO: we might want to eventually support checking each of the semantics
+  -- of Pact.Types.Runtime's WriteType.
+  --
+  Write tn rowId {- obj -} -> do
+    -- TODO: could be nicer
+    tableWritten %= \arr -> writeArray arr (literal tn) true
+    --
+    -- TODO: make a constant on the pact side that this uses:
+    --
+    pure $ literal "Write succeeded"
+
+  -- TODO Let
+
   Var name -> do
     -- Assume the term is well-scoped after typechecking
     Just val <- view (scope . at name)
@@ -624,8 +672,10 @@ evalDomainProperty Success = use succeeds
 evalDomainProperty Abort = bnot <$> evalDomainProperty Success
 evalDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
--- evalDomainProperty (TableRead tn) = _todoRead
--- evalDomainProperty (TableWrite tn) = _todoWrite
+evalDomainProperty (TableRead tn) =
+  readArray <$> use tableRead <*> pure (literal tn)
+evalDomainProperty (TableWrite tn) =
+  readArray <$> use tableWritten <*> pure (literal tn)
 
 evalProperty :: Property -> AnalyzeM SBool
 evalProperty (p1 `Implies` p2) = do

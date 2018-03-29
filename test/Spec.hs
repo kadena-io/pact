@@ -87,6 +87,43 @@ suite = tests
   --           |]
   --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
   --                                 `Implies` Occurs Abort
+
+  , scope "write.insert" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string ()
+                (insert tokens "stu" {"balance": 5}))
+            |]
+      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+      expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
+
+  , scope "write.update" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string ()
+                (update tokens "stu" {"balance": 5}))
+            |]
+      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+
+  , scope "write.write" $ do
+      let code =
+            [text|
+              (defschema tokens-table
+                balance:integer)
+              (deftable tokens:{tokens-table})
+
+              (defun test:string ()
+                (write tokens "stu" {"balance": 5}))
+            |]
+      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
   ]
 
 main :: IO ()
