@@ -154,7 +154,7 @@ succeeds = latticeState.lasSucceeds
 mkSymArrayLens
   :: forall s array k v. (SymWord k, SymWord v, SymArray array)
   => Lens' s (array k v)
-  -> (SBV k) -> Lens' s (SBV v)
+  -> SBV k -> Lens' s (SBV v)
 mkSymArrayLens sArr symKey = lens getter setter
   where
     getter :: s -> SBV v
