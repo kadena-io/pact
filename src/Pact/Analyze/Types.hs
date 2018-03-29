@@ -151,23 +151,23 @@ initialAnalyzeState = AnalyzeState
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
 
-mkSymArrayLens
-  :: forall s array k v. (SymWord k, SymWord v, SymArray array)
-  => Lens' s (array k v)
-  -> SBV k -> Lens' s (SBV v)
-mkSymArrayLens sArr symKey = lens getter setter
+symArrayAt
+  :: forall array k v
+   . (SymWord k, SymWord v, SymArray array)
+  => SBV k -> Lens' (array k v) (SBV v)
+symArrayAt symKey = lens getter setter
   where
-    getter :: s -> SBV v
-    getter s = readArray (s ^. sArr) symKey
+    getter :: array k v -> SBV v
+    getter arr = readArray arr symKey
 
-    setter :: s -> SBV v -> s
-    setter s symVal = over sArr (\arr -> writeArray arr symKey symVal) s
+    setter :: array k v -> SBV v -> array k v
+    setter arr symVal = writeArray arr symKey symVal
 
 tableRead :: TableName -> Lens' AnalyzeState SBool
-tableRead tn = mkSymArrayLens (latticeState.lasTableRead) (literal tn)
+tableRead tn = latticeState.lasTableRead.symArrayAt (literal tn)
 
 tableWritten :: TableName -> Lens' AnalyzeState SBool
-tableWritten tn = mkSymArrayLens (latticeState.lasTableWritten) (literal tn)
+tableWritten tn = latticeState.lasTableWritten.symArrayAt (literal tn)
 
 data AnalyzeFailure
   = MalformedArithOp ArithOp [Term Integer]
