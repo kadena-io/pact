@@ -172,24 +172,9 @@ suite = tests
       expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
 
-  , scope "sequence.monomorphic" $ do
-      let code =
-            [text|
-              (defschema token-row balance:integer)
-              (deftable tokens:{token-row})
-
-              (defun test:string (x:bool)
-                "before"
-                (if x
-                  (insert tokens "stu" {"balance": 5})
-                  "didn't write")
-                "after")
-            |]
-      expectPass code $ Satisfiable $ Occurs $ TableWrite "tokens"
-      expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
-
   --
-  -- TODO: need sequence.polymorphic
+  -- TODO: before we can add some more interesting composite examples, we need
+  --       support for heterogeneously-typed Sequences
   --
 
   --
