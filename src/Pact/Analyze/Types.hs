@@ -222,6 +222,12 @@ pattern NativeFunc f <- (FNative _ f _ _)
 
 -- compileNode's Patterns
 
+pattern AST_Let :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_Let node bindings body = Binding node bindings body BindLet
+
+pattern AST_Bind :: forall a. a -> [(Named a, AST a)] -> a -> [AST a] -> AST a
+pattern AST_Bind node bindings schema body <- Binding node bindings body (BindSchema schema)
+
 pattern AST_Var :: forall a. a -> AST a
 pattern AST_Var var <- (TC.Var var)
 
@@ -308,7 +314,8 @@ data Term ret where
   --         the object should likewise probably be parameterized by a schema.
   Write          ::                        TableName    -> Term String    ->           Term String
   Let            :: (Show a, SymWord a) => Text         -> Term a         -> Term b -> Term b
-  -- TODO: Binding
+  -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
+  --       just using Let+At first.
   Var            ::                        Text         ->                             Term a
   Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
@@ -401,7 +408,22 @@ translateNodeInt = unAstNodeOf >>> \case
     name <- view (ix n)
     pure $ Arith Negate [Var name]
 
-  AST_Var         n -> Var <$> view (ix n)
+  -- AST_Let _ [] body ->
+  --   translateBody translateNodeInt $ AstNodeOf <$> body
+  --
+  -- AST_Let n ((Named _ varNode _, rhs):bindingsRest) body -> do
+  --   val <- _translateBasedOnType varNode rhs
+  --   let varName = tcName varNode
+  --   local (at varNode ?~ varName) $ do
+  --     --
+  --     -- TODO: do we only want to allow subsequent bindings to reference
+  --     --       earlier ones if we know it's let* rather than let? or has this
+  --     --       been enforced by earlier stages for us?
+  --     --
+  --     rest <- translateNodeInt $ AstNodeOf $ AST_Let n bindingsRest body
+  --     return $ Let varName val rest
+
+  AST_Var n -> Var <$> view (ix n)
 
   AST_Days days -> do
     days' <- translateNodeInt (AstNodeOf days)
@@ -715,6 +737,9 @@ evalProperty (p1 `Or` p2) = do
 evalProperty (Not p) = bnot <$> evalProperty p
 evalProperty (Occurs dp) = evalDomainProperty dp
 
+tcName :: Node -> Text
+tcName = _tiName . _aId
+
 analyzeFunction
   :: TopLevel Node
   -> Check
@@ -725,7 +750,7 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
 
       -- extract the typechecker's name for a node, eg "analyze-tests.layup_x".
       nodeNames :: [Text]
-      nodeNames = _tiName . _aId <$> argNodes
+      nodeNames = tcName <$> argNodes
 
       nodeNames' :: Map Node Text
       nodeNames' = Map.fromList $ zip argNodes nodeNames

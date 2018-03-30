@@ -181,6 +181,10 @@ suite = tests
   -- TODO: test table-level reads, but to implement this we need to support
   --       objects.
   --
+
+  --
+  -- TODO: let, with lets nested on the RHS of lets
+  --
   ]
 
 main :: IO ()
