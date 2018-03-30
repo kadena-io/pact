@@ -146,6 +146,7 @@ data AnalyzeFailure
   | EmptyBody
   -- | A node we have a good reason not to handle
   | UnhandledTerm String (Term Int64)
+  | UnexpectedNode'
   deriving Show
 
 type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
@@ -368,26 +369,46 @@ preMap f (K fb fd fi fs ft) = K (fb . f) (fd . f) (fi . f) (fs . f) (ft . f)
 uniformK :: (forall a. (Show a, SymWord a) => Term a -> b) -> K b
 uniformK f = K f f f f f
 
-kExpectInt :: K (Term Integer)
-kExpectInt = K (error "kExpectInt") (error "kExpectInt") id (error "kExpectInt") (error "kExpectInt")
+kExpectInt :: K (Maybe (Term Integer))
+kExpectInt = K
+  (const Nothing)
+  (const Nothing)
+  pure
+  (const Nothing)
+  (const Nothing)
 
 kApplyInt :: K a -> Term Integer -> a
 kApplyInt (K _ _ fi _ _) i = fi i
 
-kExpectBool :: K (Term Bool)
-kExpectBool = K id (error "kExpectBool") (error "kExpectBool") (error "kExpectBool") (error "kExpectBool")
+kExpectBool :: K (Maybe (Term Bool))
+kExpectBool = K
+  pure
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
 
 kApplyBool :: K a -> Term Bool -> a
 kApplyBool (K fb _ _ _ _) b = fb b
 
-kExpectStr :: K (Term String)
-kExpectStr = K (error "kExpectStr") (error "kExpectStr") (error "kExpectStr") id (error "kExpectStr")
+kExpectStr :: K (Maybe (Term String))
+kExpectStr = K
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
+  pure
+  (const Nothing)
 
 kApplyStr :: K a -> Term String -> a
 kApplyStr (K _ _ _ fs _) s = fs s
 
-kExpectDecimal :: K (Term Decimal)
-kExpectDecimal = K (error "kExpectDecimal") id (error "kExpectDecimal") (error "kExpectDecimal") (error "kExpectDecimal")
+kExpectDecimal :: K (Maybe (Term Decimal))
+kExpectDecimal = K
+  (const Nothing)
+  pure
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
 
 kApplyDecimal :: K a -> Term Decimal -> a
 kApplyDecimal (K _ fd _ _ _) d = fd d
@@ -395,8 +416,13 @@ kApplyDecimal (K _ fd _ _ _) d = fd d
 mkTime :: UTCTime -> Time
 mkTime utct = utct ^. _utctDayTime . microseconds
 
-kExpectTime :: K (Term Time)
-kExpectTime = K (error "kExpectTime") (error "kExpectTime") (error "kExpectTime") (error "kExpectTime") id
+kExpectTime :: K (Maybe (Term Time))
+kExpectTime = K
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
+  (const Nothing)
+  pure
 
 kApplyTime :: K a -> Term Time -> a
 kApplyTime (K _ _ _ _ ft) t = ft t
@@ -616,13 +642,21 @@ runCheck (Valid _prop) provable = do
 
 translateBody
   :: forall a. (Show a, SymWord a)
-  => K (Term a)
+  => K (Maybe (Term a))
   -> [AST Node]
   -> TranslateM (Term a)
 translateBody _k [] = throwError EmptyBody
-translateBody k [ast] = translateNode k ast
+translateBody k [ast] = translateNode' k ast
 translateBody k (ast:asts) = join $ flip translateNode ast $ uniformK
   (\a -> translateBody (preMap (Sequence a) k) asts)
+
+-- TODO: can we get rid of translateNode'
+translateNode' :: forall a. K (Maybe a) -> AST Node -> TranslateM a
+translateNode' k node = do
+  x <- translateNode k node
+  case x of
+    Nothing -> throwError UnexpectedNode'
+    Just x' -> pure x'
 
 translateNode :: forall a. K a -> AST Node -> TranslateM a
 translateNode k = \case
@@ -636,7 +670,7 @@ translateNode k = \case
     pure $ kApplyInt k $ Arith Negate [Var name]
   AST_Var         n -> kApplyInt k . Var <$> view (ix n)
   AST_Days days -> do
-    days' <- translateNode kExpectInt days
+    days' <- translateNode' kExpectInt days
     pure $ kApplyInt k $ Arith Mul [60 * 60 * 24, days']
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
@@ -644,55 +678,55 @@ translateNode k = \case
   -- TODO(joel): do this for decimal (etc) as well
   AST_NFun_Basic fn args -> fmap (kApplyInt k) $ case (fn, args) of
     ("-", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Sub [a', b']
-    ("-", [a]) -> Arith Negate . pure <$> translateNode kExpectInt a
+    ("-", [a]) -> Arith Negate . pure <$> translateNode' kExpectInt a
     ("+", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Add [a', b']
     ("*", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Mul [a', b']
     ("/", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Div [a', b']
     ("^", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Pow [a', b']
-    ("sqrt", [a]) -> Arith Sqrt . pure <$> translateNode kExpectInt a
+    ("sqrt", [a]) -> Arith Sqrt . pure <$> translateNode' kExpectInt a
     ("mod", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Mod [a', b']
     ("log", [a, b]) -> do
-      a' <- translateNode kExpectInt a
-      b' <- translateNode kExpectInt b
+      a' <- translateNode' kExpectInt a
+      b' <- translateNode' kExpectInt b
       pure $ Arith Log [a', b']
-    ("ln", [a]) -> Arith Ln . pure <$> translateNode kExpectInt a
-    ("exp", [a]) -> Arith Pow . pure <$> translateNode kExpectInt a
-    ("abs", [a]) -> Arith Abs . pure <$> translateNode kExpectInt a
+    ("ln", [a]) -> Arith Ln . pure <$> translateNode' kExpectInt a
+    ("exp", [a]) -> Arith Pow . pure <$> translateNode' kExpectInt a
+    ("abs", [a]) -> Arith Abs . pure <$> translateNode' kExpectInt a
 
-    ("round", [a]) -> Arith Round . pure <$> translateNode kExpectInt a
-    ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNode kExpectInt a
-    ("floor", [a]) -> Arith Floor . pure <$> translateNode kExpectInt a
+    ("round", [a]) -> Arith Round . pure <$> translateNode' kExpectInt a
+    ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNode' kExpectInt a
+    ("floor", [a]) -> Arith Floor . pure <$> translateNode' kExpectInt a
 
   -- Bool
   AST_Lit (LBool b)     -> pure (kApplyBool k (Literal (literal b)))
   AST_Var n -> kApplyBool k . Var <$> view (ix n)
 
   AST_Enforce _ cond _msg -> do
-    condTerm <- translateNode kExpectBool cond
+    condTerm <- translateNode' kExpectBool cond
     return $ kApplyBool k $ Enforce condTerm
 
   AST_EnforceKeyset ks
     | ks ^? aNode.aTy == Just (TyPrim TyString)
     -> do
-      ksNameTerm <- translateNode kExpectStr ks
+      ksNameTerm <- translateNode' kExpectStr ks
       return $ kApplyBool k $ Enforce $ NameAuthorized ksNameTerm
 
   AST_NFun_Basic fn args -> do
@@ -726,15 +760,15 @@ translateNode k = \case
         mkLogical :: TranslateM a
         mkLogical = fmap (kApplyBool k) $ case (fn, args) of
           ("and", [a, b]) -> do
-            a' <- translateNode kExpectBool a
-            b' <- translateNode kExpectBool b
+            a' <- translateNode' kExpectBool a
+            b' <- translateNode' kExpectBool b
             pure $ Logical AndOp [a', b']
           ("or", [a, b]) -> do
-            a' <- translateNode kExpectBool a
-            b' <- translateNode kExpectBool b
+            a' <- translateNode' kExpectBool a
+            b' <- translateNode' kExpectBool b
             pure $ Logical OrOp [a', b']
           ("not", [a]) -> do
-            a' <- translateNode kExpectBool a
+            a' <- translateNode' kExpectBool a
             pure $ Logical NotOp [a']
           _ -> throwError $ MalformedLogicalOp fn args
 
@@ -742,25 +776,25 @@ translateNode k = \case
       -- integer, decimal, string, and time are all comparable. Use the type of
       -- the first argument to decide which to use.
       | isComparison fn -> case args ^? ix 0 . aNode . aTy of
-        Just (TyPrim TyInteger) -> mkComparison (translateNode kExpectInt)
-        Just (TyPrim TyDecimal) -> mkComparison (translateNode kExpectDecimal)
-        Just (TyPrim TyString) -> mkComparison (translateNode kExpectStr)
-        Just (TyPrim TyTime) -> mkComparison (translateNode kExpectTime)
+        Just (TyPrim TyInteger) -> mkComparison (translateNode' kExpectInt)
+        Just (TyPrim TyDecimal) -> mkComparison (translateNode' kExpectDecimal)
+        Just (TyPrim TyString)  -> mkComparison (translateNode' kExpectStr)
+        Just (TyPrim TyTime)    -> mkComparison (translateNode' kExpectTime)
         _ -> throwError $ MalformedComparison fn args
       | isLogical fn -> mkLogical
 
   AST_If _ cond tBranch fBranch -> do
     ite <- IfThenElse
-      <$> translateNode kExpectBool cond
-      <*> translateNode kExpectBool tBranch
-      <*> translateNode kExpectBool fBranch
+      <$> translateNode' kExpectBool cond
+      <*> translateNode' kExpectBool tBranch
+      <*> translateNode' kExpectBool fBranch
     pure $ kApplyBool k ite
 
   -- String
   AST_Lit (LString t) -> pure $ kApplyStr k $ Literal $ literal $ T.unpack t
   AST_NFun_Basic "+" [a, b] -> kApplyStr k ... Concat
-    <$> translateNode kExpectStr a
-    <*> translateNode kExpectStr b
+    <$> translateNode' kExpectStr a
+    <*> translateNode' kExpectStr b
 
   AST_NFun_Basic "pact-version" [] -> pure $ kApplyStr k PactVersion
 
@@ -769,7 +803,7 @@ translateNode k = \case
     let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
     -- TODO: this should not be specialized to just String
     body' <- translateBody kExpectStr body
-    key' <- translateNode kExpectStr key
+    key' <- translateNode' kExpectStr key
     let withRead = WithRead table key' bindings' body'
     pure $ kApplyStr k withRead
 
@@ -780,11 +814,11 @@ translateNode k = \case
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyInteger -> kApplyTime k ... AddTimeInt
-      <$> translateNode kExpectTime time
-      <*> translateNode kExpectInt seconds
+      <$> translateNode' kExpectTime time
+      <*> translateNode' kExpectInt seconds
     | seconds ^. aNode . aTy == TyPrim TyDecimal -> kApplyTime k ... AddTimeDec
-      <$> translateNode kExpectTime time
-      <*> translateNode kExpectDecimal seconds
+      <$> translateNode' kExpectTime time
+      <*> translateNode' kExpectDecimal seconds
 
   AST_Lit (LTime t) -> pure (kApplyTime k (Literal (literal (mkTime t))))
   AST_Var n -> kApplyTime k . Var <$> view (ix n)
