@@ -146,7 +146,6 @@ data AnalyzeFailure
   | EmptyBody
   -- | A node we have a good reason not to handle
   | UnhandledTerm String (Term Int64)
-  | UnexpectedNode'
   deriving Show
 
 type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
@@ -650,12 +649,12 @@ translateBody k [ast] = translateNode' k ast
 translateBody k (ast:asts) = join $ flip translateNode ast $ uniformK
   (\a -> translateBody (preMap (Sequence a) k) asts)
 
--- TODO: can we get rid of translateNode'
+-- TODO: can we get rid of translateNode'?
 translateNode' :: forall a. K (Maybe a) -> AST Node -> TranslateM a
 translateNode' k node = do
   x <- translateNode k node
   case x of
-    Nothing -> throwError UnexpectedNode'
+    Nothing -> throwError (UnexpectedNode node)
     Just x' -> pure x'
 
 translateNode :: forall a. K a -> AST Node -> TranslateM a
