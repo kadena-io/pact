@@ -19,6 +19,7 @@
 {-# language TupleSections      #-}
 {-# language MultiParamTypeClasses #-}
 {-# language UndecidableInstances #-}
+{-# language InstanceSigs #-}
 
 module Pact.Analyze.Types
   ( runCompiler
@@ -357,7 +358,7 @@ newtype AstNodeOf a
   = AstNodeOf
     { unAstNodeOf :: AST Node }
 
-type TranslateM a = ReaderT (Map Node Text) (TransT a (Except AnalyzeFailure))
+type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 data K a = K
   !(AstNodeOf Bool    -> a)
@@ -369,39 +370,37 @@ data K a = K
 instance Functor K where
   fmap f (K b d i s t) = K (f . b) (f . d) (f . i) (f . s) (f . t)
 
-newtype TransT b m a = TransT { unTransT :: K b -> m a }
+-- newtype TransT b m a = TransT { unTransT :: K b -> m a }
 
-instance Functor m => Functor (TransT b m) where
-  fmap f (TransT cont) = TransT $ fmap f . cont
+-- instance Functor m => Functor (TransT b m) where
+--   fmap f (TransT cont) = TransT $ fmap f . cont
 
-instance Applicative m => Applicative (TransT b m) where
-  TransT fab <*> TransT fa = TransT $ \k -> fab k <*> fa k
+-- instance Applicative m => Applicative (TransT b m) where
+--   TransT fab <*> TransT fa = TransT $ \k -> fab k <*> fa k
 
-instance Monad m => Monad (TransT b m) where
-  TransT ma >>= famb = TransT $ \k -> do
-    a <- ma k
-    unTransT (famb a) k
+-- instance Monad m => Monad (TransT b m) where
+--   TransT ma >>= famb = TransT $ \k -> do
+--     a <- ma k
+--     unTransT (famb a) k
 
-instance MonadError e m => MonadError e (TransT b m) where
-  -- throwError = undefined
-  -- catchError = undefined
+-- instance MonadError e m => MonadError e (TransT b m) where
 
-handleB :: Applicative m => AstNodeOf Bool -> TransT a m a
-handleB x = TransT $ \(K hb _hd _hi _hs _ht) -> pure (hb x)
+-- handleB :: Applicative m => AstNodeOf Bool -> TransT a m a
+-- handleB x = TransT $ \(K hb _hd _hi _hs _ht) -> pure (hb x)
 
-handleD :: Applicative m => AstNodeOf Decimal -> TransT a m a
-handleD x = TransT $ \(K _hb hd _hi _hs _ht) -> pure (hd x)
+-- handleD :: Applicative m => AstNodeOf Decimal -> TransT a m a
+-- handleD x = TransT $ \(K _hb hd _hi _hs _ht) -> pure (hd x)
 
-handleI :: Applicative m => AstNodeOf Integer -> TransT a m a
-handleI x = TransT $ \(K _hb _hd hi _hs _ht) -> pure (hi x)
+-- handleI :: Applicative m => AstNodeOf Integer -> TransT a m a
+-- handleI x = TransT $ \(K _hb _hd hi _hs _ht) -> pure (hi x)
 
-handleS :: Applicative m => AstNodeOf String -> TransT a m a
-handleS x = TransT $ \(K _hb _hd _hi hs _ht) -> pure (hs x)
+-- handleS :: Applicative m => AstNodeOf String -> TransT a m a
+-- handleS x = TransT $ \(K _hb _hd _hi hs _ht) -> pure (hs x)
 
-handleT :: Applicative m => AstNodeOf Time -> TransT a m a
-handleT x = TransT $ \(K _hb _hd _hi _hs ht) -> pure (ht x)
+-- handleT :: Applicative m => AstNodeOf Time -> TransT a m a
+-- handleT x = TransT $ \(K _hb _hd _hi _hs ht) -> pure (ht x)
 
-translateNodeInt :: AstNodeOf Integer -> TranslateM a (Term Integer)
+translateNodeInt :: AstNodeOf Integer -> TranslateM (Term Integer)
 translateNodeInt = unAstNodeOf >>> \case
   AST_NegativeLit (LInteger i)  -> Arith Negate . pure <$> pure (Literal (literal i))
   AST_Lit         (LInteger i)  -> pure (Literal (literal i))
@@ -457,7 +456,7 @@ translateNodeInt = unAstNodeOf >>> \case
 
   ast -> throwError $ UnexpectedNode "translateNodeInt" ast
 
-translateNodeBool :: AstNodeOf Bool -> TranslateM a (Term Bool)
+translateNodeBool :: AstNodeOf Bool -> TranslateM (Term Bool)
 translateNodeBool = unAstNodeOf >>> \case
   AST_Lit (LBool b)     -> pure (Literal (literal b))
   AST_Var n -> Var <$> view (ix n)
@@ -475,8 +474,8 @@ translateNodeBool = unAstNodeOf >>> \case
   AST_NFun_Basic fn args -> do
     let mkComparison
           :: (Show b, SymWord b)
-          => (AstNodeOf b -> TranslateM a (Term b))
-          -> TranslateM a (Term Bool)
+          => (AstNodeOf b -> TranslateM (Term b))
+          -> TranslateM (Term Bool)
         mkComparison translate = case (fn, args) of
           -- TODO: this could compare integer, decimal, string, or time. use the node
           -- to decide which to dispatch to
@@ -500,7 +499,7 @@ translateNodeBool = unAstNodeOf >>> \case
             <*> translate (AstNodeOf b)
           _ -> throwError $ MalformedComparison fn args
 
-        mkLogical :: TranslateM a (Term Bool)
+        mkLogical :: TranslateM (Term Bool)
         mkLogical = case (fn, args) of
           ("and", [a, b]) -> do
             a' <- translateNodeBool (AstNodeOf a)
@@ -533,7 +532,7 @@ translateNodeBool = unAstNodeOf >>> \case
 
   ast -> throwError $ UnexpectedNode "translateNodeBool" ast
 
-translateNodeStr :: AstNodeOf String -> TranslateM a (Term String)
+translateNodeStr :: AstNodeOf String -> TranslateM (Term String)
 translateNodeStr = unAstNodeOf >>> \case
   AST_Lit (LString t) -> pure $ Literal $ literal $ T.unpack t
   AST_NFun_Basic "+" [a, b] -> Concat
@@ -551,8 +550,7 @@ translateNodeStr = unAstNodeOf >>> \case
     WithRead table
       <$> translateNodeStr (AstNodeOf key)
       <*> pure bindings'
-      -- XXX: translateNode type
-      <*> translateBody translateNodeStr (AstNodeOf <$> body)
+      <*> translateBody undefined (AstNodeOf <$> body)
 
   ast -> throwError $ UnexpectedNode "translateNodeStr" ast
 
@@ -588,7 +586,7 @@ mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 sDecimal :: String -> Symbolic (SBV Decimal)
 sDecimal = symbolic
 
-translateNodeDecimal :: AstNodeOf Decimal -> TranslateM a (Term Decimal)
+translateNodeDecimal :: AstNodeOf Decimal -> TranslateM (Term Decimal)
 translateNodeDecimal = unAstNodeOf >>> \case
   AST_Lit (LDecimal d) -> pure (Literal (literal (mkDecimal d)))
   AST_Var n            -> Var <$> view (ix n)
@@ -599,7 +597,7 @@ type Time = Int64
 mkTime :: UTCTime -> Time
 mkTime utct = utct ^. _utctDayTime . microseconds
 
-translateNodeTime :: AstNodeOf Time -> TranslateM a (Term Time)
+translateNodeTime :: AstNodeOf Time -> TranslateM (Term Time)
 translateNodeTime = unAstNodeOf >>> \case
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
@@ -803,57 +801,52 @@ runCheck (Valid _prop) provable = do
 
 translateBody
   :: (Show a, SymWord a)
-  => (AstNodeOf a -> TranslateM b (Term a))
+  => K (Term a)
   -> [AstNodeOf a]
-  -> TranslateM b b
-translateBody translator ast
-  | length ast >= 1 = do
-    ast' <- mapM translator ast
-    pure $ foldr1 Sequence ast'
+  -> TranslateM (Term a)
+translateBody _k ast
+  | length ast >= 1 = undefined
   | otherwise = throwError EmptyBody
 
 analyzeFunction'
-  :: (Show a, SymWord a)
-  => (AstNodeOf a -> TranslateM b (Term a))
+  :: forall a.
+     (Show a, SymWord a)
+  => (AstNodeOf a -> TranslateM (Term a))
   -> Check
   -> [AST Node]
   -> [(Text, Type UserType)]
   -> Map Node Text
   -> IO CheckResult
-analyzeFunction' translator check body' argTys nodeNames =
+analyzeFunction' translator check body argTys nodeNames =
   case runExcept
-         (unTransT
            (runReaderT
-             (translateBody
-               translator
-               (AstNodeOf <$> body'))
-             nodeNames)
-           (K undefined undefined undefined undefined undefined)) of
+             (translateBody (undefined :: K (Term a)) (AstNodeOf <$> body))
+             nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
-    Right body'' -> body''
+    Right body'' -> do
 
---       compileFailureVar <- newEmptyMVar
---       checkResult <- runCheck check $ do
---         scope0 <- allocateArgs argTys
---         nameAuths <- newArray "nameAuthorizations"
+      compileFailureVar <- newEmptyMVar
+      checkResult <- runCheck check $ do
+        scope0 <- allocateArgs argTys
+        nameAuths <- newArray "nameAuthorizations"
 
---         let prop   = checkProperty check
---             env0   = AnalyzeEnv scope0 nameAuths
---             state0 = initialAnalyzeState
---             action = evalTerm body''
---                   *> evalProperty prop
+        let prop   = checkProperty check
+            env0   = AnalyzeEnv scope0 nameAuths
+            state0 = initialAnalyzeState
+            action = evalTerm body''
+                  *> evalProperty prop
 
---         case runExcept $ runRWST action env0 state0 of
---           Left cf -> do
---             liftIO $ putMVar compileFailureVar cf
---             pure false
---           Right (propResult, _env, _log) ->
---             pure propResult
+        case runExcept $ runRWST action env0 state0 of
+          Left cf -> do
+            liftIO $ putMVar compileFailureVar cf
+            pure false
+          Right (propResult, _env, _log) ->
+            pure propResult
 
---       mVarVal <- tryTakeMVar compileFailureVar
---       pure $ case mVarVal of
---         Nothing -> checkResult
---         Just cf -> Left (AnalyzeFailure cf)
+      mVarVal <- tryTakeMVar compileFailureVar
+      pure $ case mVarVal of
+        Nothing -> checkResult
+        Just cf -> Left (AnalyzeFailure cf)
 
 rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
 rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
@@ -921,3 +914,4 @@ runTest code check = do
             Just ref -> do
               (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
               failedTcOrAnalyze tcState fun check
+
