@@ -672,8 +672,6 @@ translateNode k = \case
   AST_Days days -> do
     days' <- translateNode' kExpectInt days
     pure $ kApplyInt k $ Arith Mul [60 * 60 * 24, days']
-  AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyInteger -> undefined
 
   -- TODO(joel): do this for decimal (etc) as well
   AST_NFun_Basic fn args -> fmap (kApplyInt k) $ case (fn, args) of
