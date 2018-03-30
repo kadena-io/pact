@@ -1,21 +1,21 @@
-{-# language DeriveAnyClass     #-}
-{-# language DeriveDataTypeable #-}
-{-# language DeriveGeneric      #-}
-{-# language FlexibleContexts   #-}
-{-# language FlexibleInstances  #-}
-{-# language GADTs              #-}
-{-# language LambdaCase         #-}
-{-# language MultiWayIf         #-}
-{-# language OverloadedStrings  #-}
-{-# language PatternSynonyms    #-}
-{-# language Rank2Types         #-}
-{-# language RecordWildCards    #-}
+{-# language DeriveAnyClass      #-}
+{-# language DeriveDataTypeable  #-}
+{-# language DeriveGeneric       #-}
+{-# language FlexibleContexts    #-}
+{-# language FlexibleInstances   #-}
+{-# language GADTs               #-}
+{-# language LambdaCase          #-}
+{-# language MultiWayIf          #-}
+{-# language OverloadedStrings   #-}
+{-# language PatternSynonyms     #-}
+{-# language Rank2Types          #-}
+{-# language RecordWildCards     #-}
 {-# language ScopedTypeVariables #-}
-{-# language StandaloneDeriving #-}
-{-# language TemplateHaskell    #-}
-{-# language TypeApplications   #-}
-{-# language ViewPatterns       #-}
-{-# language TupleSections      #-}
+{-# language StandaloneDeriving  #-}
+{-# language TemplateHaskell     #-}
+{-# language TypeApplications    #-}
+{-# language ViewPatterns        #-}
+{-# language TupleSections       #-}
 
 module Pact.Analyze.Types
   ( runCompiler
@@ -36,20 +36,21 @@ import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (runStateT)
-import Control.Monad.Trans.RWS.Strict
+import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Data
 import qualified Data.Decimal as Decimal
 import Data.Text (Text)
 import Data.Thyme
+import Data.String (IsString(..))
 import Pact.Typechecker hiding (debug)
-import Pact.Types.Lang hiding (Term)
-import Pact.Types.Runtime hiding (Term)
+import Pact.Types.Lang hiding (Term, TableName)
+import qualified Pact.Types.Lang as Lang
+import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
 import Pact.Types.Typecheck hiding (Var)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
 import Pact.Repl
-import Data.Aeson hiding (Object, Success, (.=))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -97,12 +98,24 @@ instance Mergeable AnalyzeLog where
   --
   symbolicMerge _f _t = mappend
 
+newtype TableName
+  = TableName Text
+  deriving (Eq, Ord, Read, Data, Show)
+
+deriving instance HasKind TableName
+deriving instance SymWord TableName
+
+instance IsString TableName where
+  fromString = TableName . T.pack
+
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds :: SBool
+    { _lasSucceeds     :: SBool
+    , _lasTableRead    :: SFunArray TableName Bool
+    , _lasTableWritten :: SFunArray TableName Bool
     }
-  deriving (Show, Eq, Generic, Mergeable)
+  deriving (Show, Generic, Mergeable)
 makeLenses ''LatticeAnalyzeState
 
 -- Checking state that is transferred through every computation, in-order.
@@ -116,7 +129,7 @@ data AnalyzeState
     { _latticeState :: LatticeAnalyzeState
     , _globalState  :: GlobalAnalyzeState
     }
-  deriving (Show, Eq)
+  deriving (Show)
 makeLenses ''AnalyzeState
 
 instance Mergeable AnalyzeState where
@@ -128,12 +141,34 @@ instance Mergeable AnalyzeState where
 
 initialAnalyzeState :: AnalyzeState
 initialAnalyzeState = AnalyzeState
-  { _latticeState = LatticeAnalyzeState true
+  { _latticeState = LatticeAnalyzeState
+      { _lasSucceeds     = true
+      , _lasTableRead    = mkSFunArray $ const false
+      , _lasTableWritten = mkSFunArray $ const false
+      }
   , _globalState  = GlobalAnalyzeState ()
   }
 
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
+
+symArrayAt
+  :: forall array k v
+   . (SymWord k, SymWord v, SymArray array)
+  => SBV k -> Lens' (array k v) (SBV v)
+symArrayAt symKey = lens getter setter
+  where
+    getter :: array k v -> SBV v
+    getter arr = readArray arr symKey
+
+    setter :: array k v -> SBV v -> array k v
+    setter arr = writeArray arr symKey
+
+tableRead :: TableName -> Lens' AnalyzeState SBool
+tableRead tn = latticeState.lasTableRead.symArrayAt (literal tn)
+
+tableWritten :: TableName -> Lens' AnalyzeState SBool
+tableWritten tn = latticeState.lasTableWritten.symArrayAt (literal tn)
 
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
@@ -149,9 +184,9 @@ data AnalyzeFailure
   | UnhandledTerm String (Term Int64)
   deriving Show
 
-type M = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
+type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
-instance (Mergeable w, Mergeable a) => Mergeable (RWST r w AnalyzeState (Except e) a) where
+instance (Mergeable a) => Mergeable (AnalyzeM a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
@@ -190,6 +225,12 @@ pattern NativeFunc :: forall a. Text -> Fun a
 pattern NativeFunc f <- (FNative _ f _ _)
 
 -- compileNode's Patterns
+
+pattern AST_Let :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_Let node bindings body = Binding node bindings body BindLet
+
+pattern AST_Bind :: forall a. a -> [(Named a, AST a)] -> a -> [AST a] -> AST a
+pattern AST_Bind node bindings schema body <- Binding node bindings body (BindSchema schema)
 
 pattern AST_Var :: forall a. a -> AST a
 pattern AST_Var var <- (TC.Var var)
@@ -267,27 +308,28 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
 data Term ret where
-  IfThenElse     ::                        Term Bool    -> Term a   -> Term a -> Term a
-  Enforce        ::                        Term Bool    ->                       Term Bool
+  IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
+  Enforce        ::                        Term Bool    ->                             Term Bool
   -- TODO: do we need a noop to handle a sequence of one expression?
-  Sequence       :: (Show b, SymWord b) => Term b       -> Term a   ->           Term a
-  Literal        ::                        SBV a        ->                       Term a
-  --
-  -- TODO: change read/write to use strings -> objects
-  --
-  Read           ::                        Term Integer ->                     Term a
-  Write          :: (Show a)            => Term Integer -> Term a ->           Term ()
-  Let            :: (Show a)            => String       -> Term a -> Term b -> Term b
-  Var            ::                        Text         ->                     Term a
-  Arith          ::                        ArithOp      -> [Term Integer]   -> Term Integer
-  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
-  Logical        :: LogicalOp -> [Term a] -> Term a
-  AddTimeInt     ::                        Term Time    -> Term Integer     -> Term Time
-  AddTimeDec     ::                        Term Time    -> Term Decimal     -> Term Time
-  NameAuthorized ::                        Term String  ->                     Term Bool
-
-  Concat         ::                        Term String  -> Term String      -> Term String
-  PactVersion    ::                                                            Term String
+  Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
+  Literal        ::                        SBV a        ->                             Term a
+  -- TODO: Read should return an object, probably parameterized by a schema:
+  Read           ::                        TableName    -> Term String    ->           Term ()
+  -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
+  --         the object should likewise probably be parameterized by a schema.
+  Write          ::                        TableName    -> Term String    ->           Term String
+  Let            :: (Show a, SymWord a) => Text         -> Term a         -> Term b -> Term b
+  -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
+  --       just using Let+At first.
+  Var            ::                        Text         ->                             Term a
+  Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
+  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
+  Logical        ::                        LogicalOp    -> [Term a]       ->           Term a
+  AddTimeInt     ::                        Term Time    -> Term Integer   ->           Term Time
+  AddTimeDec     ::                        Term Time    -> Term Decimal   ->           Term Time
+  NameAuthorized ::                        Term String  ->                             Term Bool
+  Concat         ::                        Term String  -> Term String    ->           Term String
+  PactVersion    ::                                                                    Term String
 
   WithRead       :: (Show a) => Text -> Term String -> [Text] -> Term a -> Term a
 
@@ -353,6 +395,9 @@ data Check where
   Satisfiable :: Property -> Check
   Valid       :: Property -> Check
 
+--
+-- TODO: this should probably have its own TranslateFailure type?
+--
 type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 data K a = K
@@ -448,7 +493,7 @@ pattern AST_Binding :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Binding node' bindings' bdy' <- (Binding node' bindings' bdy' _)
 
 pattern RawTableName :: Text -> AST Node
-pattern RawTableName t <- (Table (Node (TcId _ t _) _))
+pattern RawTableName t <- (Table (Node (TcId _ t _) _) _)
 
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
@@ -478,12 +523,12 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyString  -> mkAVar <$> sString name'
   pure (name, var)
 
-namedAuth :: SString -> M SBool
+namedAuth :: SString -> AnalyzeM SBool
 namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
-evalTerm :: (Show a, SymWord a) => Term a -> M (SBV a)
+evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
@@ -497,6 +542,27 @@ evalTerm = \case
   Sequence a b -> evalTerm a *> evalTerm b
 
   Literal a -> pure a
+
+  Read tn rowId -> do
+    rId <- evalTerm rowId -- TODO: use this
+    tableRead tn .= true
+    pure $ literal () -- TODO: this should instead return a symbolic object
+
+  --
+  -- TODO: we might want to eventually support checking each of the semantics
+  -- of Pact.Types.Runtime's WriteType.
+  --
+  Write tn rowId {- obj -} -> do
+    tableWritten tn .= true
+    --
+    -- TODO: make a constant on the pact side that this uses:
+    --
+    pure $ literal "Write succeeded"
+
+  Let name rhs body -> do
+    val <- evalTerm rhs
+    local (scope.at name ?~ mkAVar val) $
+      evalTerm body
 
   Var name -> do
     -- Assume the term is well-scoped after typechecking
@@ -547,17 +613,17 @@ evalTerm = \case
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
-evalDomainProperty :: DomainProperty -> M SBool
+evalDomainProperty :: DomainProperty -> AnalyzeM SBool
 evalDomainProperty Success = use succeeds
 evalDomainProperty Abort = bnot <$> evalDomainProperty Success
 evalDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
--- evalDomainProperty (TableRead tn) = _todoRead
--- evalDomainProperty (TableWrite tn) = _todoWrite
+evalDomainProperty (TableRead tn) = use $ tableRead tn
+evalDomainProperty (TableWrite tn) = use $ tableWritten tn
 -- evalDomainProperty (ColumnConserves tableName colName)
 -- evalDomainProperty (CellIncrease tableName colName)
 
-evalProperty :: Property -> M SBool
+evalProperty :: Property -> AnalyzeM SBool
 evalProperty (p1 `Implies` p2) = do
   b1 <- evalProperty p1
   b2 <- evalProperty p2
@@ -573,6 +639,9 @@ evalProperty (p1 `Or` p2) = do
 evalProperty (Not p) = bnot <$> evalProperty p
 evalProperty (Occurs dp) = evalDomainProperty dp
 
+tcName :: Node -> Text
+tcName = _tiName . _aId
+
 analyzeFunction
   :: TopLevel Node
   -> Check
@@ -583,7 +652,7 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
 
       -- extract the typechecker's name for a node, eg "analyze-tests.layup_x".
       nodeNames :: [Text]
-      nodeNames = _tiName . _aId <$> argNodes
+      nodeNames = tcName <$> argNodes
 
       nodeNames' :: Map Node Text
       nodeNames' = Map.fromList $ zip argNodes nodeNames
@@ -662,6 +731,20 @@ translateNode' k node = do
 
 translateNode :: forall a. K a -> AST Node -> TranslateM a
 translateNode k = \case
+  -- AST_Let _ [] body ->
+  --   translateBody translateNodeInt $ AstNodeOf <$> body
+  --
+  -- AST_Let n ((Named _ varNode _, rhs):bindingsRest) body -> do
+  --   val <- _translateBasedOnType varNode rhs
+  --   let varName = tcName varNode
+  --   local (at varNode ?~ varName) $ do
+  --     --
+  --     -- TODO: do we only want to allow subsequent bindings to reference
+  --     --       earlier ones if we know it's let* rather than let? or has this
+  --     --       been enforced by earlier stages for us?
+  --     --
+  --     rest <- translateNodeInt $ AstNodeOf $ AST_Let n bindingsRest body
+  --     return $ Let varName val rest
 
   -- Int
   AST_NegativeLit (LInteger i)  -> kApplyInt k . Arith Negate . pure <$>
@@ -670,6 +753,7 @@ translateNode k = \case
   AST_NegativeVar n -> do
     name <- view (ix n)
     pure $ kApplyInt k $ Arith Negate [Var name]
+  -- XXX fix duplicated Var situation
   AST_Var         n -> kApplyInt k . Var <$> view (ix n)
   AST_Days days -> do
     days' <- translateNode' kExpectInt days
@@ -785,6 +869,10 @@ translateNode k = \case
         _ -> throwError $ MalformedComparison fn args
       | isLogical fn -> mkLogical
       | isArith   fn -> mkArith
+
+  AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
+    | elem name ["insert", "update", "write"]
+    -> Write (TableName tn) <$> translateNodeStr (AstNodeOf row)
 
   AST_If _ cond tBranch fBranch -> do
     ite <- IfThenElse

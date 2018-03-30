@@ -6,9 +6,10 @@ packages:
 - '.'
 - location:
     # Until https://github.com/kadena-io/pact/pull/32 is merged
+    # And   https://github.com/kadena-io/pact/pull/33 is merged
     #git: git@github.com:kadena-io/pact.git
     git: git@github.com:bts/pact.git
-    commit: a22575c782885dce0597f4393ab95da9688b3255
+    commit: 4e32441ce081f81a96c3ec4cbf6510651a387c70
   extra-dep: true
 - location:
     git: git@github.com:buckie/Hsmtlib.git
