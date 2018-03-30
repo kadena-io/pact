@@ -410,6 +410,14 @@ data K a = K
 instance Functor K where
   fmap f (K b d i s t) = K (f . b) (f . d) (f . i) (f . s) (f . t)
 
+kApplyUniform :: forall a. Node -> K a -> (forall b. Term b) -> a
+kApplyUniform node (K fb fd fi fs ft) tm = case node ^. aTy of
+  TyPrim TyBool    -> fb tm
+  TyPrim TyDecimal -> fd tm
+  TyPrim TyInteger -> fi tm
+  TyPrim TyString  -> fs tm
+  TyPrim TyTime    -> ft tm
+
 preMap :: (forall a. Term a -> Term a) -> K b -> K b
 preMap f (K fb fd fi fs ft) = K (fb . f) (fd . f) (fi . f) (fs . f) (ft . f)
 
@@ -732,7 +740,7 @@ translateNode' k node = do
 translateNode :: forall a. K a -> AST Node -> TranslateM a
 translateNode k = \case
   -- AST_Let _ [] body ->
-  --   translateBody translateNodeInt $ AstNodeOf <$> body
+  --   translateBody kExpectInt body
   --
   -- AST_Let n ((Named _ varNode _, rhs):bindingsRest) body -> do
   --   val <- _translateBasedOnType varNode rhs
@@ -743,8 +751,12 @@ translateNode k = \case
   --     --       earlier ones if we know it's let* rather than let? or has this
   --     --       been enforced by earlier stages for us?
   --     --
-  --     rest <- translateNodeInt $ AstNodeOf $ AST_Let n bindingsRest body
+  --     rest <- translateNode kExpectInt $ AST_Let n bindingsRest body
   --     return $ Let varName val rest
+
+  AST_Var node -> do
+    varName <- view (ix node)
+    pure $ kApplyUniform node k (Var varName)
 
   -- Int
   AST_NegativeLit (LInteger i)  -> kApplyInt k . Arith Negate . pure <$>
@@ -753,15 +765,12 @@ translateNode k = \case
   AST_NegativeVar n -> do
     name <- view (ix n)
     pure $ kApplyInt k $ Arith Negate [Var name]
-  -- XXX fix duplicated Var situation
-  AST_Var         n -> kApplyInt k . Var <$> view (ix n)
   AST_Days days -> do
     days' <- translateNode' kExpectInt days
     pure $ kApplyInt k $ Arith Mul [60 * 60 * 24, days']
 
   -- Bool
   AST_Lit (LBool b)     -> pure (kApplyBool k (Literal (literal b)))
-  AST_Var n -> kApplyBool k . Var <$> view (ix n)
 
   AST_Enforce _ cond _msg -> do
     condTerm <- translateNode' kExpectBool cond
@@ -872,14 +881,45 @@ translateNode k = \case
 
   AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
     | elem name ["insert", "update", "write"]
-    -> Write (TableName tn) <$> translateNodeStr (AstNodeOf row)
+    -> kApplyStr k . Write (TableName tn) <$> translateNode' kExpectStr row
 
-  AST_If _ cond tBranch fBranch -> do
-    ite <- IfThenElse
-      <$> translateNode' kExpectBool cond
-      <*> translateNode' kExpectBool tBranch
-      <*> translateNode' kExpectBool fBranch
-    pure $ kApplyBool k ite
+  AST_If node cond tBranch fBranch -> case node ^. aTy of
+    -- TODO(joel): express this more succinctly
+
+    TyPrim TyBool    -> do
+      ite <- IfThenElse
+        <$> translateNode' kExpectBool cond
+        <*> translateNode' kExpectBool tBranch
+        <*> translateNode' kExpectBool fBranch
+      pure $ kApplyBool k ite
+
+    TyPrim TyDecimal -> do
+      ite <- IfThenElse
+        <$> translateNode' kExpectBool cond
+        <*> translateNode' kExpectDecimal tBranch
+        <*> translateNode' kExpectDecimal fBranch
+      pure $ kApplyDecimal k ite
+
+    TyPrim TyInteger -> do
+      ite <- IfThenElse
+        <$> translateNode' kExpectBool cond
+        <*> translateNode' kExpectInt tBranch
+        <*> translateNode' kExpectInt fBranch
+      pure $ kApplyInt k ite
+
+    TyPrim TyString  -> do
+      ite <- IfThenElse
+        <$> translateNode' kExpectBool cond
+        <*> translateNode' kExpectStr tBranch
+        <*> translateNode' kExpectStr fBranch
+      pure $ kApplyStr k ite
+
+    TyPrim TyTime    -> do
+      ite <- IfThenElse
+        <$> translateNode' kExpectBool cond
+        <*> translateNode' kExpectTime tBranch
+        <*> translateNode' kExpectTime fBranch
+      pure $ kApplyTime k ite
 
   -- String
   AST_Lit (LString t) -> pure $ kApplyStr k $ Literal $ literal $ T.unpack t
@@ -912,8 +952,6 @@ translateNode k = \case
       <*> translateNode' kExpectDecimal seconds
 
   AST_Lit (LTime t) -> pure (kApplyTime k (Literal (literal (mkTime t))))
-  AST_Var n -> kApplyTime k . Var <$> view (ix n)
-  AST_Var n            -> kApplyDecimal k . Var <$> view (ix n)
 
   --
   -- TODO: more cases.
