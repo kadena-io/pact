@@ -141,7 +141,7 @@ data AnalyzeFailure
   | MalformedComparison Text [AST Node]
   | MalformedLogicalOp Text [AST Node]
   -- | Some translator received a node it didn't expect
-  | UnexpectedNode String (AST Node)
+  | UnexpectedNode (AST Node)
   -- | 'translateBody' expects at least one node in a function body.
   | EmptyBody
   -- | A node we have a good reason not to handle
@@ -794,8 +794,7 @@ translateNode k = \case
   -- TODO: more cases.
   --
 
-  -- TODO: Remove string in UnexpectedNode
-  ast -> throwError $ UnexpectedNode "translateNode" ast
+  ast -> throwError (UnexpectedNode ast)
 
 analyzeFunction'
   :: Check
