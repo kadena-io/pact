@@ -1,4 +1,3 @@
-{-# language ConstraintKinds    #-}
 {-# language DeriveAnyClass     #-}
 {-# language DeriveDataTypeable #-}
 {-# language DeriveGeneric      #-}
@@ -17,10 +16,6 @@
 {-# language TypeApplications   #-}
 {-# language ViewPatterns       #-}
 {-# language TupleSections      #-}
-{-# language MultiParamTypeClasses #-}
-{-# language UndecidableInstances #-}
-{-# language InstanceSigs #-}
-{-# language KindSignatures #-}
 
 module Pact.Analyze.Types
   ( runCompiler
@@ -35,10 +30,9 @@ module Pact.Analyze.Types
   , Property(..)
   ) where
 
-import Control.Arrow ((>>>))
 import Control.Concurrent.MVar
 import Control.Monad
-import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError, MonadError)
+import Control.Monad.Except (ExceptT(..), Except, runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (runStateT)
@@ -69,7 +63,6 @@ import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 
-import Data.Kind (Constraint)
 import Debug.Trace
 
 -- | Low-level, untyped variable.
@@ -409,6 +402,7 @@ kApplyTime :: K a -> Term Time -> a
 kApplyTime (K _ _ _ _ ft) t = ft t
 
 infixr 9 ...
+(...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
 (...) = ((.) . (.))
 
 pattern AST_WithRead :: Node
@@ -769,9 +763,6 @@ translateNode k = \case
     <*> translateNode kExpectStr b
 
   AST_NFun_Basic "pact-version" [] -> pure $ kApplyStr k PactVersion
-  --
-  -- TODO: more cases.
-  --
 
   AST_WithRead _node table key bindings body -> do
     traceShowM bindings
@@ -798,6 +789,10 @@ translateNode k = \case
   AST_Lit (LTime t) -> pure (kApplyTime k (Literal (literal (mkTime t))))
   AST_Var n -> kApplyTime k . Var <$> view (ix n)
   AST_Var n            -> kApplyDecimal k . Var <$> view (ix n)
+
+  --
+  -- TODO: more cases.
+  --
 
   -- TODO: Remove string in UnexpectedNode
   ast -> throwError $ UnexpectedNode "translateNode" ast
