@@ -36,7 +36,7 @@ expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
 suite :: Test ()
 suite = tests
-  [ scope "success" $ do
+  [ scope "success.1" $ do
       let code =
             [text|
               (defun test:bool (x:integer)
@@ -44,7 +44,7 @@ suite = tests
             |]
       expectPass code $ Valid $ Occurs Success
 
-  , scope "success" $ do
+  , scope "success.2" $ do
       let code =
             [text|
               (defun test:bool ()
@@ -55,7 +55,7 @@ suite = tests
 
       expectFail code $ Satisfiable $ Occurs Success
 
-  , scope "success" $ do
+  , scope "success.3" $ do
       let code =
             [text|
               (defun test:bool (x:integer)
@@ -118,4 +118,4 @@ suite = tests
   ]
 
 main :: IO ()
-main = run suite
+main = runOnly "success" suite
