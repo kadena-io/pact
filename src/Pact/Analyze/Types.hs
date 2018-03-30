@@ -668,7 +668,12 @@ analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) che
       argTys :: [(Text, Type UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
 
-  in analyzeFunction' check body' argTys nodeNames'
+  in case retTy of
+      TyPrim TyBool    -> analyzeFunction' check kExpectBool body' argTys nodeNames'
+      TyPrim TyDecimal -> analyzeFunction' check kExpectDecimal body' argTys nodeNames'
+      TyPrim TyInteger -> analyzeFunction' check kExpectInt body' argTys nodeNames'
+      TyPrim TyString  -> analyzeFunction' check kExpectStr body' argTys nodeNames'
+      TyPrim TyTime    -> analyzeFunction' check kExpectTime body' argTys nodeNames'
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
@@ -960,16 +965,17 @@ translateNode k = \case
   ast -> throwError (UnexpectedNode "translateNode" ast)
 
 analyzeFunction'
-  :: Check
+  :: (Show a, SymWord a)
+  => Check
+  -> K (Either String (Term a))
   -> [AST Node]
   -> [(Text, Type UserType)]
   -> Map Node Text
   -> IO CheckResult
-analyzeFunction' check body argTys nodeNames =
+analyzeFunction' check expectation body argTys nodeNames =
   case runExcept
            (runReaderT
-             -- XXX generalize to any type
-             (translateBody kExpectInt body)
+             (translateBody expectation body)
              nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
     Right body'' -> do
