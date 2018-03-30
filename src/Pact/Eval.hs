@@ -209,15 +209,15 @@ loadModule m bod1 mi = do
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
-          dsm <- firstOf (eeRefStore.rsModules.ix q._2.ix n) <$> ask
-          case dsm of
-            d@Just {} -> return d
-            Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
+  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n
+  case dsm of
+    d@Just {} -> return d
+    Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
 resolveRef nn@(Name _ _) = do
-          nm <- firstOf (eeRefStore.rsNatives.ix nn) <$> ask
-          case nm of
-            d@Just {} -> return d
-            Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
+  nm <- asks $ firstOf $ eeRefStore.rsNatives.ix nn
+  case nm of
+    d@Just {} -> return d
+    Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
