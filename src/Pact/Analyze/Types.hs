@@ -142,8 +142,8 @@ initialAnalyzeState :: AnalyzeState
 initialAnalyzeState = AnalyzeState
   { _latticeState = LatticeAnalyzeState
       { _lasSucceeds     = true
-      , _lasTableRead    = (mkSFunArray $ const false)
-      , _lasTableWritten = (mkSFunArray $ const false)
+      , _lasTableRead    = mkSFunArray $ const false
+      , _lasTableWritten = mkSFunArray $ const false
       }
   , _globalState  = GlobalAnalyzeState ()
   }
@@ -161,7 +161,7 @@ symArrayAt symKey = lens getter setter
     getter arr = readArray arr symKey
 
     setter :: array k v -> SBV v -> array k v
-    setter arr symVal = writeArray arr symKey symVal
+    setter arr = writeArray arr symKey
 
 tableRead :: TableName -> Lens' AnalyzeState SBool
 tableRead tn = latticeState.lasTableRead.symArrayAt (literal tn)
@@ -561,8 +561,8 @@ translateNodeStr = unAstNodeOf >>> \case
 
   AST_NFun _node "pact-version" [] -> pure PactVersion
 
-  AST_NFun _node name [(Table _tnode (Lang.TableName tn)), row, _obj]
-    | any (name ==) ["insert", "update", "write"]
+  AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
+    | elem name ["insert", "update", "write"]
     -> Write (TableName tn) <$> translateNodeStr (AstNodeOf row)
 
   AST_If _ cond tBranch fBranch -> IfThenElse
