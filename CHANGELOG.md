@@ -1,3 +1,7 @@
+2.3.8
+---
+* Fix documentation for `format` form
+
 2.3.7
 ---
 * `keylog` returns rows indexed by txid

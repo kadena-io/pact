@@ -1957,7 +1957,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.3.7"
+    "2.3.8"
 
 read-decimal
 ~~~~~~~~~~~~
