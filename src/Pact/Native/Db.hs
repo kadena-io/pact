@@ -53,7 +53,7 @@ dbDefs =
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" id bal ccy))`"
+     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
@@ -61,7 +61,7 @@ dbDefs =
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" id bal ccy))`"
+     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
