@@ -231,7 +231,7 @@ translateNode k = \case
     <$> translateNode' kExpectStr a
     <*> translateNode' kExpectStr b
 
-  AST_NFun_Basic "pact-version" [] -> pure $ kApplyStr k PactVersion
+  AST_NFun _node "pact-version" [] -> pure $ kApplyStr k PactVersion
 
   AST_WithRead _node table key bindings body -> do
     traceShowM bindings
