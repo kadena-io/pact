@@ -419,6 +419,16 @@ kApplyUniform node (K fb fd fi fs ft) tm = case node ^. aTy of
   TyPrim TyString  -> fs tm
   TyPrim TyTime    -> ft tm
 
+  -- TODO
+  TyPrim TyValue   -> error "unimplemented type analysis"
+  TyPrim TyKeySet  -> error "unimplemented type analysis"
+  TyAny            -> error "unimplemented type analysis"
+  TyVar _v         -> error "unimplemented type analysis"
+  TyList _         -> error "unimplemented type analysis"
+  TySchema _ _     -> error "unimplemented type analysis"
+  TyFun _          -> error "unimplemented type analysis"
+  TyUser _         -> error "unimplemented type analysis"
+
 preMap :: (forall a. Term a -> Term a) -> K b -> K b
 preMap f (K fb fd fi fs ft) = K (fb . f) (fd . f) (fi . f) (fs . f) (ft . f)
 
@@ -530,6 +540,16 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyDecimal -> mkAVar <$> sDecimal name'
     TyPrim TyTime    -> mkAVar <$> sInt64 name'
     TyPrim TyString  -> mkAVar <$> sString name'
+
+    -- TODO
+    TyPrim TyValue   -> error "unimplemented type analysis"
+    TyPrim TyKeySet  -> error "unimplemented type analysis"
+    TyAny            -> error "unimplemented type analysis"
+    TyVar _v         -> error "unimplemented type analysis"
+    TyList _         -> error "unimplemented type analysis"
+    TySchema _ _     -> error "unimplemented type analysis"
+    TyFun _          -> error "unimplemented type analysis"
+    TyUser _         -> error "unimplemented type analysis"
   pure (name, var)
 
 namedAuth :: SString -> AnalyzeM SBool
@@ -683,6 +703,16 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       TyPrim TyInteger -> analyzeFunction' check kExpectInt body' argTys nodeNames'
       TyPrim TyString  -> analyzeFunction' check kExpectStr body' argTys nodeNames'
       TyPrim TyTime    -> analyzeFunction' check kExpectTime body' argTys nodeNames'
+
+      -- TODO
+      TyPrim TyValue   -> error "unimplemented type analysis"
+      TyPrim TyKeySet  -> error "unimplemented type analysis"
+      TyAny            -> error "unimplemented type analysis"
+      TyVar _v         -> error "unimplemented type analysis"
+      TyList _         -> error "unimplemented type analysis"
+      TySchema _ _     -> error "unimplemented type analysis"
+      TyFun _          -> error "unimplemented type analysis"
+      TyUser _         -> error "unimplemented type analysis"
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
@@ -934,6 +964,9 @@ translateNode k = \case
         <*> translateNode' kExpectTime tBranch
         <*> translateNode' kExpectTime fBranch
       pure $ kApplyTime k ite'
+
+    -- TODO
+    _ -> error "unimplemented type analysis"
 
   -- String
   AST_Lit (LString t) -> pure $ kApplyStr k $ Literal $ literal $ T.unpack t
