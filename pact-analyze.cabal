@@ -15,9 +15,13 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Pact.Analyze.Types
+  exposed-modules:     Pact.Analyze.Analyze
                      , Pact.Analyze.Demo
                      , Pact.Analyze.DSL
+                     , Pact.Analyze.K
+                     , Pact.Analyze.Patterns
+                     , Pact.Analyze.Translate
+                     , Pact.Analyze.Types
   build-depends:       Decimal
                      , Hsmtlib
                      , SmtLib
