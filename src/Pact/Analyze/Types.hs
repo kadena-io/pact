@@ -544,8 +544,8 @@ evalTerm = \case
     ite testPasses (evalTerm then') (evalTerm else')
 
   Enforce cond -> do
-    cond <- evalTerm cond
-    succeeds %= (&&& cond)
+    cond' <- evalTerm cond
+    succeeds %= (&&& cond')
     pure true
 
   Sequence a b -> evalTerm a *> evalTerm b
@@ -663,7 +663,7 @@ analyzeFunction
   :: TopLevel Node
   -> Check
   -> IO CheckResult
-analyzeFunction (TopFun (FDefun _ _ ty@(FunType argTys retTy) args body' _)) check =
+analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
   let argNodes :: [Node]
       argNodes = _nnNamed <$> args
 
@@ -992,10 +992,10 @@ analyzeFunction' check expectation body argTys nodeNames =
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
-        nameAuths <- newArray "nameAuthorizations"
+        nameAuths' <- newArray "nameAuthorizations"
 
         let prop   = checkProperty check
-            env0   = AnalyzeEnv scope0 nameAuths
+            env0   = AnalyzeEnv scope0 nameAuths'
             state0 = initialAnalyzeState
             action = evalTerm body''
                   *> evalProperty prop
