@@ -322,6 +322,8 @@ data Term ret where
   Literal        ::                        SBV a        ->                             Term a
   -- TODO: Read should return an object, probably parameterized by a schema:
   Read           ::                        TableName    -> Term String    ->           Term ()
+
+  WithRead       :: (Show a) => TableName -> Term String -> [Text] -> Term a -> Term a
   -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
   --         the object should likewise probably be parameterized by a schema.
   Write          ::                        TableName    -> Term String    ->           Term String
@@ -337,8 +339,6 @@ data Term ret where
   NameAuthorized ::                        Term String  ->                             Term Bool
   Concat         ::                        Term String  -> Term String    ->           Term String
   PactVersion    ::                                                                    Term String
-
-  WithRead       :: (Show a) => Text -> Term String -> [Text] -> Term a -> Term a
 
   --
   -- TODO: figure out the object representation we use here:
@@ -662,6 +662,12 @@ evalTerm = \case
   Concat str1 str2 -> (.++) <$> evalTerm str1 <*> evalTerm str2
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
+
+  WithRead tn rowId bindings body -> do
+    rId <- evalTerm rowId -- TODO: use this
+    tableRead tn .= true
+    -- TODO: this should actually read and bind variables here
+    evalTerm body
 
 evalDomainProperty :: DomainProperty -> AnalyzeM SBool
 evalDomainProperty Success = use succeeds
@@ -989,13 +995,13 @@ translateNode k = \case
 
   AST_NFun_Basic "pact-version" [] -> pure $ kApplyStr k PactVersion
 
-  AST_WithRead _node table key bindings body -> do
+  AST_WithRead node table key bindings body -> do
     traceShowM bindings
     let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
     -- TODO: this should not be specialized to just String
     body' <- translateBody kExpectStr body
-    key' <- translateNode' kExpectStr key
-    let withRead = WithRead table key' bindings' body'
+    key'  <- translateNode' kExpectStr key
+    let withRead = WithRead (TableName table) key' bindings' body'
     pure $ kApplyStr k withRead
 
   -- Decimal

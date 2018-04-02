@@ -216,4 +216,4 @@ suite = tests
   ]
 
 main :: IO ()
-main = runOnly "success" suite
+main = run suite
