@@ -81,12 +81,26 @@ deriving instance SymWord TableName
 instance IsString TableName where
   fromString = TableName . T.pack
 
+newtype ColumnName
+  = ColumnName Text
+  deriving (Eq, Ord, Read, Data, Show)
+
+deriving instance HasKind ColumnName
+deriving instance SymWord ColumnName
+
+instance IsString ColumnName where
+  fromString = ColumnName . T.pack
+
+deriving instance HasKind (TableName, ColumnName)
+deriving instance SymWord (TableName, ColumnName)
+
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
     { _lasSucceeds     :: SBool
     , _lasTableRead    :: SFunArray TableName Bool
     , _lasTableWritten :: SFunArray TableName Bool
+    , _lasColumnDelta  :: SFunArray (TableName, ColumnName) Integer
     }
   deriving (Show, Generic, Mergeable)
 makeLenses ''LatticeAnalyzeState
@@ -118,6 +132,7 @@ initialAnalyzeState = AnalyzeState
       { _lasSucceeds     = true
       , _lasTableRead    = mkSFunArray $ const false
       , _lasTableWritten = mkSFunArray $ const false
+      , _lasColumnDelta  = mkSFunArray $ const 0
       }
   , _globalState  = GlobalAnalyzeState ()
   }
@@ -148,6 +163,9 @@ tableRead tn = latticeState.lasTableRead.symArrayAt (literal tn)
 
 tableWritten :: TableName -> Lens' AnalyzeState SBool
 tableWritten tn = latticeState.lasTableWritten.symArrayAt (literal tn)
+
+columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState SInteger
+columnDelta tn cn = latticeState.lasColumnDelta.symArrayAt (literal (tn, cn))
 
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
