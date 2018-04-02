@@ -175,6 +175,7 @@ data AnalyzeFailure
   | UnsupportedArithOp ArithOp
   | MalformedComparison Text [AST Node]
   | MalformedLogicalOp Text [AST Node]
+  | MalformedLogicalOpExec LogicalOp [Term Bool]
   | MalformedArithOp Text [AST Node]
   -- | Some translator received a node it didn't expect
   | UnexpectedNode String (AST Node)
@@ -324,7 +325,7 @@ data Term ret where
   Var            ::                        Text         ->                             Term a
   Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
-  Logical        ::                        LogicalOp    -> [Term a]       ->           Term a
+  Logical        ::                        LogicalOp    -> [Term Bool]    ->           Term Bool
   AddTimeInt     ::                        Term Time    -> Term Integer   ->           Term Time
   AddTimeDec     ::                        Term Time    -> Term Decimal   ->           Term Time
   NameAuthorized ::                        Term String  ->                             Term Bool
@@ -605,6 +606,14 @@ evalTerm = \case
       Lte -> x' .<= y'
       Eq  -> x' .== y'
       Neq -> x' ./= y'
+
+  Logical op args -> do
+    args' <- forM args evalTerm
+    case (op, args') of
+      (AndOp, [a, b]) -> pure $ a &&& b
+      (OrOp, [a, b])  -> pure $ a ||| b
+      (NotOp, [a])    -> pure $ bnot a
+      _               -> throwError $ MalformedLogicalOpExec op args
 
   AddTimeInt time secs -> do
     time' <- evalTerm time
