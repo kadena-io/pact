@@ -892,39 +892,39 @@ translateNode k = \case
     -- TODO(joel): express this more succinctly
 
     TyPrim TyBool    -> do
-      ite <- IfThenElse
+      ite' <- IfThenElse
         <$> translateNode' kExpectBool cond
         <*> translateNode' kExpectBool tBranch
         <*> translateNode' kExpectBool fBranch
-      pure $ kApplyBool k ite
+      pure $ kApplyBool k ite'
 
     TyPrim TyDecimal -> do
-      ite <- IfThenElse
+      ite' <- IfThenElse
         <$> translateNode' kExpectBool cond
         <*> translateNode' kExpectDecimal tBranch
         <*> translateNode' kExpectDecimal fBranch
-      pure $ kApplyDecimal k ite
+      pure $ kApplyDecimal k ite'
 
     TyPrim TyInteger -> do
-      ite <- IfThenElse
+      ite' <- IfThenElse
         <$> translateNode' kExpectBool cond
         <*> translateNode' kExpectInt tBranch
         <*> translateNode' kExpectInt fBranch
-      pure $ kApplyInt k ite
+      pure $ kApplyInt k ite'
 
     TyPrim TyString  -> do
-      ite <- IfThenElse
+      ite' <- IfThenElse
         <$> translateNode' kExpectBool cond
         <*> translateNode' kExpectStr tBranch
         <*> translateNode' kExpectStr fBranch
-      pure $ kApplyStr k ite
+      pure $ kApplyStr k ite'
 
     TyPrim TyTime    -> do
-      ite <- IfThenElse
+      ite' <- IfThenElse
         <$> translateNode' kExpectBool cond
         <*> translateNode' kExpectTime tBranch
         <*> translateNode' kExpectTime fBranch
-      pure $ kApplyTime k ite
+      pure $ kApplyTime k ite'
 
   -- String
   AST_Lit (LString t) -> pure $ kApplyStr k $ Literal $ literal $ T.unpack t
