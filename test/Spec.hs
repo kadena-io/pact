@@ -201,10 +201,22 @@ suite = tests
       expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
       expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
 
-  --
-  -- TODO: before we can add some more interesting composite examples, we need
-  --       support for heterogeneously-typed Sequences
-  --
+  , scope "table-write.conditional" $ do
+      let code =
+            [text|
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
+
+              (defun test:string (x:bool)
+                ;; returns bool:
+                (enforce x "x must be true")
+                ;; returns string:
+                (if x
+                  "didn't write"
+                  (insert tokens "stu" {"balance": 5})))
+            |]
+      expectPass code $ Valid $ Occurs Success
+                      `Implies` Not (Occurs $ TableWrite "tokens")
 
   --
   -- TODO: test table-level reads, but to implement this we need to support
