@@ -47,7 +47,7 @@ import Pact.Typechecker hiding (debug)
 import Pact.Types.Lang hiding (Term, TableName)
 import qualified Pact.Types.Lang as Lang
 import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
-import Pact.Types.Typecheck hiding (Var)
+import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
 import Pact.Repl
@@ -151,6 +151,12 @@ initialAnalyzeState = AnalyzeState
 
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
+
+data UserType = UserType
+  deriving (Eq, Ord, Read, Data, Show)
+
+deriving instance HasKind UserType
+deriving instance SymWord UserType
 
 symArrayAt
   :: forall array k v
@@ -402,22 +408,24 @@ data Check where
 type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 data K a = K
-  !(Term Bool    -> a)
-  !(Term Decimal -> a)
-  !(Term Integer -> a)
-  !(Term String  -> a)
-  !(Term Time    -> a)
+  !(Term Bool     -> a)
+  !(Term Decimal  -> a)
+  !(Term Integer  -> a)
+  !(Term String   -> a)
+  !(Term Time     -> a)
+  !(Term UserType -> a)
 
 instance Functor K where
-  fmap f (K b d i s t) = K (f . b) (f . d) (f . i) (f . s) (f . t)
+  fmap f (K b d i s t u) = K (f . b) (f . d) (f . i) (f . s) (f . t) (f . u)
 
 kApplyUniform :: forall a. Node -> K a -> (forall b. Term b) -> a
-kApplyUniform node (K fb fd fi fs ft) tm = case node ^. aTy of
+kApplyUniform node (K fb fd fi fs ft fu) tm = case node ^. aTy of
   TyPrim TyBool    -> fb tm
   TyPrim TyDecimal -> fd tm
   TyPrim TyInteger -> fi tm
   TyPrim TyString  -> fs tm
   TyPrim TyTime    -> ft tm
+  TyUser _         -> fu tm
 
   -- TODO
   TyPrim TyValue   -> error "unimplemented type analysis"
@@ -427,13 +435,13 @@ kApplyUniform node (K fb fd fi fs ft) tm = case node ^. aTy of
   TyList _         -> error "unimplemented type analysis"
   TySchema _ _     -> error "unimplemented type analysis"
   TyFun _          -> error "unimplemented type analysis"
-  TyUser _         -> error "unimplemented type analysis"
 
 preMap :: (forall a. Term a -> Term a) -> K b -> K b
-preMap f (K fb fd fi fs ft) = K (fb . f) (fd . f) (fi . f) (fs . f) (ft . f)
+preMap f (K fb fd fi fs ft fu)
+  = K (fb . f) (fd . f) (fi . f) (fs . f) (ft . f) (fu . f)
 
 uniformK :: (forall a. (Show a, SymWord a) => Term a -> b) -> K b
-uniformK f = K f f f f f
+uniformK f = K f f f f f f
 
 kExpectInt :: K (Either String (Term Integer))
 kExpectInt = K
@@ -442,9 +450,10 @@ kExpectInt = K
   pure
   (const (Left "expecting int"))
   (const (Left "expecting int"))
+  (const (Left "expecting int"))
 
 kApplyInt :: K a -> Term Integer -> a
-kApplyInt (K _ _ fi _ _) i = fi i
+kApplyInt (K _ _ fi _ _ _) i = fi i
 
 kExpectBool :: K (Either String (Term Bool))
 kExpectBool = K
@@ -453,9 +462,10 @@ kExpectBool = K
   (const (Left "expecting bool"))
   (const (Left "expecting bool"))
   (const (Left "expecting bool"))
+  (const (Left "expecting bool"))
 
 kApplyBool :: K a -> Term Bool -> a
-kApplyBool (K fb _ _ _ _) b = fb b
+kApplyBool (K fb _ _ _ _ _) b = fb b
 
 kExpectStr :: K (Either String (Term String))
 kExpectStr = K
@@ -464,9 +474,10 @@ kExpectStr = K
   (const (Left "expecting string"))
   pure
   (const (Left "expecting string"))
+  (const (Left "expecting string"))
 
 kApplyStr :: K a -> Term String -> a
-kApplyStr (K _ _ _ fs _) s = fs s
+kApplyStr (K _ _ _ fs _ _) s = fs s
 
 kExpectDecimal :: K (Either String (Term Decimal))
 kExpectDecimal = K
@@ -475,9 +486,10 @@ kExpectDecimal = K
   (const (Left "expecting decimal"))
   (const (Left "expecting decimal"))
   (const (Left "expecting decimal"))
+  (const (Left "expecting decimal"))
 
 kApplyDecimal :: K a -> Term Decimal -> a
-kApplyDecimal (K _ fd _ _ _) d = fd d
+kApplyDecimal (K _ fd _ _ _ _) d = fd d
 
 mkTime :: UTCTime -> Time
 mkTime utct = utct ^. _utctDayTime . microseconds
@@ -489,9 +501,10 @@ kExpectTime = K
   (const (Left "expecting time"))
   (const (Left "expecting time"))
   pure
+  (const (Left "expecting time"))
 
 kApplyTime :: K a -> Term Time -> a
-kApplyTime (K _ _ _ _ ft) t = ft t
+kApplyTime (K _ _ _ _ ft _) t = ft t
 
 infixr 9 ...
 (...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
@@ -531,7 +544,7 @@ mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 sDecimal :: String -> Symbolic (SBV Decimal)
 sDecimal = symbolic
 
-allocateArgs :: [(Text, Type UserType)] -> Symbolic (Map Text AVar)
+allocateArgs :: [(Text, Type TC.UserType)] -> Symbolic (Map Text AVar)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
   var <- case ty of
@@ -540,6 +553,7 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyPrim TyDecimal -> mkAVar <$> sDecimal name'
     TyPrim TyTime    -> mkAVar <$> sInt64 name'
     TyPrim TyString  -> mkAVar <$> sString name'
+    TyUser _         -> mkAVar <$> (free_ :: Symbolic (SBV UserType))
 
     -- TODO
     TyPrim TyValue   -> error "unimplemented type analysis"
@@ -549,7 +563,6 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     TyList _         -> error "unimplemented type analysis"
     TySchema _ _     -> error "unimplemented type analysis"
     TyFun _          -> error "unimplemented type analysis"
-    TyUser _         -> error "unimplemented type analysis"
   pure (name, var)
 
 namedAuth :: SString -> AnalyzeM SBool
@@ -694,7 +707,7 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       nodeNames' :: Map Node Text
       nodeNames' = Map.fromList $ zip argNodes nodeNames
 
-      argTys :: [(Text, Type UserType)]
+      argTys :: [(Text, Type TC.UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
 
   in case retTy of
@@ -1011,7 +1024,7 @@ analyzeFunction'
   => Check
   -> K (Either String (Term a))
   -> [AST Node]
-  -> [(Text, Type UserType)]
+  -> [(Text, Type TC.UserType)]
   -> Map Node Text
   -> IO CheckResult
 analyzeFunction' check expectation body argTys nodeNames =
