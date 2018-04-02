@@ -25,7 +25,7 @@ module Pact.Native
 import Control.Concurrent hiding (yield)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Reader (ask)
+import Control.Monad.Reader (asks)
 import Control.Monad.Catch
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
@@ -435,7 +435,7 @@ yield i as = argsError i as
 
 resume :: NativeFun e
 resume i [TBinding ps bd (BindSchema _) bi] = do
-  rm <- firstOf (eePactStep . _Just . psResume . _Just) <$> ask
+  rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi
