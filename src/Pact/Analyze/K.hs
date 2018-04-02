@@ -7,6 +7,17 @@ import Pact.Types.Typecheck hiding (UserType)
 
 import Pact.Analyze.Types
 
+-- | 'K' contains a set of continuations for any type we might encounter during
+-- translation.
+--
+-- You can see this in action by searching for @kApply@ / @kExpect@ in the
+-- Translate module. @kApply@ is used to produce an @a@ from the given type of
+-- @Term@. @kExpect@ is used to induce a failure @Either String@ if the wrong
+-- node type is encountered.
+--
+-- 'K' also shows up in the @Analyze@ module, where we @kExpect@ a given type
+-- based on the type-level type of the term we're analyzing, and kick off
+-- translation.
 data K a = K
   !(Term Bool     -> a)
   !(Term Decimal  -> a)

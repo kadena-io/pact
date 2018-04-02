@@ -44,10 +44,10 @@ import Pact.Analyze.Types
 analyzeFunction'
   :: (Show a, SymWord a)
   => Check
-  -> K (Either String (Term a))
   -> [AST Node]
   -> [(Text, Type TC.UserType)]
   -> Map Node Text
+  -> K (Either String (Term a))
   -> IO CheckResult
 analyzeFunction' check expectation body argTys nodeNames =
   case runExcept (runReaderT (translateBody expectation body) nodeNames) of
@@ -230,11 +230,11 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       argTys = zip nodeNames (_aTy <$> argNodes)
 
   in case retTy of
-      TyPrim TyBool    -> analyzeFunction' check kExpectBool body' argTys nodeNames'
-      TyPrim TyDecimal -> analyzeFunction' check kExpectDecimal body' argTys nodeNames'
-      TyPrim TyInteger -> analyzeFunction' check kExpectInt body' argTys nodeNames'
-      TyPrim TyString  -> analyzeFunction' check kExpectStr body' argTys nodeNames'
-      TyPrim TyTime    -> analyzeFunction' check kExpectTime body' argTys nodeNames'
+      TyPrim TyBool    -> analyzeFunction' check body' argTys nodeNames' kExpectBool
+      TyPrim TyDecimal -> analyzeFunction' check body' argTys nodeNames' kExpectDecimal
+      TyPrim TyInteger -> analyzeFunction' check body' argTys nodeNames' kExpectInt
+      TyPrim TyString  -> analyzeFunction' check body' argTys nodeNames' kExpectStr
+      TyPrim TyTime    -> analyzeFunction' check body' argTys nodeNames' kExpectTime
 
       -- TODO
       TyPrim TyValue   -> error "unimplemented type analysis"
