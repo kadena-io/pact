@@ -50,13 +50,10 @@ analyzeFunction'
   -> Map Node Text
   -> IO CheckResult
 analyzeFunction' check expectation body argTys nodeNames =
-  case runExcept
-           (runReaderT
-             (translateBody expectation body)
-             nodeNames) of
+  case runExcept (runReaderT (translateBody expectation body) nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
-    Right body'' -> do
 
+    Right body'' -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
