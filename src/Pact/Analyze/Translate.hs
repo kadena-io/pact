@@ -182,7 +182,7 @@ translateNode k = \case
 
   AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
     | elem name ["insert", "update", "write"]
-    -> kApplyStr k . Write (TableName tn) <$> translateNode' kExpectStr row
+    -> kApplyStr k . Write (TableName . T.unpack $ tn) <$> translateNode' kExpectStr row
 
   AST_If node cond tBranch fBranch -> case node ^. aTy of
     -- TODO(joel): express this more succinctly
@@ -239,7 +239,7 @@ translateNode k = \case
     -- TODO: this should not be specialized to just String
     body' <- translateBody kExpectStr body
     key'  <- translateNode' kExpectStr key
-    let withRead = WithRead (TableName table) key' bindings' body'
+    let withRead = WithRead (TableName . T.unpack $ table) key' bindings' body'
     pure $ kApplyStr k withRead
 
   -- Decimal

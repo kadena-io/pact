@@ -58,10 +58,11 @@ analyzeFunction' check expectation body argTys nodeNames =
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
         nameAuths' <- newArray "nameAuthorizations"
+        symCells <- mkSymbolicCells
 
         let prop   = checkProperty check
             env0   = AnalyzeEnv scope0 nameAuths'
-            state0 = initialAnalyzeState
+            state0 = initialAnalyzeState symCells
             action = evalTerm body''
                   *> evalProperty prop
 
@@ -175,6 +176,9 @@ evalTerm = \case
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
+  --
+  -- NOTE: instead of this we will probably translate with-read to Read+Let+At
+  --
   WithRead tn rowId bindings body -> do
     rId <- evalTerm rowId -- TODO: use this
     tableRead tn .= true

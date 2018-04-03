@@ -27,15 +27,12 @@ import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
-import qualified Data.Text as T
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.String (IsString(..))
-import Data.Text (Text)
 import Data.Thyme
 import GHC.Generics
 import Pact.Types.Lang hiding (Term, TableName)
-import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 
@@ -48,6 +45,9 @@ unsafeCastAVar (AVar sval) = SBVI.SBV sval
 
 mkAVar :: SBV a -> AVar
 mkAVar (SBVI.SBV sval) = AVar sval
+
+coerceSBV :: SBV a -> SBV b
+coerceSBV = SBVI.SBV . SBVI.unSBV
 
 data AnalyzeEnv = AnalyzeEnv
   { _scope     :: Map Text AVar      -- used with 'local' in a stack fashion
@@ -71,28 +71,126 @@ instance Mergeable AnalyzeLog where
   --
   symbolicMerge _f _t = mappend
 
-newtype TableName
-  = TableName Text
-  deriving (Eq, Ord, Read, Data, Show)
+mkConcreteString :: String -> SBV a
+mkConcreteString = SBVI.SBV
+                 . SBVI.SVal KString
+                 . Left
+                 . SBVI.CW KString
+                 . SBVI.CWString
 
-deriving instance HasKind TableName
-deriving instance SymWord TableName
+wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
+wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
+wrappedStringFromCW _ c = error $ "SymWord: Unexpected non-string value: " ++ show c
+
+newtype TableName
+  = TableName String
+  deriving (Eq, Ord, Show)
+
+instance SymWord TableName where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (TableName s) = mkConcreteString s
+  fromCW = wrappedStringFromCW TableName
+
+instance HasKind TableName where
+  kindOf _ = KString
 
 instance IsString TableName where
-  fromString = TableName . T.pack
+  fromString = TableName
 
 newtype ColumnName
-  = ColumnName Text
-  deriving (Eq, Ord, Read, Data, Show)
+  = ColumnName String
+  deriving (Eq, Ord, Show)
 
-deriving instance HasKind ColumnName
-deriving instance SymWord ColumnName
+instance SymWord ColumnName where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (ColumnName s) = mkConcreteString s
+  fromCW = wrappedStringFromCW ColumnName
+
+instance HasKind ColumnName where
+  kindOf _ = KString
 
 instance IsString ColumnName where
-  fromString = ColumnName . T.pack
+  fromString = ColumnName
 
-deriving instance HasKind (TableName, ColumnName)
-deriving instance SymWord (TableName, ColumnName)
+newtype RowKey
+  = RowKey String
+  deriving (Eq, Ord, Show)
+
+instance SymWord RowKey where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (RowKey s) = mkConcreteString s
+  fromCW = wrappedStringFromCW RowKey
+
+instance HasKind RowKey where
+  kindOf _ = KString
+
+instance IsString RowKey where
+  fromString = RowKey
+
+-- a unique column, comprised of table name and column name
+-- e.g. accounts__balance
+newtype ColumnId
+  = ColumnId String
+  deriving (Eq, Ord)
+
+instance SymWord ColumnId where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (ColumnId cid) = mkConcreteString cid
+  fromCW = wrappedStringFromCW ColumnId
+
+instance HasKind ColumnId where
+  kindOf _ = KString
+
+instance IsString ColumnId where
+  fromString = ColumnId
+
+sColId :: TableName -> SBV ColumnName -> SBV ColumnId
+sColId (TableName tn) sCn = coerceSBV $
+  (literal $ tn ++ "__") .++ coerceSBV sCn
+
+-- a unique cell, from table and column names, and a row key
+-- e.g. accounts__balance__25
+newtype CellId
+  = CellId String
+  deriving (Eq, Ord)
+
+instance SymWord CellId where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (CellId cid) = mkConcreteString cid
+  fromCW = wrappedStringFromCW CellId
+
+instance HasKind CellId where
+  kindOf _ = KString
+
+instance IsString CellId where
+  fromString = CellId
+
+--
+-- TODO: set up more hygenic munging. we don't want SBV to find a solution with
+-- a column name or row key containing "__".
+--
+
+sCellId :: TableName -> SBV ColumnName -> SBV RowKey -> SBV CellId
+sCellId (TableName tn) sCn sRk = coerceSBV $
+  (literal $ tn ++ "__") .++ coerceSBV sCn .++ "__" .++ coerceSBV sRk
+
+data SymbolicCells
+  = SymbolicCells
+    { _scIntValues    :: SArray CellId Integer
+    , _scBoolValues   :: SArray CellId Bool
+    , _scStringValues :: SArray CellId String
+    -- TODO: decimal
+    -- TODO: time
+    -- TODO: opaque blobs
+    }
+    deriving (Show, Generic, Mergeable)
+makeLenses ''SymbolicCells
+
+mkSymbolicCells :: Symbolic SymbolicCells
+mkSymbolicCells = SymbolicCells
+  <$> newArray "intCells"
+  <*> newArray "boolCells"
+  <*> newArray "stringCells"
 
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
@@ -100,7 +198,8 @@ data LatticeAnalyzeState
     { _lasSucceeds      :: SBool
     , _lasTablesRead    :: SFunArray TableName Bool
     , _lasTablesWritten :: SFunArray TableName Bool
-    , _lasColumnDeltas  :: SFunArray (TableName, ColumnName) Integer
+    , _lasColumnDeltas  :: SFunArray ColumnId Integer
+    , _lasCells         :: SymbolicCells
     }
   deriving (Show, Generic, Mergeable)
 makeLenses ''LatticeAnalyzeState
@@ -126,13 +225,14 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-initialAnalyzeState :: AnalyzeState
-initialAnalyzeState = AnalyzeState
+initialAnalyzeState :: SymbolicCells -> AnalyzeState
+initialAnalyzeState symCells = AnalyzeState
   { _latticeState = LatticeAnalyzeState
       { _lasSucceeds      = true
       , _lasTablesRead    = mkSFunArray $ const false
       , _lasTablesWritten = mkSFunArray $ const false
       , _lasColumnDeltas  = mkSFunArray $ const 0
+      , _lasCells         = symCells
       }
   , _globalState  = GlobalAnalyzeState ()
   }
@@ -164,8 +264,32 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
 tableWritten :: TableName -> Lens' AnalyzeState SBool
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
 
-columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState SInteger
-columnDelta tn cn = latticeState.lasColumnDeltas.symArrayAt (literal (tn, cn))
+columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
+columnDelta tn sCn = latticeState.lasColumnDeltas.symArrayAt (sColId tn sCn)
+
+intCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SInteger
+intCell tn sCn sRk =
+  latticeState.lasCells.scIntValues.symArrayAt (sCellId tn sCn sRk)
+
+boolCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SBool
+boolCell tn sCn sRk =
+  latticeState.lasCells.scBoolValues.symArrayAt (sCellId tn sCn sRk)
+
+stringCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SString
+stringCell tn sCn sRk =
+  latticeState.lasCells.scStringValues.symArrayAt (sCellId tn sCn sRk)
 
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
