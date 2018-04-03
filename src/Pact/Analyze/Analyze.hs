@@ -120,6 +120,8 @@ evalTerm = \case
       evalTerm body
 
   Var name -> do
+    theScope <- view scope
+    -- traceShowM ("Var name", name, theScope)
     -- Assume the term is well-scoped after typechecking
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
@@ -182,8 +184,11 @@ evalTerm = \case
   WithRead tn rowId bindings body -> do
     rId <- evalTerm rowId -- TODO: use this
     tableRead tn .= true
-    -- TODO: this should actually read and bind variables here
-    evalTerm body
+    -- TODO: this should actually read to bind variables here
+    newVars <- forM bindings $ \varName ->
+      pure (varName, mkAVar (literal True))
+    local (scope <>~ Map.fromList newVars) $
+      evalTerm body
 
 evalDomainProperty :: DomainProperty -> AnalyzeM SBool
 evalDomainProperty Success = use succeeds

@@ -113,3 +113,15 @@ kExpectTime = K
 
 kApplyTime :: K a -> Term Time -> a
 kApplyTime (K _ _ _ _ ft _) t = ft t
+
+kExpectUserType :: K (Either String (Term UserType))
+kExpectUserType = K
+  (const (Left "expecting user type"))
+  (const (Left "expecting user type"))
+  (const (Left "expecting user type"))
+  (const (Left "expecting user type"))
+  (const (Left "expecting user type"))
+  pure
+
+kApplyUserType :: K a -> Term UserType -> a
+kApplyUserType (K _ _ _ _ _ fu) t = fu t

@@ -226,6 +226,51 @@ suite = tests
   --
   -- TODO: let, with lets nested on the RHS of lets
   --
+
+  , scope "let" $ do
+      scope "sanity" $ do
+        scope "1" $
+          let code =
+                [text|
+                  (defun test:bool (x:integer)
+                    (let ((y x)
+                          (z (+ 10 x)))
+                      (enforce (> z y) "z > y")
+                      true))
+                |]
+          in expectPass code $ Valid $ Not $ Occurs Abort
+
+        scope "2" $
+          let code =
+                [text|
+                  (defun test:bool (x:integer)
+                    (let ((y x)
+                          (z (+ 10 x)))
+                      (enforce (< z y) "z > y")
+                      true))
+                |]
+          in expectPass code $ Valid $ Occurs Abort
+
+      scope "let*.sanity" $
+          let code =
+                [text|
+                  (defun test:bool (x:integer)
+                    (let* ((x 2)
+                          (y (* x 10)))
+                     (enforce (= 22 (+ x y)) "x + y = 22")))
+                |]
+          in expectPass code $ Valid $ Not $ Occurs Abort
+
+      scope "nested" $
+          let code =
+                [text|
+                  (defun test:bool (x:integer)
+                    (let ((x (let ((y 2)) y))
+                          (y (let ((x 3)) x)))
+                     (let ((z (let ((w 1)) (+ (+ x y) w))))
+                       (enforce (= 6 z) "2 + 3 + 1 = 6"))))
+                |]
+          in expectPass code $ Valid $ Not $ Occurs Abort
   ]
 
 main :: IO ()

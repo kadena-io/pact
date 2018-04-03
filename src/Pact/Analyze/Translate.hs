@@ -5,20 +5,19 @@
 {-# language ScopedTypeVariables #-}
 module Pact.Analyze.Translate where
 
+import Control.Lens hiding (op, (.>), (...))
 import Control.Monad
 import Control.Monad.Except (throwError)
-import Control.Lens hiding (op, (.>), (...))
+import Control.Monad.Reader (local)
 import Pact.Types.Lang hiding (Term, TableName)
 import qualified Pact.Types.Lang as Lang
-import Pact.Types.Typecheck hiding (Var, UserType)
+import Pact.Types.Typecheck hiding (Var)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.Text as T
 
 import Pact.Analyze.K
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
-
-import Debug.Trace
 
 translateBody
   :: forall a. (Show a, SymWord a)
@@ -38,25 +37,106 @@ translateNode' k node = do
     Left e   -> throwError (UnexpectedNode e node)
     Right x' -> pure x'
 
+kApplyCase
+  :: Node
+  -> AST Node
+  -> (Term Bool    -> TranslateM b)
+  -> (Term Decimal -> TranslateM b)
+  -> (Term Integer -> TranslateM b)
+  -> (Term String  -> TranslateM b)
+  -> (Term Time    -> TranslateM b)
+  -> TranslateM b
+kApplyCase node term fb fd fi fs ft = case node ^. aTy of
+  TyPrim TyBool -> do
+    Right term' <- translateNode kExpectBool term
+    fb term'
+  TyPrim TyDecimal -> do
+    Right term' <- translateNode kExpectDecimal term
+    fd term'
+  TyPrim TyInteger -> do
+    Right term' <- translateNode kExpectInt term
+    fi term'
+  TyPrim TyString -> do
+    Right term' <- translateNode kExpectStr term
+    fs term'
+  TyPrim TyTime -> do
+    Right term' <- translateNode kExpectTime term
+    ft term'
+
 translateNode :: forall a. K a -> AST Node -> TranslateM a
 translateNode k = \case
-  -- AST_Let _ [] body ->
-  --   translateBody kExpectInt body
-  --
-  -- AST_Let n ((Named _ varNode _, rhs):bindingsRest) body -> do
-  --   val <- _translateBasedOnType varNode rhs
-  --   let varName = tcName varNode
-  --   local (at varNode ?~ varName) $ do
-  --     --
-  --     -- TODO: do we only want to allow subsequent bindings to reference
-  --     --       earlier ones if we know it's let* rather than let? or has this
-  --     --       been enforced by earlier stages for us?
-  --     --
-  --     rest <- translateNode kExpectInt $ AST_Let n bindingsRest body
-  --     return $ Let varName val rest
+  AST_Let node [] body -> do
+    case node ^. aTy of
+      TyPrim TyBool -> do
+        body' <- translateBody kExpectBool body
+        pure $ kApplyBool k body'
+      TyPrim TyDecimal -> do
+        body' <- translateBody kExpectDecimal body
+        pure $ kApplyDecimal k body'
+      TyPrim TyInteger -> do
+        body' <- translateBody kExpectInt body
+        pure $ kApplyInt k body'
+      TyPrim TyString -> do
+        body' <- translateBody kExpectStr body
+        pure $ kApplyStr k body'
+      TyPrim TyTime -> do
+        body' <- translateBody kExpectTime body
+        pure $ kApplyTime k body'
+
+  AST_Let node ((Named _ varNode _, rhs):bindingsRest) body -> do
+    let varName = varNode ^. aId ^. tiName
+    local (at varNode ?~ varName) $ do
+      --
+      -- TODO: do we only want to allow subsequent bindings to reference
+      --       earlier ones if we know it's let* rather than let? or has this
+      --       been enforced by earlier stages for us?
+      --
+      let subAst = AST_Let node bindingsRest body
+      kApplyCase varNode rhs
+        (\val ->
+          kApplyCase node subAst
+            (\rest -> pure $ kApplyBool    k (Let varName val rest))
+            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
+            (\rest -> pure $ kApplyInt     k (Let varName val rest))
+            (\rest -> pure $ kApplyStr     k (Let varName val rest))
+            (\rest -> pure $ kApplyTime    k (Let varName val rest))
+        )
+        (\val ->
+          kApplyCase node subAst
+            (\rest -> pure $ kApplyBool    k (Let varName val rest))
+            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
+            (\rest -> pure $ kApplyInt     k (Let varName val rest))
+            (\rest -> pure $ kApplyStr     k (Let varName val rest))
+            (\rest -> pure $ kApplyTime    k (Let varName val rest))
+        )
+        (\val ->
+          kApplyCase node subAst
+            (\rest -> pure $ kApplyBool    k (Let varName val rest))
+            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
+            (\rest -> pure $ kApplyInt     k (Let varName val rest))
+            (\rest -> pure $ kApplyStr     k (Let varName val rest))
+            (\rest -> pure $ kApplyTime    k (Let varName val rest))
+        )
+        (\val ->
+          kApplyCase node subAst
+            (\rest -> pure $ kApplyBool    k (Let varName val rest))
+            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
+            (\rest -> pure $ kApplyInt     k (Let varName val rest))
+            (\rest -> pure $ kApplyStr     k (Let varName val rest))
+            (\rest -> pure $ kApplyTime    k (Let varName val rest))
+        )
+        (\val ->
+          kApplyCase node subAst
+            (pure . kApplyBool    k . Let varName val)
+            (pure . kApplyDecimal k . Let varName val)
+            (pure . kApplyInt     k . Let varName val)
+            (pure . kApplyStr     k . Let varName val)
+            (pure . kApplyTime    k . Let varName val)
+        )
 
   AST_Var node -> do
     varName <- view (ix node)
+    -- traceShowM ("AST_Var node", varName, node)
     pure $ kApplyUniform node k (Var varName)
 
   -- Int
@@ -234,7 +314,7 @@ translateNode k = \case
   AST_NFun _node "pact-version" [] -> pure $ kApplyStr k PactVersion
 
   AST_WithRead _node table key bindings body -> do
-    traceShowM bindings
+    -- traceShowM ("bindings", bindings)
     let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
     -- TODO: this should not be specialized to just String
     body' <- translateBody kExpectStr body
