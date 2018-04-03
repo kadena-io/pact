@@ -97,10 +97,10 @@ deriving instance SymWord (TableName, ColumnName)
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds     :: SBool
-    , _lasTableRead    :: SFunArray TableName Bool
-    , _lasTableWritten :: SFunArray TableName Bool
-    , _lasColumnDelta  :: SFunArray (TableName, ColumnName) Integer
+    { _lasSucceeds      :: SBool
+    , _lasTablesRead    :: SFunArray TableName Bool
+    , _lasTablesWritten :: SFunArray TableName Bool
+    , _lasColumnDeltas  :: SFunArray (TableName, ColumnName) Integer
     }
   deriving (Show, Generic, Mergeable)
 makeLenses ''LatticeAnalyzeState
@@ -129,10 +129,10 @@ instance Mergeable AnalyzeState where
 initialAnalyzeState :: AnalyzeState
 initialAnalyzeState = AnalyzeState
   { _latticeState = LatticeAnalyzeState
-      { _lasSucceeds     = true
-      , _lasTableRead    = mkSFunArray $ const false
-      , _lasTableWritten = mkSFunArray $ const false
-      , _lasColumnDelta  = mkSFunArray $ const 0
+      { _lasSucceeds      = true
+      , _lasTablesRead    = mkSFunArray $ const false
+      , _lasTablesWritten = mkSFunArray $ const false
+      , _lasColumnDeltas  = mkSFunArray $ const 0
       }
   , _globalState  = GlobalAnalyzeState ()
   }
@@ -159,13 +159,13 @@ symArrayAt symKey = lens getter setter
     setter arr = writeArray arr symKey
 
 tableRead :: TableName -> Lens' AnalyzeState SBool
-tableRead tn = latticeState.lasTableRead.symArrayAt (literal tn)
+tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
 
 tableWritten :: TableName -> Lens' AnalyzeState SBool
-tableWritten tn = latticeState.lasTableWritten.symArrayAt (literal tn)
+tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
 
 columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState SInteger
-columnDelta tn cn = latticeState.lasColumnDelta.symArrayAt (literal (tn, cn))
+columnDelta tn cn = latticeState.lasColumnDeltas.symArrayAt (literal (tn, cn))
 
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
