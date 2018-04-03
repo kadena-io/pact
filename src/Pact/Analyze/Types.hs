@@ -15,6 +15,7 @@
 {-# language TypeApplications    #-}
 {-# language ViewPatterns        #-}
 {-# language TupleSections       #-}
+{-# language TypeOperators       #-}
 
 module Pact.Analyze.Types where
 
@@ -32,7 +33,8 @@ import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Thyme
 import GHC.Generics
-import Pact.Types.Lang hiding (Term, TableName)
+import Pact.Types.Lang hiding (Term, TableName, Type)
+-- import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 
@@ -304,6 +306,8 @@ data AnalyzeFailure
   | EmptyBody
   -- | A node we have a good reason not to handle
   | UnhandledTerm String (Term Int64)
+  | TypesDontMatch EType EType
+  | BranchesDifferentTypes EType EType
   deriving Show
 
 type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
@@ -360,6 +364,29 @@ data LogicalOp = AndOp | OrOp | NotOp
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
+data Type a where
+  TInt     :: Type Integer
+  TBool    :: Type Bool
+  TStr     :: Type String
+  TTime    :: Type Time
+  TDecimal :: Type Decimal
+
+data EType where
+  -- TODO: parametrize over constraint
+  EType :: (Show a, SymWord a) => Type a -> EType
+
+typeEq :: Type a -> Type b -> Maybe (a :~: b)
+typeEq TInt  TInt  = Just Refl
+typeEq TBool TBool = Just Refl
+typeEq TStr TStr = Just Refl
+typeEq TTime TTime = Just Refl
+typeEq TDecimal TDecimal = Just Refl
+typeEq _     _     = Nothing
+
+data ETerm where
+  -- TODO: remove Show (add constraint c?)
+  ETerm :: (Show a, SymWord a) => Term a -> Type a -> ETerm
+
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
   Enforce        ::                        Term Bool    ->                             Term Bool
@@ -400,6 +427,9 @@ data Term ret where
   --
 
 deriving instance Show a => (Show (Term a))
+deriving instance Show (Type a)
+deriving instance Show ETerm
+deriving instance Show EType
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger

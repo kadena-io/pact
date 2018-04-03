@@ -18,7 +18,6 @@ library
   exposed-modules:     Pact.Analyze.Analyze
                      , Pact.Analyze.Demo
                      , Pact.Analyze.DSL
-                     , Pact.Analyze.K
                      , Pact.Analyze.Patterns
                      , Pact.Analyze.Translate
                      , Pact.Analyze.Types

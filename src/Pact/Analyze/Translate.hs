@@ -1,3 +1,4 @@
+{-# language GADTs               #-}
 {-# language LambdaCase          #-}
 {-# language MultiWayIf          #-}
 {-# language OverloadedStrings   #-}
@@ -5,8 +6,7 @@
 {-# language ScopedTypeVariables #-}
 module Pact.Analyze.Translate where
 
-import Control.Lens hiding (op, (.>), (...))
-import Control.Monad
+import Control.Lens hiding (op, (.>))
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (local)
 import Pact.Types.Lang hiding (Term, TableName)
@@ -15,73 +15,31 @@ import Pact.Types.Typecheck hiding (Var)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.Text as T
 
-import Pact.Analyze.K
+import Data.Type.Equality
+
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
 
-translateBody
-  :: forall a. (Show a, SymWord a)
-  => K (Either String (Term a))
-  -> [AST Node]
-  -> TranslateM (Term a)
-translateBody _k [] = throwError EmptyBody
-translateBody k [ast] = translateNode' k ast
-translateBody k (ast:asts) = join $ flip translateNode ast $ uniformK
-  (\a -> translateBody (preMap (Sequence a) k) asts)
+translateBody :: [AST Node] -> TranslateM ETerm
+translateBody [] = throwError EmptyBody
+translateBody [ast] = translateNode ast
+translateBody (ast:asts) = do
+  ETerm ast' _   <- translateNode ast
+  ETerm asts' ty <- translateBody asts
+  pure $ ETerm (Sequence ast' asts') ty
 
--- TODO: can we get rid of translateNode'?
-translateNode' :: forall a. K (Either String a) -> AST Node -> TranslateM a
-translateNode' k node = do
-  x <- translateNode k node
-  case x of
-    Left e   -> throwError (UnexpectedNode e node)
-    Right x' -> pure x'
+nodeToTy :: Node -> EType
+nodeToTy node = case node ^. aTy of
+  TyPrim TyBool    -> EType TBool
+  TyPrim TyDecimal -> EType TDecimal
+  TyPrim TyInteger -> EType TInt
+  TyPrim TyString  -> EType TStr
+  TyPrim TyTime    -> EType TTime
+  _                -> error "EType not yet supported"
 
-kApplyCase
-  :: Node
-  -> AST Node
-  -> (Term Bool    -> TranslateM b)
-  -> (Term Decimal -> TranslateM b)
-  -> (Term Integer -> TranslateM b)
-  -> (Term String  -> TranslateM b)
-  -> (Term Time    -> TranslateM b)
-  -> TranslateM b
-kApplyCase node term fb fd fi fs ft = case node ^. aTy of
-  TyPrim TyBool -> do
-    Right term' <- translateNode kExpectBool term
-    fb term'
-  TyPrim TyDecimal -> do
-    Right term' <- translateNode kExpectDecimal term
-    fd term'
-  TyPrim TyInteger -> do
-    Right term' <- translateNode kExpectInt term
-    fi term'
-  TyPrim TyString -> do
-    Right term' <- translateNode kExpectStr term
-    fs term'
-  TyPrim TyTime -> do
-    Right term' <- translateNode kExpectTime term
-    ft term'
-
-translateNode :: forall a. K a -> AST Node -> TranslateM a
-translateNode k = \case
-  AST_Let node [] body -> do
-    case node ^. aTy of
-      TyPrim TyBool -> do
-        body' <- translateBody kExpectBool body
-        pure $ kApplyBool k body'
-      TyPrim TyDecimal -> do
-        body' <- translateBody kExpectDecimal body
-        pure $ kApplyDecimal k body'
-      TyPrim TyInteger -> do
-        body' <- translateBody kExpectInt body
-        pure $ kApplyInt k body'
-      TyPrim TyString -> do
-        body' <- translateBody kExpectStr body
-        pure $ kApplyStr k body'
-      TyPrim TyTime -> do
-        body' <- translateBody kExpectTime body
-        pure $ kApplyTime k body'
+translateNode :: AST Node -> TranslateM ETerm
+translateNode = \case
+  AST_Let _ [] body -> translateBody body
 
   AST_Let node ((Named _ varNode _, rhs):bindingsRest) body -> do
     let varName = varNode ^. aId ^. tiName
@@ -91,258 +49,170 @@ translateNode k = \case
       --       earlier ones if we know it's let* rather than let? or has this
       --       been enforced by earlier stages for us?
       --
+      ETerm rhs' _ <- translateNode rhs
       let subAst = AST_Let node bindingsRest body
-      kApplyCase varNode rhs
-        (\val ->
-          kApplyCase node subAst
-            (\rest -> pure $ kApplyBool    k (Let varName val rest))
-            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
-            (\rest -> pure $ kApplyInt     k (Let varName val rest))
-            (\rest -> pure $ kApplyStr     k (Let varName val rest))
-            (\rest -> pure $ kApplyTime    k (Let varName val rest))
-        )
-        (\val ->
-          kApplyCase node subAst
-            (\rest -> pure $ kApplyBool    k (Let varName val rest))
-            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
-            (\rest -> pure $ kApplyInt     k (Let varName val rest))
-            (\rest -> pure $ kApplyStr     k (Let varName val rest))
-            (\rest -> pure $ kApplyTime    k (Let varName val rest))
-        )
-        (\val ->
-          kApplyCase node subAst
-            (\rest -> pure $ kApplyBool    k (Let varName val rest))
-            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
-            (\rest -> pure $ kApplyInt     k (Let varName val rest))
-            (\rest -> pure $ kApplyStr     k (Let varName val rest))
-            (\rest -> pure $ kApplyTime    k (Let varName val rest))
-        )
-        (\val ->
-          kApplyCase node subAst
-            (\rest -> pure $ kApplyBool    k (Let varName val rest))
-            (\rest -> pure $ kApplyDecimal k (Let varName val rest))
-            (\rest -> pure $ kApplyInt     k (Let varName val rest))
-            (\rest -> pure $ kApplyStr     k (Let varName val rest))
-            (\rest -> pure $ kApplyTime    k (Let varName val rest))
-        )
-        (\val ->
-          kApplyCase node subAst
-            (pure . kApplyBool    k . Let varName val)
-            (pure . kApplyDecimal k . Let varName val)
-            (pure . kApplyInt     k . Let varName val)
-            (pure . kApplyStr     k . Let varName val)
-            (pure . kApplyTime    k . Let varName val)
-        )
+      ETerm body' bodyTy <- translateNode subAst
+      pure $ ETerm (Let varName rhs' body') bodyTy
 
   AST_Var node -> do
     varName <- view (ix node)
     -- traceShowM ("AST_Var node", varName, node)
-    pure $ kApplyUniform node k (Var varName)
+    case nodeToTy node of
+      EType ty -> pure $ ETerm (Var varName) ty
 
   -- Int
-  AST_NegativeLit (LInteger i)  -> kApplyInt k . Arith Negate . pure <$>
-    pure (Literal (literal i))
-  AST_Lit         (LInteger i)  -> pure (kApplyInt k (Literal (literal i)))
+  AST_NegativeLit (LInteger i)  -> do
+    let tm = Arith Negate [Literal (literal i)]
+    -- TODO: this should also work for decimal
+    pure $ ETerm tm TInt
+  AST_Lit         (LInteger i)  ->
+    -- TODO: shouldn't this also work for decimal?
+    pure (ETerm (Literal (literal i)) TInt)
   AST_NegativeVar n -> do
     name <- view (ix n)
-    pure $ kApplyInt k $ Arith Negate [Var name]
+    -- TODO: shouldn't this also work for decimal?
+    pure (ETerm (Arith Negate [Var name]) TInt)
   AST_Days days -> do
-    days' <- translateNode' kExpectInt days
-    pure $ kApplyInt k $ Arith Mul [60 * 60 * 24, days']
+    -- TODO: this should also work for decimal
+    ETerm days' TInt <- translateNode days
+    pure $ ETerm (Arith Mul [60 * 60 * 24, days']) TInt
 
   -- Bool
-  AST_Lit (LBool b)     -> pure (kApplyBool k (Literal (literal b)))
+  AST_Lit (LBool b)     -> pure (ETerm (Literal (literal b)) TBool)
 
   AST_Enforce _ cond _msg -> do
-    condTerm <- translateNode' kExpectBool cond
-    return $ kApplyBool k $ Enforce condTerm
+    ETerm condTerm TBool <- translateNode cond
+    pure $ ETerm (Enforce condTerm) TBool
 
   AST_EnforceKeyset ks
     | ks ^? aNode.aTy == Just (TyPrim TyString)
     -> do
-      ksNameTerm <- translateNode' kExpectStr ks
-      return $ kApplyBool k $ Enforce $ NameAuthorized ksNameTerm
+      ETerm ksNameTerm TStr <- translateNode ks
+      return $ ETerm (Enforce (NameAuthorized ksNameTerm)) TBool
 
   AST_NFun_Basic fn args -> do
-    let mkComparison
-          :: (Show b, SymWord b)
-          => (AST Node -> TranslateM (Term b))
-          -> TranslateM a
-        mkComparison translate = fmap (kApplyBool k) $ case (fn, args) of
-          -- TODO: this could compare integer, decimal, string, or time. use the node
-          -- to decide which to dispatch to
-          (">", [a, b]) -> Comparison Gt
-            <$> translate a
-            <*> translate b
-          ("<", [a, b]) -> Comparison Lt
-            <$> translate a
-            <*> translate b
-          ("<=", [a, b]) -> Comparison Lte
-            <$> translate a
-            <*> translate b
-          (">=", [a, b]) -> Comparison Gte
-            <$> translate a
-            <*> translate b
-          ("=", [a, b]) -> Comparison Eq
-            <$> translate a
-            <*> translate b
-          ("!=", [a, b]) -> Comparison Neq
-            <$> translate a
-            <*> translate b
+    let mkComparison :: TranslateM ETerm
+        mkComparison = case args of
+          [a, b] -> do
+            ETerm a' ta <- translateNode a
+            ETerm b' tb <- translateNode b
+            op <- case fn of
+              ">"  -> pure Gt
+              "<"  -> pure Lt
+              ">=" -> pure Gte
+              "<=" -> pure Lte
+              "="  -> pure Eq
+              "!=" -> pure Neq
+              _ -> throwError $ MalformedComparison fn args
+            case typeEq ta tb of
+              Just Refl -> pure $ ETerm (Comparison op a' b') TBool
+              _         -> throwError (TypesDontMatch (EType ta) (EType tb))
           _ -> throwError $ MalformedComparison fn args
 
-        mkLogical :: TranslateM a
-        mkLogical = fmap (kApplyBool k) $ case (fn, args) of
-          ("and", [a, b]) -> do
-            a' <- translateNode' kExpectBool a
-            b' <- translateNode' kExpectBool b
-            pure $ Logical AndOp [a', b']
-          ("or", [a, b]) -> do
-            a' <- translateNode' kExpectBool a
-            b' <- translateNode' kExpectBool b
-            pure $ Logical OrOp [a', b']
-          ("not", [a]) -> do
-            a' <- translateNode' kExpectBool a
-            pure $ Logical NotOp [a']
+        mkLogical :: TranslateM ETerm
+        mkLogical = case args of
+          [a] -> do
+            ETerm a' TBool <- translateNode a
+            case fn of
+              "not" -> pure $ ETerm (Logical NotOp [a']) TBool
+              _ -> throwError $ MalformedComparison fn args
+          [a, b] -> do
+            ETerm a' TBool <- translateNode a
+            ETerm b' TBool <- translateNode b
+            case fn of
+              "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
+              "or" -> pure $ ETerm (Logical OrOp [a', b']) TBool
+              _ -> throwError $ MalformedLogicalOp fn args
           _ -> throwError $ MalformedLogicalOp fn args
 
         -- TODO(joel): do this for decimal (etc) as well
-        mkArith :: TranslateM a
-        mkArith = fmap (kApplyInt k) $ case (fn, args) of
-          ("-", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Sub [a', b']
-          ("-", [a]) -> Arith Negate . pure <$> translateNode' kExpectInt a
-          ("+", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Add [a', b']
-          ("*", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Mul [a', b']
-          ("/", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Div [a', b']
-          ("^", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Pow [a', b']
-          ("sqrt", [a]) -> Arith Sqrt . pure <$> translateNode' kExpectInt a
-          ("mod", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Mod [a', b']
-          ("log", [a, b]) -> do
-            a' <- translateNode' kExpectInt a
-            b' <- translateNode' kExpectInt b
-            pure $ Arith Log [a', b']
-          ("ln", [a]) -> Arith Ln . pure <$> translateNode' kExpectInt a
-          ("exp", [a]) -> Arith Pow . pure <$> translateNode' kExpectInt a
-          ("abs", [a]) -> Arith Abs . pure <$> translateNode' kExpectInt a
-
-          ("round", [a]) -> Arith Round . pure <$> translateNode' kExpectInt a
-          ("ceiling", [a]) -> Arith Ceiling . pure <$> translateNode' kExpectInt a
-          ("floor", [a]) -> Arith Floor . pure <$> translateNode' kExpectInt a
+        mkArith :: TranslateM ETerm
+        mkArith = case args of
+          [a, b] -> do
+            ETerm a' TInt <- translateNode a
+            ETerm b' TInt <- translateNode b
+            -- case typeEq ta tb of
+            --   Just Refl -> pure $ ETerm (Arith Sub [a', b']) TInt
+            --   _         -> throwError (TypesDontMatch (EType ta) (EType tb))
+            case fn of
+              "-" -> pure $ ETerm (Arith Sub [a', b']) TInt
+              "+" -> pure $ ETerm (Arith Add [a', b']) TInt
+              "*" -> pure $ ETerm (Arith Mul [a', b']) TInt
+              "/" -> pure $ ETerm (Arith Div [a', b']) TInt
+              "^" -> pure $ ETerm (Arith Pow [a', b']) TInt
+              "mod" -> pure $ ETerm (Arith Mod [a', b']) TInt
+              "log" -> pure $ ETerm (Arith Log [a', b']) TInt
+              _ -> throwError $ MalformedLogicalOp fn args
+          [a] -> do
+            ETerm a' TInt <- translateNode a
+            case fn of
+              "-" -> pure $ ETerm (Arith Negate [a']) TInt
+              "sqrt" -> pure $ ETerm (Arith Sqrt [a']) TInt
+              "ln" -> pure $ ETerm (Arith Ln [a']) TInt
+              "exp" -> pure $ ETerm (Arith Exp [a']) TInt
+              "abs" -> pure $ ETerm (Arith Abs [a']) TInt
+              "round" -> pure $ ETerm (Arith Round [a']) TInt
+              "ceiling" -> pure $ ETerm (Arith Ceiling [a']) TInt
+              "floor" -> pure $ ETerm (Arith Floor [a']) TInt
+              _ -> throwError $ MalformedArithOp fn args
           _ -> throwError $ MalformedArithOp fn args
 
     if
       -- integer, decimal, string, and time are all comparable. Use the type of
       -- the first argument to decide which to use.
-      | isComparison fn -> case args ^? ix 0 . aNode . aTy of
-        Just (TyPrim TyInteger) -> mkComparison (translateNode' kExpectInt)
-        Just (TyPrim TyDecimal) -> mkComparison (translateNode' kExpectDecimal)
-        Just (TyPrim TyString)  -> mkComparison (translateNode' kExpectStr)
-        Just (TyPrim TyTime)    -> mkComparison (translateNode' kExpectTime)
-        _ -> throwError $ MalformedComparison fn args
-      | isLogical fn -> mkLogical
-      | isArith   fn -> mkArith
+      | isComparison fn -> mkComparison
+      | isLogical    fn -> mkLogical
+      | isArith      fn -> mkArith
 
   AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
-    | elem name ["insert", "update", "write"]
-    -> kApplyStr k . Write (TableName . T.unpack $ tn) <$> translateNode' kExpectStr row
+    | elem name ["insert", "update", "write"] -> do
+    ETerm row' TStr <- translateNode row
+    pure $ ETerm (Write (TableName (T.unpack tn)) row') TStr
 
-  AST_If node cond tBranch fBranch -> case node ^. aTy of
-    -- TODO(joel): express this more succinctly
-
-    TyPrim TyBool    -> do
-      ite' <- IfThenElse
-        <$> translateNode' kExpectBool cond
-        <*> translateNode' kExpectBool tBranch
-        <*> translateNode' kExpectBool fBranch
-      pure $ kApplyBool k ite'
-
-    TyPrim TyDecimal -> do
-      ite' <- IfThenElse
-        <$> translateNode' kExpectBool cond
-        <*> translateNode' kExpectDecimal tBranch
-        <*> translateNode' kExpectDecimal fBranch
-      pure $ kApplyDecimal k ite'
-
-    TyPrim TyInteger -> do
-      ite' <- IfThenElse
-        <$> translateNode' kExpectBool cond
-        <*> translateNode' kExpectInt tBranch
-        <*> translateNode' kExpectInt fBranch
-      pure $ kApplyInt k ite'
-
-    TyPrim TyString  -> do
-      ite' <- IfThenElse
-        <$> translateNode' kExpectBool cond
-        <*> translateNode' kExpectStr tBranch
-        <*> translateNode' kExpectStr fBranch
-      pure $ kApplyStr k ite'
-
-    TyPrim TyTime    -> do
-      ite' <- IfThenElse
-        <$> translateNode' kExpectBool cond
-        <*> translateNode' kExpectTime tBranch
-        <*> translateNode' kExpectTime fBranch
-      pure $ kApplyTime k ite'
-
-    -- TODO
-    _ -> error "unimplemented type analysis"
+  AST_If _ cond tBranch fBranch -> do
+    ETerm cond' TBool <- translateNode cond
+    ETerm a ta <- translateNode tBranch
+    ETerm b tb <- translateNode fBranch
+    case typeEq ta tb of
+      Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
+      _ -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
 
   -- String
-  AST_Lit (LString t) -> pure $ kApplyStr k $ Literal $ literal $ T.unpack t
-  AST_NFun_Basic "+" [a, b] -> kApplyStr k ... Concat
-    <$> translateNode' kExpectStr a
-    <*> translateNode' kExpectStr b
+  AST_Lit (LString t) -> pure $ ETerm (Literal $ literal $ T.unpack t) TStr
+  AST_NFun_Basic "+" [a, b] -> do
+    ETerm a' TStr <- translateNode a
+    ETerm b' TStr <- translateNode b
+    pure (ETerm (Concat a' b') TStr)
 
-  AST_NFun _node "pact-version" [] -> pure $ kApplyStr k PactVersion
+  AST_NFun_Basic "pact-version" [] -> pure $ ETerm PactVersion TStr
 
   AST_WithRead _node table key bindings body -> do
     -- traceShowM ("bindings", bindings)
     let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
-    -- TODO: this should not be specialized to just String
-    body' <- translateBody kExpectStr body
-    key'  <- translateNode' kExpectStr key
-    let withRead = WithRead (TableName . T.unpack $ table) key' bindings' body'
-    pure $ kApplyStr k withRead
+    ETerm body' tbody <- translateBody body
+    ETerm key' TStr <- translateNode key
+    let withRead = WithRead (TableName (T.unpack table)) key' bindings' body'
+    pure $ ETerm withRead tbody
 
   -- Decimal
-  AST_Lit (LDecimal d) -> pure (kApplyDecimal k (Literal (literal (mkDecimal d))))
+  AST_Lit (LDecimal d) -> pure (ETerm (Literal (literal (mkDecimal d))) TDecimal)
 
   -- Time
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyInteger -> kApplyTime k ... AddTimeInt
-      <$> translateNode' kExpectTime time
-      <*> translateNode' kExpectInt seconds
-    | seconds ^. aNode . aTy == TyPrim TyDecimal -> kApplyTime k ... AddTimeDec
-      <$> translateNode' kExpectTime time
-      <*> translateNode' kExpectDecimal seconds
+    | seconds ^. aNode . aTy == TyPrim TyInteger -> do
+      ETerm time' TTime <- translateNode time
+      ETerm seconds' TInt <- translateNode seconds
+      pure (ETerm (AddTimeInt time' seconds') TTime)
+    | seconds ^. aNode . aTy == TyPrim TyDecimal -> do
+      ETerm time' TTime <- translateNode time
+      ETerm seconds' TDecimal <- translateNode seconds
+      pure (ETerm (AddTimeDec time' seconds') TTime)
 
-  AST_Lit (LTime t) -> pure (kApplyTime k (Literal (literal (mkTime t))))
+  AST_Lit (LTime t) -> pure (ETerm (Literal (literal (mkTime t))) TTime)
 
   --
   -- TODO: more cases.
   --
 
   ast -> throwError (UnexpectedNode "translateNode" ast)
-
-infixr 9 ...
-(...) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(...) = ((.) . (.))

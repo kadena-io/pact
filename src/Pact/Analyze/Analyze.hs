@@ -22,7 +22,8 @@ import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Text (Text)
 import Pact.Typechecker hiding (debug)
-import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
+import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
+import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
@@ -37,23 +38,20 @@ import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV as SBV
 import qualified Data.Text as T
 
-import Pact.Analyze.K
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 
 analyzeFunction'
-  :: (Show a, SymWord a)
-  => Check
+  :: Check
   -> [AST Node]
-  -> [(Text, Type TC.UserType)]
+  -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
-  -> K (Either String (Term a))
   -> IO CheckResult
-analyzeFunction' check expectation body argTys nodeNames =
-  case runExcept (runReaderT (translateBody expectation body) nodeNames) of
+analyzeFunction' check body argTys nodeNames =
+  case runExcept (runReaderT (translateBody body) nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
 
-    Right body'' -> do
+    Right (ETerm body'' _) -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
@@ -231,25 +229,10 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       nodeNames' :: Map Node Text
       nodeNames' = Map.fromList $ zip argNodes nodeNames
 
-      argTys :: [(Text, Type TC.UserType)]
+      argTys :: [(Text, Pact.Type TC.UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
 
-  in case retTy of
-      TyPrim TyBool    -> analyzeFunction' check body' argTys nodeNames' kExpectBool
-      TyPrim TyDecimal -> analyzeFunction' check body' argTys nodeNames' kExpectDecimal
-      TyPrim TyInteger -> analyzeFunction' check body' argTys nodeNames' kExpectInt
-      TyPrim TyString  -> analyzeFunction' check body' argTys nodeNames' kExpectStr
-      TyPrim TyTime    -> analyzeFunction' check body' argTys nodeNames' kExpectTime
-
-      -- TODO
-      TyPrim TyValue   -> error "unimplemented type analysis"
-      TyPrim TyKeySet  -> error "unimplemented type analysis"
-      TyAny            -> error "unimplemented type analysis"
-      TyVar _v         -> error "unimplemented type analysis"
-      TyList _         -> error "unimplemented type analysis"
-      TySchema _ _     -> error "unimplemented type analysis"
-      TyFun _          -> error "unimplemented type analysis"
-      TyUser _         -> error "unimplemented type analysis"
+  in analyzeFunction' check body' argTys nodeNames'
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
@@ -263,7 +246,7 @@ tcName = _tiName . _aId
 sDecimal :: String -> Symbolic (SBV Decimal)
 sDecimal = symbolic
 
-allocateArgs :: [(Text, Type TC.UserType)] -> Symbolic (Map Text AVar)
+allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVar)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
   var <- case ty of
