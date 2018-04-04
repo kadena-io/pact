@@ -14,7 +14,6 @@ import qualified Pact.Types.Lang as Lang
 import Pact.Types.Typecheck hiding (Var)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.Text as T
-
 import Data.Type.Equality
 
 import Pact.Analyze.Patterns
@@ -56,7 +55,6 @@ translateNode = \case
 
   AST_Var node -> do
     varName <- view (ix node)
-    -- traceShowM ("AST_Var node", varName, node)
     case nodeToTy node of
       EType ty -> pure $ ETerm (Var varName) ty
 
@@ -65,13 +63,16 @@ translateNode = \case
     let tm = Arith Negate [Literal (literal i)]
     -- TODO: this should also work for decimal
     pure $ ETerm tm TInt
+
   AST_Lit         (LInteger i)  ->
     -- TODO: shouldn't this also work for decimal?
     pure (ETerm (Literal (literal i)) TInt)
+
   AST_NegativeVar n -> do
     name <- view (ix n)
     -- TODO: shouldn't this also work for decimal?
     pure (ETerm (Arith Negate [Var name]) TInt)
+
   AST_Days days -> do
     -- TODO: this should also work for decimal
     ETerm days' TInt <- translateNode days
@@ -179,6 +180,7 @@ translateNode = \case
 
   -- String
   AST_Lit (LString t) -> pure $ ETerm (Literal $ literal $ T.unpack t) TStr
+
   AST_NFun_Basic "+" [a, b] -> do
     ETerm a' TStr <- translateNode a
     ETerm b' TStr <- translateNode b
@@ -187,7 +189,6 @@ translateNode = \case
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
   AST_WithRead _node table key bindings body -> do
-    -- traceShowM ("bindings", bindings)
     let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
     ETerm body' tbody <- translateBody body
     ETerm key' TStr <- translateNode key

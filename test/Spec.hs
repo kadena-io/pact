@@ -223,10 +223,6 @@ suite = tests
   --       objects.
   --
 
-  --
-  -- TODO: let, with lets nested on the RHS of lets
-  --
-
   , scope "let" $ do
       scope "sanity" $ do
         scope "1" $
