@@ -114,7 +114,7 @@ evalTerm = \case
 
   Let name rhs body -> do
     val <- evalTerm rhs
-    local (scope.at name ?~ mkAVar val) $
+    local (scope.at name ?~ mkAVal val) $
       evalTerm body
 
   Var name -> do
@@ -123,7 +123,7 @@ evalTerm = \case
     -- Assume the term is well-scoped after typechecking
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
-    pure $ unsafeCastAVar val
+    pure $ unsafeCastAVal val
 
   Arith op args ->
     if op `Set.member` unsupportedArithOps
@@ -184,7 +184,7 @@ evalTerm = \case
     tableRead tn .= true
     -- TODO: this should actually read to bind variables here
     newVars <- forM bindings $ \varName ->
-      pure (varName, mkAVar (literal True))
+      pure (varName, mkAVal (literal True))
     local (scope <>~ Map.fromList newVars) $
       evalTerm body
 
@@ -246,16 +246,16 @@ tcName = _tiName . _aId
 sDecimal :: String -> Symbolic (SBV Decimal)
 sDecimal = symbolic
 
-allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVar)
+allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
   let name' = T.unpack name
   var <- case ty of
-    TyPrim TyInteger -> mkAVar <$> sInteger name'
-    TyPrim TyBool    -> mkAVar <$> sBool name'
-    TyPrim TyDecimal -> mkAVar <$> sDecimal name'
-    TyPrim TyTime    -> mkAVar <$> sInt64 name'
-    TyPrim TyString  -> mkAVar <$> sString name'
-    TyUser _         -> mkAVar <$> (free_ :: Symbolic (SBV UserType))
+    TyPrim TyInteger -> mkAVal <$> sInteger name'
+    TyPrim TyBool    -> mkAVal <$> sBool name'
+    TyPrim TyDecimal -> mkAVal <$> sDecimal name'
+    TyPrim TyTime    -> mkAVal <$> sInt64 name'
+    TyPrim TyString  -> mkAVal <$> sString name'
+    TyUser _         -> mkAVal <$> (free_ :: Symbolic (SBV UserType))
 
     -- TODO
     TyPrim TyValue   -> error "unimplemented type analysis"

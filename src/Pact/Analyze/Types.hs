@@ -38,21 +38,21 @@ import Pact.Types.Lang hiding (Term, TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 
--- | Low-level, untyped variable.
-data AVar = AVar SBVI.SVal
+-- | Low-level, untyped symbolic value.
+data AVal = AVal SBVI.SVal
   deriving (Eq, Show)
 
-unsafeCastAVar :: AVar -> SBV a
-unsafeCastAVar (AVar sval) = SBVI.SBV sval
+unsafeCastAVal :: AVal -> SBV a
+unsafeCastAVal (AVal sval) = SBVI.SBV sval
 
-mkAVar :: SBV a -> AVar
-mkAVar (SBVI.SBV sval) = AVar sval
+mkAVal :: SBV a -> AVal
+mkAVal (SBVI.SBV sval) = AVal sval
 
 coerceSBV :: SBV a -> SBV b
 coerceSBV = SBVI.SBV . SBVI.unSBV
 
 data AnalyzeEnv = AnalyzeEnv
-  { _scope     :: Map Text AVar      -- used with 'local' in a stack fashion
+  { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion
   , _nameAuths :: SArray String Bool -- read-only
   } deriving Show
 makeLenses ''AnalyzeEnv
