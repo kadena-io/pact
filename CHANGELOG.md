@@ -1,6 +1,9 @@
 2.3.8
 ---
+* Pact tool improvements: auto-complete, readline support, better multiline
 * Fix documentation for `format` form
+* Internal changes: TableName in AST, expose evalRepl', token parsing
+* build improvements: weeder, hlint enforcement
 
 2.3.7
 ---
