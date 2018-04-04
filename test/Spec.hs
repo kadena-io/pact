@@ -152,6 +152,44 @@ suite = tests
   -- TODO: enforce-keyset.object
   --
 
+  , scope "table-read" $
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer)
+              (deftable tokens:{token-row})
+
+              (defun test:string ()
+                (insert tokens "stu" {"balance": 5, "name": "stu"})
+                (let ((stu-name (at 'name (read tokens "stu")))
+                      (stu-balance (at 'balance (read tokens "stu")))
+                     )
+                  (enforce (= stu-name "stu") "name is stu")
+                  (enforce (= stu-balance 5) "balance is 5")
+                  )
+                )
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
+
+  , scope "x.table-read" $
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer)
+              (deftable tokens:{token-row})
+
+              (defun test:string ()
+                (insert tokens "stu" {"balance": 5, "name": "stu"})
+                (let ((stu (read tokens "stu")))
+                  ; (enforce (= (at 'name stu) "stu") "name is stu")
+                  (enforce (= (at 'balance stu) 5) "balance is 5")
+                  )
+                )
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
+
   , scope "table-write.insert" $ do
       let code =
             [text|
@@ -270,4 +308,4 @@ suite = tests
   ]
 
 main :: IO ()
-main = run suite
+main = runOnly "table-read" suite

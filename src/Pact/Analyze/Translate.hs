@@ -9,12 +9,16 @@ module Pact.Analyze.Translate where
 import Control.Lens hiding (op, (.>))
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (local)
-import Pact.Types.Lang hiding (Term, TableName)
+import qualified Data.Map as Map
+import Pact.Types.Lang hiding (Term, TableName, TObject, EObject)
 import qualified Pact.Types.Lang as Lang
-import Pact.Types.Typecheck hiding (Var)
+import Pact.Types.Typecheck hiding (Var, Schema)
+import qualified Pact.Types.Typecheck as TC
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.Text as T
 import Data.Type.Equality
+import qualified Pact.Types.Lang as Pact
+import qualified Pact.Types.Typecheck as Pact
 
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
@@ -168,7 +172,7 @@ translateNode = \case
   AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
-    pure $ ETerm (Write (TableName (T.unpack tn)) row') TStr
+    pure $ ETerm (Write (TableName (T.unpack tn)) row' undefined) TStr
 
   AST_If _ cond tBranch fBranch -> do
     ETerm cond' TBool <- translateNode cond
@@ -212,8 +216,34 @@ translateNode = \case
 
   AST_Lit (LTime t) -> pure (ETerm (Literal (literal (mkTime t))) TTime)
 
+  AST_Read node table key -> do
+    ETerm key' TStr <- translateNode key
+    schema <- case schemaFromPact (_aTy node) of
+      Left err -> throwError err
+      Right x -> pure x
+    pure (EObject (Read (TableName (T.unpack table)) schema key') TObject)
+
+  AST_At colName obj -> do
+    EObject obj' TObject <- translateNode obj
+    -- XXX return correct type
+    pure $ ETerm (At (T.unpack colName) obj') TInt
+
   --
   -- TODO: more cases.
   --
 
   ast -> throwError (UnexpectedNode "translateNode" ast)
+
+schemaFromPact :: Pact.Type Pact.UserType -> Either AnalyzeFailure Schema
+schemaFromPact ty = case ty of
+  TyUser (TC.Schema _ _ fields _) -> Right $ Schema $ Map.fromList $ flip map fields $
+    \(Arg name ty _info) -> case ty of
+      TyPrim TyBool    -> (T.unpack name, EType TBool)
+      TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
+      TyPrim TyInteger -> (T.unpack name, EType TInt)
+      TyPrim TyString  -> (T.unpack name, EType TStr)
+      TyPrim TyTime    -> (T.unpack name, EType TTime)
+
+  TySchema _ ty' -> schemaFromPact ty'
+
+  ty -> Left $ NotConvertibleToSchema ty

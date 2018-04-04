@@ -16,6 +16,8 @@
 {-# language ViewPatterns        #-}
 {-# language TupleSections       #-}
 {-# language TypeOperators       #-}
+{-# language TypeFamilies        #-}
+{-# language TypeFamilyDependencies        #-}
 
 module Pact.Analyze.Types where
 
@@ -33,20 +35,26 @@ import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Thyme
 import GHC.Generics
-import Pact.Types.Lang hiding (Term, TableName, Type)
+import Pact.Types.Lang hiding (Term, TableName, Type, TObject)
+import qualified Pact.Types.Lang as Pact
 -- import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
+import qualified Pact.Types.Typecheck as Pact
 
-type family SymbolicRep a where
+type family SymbolicRep a = r | r -> a where
   SymbolicRep Object = Object
   SymbolicRep a      = SBV a
 
-type FieldType
-  = () -- TODO
+type FieldType = EType
+  -- = () -- TODO
 
 newtype Object
   = Object (Map String (FieldType, AVal))
+  deriving (Eq, Show)
+
+newtype Schema = Schema (Map String FieldType)
+  deriving Show
 
 -- | Untyped symbolic value.
 data AVal
@@ -57,9 +65,12 @@ data AVal
 --
 -- TODO: will this work?
 --
-unsafeCastAVal :: AVal -> SymbolicRep a
-unsafeCastAVal (AVal sval) = SBVI.SBV sval
-unsafeCastAVal (AnObj obj) = obj
+-- unsafeCastAVal :: AVal -> SymbolicRep a
+-- unsafeCastAVal (AVal sval) = SBVI.SBV sval
+-- unsafeCastAVal (AnObj obj) = obj
+
+mkSBV :: SBVI.SVal -> SBV a
+mkSBV = SBVI.SBV
 
 mkAVal :: SBV a -> AVal
 mkAVal (SBVI.SBV sval) = AVal sval
@@ -71,7 +82,6 @@ data AnalyzeEnv = AnalyzeEnv
   { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion
   , _nameAuths :: SArray String Bool -- read-only
   } deriving Show
-makeLenses ''AnalyzeEnv
 
 newtype AnalyzeLog
   = AnalyzeLog ()
@@ -208,7 +218,6 @@ data SymbolicCells
     -- TODO: opaque blobs
     }
     deriving (Show, Generic, Mergeable)
-makeLenses ''SymbolicCells
 
 mkSymbolicCells :: Symbolic SymbolicCells
 mkSymbolicCells = SymbolicCells
@@ -226,13 +235,11 @@ data LatticeAnalyzeState
     , _lasCells         :: SymbolicCells
     }
   deriving (Show, Generic, Mergeable)
-makeLenses ''LatticeAnalyzeState
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
   = GlobalAnalyzeState ()
   deriving (Show, Eq)
-makeLenses ''GlobalAnalyzeState
 
 data AnalyzeState
   = AnalyzeState
@@ -240,7 +247,6 @@ data AnalyzeState
     , _globalState  :: GlobalAnalyzeState
     }
   deriving (Show)
-makeLenses ''AnalyzeState
 
 instance Mergeable AnalyzeState where
   -- NOTE: We discard the left global state because this is out-of-date and was
@@ -261,9 +267,6 @@ initialAnalyzeState symCells = AnalyzeState
   , _globalState  = GlobalAnalyzeState ()
   }
 
-succeeds :: Lens' AnalyzeState SBool
-succeeds = latticeState.lasSucceeds
-
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
 
@@ -282,39 +285,6 @@ symArrayAt symKey = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
-tableRead :: TableName -> Lens' AnalyzeState SBool
-tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
-
-tableWritten :: TableName -> Lens' AnalyzeState SBool
-tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
-
-columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
-columnDelta tn sCn = latticeState.lasColumnDeltas.symArrayAt (sColId tn sCn)
-
-intCell
-  :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SInteger
-intCell tn sCn sRk =
-  latticeState.lasCells.scIntValues.symArrayAt (sCellId tn sCn sRk)
-
-boolCell
-  :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SBool
-boolCell tn sCn sRk =
-  latticeState.lasCells.scBoolValues.symArrayAt (sCellId tn sCn sRk)
-
-stringCell
-  :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SString
-stringCell tn sCn sRk =
-  latticeState.lasCells.scStringValues.symArrayAt (sCellId tn sCn sRk)
-
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
   | UnsupportedArithOp ArithOp
@@ -327,28 +297,14 @@ data AnalyzeFailure
   -- | 'translateBody' expects at least one node in a function body.
   | EmptyBody
   -- | A node we have a good reason not to handle
-  | UnhandledTerm String (Term Int64)
+  | UnhandledTerm String ETerm
   | TypesDontMatch EType EType
   | BranchesDifferentTypes EType EType
+  | KeyNotPresent String Object
+  | NotConvertibleToSchema (Pact.Type Pact.UserType)
   deriving Show
 
 type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
-
-instance (Mergeable a) => Mergeable (AnalyzeM a) where
-  symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
-    --
-    -- We explicitly propagate only the "global" portion of the state from the
-    -- left to the right computation. And then the only lattice state, and not
-    -- global state, is merged (per AnalyzeState's Mergeable instance.)
-    --
-    -- If either side fails, the entire merged computation fails.
-    --
-    let run act = runExcept . runRWST act r
-    in do
-      lTup <- run left s
-      let gs = lTup ^. _2.globalState
-      rTup <- run right $ s & globalState .~ gs
-      return $ symbolicMerge force test lTup rTup
 
 data ArithOp
   = Sub -- "-" Integer / Decimal
@@ -392,6 +348,7 @@ data Type a where
   TStr     :: Type String
   TTime    :: Type Time
   TDecimal :: Type Decimal
+  TObject  :: Type Object
 
 data EType where
   -- TODO: parametrize over constraint
@@ -403,11 +360,19 @@ typeEq TBool TBool = Just Refl
 typeEq TStr TStr = Just Refl
 typeEq TTime TTime = Just Refl
 typeEq TDecimal TDecimal = Just Refl
+-- TODO: this should probably compare types of fields
+typeEq TObject TObject = Just Refl
 typeEq _     _     = Nothing
+
+instance Eq EType where
+  EType a == EType b = case typeEq a b of
+    Just _refl -> True
+    Nothing    -> False
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
   ETerm :: (Show a, SymWord a) => Term a -> Type a -> ETerm
+  EObject :: Term Object -> Type Object -> ETerm
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
@@ -417,8 +382,8 @@ data Term ret where
   Literal        ::                        SBV a        ->                             Term a
 
   LiteralObject  ::                        Object       ->                             Term Object
-  At             ::                        Term String  -> Term Object    ->           Term a
-  Read           ::                        TableName    -> Term String    ->           Term Object
+  At             ::                        String       -> Term Object    ->           Term a
+  Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:
   Write          ::                        TableName -> Term String -> Term Object -> Term String
 
@@ -453,10 +418,13 @@ data Term ret where
   --  and then ADMIN_KEYSET is used in the code
   --
 
-deriving instance Show a => (Show (Term a))
-deriving instance Show (Type a)
+deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
+
+deriving instance Show (Type a)
+deriving instance Eq (Type a)
 deriving instance Show EType
+-- deriving instance Eq EType
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
@@ -545,3 +513,61 @@ data CheckSuccess
 
 type CheckResult
   = Either CheckFailure CheckSuccess
+
+makeLenses ''AnalyzeEnv
+makeLenses ''AnalyzeState
+makeLenses ''GlobalAnalyzeState
+makeLenses ''LatticeAnalyzeState
+makeLenses ''SymbolicCells
+
+succeeds :: Lens' AnalyzeState SBool
+succeeds = latticeState.lasSucceeds
+
+tableRead :: TableName -> Lens' AnalyzeState SBool
+tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
+
+tableWritten :: TableName -> Lens' AnalyzeState SBool
+tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
+
+columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
+columnDelta tn sCn = latticeState.lasColumnDeltas.symArrayAt (sColId tn sCn)
+
+intCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SInteger
+intCell tn sCn sRk =
+  latticeState.lasCells.scIntValues.symArrayAt (sCellId tn sCn sRk)
+
+boolCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SBool
+boolCell tn sCn sRk =
+  latticeState.lasCells.scBoolValues.symArrayAt (sCellId tn sCn sRk)
+
+stringCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SString
+stringCell tn sCn sRk =
+  latticeState.lasCells.scStringValues.symArrayAt (sCellId tn sCn sRk)
+
+instance (Mergeable a) => Mergeable (AnalyzeM a) where
+  symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
+    --
+    -- We explicitly propagate only the "global" portion of the state from the
+    -- left to the right computation. And then the only lattice state, and not
+    -- global state, is merged (per AnalyzeState's Mergeable instance.)
+    --
+    -- If either side fails, the entire merged computation fails.
+    --
+    let run act = runExcept . runRWST act r
+    in do
+      lTup <- run left s
+      let gs = lTup ^. _2.globalState
+      rTup <- run right $ s & globalState .~ gs
+      return $ symbolicMerge force test lTup rTup

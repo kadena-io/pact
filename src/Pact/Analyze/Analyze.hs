@@ -24,7 +24,7 @@ import Data.Text (Text)
 import Pact.Typechecker hiding (debug)
 import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
 import qualified Pact.Types.Runtime as Pact
-import Pact.Types.Typecheck hiding (Var, UserType)
+import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
 import Pact.Repl
@@ -40,6 +40,8 @@ import qualified Data.Text as T
 
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
+
+import Debug.Trace
 
 analyzeFunction'
   :: Check
@@ -81,7 +83,21 @@ namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
-evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SymbolicRep a)
+evalTermO :: Term Object -> AnalyzeM Object
+evalTermO = \case
+  LiteralObject o -> pure o
+  Read tn (Schema fields) rowId -> do
+    rId <- evalTerm rowId
+    tableRead tn .= true
+    obj <- iforM fields $ \fieldName fieldType -> do
+      x <- case fieldType of
+        EType TInt -> mkAVal <$> use (intCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
+        EType TBool -> mkAVal <$> use (boolCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
+        EType TStr -> mkAVal <$> use (stringCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
+      pure (fieldType, x)
+    pure (Object obj)
+
+evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
@@ -96,16 +112,20 @@ evalTerm = \case
 
   Literal a -> pure a
 
-  Read tn rowId -> do
-    rId <- evalTerm rowId -- TODO: use this
-    tableRead tn .= true
-    pure $ literal () -- TODO: this should instead return a symbolic object
+  -- In principle we could do this lookup with dynamic keys, but what do we
+  -- return when the key is not present?
+  At colName obj -> do
+    Object obj' <- evalTermO obj
+    case Map.lookup colName obj' of
+      Nothing -> throwError $ KeyNotPresent colName (Object obj')
+      Just (_fieldType, AVal val) -> pure $ mkSBV val
+      Just (_fieldType, AnObj _x) -> undefined
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn rowId {- obj -} -> do
+  Write tn rowId obj -> do
     tableWritten tn .= true
     --
     -- TODO: make a constant on the pact side that this uses:
@@ -123,7 +143,9 @@ evalTerm = \case
     -- Assume the term is well-scoped after typechecking
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
-    pure $ unsafeCastAVal val
+    case val of
+      AVal x -> pure (mkSBV x)
+      AnObj _ -> undefined
 
   Arith op args ->
     if op `Set.member` unsupportedArithOps
@@ -168,7 +190,7 @@ evalTerm = \case
 
   n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
     "We don't support adding decimals to time yet"
-    n
+    (ETerm n undefined)
 
   NameAuthorized str -> namedAuth =<< evalTerm str
 
@@ -187,6 +209,10 @@ evalTerm = \case
       pure (varName, mkAVal (literal True))
     local (scope <>~ Map.fromList newVars) $
       evalTerm body
+
+  n -> do
+    traceShowM n
+    throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)
 
 evalDomainProperty :: DomainProperty -> AnalyzeM SBool
 evalDomainProperty Success = use succeeds

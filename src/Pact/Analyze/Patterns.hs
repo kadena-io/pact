@@ -99,3 +99,8 @@ pattern RawTableName t <- (Table (Node (TcId _ t _) _) _)
 
 pattern NativeFuncSpecial :: forall a. Text -> AST a -> Fun a
 pattern NativeFuncSpecial f bdy <- (FNative _ f _ (Just (_,SBinding bdy)))
+
+-- pattern AST_Read :: forall a. AST a
+pattern AST_Read node table key <- App node (NativeFunc "read") [RawTableName table, key]
+
+pattern AST_At colName obj <- App _ (NativeFunc "at") [Prim _ (PrimLit (LString colName)), obj]
