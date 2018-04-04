@@ -256,7 +256,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.7"
+"2.3.8"
 ```
 
 
@@ -535,7 +535,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
 ```lisp
 (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" id bal ccy))
+   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 
@@ -547,7 +547,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
 ```lisp
 (with-read 'accounts id { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" id bal ccy))
+   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 

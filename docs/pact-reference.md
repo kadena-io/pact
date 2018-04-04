@@ -552,7 +552,7 @@ The following code indicates how this might be achieved:
 (defun read-balance (id)
   (with-read { "balance":= bal, "keyset":= ks }
     (enforce-keyset ks)
-    (format "Your balance is {}" bal)))
+    (format "Your balance is {}" [bal])))
 ```
 
 In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](#read-keyset)
@@ -920,7 +920,7 @@ They are used in [with-read](#with-read), [with-default-read](#with-default-read
 ```lisp
 (defun check-balance (id)
   (with-read accounts id { "balance" := bal }
-    (enforce (> bal 0) (format "Account in overdraft: {}" bal))))
+    (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 ```
 
 Type specifiers

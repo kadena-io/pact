@@ -672,7 +672,7 @@ be achieved:
     (defun read-balance (id)
       (with-read accounts id { "balance":= bal, "keyset":= ks }
         (enforce-keyset ks)
-        (format "Your balance is {}" bal)))
+        (format "Your balance is {}" [bal])))
 
 In the example, ``create-account`` reads a keyset definition from the
 message payload using `read-keyset <#read-keyset>`__ to store as
@@ -1178,7 +1178,7 @@ values in an object.
 
     (defun check-balance (id)
       (with-read accounts id { "balance" := bal }
-        (enforce (> bal 0) (format "Account in overdraft: {}" bal))))
+        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
 Type specifiers
 ---------------
@@ -1957,7 +1957,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.3.7"
+    "2.3.8"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -2264,7 +2264,7 @@ from DEFAULTS, an object with matching key names.
 .. code:: lisp
 
     (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" id bal ccy))
+       (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
 ~~~~~~~~~
@@ -2278,7 +2278,7 @@ BINDINGS over subsequent body statements.
 .. code:: lisp
 
     (with-read 'accounts id { "balance":= bal, "ccy":= ccy }
-       (format "Balance for {} is {} {}" id bal ccy))
+       (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
 ~~~~~
