@@ -38,12 +38,28 @@ import Pact.Types.Lang hiding (Term, TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 
--- | Low-level, untyped symbolic value.
-data AVal = AVal SBVI.SVal
+type family SymbolicRep a where
+  SymbolicRep Object = Object
+  SymbolicRep a      = SBV a
+
+type FieldType
+  = () -- TODO
+
+newtype Object
+  = Object (Map String (FieldType, AVal))
+
+-- | Untyped symbolic value.
+data AVal
+  = AVal SBVI.SVal
+  | AnObj Object
   deriving (Eq, Show)
 
-unsafeCastAVal :: AVal -> SBV a
+--
+-- TODO: will this work?
+--
+unsafeCastAVal :: AVal -> SymbolicRep a
 unsafeCastAVal (AVal sval) = SBVI.SBV sval
+unsafeCastAVal (AnObj obj) = obj
 
 mkAVal :: SBV a -> AVal
 mkAVal (SBVI.SBV sval) = AVal sval
@@ -399,13 +415,18 @@ data Term ret where
   -- TODO: do we need a noop to handle a sequence of one expression?
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
   Literal        ::                        SBV a        ->                             Term a
-  -- TODO: Read should return an object, probably parameterized by a schema:
-  Read           ::                        TableName    -> Term String    ->           Term ()
 
+  LiteralObject  ::                        Object       ->                             Term Object
+  At             ::                        Term String  -> Term Object    ->           Term a
+  Read           ::                        TableName    -> Term String    ->           Term Object
+  -- NOTE: pact really does return a string here:
+  Write          ::                        TableName -> Term String -> Term Object -> Term String
+
+  --
+  -- TODO: retire:
+  --
   WithRead       :: (Show a) => TableName -> Term String -> [Text] -> Term a -> Term a
-  -- TODO: Write should take an obj after tn and row term but still return Term String like pact:
-  --         the object should likewise probably be parameterized by a schema.
-  Write          ::                        TableName    -> Term String    ->           Term String
+
   Let            :: (Show a, SymWord a) => Text         -> Term a         -> Term b -> Term b
   -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
   --       just using Let+At first.

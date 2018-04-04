@@ -81,7 +81,7 @@ namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
-evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
+evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SymbolicRep a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
