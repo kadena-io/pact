@@ -169,7 +169,13 @@ instance IsString CellId where
 
 --
 -- TODO: set up more hygenic munging. we don't want SBV to find a solution with
--- a column name or row key containing "__".
+-- a column name or row key containing "__". perhaps we accumulate symbolic
+-- column name and row key variables (in a Set, in GlobalState) and then assert
+-- contraints that these variables must take names from a whitelist, or never
+-- contain "__".
+--
+-- Another solution might be using indirection in the form of multiple layers
+-- of arrays, without the need for munging.
 --
 
 sCellId :: TableName -> SBV ColumnName -> SBV RowKey -> SBV CellId
