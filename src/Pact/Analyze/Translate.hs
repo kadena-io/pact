@@ -184,7 +184,7 @@ translateNode = \case
     ETerm b' TStr <- translateNode b
     pure (ETerm (Concat a' b') TStr)
 
-  AST_NFun_Basic "pact-version" [] -> pure $ ETerm PactVersion TStr
+  AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
   AST_WithRead _node table key bindings body -> do
     -- traceShowM ("bindings", bindings)
