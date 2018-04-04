@@ -125,8 +125,16 @@ evalTerm = \case
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn rowId obj -> do
+  Write tn (Schema fields) rowId (LiteralObject (Object obj)) -> do
     tableWritten tn .= true
+    rId <- evalTerm rowId
+    iforM obj $ \colName (fieldType, val) ->
+      case val of
+        AVal val -> case fieldType of
+          EType TInt -> intCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
+          EType TBool -> boolCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
+          EType TStr -> stringCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
+        AnObj _ -> pure () -- XXX throw error
     --
     -- TODO: make a constant on the pact side that this uses:
     --

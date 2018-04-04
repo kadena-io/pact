@@ -385,7 +385,7 @@ data Term ret where
   At             ::                        String       -> Term Object    ->           Term a
   Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:
-  Write          ::                        TableName -> Term String -> Term Object -> Term String
+  Write          ::                        TableName -> Schema -> Term String -> Term Object -> Term String
 
   --
   -- TODO: retire:

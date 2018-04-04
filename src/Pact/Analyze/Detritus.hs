@@ -52,6 +52,3 @@ pattern AST_EnforceKeyset node' keyset' <-
 pattern AST_Format :: forall a. a -> Text -> [AST a] -> AST a
 pattern AST_Format node' fmtStr' args' <-
   (App node' (NativeFunc "format") (AST_Lit (LString fmtStr'):args'))
-
-pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
-pattern AST_Obj objNode kvs <- (Object objNode kvs)

@@ -12,7 +12,7 @@ import Control.Monad.Reader (local)
 import qualified Data.Map as Map
 import Pact.Types.Lang hiding (Term, TableName, TObject, EObject)
 import qualified Pact.Types.Lang as Lang
-import Pact.Types.Typecheck hiding (Var, Schema)
+import Pact.Types.Typecheck hiding (Var, Schema, Object)
 import qualified Pact.Types.Typecheck as TC
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.Text as T
@@ -169,10 +169,13 @@ translateNode = \case
       | isLogical    fn -> mkLogical
       | isArith      fn -> mkArith
 
-  AST_NFun _node name [Table _tnode (Lang.TableName tn), row, _obj]
+  AST_NFun _node name [Table _tnode (Lang.TableName tn), row, obj]
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
-    pure $ ETerm (Write (TableName (T.unpack tn)) row' undefined) TStr
+    EObject obj' TObject <- translateNode obj
+    case schemaFromPact (_aTy (_aNode obj)) of
+      Left err -> throwError err
+      Right schema -> pure $ ETerm (Write (TableName (T.unpack tn)) schema row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
     ETerm cond' TBool <- translateNode cond
@@ -227,6 +230,15 @@ translateNode = \case
     EObject obj' TObject <- translateNode obj
     -- XXX return correct type
     pure $ ETerm (At (T.unpack colName) obj') TInt
+
+  AST_Obj node kvs -> do
+    kvs' <- flip traverse kvs $ \(k, v) -> do
+      let k' = case k of
+                 AST_Lit (LString t) -> T.unpack t
+                 _ -> undefined
+      v' <- translateNode v
+      pure (k', (undefined, v'))
+    pure $ EObject (LiteralObject $ Object $ Map.fromList kvs') TObject
 
   --
   -- TODO: more cases.
