@@ -156,6 +156,8 @@ instance HasKind RowKey where
 instance IsString RowKey where
   fromString = RowKey
 
+type SRowKey = SBV RowKey
+
 -- a unique column, comprised of table name and column name
 -- e.g. accounts__balance
 newtype ColumnId
@@ -393,6 +395,7 @@ data Term ret where
   Literal        ::                        SBV a        ->                             Term a
 
   LiteralObject  ::                        Map String (FieldType, ETerm)       ->                             Term Object
+  -- TODO: computed keys
   At             ::                        String       -> Term Object    ->           Term a
   Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:

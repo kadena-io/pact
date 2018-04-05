@@ -163,14 +163,11 @@ suite = tests
               (defun test:string ()
                 (insert tokens "stu" {"balance": 5, "name": "stu"})
                 (let ((stu-name    (at 'name (read tokens "stu")))
-                      (stu-balance (at 'balance (read tokens "stu")))
-                     )
-                  ; (enforce (= stu-name "stu") "name is stu")
-                  (enforce (= stu-balance 5) "balance is 5")
-                  )
-                )
+                      (stu-balance (at 'balance (read tokens "stu"))))
+                  (enforce (= stu-name "stu") "name is stu")
+                  (enforce (= stu-balance 5) "balance is 5")))
             |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+      in expectPass code $ Valid $ Occurs Success
 
   , scope "x.table-read" $
       let code =

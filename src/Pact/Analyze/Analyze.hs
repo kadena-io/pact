@@ -93,14 +93,16 @@ evalTermO = \case
       val <- evalTerm tm
       pure (fieldType, mkAVal val)
     pure (Object obj')
+
   Read tn (Schema fields) rowId -> do
     rId <- evalTerm rowId
     tableRead tn .= true
     obj <- iforM fields $ \fieldName fieldType -> do
+      let sCn = literal $ ColumnName fieldName
       x <- case fieldType of
-        EType TInt -> mkAVal <$> use (intCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
-        EType TBool -> mkAVal <$> use (boolCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
-        EType TStr -> mkAVal <$> use (stringCell tn (literal (ColumnName fieldName)) (coerceSBV rId))
+        EType TInt  -> mkAVal <$> use (intCell    tn sCn (coerceSBV rId))
+        EType TBool -> mkAVal <$> use (boolCell   tn sCn (coerceSBV rId))
+        EType TStr  -> mkAVal <$> use (stringCell tn sCn (coerceSBV rId))
       pure (fieldType, x)
     pure (Object obj)
 
@@ -132,16 +134,20 @@ evalTerm = \case
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn (Schema fields) rowId (LiteralObject obj) -> do
+  Write tn (Schema fields) rowKey (LiteralObject obj) -> do
+    --
+    -- TODO: handle write of non-literal object
+    --
     tableWritten tn .= true
-    rId <- evalTerm rowId
-    iforM obj $ \colName (fieldType, ETerm tm _) -> do
+    sRk <- evalTerm rowKey
+    x <- iforM obj $ \colName (fieldType, ETerm tm _) -> do
       val <- evalTerm tm
+      let sCn = literal $ ColumnName colName
       case mkAVal val of
-        AVal val -> case fieldType of
-          EType TInt -> intCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
-          EType TBool -> boolCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
-          EType TStr -> stringCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
+        AVal val' -> case fieldType of
+          EType TInt  -> intCell    tn sCn (coerceSBV sRk) .= mkSBV val'
+          EType TBool -> boolCell   tn sCn (coerceSBV sRk) .= mkSBV val'
+          EType TStr  -> stringCell tn sCn (coerceSBV sRk) .= mkSBV val'
         AnObj _ -> pure () -- XXX throw error
 
     --
@@ -280,7 +286,7 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       --              need to extract these from the program.
       --
       tableNames :: [TableName]
-      tableNames = ["test.accounts", "test.tokens"]
+      tableNames = ["accounts", "tokens"]
 
   in analyzeFunction' check body' argTys nodeNames' tableNames
 
@@ -322,7 +328,7 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
 -- semantically-meaningful results.
 runCheck :: Provable a => Check -> a -> IO CheckResult
 runCheck (Satisfiable _prop) provable = do
-  (SatResult smtRes) <- satWith z3{verbose=True, transcript=Just "/Users/joel/code/kadena/pact-analyze/transcript", redirectVerbose=Just "/Users/joel/code/kadena/pact-analyze/verbose"} provable
+  (SatResult smtRes) <- sat provable
   pure $ case smtRes of
     SBV.Unsatisfiable _config -> Left Unsatisfiable
     SBV.Satisfiable _config model -> Right $ SatisfiedProperty model

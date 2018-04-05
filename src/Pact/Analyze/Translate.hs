@@ -169,7 +169,7 @@ translateNode = \case
       | isLogical    fn -> mkLogical
       | isArith      fn -> mkArith
 
-  AST_NFun _node name [Table _tnode (Lang.TableName tn), row, obj]
+  AST_NFun _node name [ShortTableName tn, row, obj]
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' TObject <- translateNode obj
