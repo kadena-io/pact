@@ -315,7 +315,9 @@ data AnalyzeFailure
   | BranchesDifferentTypes EType EType
   | KeyNotPresent String Object
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
-  deriving Show
+
+instance Show AnalyzeFailure
+  -- deriving Show
 
 type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
@@ -355,13 +357,13 @@ data LogicalOp = AndOp | OrOp | NotOp
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
+-- The type of a simple type
 data Type a where
   TInt     :: Type Integer
   TBool    :: Type Bool
   TStr     :: Type String
   TTime    :: Type Time
   TDecimal :: Type Decimal
-  TObject  :: Type Object
 
 data EType where
   -- TODO: parametrize over constraint
@@ -373,8 +375,6 @@ typeEq TBool TBool = Just Refl
 typeEq TStr TStr = Just Refl
 typeEq TTime TTime = Just Refl
 typeEq TDecimal TDecimal = Just Refl
--- TODO: this should probably compare types of fields
-typeEq TObject TObject = Just Refl
 typeEq _     _     = Nothing
 
 instance Eq EType where
@@ -384,8 +384,8 @@ instance Eq EType where
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
-  ETerm   :: (Show a, SymWord a) => Term a      -> Type a      -> ETerm
-  EObject ::                        Term Object -> Type Object -> ETerm
+  ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
+  EObject ::                        Term Object -> Schema -> ETerm
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
@@ -394,12 +394,15 @@ data Term ret where
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
   Literal        ::                        SBV a        ->                             Term a
 
+  --
+  -- TODO: we need to allow computed keys here
+  --
   LiteralObject  ::                        Map String (FieldType, ETerm)       ->                             Term Object
   -- TODO: computed keys
   At             ::                        String       -> Term Object    ->           Term a
   Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:
-  Write          ::                        TableName -> Schema -> Term String -> Term Object -> Term String
+  Write          ::                        TableName -> Term String -> Term Object -> Term String
 
   --
   -- TODO: retire:

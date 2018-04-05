@@ -27,6 +27,8 @@ translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
 translateBody [ast] = translateNode ast
 translateBody (ast:asts) = do
+  -- XXX: allow objects
+  -- EAny ast' <- translateNode ast
   ETerm ast' _   <- translateNode ast
   ETerm asts' ty <- translateBody asts
   pure $ ETerm (Sequence ast' asts') ty
@@ -53,6 +55,7 @@ translateNode = \case
       --       earlier ones if we know it's let* rather than let? or has this
       --       been enforced by earlier stages for us?
       --
+      -- XXX allow objects here
       ETerm body' bodyTy <- translateNode $ AST_Let node bindingsRest body
       case rhsETerm of
         ETerm rhs _ -> pure $ ETerm (Let varName rhs body') bodyTy
@@ -173,10 +176,10 @@ translateNode = \case
   AST_NFun _node name [ShortTableName tn, row, obj]
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
-    EObject obj' TObject <- translateNode obj
+    EObject obj' _schema <- translateNode obj
     case schemaFromPact (_aTy (_aNode obj)) of
       Left err -> throwError err
-      Right schema -> pure $ ETerm (Write (TableName (T.unpack tn)) schema row' obj') TStr
+      Right schema -> pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
     ETerm cond' TBool <- translateNode cond
@@ -233,10 +236,10 @@ translateNode = \case
     schema <- case schemaFromPact (_aTy node) of
       Left err -> throwError err
       Right x -> pure x
-    pure (EObject (Read (TableName (T.unpack table)) schema key') TObject)
+    pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
 
   AST_At colName obj -> do
-    EObject obj' TObject <- translateNode obj
+    EObject obj' _schema <- translateNode obj
     -- XXX return correct type
     pure $ ETerm (At (T.unpack colName) obj') TInt
 
@@ -253,7 +256,10 @@ translateNode = \case
                  TyPrim TyTime -> EType TTime
       v' <- translateNode v
       pure (k', (ty, v'))
-    pure $ EObject (LiteralObject $ Map.fromList kvs') TObject
+    schema <- case schemaFromPact (_aTy node) of
+      Left err -> throwError err
+      Right x -> pure x
+    pure $ EObject (LiteralObject $ Map.fromList kvs') schema
 
   --
   -- TODO: more cases.

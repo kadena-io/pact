@@ -23,7 +23,7 @@ import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Text (Text)
 import Pact.Typechecker hiding (debug)
-import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
+import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type, EObject)
 import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
@@ -125,6 +125,7 @@ evalTerm = \case
   -- return when the key is not present?
   At colName obj -> do
     Object obj' <- evalTermO obj
+    -- TODO(joel): sequence of ite
     case Map.lookup colName obj' of
       Nothing -> throwError $ KeyNotPresent colName (Object obj')
       Just (_fieldType, AVal val) -> pure $ mkSBV val
@@ -134,16 +135,16 @@ evalTerm = \case
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn (Schema fields) rowKey (LiteralObject obj) -> do
+  Write tn rowKey obj -> do
+    Object obj' <- evalTermO obj
     --
     -- TODO: handle write of non-literal object
     --
     tableWritten tn .= true
     sRk <- evalTerm rowKey
-    x <- iforM obj $ \colName (fieldType, ETerm tm _) -> do
-      val <- evalTerm tm
+    void $ iforM obj' $ \colName (fieldType, aval) -> do
       let sCn = literal $ ColumnName colName
-      case mkAVal val of
+      case aval of
         AVal val' -> case fieldType of
           EType TInt  -> intCell    tn sCn (coerceSBV sRk) .= mkSBV val'
           EType TBool -> boolCell   tn sCn (coerceSBV sRk) .= mkSBV val'
@@ -410,4 +411,3 @@ runTest code check = do
             Just ref -> do
               (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
               failedTcOrAnalyze tcState fun check
-
