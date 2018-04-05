@@ -51,7 +51,7 @@ newtype Object
   deriving (Eq, Show)
 
 newtype Schema = Schema (Map String FieldType)
-  deriving Show
+  deriving (Show, Eq)
 
 -- | Untyped symbolic value.
 data AVal
@@ -311,13 +311,16 @@ data AnalyzeFailure
   | EmptyBody
   -- | A node we have a good reason not to handle
   | UnhandledTerm String ETerm
+  | UnhandledObject (Term Object)
   | TypesDontMatch EType EType
   | BranchesDifferentTypes EType EType
   | KeyNotPresent String Object
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
-
-instance Show AnalyzeFailure
-  -- deriving Show
+  | AtHasNoRelevantFields EType Schema
+  | ObjFieldOfWrongType String EType
+  | AValUnexpectedlySVal SBVI.SVal
+  | AValUnexpectedlyObj Object
+  deriving Show
 
 type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
@@ -368,19 +371,22 @@ data Type a where
 data EType where
   -- TODO: parametrize over constraint
   EType :: (Show a, SymWord a) => Type a -> EType
+  EObjectTy :: Schema -> EType
 
 typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt  TInt  = Just Refl
-typeEq TBool TBool = Just Refl
-typeEq TStr TStr = Just Refl
-typeEq TTime TTime = Just Refl
+typeEq TInt     TInt     = Just Refl
+typeEq TBool    TBool    = Just Refl
+typeEq TStr     TStr     = Just Refl
+typeEq TTime    TTime    = Just Refl
 typeEq TDecimal TDecimal = Just Refl
-typeEq _     _     = Nothing
+typeEq _        _        = Nothing
 
 instance Eq EType where
   EType a == EType b = case typeEq a b of
     Just _refl -> True
     Nothing    -> False
+  EObjectTy a == EObjectTy b = a == b
+  _ == _ = False
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
@@ -398,8 +404,10 @@ data Term ret where
   -- TODO: we need to allow computed keys here
   --
   LiteralObject  ::                        Map String (FieldType, ETerm)       ->                             Term Object
-  -- TODO: computed keys
-  At             ::                        String       -> Term Object    ->           Term a
+
+  -- At holds the schema of the object it's accessing. We do this so we can
+  -- determine statically which fields can be accessed.
+  At             ::                        Schema      -> Term String              -> Term Object    -> EType -> Term a
   Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:
   Write          ::                        TableName -> Term String -> Term Object -> Term String
@@ -409,7 +417,7 @@ data Term ret where
   --
   WithRead       :: (Show a) => TableName -> Term String -> [Text] -> Term a -> Term a
 
-  Let            :: (Show a, SymWord a) => Text         -> Term a         -> Term b -> Term b
+  Let            ::                        Text         -> ETerm         -> Term a  -> Term a
   -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
   --       just using Let+At first.
   Var            ::                        Text         ->                             Term a
@@ -441,7 +449,6 @@ deriving instance Show ETerm
 deriving instance Show (Type a)
 deriving instance Eq (Type a)
 deriving instance Show EType
--- deriving instance Eq EType
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger

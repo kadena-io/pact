@@ -10,8 +10,8 @@ import Control.Lens hiding (op, (.>))
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (local)
 import qualified Data.Map as Map
-import Pact.Types.Lang hiding (Term, TableName, TObject, EObject)
-import qualified Pact.Types.Lang as Lang
+import Data.Traversable (for)
+import Pact.Types.Lang hiding (Term, TableName, TObject, EObject, Type)
 import Pact.Types.Typecheck hiding (Var, Schema, Object)
 import qualified Pact.Types.Typecheck as TC
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
@@ -33,15 +33,6 @@ translateBody (ast:asts) = do
   ETerm asts' ty <- translateBody asts
   pure $ ETerm (Sequence ast' asts') ty
 
-nodeToTy :: Node -> EType
-nodeToTy node = case node ^. aTy of
-  TyPrim TyBool    -> EType TBool
-  TyPrim TyDecimal -> EType TDecimal
-  TyPrim TyInteger -> EType TInt
-  TyPrim TyString  -> EType TStr
-  TyPrim TyTime    -> EType TTime
-  _                -> error "EType not yet supported"
-
 translateNode :: AST Node -> TranslateM ETerm
 translateNode = \case
   AST_Let _ [] body -> translateBody body
@@ -56,15 +47,16 @@ translateNode = \case
       --       been enforced by earlier stages for us?
       --
       -- XXX allow objects here
-      ETerm body' bodyTy <- translateNode $ AST_Let node bindingsRest body
-      case rhsETerm of
-        ETerm rhs _ -> pure $ ETerm (Let varName rhs body') bodyTy
-        -- EObject tm ty -> pure $ ETerm (Let )
+      body' <- translateNode $ AST_Let node bindingsRest body
+      pure $ case body' of
+        ETerm   bodyTm bodyTy -> ETerm   (Let varName rhsETerm bodyTm) bodyTy
+        EObject bodyTm bodyTy -> EObject (Let varName rhsETerm bodyTm) bodyTy
 
   AST_Var node -> do
     varName <- view (ix node)
-    case nodeToTy node of
-      EType ty -> pure $ ETerm (Var varName) ty
+    pure $ case typeFromPact (_aTy node) of
+      EType ty         -> ETerm (Var varName) ty
+      EObjectTy schema -> EObject (Var varName) schema
 
   -- Int
   AST_NegativeLit (LInteger i) -> do
@@ -238,22 +230,25 @@ translateNode = \case
       Right x -> pure x
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
 
-  AST_At colName obj -> do
-    EObject obj' _schema <- translateNode obj
-    -- XXX return correct type
-    pure $ ETerm (At (T.unpack colName) obj') TInt
+  AST_At node colName obj -> do
+    EObject obj' schema <- translateNode obj
+    let colName' = Literal $ literal $ T.unpack colName
+    pure $ case typeFromPact (_aTy node) of
+      ty@(EType ty')         -> ETerm   (At schema colName' obj' ty) ty'
+      ty@(EObjectTy schema') -> EObject (At schema colName' obj' ty) schema'
 
   AST_Obj node kvs -> do
-    kvs' <- flip traverse kvs $ \(k, v) -> do
+    kvs' <- for kvs $ \(k, v) -> do
       let k' = case k of
                  AST_Lit (LString t) -> T.unpack t
+                 -- TODO: support non-const keys
                  _ -> undefined
       let ty = case v ^. aNode . aTy of
-                 TyPrim TyBool -> EType TBool
+                 TyPrim TyBool    -> EType TBool
                  TyPrim TyDecimal -> EType TDecimal
                  TyPrim TyInteger -> EType TInt
-                 TyPrim TyString -> EType TStr
-                 TyPrim TyTime -> EType TTime
+                 TyPrim TyString  -> EType TStr
+                 TyPrim TyTime    -> EType TTime
       v' <- translateNode v
       pure (k', (ty, v'))
     schema <- case schemaFromPact (_aTy node) of
@@ -267,9 +262,9 @@ translateNode = \case
 
   ast -> throwError (UnexpectedNode "translateNode" ast)
 
-schemaFromPact :: Pact.Type Pact.UserType -> Either AnalyzeFailure Schema
-schemaFromPact ty = case ty of
-  TyUser (TC.Schema _ _ fields _) -> Right $ Schema $ Map.fromList $ flip map fields $
+typeFromPact :: Pact.Type Pact.UserType -> EType
+typeFromPact ty = case ty of
+  TyUser (TC.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
     \(Arg name ty _info) -> case ty of
       TyPrim TyBool    -> (T.unpack name, EType TBool)
       TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
@@ -277,6 +272,16 @@ schemaFromPact ty = case ty of
       TyPrim TyString  -> (T.unpack name, EType TStr)
       TyPrim TyTime    -> (T.unpack name, EType TTime)
 
-  TySchema _ ty' -> schemaFromPact ty'
+  -- TODO(joel): understand the difference between the TyUser and TySchema cases
+  TySchema _ ty' -> typeFromPact ty'
 
-  ty -> Left $ NotConvertibleToSchema ty
+  TyPrim TyBool    -> EType TBool
+  TyPrim TyDecimal -> EType TDecimal
+  TyPrim TyInteger -> EType TInt
+  TyPrim TyString  -> EType TStr
+  TyPrim TyTime    -> EType TTime
+
+schemaFromPact :: Pact.Type Pact.UserType -> Either AnalyzeFailure Schema
+schemaFromPact ty = case typeFromPact ty of
+  EType _primTy    -> Left $ NotConvertibleToSchema ty
+  EObjectTy schema -> Right schema

@@ -1,8 +1,9 @@
-{-# language GADTs             #-}
-{-# language LambdaCase        #-}
-{-# language OverloadedStrings #-}
-{-# language Rank2Types        #-}
-{-# language TupleSections     #-}
+{-# language GADTs               #-}
+{-# language LambdaCase          #-}
+{-# language OverloadedStrings   #-}
+{-# language Rank2Types          #-}
+{-# language ScopedTypeVariables #-}
+{-# language TupleSections       #-}
 
 module Pact.Analyze.Analyze
   ( runCompiler
@@ -21,6 +22,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict (runStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
+import Data.Foldable (foldrM)
 import Data.Text (Text)
 import Pact.Typechecker hiding (debug)
 import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type, EObject)
@@ -103,10 +105,21 @@ evalTermO = \case
         EType TInt  -> mkAVal <$> use (intCell    tn sCn (coerceSBV rId))
         EType TBool -> mkAVal <$> use (boolCell   tn sCn (coerceSBV rId))
         EType TStr  -> mkAVal <$> use (stringCell tn sCn (coerceSBV rId))
+        -- TODO: more field types
       pure (fieldType, x)
     pure (Object obj)
 
-evalTerm :: (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
+  Var name -> do
+    Just val <- view (scope . at name)
+    -- Assume the variable is well-typed after typechecking
+    case val of
+      AVal  val -> throwError $ AValUnexpectedlySVal val
+      AnObj obj -> pure obj
+
+  obj -> throwError $ UnhandledObject obj
+
+evalTerm
+  :: forall a. (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
 evalTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
@@ -123,13 +136,41 @@ evalTerm = \case
 
   -- In principle we could do this lookup with dynamic keys, but what do we
   -- return when the key is not present?
-  At colName obj -> do
+  At schema@(Schema schemaFields) colName obj retType -> do
     Object obj' <- evalTermO obj
-    -- TODO(joel): sequence of ite
-    case Map.lookup colName obj' of
-      Nothing -> throwError $ KeyNotPresent colName (Object obj')
-      Just (_fieldType, AVal val) -> pure $ mkSBV val
-      Just (_fieldType, AnObj _x) -> undefined
+
+    -- Filter down to only fields which contain the type we're looking for
+    let relevantFields
+          = map fst
+          $ filter (\(_name, ty) -> ty == retType)
+          $ Map.toList schemaFields
+
+    colName' <- evalTerm colName
+
+    firstName:relevantFields' <- case relevantFields of
+      [] -> throwError $ AtHasNoRelevantFields retType schema
+      _ -> pure relevantFields
+
+    let getObjVal fieldName = case Map.lookup fieldName obj' of
+          Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
+          Just (_fieldType, AVal val) -> pure (mkSBV val)
+          Just (fieldType, AnObj _x) -> throwError $
+            ObjFieldOfWrongType fieldName fieldType
+
+    firstVal <- getObjVal firstName
+
+    -- Fold over each relevant field, building a sequence of `ite`s. We require
+    -- at least one matching field, ie firstVal. At first glance, this should
+    -- just be a `foldr1M`, but we want the type of accumulator and element to
+    -- differ, because elements are `String` `fieldName`s, while the accumulator
+    -- is an `SBV a`.
+    foldrM
+      (\fieldName rest -> do
+        val <- getObjVal fieldName
+        pure $ ite (colName' .== literal fieldName) val rest
+      )
+      firstVal
+      relevantFields'
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
@@ -149,16 +190,22 @@ evalTerm = \case
           EType TInt  -> intCell    tn sCn (coerceSBV sRk) .= mkSBV val'
           EType TBool -> boolCell   tn sCn (coerceSBV sRk) .= mkSBV val'
           EType TStr  -> stringCell tn sCn (coerceSBV sRk) .= mkSBV val'
-        AnObj _ -> pure () -- XXX throw error
+          -- TODO: rest of cell types
+        AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
 
     --
     -- TODO: make a constant on the pact side that this uses:
     --
     pure $ literal "Write succeeded"
 
-  Let name rhs body -> do
+  Let name (ETerm rhs _) body -> do
     val <- evalTerm rhs
     local (scope.at name ?~ mkAVal val) $
+      evalTerm body
+
+  Let name (EObject rhs _) body -> do
+    rhs' <- evalTermO rhs
+    local (scope.at name ?~ AnObj rhs') $
       evalTerm body
 
   Var name -> do

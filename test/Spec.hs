@@ -152,7 +152,7 @@ suite = tests
   -- TODO: enforce-keyset.object
   --
 
-  , scope "table-read" $
+  , scope "table-read.multiple-read" $
       let code =
             [text|
               (defschema token-row
@@ -169,7 +169,7 @@ suite = tests
             |]
       in expectPass code $ Valid $ Occurs Success
 
-  , scope "x.table-read" $
+  , scope "table-read.one-read" $
       let code =
             [text|
               (defschema token-row
@@ -180,7 +180,7 @@ suite = tests
               (defun test:string ()
                 (insert tokens "stu" {"balance": 5, "name": "stu"})
                 (let ((stu (read tokens "stu")))
-                  ; (enforce (= (at 'name stu) "stu") "name is stu")
+                  (enforce (= (at 'name stu) "stu") "name is stu")
                   (enforce (= (at 'balance stu) 5) "balance is 5")
                   )
                 )
@@ -305,5 +305,4 @@ suite = tests
   ]
 
 main :: IO ()
-main = runOnly "table-read" suite
---main = run suite
+main = run suite
