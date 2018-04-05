@@ -1,6 +1,7 @@
 {-# language DeriveAnyClass      #-}
 {-# language DeriveDataTypeable  #-}
 {-# language DeriveGeneric       #-}
+{-# language DeriveTraversable   #-}
 {-# language FlexibleContexts    #-}
 {-# language FlexibleInstances   #-}
 {-# language GADTs               #-}
@@ -17,7 +18,6 @@
 {-# language TupleSections       #-}
 {-# language TypeOperators       #-}
 {-# language TypeFamilies        #-}
-{-# language TypeFamilyDependencies        #-}
 
 module Pact.Analyze.Types where
 
@@ -28,6 +28,7 @@ import Control.Lens hiding (op, (.>), (...))
 import Data.Data
 import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
+import qualified Data.Map as Map
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import Data.Set (Set)
@@ -41,10 +42,6 @@ import qualified Pact.Types.Lang as Pact
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 import qualified Pact.Types.Typecheck as Pact
-
-type family SymbolicRep a = r | r -> a where
-  SymbolicRep Object = Object
-  SymbolicRep a      = SBV a
 
 type FieldType = EType
   -- = () -- TODO
@@ -125,6 +122,10 @@ instance HasKind TableName where
 instance IsString TableName where
   fromString = TableName
 
+newtype TableMap a
+  = TableMap { _tableMap :: Map TableName a }
+  deriving (Show, Functor, Foldable, Traversable)
+
 newtype ColumnName
   = ColumnName String
   deriving (Eq, Ord, Show)
@@ -172,12 +173,8 @@ instance HasKind ColumnId where
 instance IsString ColumnId where
   fromString = ColumnId
 
-sColId :: TableName -> SBV ColumnName -> SBV ColumnId
-sColId (TableName tn) sCn = coerceSBV $
-  (literal $ tn ++ "__") .++ coerceSBV sCn
-
--- a unique cell, from table and column names, and a row key
--- e.g. accounts__balance__25
+-- a unique cell, from a column name and a row key
+-- e.g. balance__25
 newtype CellId
   = CellId String
   deriving (Eq, Ord)
@@ -204,9 +201,8 @@ instance IsString CellId where
 -- of arrays, without the need for munging.
 --
 
-sCellId :: TableName -> SBV ColumnName -> SBV RowKey -> SBV CellId
-sCellId (TableName tn) sCn sRk = coerceSBV $
-  (literal $ tn ++ "__") .++ coerceSBV sCn .++ "__" .++ coerceSBV sRk
+sCellId :: SBV ColumnName -> SBV RowKey -> SBV CellId
+sCellId sCn sRk = coerceSBV $ coerceSBV sCn .++ "__" .++ coerceSBV sRk
 
 data SymbolicCells
   = SymbolicCells
@@ -225,19 +221,28 @@ mkSymbolicCells = SymbolicCells
   <*> newArray "boolCells"
   <*> newArray "stringCells"
 
+instance Mergeable a => Mergeable (TableMap a) where
+  symbolicMerge force test (TableMap left) (TableMap right) = TableMap $
+    -- intersection is fine here; we know each map has all tables:
+    Map.intersectionWith (symbolicMerge force test) left right
+
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
     { _lasSucceeds      :: SBool
     , _lasTablesRead    :: SFunArray TableName Bool
     , _lasTablesWritten :: SFunArray TableName Bool
-    , _lasColumnDeltas  :: SFunArray ColumnId Integer
-    , _lasCells         :: SymbolicCells
+    , _lasColumnDeltas  :: TableMap (SFunArray ColumnName Integer)
+    , _lasTableCells    :: TableMap SymbolicCells
     }
   deriving (Show, Generic, Mergeable)
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
+  --
+  -- TODO: it seems that we'll need to accumulate constraints on
+  --       `SBV ColumnName`s as we project from objects and write tables.
+  --
   = GlobalAnalyzeState ()
   deriving (Show, Eq)
 
@@ -255,17 +260,23 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-initialAnalyzeState :: SymbolicCells -> AnalyzeState
-initialAnalyzeState symCells = AnalyzeState
-  { _latticeState = LatticeAnalyzeState
-      { _lasSucceeds      = true
-      , _lasTablesRead    = mkSFunArray $ const false
-      , _lasTablesWritten = mkSFunArray $ const false
-      , _lasColumnDeltas  = mkSFunArray $ const 0
-      , _lasCells         = symCells
-      }
-  , _globalState  = GlobalAnalyzeState ()
-  }
+initialAnalyzeState :: TableMap SymbolicCells -> AnalyzeState
+initialAnalyzeState tableCells = AnalyzeState
+    { _latticeState = LatticeAnalyzeState
+        { _lasSucceeds      = true
+        , _lasTablesRead    = mkSFunArray $ const false
+        , _lasTablesWritten = mkSFunArray $ const false
+        , _lasColumnDeltas  = columnDeltas
+        , _lasTableCells    = tableCells
+        }
+    , _globalState = GlobalAnalyzeState ()
+    }
+
+  where
+    columnDeltas :: TableMap (SFunArray ColumnName Integer)
+    columnDeltas = TableMap $ Map.fromList $ zip
+      (Map.keys $ _tableMap tableCells)
+      (repeat $ mkSFunArray (const 0))
 
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
@@ -514,11 +525,17 @@ data CheckSuccess
 type CheckResult
   = Either CheckFailure CheckSuccess
 
+makeLenses ''TableMap
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
+
+type instance Index (TableMap a) = TableName
+type instance IxValue (TableMap a) = a
+instance Ixed (TableMap a) where ix k = tableMap.ix k
+instance At (TableMap a) where at k = tableMap.at k
 
 succeeds :: Lens' AnalyzeState SBool
 succeeds = latticeState.lasSucceeds
@@ -530,7 +547,7 @@ tableWritten :: TableName -> Lens' AnalyzeState SBool
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
 
 columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
-columnDelta tn sCn = latticeState.lasColumnDeltas.symArrayAt (sColId tn sCn)
+columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn
 
 intCell
   :: TableName
@@ -538,7 +555,7 @@ intCell
   -> SBV RowKey
   -> Lens' AnalyzeState SInteger
 intCell tn sCn sRk =
-  latticeState.lasCells.scIntValues.symArrayAt (sCellId tn sCn sRk)
+  latticeState.lasTableCells.singular (ix tn).scIntValues.symArrayAt (sCellId sCn sRk)
 
 boolCell
   :: TableName
@@ -546,7 +563,7 @@ boolCell
   -> SBV RowKey
   -> Lens' AnalyzeState SBool
 boolCell tn sCn sRk =
-  latticeState.lasCells.scBoolValues.symArrayAt (sCellId tn sCn sRk)
+  latticeState.lasTableCells.singular (ix tn).scBoolValues.symArrayAt (sCellId sCn sRk)
 
 stringCell
   :: TableName
@@ -554,7 +571,7 @@ stringCell
   -> SBV RowKey
   -> Lens' AnalyzeState SString
 stringCell tn sCn sRk =
-  latticeState.lasCells.scStringValues.symArrayAt (sCellId tn sCn sRk)
+  latticeState.lasTableCells.singular (ix tn).scStringValues.symArrayAt (sCellId sCn sRk)
 
 instance (Mergeable a) => Mergeable (AnalyzeM a) where
   symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $

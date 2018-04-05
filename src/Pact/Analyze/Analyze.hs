@@ -1,7 +1,8 @@
-{-# language GADTs               #-}
-{-# language LambdaCase          #-}
-{-# language OverloadedStrings   #-}
-{-# language Rank2Types          #-}
+{-# language GADTs             #-}
+{-# language LambdaCase        #-}
+{-# language OverloadedStrings #-}
+{-# language Rank2Types        #-}
+{-# language TupleSections     #-}
 
 module Pact.Analyze.Analyze
   ( runCompiler
@@ -48,8 +49,9 @@ analyzeFunction'
   -> [AST Node]
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
+  -> [TableName]
   -> IO CheckResult
-analyzeFunction' check body argTys nodeNames =
+analyzeFunction' check body argTys nodeNames tableNames =
   case runExcept (runReaderT (translateBody body) nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
 
@@ -58,11 +60,12 @@ analyzeFunction' check body argTys nodeNames =
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
         nameAuths' <- newArray "nameAuthorizations"
-        symCells <- mkSymbolicCells
+        allTableCells <- sequence $ TableMap $ Map.fromList $
+          (, mkSymbolicCells) <$> tableNames
 
         let prop   = checkProperty check
             env0   = AnalyzeEnv scope0 nameAuths'
-            state0 = initialAnalyzeState symCells
+            state0 = initialAnalyzeState allTableCells
             action = evalTerm body''
                   *> evalProperty prop
 
@@ -272,7 +275,14 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       argTys :: [(Text, Pact.Type TC.UserType)]
       argTys = zip nodeNames (_aTy <$> argNodes)
 
-  in analyzeFunction' check body' argTys nodeNames'
+      --
+      -- TODO: FIXME: this is broken for anything but our current tests. we
+      --              need to extract these from the program.
+      --
+      tableNames :: [TableName]
+      tableNames = ["test.accounts", "test.tokens"]
+
+  in analyzeFunction' check body' argTys nodeNames' tableNames
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 

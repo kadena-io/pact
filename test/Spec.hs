@@ -23,7 +23,7 @@ wrap code =
          data
          )
       (deftable accounts:{account}
-        "Main table for accounts module.")
+        "Main table for test module.")
       $code
       )
     (commit-tx)
