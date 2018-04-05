@@ -20,7 +20,7 @@ wrap code =
       (defschema account
         "Row type for accounts table."
          balance:integer
-         data
+       ; data
          )
       (deftable accounts:{account}
         "Main table for test module.")
@@ -115,25 +115,26 @@ suite = tests
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
 
-  -- , scope "conserves-masss" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:string (from to amount)
-  --                 "Transfer money between accounts"
-  --                 (with-read accounts from { "balance":= from-bal }
-  --                   (with-read accounts to { "balance":= to-bal }
-  --                       (enforce (>= from-bal amount) "Insufficient Funds")
-  --                       (update accounts from
-  --                               { "balance": (- from-bal amount) })
-  --                       (update accounts to
-  --                               { "balance": (+ to-bal amount) })
-  --                   )
-  --                 )
-  --               )
-  --           |]
+  --, scope "conserves-mass" $ do
+  --    let code =
+  --          [text|
+  --            (defun test:string (from:string to:string amount:integer)
+  --              "Transfer money between accounts"
+  --              (let ((from-bal (at 'balance (read accounts from)))
+  --                    (to-bal   (at 'balance (read accounts to))))
+  --                (enforce (> amount 0)         "Non-positive amount")
+  --                (enforce (>= from-bal amount) "Insufficient Funds")
+  --                (update accounts from { "balance": (- from-bal amount) })
+  --                (update accounts to   { "balance": (+ to-bal amount) })))
 
-  --     -- PROVE 'analyze-tests.accounts.balance' [ConservesMass, Column >= 0]
-  --     expectPass code $ Valid $ Occurs $ ColumnConserves "accounts" "balance"
+  --              ;(with-read accounts from { "balance":= from-bal }
+  --              ;  (with-read accounts to { "balance":= to-bal }
+  --              ;    (enforce (>= from-bal amount) "Insufficient Funds")
+  --              ;    (update accounts from { "balance": (- from-bal amount) })
+  --              ;    (update accounts to   { "balance": (+ to-bal amount) }))))
+  --          |]
+
+  --    expectPass code $ Valid $ Occurs $ ColumnConserve "accounts" "balance"
   --     expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
 
   --

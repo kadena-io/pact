@@ -187,8 +187,16 @@ evalTerm = \case
       let sCn = literal $ ColumnName colName
       case aval of
         AVal val' -> case fieldType of
-          EType TInt  -> intCell    tn sCn (coerceSBV sRk) .= mkSBV val'
+          EType TInt  -> do
+            let cell  :: Lens' AnalyzeState SInteger
+                cell  = intCell tn sCn (coerceSBV sRk)
+                next  = mkSBV val'
+            prev <- use cell
+            cell .= next
+            columnDelta tn sCn += next - prev
+
           EType TBool -> boolCell   tn sCn (coerceSBV sRk) .= mkSBV val'
+
           EType TStr  -> stringCell tn sCn (coerceSBV sRk) .= mkSBV val'
           -- TODO: rest of cell types
         AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
@@ -292,8 +300,11 @@ evalDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
 evalDomainProperty (TableRead tn) = use $ tableRead tn
 evalDomainProperty (TableWrite tn) = use $ tableWritten tn
--- evalDomainProperty (ColumnConserves tableName colName)
 -- evalDomainProperty (CellIncrease tableName colName)
+evalDomainProperty (ColumnConserve tableName colName) =
+  (0 .==) <$> use (columnDelta tableName (literal colName))
+evalDomainProperty (ColumnIncrease tableName colName) =
+  (0 .<) <$> use (columnDelta tableName (literal colName))
 
 evalProperty :: Property -> AnalyzeM SBool
 evalProperty (p1 `Implies` p2) = do

@@ -459,16 +459,20 @@ instance Num (Term Integer) where
   negate x = Arith Negate [x]
 
 data DomainProperty where
-  TableWrite       :: TableName  ->             DomainProperty -- anything in table is written
-  TableRead        :: TableName  ->             DomainProperty -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnId -> DomainProperty -- particular column is written
+  TableWrite       :: TableName  ->               DomainProperty -- anything in table is written
+  TableRead        :: TableName  ->               DomainProperty -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnName -> DomainProperty -- particular column is written
   --
-  CellIncrease     :: TableName  -> ColumnId -> DomainProperty -- any cell at all in col increases
-  ColumnConserves  :: TableName  -> ColumnId -> DomainProperty -- sum of all changes in col is 0
+  -- TODO: these properties demonstrate that we probably want to parameterize
+  --       by a type (int/bool, etc), and allow appropriate e.g. numeric ops
   --
-  KsNameAuthorized :: KeySetName ->             DomainProperty -- keyset authorized by name
-  Abort            ::                           DomainProperty
-  Success          ::                           DomainProperty
+  CellIncrease     :: TableName  -> ColumnName -> DomainProperty -- any cell at all in col increases
+  ColumnConserve   :: TableName  -> ColumnName -> DomainProperty -- sum of all changes in col == 0
+  ColumnIncrease   :: TableName  -> ColumnName -> DomainProperty -- sum of all changes in col >  0
+  --
+  KsNameAuthorized :: KeySetName ->               DomainProperty -- keyset authorized by name
+  Abort            ::                             DomainProperty
+  Success          ::                             DomainProperty
   --
   -- TODO: row-level keyset enforcement seems like it needs some form of
   --       unification, so that using a variable we can connect >1 domain

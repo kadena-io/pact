@@ -271,6 +271,7 @@ typeFromPact ty = case ty of
       TyPrim TyInteger -> (T.unpack name, EType TInt)
       TyPrim TyString  -> (T.unpack name, EType TStr)
       TyPrim TyTime    -> (T.unpack name, EType TTime)
+      -- TODO: opaque data
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
   TySchema _ ty' -> typeFromPact ty'
