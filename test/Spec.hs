@@ -306,3 +306,4 @@ suite = tests
 
 main :: IO ()
 main = runOnly "table-read" suite
+--main = run suite

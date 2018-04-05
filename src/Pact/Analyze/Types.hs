@@ -384,8 +384,8 @@ instance Eq EType where
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
-  ETerm :: (Show a, SymWord a) => Term a -> Type a -> ETerm
-  EObject :: Term Object -> Type Object -> ETerm
+  ETerm   :: (Show a, SymWord a) => Term a      -> Type a      -> ETerm
+  EObject ::                        Term Object -> Type Object -> ETerm
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a

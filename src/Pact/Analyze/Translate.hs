@@ -44,7 +44,8 @@ translateNode :: AST Node -> TranslateM ETerm
 translateNode = \case
   AST_Let _ [] body -> translateBody body
 
-  AST_Let node ((Named _ varNode _, rhs):bindingsRest) body -> do
+  AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
+    rhsETerm <- translateNode rhsNode
     let varName = varNode ^. aId ^. tiName
     local (at varNode ?~ varName) $ do
       --
@@ -52,10 +53,10 @@ translateNode = \case
       --       earlier ones if we know it's let* rather than let? or has this
       --       been enforced by earlier stages for us?
       --
-      ETerm rhs' _ <- translateNode rhs
-      let subAst = AST_Let node bindingsRest body
-      ETerm body' bodyTy <- translateNode subAst
-      pure $ ETerm (Let varName rhs' body') bodyTy
+      ETerm body' bodyTy <- translateNode $ AST_Let node bindingsRest body
+      case rhsETerm of
+        ETerm rhs _ -> pure $ ETerm (Let varName rhs body') bodyTy
+        -- EObject tm ty -> pure $ ETerm (Let )
 
   AST_Var node -> do
     varName <- view (ix node)
@@ -63,12 +64,12 @@ translateNode = \case
       EType ty -> pure $ ETerm (Var varName) ty
 
   -- Int
-  AST_NegativeLit (LInteger i)  -> do
+  AST_NegativeLit (LInteger i) -> do
     let tm = Arith Negate [Literal (literal i)]
     -- TODO: this should also work for decimal
     pure $ ETerm tm TInt
 
-  AST_Lit         (LInteger i)  ->
+  AST_Lit (LInteger i) ->
     -- TODO: shouldn't this also work for decimal?
     pure (ETerm (Literal (literal i)) TInt)
 
@@ -83,7 +84,7 @@ translateNode = \case
     pure $ ETerm (Arith Mul [60 * 60 * 24, days']) TInt
 
   -- Bool
-  AST_Lit (LBool b)     -> pure (ETerm (Literal (literal b)) TBool)
+  AST_Lit (LBool b) -> pure (ETerm (Literal (literal b)) TBool)
 
   AST_Enforce _ cond _msg -> do
     ETerm condTerm TBool <- translateNode cond
