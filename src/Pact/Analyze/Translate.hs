@@ -195,12 +195,20 @@ translateNode = \case
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
+  {-
   AST_WithRead _node table key bindings body -> do
-    let bindings' = flip map bindings $ \(Named name _ _, _var) -> name
+    let bindings' :: [(Text, String)]
+        bindings' = flip map bindings $ \(Named name _ _, _var) -> name
     ETerm body' tbody <- translateBody body
-    ETerm key' TStr <- translateNode key
-    let withRead = WithRead (TableName (T.unpack table)) key' bindings' body'
-    pure $ ETerm withRead tbody
+    ETerm key' TStr   <- translateNode key
+    -- let withRead = WithRead (TableName (T.unpack table)) key' bindings' body'
+    let freshVar = undefined
+    let body'' = foldr
+          (\(colName, varName) body -> Let varName (At colName freshVar) body)
+          body'
+          bindings'
+    pure $ Let freshVar (Read (TableName (T.unpack table)) _schema key') body''
+-}
 
   -- Decimal
   AST_Lit (LDecimal d) -> pure (ETerm (Literal (literal (mkDecimal d))) TDecimal)
@@ -236,9 +244,15 @@ translateNode = \case
       let k' = case k of
                  AST_Lit (LString t) -> T.unpack t
                  _ -> undefined
+      let ty = case v ^. aNode . aTy of
+                 TyPrim TyBool -> EType TBool
+                 TyPrim TyDecimal -> EType TDecimal
+                 TyPrim TyInteger -> EType TInt
+                 TyPrim TyString -> EType TStr
+                 TyPrim TyTime -> EType TTime
       v' <- translateNode v
-      pure (k', (undefined, v'))
-    pure $ EObject (LiteralObject $ Object $ Map.fromList kvs') TObject
+      pure (k', (ty, v'))
+    pure $ EObject (LiteralObject $ Map.fromList kvs') TObject
 
   --
   -- TODO: more cases.

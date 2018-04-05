@@ -85,7 +85,11 @@ namedAuth str = do
 
 evalTermO :: Term Object -> AnalyzeM Object
 evalTermO = \case
-  LiteralObject o -> pure o
+  LiteralObject obj -> do
+    obj' <- iforM obj $ \colName (fieldType, ETerm tm _) -> do
+      val <- evalTerm tm
+      pure (fieldType, mkAVal val)
+    pure (Object obj')
   Read tn (Schema fields) rowId -> do
     rId <- evalTerm rowId
     tableRead tn .= true
@@ -125,16 +129,18 @@ evalTerm = \case
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn (Schema fields) rowId (LiteralObject (Object obj)) -> do
+  Write tn (Schema fields) rowId (LiteralObject obj) -> do
     tableWritten tn .= true
     rId <- evalTerm rowId
-    iforM obj $ \colName (fieldType, val) ->
-      case val of
+    iforM obj $ \colName (fieldType, ETerm tm _) -> do
+      val <- evalTerm tm
+      case mkAVal val of
         AVal val -> case fieldType of
           EType TInt -> intCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
           EType TBool -> boolCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
           EType TStr -> stringCell tn (literal (ColumnName colName)) (coerceSBV rId) .= mkSBV val
         AnObj _ -> pure () -- XXX throw error
+
     --
     -- TODO: make a constant on the pact side that this uses:
     --
@@ -306,7 +312,7 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
 -- semantically-meaningful results.
 runCheck :: Provable a => Check -> a -> IO CheckResult
 runCheck (Satisfiable _prop) provable = do
-  (SatResult smtRes) <- sat provable
+  (SatResult smtRes) <- satWith z3{verbose=True, transcript=Just "/Users/joel/code/kadena/pact-analyze/transcript", redirectVerbose=Just "/Users/joel/code/kadena/pact-analyze/verbose"} provable
   pure $ case smtRes of
     SBV.Unsatisfiable _config -> Left Unsatisfiable
     SBV.Satisfiable _config model -> Right $ SatisfiedProperty model

@@ -162,7 +162,7 @@ suite = tests
 
               (defun test:string ()
                 (insert tokens "stu" {"balance": 5, "name": "stu"})
-                (let ((stu-name (at 'name (read tokens "stu")))
+                (let ((stu-name    (at 'name (read tokens "stu")))
                       (stu-balance (at 'balance (read tokens "stu")))
                      )
                   ; (enforce (= stu-name "stu") "name is stu")

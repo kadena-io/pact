@@ -381,7 +381,7 @@ data Term ret where
   Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
   Literal        ::                        SBV a        ->                             Term a
 
-  LiteralObject  ::                        Object       ->                             Term Object
+  LiteralObject  ::                        Map String (FieldType, ETerm)       ->                             Term Object
   At             ::                        String       -> Term Object    ->           Term a
   Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
   -- NOTE: pact really does return a string here:
