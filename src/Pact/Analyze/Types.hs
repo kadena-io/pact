@@ -244,6 +244,9 @@ newtype GlobalAnalyzeState
   -- TODO: it seems that we'll need to accumulate constraints on
   --       `SBV ColumnName`s as we project from objects and write tables.
   --
+  --  In addition to column names coming from a whitelist determined by type,
+  --  also accum row key constraints -- that strings can't be empty.
+  --
   = GlobalAnalyzeState ()
   deriving (Show, Eq)
 
