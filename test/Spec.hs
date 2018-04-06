@@ -2,7 +2,6 @@
 {-# language QuasiQuotes       #-}
 
 import           Data.Text            (Text)
-import qualified Data.Text            as T
 import           EasyTest
 import           NeatInterpolation
 
@@ -187,6 +186,24 @@ suite = tests
                 (let ((stu (read tokens "stu")))
                   (enforce (= (at 'name stu) "stu") "name is stu")
                   (enforce (= (at 'balance stu) 5) "balance is 5")
+                  )
+                )
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
+
+  , scope "at.dynamic-key" $
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer)
+
+              (defun test:string ()
+                (let* ((stu:object{token-row} {"balance": 5, "name": "stu"})
+                       (k-start "bal")
+                       (k-end "ance")
+                       (val:integer (at (+ k-start k-end) stu)))
+                  (enforce (= val 5) "balance is 5")
                   )
                 )
             |]

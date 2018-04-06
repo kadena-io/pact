@@ -54,7 +54,7 @@ analyzeFunction'
   -> [TableName]
   -> IO CheckResult
 analyzeFunction' check body argTys nodeNames tableNames =
-  case runExcept (runReaderT (translateBody body) nodeNames) of
+  case runExcept (runReaderT (unTranslateM (translateBody body)) nodeNames) of
     Left reason -> pure $ Left $ AnalyzeFailure reason
 
     Right (ETerm body'' _) -> do

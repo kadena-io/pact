@@ -22,7 +22,6 @@
 module Pact.Analyze.Types where
 
 import Control.Monad.Except (ExceptT(..), Except, runExcept)
-import Control.Monad.Reader
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Data
@@ -36,7 +35,7 @@ import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Thyme
 import GHC.Generics
-import Pact.Types.Lang hiding (Term, TableName, Type, TObject)
+import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
 import qualified Pact.Types.Lang as Pact
 -- import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
@@ -298,6 +297,9 @@ symArrayAt symKey = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
+--
+-- TODO: split in to TranslateFailure / AnalyzeFailure
+--
 data AnalyzeFailure
   = MalformedArithOpExec ArithOp [Term Integer]
   | UnsupportedArithOp ArithOp
@@ -320,7 +322,16 @@ data AnalyzeFailure
   | ObjFieldOfWrongType String EType
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
+  | AlternativeFailures [AnalyzeFailure]
+  | MonadFailure String
   deriving Show
+
+instance Monoid AnalyzeFailure where
+  mempty = AlternativeFailures []
+  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
+  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
+  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
+  mappend x y = AlternativeFailures [x, y]
 
 type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
@@ -392,6 +403,10 @@ data ETerm where
   -- TODO: remove Show (add constraint c?)
   ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
   EObject ::                        Term Object -> Schema -> ETerm
+
+-- typeof :: ETerm -> EType
+-- typeof (ETerm _tm ty)        = EType ty
+-- typeof (EObject _obj schema) = EObjectTy schema
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
@@ -500,11 +515,6 @@ data Property where
 data Check where
   Satisfiable :: Property -> Check
   Valid       :: Property -> Check
-
---
--- TODO: this should probably have its own TranslateFailure type?
---
-type TranslateM = ReaderT (Map Node Text) (Except AnalyzeFailure)
 
 type Time = Int64
 

@@ -1,14 +1,19 @@
-{-# language GADTs               #-}
-{-# language LambdaCase          #-}
-{-# language MultiWayIf          #-}
-{-# language OverloadedStrings   #-}
-{-# language Rank2Types          #-}
-{-# language ScopedTypeVariables #-}
+{-# language GADTs                      #-}
+{-# language GeneralizedNewtypeDeriving #-}
+{-# language LambdaCase                 #-}
+{-# language MultiWayIf                 #-}
+{-# language MonadFailDesugaring        #-}
+{-# language OverloadedStrings          #-}
+{-# language Rank2Types                 #-}
+{-# language ScopedTypeVariables        #-}
 module Pact.Analyze.Translate where
 
+import Control.Applicative (Alternative, (<|>))
 import Control.Lens hiding (op, (.>))
-import Control.Monad.Except (throwError)
-import Control.Monad.Reader (local)
+import Control.Monad.Except (Except, MonadError, throwError)
+import Control.Monad.Fail
+import Control.Monad.Reader
+import Data.Map.Strict (Map)
 import qualified Data.Map as Map
 import Data.Traversable (for)
 import Pact.Types.Lang hiding (Term, TableName, TObject, EObject, Type)
@@ -22,6 +27,13 @@ import qualified Pact.Types.Typecheck as Pact
 
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
+
+newtype TranslateM a = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except AnalyzeFailure) a }
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
+    MonadReader (Map Node Text), MonadError AnalyzeFailure)
+
+instance MonadFail TranslateM where
+  fail s = throwError (MonadFailure s)
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
@@ -91,7 +103,7 @@ translateNode = \case
       ETerm ksNameTerm TStr <- translateNode ks
       return $ ETerm (Enforce (NameAuthorized ksNameTerm)) TBool
 
-  AST_NFun_Basic fn args -> do
+  AST_NFun_Basic fn args ->
     let mkComparison :: TranslateM ETerm
         mkComparison = case args of
           [a, b] -> do
@@ -116,13 +128,13 @@ translateNode = \case
             ETerm a' TBool <- translateNode a
             case fn of
               "not" -> pure $ ETerm (Logical NotOp [a']) TBool
-              _ -> throwError $ MalformedComparison fn args
+              _     -> throwError $ MalformedComparison fn args
           [a, b] -> do
             ETerm a' TBool <- translateNode a
             ETerm b' TBool <- translateNode b
             case fn of
               "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
-              "or" -> pure $ ETerm (Logical OrOp [a', b']) TBool
+              "or"  -> pure $ ETerm (Logical OrOp [a', b']) TBool
               _ -> throwError $ MalformedLogicalOp fn args
           _ -> throwError $ MalformedLogicalOp fn args
 
@@ -136,34 +148,37 @@ translateNode = \case
             --   Just Refl -> pure $ ETerm (Arith Sub [a', b']) TInt
             --   _         -> throwError (TypesDontMatch (EType ta) (EType tb))
             case fn of
-              "-" -> pure $ ETerm (Arith Sub [a', b']) TInt
-              "+" -> pure $ ETerm (Arith Add [a', b']) TInt
-              "*" -> pure $ ETerm (Arith Mul [a', b']) TInt
-              "/" -> pure $ ETerm (Arith Div [a', b']) TInt
-              "^" -> pure $ ETerm (Arith Pow [a', b']) TInt
+              "-"   -> pure $ ETerm (Arith Sub [a', b']) TInt
+              "+"   -> pure $ ETerm (Arith Add [a', b']) TInt
+              "*"   -> pure $ ETerm (Arith Mul [a', b']) TInt
+              "/"   -> pure $ ETerm (Arith Div [a', b']) TInt
+              "^"   -> pure $ ETerm (Arith Pow [a', b']) TInt
               "mod" -> pure $ ETerm (Arith Mod [a', b']) TInt
               "log" -> pure $ ETerm (Arith Log [a', b']) TInt
-              _ -> throwError $ MalformedLogicalOp fn args
+              _     -> throwError $ MalformedLogicalOp fn args
           [a] -> do
             ETerm a' TInt <- translateNode a
             case fn of
-              "-" -> pure $ ETerm (Arith Negate [a']) TInt
-              "sqrt" -> pure $ ETerm (Arith Sqrt [a']) TInt
-              "ln" -> pure $ ETerm (Arith Ln [a']) TInt
-              "exp" -> pure $ ETerm (Arith Exp [a']) TInt
-              "abs" -> pure $ ETerm (Arith Abs [a']) TInt
-              "round" -> pure $ ETerm (Arith Round [a']) TInt
+              "-"       -> pure $ ETerm (Arith Negate [a']) TInt
+              "sqrt"    -> pure $ ETerm (Arith Sqrt [a']) TInt
+              "ln"      -> pure $ ETerm (Arith Ln [a']) TInt
+              "exp"     -> pure $ ETerm (Arith Exp [a']) TInt
+              "abs"     -> pure $ ETerm (Arith Abs [a']) TInt
+              "round"   -> pure $ ETerm (Arith Round [a']) TInt
               "ceiling" -> pure $ ETerm (Arith Ceiling [a']) TInt
-              "floor" -> pure $ ETerm (Arith Floor [a']) TInt
-              _ -> throwError $ MalformedArithOp fn args
+              "floor"   -> pure $ ETerm (Arith Floor [a']) TInt
+              _         -> throwError $ MalformedArithOp fn args
           _ -> throwError $ MalformedArithOp fn args
 
-    if
-      -- integer, decimal, string, and time are all comparable. Use the type of
-      -- the first argument to decide which to use.
-      | isComparison fn -> mkComparison
-      | isLogical    fn -> mkLogical
-      | isArith      fn -> mkArith
+        mkConcat :: TranslateM ETerm
+        mkConcat = case (fn, args) of
+          ("+", [a, b]) -> do
+            ETerm a' TStr <- translateNode a
+            ETerm b' TStr <- translateNode b
+            pure (ETerm (Concat a' b') TStr)
+          _ -> throwError undefined
+
+    in mkArith <|> mkComparison <|> mkLogical <|> mkConcat
 
   AST_NFun _node name [ShortTableName tn, row, obj]
     | elem name ["insert", "update", "write"] -> do
@@ -181,13 +196,7 @@ translateNode = \case
       Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
       _ -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
 
-  -- String
   AST_Lit (LString t) -> pure $ ETerm (Literal $ literal $ T.unpack t) TStr
-
-  AST_NFun_Basic "+" [a, b] -> do
-    ETerm a' TStr <- translateNode a
-    ETerm b' TStr <- translateNode b
-    pure (ETerm (Concat a' b') TStr)
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
@@ -229,13 +238,6 @@ translateNode = \case
       Left err -> throwError err
       Right x -> pure x
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
-
-  AST_At node colName obj -> do
-    EObject obj' schema <- translateNode obj
-    let colName' = Literal $ literal $ T.unpack colName
-    pure $ case typeFromPact (_aTy node) of
-      ty@(EType ty')         -> ETerm   (At schema colName' obj' ty) ty'
-      ty@(EObjectTy schema') -> EObject (At schema colName' obj' ty) schema'
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
