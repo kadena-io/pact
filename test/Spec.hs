@@ -115,27 +115,31 @@ suite = tests
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
 
-  --, scope "conserves-mass" $ do
-  --    let code =
-  --          [text|
-  --            (defun test:string (from:string to:string amount:integer)
-  --              "Transfer money between accounts"
-  --              (let ((from-bal (at 'balance (read accounts from)))
-  --                    (to-bal   (at 'balance (read accounts to))))
-  --                (enforce (> amount 0)         "Non-positive amount")
-  --                (enforce (>= from-bal amount) "Insufficient Funds")
-  --                (update accounts from { "balance": (- from-bal amount) })
-  --                (update accounts to   { "balance": (+ to-bal amount) })))
+  , scope "conserves-mass" $ do
+      let code =
+            [text|
+              (defun test:string (from:string to:string amount:integer)
+                "Transfer money between accounts"
+                (let ((from-bal (at 'balance (read accounts from)))
+                      (to-bal   (at 'balance (read accounts to))))
+                  (enforce (> amount 0)         "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts from { "balance": (- from-bal amount) })
+                  (update accounts to   { "balance": (+ to-bal amount) })))
 
-  --              ;(with-read accounts from { "balance":= from-bal }
-  --              ;  (with-read accounts to { "balance":= to-bal }
-  --              ;    (enforce (>= from-bal amount) "Insufficient Funds")
-  --              ;    (update accounts from { "balance": (- from-bal amount) })
-  --              ;    (update accounts to   { "balance": (+ to-bal amount) }))))
-  --          |]
+                ;(with-read accounts from { "balance":= from-bal }
+                ;  (with-read accounts to { "balance":= to-bal }
+                ;    (enforce (> amount 0)         "Non-positive amount")
+                ;    (enforce (>= from-bal amount) "Insufficient Funds")
+                ;    (enforce (!= from to)         "Sender is the recipient")
+                ;    (update accounts from { "balance": (- from-bal amount) })
+                ;    (update accounts to   { "balance": (+ to-bal amount) }))))
+            |]
 
-  --    expectPass code $ Valid $ Occurs $ ColumnConserve "accounts" "balance"
-  --     expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
+      expectPass code $ Valid $ Occurs Success
+                      `Implies` Occurs (ColumnConserve "accounts" "balance")
+      -- expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
 
   --
   -- TODO: this is pending fixes to pact's typechecker.

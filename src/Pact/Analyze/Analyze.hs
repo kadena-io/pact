@@ -134,8 +134,6 @@ evalTerm = \case
 
   Literal a -> pure a
 
-  -- In principle we could do this lookup with dynamic keys, but what do we
-  -- return when the key is not present?
   At schema@(Schema schemaFields) colName obj retType -> do
     Object obj' <- evalTermO obj
 
