@@ -6,29 +6,31 @@
 {-# language OverloadedStrings          #-}
 {-# language Rank2Types                 #-}
 {-# language ScopedTypeVariables        #-}
+
 module Pact.Analyze.Translate where
 
 import Control.Applicative (Alternative, (<|>))
-import Control.Lens hiding (op, (.>))
+import Control.Lens hiding (op)
 import Control.Monad.Except (Except, MonadError, throwError)
 import Control.Monad.Fail
 import Control.Monad.Reader
-import Data.Map.Strict (Map)
 import qualified Data.Map as Map
-import Data.Traversable (for)
-import Pact.Types.Lang hiding (Term, TableName, TObject, EObject, Type)
-import Pact.Types.Typecheck hiding (Var, Schema, Object)
-import qualified Pact.Types.Typecheck as TC
-import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import Data.Map.Strict (Map)
+import Data.SBV (literal)
+import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Traversable (for)
 import Data.Type.Equality
+import Pact.Types.Lang (Literal(..), Type(..), PrimType(..), Arg(..))
 import qualified Pact.Types.Lang as Pact
+import Pact.Types.Typecheck hiding (Var, Schema, Object)
 import qualified Pact.Types.Typecheck as Pact
 
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
 
-newtype TranslateM a = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except AnalyzeFailure) a }
+newtype TranslateM a
+  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
     MonadReader (Map Node Text), MonadError AnalyzeFailure)
 
@@ -266,7 +268,7 @@ translateNode = \case
 
 typeFromPact :: Pact.Type Pact.UserType -> EType
 typeFromPact ty = case ty of
-  TyUser (TC.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
+  TyUser (Pact.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
     \(Arg name ty _info) -> case ty of
       TyPrim TyBool    -> (T.unpack name, EType TBool)
       TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
