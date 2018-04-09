@@ -35,7 +35,7 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (evalTerm, evalProperty, runAnalyzeM)
+import Pact.Analyze.Analyze (analyzeTerm, analyzeProperty, runAnalyzeM)
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 
@@ -61,8 +61,8 @@ analyzeFunction' check body argTys nodeNames tableNames =
         let prop   = checkProperty check
             env0   = AnalyzeEnv scope0 nameAuths'
             state0 = initialAnalyzeState allTableCells
-            action = evalTerm body''
-                  *> evalProperty prop
+            action = analyzeTerm body''
+                  *> analyzeProperty prop
 
         case runExcept $ runRWST (runAnalyzeM action) env0 state0 of
           Left cf -> do

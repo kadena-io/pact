@@ -51,16 +51,16 @@ namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
-evalTermO :: Term Object -> AnalyzeM Object
-evalTermO = \case
+analyzeTermO :: Term Object -> AnalyzeM Object
+analyzeTermO = \case
   LiteralObject obj -> do
     obj' <- iforM obj $ \colName (fieldType, ETerm tm _) -> do
-      val <- evalTerm tm
+      val <- analyzeTerm tm
       pure (fieldType, mkAVal val)
     pure (Object obj')
 
   Read tn (Schema fields) rowId -> do
-    rId <- evalTerm rowId
+    rId <- analyzeTerm rowId
     tableRead tn .= true
     obj <- iforM fields $ \fieldName fieldType -> do
       let sCn = literal $ ColumnName fieldName
@@ -81,24 +81,24 @@ evalTermO = \case
 
   obj -> throwError $ UnhandledObject obj
 
-evalTerm
+analyzeTerm
   :: forall a. (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
-evalTerm = \case
+analyzeTerm = \case
   IfThenElse cond then' else' -> do
-    testPasses <- evalTerm cond
-    ite testPasses (evalTerm then') (evalTerm else')
+    testPasses <- analyzeTerm cond
+    ite testPasses (analyzeTerm then') (analyzeTerm else')
 
   Enforce cond -> do
-    cond' <- evalTerm cond
+    cond' <- analyzeTerm cond
     succeeds %= (&&& cond')
     pure true
 
-  Sequence a b -> evalTerm a *> evalTerm b
+  Sequence a b -> analyzeTerm a *> analyzeTerm b
 
   Literal a -> pure a
 
   At schema@(Schema schemaFields) colName obj retType -> do
-    Object obj' <- evalTermO obj
+    Object obj' <- analyzeTermO obj
 
     -- Filter down to only fields which contain the type we're looking for
     let relevantFields
@@ -106,7 +106,7 @@ evalTerm = \case
           $ filter (\(_name, ty) -> ty == retType)
           $ Map.toList schemaFields
 
-    colName' <- evalTerm colName
+    colName' <- analyzeTerm colName
 
     firstName:relevantFields' <- case relevantFields of
       [] -> throwError $ AtHasNoRelevantFields retType schema
@@ -138,12 +138,12 @@ evalTerm = \case
   -- of Pact.Types.Runtime's WriteType.
   --
   Write tn rowKey obj -> do
-    Object obj' <- evalTermO obj
+    Object obj' <- analyzeTermO obj
     --
     -- TODO: handle write of non-literal object
     --
     tableWritten tn .= true
-    sRk <- evalTerm rowKey
+    sRk <- analyzeTerm rowKey
     void $ iforM obj' $ \colName (fieldType, aval) -> do
       let sCn = literal $ ColumnName colName
       case aval of
@@ -168,14 +168,14 @@ evalTerm = \case
     pure $ literal "Write succeeded"
 
   Let name (ETerm rhs _) body -> do
-    val <- evalTerm rhs
+    val <- analyzeTerm rhs
     local (scope.at name ?~ mkAVal val) $
-      evalTerm body
+      analyzeTerm body
 
   Let name (EObject rhs _) body -> do
-    rhs' <- evalTermO rhs
+    rhs' <- analyzeTermO rhs
     local (scope.at name ?~ AnObj rhs') $
-      evalTerm body
+      analyzeTerm body
 
   Var name -> do
     theScope <- view scope
@@ -192,7 +192,7 @@ evalTerm = \case
     then throwError $ UnsupportedArithOp op
     else do
 
-            args' <- forM args evalTerm
+            args' <- forM args analyzeTerm
             case (op, args') of
               (Sub, [x, y]) -> pure $ x - y
               (Add, [x, y]) -> pure $ x + y
@@ -205,8 +205,8 @@ evalTerm = \case
               _             -> throwError $ MalformedArithOpExec op args
 
   Comparison op x y -> do
-    x' <- evalTerm x
-    y' <- evalTerm y
+    x' <- analyzeTerm x
+    y' <- analyzeTerm y
     pure $ case op of
       Gt  -> x' .> y'
       Lt  -> x' .< y'
@@ -216,7 +216,7 @@ evalTerm = \case
       Neq -> x' ./= y'
 
   Logical op args -> do
-    args' <- forM args evalTerm
+    args' <- forM args analyzeTerm
     case (op, args') of
       (AndOp, [a, b]) -> pure $ a &&& b
       (OrOp, [a, b])  -> pure $ a ||| b
@@ -224,17 +224,17 @@ evalTerm = \case
       _               -> throwError $ MalformedLogicalOpExec op args
 
   AddTimeInt time secs -> do
-    time' <- evalTerm time
-    secs' <- evalTerm secs
+    time' <- analyzeTerm time
+    secs' <- analyzeTerm secs
     pure $ time' + sFromIntegral secs'
 
   n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
     "We don't support adding decimals to time yet"
     (ETerm n undefined)
 
-  NameAuthorized str -> namedAuth =<< evalTerm str
+  NameAuthorized str -> namedAuth =<< analyzeTerm str
 
-  Concat str1 str2 -> (.++) <$> evalTerm str1 <*> evalTerm str2
+  Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
@@ -242,43 +242,43 @@ evalTerm = \case
   -- NOTE: instead of this we will probably translate with-read to Read+Let+At
   --
   WithRead tn rowId bindings body -> do
-    rId <- evalTerm rowId -- TODO: use this
+    rId <- analyzeTerm rowId -- TODO: use this
     tableRead tn .= true
     -- TODO: this should actually read to bind variables here
     newVars <- forM bindings $ \varName ->
       pure (varName, mkAVal (literal True))
     local (scope <>~ Map.fromList newVars) $
-      evalTerm body
+      analyzeTerm body
 
   n -> do
     --traceShowM n
     throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)
 
-evalDomainProperty :: DomainProperty -> AnalyzeM SBool
-evalDomainProperty Success = use succeeds
-evalDomainProperty Abort = bnot <$> evalDomainProperty Success
-evalDomainProperty (KsNameAuthorized (KeySetName n)) =
+analyzeDomainProperty :: DomainProperty -> AnalyzeM SBool
+analyzeDomainProperty Success = use succeeds
+analyzeDomainProperty Abort = bnot <$> analyzeDomainProperty Success
+analyzeDomainProperty (KsNameAuthorized (KeySetName n)) =
   namedAuth $ literal $ T.unpack n
-evalDomainProperty (TableRead tn) = use $ tableRead tn
-evalDomainProperty (TableWrite tn) = use $ tableWritten tn
--- evalDomainProperty (CellIncrease tableName colName)
-evalDomainProperty (ColumnConserve tableName colName) =
+analyzeDomainProperty (TableRead tn) = use $ tableRead tn
+analyzeDomainProperty (TableWrite tn) = use $ tableWritten tn
+-- analyzeDomainProperty (CellIncrease tableName colName)
+analyzeDomainProperty (ColumnConserve tableName colName) =
   (0 .==) <$> use (columnDelta tableName (literal colName))
-evalDomainProperty (ColumnIncrease tableName colName) =
+analyzeDomainProperty (ColumnIncrease tableName colName) =
   (0 .<) <$> use (columnDelta tableName (literal colName))
 
-evalProperty :: Property -> AnalyzeM SBool
-evalProperty (p1 `Implies` p2) = do
-  b1 <- evalProperty p1
-  b2 <- evalProperty p2
+analyzeProperty :: Property -> AnalyzeM SBool
+analyzeProperty (p1 `Implies` p2) = do
+  b1 <- analyzeProperty p1
+  b2 <- analyzeProperty p2
   pure $ b1 ==> b2
-evalProperty (p1 `And` p2) = do
-  b1 <- evalProperty p1
-  b2 <- evalProperty p2
+analyzeProperty (p1 `And` p2) = do
+  b1 <- analyzeProperty p1
+  b2 <- analyzeProperty p2
   pure $ b1 &&& b2
-evalProperty (p1 `Or` p2) = do
-  b1 <- evalProperty p1
-  b2 <- evalProperty p2
+analyzeProperty (p1 `Or` p2) = do
+  b1 <- analyzeProperty p1
+  b2 <- analyzeProperty p2
   pure $ b1 ||| b2
-evalProperty (Not p) = bnot <$> evalProperty p
-evalProperty (Occurs dp) = evalDomainProperty dp
+analyzeProperty (Not p) = bnot <$> analyzeProperty p
+analyzeProperty (Occurs dp) = analyzeDomainProperty dp
