@@ -37,19 +37,16 @@ import Data.Thyme
 import GHC.Generics
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
 import qualified Pact.Types.Lang as Pact
--- import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type)
 import Pact.Types.Typecheck hiding (Var, UserType)
 import qualified Pact.Types.Typecheck as TC
 import qualified Pact.Types.Typecheck as Pact
 
-type FieldType = EType
-  -- = () -- TODO
-
 newtype Object
-  = Object (Map String (FieldType, AVal))
+  = Object (Map String (EType, AVal))
   deriving (Eq, Show)
 
-newtype Schema = Schema (Map String FieldType)
+newtype Schema
+  = Schema (Map String EType)
   deriving (Show, Eq)
 
 -- | Untyped symbolic value.
@@ -57,13 +54,6 @@ data AVal
   = AVal SBVI.SVal
   | AnObj Object
   deriving (Eq, Show)
-
---
--- TODO: will this work?
---
--- unsafeCastAVal :: AVal -> SymbolicRep a
--- unsafeCastAVal (AVal sval) = SBVI.SBV sval
--- unsafeCastAVal (AnObj obj) = obj
 
 mkSBV :: SBVI.SVal -> SBV a
 mkSBV = SBVI.SBV
@@ -155,7 +145,8 @@ instance HasKind RowKey where
 instance IsString RowKey where
   fromString = RowKey
 
-type SRowKey = SBV RowKey
+type SRowKey
+  = SBV RowKey
 
 -- a unique column, comprised of table name and column name
 -- e.g. accounts__balance
@@ -407,10 +398,6 @@ data ETerm where
   ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
   EObject ::                        Term Object -> Schema -> ETerm
 
--- typeof :: ETerm -> EType
--- typeof (ETerm _tm ty)        = EType ty
--- typeof (EObject _obj schema) = EObjectTy schema
-
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
   Enforce        ::                        Term Bool    ->                             Term Bool
@@ -421,7 +408,7 @@ data Term ret where
   --
   -- TODO: we need to allow computed keys here
   --
-  LiteralObject  ::                        Map String (FieldType, ETerm)       ->                             Term Object
+  LiteralObject  ::                        Map String (EType, ETerm)      ->           Term Object
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
