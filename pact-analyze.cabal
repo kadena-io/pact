@@ -16,6 +16,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Pact.Analyze.Analyze
+                     , Pact.Analyze.Check
                      , Pact.Analyze.Demo
                      , Pact.Analyze.DSL
                      , Pact.Analyze.Patterns

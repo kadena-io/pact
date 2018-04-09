@@ -1,12 +1,12 @@
 {-# language OverloadedStrings #-}
 {-# language QuasiQuotes       #-}
 
-import           Data.Text            (Text)
+import           Data.Text          (Text)
 import           EasyTest
 import           NeatInterpolation
 
-import           Pact.Analyze.Analyze
-import           Pact.Analyze.Types   hiding (scope)
+import           Pact.Analyze.Check
+import           Pact.Analyze.Types hiding (scope)
 
 wrap :: Text -> Text
 wrap code =
