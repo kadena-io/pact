@@ -30,9 +30,9 @@ import Pact.Analyze.Patterns
 import Pact.Analyze.Types
 
 newtype TranslateM a
-  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except AnalyzeFailure) a }
+  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except TranslateFailure) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node Text), MonadError AnalyzeFailure)
+    MonadReader (Map Node Text), MonadError TranslateFailure)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
@@ -121,7 +121,7 @@ translateNode = \case
               _ -> throwError $ MalformedComparison fn args
             case typeEq ta tb of
               Just Refl -> pure $ ETerm (Comparison op a' b') TBool
-              _         -> throwError (TypesDontMatch (EType ta) (EType tb))
+              _         -> throwError (TypeMismatch (EType ta) (EType tb))
           _ -> throwError $ MalformedComparison fn args
 
         mkLogical :: TranslateM ETerm
@@ -148,7 +148,7 @@ translateNode = \case
             ETerm b' TInt <- translateNode b
             -- case typeEq ta tb of
             --   Just Refl -> pure $ ETerm (Arith Sub [a', b']) TInt
-            --   _         -> throwError (TypesDontMatch (EType ta) (EType tb))
+            --   _         -> throwError (TypeMismatch (EType ta) (EType tb))
             case fn of
               "-"   -> pure $ ETerm (Arith Sub [a', b']) TInt
               "+"   -> pure $ ETerm (Arith Add [a', b']) TInt
@@ -286,7 +286,7 @@ typeFromPact ty = case ty of
   TyPrim TyString  -> EType TStr
   TyPrim TyTime    -> EType TTime
 
-schemaFromPact :: Pact.Type Pact.UserType -> Either AnalyzeFailure Schema
+schemaFromPact :: Pact.Type Pact.UserType -> Either TranslateFailure Schema
 schemaFromPact ty = case typeFromPact ty of
   EType _primTy    -> Left $ NotConvertibleToSchema ty
   EObjectTy schema -> Right schema

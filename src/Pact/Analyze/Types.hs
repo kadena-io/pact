@@ -291,43 +291,22 @@ symArrayAt symKey = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
---
--- TODO: split in to TranslateFailure / AnalyzeFailure
---
 data AnalyzeFailure
-  = MalformedArithOpExec ArithOp [Term Integer]
-  | UnsupportedArithOp ArithOp
-  | MalformedComparison Text [AST Node]
-  | MalformedLogicalOp Text [AST Node]
-  | MalformedLogicalOpExec LogicalOp [Term Bool]
-  | MalformedArithOp Text [AST Node]
-  -- | Some translator received a node it didn't expect
-  | UnexpectedNode String (AST Node)
-  -- | 'translateBody' expects at least one node in a function body.
-  | EmptyBody
-  -- | A node we have a good reason not to handle
-  | UnhandledTerm String ETerm
-  | UnhandledObject (Term Object)
-  | TypesDontMatch EType EType
-  | BranchesDifferentTypes EType EType
-  | KeyNotPresent String Object
-  | NotConvertibleToSchema (Pact.Type Pact.UserType)
-  | AtHasNoRelevantFields EType Schema
-  | ObjFieldOfWrongType String EType
+  = AtHasNoRelevantFields EType Schema
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
-  | AlternativeFailures [AnalyzeFailure]
-  | MonadFailure String
+  | KeyNotPresent String Object
+  | MalformedArithOpExec ArithOp [Term Integer]
+  | MalformedLogicalOpExec LogicalOp [Term Bool]
+  | ObjFieldOfWrongType String EType
+  | UnsupportedArithOp ArithOp
+  -- For cases we don't handle yet:
+  | UnhandledObject (Term Object)
+  | UnhandledTerm String ETerm
   deriving Show
 
-instance Monoid AnalyzeFailure where
-  mempty = AlternativeFailures []
-  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
-  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
-  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
-  mappend x y = AlternativeFailures [x, y]
-
-type AnalyzeM = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
+type AnalyzeM
+  = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
 data ArithOp
   = Sub -- "-" Integer / Decimal
@@ -520,6 +499,31 @@ data Decimal = Decimal
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 
+--
+-- TODO: move TranslateFailure back to the Translate module once we can move
+-- CheckFailure downstream of it.
+--
+
+data TranslateFailure
+  = BranchesDifferentTypes EType EType
+  | EmptyBody
+  | MalformedArithOp Text [AST Node]
+  | MalformedLogicalOp Text [AST Node]
+  | MalformedComparison Text [AST Node]
+  | NotConvertibleToSchema (Pact.Type Pact.UserType)
+  | TypeMismatch EType EType
+  | UnexpectedNode String (AST Node)
+  | AlternativeFailures [TranslateFailure]
+  | MonadFailure String
+  deriving Show
+
+instance Monoid TranslateFailure where
+  mempty = AlternativeFailures []
+  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
+  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
+  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
+  mappend x y = AlternativeFailures [x, y]
+
 data CheckFailure
   = Invalid SBVI.SMTModel
   | Unsatisfiable
@@ -528,6 +532,7 @@ data CheckFailure
   | ProofError [String]
   | TypecheckFailure (Set TC.Failure)
   | AnalyzeFailure AnalyzeFailure
+  | TranslateFailure TranslateFailure
   --
   -- TODO: maybe remove this constructor from from CheckFailure.
   --

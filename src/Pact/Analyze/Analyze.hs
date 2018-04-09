@@ -55,7 +55,7 @@ analyzeFunction'
   -> IO CheckResult
 analyzeFunction' check body argTys nodeNames tableNames =
   case runExcept (runReaderT (unTranslateM (translateBody body)) nodeNames) of
-    Left reason -> pure $ Left $ AnalyzeFailure reason
+    Left reason -> pure $ Left $ TranslateFailure reason
 
     Right (ETerm body'' _) -> do
       compileFailureVar <- newEmptyMVar
