@@ -224,22 +224,112 @@ evalTerm = \case
       AVal x -> pure (mkSBV x)
       AnObj _ -> undefined
 
-  Arith op args ->
-    if op `Set.member` unsupportedArithOps
-    then throwError $ UnsupportedArithOp op
-    else do
+  IntArithOp op x y -> do
+    x' <- evalTerm x
+    y' <- evalTerm y
+    case op of
+      Add -> pure $ x' + y'
+      Sub -> pure $ x' - y'
+      Mul -> pure $ x' * y'
+      Div -> pure $ x' `sDiv` y'
+      Pow -> throwError $ UnsupportedIntArithOp op
+      Log -> throwError $ UnsupportedIntArithOp op
 
-            args' <- forM args evalTerm
-            case (op, args') of
-              (Sub, [x, y]) -> pure $ x - y
-              (Add, [x, y]) -> pure $ x + y
-              (Mul, [x, y]) -> pure $ x * y
-              (Div, [x, y]) -> pure $ x `sDiv` y
-              (Mod, [x, y]) -> pure $ x `sMod` y
-              (Abs, [x])    -> pure $ abs x
-              (Signum, [x]) -> pure $ signum x
-              (Negate, [x]) -> pure $ negate x
-              _             -> throwError $ MalformedArithOpExec op args
+  DecArithOp op x y -> do
+    x' <- evalTerm x
+    y' <- evalTerm y
+    case op of
+      Add -> pure $ x' + y'
+      Sub -> pure $ x' - y'
+      Mul -> pure $ x' * y'
+      Div -> pure $ x' / y'
+      Pow -> throwError $ UnsupportedDecArithOp op
+      Log -> throwError $ UnsupportedDecArithOp op
+
+  IntDecArithOp op x y -> do
+    x' <- evalTerm x
+    y' <- evalTerm y
+    case op of
+      Add -> pure $ sFromIntegral x' + y'
+      Sub -> pure $ sFromIntegral x' - y'
+      Mul -> pure $ sFromIntegral x' * y'
+      Div -> pure $ sFromIntegral x' / y'
+      Pow -> throwError $ UnsupportedDecArithOp op
+      Log -> throwError $ UnsupportedDecArithOp op
+
+  DecIntArithOp op x y -> do
+    x' <- evalTerm x
+    y' <- evalTerm y
+    case op of
+      Add -> pure $ x' + sFromIntegral y'
+      Sub -> pure $ x' - sFromIntegral y'
+      Mul -> pure $ x' * sFromIntegral y'
+      Div -> pure $ x' / sFromIntegral y'
+      Pow -> throwError $ UnsupportedDecArithOp op
+      Log -> throwError $ UnsupportedDecArithOp op
+
+  ModOp x y -> do
+    x' <- evalTerm x
+    y' <- evalTerm y
+    pure $ x' `sMod` y'
+
+  IntUnaryArithOp op x -> do
+    x' <- evalTerm x
+    case op of
+      Negate -> pure $ negate x'
+      Sqrt   -> throwError $ UnsupportedUnaryOp op
+      Ln     -> throwError $ UnsupportedUnaryOp op
+      Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
+      Abs    -> pure $ abs x'
+      Signum -> pure $ signum x'
+
+  DecUnaryArithOp op x -> do
+    x' <- evalTerm x
+    case op of
+      Negate -> pure $ negate x'
+      Sqrt   -> throwError $ UnsupportedUnaryOp op
+      Ln     -> throwError $ UnsupportedUnaryOp op
+      Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
+      Abs    -> pure $ abs x'
+      Signum -> pure $ signum x'
+
+  RoundingLikeOp1 op x -> do
+    x' <- evalTerm x
+    pure $ case op of
+      -- if the number is exactly between two whole numbers, round to the
+      -- nearest even.
+      Round   ->
+        let wholePart      = sRealToSInteger x'
+            wholePartIsOdd = wholePart `sMod` 2 .== 1
+            isExactlyHalf  = sFromIntegral wholePart + 1 / 2 .== x'
+
+        in ite isExactlyHalf
+          -- nearest even number!
+          (wholePart + oneIf wholePartIsOdd)
+          -- otherwise we take the floor of `x + 0.5`
+          (sRealToSInteger (x' + 0.5))
+      Ceiling -> negate (sRealToSInteger (negate x'))
+      Floor   -> sRealToSInteger x'
+
+  RoundingLikeOp2 op x precision -> do
+    x'         <- evalTerm x
+    precision' <- evalTerm precision
+    let digitShift :: SInteger
+        digitShift = 10 .^ precision'
+        x'' = x' * sFromIntegral digitShift
+
+    x''' <- evalTerm (RoundingLikeOp1 op (Literal x''))
+
+    pure $ sFromIntegral x''' / sFromIntegral digitShift
+
+  AddTime time (ETerm secs TInt) -> do
+    time' <- evalTerm time
+    secs' <- evalTerm secs
+    pure $ time' + sFromIntegral secs'
+
+  -- n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
+  --   "We don't support adding decimals to time yet"
+  --   (ETerm n undefined)
 
   Comparison op x y -> do
     x' <- evalTerm x
@@ -259,15 +349,6 @@ evalTerm = \case
       (OrOp, [a, b])  -> pure $ a ||| b
       (NotOp, [a])    -> pure $ bnot a
       _               -> throwError $ MalformedLogicalOpExec op args
-
-  AddTimeInt time secs -> do
-    time' <- evalTerm time
-    secs' <- evalTerm secs
-    pure $ time' + sFromIntegral secs'
-
-  n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
-    "We don't support adding decimals to time yet"
-    (ETerm n undefined)
 
   NameAuthorized str -> namedAuth =<< evalTerm str
 

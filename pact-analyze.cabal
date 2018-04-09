@@ -41,6 +41,7 @@ library
                      , text
                      , thyme
                      , sbv
+                     , old-locale
 
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
