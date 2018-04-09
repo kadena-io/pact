@@ -4,6 +4,7 @@
 {-# language LambdaCase                 #-}
 {-# language OverloadedStrings          #-}
 {-# language ScopedTypeVariables        #-}
+{-# language TemplateHaskell            #-}
 
 module Pact.Analyze.Analyze where
 
@@ -15,14 +16,51 @@ import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import qualified Data.SBV.Internals as SBVI
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type, EObject)
 import Pact.Types.Version (pactVersion)
 
 import Pact.Analyze.Types
+
+data AnalyzeEnv = AnalyzeEnv
+  { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion
+  , _nameAuths :: SArray String Bool -- read-only
+  } deriving Show
+
+newtype AnalyzeLog
+  = AnalyzeLog ()
+
+instance Monoid AnalyzeLog where
+  mempty = AnalyzeLog ()
+  mappend _ _ = AnalyzeLog ()
+
+instance Mergeable AnalyzeLog where
+  --
+  -- NOTE: If we change the underlying representation of AnalyzeLog to a list,
+  -- the default Mergeable instance for this will have the wrong semantics, as
+  -- it requires that lists have the same length. We more likely want to use
+  -- monoidal semantics for anything we log:
+  --
+  symbolicMerge _f _t = mappend
+
+data AnalyzeFailure
+  = AtHasNoRelevantFields EType Schema
+  | AValUnexpectedlySVal SBVI.SVal
+  | AValUnexpectedlyObj Object
+  | KeyNotPresent String Object
+  | MalformedArithOpExec ArithOp [Term Integer]
+  | MalformedLogicalOpExec LogicalOp [Term Bool]
+  | ObjFieldOfWrongType String EType
+  | UnsupportedArithOp ArithOp
+  -- For cases we don't handle yet:
+  | UnhandledObject (Term Object)
+  | UnhandledTerm String ETerm
+  deriving Show
 
 newtype AnalyzeM a
   = AnalyzeM
@@ -45,6 +83,8 @@ instance (Mergeable a) => Mergeable (AnalyzeM a) where
       let gs = lTup ^. _2.globalState
       rTup <- run right $ s & globalState .~ gs
       return $ symbolicMerge force test lTup rTup
+
+makeLenses ''AnalyzeEnv
 
 namedAuth :: SString -> AnalyzeM SBool
 namedAuth str = do

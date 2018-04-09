@@ -25,8 +25,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.HashMap.Strict as HM
 import Data.Default (def)
 import Data.Traversable (for)
+import Data.Set (Set)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV as SBV
+import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Pact.Repl
 import Pact.Typechecker hiding (debug)
@@ -35,9 +37,33 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (analyzeTerm, analyzeProperty, runAnalyzeM)
+import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure, analyzeTerm,
+                             analyzeProperty, runAnalyzeM)
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
+
+data CheckFailure
+  = Invalid SBVI.SMTModel
+  | Unsatisfiable
+  | Unknown String -- reason
+  | SatExtensionField SBVI.SMTModel
+  | ProofError [String]
+  | TypecheckFailure (Set TC.Failure)
+  | AnalyzeFailure AnalyzeFailure
+  | TranslateFailure TranslateFailure
+  --
+  -- TODO: maybe remove this constructor from from CheckFailure.
+  --
+  | CodeCompilationFailed String
+  deriving (Show)
+
+data CheckSuccess
+  = SatisfiedProperty SBVI.SMTModel
+  | ProvedTheorem
+  deriving (Show)
+
+type CheckResult
+  = Either CheckFailure CheckSuccess
 
 analyzeFunction'
   :: Check

@@ -36,7 +36,6 @@ import GHC.Generics
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
 import qualified Pact.Types.Lang as Pact
 import Pact.Types.Typecheck hiding (Var, UserType)
-import qualified Pact.Types.Typecheck as TC
 import qualified Pact.Types.Typecheck as Pact
 
 newtype Object
@@ -61,27 +60,6 @@ mkAVal (SBVI.SBV sval) = AVal sval
 
 coerceSBV :: SBV a -> SBV b
 coerceSBV = SBVI.SBV . SBVI.unSBV
-
-data AnalyzeEnv = AnalyzeEnv
-  { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion
-  , _nameAuths :: SArray String Bool -- read-only
-  } deriving Show
-
-newtype AnalyzeLog
-  = AnalyzeLog ()
-
-instance Monoid AnalyzeLog where
-  mempty = AnalyzeLog ()
-  mappend _ _ = AnalyzeLog ()
-
-instance Mergeable AnalyzeLog where
-  --
-  -- NOTE: If we change the underlying representation of AnalyzeLog to a list,
-  -- the default Mergeable instance for this will have the wrong semantics, as
-  -- it requires that lists have the same length. We more likely want to use
-  -- monoidal semantics for anything we log:
-  --
-  symbolicMerge _f _t = mappend
 
 mkConcreteString :: String -> SBV a
 mkConcreteString = SBVI.SBV
@@ -289,20 +267,6 @@ symArrayAt symKey = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
-data AnalyzeFailure
-  = AtHasNoRelevantFields EType Schema
-  | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj Object
-  | KeyNotPresent String Object
-  | MalformedArithOpExec ArithOp [Term Integer]
-  | MalformedLogicalOpExec LogicalOp [Term Bool]
-  | ObjFieldOfWrongType String EType
-  | UnsupportedArithOp ArithOp
-  -- For cases we don't handle yet:
-  | UnhandledObject (Term Object)
-  | UnhandledTerm String ETerm
-  deriving Show
-
 data ArithOp
   = Sub -- "-" Integer / Decimal
   | Add -- "+"
@@ -494,56 +458,7 @@ data Decimal = Decimal
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
 
---
--- TODO: move TranslateFailure back to the Translate module once we can move
--- CheckFailure downstream of it.
---
-
-data TranslateFailure
-  = BranchesDifferentTypes EType EType
-  | EmptyBody
-  | MalformedArithOp Text [AST Node]
-  | MalformedLogicalOp Text [AST Node]
-  | MalformedComparison Text [AST Node]
-  | NotConvertibleToSchema (Pact.Type Pact.UserType)
-  | TypeMismatch EType EType
-  | UnexpectedNode String (AST Node)
-  | AlternativeFailures [TranslateFailure]
-  | MonadFailure String
-  deriving Show
-
-instance Monoid TranslateFailure where
-  mempty = AlternativeFailures []
-  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
-  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
-  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
-  mappend x y = AlternativeFailures [x, y]
-
-data CheckFailure
-  = Invalid SBVI.SMTModel
-  | Unsatisfiable
-  | Unknown String -- reason
-  | SatExtensionField SBVI.SMTModel
-  | ProofError [String]
-  | TypecheckFailure (Set TC.Failure)
-  | AnalyzeFailure AnalyzeFailure
-  | TranslateFailure TranslateFailure
-  --
-  -- TODO: maybe remove this constructor from from CheckFailure.
-  --
-  | CodeCompilationFailed String
-  deriving (Show)
-
-data CheckSuccess
-  = SatisfiedProperty SBVI.SMTModel
-  | ProvedTheorem
-  deriving (Show)
-
-type CheckResult
-  = Either CheckFailure CheckSuccess
-
 makeLenses ''TableMap
-makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState

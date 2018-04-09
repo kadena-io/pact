@@ -29,6 +29,26 @@ import qualified Pact.Types.Typecheck as Pact
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
 
+data TranslateFailure
+  = BranchesDifferentTypes EType EType
+  | EmptyBody
+  | MalformedArithOp Text [AST Node]
+  | MalformedLogicalOp Text [AST Node]
+  | MalformedComparison Text [AST Node]
+  | NotConvertibleToSchema (Pact.Type Pact.UserType)
+  | TypeMismatch EType EType
+  | UnexpectedNode String (AST Node)
+  | AlternativeFailures [TranslateFailure]
+  | MonadFailure String
+  deriving Show
+
+instance Monoid TranslateFailure where
+  mempty = AlternativeFailures []
+  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
+  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
+  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
+  mappend x y = AlternativeFailures [x, y]
+
 newtype TranslateM a
   = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except TranslateFailure) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
