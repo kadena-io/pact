@@ -21,8 +21,6 @@
 
 module Pact.Analyze.Types where
 
-import Control.Monad.Except (ExceptT(..), Except, runExcept)
-import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Data
 import qualified Data.Decimal as Decimal
@@ -304,9 +302,6 @@ data AnalyzeFailure
   | UnhandledObject (Term Object)
   | UnhandledTerm String ETerm
   deriving Show
-
-type AnalyzeM
-  = RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure)
 
 data ArithOp
   = Sub -- "-" Integer / Decimal
@@ -594,19 +589,3 @@ stringCell
   -> Lens' AnalyzeState SString
 stringCell tn sCn sRk =
   latticeState.lasTableCells.singular (ix tn).scStringValues.symArrayAt (sCellId sCn sRk)
-
-instance (Mergeable a) => Mergeable (AnalyzeM a) where
-  symbolicMerge force test left right = RWST $ \r s -> ExceptT $ Identity $
-    --
-    -- We explicitly propagate only the "global" portion of the state from the
-    -- left to the right computation. And then the only lattice state, and not
-    -- global state, is merged (per AnalyzeState's Mergeable instance.)
-    --
-    -- If either side fails, the entire merged computation fails.
-    --
-    let run act = runExcept . runRWST act r
-    in do
-      lTup <- run left s
-      let gs = lTup ^. _2.globalState
-      rTup <- run right $ s & globalState .~ gs
-      return $ symbolicMerge force test lTup rTup

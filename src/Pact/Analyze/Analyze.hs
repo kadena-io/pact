@@ -1,9 +1,11 @@
-{-# language GADTs               #-}
-{-# language LambdaCase          #-}
-{-# language OverloadedStrings   #-}
-{-# language Rank2Types          #-}
-{-# language ScopedTypeVariables #-}
-{-# language TupleSections       #-}
+{-# language DeriveFunctor              #-}
+{-# language GADTs                      #-}
+{-# language GeneralizedNewtypeDeriving #-}
+{-# language LambdaCase                 #-}
+{-# language OverloadedStrings          #-}
+{-# language Rank2Types                 #-}
+{-# language ScopedTypeVariables        #-}
+{-# language TupleSections              #-}
 
 module Pact.Analyze.Analyze
   ( runCompiler
@@ -16,9 +18,11 @@ module Pact.Analyze.Analyze
 
 import Control.Concurrent.MVar
 import Control.Monad
-import Control.Monad.Except (runExcept, throwError)
+import Control.Monad.Except (MonadError, ExceptT(..), Except, runExcept,
+                             throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
+import Control.Monad.State (MonadState)
 import Control.Monad.State.Strict (runStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
@@ -44,7 +48,27 @@ import qualified Data.Text as T
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 
-import Debug.Trace
+newtype AnalyzeM a
+  = AnalyzeM
+    { runAnalyzeM :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure) a }
+  deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
+            MonadState AnalyzeState, MonadError AnalyzeFailure)
+
+instance (Mergeable a) => Mergeable (AnalyzeM a) where
+  symbolicMerge force test left right = AnalyzeM $ RWST $ \r s -> ExceptT $ Identity $
+    --
+    -- We explicitly propagate only the "global" portion of the state from the
+    -- left to the right computation. And then the only lattice state, and not
+    -- global state, is merged (per AnalyzeState's Mergeable instance.)
+    --
+    -- If either side fails, the entire merged computation fails.
+    --
+    let run act = runExcept . runRWST (runAnalyzeM act) r
+    in do
+      lTup <- run left s
+      let gs = lTup ^. _2.globalState
+      rTup <- run right $ s & globalState .~ gs
+      return $ symbolicMerge force test lTup rTup
 
 analyzeFunction'
   :: Check
@@ -71,7 +95,7 @@ analyzeFunction' check body argTys nodeNames tableNames =
             action = evalTerm body''
                   *> evalProperty prop
 
-        case runExcept $ runRWST action env0 state0 of
+        case runExcept $ runRWST (runAnalyzeM action) env0 state0 of
           Left cf -> do
             liftIO $ putMVar compileFailureVar cf
             pure false
@@ -288,7 +312,7 @@ evalTerm = \case
       evalTerm body
 
   n -> do
-    traceShowM n
+    --traceShowM n
     throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)
 
 evalDomainProperty :: DomainProperty -> AnalyzeM SBool
