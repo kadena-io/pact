@@ -199,6 +199,7 @@ data AnalyzeFailure
   | KeyNotPresent String Object
   | MalformedLogicalOpExec LogicalOp [Term Bool]
   | ObjFieldOfWrongType String EType
+  | PossibleRoundoff String
   | UnsupportedDecArithOp ArithOp
   | UnsupportedIntArithOp ArithOp
   | UnsupportedUnaryOp UnaryArithOp
@@ -559,9 +560,13 @@ analyzeTerm = \case
     secs' <- analyzeTerm secs
     pure $ time' + sFromIntegral secs'
 
-  -- n@(AddTimeDec _ _) -> throwError $ UnhandledTerm
-  --   "We don't support adding decimals to time yet"
-  --   (ETerm n undefined)
+  AddTime time (ETerm secs TDecimal) -> do
+    time' <- analyzeTerm time
+    secs' <- analyzeTerm secs
+    if isConcrete secs'
+    then pure $ time' + sFromIntegral (sRealToSInteger secs')
+    else throwError $ PossibleRoundoff
+      "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
   Comparison op x y -> do
     x' <- analyzeTerm x

@@ -280,7 +280,7 @@ deriving instance Show EType
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
   (+)    = IntArithOp Add
-  (*)    = IntArithOp Add
+  (*)    = IntArithOp Mul
   abs    = IntUnaryArithOp Abs
   signum = IntUnaryArithOp Signum
   negate = IntUnaryArithOp Negate
@@ -288,7 +288,7 @@ instance Num (Term Integer) where
 instance Num (Term Decimal) where
   fromInteger = Literal . literal . mkDecimal . fromInteger
   (+)    = DecArithOp Add
-  (*)    = DecArithOp Add
+  (*)    = DecArithOp Mul
   abs    = DecUnaryArithOp Abs
   signum = DecUnaryArithOp Signum
   negate = DecUnaryArithOp Negate
@@ -339,7 +339,10 @@ data Check where
 type Time = Int64
 
 mkTime :: UTCTime -> Time
-mkTime utct = utct ^. _utctDayTime . microseconds
+mkTime utct
+  = ((utct ^. _utctDay . to toModifiedJulianDay . to fromIntegral)
+    * (1000000 * 60 * 60 * 24))
+  + (utct ^. _utctDayTime . microseconds)
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal

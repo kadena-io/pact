@@ -325,17 +325,39 @@ suite = tests
                 |]
           in expectPass code $ Valid $ Not $ Occurs Abort
 
-  -- , scope "time" $
-  --     let code =
-  --           [text|
-  --             (defun test:bool ()
-  --               (let ((startTime:time (time "2016-07-22T12:00:00Z")))
-  --                 (enforce (= (add-time startTime (days 1)) (time "2016-07-23T12:00:00Z")) "")
-  --                 (enforce (= (add-time startTime (hours 1)) (time "2016-07-22T13:00:00Z")) "")
-  --                 (enforce (= (add-time startTime (minutes 1)) (time "2016-07-22T12:01:00Z")) "")
-  --               ))
-  --           |]
-  --     in expectPass code $ Valid $ Not $ Occurs Abort
+  , scope "time" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (let ((startTime:time (time "2016-07-22T12:00:00Z")))
+                  (enforce
+                    (= (add-time startTime (days 1))
+                       (time "2016-07-23T12:00:00Z"))
+                    "one day later")
+                  (enforce
+                    (= (add-time startTime (hours 1))
+                       (time "2016-07-22T13:00:00Z"))
+                    "one hour later")
+                  (enforce
+                    (= (add-time startTime (minutes 1))
+                       (time "2016-07-22T12:01:00Z"))
+                    "one minute later")
+
+                  (enforce
+                    (= (add-time (time "2016-07-22T12:00:00Z") (days 1.5))
+                       (time "2016-07-24T00:00:00Z"))
+                    "1.5 days later")
+                  (enforce
+                    (= (add-time (time "2016-07-22T12:00:00Z") (hours 1.5))
+                       (time "2016-07-22T13:30:00Z"))
+                    "1.5 hours later")
+                  (enforce
+                    (= (add-time (time "2016-07-22T12:00:00Z") (minutes 1.5))
+                       (time "2016-07-22T12:01:30Z"))
+                    "1.5 minutes later")
+                ))
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
 
   , scope "arith" $
       let code =
