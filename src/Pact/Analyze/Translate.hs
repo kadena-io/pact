@@ -194,15 +194,7 @@ translateNode = \case
             ETerm b' bTy <- translateNode b
             if
               | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
-                -> let opFromNameID = \case
-                         ("+" :: Text) -> Add
-                         "-"           -> Sub
-                         "*"           -> Mul
-                         "/"           -> Div
-                         "^"           -> Pow
-                         "log"         -> Log
-
-                       opFromNameDec = \case
+                -> let opFromName = \case
                          ("+" :: Text) -> Add
                          "-"           -> Sub
                          "*"           -> Mul
@@ -210,15 +202,22 @@ translateNode = \case
                          "^"           -> Pow
                          "log"         -> Log
                  in case (aTy, bTy) of
-                   (TInt, TInt)         -> pure $ ETerm (IntArithOp (opFromNameID fn) a' b') TInt
-                   (TDecimal, TDecimal) -> pure $ ETerm (DecArithOp (opFromNameID fn) a' b') TDecimal
-                   (TInt, TDecimal)     -> pure $ ETerm (IntDecArithOp (opFromNameDec fn) a' b') TDecimal
-                   (TDecimal, TInt)     -> pure $ ETerm (DecIntArithOp (opFromNameDec fn) a' b') TDecimal
+                   (TInt, TInt)         -> pure $
+                     ETerm (IntArithOp (opFromName fn) a' b') TInt
+                   (TDecimal, TDecimal) -> pure $
+                     ETerm (DecArithOp (opFromName fn) a' b') TDecimal
+                   (TInt, TDecimal)     -> pure $
+                     ETerm (IntDecArithOp (opFromName fn) a' b') TDecimal
+                   (TDecimal, TInt)     -> pure $
+                     ETerm (DecIntArithOp (opFromName fn) a' b') TDecimal
                    _ -> throwError $ MalformedArithOp fn args
               | otherwise -> case (aTy, bTy, fn) of
-                (TDecimal, TInt, "round")   -> pure $ ETerm (RoundingLikeOp2 Round a' b') TDecimal
-                (TDecimal, TInt, "ceiling") -> pure $ ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
-                (TDecimal, TInt, "floor")   -> pure $ ETerm (RoundingLikeOp2 Floor a' b') TDecimal
+                (TDecimal, TInt, "round")   -> pure $
+                  ETerm (RoundingLikeOp2 Round a' b') TDecimal
+                (TDecimal, TInt, "ceiling") -> pure $
+                  ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
+                (TDecimal, TInt, "floor")   -> pure $
+                  ETerm (RoundingLikeOp2 Floor a' b') TDecimal
                 _ -> throwError $ MalformedArithOp fn args
           [a] -> do
             ETerm a' ty <- translateNode a
