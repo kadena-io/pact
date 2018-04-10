@@ -22,13 +22,49 @@ import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.String (IsString(..))
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
-import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..), WriteType(..))
+import Pact.Types.Runtime hiding (ColumnId, TableName, Term, Type, EObject,
+                                  RowKey(..), WriteType(..))
 import Pact.Types.Version (pactVersion)
 
 import Pact.Analyze.Types
+
+-- a unique column, comprised of table name and column name
+-- e.g. accounts__balance
+newtype ColumnId
+  = ColumnId String
+  deriving (Eq, Ord)
+
+instance SymWord ColumnId where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (ColumnId cid) = mkConcreteString cid
+  fromCW = wrappedStringFromCW ColumnId
+
+instance HasKind ColumnId where
+  kindOf _ = KString
+
+instance IsString ColumnId where
+  fromString = ColumnId
+
+-- a unique cell, from a column name and a row key
+-- e.g. balance__25
+newtype CellId
+  = CellId String
+  deriving (Eq, Ord)
+
+instance SymWord CellId where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (CellId cid) = mkConcreteString cid
+  fromCW = wrappedStringFromCW CellId
+
+instance HasKind CellId where
+  kindOf _ = KString
+
+instance IsString CellId where
+  fromString = CellId
 
 data AnalyzeEnv = AnalyzeEnv
   { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion

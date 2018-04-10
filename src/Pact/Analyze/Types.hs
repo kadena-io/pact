@@ -99,40 +99,6 @@ instance IsString RowKey where
 type SRowKey
   = SBV RowKey
 
--- a unique column, comprised of table name and column name
--- e.g. accounts__balance
-newtype ColumnId
-  = ColumnId String
-  deriving (Eq, Ord)
-
-instance SymWord ColumnId where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (ColumnId cid) = mkConcreteString cid
-  fromCW = wrappedStringFromCW ColumnId
-
-instance HasKind ColumnId where
-  kindOf _ = KString
-
-instance IsString ColumnId where
-  fromString = ColumnId
-
--- a unique cell, from a column name and a row key
--- e.g. balance__25
-newtype CellId
-  = CellId String
-  deriving (Eq, Ord)
-
-instance SymWord CellId where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (CellId cid) = mkConcreteString cid
-  fromCW = wrappedStringFromCW CellId
-
-instance HasKind CellId where
-  kindOf _ = KString
-
-instance IsString CellId where
-  fromString = CellId
-
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
 
