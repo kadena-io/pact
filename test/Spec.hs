@@ -376,8 +376,8 @@ suite = tests
 
                   ; dec -> dec -> dec
                   ; disabled due to pact typechecking limitations
-                  ; (enforce (= (+ xD yD) 4) "")
-                  ; (enforce (= (- xD yD) -1) "")
+                  (enforce (= (+ xD yD) 4.0) "")
+                  (enforce (= (- xD yD) -1.0) "")
                   (enforce (= (* xD yD) 3.75) "")
                   (enforce (= (/ xD yD) 0.6) "")
 
