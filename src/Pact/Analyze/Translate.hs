@@ -16,15 +16,18 @@ import Control.Monad.Fail
 import Control.Monad.Reader
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
+import qualified Data.Set as Set
 import Data.SBV (literal)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Thyme (parseTime)
 import Data.Traversable (for)
 import Data.Type.Equality
 import Pact.Types.Lang (Literal(..), Type(..), PrimType(..), Arg(..))
 import qualified Pact.Types.Lang as Pact
 import Pact.Types.Typecheck hiding (Var, Schema, Object)
 import qualified Pact.Types.Typecheck as Pact
+import System.Locale (defaultTimeLocale)
 
 import Pact.Analyze.Patterns
 import Pact.Analyze.Types
@@ -93,27 +96,25 @@ translateNode = \case
       EObjectTy schema -> EObject (Var varName) schema
 
   -- Int
-  AST_NegativeLit (LInteger i) -> do
-    let tm = Arith Negate [Literal (literal i)]
-    -- TODO: this should also work for decimal
-    pure $ ETerm tm TInt
+  AST_NegativeLit lit -> case lit of
+    LInteger i -> pure $ ETerm (IntUnaryArithOp Negate (Literal (literal i))) TInt
+    LDecimal d -> pure $ ETerm (DecUnaryArithOp Negate (Literal (literal (mkDecimal d)))) TDecimal
+    _ -> undefined
 
-  AST_Lit (LInteger i) ->
-    -- TODO: shouldn't this also work for decimal?
-    pure (ETerm (Literal (literal i)) TInt)
+  AST_Lit lit -> case lit of
+    LInteger i -> pure $ ETerm (Literal (literal i)) TInt
+    LBool b    -> pure $ ETerm (Literal (literal b)) TBool
+    LString s  -> pure $ ETerm (Literal $ literal $ T.unpack s) TStr
+    LDecimal d -> pure $ ETerm (Literal (literal (mkDecimal d))) TDecimal
+    LTime t    -> pure $ ETerm (Literal (literal (mkTime t))) TTime
 
-  AST_NegativeVar n -> do
-    name <- view (ix n)
-    -- TODO: shouldn't this also work for decimal?
-    pure (ETerm (Arith Negate [Var name]) TInt)
-
-  AST_Days days -> do
-    -- TODO: this should also work for decimal
-    ETerm days' TInt <- translateNode days
-    pure $ ETerm (Arith Mul [60 * 60 * 24, days']) TInt
-
-  -- Bool
-  AST_Lit (LBool b) -> pure (ETerm (Literal (literal b)) TBool)
+  AST_NegativeVar node -> do
+    name <- view (ix node)
+    EType ty <- pure $ typeFromPact (_aTy node)
+    case ty of
+      TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name)) TInt)
+      TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
+      _ -> undefined
 
   AST_Enforce _ cond _msg -> do
     ETerm condTerm TBool <- translateNode cond
@@ -124,6 +125,32 @@ translateNode = \case
     -> do
       ETerm ksNameTerm TStr <- translateNode ks
       return $ ETerm (Enforce (NameAuthorized ksNameTerm)) TBool
+
+  AST_Days days -> do
+    ETerm days' daysTy <- translateNode days
+    case daysTy of
+      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60 * 24) days') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60 * 24) days') TDecimal
+      _        -> throwError undefined
+
+  AST_Hours hours -> do
+    ETerm hours' hoursTy <- translateNode hours
+    case hoursTy of
+      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60) hours') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60) hours') TDecimal
+      _        -> throwError undefined
+
+  AST_Minutes minutes -> do
+    ETerm minutes' minutes <- translateNode minutes
+    case minutes of
+      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60) minutes') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60) minutes') TDecimal
+      _        -> throwError undefined
+
+  AST_NFun _node "time" [AST_Lit (LString timeLit)]
+    | Just timeLit'
+      <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
+    -> pure $ ETerm (Literal (literal (mkTime timeLit'))) TTime
 
   AST_NFun_Basic fn args ->
     let mkComparison :: TranslateM ETerm
@@ -160,35 +187,57 @@ translateNode = \case
               _ -> throwError $ MalformedLogicalOp fn args
           _ -> throwError $ MalformedLogicalOp fn args
 
-        -- TODO(joel): do this for decimal (etc) as well
         mkArith :: TranslateM ETerm
         mkArith = case args of
           [a, b] -> do
-            ETerm a' TInt <- translateNode a
-            ETerm b' TInt <- translateNode b
-            -- case typeEq ta tb of
-            --   Just Refl -> pure $ ETerm (Arith Sub [a', b']) TInt
-            --   _         -> throwError (TypeMismatch (EType ta) (EType tb))
-            case fn of
-              "-"   -> pure $ ETerm (Arith Sub [a', b']) TInt
-              "+"   -> pure $ ETerm (Arith Add [a', b']) TInt
-              "*"   -> pure $ ETerm (Arith Mul [a', b']) TInt
-              "/"   -> pure $ ETerm (Arith Div [a', b']) TInt
-              "^"   -> pure $ ETerm (Arith Pow [a', b']) TInt
-              "mod" -> pure $ ETerm (Arith Mod [a', b']) TInt
-              "log" -> pure $ ETerm (Arith Log [a', b']) TInt
-              _     -> throwError $ MalformedLogicalOp fn args
+            ETerm a' aTy <- translateNode a
+            ETerm b' bTy <- translateNode b
+            if
+              | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
+                -> let opFromNameID = \case
+                         ("+" :: Text) -> Add
+                         "-"           -> Sub
+                         "*"           -> Mul
+                         "/"           -> Div
+                         "^"           -> Pow
+                         "log"         -> Log
+
+                       opFromNameDec = \case
+                         ("+" :: Text) -> Add
+                         "-"           -> Sub
+                         "*"           -> Mul
+                         "/"           -> Div
+                         "^"           -> Pow
+                         "log"         -> Log
+                 in case (aTy, bTy) of
+                   (TInt, TInt)         -> pure $ ETerm (IntArithOp (opFromNameID fn) a' b') TInt
+                   (TDecimal, TDecimal) -> pure $ ETerm (DecArithOp (opFromNameID fn) a' b') TDecimal
+                   (TInt, TDecimal)     -> pure $ ETerm (IntDecArithOp (opFromNameDec fn) a' b') TDecimal
+                   (TDecimal, TInt)     -> pure $ ETerm (DecIntArithOp (opFromNameDec fn) a' b') TDecimal
+                   _ -> throwError $ MalformedArithOp fn args
+              | otherwise -> case (aTy, bTy, fn) of
+                (TDecimal, TInt, "round")   -> pure $ ETerm (RoundingLikeOp2 Round a' b') TDecimal
+                (TDecimal, TInt, "ceiling") -> pure $ ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
+                (TDecimal, TInt, "floor")   -> pure $ ETerm (RoundingLikeOp2 Floor a' b') TDecimal
+                _ -> throwError $ MalformedArithOp fn args
           [a] -> do
-            ETerm a' TInt <- translateNode a
-            case fn of
-              "-"       -> pure $ ETerm (Arith Negate [a']) TInt
-              "sqrt"    -> pure $ ETerm (Arith Sqrt [a']) TInt
-              "ln"      -> pure $ ETerm (Arith Ln [a']) TInt
-              "exp"     -> pure $ ETerm (Arith Exp [a']) TInt
-              "abs"     -> pure $ ETerm (Arith Abs [a']) TInt
-              "round"   -> pure $ ETerm (Arith Round [a']) TInt
-              "ceiling" -> pure $ ETerm (Arith Ceiling [a']) TInt
-              "floor"   -> pure $ ETerm (Arith Floor [a']) TInt
+            ETerm a' ty <- translateNode a
+            case (fn, ty) of
+              ("-",    TInt) -> pure $ ETerm (IntUnaryArithOp Negate a') TInt
+              ("sqrt", TInt) -> pure $ ETerm (IntUnaryArithOp Sqrt a') TInt
+              ("ln",   TInt) -> pure $ ETerm (IntUnaryArithOp Ln a') TInt
+              ("exp",  TInt) -> pure $ ETerm (IntUnaryArithOp Exp a') TInt
+              ("abs",  TInt) -> pure $ ETerm (IntUnaryArithOp Abs a') TInt
+
+              ("-",    TDecimal) -> pure $ ETerm (DecUnaryArithOp Negate a') TDecimal
+              ("sqrt", TDecimal) -> pure $ ETerm (DecUnaryArithOp Sqrt a') TDecimal
+              ("ln",   TDecimal) -> pure $ ETerm (DecUnaryArithOp Ln a') TDecimal
+              ("exp",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Exp a') TDecimal
+              ("abs",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Abs a') TDecimal
+
+              ("round",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Round a') TInt
+              ("ceiling", TDecimal) -> pure $ ETerm (RoundingLikeOp1 Ceiling a') TInt
+              ("floor",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Floor a') TInt
               _         -> throwError $ MalformedArithOp fn args
           _ -> throwError $ MalformedArithOp fn args
 
@@ -198,9 +247,17 @@ translateNode = \case
             ETerm a' TStr <- translateNode a
             ETerm b' TStr <- translateNode b
             pure (ETerm (Concat a' b') TStr)
-          _ -> throwError undefined
+          _ -> mzero
 
-    in mkArith <|> mkComparison <|> mkLogical <|> mkConcat
+        mkMod :: TranslateM ETerm
+        mkMod = case (fn, args) of
+          ("mod", [a, b]) -> do
+            ETerm a' TInt <- translateNode a
+            ETerm b' TInt <- translateNode b
+            pure (ETerm (ModOp a' b') TInt)
+          _ -> mzero
+
+    in mkMod <|> mkArith <|> mkComparison <|> mkLogical <|> mkConcat
 
   AST_NFun _node name [ShortTableName tn, row, obj]
     | elem name ["insert", "update", "write"] -> do
@@ -217,8 +274,6 @@ translateNode = \case
     case typeEq ta tb of
       Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
       _ -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
-
-  AST_Lit (LString t) -> pure $ ETerm (Literal $ literal $ T.unpack t) TStr
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
@@ -237,22 +292,14 @@ translateNode = \case
     pure $ Let freshVar (Read (TableName (T.unpack table)) _schema key') body''
 -}
 
-  -- Decimal
-  AST_Lit (LDecimal d) -> pure (ETerm (Literal (literal (mkDecimal d))) TDecimal)
-
   -- Time
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyInteger -> do
+    | seconds ^. aNode . aTy == TyPrim TyInteger ||
+      seconds ^. aNode . aTy == TyPrim TyDecimal -> do
       ETerm time' TTime <- translateNode time
-      ETerm seconds' TInt <- translateNode seconds
-      pure (ETerm (AddTimeInt time' seconds') TTime)
-    | seconds ^. aNode . aTy == TyPrim TyDecimal -> do
-      ETerm time' TTime <- translateNode time
-      ETerm seconds' TDecimal <- translateNode seconds
-      pure (ETerm (AddTimeDec time' seconds') TTime)
-
-  AST_Lit (LTime t) -> pure (ETerm (Literal (literal (mkTime t))) TTime)
+      seconds'          <- translateNode seconds
+      pure (ETerm (AddTime time' seconds') TTime)
 
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
@@ -260,6 +307,14 @@ translateNode = \case
       Left err -> throwError err
       Right x -> pure x
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
+
+  AST_At node colName obj -> do
+    EObject obj' schema <- translateNode obj
+    ETerm colName' TStr <- translateNode colName
+    -- let colName' = Literal $ literal $ T.unpack colName
+    pure $ case typeFromPact (_aTy node) of
+      ty@(EType ty')         -> ETerm   (At schema colName' obj' ty) ty'
+      ty@(EObjectTy schema') -> EObject (At schema colName' obj' ty) schema'
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do

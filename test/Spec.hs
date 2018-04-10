@@ -324,6 +324,127 @@ suite = tests
                        (enforce (= 6 z) "2 + 3 + 1 = 6"))))
                 |]
           in expectPass code $ Valid $ Not $ Occurs Abort
+
+  -- , scope "time" $
+  --     let code =
+  --           [text|
+  --             (defun test:bool ()
+  --               (let ((startTime:time (time "2016-07-22T12:00:00Z")))
+  --                 (enforce (= (add-time startTime (days 1)) (time "2016-07-23T12:00:00Z")) "")
+  --                 (enforce (= (add-time startTime (hours 1)) (time "2016-07-22T13:00:00Z")) "")
+  --                 (enforce (= (add-time startTime (minutes 1)) (time "2016-07-22T12:01:00Z")) "")
+  --               ))
+  --           |]
+  --     in expectPass code $ Valid $ Not $ Occurs Abort
+
+  , scope "arith" $
+      let code =
+            [text|
+              (defun test:bool ()
+                (let ((xI:integer 1)
+                      (yI:integer 2)
+                      (xD:decimal 1.5)
+                      (yD:decimal 2.5))
+
+                  ; int -> int -> int
+                  (enforce (= (+ xI yI) 3) "")
+                  (enforce (= (- xI yI) -1) "")
+                  (enforce (= (* xI yI) 2) "")
+                  (enforce (= (/ xI yI) 0) "")
+
+                  ; dec -> dec -> dec
+                  ; disabled due to pact typechecking limitations
+                  ; (enforce (= (+ xD yD) 4) "")
+                  ; (enforce (= (- xD yD) -1) "")
+                  (enforce (= (* xD yD) 3.75) "")
+                  (enforce (= (/ xD yD) 0.6) "")
+
+                  ; int -> dec -> dec
+                  (enforce (= (+ xI yD) 3.5) "")
+                  (enforce (= (- xI yD) -1.5) "")
+                  (enforce (= (* xI yD) 2.5) "")
+                  (enforce (= (/ xI yD) 0.4) "")
+
+                  ; dec -> int -> dec
+                  (enforce (= (+ xD yI) 3.5) "")
+                  (enforce (= (- xD yI) -0.5) "")
+                  (enforce (= (* xD yI) 3.0) "")
+                  (enforce (= (/ xD yI) 0.75) "")
+
+                  (enforce (= (mod 3 2) 1) "")
+                  (enforce (= (mod 4 2) 0) "")
+                  (enforce (= (mod 2983479238473 2) 1) "")
+                  (enforce (= (mod 2983479238472 2) 0) "")
+
+                  (enforce (= (- 3) -3) "")
+                  (enforce (= (abs -3) 3) "")
+                  (enforce (= (abs 0) 0) "")
+                  (enforce (= (abs 3) 3) "")
+
+                  (enforce (= (floor 1.5) 1) "")
+                  (enforce (= (round 1.5) 2) "")
+                  (enforce (= (ceiling 1.5) 2) "")
+
+                  ; banker's rounding
+                  (enforce (= (round 1.5) 2) "")
+                  (enforce (= (round 2.5) 2) "")
+                  (enforce (= (round 3.5) 4) "")
+                  (enforce (= (round 4.5) 4) "")
+
+                  (enforce (= (round 1.50000000001) 2) "")
+                  (enforce (= (round 1.49999999999) 1) "")
+
+                  (enforce (= (floor 1.6) 1) "")
+                  (enforce (= (round 1.6) 2) "")
+                  (enforce (= (ceiling 1.6) 2) "")
+
+                  (enforce (= (floor 1.4) 1) "")
+                  (enforce (= (round 1.4) 1) "")
+                  (enforce (= (ceiling 1.4) 2) "")
+
+                  (enforce (= (floor -1.5) -2) "")
+                  (enforce (= (round -1.5) -2) "")
+                  (enforce (= (ceiling -1.5) -1) "")
+
+                  ; banker's rounding
+                  (enforce (= (round -1.5) -2) "")
+                  (enforce (= (round -2.5) -2) "")
+                  (enforce (= (round -3.5) -4) "")
+                  (enforce (= (round -4.5) -4) "")
+
+                  (enforce (= (round -1.50000000001) -2) "")
+                  (enforce (= (round -1.49999999999) -1) "")
+
+                  (enforce (= (floor -1.6) -2) "")
+                  (enforce (= (round -1.6) -2) "")
+                  (enforce (= (ceiling -1.6) -1) "")
+
+                  (enforce (= (floor -1.4) -2) "")
+                  (enforce (= (round -1.4) -1) "")
+                  (enforce (= (ceiling -1.4) -1) "")
+
+                  (enforce (= (floor 0.0) 0) "")
+                  (enforce (= (round 0.0) 0) "")
+                  (enforce (= (ceiling 0.0) 0) "")
+
+                  (enforce (= (floor 1.0) 1) "")
+                  (enforce (= (round 1.0) 1) "")
+                  (enforce (= (ceiling 1.0) 1) "")
+
+                  (enforce (= (floor 1.99999) 1) "")
+                  (enforce (= (round 1.99999) 2) "")
+                  (enforce (= (ceiling 1.99999) 2) "")
+
+                  (enforce (= (floor 100.15234 2) 100.15) "")
+                  (enforce (= (round 100.15234 2) 100.15) "")
+                  (enforce (= (ceiling 100.15234 2) 100.16) "")
+
+                  (enforce (= (floor -100.15234 2) -100.16) "")
+                  (enforce (= (round -100.15234 2) -100.15) "")
+                  (enforce (= (ceiling -100.15234 2) -100.15) "")
+                ))
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
   ]
 
 main :: IO ()

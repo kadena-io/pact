@@ -14,7 +14,6 @@ import Data.Map.Strict (Map)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Thyme
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
@@ -141,35 +140,43 @@ data UserType = UserType
 deriving instance HasKind UserType
 deriving instance SymWord UserType
 
+-- Operations that apply to a pair of either integer or decimal, resulting in
+-- the same:
+-- integer -> integer -> integer
+-- decimal -> decimal -> decimal
+--
+-- Or:
+-- integer -> decimal -> integer
+-- decimal -> integer -> integer
 data ArithOp
-  = Sub -- "-" Integer / Decimal
-  | Add -- "+"
-  | Mul -- "*"
-  | Div -- "/"
+  = Add
+  | Sub
+  | Mul
+  | Div
+  | Pow
+  | Log
+  deriving (Show, Eq)
 
-  | Pow -- "^"
-  | Sqrt -- "sqrt"
-  | Mod -- "mod"
-  | Log -- "log"
-  | Ln -- "ln"
+-- integer -> integer
+-- decimal -> decimal
+data UnaryArithOp
+  = Negate
+  | Sqrt
+  | Ln
+  | Exp
+  | Abs
 
-  | Exp -- "exp"
-  | Abs -- "abs"
-  | Round -- "round"
-  | Ceiling -- "ceiling"
-  | Floor -- "floor"
-
-  -- Extras not necessarily in pact
-  -- @Signum@ because we want (Term Integer) to be a Num instance
+  -- Implemented only for the sake of the Num instance
   | Signum
-  -- @Negate@ because @-@ is overloaded in pact to mean "minus" or "negate"
-  | Negate
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq)
 
-unsupportedArithOps :: Set ArithOp
-unsupportedArithOps = Set.fromList
-  -- TODO(joel) support Exp with svExp?
-  [Pow, Sqrt, Log, Ln, Exp, Round, Ceiling, Floor]
+-- decimal -> integer -> decimal
+-- decimal -> decimal
+data RoundingLikeOp
+  = Round
+  | Ceiling
+  | Floor
+  deriving (Show, Eq)
 
 data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)
@@ -238,11 +245,24 @@ data Term ret where
   -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
   --       just using Let+At first.
   Var            ::                        Text         ->                             Term a
-  Arith          ::                        ArithOp      -> [Term Integer] ->           Term Integer
+
+  DecArithOp      :: ArithOp      -> Term Decimal -> Term Decimal -> Term Decimal
+  IntArithOp      :: ArithOp      -> Term Integer -> Term Integer -> Term Integer
+  DecUnaryArithOp :: UnaryArithOp                 -> Term Decimal -> Term Decimal
+  IntUnaryArithOp :: UnaryArithOp                 -> Term Integer -> Term Integer
+
+  DecIntArithOp   :: ArithOp -> Term Decimal -> Term Integer -> Term Decimal
+  IntDecArithOp   :: ArithOp -> Term Integer -> Term Decimal -> Term Decimal
+
+  ModOp           :: Term Integer   -> Term Integer -> Term Integer
+  RoundingLikeOp1 :: RoundingLikeOp -> Term Decimal -> Term Integer
+  RoundingLikeOp2 :: RoundingLikeOp -> Term Decimal -> Term Integer -> Term Decimal
+
+  -- invariant (inaccessible): a ~ Integer or a ~ Decimal
+  AddTime         :: Term Time -> ETerm -> Term Time
+
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
   Logical        ::                        LogicalOp    -> [Term Bool]    ->           Term Bool
-  AddTimeInt     ::                        Term Time    -> Term Integer   ->           Term Time
-  AddTimeDec     ::                        Term Time    -> Term Decimal   ->           Term Time
   NameAuthorized ::                        Term String  ->                             Term Bool
   Concat         ::                        Term String  -> Term String    ->           Term String
   PactVersion    ::                                                                    Term String
@@ -269,11 +289,19 @@ deriving instance Show EType
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
-  x + y = Arith Add [x, y]
-  x * y = Arith Mul [x, y]
-  abs x = Arith Abs [x]
-  signum x = Arith Signum [x]
-  negate x = Arith Negate [x]
+  (+)    = IntArithOp Add
+  (*)    = IntArithOp Add
+  abs    = IntUnaryArithOp Abs
+  signum = IntUnaryArithOp Signum
+  negate = IntUnaryArithOp Negate
+
+instance Num (Term Decimal) where
+  fromInteger = Literal . literal . mkDecimal . fromInteger
+  (+)    = DecArithOp Add
+  (*)    = DecArithOp Add
+  abs    = DecUnaryArithOp Abs
+  signum = DecUnaryArithOp Signum
+  negate = DecUnaryArithOp Negate
 
 data DomainProperty where
   TableWrite       :: TableName  ->               DomainProperty -- anything in table is written
@@ -324,10 +352,10 @@ mkTime :: UTCTime -> Time
 mkTime utct = utct ^. _utctDayTime . microseconds
 
 -- Pact uses Data.Decimal which is arbitrary-precision
-data Decimal = Decimal
-  { decimalPlaces :: !Word8
-  , decimalMantissa :: !Integer
-  } deriving (Show, Read, Eq, Ord, Data, HasKind, SymWord)
+type Decimal = AlgReal
 
 mkDecimal :: Decimal.Decimal -> Decimal
-mkDecimal (Decimal.Decimal places mantissa) = Decimal places mantissa
+mkDecimal (Decimal.Decimal places mantissa) = fromRational $
+  mantissa % 10 ^ places
+
+type SDecimal = (SWord8, SInteger)
