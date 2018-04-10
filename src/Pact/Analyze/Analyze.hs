@@ -513,7 +513,16 @@ analyzeTerm = \case
   RoundingLikeOp1 op x -> do
     x' <- analyzeTerm x
     pure $ case op of
-      -- if the number is exactly between two whole numbers, round to the
+      -- The only SReal -> SInteger conversion function that sbv provides is
+      -- sRealToSInteger, which computes the floor.
+      Floor   -> sRealToSInteger x'
+
+      -- For ceiling we use the identity:
+      -- ceil(x) = -floor(-x)
+      Ceiling -> negate (sRealToSInteger (negate x'))
+
+      -- Round is much more complicated because pact uses the banker's method,
+      -- where a real exactly between two integers (_.5) is rounded to the
       -- nearest even.
       Round   ->
         let wholePart      = sRealToSInteger x'
@@ -525,9 +534,15 @@ analyzeTerm = \case
           (wholePart + oneIf wholePartIsOdd)
           -- otherwise we take the floor of `x + 0.5`
           (sRealToSInteger (x' + 0.5))
-      Ceiling -> negate (sRealToSInteger (negate x'))
-      Floor   -> sRealToSInteger x'
 
+  -- In the decimal rounding operations we shift the number left by `precision`
+  -- digits, round using the integer method, and shift back right.
+  --
+  -- x': SReal            := -100.15234
+  -- precision': SInteger := 2
+  -- x'': SReal           := -10015.234
+  -- x''': SInteger       := -10015
+  -- return: SReal        := -100.15
   RoundingLikeOp2 op x precision -> do
     x'         <- analyzeTerm x
     precision' <- analyzeTerm precision
