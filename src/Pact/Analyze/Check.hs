@@ -37,8 +37,10 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure, analyzeTerm,
-                             analyzeProperty, runAnalyzeM)
+import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure,
+                             allocateSymbolicCells, analyzeTerm,
+                             analyzeProperty, mkInitialAnalyzeState,
+                             runAnalyzeM)
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 
@@ -81,12 +83,10 @@ analyzeFunction' check body argTys nodeNames tableNames =
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
         nameAuths' <- newArray "nameAuthorizations"
-        allTableCells <- sequence $ TableMap $ Map.fromList $
-          (, mkSymbolicCells) <$> tableNames
+        state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
 
         let prop   = checkProperty check
             env0   = AnalyzeEnv scope0 nameAuths'
-            state0 = initialAnalyzeState allTableCells
             action = analyzeTerm body''
                   *> analyzeProperty prop
 
