@@ -24,7 +24,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..), WriteType(..))
 import Pact.Types.Version (pactVersion)
@@ -70,12 +69,6 @@ instance Mergeable SymbolicCells where
     where
       f :: SymWord a => SArray CellId a -> SArray CellId a -> SArray CellId a
       f = symbolicMerge force test
-
-mkSymbolicCells :: Symbolic SymbolicCells
-mkSymbolicCells = SymbolicCells
-  <$> newArray "intCells"
-  <*> newArray "boolCells"
-  <*> newArray "stringCells"
 
 newtype TableMap a
   = TableMap { _tableMap :: Map TableName a }
@@ -155,7 +148,13 @@ mkInitialAnalyzeState tableCells = AnalyzeState
 
 allocateSymbolicCells :: [TableName] -> Symbolic (TableMap SymbolicCells)
 allocateSymbolicCells tableNames = sequence $ TableMap $ Map.fromList $
-  (, mkSymbolicCells) <$> tableNames
+    (, mkCells) <$> tableNames
+  where
+    mkCells :: Symbolic SymbolicCells
+    mkCells = SymbolicCells
+      <$> newArray "intCells"
+      <*> newArray "boolCells"
+      <*> newArray "stringCells"
 
 data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
