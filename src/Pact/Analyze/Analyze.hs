@@ -593,18 +593,6 @@ analyzeTerm = \case
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
-  --
-  -- NOTE: instead of this we will probably translate with-read to Read+Let+At
-  --
-  WithRead tn rowId bindings body -> do
-    rId <- analyzeTerm rowId -- TODO: use this
-    tableRead tn .= true
-    -- TODO: this should actually read to bind variables here
-    newVars <- forM bindings $ \varName ->
-      pure (varName, mkAVal (literal True))
-    local (scope <>~ Map.fromList newVars) $
-      analyzeTerm body
-
   n -> do
     --traceShowM n
     throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)

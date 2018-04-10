@@ -114,44 +114,6 @@ suite = tests
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
 
-  , scope "conserves-mass" $ do
-      let code =
-            [text|
-              (defun test:string (from:string to:string amount:integer)
-                "Transfer money between accounts"
-                (let ((from-bal (at 'balance (read accounts from)))
-                      (to-bal   (at 'balance (read accounts to))))
-                  (enforce (> amount 0)         "Non-positive amount")
-                  (enforce (>= from-bal amount) "Insufficient Funds")
-                  (enforce (!= from to)         "Sender is the recipient")
-                  (update accounts from { "balance": (- from-bal amount) })
-                  (update accounts to   { "balance": (+ to-bal amount) })))
-
-                ;(with-read accounts from { "balance":= from-bal }
-                ;  (with-read accounts to { "balance":= to-bal }
-                ;    (enforce (> amount 0)         "Non-positive amount")
-                ;    (enforce (>= from-bal amount) "Insufficient Funds")
-                ;    (enforce (!= from to)         "Sender is the recipient")
-                ;    (update accounts from { "balance": (- from-bal amount) })
-                ;    (update accounts to   { "balance": (+ to-bal amount) }))))
-            |]
-
-      expectPass code $ Valid $ Occurs Success
-                      `Implies` Occurs (ColumnConserve "accounts" "balance")
-      -- expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
-
-  --
-  -- TODO: this is pending fixes to pact's typechecker.
-  --
-  -- , scope "enforce-keyset.name.dynamic" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:bool ()
-  --               (enforce-keyset (+ "k" "s")))
-  --           |]
-  --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
-  --                                 `Implies` Occurs Abort
-
   --
   -- TODO: enforce-keyset.object
   --
@@ -208,6 +170,10 @@ suite = tests
                 )
             |]
       in expectPass code $ Valid $ Not $ Occurs Abort
+
+  --
+  -- TODO: test TableRead
+  --
 
   , scope "table-write.insert" $ do
       let code =
@@ -275,10 +241,52 @@ suite = tests
       expectPass code $ Valid $ Occurs Success
                       `Implies` Not (Occurs $ TableWrite "tokens")
 
+  , scope "conserves-mass" $ do
+      let code =
+            [text|
+              (defun test:string (from:string to:string amount:integer)
+                "Transfer money between accounts"
+                (let ((from-bal (at 'balance (read accounts from)))
+                      (to-bal   (at 'balance (read accounts to))))
+                  (enforce (> amount 0)         "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts from { "balance": (- from-bal amount) })
+                  (update accounts to   { "balance": (+ to-bal amount) })))
+            |]
+
+      expectPass code $ Valid $ Occurs Success
+                      `Implies` Occurs (ColumnConserve "accounts" "balance")
+      -- expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
+
   --
-  -- TODO: test table-level reads, but to implement this we need to support
-  --       objects.
+  -- TODO: this is pending fixes to pact's translation to AST:
+  --         https://github.com/kadena-io/pact/issues/44
   --
+  -- , scope "with-read" $ do
+  --     let code =
+  --           [text|
+  --             (defun test:integer (from:string to:string)
+  --               (with-read accounts from { (+ "bal" "ance") := from-bal }
+  --                 (with-read accounts to { "balance" := to-bal }
+  --                   (+ from-bal to-bal))))
+  --           |]
+
+  --     expectPass code $ Valid $ Occurs Success
+  --                     `Implies` Occurs (ColumnConserve "accounts" "balance")
+
+  --
+  -- TODO: this is pending fixes to pact's typechecker:
+  --         https://github.com/kadena-io/pact/issues/40
+  --
+  -- , scope "enforce-keyset.name.dynamic" $ do
+  --     let code =
+  --           [text|
+  --             (defun test:bool ()
+  --               (enforce-keyset (+ "k" "s")))
+  --           |]
+  --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
+  --                                 `Implies` Occurs Abort
 
   , scope "let" $ do
       scope "sanity" $ do

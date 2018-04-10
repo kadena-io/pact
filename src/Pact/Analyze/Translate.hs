@@ -14,6 +14,7 @@ import Control.Lens hiding (op)
 import Control.Monad.Except (Except, MonadError, throwError)
 import Control.Monad.Fail
 import Control.Monad.Reader
+import Control.Monad.State.Strict (MonadState(..), StateT)
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -23,6 +24,7 @@ import qualified Data.Text as T
 import Data.Thyme (parseTime)
 import Data.Traversable (for)
 import Data.Type.Equality
+import Data.Monoid ((<>))
 import Pact.Types.Lang (Literal(..), Type(..), PrimType(..), Arg(..))
 import qualified Pact.Types.Lang as Pact
 import Pact.Types.Typecheck hiding (Var, Schema, Object)
@@ -52,10 +54,16 @@ instance Monoid TranslateFailure where
   mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
   mappend x y = AlternativeFailures [x, y]
 
+-- next fresh variable ID
+newtype FreshId
+  = FreshId Int
+  deriving (Enum, Num)
+
 newtype TranslateM a
-  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (Except TranslateFailure) a }
+  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (StateT FreshId (Except TranslateFailure)) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node Text), MonadError TranslateFailure)
+    MonadReader (Map Node Text), MonadState FreshId,
+    MonadError TranslateFailure)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
@@ -64,11 +72,21 @@ translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
 translateBody [ast] = translateNode ast
 translateBody (ast:asts) = do
-  -- XXX: allow objects
+  --
+  -- TODO: allow objects
+  --
   -- EAny ast' <- translateNode ast
   ETerm ast' _   <- translateNode ast
   ETerm asts' ty <- translateBody asts
   pure $ ETerm (Sequence ast' asts') ty
+
+genFresh :: Text -> TranslateM (Text, Term a)
+genFresh baseName = do
+  varId <- get
+  id %= succ
+  -- similar to how let-bound variables are named e.g. "let4_x":
+  let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
+  return $ (varName, Var varName)
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode = \case
@@ -276,20 +294,71 @@ translateNode = \case
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
-  {-
-  AST_WithRead _node table key bindings body -> do
-    let bindings' :: [(Text, String)]
-        bindings' = flip map bindings $ \(Named name _ _, _var) -> name
-    ETerm body' tbody <- translateBody body
-    ETerm key' TStr   <- translateNode key
-    -- let withRead = WithRead (TableName (T.unpack table)) key' bindings' body'
-    let freshVar = undefined
-    let body'' = foldr
-          (\(colName, varName) body -> Let varName (At colName freshVar) body)
-          body'
-          bindings'
-    pure $ Let freshVar (Read (TableName (T.unpack table)) _schema key') body''
--}
+  --
+  -- TODO: we need to fix https://github.com/kadena-io/pact/issues/44 before
+  --       this will work.
+  --
+  AST_WithRead node table key bindings schemaNode body -> do
+    schema <- case schemaFromPact (_aTy schemaNode) of
+      Left err -> throwError err
+      Right s  -> pure s
+
+    (bindings' :: [(ETerm, (Node, Text))]) <- for bindings $
+      \(Named _x varNode _, colName) -> do
+        -- traceM $ "x:: " ++ show x
+        colName' <- translateNode colName
+        let varName = varNode ^. aId ^. tiName
+        pure (colName', (varNode, varName))
+
+    let nodeNames = Map.fromList $ snd <$> bindings'
+
+    ETerm key' TStr <- translateNode key
+    (freshName, freshVar :: Term Object) <- genFresh "with-read"
+
+    let translateLet :: Term a -> Term a
+        translateLet translatedBody = Let
+          freshName
+          (EObject (Read (TableName (T.unpack table)) schema key') schema)
+          (foldr
+             (\(colTerm :: ETerm, (varNode, varName)) body ->
+               let varType = typeFromPact $ _aTy varNode
+               in case colTerm of
+                    EObject _ _ ->
+                      --
+                      -- TODO: make this fold monadic and use MonadFail
+                      --
+                      error "TODO: deal with disallowed obj"
+
+                    ETerm colName TStr ->
+                      Let varName
+                        (case varType of
+                           EType ty ->
+                             ETerm   (At schema colName freshVar varType) ty
+                           EObjectTy sch ->
+                             EObject (At schema colName freshVar varType) sch)
+                        body
+
+                    --
+                    -- NOTE: after fixing #44, this case probably should not be
+                    --       able to occur:
+                    --
+                    -- ETerm colName ty -> error $
+                    --   "got a " ++ show ty ++ " for " ++ show varName ++
+                    --   ". colName is: " ++ show colName ++
+                    --   "... varNode is: " ++ show varNode ++
+                    --   " ... colTerm is: " ++ show colTerm
+          )
+             translatedBody
+             bindings')
+
+    wrappedBody <- local (nodeNames <>) $ translateBody body
+
+    pure $ case wrappedBody of
+      ETerm translatedBody bodyType ->
+        ETerm (translateLet translatedBody) bodyType
+
+      EObject translatedBody schema' ->
+        EObject (translateLet translatedBody) schema'
 
   -- Time
   -- Tricky: seconds could be either integer or decimal

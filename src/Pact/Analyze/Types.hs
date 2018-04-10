@@ -201,11 +201,6 @@ data Term ret where
   -- NOTE: pact really does return a string here:
   Write          ::                        TableName -> Term String -> Term Object -> Term String
 
-  --
-  -- TODO: retire:
-  --
-  WithRead       :: (Show a) => TableName -> Term String -> [Text] -> Term a -> Term a
-
   Let            ::                        Text         -> ETerm         -> Term a  -> Term a
   -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
   --       just using Let+At first.

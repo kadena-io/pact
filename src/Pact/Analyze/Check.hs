@@ -15,7 +15,7 @@ import Control.Concurrent.MVar
 import Control.Monad.Except (runExcept)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
-import Control.Monad.State.Strict (runStateT)
+import Control.Monad.State.Strict (runStateT, evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Text (Text)
@@ -75,7 +75,7 @@ analyzeFunction'
   -> [TableName]
   -> IO CheckResult
 analyzeFunction' check body argTys nodeNames tableNames =
-  case runExcept (runReaderT (unTranslateM (translateBody body)) nodeNames) of
+  case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
 
     Right (ETerm body'' _) -> do
