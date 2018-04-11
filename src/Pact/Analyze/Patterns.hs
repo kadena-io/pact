@@ -98,10 +98,10 @@ pattern AST_WithRead
 pattern AST_WithRead node table key bindings schema body <-
   App node
       (NativeFuncSpecial "with-read" (AST_BindSchema _ bindings schema body))
-      [RawTableName table, key]
+      [ShortTableName table, key]
 
-pattern RawTableName :: Text -> AST Node
-pattern RawTableName t <- Table (Node (TcId _ t _) _) _
+-- pattern RawTableName :: Text -> AST Node
+-- pattern RawTableName t <- Table (Node (TcId _ t _) _) _
 
 pattern ShortTableName :: Text -> AST Node
 pattern ShortTableName tn <- Table _node (Lang.TableName tn)

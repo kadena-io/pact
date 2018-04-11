@@ -259,21 +259,16 @@ suite = tests
                       `Implies` Occurs (ColumnConserve "accounts" "balance")
       -- expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
 
-  --
-  -- TODO: this is pending fixes to pact's translation to AST:
-  --         https://github.com/kadena-io/pact/issues/44
-  --
-  -- , scope "with-read" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:integer (from:string to:string)
-  --               (with-read accounts from { (+ "bal" "ance") := from-bal }
-  --                 (with-read accounts to { "balance" := to-bal }
-  --                   (+ from-bal to-bal))))
-  --           |]
+  , scope "with-read" $ do
+      let code =
+            [text|
+              (defun test:integer (acct:string)
+                (update accounts acct { "balance": 10 })
+                (with-read accounts acct { "balance" := bal }
+                  (enforce (= bal 10) "Read after write failed")))
+            |]
 
-  --     expectPass code $ Valid $ Occurs Success
-  --                     `Implies` Occurs (ColumnConserve "accounts" "balance")
+      expectPass code $ Valid $ Occurs Success
 
   --
   -- TODO: this is pending fixes to pact's typechecker:

@@ -435,6 +435,11 @@ analyzeTerm = \case
   Var name -> do
     theScope <- view scope
     -- traceShowM ("Var name", name, theScope)
+    --
+    -- TODO: probably throw AnalyzeFailures where we currently assume, because
+    --       it's possible we've messed up translation for future non-trivial
+    --       forms.
+    --
     -- Assume the term is well-scoped after typechecking
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking

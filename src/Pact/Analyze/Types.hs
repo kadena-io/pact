@@ -319,6 +319,8 @@ data DomainProperty where
   -- TODO: possibly allow use of input as parameter to domain properties
   --       - e.g.: column_increases_by(t0, x)     [where x is function input]
   --
+  -- TODO: StaleRead?
+  --
 
 data Property where
   Implies :: Property       -> Property -> Property

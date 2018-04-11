@@ -294,18 +294,16 @@ translateNode = \case
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
-  --
-  -- TODO: we need to fix https://github.com/kadena-io/pact/issues/44 before
-  --       this will work.
-  --
   AST_WithRead node table key bindings schemaNode body -> do
     schema <- case schemaFromPact (_aTy schemaNode) of
       Left err -> throwError err
       Right s  -> pure s
 
     (bindings' :: [(ETerm, (Node, Text))]) <- for bindings $
-      \(Named _x varNode _, colName) -> do
-        -- traceM $ "x:: " ++ show x
+      \(Named _ varNode _, colName) -> do
+        --
+        -- TODO: don't translate here; we know we must have a string lit
+        --
         colName' <- translateNode colName
         let varName = varNode ^. aId ^. tiName
         pure (colName', (varNode, varName))
@@ -325,7 +323,7 @@ translateNode = \case
                in case colTerm of
                     EObject _ _ ->
                       --
-                      -- TODO: make this fold monadic and use MonadFail
+                      -- TODO: make this fold monadic and use MonadFail here
                       --
                       error "TODO: deal with disallowed obj"
 
@@ -336,18 +334,7 @@ translateNode = \case
                              ETerm   (At schema colName freshVar varType) ty
                            EObjectTy sch ->
                              EObject (At schema colName freshVar varType) sch)
-                        body
-
-                    --
-                    -- NOTE: after fixing #44, this case probably should not be
-                    --       able to occur:
-                    --
-                    -- ETerm colName ty -> error $
-                    --   "got a " ++ show ty ++ " for " ++ show varName ++
-                    --   ". colName is: " ++ show colName ++
-                    --   "... varNode is: " ++ show varNode ++
-                    --   " ... colTerm is: " ++ show colTerm
-          )
+                        body)
              translatedBody
              bindings')
 
