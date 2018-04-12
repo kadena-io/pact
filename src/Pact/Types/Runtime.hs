@@ -63,12 +63,12 @@ module Pact.Types.Runtime
 
 
 import Control.Arrow ((&&&))
-import Control.Lens hiding (op,(.=))
+import Control.Lens hiding ((.=))
 import Control.Applicative
 import Control.DeepSeq
 import Data.List
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
@@ -305,19 +305,19 @@ instance AsString (Domain k v) where
 -- Backends are expected to return "user-visible" values
 -- for '_txValue', namely that internal JSON formats for 'Persistable'
 -- need to be converted to Term JSON formats.
-data TxLog =
+data TxLog v =
     TxLog {
       _txDomain :: !Text
     , _txKey :: !Text
-    , _txValue :: !Value
-    } deriving (Eq,Show,Typeable,Generic)
+    , _txValue :: !v
+    } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
 makeLenses ''TxLog
-instance Hashable TxLog
+instance Hashable v => Hashable (TxLog v)
 
-instance ToJSON TxLog where
+instance ToJSON v => ToJSON (TxLog v) where
     toJSON (TxLog d k v) =
         object ["table" .= d, "key" .= k, "value" .= v]
-instance FromJSON TxLog where
+instance FromJSON v => FromJSON (TxLog v) where
     parseJSON = withObject "TxLog" $ \o ->
                 TxLog <$> o .: "table" <*> o .: "key" <*> o .: "value"
 
@@ -357,12 +357,12 @@ data PactDb e = PactDb {
   , _beginTx :: Maybe TxId -> Method e ()
     -- | Commit transaction, if in tx. If not in tx, rollback and throw error.
     -- Return raw TxLogs, for use in checkpointing only (not for transmission to user).
-  , _commitTx ::  Method e [TxLog]
+  , _commitTx ::  Method e [TxLog Value]
     -- | Rollback database transaction.
   , _rollbackTx :: Method e ()
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
-                 Domain k v -> TxId -> Method e [TxLog]
+                 Domain k v -> TxId -> Method e [TxLog v]
 }
 
 
@@ -374,6 +374,7 @@ newtype TxId = TxId Word64
 instance NFData TxId
 instance Show TxId where show (TxId s) = show s
 instance ToTerm TxId where toTerm = tLit . LInteger . fromIntegral
+instance AsString TxId where asString = pack . show
 
 newtype PactId = PactId Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
@@ -564,7 +565,7 @@ beginTx :: Info -> Maybe TxId -> Eval e ()
 beginTx i t = method i $ \db -> _beginTx db t
 
 -- | Invoke _commitTx
-commitTx :: Info -> Eval e [TxLog]
+commitTx :: Info -> Eval e [TxLog Value]
 commitTx i = method i $ \db -> _commitTx db
 
 -- | Invoke _rollbackTx
@@ -572,7 +573,7 @@ rollbackTx :: Info -> Eval e ()
 rollbackTx i = method i $ \db -> _rollbackTx db
 
 -- | Invoke _getTxLog
-getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog]
+getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
 

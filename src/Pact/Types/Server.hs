@@ -41,7 +41,7 @@ module Pact.Types.Server
 import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception.Safe
-import Control.Lens hiding ((.=))
+import Control.Lens
 import Control.Monad.Reader
 import Control.Concurrent.Chan
 import Data.Maybe
@@ -54,7 +54,7 @@ import Data.Aeson
 import Data.HashSet (HashSet)
 import Data.HashMap.Strict (HashMap)
 
-import Prelude hiding (log,exp)
+import Prelude
 
 import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()

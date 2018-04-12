@@ -6,6 +6,16 @@ The Pact Programming Language
 This is the source code repository for [Pact](http://kadena.io/pact), a language for developing
 smart contracts to run on a [fast deterministic blockchain](http://kadena.io).
 
+References
+---
+
+[Pact Homepage](http://kadena.io/pact)
+
+[Pact Reference Docs](http://pact-language.readthedocs.io)
+
+[Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)
+
+
 Quick Start: Browser
 ---
 
@@ -21,7 +31,7 @@ smart contracts, the best way to go is to use the [Atom editor](https://atom.io)
 Installing Pact with homebrew (OSX only)
 ---
 
-You'll then need to install the Pact interpreter/REPL. On Mac, the easiest way is with homebrew.
+You'll then need to install the Pact interpreter/REPL. On Mac, the easiest way is with [homebrew](https://brew.sh/).
 
 ```
 brew install kadena-io/pact/pact
@@ -46,7 +56,7 @@ $ pact
 pact> (+ 1 2)
 3
 pact> (+ "hello, " "world")
-"hello world"
+"hello, world"
 ```
 
 There are [examples](examples/) in this source repository of working smart contracts which you can load into Atom to get started.
@@ -106,14 +116,7 @@ Building with GHCJS
 
 To build pact for browser use, add `--stack-yaml stack-ghcjs.yaml` to your stack commands. The script [web/build.sh](web/build.sh) builds Pact and minifies it; you'll need the [closure compiler](https://www.npmjs.com/package/google-closure-compiler) and a Java Runtime Environment installed.
 
-More information
----
 
-[Pact Homepage](http://kadena.io/pact)
-
-[Pact Reference Docs](http://pact-language.readthedocs.io)
-
-[Pact Whitepaper](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)
 
 License
 ---

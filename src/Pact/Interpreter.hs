@@ -52,7 +52,7 @@ initMsgData = MsgData def Null def
 data EvalResult = EvalResult {
   erInput :: ![Term Name],
   erOutput :: ![Term Name],
-  erLogs :: ![TxLog],
+  erLogs :: ![TxLog Value],
   erRefStore :: !RefStore,
   erExec :: !(Maybe PactExec)
   } deriving (Eq,Show)
@@ -118,7 +118,7 @@ interpret evalEnv terms = do
                        | otherwise = updateRefStore (_evalRefs state) oldStore
   return $! EvalResult terms rs logs (newRefs $ _eeRefStore evalEnv) (_evalPactExec state)
 
-evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog])
+evalTerms :: Maybe TxId -> [Term Name] -> Eval e ([Term Name],[TxLog Value])
 evalTerms tx terms = do
   let safeRollback =
         void (try (evalRollbackTx def) :: Eval e (Either SomeException ()))

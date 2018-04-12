@@ -1,3 +1,24 @@
+2.3.8
+---
+* Pact tool improvements: auto-complete, readline support, better multiline
+* Fix documentation for `format` form
+* Internal changes: TableName in AST, expose evalRepl', token parsing
+* build improvements: weeder, hlint enforcement
+
+2.3.7
+---
+* `keylog` returns rows indexed by txid
+
+2.3.6
+---
+* Support for reading JSON arrays/objects to pact lists/objects
+* Microsecond support in time objects
+* new `keylog` function for obtaining logs by key
+
+2.3.5
+---
+* Fix issue where extra parens silently ignored in repl scripts/prompt
+
 2.3.4
 ---
 * `pact` tool improvements: better stdin support, '-d' for debug output of load

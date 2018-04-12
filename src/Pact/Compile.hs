@@ -22,7 +22,7 @@ module Pact.Compile
 
 where
 
-import Text.Trifecta as TF hiding (spaces)
+import Text.Trifecta as TF
 import Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.List
@@ -36,7 +36,7 @@ import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
 import Control.Exception
 import Data.String
-import Control.Lens hiding (op)
+import Control.Lens
 import Data.Maybe
 import Data.Default
 import qualified Data.Text as T

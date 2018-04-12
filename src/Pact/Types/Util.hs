@@ -26,7 +26,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
 import Data.Text (Text,pack)
 import Data.Text.Encoding
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Concurrent
 import Control.Lens

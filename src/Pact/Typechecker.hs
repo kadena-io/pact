@@ -32,7 +32,7 @@
 module Pact.Typechecker where
 
 import Control.Monad.Catch
-import Control.Lens hiding (pre,List,Fold)
+import Control.Lens hiding (List,Fold)
 import Bound.Scope
 import Safe hiding (at)
 import Data.Default
@@ -45,7 +45,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
 import Control.Arrow hiding ((<+>))
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 
 
@@ -263,7 +263,7 @@ applySchemas Pre ast = case ast of
   (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
     pmap <- M.fromList <$> forM bs
-      (\(Named bn _ ni,v) -> (bn,) <$> ((v,ni,) <$> lookupTy (_aNode v)))
+      (\(Named _ node ni, Prim _ (PrimLit (LString bn))) -> (bn,) <$> ((Var node,ni,) <$> lookupTy node))
     validateSchema sch pmap
     return ast
   _ -> return ast
@@ -655,8 +655,6 @@ toAST TApp {..} = do
             WithDefaultRead -> specialBind
             _ -> mkApp fun' args'
 
-
-
 toAST TBinding {..} = do
   bi <- freshId _tInfo (pack $ show _tBindType)
   bn <- trackIdNode bi
@@ -670,11 +668,13 @@ toAST TBinding {..} = do
         assocAST aid v'
         return (Named n an aid,v')
       BindSchema _ -> do
-        fieldName <- asPrimString v'
-        return (Named fieldName an aid,Var an)
+        _fieldName <- asPrimString v'
+        return (Named n an aid,v')
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
   bt <- case _tBindType of
-    BindLet -> assocAST bi (last bb) >> return BindLet
+    BindLet -> do
+      assocAST bi (last bb)
+      return BindLet
     BindSchema sty -> do
       assocAST bi (last bb)
       sty' <- mangleType bi <$> traverse toUserType sty
@@ -697,7 +697,9 @@ toAST TLiteral {..} = trackPrim _tInfo (litToPrim _tLiteral) (PrimLit _tLiteral)
 toAST TTable {..} = do
   debug $ "TTable: " ++ show _tTableType
   ty <- TySchema TyTable <$> traverse toUserType _tTableType
-  Table <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
+  Table
+    <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
+    <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TBless {..} = die _tInfo "Bless not supported"

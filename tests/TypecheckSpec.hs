@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module TypecheckSpec where
+module TypecheckSpec (spec) where
 
 import Test.Hspec
 import Pact.Typechecker hiding (debug)
@@ -9,7 +9,7 @@ import Pact.Types.Typecheck
 import Data.Default
 import Control.Lens
 import qualified Data.HashMap.Strict as HM
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<>))
 import Control.Monad
 import Data.Foldable
 

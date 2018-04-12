@@ -1,6 +1,5 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -28,7 +27,7 @@ module Pact.ApiReq
 import Control.Monad.State.Strict
 import Control.Monad.Catch
 import Data.List
-import Prelude hiding (exp,print,putStrLn,putStr,interact)
+import Prelude
 import System.Directory
 import System.FilePath
 import Data.Aeson

@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -9,7 +8,7 @@ module Pact.Server.History.Service
   , runHistoryService
   ) where
 
-import Control.Lens hiding (Index, (|>))
+import Control.Lens hiding (Index)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.RWS.Strict
@@ -198,7 +197,7 @@ registerNewListeners newListeners' = do
       return $! fromJust.snd <$> HashMap.filterWithKey (checkForIndividualResultInMem srks) m
     OnDisk{..} -> do
       liftIO $! DB.selectCompletedCommands dbConn srks
-  noNeedToListen <- return $! HashSet.intersection (HashSet.fromMap $ const () <$> found) srks
+  noNeedToListen <- return $! HashSet.intersection (HashSet.fromMap $ void found) srks
   readyToServiceListeners <- return $! HashMap.filterWithKey (\k _ -> HashSet.member k noNeedToListen) newListeners'
   realListeners <- return $! HashMap.filterWithKey (\k _ -> not $ HashSet.member k noNeedToListen) newListeners'
   unless (HashMap.null readyToServiceListeners) $ do

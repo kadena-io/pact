@@ -21,13 +21,12 @@ module Pact.Native.Db
     where
 
 import Control.Monad
--- import Control.Monad.IO.Class
 import Prelude hiding (exp)
 import Bound
 import qualified Data.Map.Strict as M
 import Data.Default
 import Control.Arrow hiding (app)
-import Control.Lens hiding (from,to,(.=))
+import Control.Lens hiding ((.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
@@ -56,7 +55,7 @@ dbDefs =
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
      \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" id bal ccy))`"
+     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
      (funType a
@@ -64,7 +63,7 @@ dbDefs =
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
-     \  (format \"Balance for {} is {} {}\" id bal ccy))`"
+     \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
@@ -98,6 +97,11 @@ dbDefs =
     ,defRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
+    ,defRNative "keylog" keylog
+     (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
+      "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
+      \indexed by txid. \
+      \`$(keylog 'accounts \"Alice\" 123485945)`"
     ,defRNative "describe-table" descTable
      (funType tTyValue [("table",tTyString)]) "Get metadata for TABLE"
     ,defRNative "describe-keyset" descKeySet
@@ -251,8 +255,19 @@ txids' i as = argsError i as
 txlog :: RNativeFun e
 txlog i [table@TTable {..},TLitInteger tid] = do
   guardTable i table
-  (`TValue` def) . toJSON <$> getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+  (`TValue` def) . toJSON . over (traverse . txValue) (columnsToObject _tTableType) <$>
+    getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
 txlog i as = argsError i as
+
+keylog :: RNativeFun e
+keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
+  guardTable i table
+  tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
+  logs <- fmap concat $ forM tids $ \tid -> fmap (map (tid,)) $ getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+  let toTxidObj (t,r) = toTObject TyAny def [(tStr "txid", toTerm t),(tStr "value",columnsToObject _tTableType (_txValue r))]
+  return $ toTList tTyValue def $ map toTxidObj $ (`filter` logs) $ \(_,TxLog {..}) -> _txKey == key
+keylog i as = argsError i as
+
 
 write :: WriteType -> RNativeFun e
 write wt i [table@TTable {..},TLitString key,TObject ps _ _] = do

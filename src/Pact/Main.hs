@@ -21,13 +21,13 @@ module Pact.Main
     ) where
 
 import Control.Applicative
-import Control.Lens hiding (op)
+import Control.Lens
 import Control.Monad.State.Strict
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (exp,print,putStrLn,putStr,interact)
-import Text.Trifecta as TF hiding (line,err,try,newline)
-import System.IO hiding (interact)
+import Prelude hiding (print,putStrLn)
+import Text.Trifecta as TF hiding (err)
+import System.IO
 import System.Exit hiding (die)
 import qualified Options.Applicative as O
 import Data.Monoid
@@ -112,7 +112,7 @@ main = do
               Just s -> execScript dolog s >>= exitLoad
               Nothing -> compileOnly fp >>= exitLoad
         | otherwise -> execScript dolog fp >>= exitLoad
-    ORepl -> getMode >>= repl' >>= exitEither (const (return ()))
+    ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
     OApiReq cf l -> apiReq cf l
 

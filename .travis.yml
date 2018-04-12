@@ -148,7 +148,8 @@ matrix:
 before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
-- rvm get stable # for #6307 travis bug
+# https://github.com/travis-ci/travis-ci/issues/6307
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; command curl -sSL https://rvm.io/mpapis.asc | gpg --import -; then rvm get stable; fi
 
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""
@@ -201,7 +202,10 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack --no-terminal $ARGS test
+      stack build --no-terminal --test --ghc-options="-Werror" $ARGS 
+      curl -sL https://raw.github.com/ndmitchell/hlint/master/misc/travis.sh | sh -s .
+      curl -sL https://raw.github.com/ndmitchell/weeder/master/misc/travis.sh | sh -s .
+      stack exec -- bench +RTS -K1k
       ;;
     cabal)
       cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES

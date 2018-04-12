@@ -34,19 +34,19 @@ module Pact.Types.Typecheck
     Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,fDocs,
     Node (..),aId,aTy,
     Named (..),
-    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,
+    AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,aTableName,
     Visit(..),Visitor
   ) where
 
 import Control.Monad.Catch
-import Control.Lens hiding (pre,List)
+import Control.Lens hiding (List)
 import Data.Default
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Monad.State
-import Data.Aeson hiding (Object, (.=))
+import Data.Aeson hiding (Object)
 import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<$$>),(<>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import Data.Monoid
 
 import Pact.Types.Lang
@@ -283,7 +283,8 @@ data AST n =
   _aNode :: n
   } |
   Table {
-  _aNode :: n
+  _aNode :: n,
+  _aTableName :: TableName
   } |
   Step {
   _aNode :: n,

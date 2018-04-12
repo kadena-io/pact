@@ -168,6 +168,20 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 ```
 
 
+### hash {#hash}
+
+*value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
+
+
+Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are converted using their JSON representation. 
+```lisp
+pact> (hash "hello")
+"e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+pact> (hash { 'foo: 1 })
+"61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+```
+
+
 ### identity {#identity}
 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
@@ -228,6 +242,18 @@ pact> (list 1 2 3)
 List modules available for loading.
 
 
+### make-list {#make-list}
+
+*length*&nbsp;`integer` *value*&nbsp;`<a>` *&rarr;*&nbsp;`[<a>]`
+
+
+Create list by repeating VALUE LENGTH times. 
+```lisp
+pact> (make-list 5 true)
+[true true true true true]
+```
+
+
 ### map {#map}
 
 *app*&nbsp;`(x:<b> -> <a>)` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
@@ -256,7 +282,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.2"
+"2.3.8"
 ```
 
 
@@ -363,6 +389,18 @@ pact> (take ['name] { 'name: "Vlad", 'active: false})
 ```
 
 
+### tx-hash {#tx-hash}
+
+ *&rarr;*&nbsp;`string`
+
+
+Obtain hash of current transaction as a string. 
+```lisp
+pact> (tx-hash)
+"786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+```
+
+
 ### typeof {#typeof}
 
 *x*&nbsp;`<a>` *&rarr;*&nbsp;`string`
@@ -423,7 +461,7 @@ Get metadata for KEYSET
 *module*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and 'code' fields.
+Get metadata for MODULE. Returns a object with 'name', 'hash', 'blessed', and 'code' fields.
 
 
 ### describe-table {#describe-table}
@@ -442,6 +480,17 @@ Get metadata for TABLE
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
 ```lisp
 (insert 'accounts { "balance": 0.0, "note": "Created account." })
+```
+
+
+### keylog {#keylog}
+
+*table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *txid*&nbsp;`integer` *&rarr;*&nbsp;`[object]`
+
+
+Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid. 
+```lisp
+(keylog 'accounts "Alice" 123485945)
 ```
 
 
@@ -524,7 +573,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
 ```lisp
 (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" id bal ccy))
+   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 
@@ -536,7 +585,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
 ```lisp
 (with-read 'accounts id { "balance":= bal, "ccy":= ccy }
-   (format "Balance for {} is {} {}" id bal ccy))
+   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
 
@@ -592,6 +641,18 @@ pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 ```
 
 
+### format-time {#format-time}
+
+*format*&nbsp;`string` *time*&nbsp;`time` *&rarr;*&nbsp;`string`
+
+
+Format TIME using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+```lisp
+pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
+"2016-07-22"
+```
+
+
 ### hours {#hours}
 
 *n*&nbsp;`decimal` *&rarr;*&nbsp;`decimal`
@@ -625,7 +686,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 *format*&nbsp;`string` *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using FORMAT. See [strftime docs](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html#index-strftime) for format info. 
+Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
 ```lisp
 pact> (parse-time "%F" "2016-09-12")
 "2016-09-12T00:00:00Z"
@@ -1154,6 +1215,18 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 ```lisp
 (env-entity "my-org")
 (env-entity)
+```
+
+
+### env-hash {#env-hash}
+
+*hash*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. 
+```lisp
+pact> (env-hash (hash "hello"))
+"Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 ```
 
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -30,13 +29,13 @@ module Pact.Eval
     ,liftTerm,apply,apply'
     ) where
 
-import Control.Lens hiding (op)
+import Control.Lens
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Monad.Catch (throwM)
 import Data.List
 import Control.Monad
-import Prelude hiding (exp,mod)
+import Prelude
 import Bound
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
@@ -50,6 +49,7 @@ import qualified Data.Set as S
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
+import Data.Aeson (Value)
 
 import Pact.Types.Runtime
 
@@ -61,7 +61,7 @@ evalRollbackTx :: Info -> Eval e ()
 evalRollbackTx = void . rollbackTx
 {-# INLINE evalRollbackTx #-}
 
-evalCommitTx :: Info -> Eval e [TxLog]
+evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
   tid <- view eeTxId
   case tid of
@@ -210,15 +210,15 @@ loadModule m bod1 mi = do
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
-          dsm <- firstOf (eeRefStore.rsModules.ix q._2.ix n) <$> ask
-          case dsm of
-            d@Just {} -> return d
-            Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
+  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n
+  case dsm of
+    d@Just {} -> return d
+    Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
 resolveRef nn@(Name _ _) = do
-          nm <- firstOf (eeRefStore.rsNatives.ix nn) <$> ask
-          case nm of
-            d@Just {} -> return d
-            Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
+  nm <- asks $ firstOf $ eeRefStore.rsNatives.ix nn
+  case nm of
+    d@Just {} -> return d
+    Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref

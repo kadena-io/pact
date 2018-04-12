@@ -23,13 +23,13 @@ module Pact.Native
     where
 
 import Control.Concurrent hiding (yield)
-import Control.Lens hiding (from,to,parts,Fold,contains)
+import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
-import Control.Monad.Reader (ask)
+import Control.Monad.Reader (asks)
 import Control.Monad.Catch
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
-import Prelude hiding (exp)
+import Prelude
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
 import Safe
@@ -348,7 +348,7 @@ readMsg i as = argsError i as
 newtype ParsedDecimal = ParsedDecimal Decimal
 instance FromJSON ParsedDecimal where
   parseJSON (String s) =
-    ParsedDecimal <$> case AP.parseOnly number s of
+    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
                         Right (LDecimal d) -> return d
                         Right (LInteger i) -> return (fromIntegral i)
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
@@ -366,7 +366,7 @@ readDecimal i as = argsError i as
 newtype ParsedInteger = ParsedInteger Integer
 instance FromJSON ParsedInteger where
   parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly number s of
+    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
                         Right (LInteger i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (Number n) = return $ ParsedInteger (round n)
@@ -454,7 +454,7 @@ yield i as = argsError i as
 
 resume :: NativeFun e
 resume i [TBinding ps bd (BindSchema _) bi] = do
-  rm <- firstOf (eePactStep . _Just . psResume . _Just) <$> ask
+  rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
     Just rval -> bindObjectLookup rval >>= bindReduce ps bd bi

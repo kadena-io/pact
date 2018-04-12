@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module KeysetSpec where
+module KeysetSpec (spec) where
 
 import Test.Hspec
 

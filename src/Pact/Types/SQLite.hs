@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
@@ -39,7 +38,7 @@ import Data.Int
 import Data.Aeson
 import GHC.Generics
 
-import Prelude hiding (log)
+import Prelude
 import Control.Monad.Catch
 
 

@@ -81,13 +81,13 @@ module Pact.Types.Lang
    ) where
 
 
-import Control.Lens hiding (op,(.=))
+import Control.Lens hiding ((.=))
 import Text.Trifecta.Delta hiding (Columns)
 import Control.Applicative
 import Data.List
 import Control.Monad
-import Prelude hiding (exp)
-import Control.Arrow hiding (app,(<+>))
+import Prelude
+import Control.Arrow hiding ((<+>))
 import Data.Functor.Classes
 import Bound
 import Data.Text (Text,pack,unpack)
@@ -114,6 +114,7 @@ import Data.Monoid
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
+import qualified Data.HashMap.Strict as HM
 
 import Data.Serialize (Serialize)
 
@@ -839,6 +840,8 @@ instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
+    parseJSON (Array a) = (toTList TyAny def . toList) <$> mapM parseJSON a
+    parseJSON (Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first toTerm) (HM.toList o)
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}
 

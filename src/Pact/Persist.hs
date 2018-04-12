@@ -114,7 +114,7 @@ instance PactKey TxKey
 instance PactKey DataKey
 
 class (Eq v,Show v,ToJSON v,FromJSON v,Typeable v) => PactValue v
-instance PactValue TxLog
+instance PactValue v => PactValue (TxLog v)
 instance PactValue (Columns Persistable)
 instance PactValue a => PactValue [a]
 instance PactValue Module
