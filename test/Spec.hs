@@ -333,24 +333,24 @@ suite = tests
   --     let code =
   --           [text|
   --             (defun test:integer ()
-  --               (let ((obj:{account} (read accounts "bob")))
+  --               (let ((obj:object{account} (read accounts "bob")))
   --                 (bind obj { "balance" := bal }
   --                   (enforce (= bal 10) "Bind failed")
   --                   bal)))
   --           |]
-
+  --
   --     expectPass code $ Valid $ Occurs Success
   --
   -- , scope "bind.from-literal" $ do
   --     let code =
   --           [text|
   --             (defun test:integer ()
-  --               (let ((acct:{account} { "balance": 10 }))
+  --               (let ((acct:object{account} { "balance": 10 }))
   --                 (bind acct { "balance" := bal }
   --                   (enforce (= bal 10) "Bind failed")
   --                   bal)))
   --           |]
-
+  --
   --     expectPass code $ Valid $ Occurs Success
 
   , scope "let" $ do
