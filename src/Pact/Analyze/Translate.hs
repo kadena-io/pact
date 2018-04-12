@@ -97,10 +97,13 @@ typeFromPact ty = case ty of
   TyPrim TyString  -> EType TStr
   TyPrim TyTime    -> EType TTime
 
-schemaFromPact :: Pact.Type Pact.UserType -> Either TranslateFailure Schema
-schemaFromPact ty = case typeFromPact ty of
-  EType _primTy    -> Left $ NotConvertibleToSchema ty
-  EObjectTy schema -> Right schema
+nodeSchema :: Node -> TranslateM Schema
+nodeSchema node = case typeFromPact pactType of
+    EType _primTy    -> throwError $ NotConvertibleToSchema pactType
+    EObjectTy schema -> pure $ schema
+
+  where
+    pactType = _aTy node
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
@@ -348,9 +351,8 @@ translateNode = \case
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' _schema <- translateNode obj
-    case schemaFromPact (_aTy (_aNode obj)) of
-      Left err -> throwError err
-      Right schema -> pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
+    schema <- nodeSchema (_aNode obj)
+    pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
     ETerm cond' TBool <- translateNode cond
@@ -363,19 +365,13 @@ translateNode = \case
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
   AST_WithRead _ table key bindings schemaNode body -> do
-    schema <- case schemaFromPact (_aTy schemaNode) of
-      Left err -> throwError err
-      Right s  -> pure s
-
+    schema <- nodeSchema schemaNode
     ETerm key' TStr <- translateNode key
     let readT = EObject (Read (TableName (T.unpack table)) schema key') schema
     translateBinding bindings schema body readT
 
   AST_Bind _ objectA bindings schemaNode body -> do
-    schema <- case schemaFromPact (_aTy schemaNode) of
-      Left err -> throwError err
-      Right s  -> pure s
-
+    schema <- nodeSchema schemaNode
     objectT <- translateNode objectA
     translateBinding bindings schema body objectT
 
@@ -390,9 +386,7 @@ translateNode = \case
 
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
-    schema <- case schemaFromPact (_aTy node) of
-      Left err -> throwError err
-      Right x -> pure x
+    schema <- nodeSchema node
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
 
   AST_At node colName obj -> do
@@ -417,9 +411,7 @@ translateNode = \case
                  TyPrim TyTime    -> EType TTime
       v' <- translateNode v
       pure (k', (ty, v'))
-    schema <- case schemaFromPact (_aTy node) of
-      Left err -> throwError err
-      Right x -> pure x
+    schema <- nodeSchema node
     pure $ EObject (LiteralObject $ Map.fromList kvs') schema
 
   --
