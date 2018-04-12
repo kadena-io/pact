@@ -45,6 +45,7 @@
       }
     ))
 
+  (property-of transfer conserves-mass)
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
     (debit src amount date { "transfer-to": dest })
@@ -61,6 +62,9 @@
       { "balance": b, "ccy": c }
       ))
 
+  (property-of read-account-admin
+    (=> (not (admin current-user))
+        noop))
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
@@ -107,12 +111,34 @@
       )))
 
 
+  (property-of enforce-auth
+    (=>
+      (not (admin current-user))
+      (not transaction-succeeds)))
   (defun enforce-auth (keyset:keyset auth)
     (if (= auth AUTH_KEYSET)
       (enforce-keyset keyset)
       (enforce (= auth (format "%s" [(pact-id)]))
         "Invalid access of pact account")))
 
+
+  (property-of debit
+    (let
+      (with-read 'initial accounts acct
+        { "balance" := initial-balance
+        , "keyset" := ks
+        , "auth" := auth
+        })
+      (with-read 'final accounts acct
+        { "balance" := final-balance })
+
+      (if
+        (and
+          (>= initial-balance amount)
+          (= ks auth))
+        (= final-balance (- initial-balance amount))
+        (= final-balance initial-balance)))
+    )
 
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
@@ -130,6 +156,21 @@
                 , "data": data
                 }
           )))
+
+  (property-of debit
+    (let
+      (with-read 'initial accounts acct
+        { "balance" := initial-balance })
+      (with-read 'final accounts acct
+        { "balance" := final-balance })
+
+      (= final-balance (+ initial-balance amount))
+    ))
+
+  ; alternately
+  (property-of debit
+    (with-read 'delta accounts acct
+      { "balance" := amount }))
 
  (defun credit (acct amount date data)
    "Credit AMOUNT to ACCT balance recording DATE and DATA"

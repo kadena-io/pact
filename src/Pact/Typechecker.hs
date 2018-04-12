@@ -725,6 +725,7 @@ toAST TStep {..} = do
   ex <- toAST _tStepExec
   assocAST si ex
   Step sn ent ex <$> traverse toAST _tStepRollback
+toAST TProperty {..} = die _tInfo "Properties not supported"
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do

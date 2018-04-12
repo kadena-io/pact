@@ -729,6 +729,9 @@ data Term n =
     , _tTableType :: !(Type (Term n))
     , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
+    } |
+    TProperty {
+      _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
@@ -760,6 +763,7 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tDocs ++ ")"
+    show TProperty {} = "TProperty"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -824,6 +828,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
+    TProperty i >>= _ = TProperty i
 
 
 instance FromJSON (Term n) where
@@ -892,6 +897,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+      TProperty {} -> Left "property"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -948,6 +954,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
+abbrev TProperty {} = "<property>"
 
 
 

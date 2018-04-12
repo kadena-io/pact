@@ -174,6 +174,7 @@ loadModule m bod1 mi = do
             TSchema {..} -> return $ Just $ asString _tSchemaName
             TTable {..} -> return $ Just $ asString _tTableName
             TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+            TProperty {..} -> return Nothing
             _ -> evalError (_tInfo t) "Invalid module member"
           return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
@@ -268,6 +269,7 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
+reduce TProperty {..} = evalError _tInfo "Properties can't be evaluated"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

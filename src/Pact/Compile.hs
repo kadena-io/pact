@@ -116,6 +116,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TSchema {} -> return d
         TTable {} -> return d
         TUse {} -> return d
+        TProperty {} -> return d
         t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use allowed in module"
       mkModule docs body = do
         cm <- use csModule
@@ -267,6 +268,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
+      ("property-of",Nothing) -> pure (TProperty li)
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li
