@@ -615,7 +615,7 @@ analyzeDomainProperty (ColumnConserve tableName colName) =
 analyzeDomainProperty (ColumnIncrease tableName colName) =
   (0 .<) <$> use (columnDelta tableName (literal colName))
 
-analyzeProperty :: Property a -> AnalyzeM (SBV a)
+analyzeProperty :: Prop a -> AnalyzeM (SBV a)
 analyzeProperty (p1 `Implies` p2) = do
   b1 <- analyzeProperty p1
   b2 <- analyzeProperty p2
