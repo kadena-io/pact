@@ -88,8 +88,6 @@ pattern AST_Hours hours <- App _ (NativeFunc "hours") [hours]
 pattern AST_Minutes :: forall a. AST a -> AST a
 pattern AST_Minutes minutes <- App _ (NativeFunc "minutes") [minutes]
 
--- TODO: AST_Bind
-
 pattern AST_WithRead
   :: Node
   -> Text
@@ -102,6 +100,18 @@ pattern AST_WithRead node table key bindings schema body <-
   App node
       (NativeFuncSpecial "with-read" (AST_BindSchema _ bindings schema body))
       [ShortTableName table, key]
+
+pattern AST_Bind
+  :: Node
+  -> AST Node
+  -> [(Named Node, AST Node)]
+  -> Node
+  -> [AST Node]
+  -> AST Node
+pattern AST_Bind node object bindings schema body <-
+  App node
+      (NativeFuncSpecial "bind" (AST_BindSchema _ bindings schema body))
+      [object]
 
 -- pattern RawTableName :: Text -> AST Node
 -- pattern RawTableName t <- Table (Node (TcId _ t _) _) _

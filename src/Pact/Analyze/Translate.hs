@@ -89,6 +89,44 @@ genFresh baseName = do
   let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
   return $ (varName, Var varName)
 
+translateBinding
+  :: [(Named Node, AST Node)]
+  -> Schema
+  -> [AST Node]
+  -> ETerm
+  -> TranslateM ETerm
+translateBinding bindings schema bodyA rhsT = do
+  (bindings' :: [(String, (Node, Text))]) <- for bindings $
+    \(Named _ varNode _, colAst) -> do
+      let varName = varNode ^. aId ^. tiName
+      case colAst of
+        AST_StringLit colName -> pure (T.unpack colName, (varNode, varName))
+        _                     -> throwError $ NonStringLitInBinding colAst
+
+  let nodeNames = Map.fromList $ snd <$> bindings'
+  (freshName, freshVar :: Term Object) <- genFresh "binding"
+
+  let translateLet :: ETerm -> Term a -> Term a
+      translateLet rhs innerBody = Let
+        freshName
+        rhs
+        -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
+        (foldl'
+           (\body (colName, (varNode, varName)) ->
+             let varType = typeFromPact $ _aTy varNode
+                 colTerm = lit colName
+             in Let varName
+                  (case varType of
+                     EType ty ->
+                       ETerm   (At schema colTerm freshVar varType) ty
+                     EObjectTy sch ->
+                       EObject (At schema colTerm freshVar varType) sch)
+                  body)
+           innerBody
+           bindings')
+
+  mapETerm (translateLet rhsT) <$> local (nodeNames <>) (translateBody bodyA)
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode = \case
   AST_Let _ [] body -> translateBody body
@@ -139,6 +177,9 @@ translateNode = \case
     ETerm condTerm TBool <- translateNode cond
     pure $ ETerm (Enforce condTerm) TBool
 
+  --
+  -- TODO: add object support
+  --
   AST_EnforceKeyset ks
     | ks ^? aNode.aTy == Just (TyPrim TyString)
     -> do
@@ -295,43 +336,22 @@ translateNode = \case
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
-  AST_WithRead node table key bindings schemaNode body -> do
+  AST_WithRead _ table key bindings schemaNode body -> do
     schema <- case schemaFromPact (_aTy schemaNode) of
       Left err -> throwError err
       Right s  -> pure s
 
-    (bindings' :: [(String, (Node, Text))]) <- for bindings $
-      \(Named _ varNode _, colAst) -> do
-        let varName = varNode ^. aId ^. tiName
-        case colAst of
-          AST_StringLit colName -> pure (T.unpack colName, (varNode, varName))
-          _                     -> throwError $ NonStringLitInBinding colAst
-
-    let nodeNames = Map.fromList $ snd <$> bindings'
-
     ETerm key' TStr <- translateNode key
-    (freshName, freshVar :: Term Object) <- genFresh "with-read"
+    let readT = EObject (Read (TableName (T.unpack table)) schema key') schema
+    translateBinding bindings schema body readT
 
-    let translateLet :: Term a -> Term a
-        translateLet translatedBody = Let
-          freshName
-          (EObject (Read (TableName (T.unpack table)) schema key') schema)
-          -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
-          (foldl'
-             (\body (colName, (varNode, varName)) ->
-               let varType = typeFromPact $ _aTy varNode
-                   colTerm = lit colName
-               in Let varName
-                    (case varType of
-                       EType ty ->
-                         ETerm   (At schema colTerm freshVar varType) ty
-                       EObjectTy sch ->
-                         EObject (At schema colTerm freshVar varType) sch)
-                    body)
-             translatedBody
-             bindings')
+  AST_Bind _ objectA bindings schemaNode body -> do
+    schema <- case schemaFromPact (_aTy schemaNode) of
+      Left err -> throwError err
+      Right s  -> pure s
 
-    mapETerm translateLet <$> local (nodeNames <>) (translateBody body)
+    objectT <- translateNode objectA
+    translateBinding bindings schema body objectT
 
   -- Time
   -- Tricky: seconds could be either integer or decimal
