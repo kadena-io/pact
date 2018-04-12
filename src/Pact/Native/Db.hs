@@ -21,7 +21,7 @@ module Pact.Native.Db
     where
 
 import Control.Monad
-import Prelude hiding (exp)
+import Prelude
 import Bound
 import qualified Data.Map.Strict as M
 import Data.Default
