@@ -331,14 +331,7 @@ translateNode = \case
              translatedBody
              bindings')
 
-    wrappedBody <- local (nodeNames <>) $ translateBody body
-
-    pure $ case wrappedBody of
-      ETerm translatedBody bodyType ->
-        ETerm (translateLet translatedBody) bodyType
-
-      EObject translatedBody schema' ->
-        EObject (translateLet translatedBody) schema'
+    mapETerm translateLet <$> local (nodeNames <>) (translateBody body)
 
   -- Time
   -- Tricky: seconds could be either integer or decimal

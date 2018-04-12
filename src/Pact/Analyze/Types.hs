@@ -2,6 +2,7 @@
 {-# language DeriveDataTypeable  #-}
 {-# language FlexibleInstances   #-}
 {-# language GADTs               #-}
+{-# language Rank2Types          #-}
 {-# language StandaloneDeriving  #-}
 {-# language TypeOperators       #-}
 
@@ -181,6 +182,11 @@ data ETerm where
   -- TODO: remove Show (add constraint c?)
   ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
   EObject ::                        Term Object -> Schema -> ETerm
+
+mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
+mapETerm f term = case term of
+  ETerm term ty    -> ETerm (f term) ty
+  EObject term sch -> EObject (f term) sch
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
