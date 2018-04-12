@@ -205,10 +205,14 @@ data AnalyzeFailure
   | UnsupportedUnaryOp UnaryArithOp
   | UnsupportedRoundingLikeOp1 RoundingLikeOp
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
+  | FailureMessage String
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
   | UnhandledTerm String ETerm
   deriving Show
+
+instance IsString AnalyzeFailure where
+  fromString = FailureMessage
 
 newtype AnalyzeM a
   = AnalyzeM
@@ -334,6 +338,48 @@ analyzeTermO = \case
       AVal  val -> throwError $ AValUnexpectedlySVal val
       AnObj obj -> pure obj
 
+  Let name (ETerm rhs _) body -> do
+    val <- analyzeTerm rhs
+    local (scope.at name ?~ mkAVal val) $
+      analyzeTermO body
+
+  Let name (EObject rhs _) body -> do
+    rhs' <- analyzeTermO rhs
+    local (scope.at name ?~ AnObj rhs') $
+      analyzeTermO body
+
+  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTermO b
+  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTermO b
+
+  IfThenElse cond then' else' -> do
+    testPasses <- analyzeTerm cond
+    case unliteral testPasses of
+      Just True  -> analyzeTermO then'
+      Just False -> analyzeTermO else'
+      Nothing    -> throwError "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
+
+  At schema@(Schema schemaFields) colName obj retType -> do
+    Object obj' <- analyzeTermO obj
+
+    -- Filter down to only fields which contain the type we're looking for
+    let relevantFields
+          = map fst
+          $ filter (\(_name, ty) -> ty == retType)
+          $ Map.toList schemaFields
+
+    colName' <- analyzeTerm colName
+
+    let getObjVal :: String -> AnalyzeM Object
+        getObjVal fieldName = case Map.lookup fieldName obj' of
+          Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
+          Just (fieldType, AVal val) -> throwError $
+            ObjFieldOfWrongType fieldName fieldType
+          Just (fieldType, AnObj x) -> pure x
+
+    case unliteral colName' of
+      Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
+      Just concreteColName -> getObjVal concreteColName
+
   obj -> throwError $ UnhandledObject obj
 
 analyzeTerm
@@ -348,7 +394,8 @@ analyzeTerm = \case
     succeeds %= (&&& cond')
     pure true
 
-  Sequence a b -> analyzeTerm a *> analyzeTerm b
+  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTerm b
+  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTerm b
 
   Literal a -> pure a
 

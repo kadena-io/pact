@@ -37,7 +37,7 @@ import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
 import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure,
-                             allocateSymbolicCells, analyzeTerm,
+                             allocateSymbolicCells, analyzeTerm, analyzeTermO,
                              analyzeProperty, mkInitialAnalyzeState,
                              runAnalyzeM)
 import Pact.Analyze.Translate
@@ -77,20 +77,19 @@ checkFunctionBody check body argTys nodeNames tableNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
 
-    Right (EObject _ _) ->
-      error "TODO: handle object return values"
+    Right tm -> do
+      let prop   = check ^. ckProp
+          action = case tm of
+            ETerm   body'' _ -> analyzeTerm  body'' *> analyzeProperty prop
+            EObject body'' _ -> analyzeTermO body'' *> analyzeProperty prop
 
-    Right (ETerm body'' _) -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         scope0 <- allocateArgs argTys
         nameAuths' <- newArray "nameAuthorizations"
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
 
-        let prop   = check ^. ckProp
-            env0   = AnalyzeEnv scope0 nameAuths'
-            action = analyzeTerm body''
-                  *> analyzeProperty prop
+        let env0   = AnalyzeEnv scope0 nameAuths'
 
         case runExcept $ runRWST (runAnalyzeM action) env0 state0 of
           Left cf -> do

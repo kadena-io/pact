@@ -169,14 +169,29 @@ suite = tests
                 name:string
                 balance:integer)
 
-              (defun test:string ()
+              (defun test:{token-row} ()
                 (let* ((stu:object{token-row} {"balance": 5, "name": "stu"})
                        (k-start "bal")
                        (k-end "ance")
                        (val:integer (at (+ k-start k-end) stu)))
                   (enforce (= val 5) "balance is 5")
+                  stu
                   )
                 )
+            |]
+      in expectPass code $ Valid $ Not $ Occurs Abort
+
+  , scope "at.object-in-object" $
+      let code =
+            [text|
+              (defschema inner
+                name:string)
+              (defschema wrapper
+                inner:{inner})
+
+              (defun test:{inner} ()
+                (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
+                  (at "inner" obj)))
             |]
       in expectPass code $ Valid $ Not $ Occurs Abort
 

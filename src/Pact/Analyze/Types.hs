@@ -192,7 +192,7 @@ data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
   Enforce        ::                        Term Bool    ->                             Term Bool
   -- TODO: do we need a noop to handle a sequence of one expression?
-  Sequence       :: (Show b, SymWord b) => Term b       -> Term a         ->           Term a
+  Sequence       ::                        ETerm        -> Term a         ->           Term a
   Literal        ::                        SBV a        ->                             Term a
 
   --

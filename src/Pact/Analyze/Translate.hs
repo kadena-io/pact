@@ -109,13 +109,11 @@ translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
 translateBody [ast] = translateNode ast
 translateBody (ast:asts) = do
-  --
-  -- TODO: allow objects
-  --
-  -- EAny ast' <- translateNode ast
-  ETerm ast' _   <- translateNode ast
-  ETerm asts' ty <- translateBody asts
-  pure $ ETerm (Sequence ast' asts') ty
+  ast'  <- translateNode ast
+  asts' <- translateBody asts
+  pure $ case asts' of
+    ETerm   astsT ty -> ETerm   (Sequence ast' astsT) ty
+    EObject astsO ty -> EObject (Sequence ast' astsO) ty
 
 translateBinding
   :: [(Named Node, AST Node)]
