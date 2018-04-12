@@ -78,6 +78,9 @@ analyzeFunction' check body argTys nodeNames tableNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
 
+    Right (EObject _ _) ->
+      error "TODO: handle object return values"
+
     Right (ETerm body'' _) -> do
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
