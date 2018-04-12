@@ -3,7 +3,7 @@
 {-# language TupleSections     #-}
 
 module Pact.Analyze.Check
-  ( checkFunction
+  ( checkTopFunction
   , runCompiler
   , runCompilerDebug
   , runCompilerTest
@@ -66,14 +66,14 @@ data CheckSuccess
 type CheckResult
   = Either CheckFailure CheckSuccess
 
-checkFunction'
+checkFunctionBody
   :: Check
   -> [AST Node]
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
   -> [TableName]
   -> IO CheckResult
-checkFunction' check body argTys nodeNames tableNames =
+checkFunctionBody check body argTys nodeNames tableNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
 
@@ -104,11 +104,11 @@ checkFunction' check body argTys nodeNames tableNames =
         Nothing -> checkResult
         Just cf -> Left (AnalyzeFailure cf)
 
-checkFunction
+checkTopFunction
   :: TopLevel Node
   -> Check
   -> IO CheckResult
-checkFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
+checkTopFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
   let argNodes :: [Node]
       argNodes = _nnNamed <$> args
 
@@ -129,9 +129,9 @@ checkFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       tableNames :: [TableName]
       tableNames = ["accounts", "tokens", "owners"]
 
-  in checkFunction' check body' argTys nodeNames' tableNames
+  in checkFunctionBody check body' argTys nodeNames' tableNames
 
-checkFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+checkTopFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 tcName :: Node -> Text
 tcName = _tiName . _aId
@@ -210,7 +210,7 @@ runCompilerDebug dbg replPath' modName' funcName' check = do
   let failures = tcState ^. tcFailures
   if Set.null failures
   then do
-    r <- checkFunction fun check
+    r <- checkTopFunction fun check
     putStrLn $ case r of
       Left err  -> show err
       Right res -> show res
@@ -219,7 +219,7 @@ runCompilerDebug dbg replPath' modName' funcName' check = do
 failedTcOrAnalyze :: TcState -> TopLevel Node -> Check -> IO CheckResult
 failedTcOrAnalyze tcState fun check =
     if Set.null failures
-    then checkFunction fun check
+    then checkTopFunction fun check
     else pure $ Left $ TypecheckFailure failures
   where
     failures = tcState ^. tcFailures
