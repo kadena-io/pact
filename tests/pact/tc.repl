@@ -94,7 +94,8 @@
     (let ((sam:object{person} { 'name: "Sam", 'age: 23, 'dob: (parse-time "%F" "1996-12-31") }))
       (where "age" (= 10) sam)))
 
-
+  (defun twoStrings:string ()
+    (enforce-keyset (+ "k" "s")))
 
 )
 

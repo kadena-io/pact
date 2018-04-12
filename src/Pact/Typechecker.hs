@@ -47,6 +47,7 @@ import Control.Arrow hiding ((<+>))
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
+import Data.List
 
 
 import Pact.Types.Typecheck
@@ -174,6 +175,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
           Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar
           Just ty -> do
             roleResolvedTy <- resolveTy ty
+            debug $ "tryFunType: unify role: role=" ++ show rol ++ ", candTy=" ++ show candArgTy ++ ", roleTy=" ++ show roleResolvedTy
             case unifyTypes candArgTy roleResolvedTy of
               Nothing -> return Nothing
               Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
@@ -183,7 +185,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   allRoles <- (:argRoles) <$> tryRole RetVar candRetTy
   case sequence allRoles of
     Nothing -> do
-      debug $ "tryFunType: failed: " ++ show cand ++ ": " ++ show allRoles
+      debug $ "tryFunType: failed: " ++ show cand ++ ": roles=" ++ show allRoles
       return Nothing
     Just ars -> do
 
@@ -512,6 +514,8 @@ unifyTypes' i a b act = case unifyTypes a b of
     return ()
 
 -- | Unify two types, indicating which of the types was more specialized with the Either result.
+-- TODO: this Either thing is becoming problematic, as specialization can result in a new type.
+-- For now specialization is left-biased.
 unifyTypes :: Eq n => Type n -> Type n -> Maybe (Either (Type n) (Type n))
 unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
@@ -524,22 +528,31 @@ unifyTypes l r = case (l,r) of
   _ -> Nothing
   where
     unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
-    unifyVar vc sc v s =
-      let vWins = Just (vc (TyVar v))
-          sWins = Just (sc s)
+    unifyVar vWrap sWrap v s =
+      let useS = sWrap s
       in case (v,s) of
-        (SchemaVar {},TyUser {}) -> sWins
-        (SchemaVar {},TyVar SchemaVar {}) -> sWins
+        (SchemaVar {},TyUser {}) -> Just useS
+        (SchemaVar {},TyVar SchemaVar {}) -> Just useS
         (SchemaVar {},_) -> Nothing
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
-        (TypeVar _ ac,TyVar (TypeVar _ bc)) | null ac -> sWins
-                                            | null bc -> vWins
-                                            | all (`elem` ac) bc -> sWins
-                                            | all (`elem` bc) ac -> vWins
-                                            | otherwise -> Nothing
-        (TypeVar _ ac,_) | null ac || s `elem` ac -> sWins
+        (TypeVar _ ac,TyVar sv@(TypeVar _ bc)) -> case unifyConstraints ac bc of
+          Just (Left uc) -> Just $ vWrap $ TyVar $ v { _tvConstraint = uc }
+          Just (Right uc) -> Just $ sWrap $ TyVar $ sv { _tvConstraint = uc }
+          Nothing -> Nothing
+        (TypeVar _ ac,_) | null ac || s `elem` ac -> Just useS
         _ -> Nothing
+
+-- | Attempt to unify identifying which input "won", or specialize the first type.
+unifyConstraints :: Eq n => [Type n] -> [Type n] -> Maybe (Either [Type n] [Type n])
+unifyConstraints ac bc
+  | null ac = Just $ Right bc
+  | null bc = Just $ Left ac
+  | all (`elem` ac) bc = Just $ Right bc
+  | all (`elem` bc) ac = Just $ Left ac
+  | null intersection = Nothing
+  | otherwise = Just $ Left intersection
+  where intersection = ac `intersect` bc
 
 -- | Instantiate a Bound scope as AST nodes or references.
 scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
