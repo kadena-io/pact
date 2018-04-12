@@ -125,7 +125,7 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
       --              need to extract these from the program.
       --
       tableNames :: [TableName]
-      tableNames = ["accounts", "tokens"]
+      tableNames = ["accounts", "tokens", "owners"]
 
   in analyzeFunction' check body' argTys nodeNames' tableNames
 

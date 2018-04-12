@@ -272,6 +272,9 @@ deriving instance Show (Type a)
 deriving instance Eq (Type a)
 deriving instance Show EType
 
+lit :: SymWord a => a -> Term a
+lit = Literal . literal
+
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
   (+)    = IntArithOp Add
@@ -281,7 +284,7 @@ instance Num (Term Integer) where
   negate = IntUnaryArithOp Negate
 
 instance Num (Term Decimal) where
-  fromInteger = Literal . literal . mkDecimal . fromInteger
+  fromInteger = lit . mkDecimal . fromInteger
   (+)    = DecArithOp Add
   (*)    = DecArithOp Mul
   abs    = DecUnaryArithOp Abs

@@ -65,9 +65,12 @@ pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
 pattern AST_If node cond then' else' <-
   App node (NativeFunc "if") [cond, then', else']
 
+pattern AST_StringLit :: forall a. Text -> AST a
+pattern AST_StringLit str <- AST_Lit (LString str)
+
 pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
 pattern AST_Enforce node cond msg <-
-  App node (NativeFunc "enforce") [cond, AST_Lit (LString msg)]
+  App node (NativeFunc "enforce") [cond, AST_StringLit msg]
 
 pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-

@@ -270,6 +270,37 @@ suite = tests
 
       expectPass code $ Valid $ Occurs Success
 
+  , scope "with-read.nested" $ do
+      let code =
+            [text|
+              (defun test:integer (acct:string)
+                (update accounts acct { "balance": 0 })
+                (with-read accounts acct { "balance" := bal }
+                  (update accounts acct { "balance": 10 })
+                  (with-read accounts acct { "balance" := bal }
+                    (enforce (= bal 10) "Shadowing failed"))))
+            |]
+
+      expectPass code $ Valid $ Occurs Success
+
+  , scope "with-read.overlapping-names" $ do
+      let code =
+            [text|
+              (defschema owner "Pet owner" cats:integer dogs:integer)
+              (deftable owners:{owner} "Table of pet owners")
+
+              (defun test:integer ()
+                (let ((o "bob")
+                      (cats 2)
+                      (dogs 3))
+                  (insert owners o {"dogs": dogs, "cats": cats})
+                  (with-read owners o { "cats" := num, "dogs" := num }
+                    (enforce (= num cats) "First binding wasn't used")
+                    num)))
+            |]
+
+      expectPass code $ Valid $ Occurs Success
+
   --
   -- TODO: this is pending fixes to pact's typechecker:
   --         https://github.com/kadena-io/pact/issues/40

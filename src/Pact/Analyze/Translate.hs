@@ -15,16 +15,16 @@ import Control.Monad.Except (Except, MonadError, throwError)
 import Control.Monad.Fail
 import Control.Monad.Reader
 import Control.Monad.State.Strict (MonadState(..), StateT)
+import Data.Foldable (foldl')
 import qualified Data.Map as Map
 import Data.Map.Strict (Map)
+import Data.Monoid ((<>))
 import qualified Data.Set as Set
-import Data.SBV (literal)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Thyme (parseTime)
 import Data.Traversable (for)
 import Data.Type.Equality
-import Data.Monoid ((<>))
 import Pact.Types.Lang (Literal(..), Type(..), PrimType(..), Arg(..))
 import qualified Pact.Types.Lang as Pact
 import Pact.Types.Typecheck hiding (Var, Schema, Object)
@@ -36,6 +36,7 @@ import Pact.Analyze.Types
 
 data TranslateFailure
   = BranchesDifferentTypes EType EType
+  | NonStringLitInBinding (AST Node)
   | EmptyBody
   | MalformedArithOp Text [AST Node]
   | MalformedLogicalOp Text [AST Node]
@@ -114,17 +115,17 @@ translateNode = \case
       EObjectTy schema -> EObject (Var varName) schema
 
   -- Int
-  AST_NegativeLit lit -> case lit of
-    LInteger i -> pure $ ETerm (IntUnaryArithOp Negate (Literal (literal i))) TInt
-    LDecimal d -> pure $ ETerm (DecUnaryArithOp Negate (Literal (literal (mkDecimal d)))) TDecimal
+  AST_NegativeLit l -> case l of
+    LInteger i -> pure $ ETerm (IntUnaryArithOp Negate (lit i)) TInt
+    LDecimal d -> pure $ ETerm (DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
     _ -> undefined
 
-  AST_Lit lit -> case lit of
-    LInteger i -> pure $ ETerm (Literal (literal i)) TInt
-    LBool b    -> pure $ ETerm (Literal (literal b)) TBool
-    LString s  -> pure $ ETerm (Literal $ literal $ T.unpack s) TStr
-    LDecimal d -> pure $ ETerm (Literal (literal (mkDecimal d))) TDecimal
-    LTime t    -> pure $ ETerm (Literal (literal (mkTime t))) TTime
+  AST_Lit l -> case l of
+    LInteger i -> pure $ ETerm (lit i) TInt
+    LBool b    -> pure $ ETerm (lit b) TBool
+    LString s  -> pure $ ETerm (lit $ T.unpack s) TStr
+    LDecimal d -> pure $ ETerm (lit (mkDecimal d)) TDecimal
+    LTime t    -> pure $ ETerm (lit (mkTime t)) TTime
 
   AST_NegativeVar node -> do
     name <- view (ix node)
@@ -168,7 +169,7 @@ translateNode = \case
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ETerm (Literal (literal (mkTime timeLit'))) TTime
+    -> pure $ ETerm (lit (mkTime timeLit')) TTime
 
   AST_NFun_Basic fn args ->
     let mkComparison :: TranslateM ETerm
@@ -299,14 +300,12 @@ translateNode = \case
       Left err -> throwError err
       Right s  -> pure s
 
-    (bindings' :: [(ETerm, (Node, Text))]) <- for bindings $
-      \(Named _ varNode _, colName) -> do
-        --
-        -- TODO: don't translate here; we know we must have a string lit
-        --
-        colName' <- translateNode colName
+    (bindings' :: [(String, (Node, Text))]) <- for bindings $
+      \(Named _ varNode _, colAst) -> do
         let varName = varNode ^. aId ^. tiName
-        pure (colName', (varNode, varName))
+        case colAst of
+          AST_StringLit colName -> pure (T.unpack colName, (varNode, varName))
+          _                     -> throwError $ NonStringLitInBinding colAst
 
     let nodeNames = Map.fromList $ snd <$> bindings'
 
@@ -317,24 +316,18 @@ translateNode = \case
         translateLet translatedBody = Let
           freshName
           (EObject (Read (TableName (T.unpack table)) schema key') schema)
-          (foldr
-             (\(colTerm :: ETerm, (varNode, varName)) body ->
+          -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
+          (foldl'
+             (\body (colName, (varNode, varName)) ->
                let varType = typeFromPact $ _aTy varNode
-               in case colTerm of
-                    EObject _ _ ->
-                      --
-                      -- TODO: make this fold monadic and use MonadFail here
-                      --
-                      error "TODO: deal with disallowed obj"
-
-                    ETerm colName TStr ->
-                      Let varName
-                        (case varType of
-                           EType ty ->
-                             ETerm   (At schema colName freshVar varType) ty
-                           EObjectTy sch ->
-                             EObject (At schema colName freshVar varType) sch)
-                        body)
+                   colTerm = lit colName
+               in Let varName
+                    (case varType of
+                       EType ty ->
+                         ETerm   (At schema colTerm freshVar varType) ty
+                       EObjectTy sch ->
+                         EObject (At schema colTerm freshVar varType) sch)
+                    body)
              translatedBody
              bindings')
 
@@ -366,7 +359,7 @@ translateNode = \case
   AST_At node colName obj -> do
     EObject obj' schema <- translateNode obj
     ETerm colName' TStr <- translateNode colName
-    -- let colName' = Literal $ literal $ T.unpack colName
+    -- let colName' = lit $ T.unpack colName
     pure $ case typeFromPact (_aTy node) of
       ty@(EType ty')         -> ETerm   (At schema colName' obj' ty) ty'
       ty@(EObjectTy schema') -> EObject (At schema colName' obj' ty) schema'
