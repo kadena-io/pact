@@ -106,10 +106,10 @@ translateBinding bindings schema bodyA rhsT = do
   let nodeNames = Map.fromList $ snd <$> bindings'
   (freshName, freshVar :: Term Object) <- genFresh "binding"
 
-  let translateLet :: ETerm -> Term a -> Term a
-      translateLet rhs innerBody = Let
+  let translateLet :: Term a -> Term a
+      translateLet innerBody = Let
         freshName
-        rhs
+        rhsT
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         (foldl'
            (\body (colName, (varNode, varName)) ->
@@ -125,7 +125,7 @@ translateBinding bindings schema bodyA rhsT = do
            innerBody
            bindings')
 
-  mapETerm (translateLet rhsT) <$> local (nodeNames <>) (translateBody bodyA)
+  mapETerm translateLet <$> local (nodeNames <>) (translateBody bodyA)
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode = \case
