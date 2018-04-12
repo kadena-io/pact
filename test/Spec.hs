@@ -114,6 +114,15 @@ suite = tests
       expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
                                   `Implies` Occurs Abort
 
+  , scope "enforce-keyset.name.dynamic" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-keyset (+ "k" "s")))
+            |]
+      expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
+                      `Implies` Occurs Abort
+
   --
   -- TODO: enforce-keyset.object
   --
@@ -300,19 +309,6 @@ suite = tests
             |]
 
       expectPass code $ Valid $ Occurs Success
-
-  --
-  -- TODO: this is pending fixes to pact's typechecker:
-  --         https://github.com/kadena-io/pact/issues/40
-  --
-  -- , scope "enforce-keyset.name.dynamic" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:bool ()
-  --               (enforce-keyset (+ "k" "s")))
-  --           |]
-  --     expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
-  --                                 `Implies` Occurs Abort
 
   , scope "let" $ do
       scope "sanity" $ do
