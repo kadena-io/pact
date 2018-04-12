@@ -325,16 +325,16 @@ data DomainProperty where
   -- TODO: StaleRead?
   --
 
-data Property where
-  Implies :: Property       -> Property -> Property
-  Not     :: Property       ->             Property
-  And     :: Property       -> Property -> Property
-  Or      :: Property       -> Property -> Property
-  Occurs  :: DomainProperty ->             Property
+data Property a where
+  Implies :: Property Bool  -> Property Bool -> Property Bool
+  Not     :: Property Bool  ->                  Property Bool
+  And     :: Property Bool  -> Property Bool -> Property Bool
+  Or      :: Property Bool  -> Property Bool -> Property Bool
+  Occurs  :: DomainProperty ->                  Property Bool
 
 data Check where
-  Satisfiable :: Property -> Check
-  Valid       :: Property -> Check
+  Satisfiable :: Property Bool -> Check
+  Valid       :: Property Bool -> Check
 
 type Time = Int64
 

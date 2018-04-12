@@ -131,7 +131,7 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
-checkProperty :: Check -> Property
+checkProperty :: Check -> Property Bool
 checkProperty (Satisfiable p) = p
 checkProperty (Valid p) = p
 
