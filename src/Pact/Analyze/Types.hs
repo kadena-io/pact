@@ -336,6 +336,15 @@ data Check where
   Satisfiable :: Prop Bool -> Check
   Valid       :: Prop Bool -> Check
 
+ckProp :: Lens' Check (Prop Bool)
+ckProp = lens getter setter
+  where
+    getter (Satisfiable p) = p
+    getter (Valid p) = p
+
+    setter (Satisfiable _) p = Satisfiable p
+    setter (Valid _) p = Valid p
+
 type Time = Int64
 
 mkTime :: UTCTime -> Time

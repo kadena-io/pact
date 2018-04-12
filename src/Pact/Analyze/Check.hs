@@ -88,7 +88,7 @@ analyzeFunction' check body argTys nodeNames tableNames =
         nameAuths' <- newArray "nameAuthorizations"
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
 
-        let prop   = checkProperty check
+        let prop   = check ^. ckProp
             env0   = AnalyzeEnv scope0 nameAuths'
             action = analyzeTerm body''
                   *> analyzeProperty prop
@@ -133,10 +133,6 @@ analyzeFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
   in analyzeFunction' check body' argTys nodeNames' tableNames
 
 analyzeFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
-
-checkProperty :: Check -> Prop Bool
-checkProperty (Satisfiable p) = p
-checkProperty (Valid p) = p
 
 tcName :: Node -> Text
 tcName = _tiName . _aId
