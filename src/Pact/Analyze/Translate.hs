@@ -69,6 +69,39 @@ newtype TranslateM a
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
 
+genFresh :: Text -> TranslateM (Text, Term a)
+genFresh baseName = do
+  varId <- get
+  id %= succ
+  -- similar to how let-bound variables are named e.g. "let4_x":
+  let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
+  return $ (varName, Var varName)
+
+typeFromPact :: Pact.Type Pact.UserType -> EType
+typeFromPact ty = case ty of
+  TyUser (Pact.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
+    \(Arg name ty _info) -> case ty of
+      TyPrim TyBool    -> (T.unpack name, EType TBool)
+      TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
+      TyPrim TyInteger -> (T.unpack name, EType TInt)
+      TyPrim TyString  -> (T.unpack name, EType TStr)
+      TyPrim TyTime    -> (T.unpack name, EType TTime)
+      -- TODO: opaque data
+
+  -- TODO(joel): understand the difference between the TyUser and TySchema cases
+  TySchema _ ty' -> typeFromPact ty'
+
+  TyPrim TyBool    -> EType TBool
+  TyPrim TyDecimal -> EType TDecimal
+  TyPrim TyInteger -> EType TInt
+  TyPrim TyString  -> EType TStr
+  TyPrim TyTime    -> EType TTime
+
+schemaFromPact :: Pact.Type Pact.UserType -> Either TranslateFailure Schema
+schemaFromPact ty = case typeFromPact ty of
+  EType _primTy    -> Left $ NotConvertibleToSchema ty
+  EObjectTy schema -> Right schema
+
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
 translateBody [ast] = translateNode ast
@@ -80,14 +113,6 @@ translateBody (ast:asts) = do
   ETerm ast' _   <- translateNode ast
   ETerm asts' ty <- translateBody asts
   pure $ ETerm (Sequence ast' asts') ty
-
-genFresh :: Text -> TranslateM (Text, Term a)
-genFresh baseName = do
-  varId <- get
-  id %= succ
-  -- similar to how let-bound variables are named e.g. "let4_x":
-  let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
-  return $ (varName, Var varName)
 
 translateBinding
   :: [(Named Node, AST Node)]
@@ -401,28 +426,3 @@ translateNode = \case
   --
 
   ast -> throwError (UnexpectedNode "translateNode" ast)
-
-typeFromPact :: Pact.Type Pact.UserType -> EType
-typeFromPact ty = case ty of
-  TyUser (Pact.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
-    \(Arg name ty _info) -> case ty of
-      TyPrim TyBool    -> (T.unpack name, EType TBool)
-      TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
-      TyPrim TyInteger -> (T.unpack name, EType TInt)
-      TyPrim TyString  -> (T.unpack name, EType TStr)
-      TyPrim TyTime    -> (T.unpack name, EType TTime)
-      -- TODO: opaque data
-
-  -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema _ ty' -> typeFromPact ty'
-
-  TyPrim TyBool    -> EType TBool
-  TyPrim TyDecimal -> EType TDecimal
-  TyPrim TyInteger -> EType TInt
-  TyPrim TyString  -> EType TStr
-  TyPrim TyTime    -> EType TTime
-
-schemaFromPact :: Pact.Type Pact.UserType -> Either TranslateFailure Schema
-schemaFromPact ty = case typeFromPact ty of
-  EType _primTy    -> Left $ NotConvertibleToSchema ty
-  EObjectTy schema -> Right schema
