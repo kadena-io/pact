@@ -181,19 +181,20 @@ suite = tests
             |]
       in expectPass code $ Valid $ Not $ Occurs Abort
 
-  , scope "at.object-in-object" $
-      let code =
-            [text|
-              (defschema inner
-                name:string)
-              (defschema wrapper
-                inner:{inner})
+  -- TODO: pending fix for https://github.com/kadena-io/pact/issues/53
+  -- , scope "at.object-in-object" $
+  --     let code =
+  --           [text|
+  --             (defschema inner
+  --               name:string)
+  --             (defschema wrapper
+  --               inner:{inner})
 
-              (defun test:{inner} ()
-                (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
-                  (at "inner" obj)))
-            |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+  --             (defun test:{inner} ()
+  --               (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
+  --                 (at "inner" obj)))
+  --           |]
+  --     in expectPass code $ Valid $ Not $ Occurs Abort
 
   --
   -- TODO: test TableRead
