@@ -120,15 +120,14 @@ translateBinding
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateBinding bindings schema bodyA rhsT = do
-  (bindings' :: [(String, (Node, Text))]) <- for bindings $
+translateBinding bindingsA schema bodyA rhsT = do
+  (bindings :: [(String, (Node, Text))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId ^. tiName
       case colAst of
         AST_StringLit colName -> pure (T.unpack colName, (varNode, varName))
         _                     -> throwError $ NonStringLitInBinding colAst
 
-  let nodeNames = Map.fromList $ snd <$> bindings'
   (freshName, freshVar :: Term Object) <- genFresh "binding"
 
   let translateLet :: Term a -> Term a
@@ -148,7 +147,9 @@ translateBinding bindings schema bodyA rhsT = do
                        EObject (At schema colTerm freshVar varType) sch)
                   body)
            innerBody
-           bindings')
+           bindings)
+
+      nodeNames = Map.fromList $ snd <$> bindings
 
   mapETerm translateLet <$> local (nodeNames <>) (translateBody bodyA)
 
