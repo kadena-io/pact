@@ -49,6 +49,7 @@ checkFuns = describe "tc.pact typecheck" $ do
   checkFun "tests/pact/tc.repl" "tctest" "sort1"
   checkFun "tests/pact/tc.repl" "tctest" "sort2"
   checkFun "tests/pact/tc.repl" "tctest" "partials"
+  checkFun "tests/pact/tc.repl" "tctest" "twoStrings"
   checkFun "examples/cp/cp.repl" "cp" "issue"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
 
@@ -90,6 +91,9 @@ _inferTransfer = inferFun True "examples/accounts/accounts.repl" "accounts" "tra
 
 _inferTestModule :: IO [TopLevel Node]
 _inferTestModule = inferModule True "tests/pact/tc.repl" "tctest"
+
+_inferTestFun :: Text -> IO (TopLevel Node, TcState)
+_inferTestFun = inferFun True "tests/pact/tc.repl" "tctest"
 
 _inferAccounts :: IO [TopLevel Node]
 _inferAccounts = inferModule False "examples/accounts/accounts.repl" "accounts"

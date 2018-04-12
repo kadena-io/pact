@@ -174,6 +174,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
           Nothing -> die' (_aId (_aNode roleAST)) $ "Bad var in overload solver: " ++ show roleTyVar
           Just ty -> do
             roleResolvedTy <- resolveTy ty
+            debug $ "tryFunType: unify role: role=" ++ show rol ++ ", candTy=" ++ show candArgTy ++ ", roleTy=" ++ show roleResolvedTy
             case unifyTypes candArgTy roleResolvedTy of
               Nothing -> return Nothing
               Just _ -> return $ Just (rol,RoleTys candArgTy roleAST roleTyVar roleResolvedTy)
@@ -183,7 +184,7 @@ tryFunType Overload {..} _ cand@(FunType candArgs candRetTy) = do
   allRoles <- (:argRoles) <$> tryRole RetVar candRetTy
   case sequence allRoles of
     Nothing -> do
-      debug $ "tryFunType: failed: " ++ show cand ++ ": " ++ show allRoles
+      debug $ "tryFunType: failed: " ++ show cand ++ ": roles=" ++ show allRoles
       return Nothing
     Just ars -> do
 
@@ -525,21 +526,24 @@ unifyTypes l r = case (l,r) of
   where
     unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
     unifyVar vc sc v s =
-      let vWins = Just (vc (TyVar v))
-          sWins = Just (sc s)
+      let vWins = (vc (TyVar v))
+          sWins = (sc s)
       in case (v,s) of
-        (SchemaVar {},TyUser {}) -> sWins
-        (SchemaVar {},TyVar SchemaVar {}) -> sWins
+        (SchemaVar {},TyUser {}) -> Just sWins
+        (SchemaVar {},TyVar SchemaVar {}) -> Just sWins
         (SchemaVar {},_) -> Nothing
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
-        (TypeVar _ ac,TyVar (TypeVar _ bc)) | null ac -> sWins
-                                            | null bc -> vWins
-                                            | all (`elem` ac) bc -> sWins
-                                            | all (`elem` bc) ac -> vWins
-                                            | otherwise -> Nothing
-        (TypeVar _ ac,_) | null ac || s `elem` ac -> sWins
+        (TypeVar _ ac,TyVar (TypeVar _ bc)) -> unifyConstraints ac bc vWins sWins
+        (TypeVar _ ac,_) | null ac || s `elem` ac -> Just sWins
         _ -> Nothing
+
+unifyConstraints :: Eq n => [Type n] -> [Type n] -> a -> a -> Maybe a
+unifyConstraints ac bc aWins bWins | null ac = Just bWins
+                            | null bc = Just aWins
+                            | all (`elem` ac) bc = Just bWins
+                            | all (`elem` bc) ac = Just aWins
+                            | otherwise = Nothing
 
 -- | Instantiate a Bound scope as AST nodes or references.
 scopeToBody :: Info -> [AST Node] -> Scope Int Term (Either Ref (AST Node)) -> TC [AST Node]
