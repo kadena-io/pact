@@ -310,6 +310,10 @@ suite = tests
 
       expectPass code $ Valid $ Occurs Success
 
+  --
+  -- TODO: bind
+  --
+
   , scope "let" $ do
       scope "sanity" $ do
         scope "1" $

@@ -297,6 +297,9 @@ instance Num (Term Decimal) where
   signum = DecUnaryArithOp Signum
   negate = DecUnaryArithOp Negate
 
+--
+-- TODO: collapse this into Prop.
+--
 data DomainProperty where
   TableWrite       :: TableName  ->               DomainProperty -- anything in table is written
   TableRead        :: TableName  ->               DomainProperty -- anything in table is read
