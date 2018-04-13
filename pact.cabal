@@ -112,7 +112,6 @@ library
     exposed-modules:
                     Pact.Analyze.Analyze
                   , Pact.Analyze.Check
-                  , Pact.Analyze.Demo
                   , Pact.Analyze.Patterns
                   , Pact.Analyze.Translate
                   , Pact.Analyze.Types
