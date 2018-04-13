@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TupleSections #-}
 -- |
 -- Module      :  Pact.Eval
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -39,7 +40,7 @@ import Prelude
 import Bound
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Safe
+import Safe hiding (at)
 import Data.Default
 import Control.Arrow hiding (app)
 import Data.Maybe
@@ -50,7 +51,9 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
 import Data.Aeson (Value)
+import qualified Data.Text as Text
 
+import Pact.Analyze.Prop (Check)
 import Pact.Types.Runtime
 
 evalBeginTx :: Info -> Eval e ()
@@ -150,7 +153,6 @@ evalUse mn h i = do
                                show mh ++ ", " ++ show _mHash
       installModule m
 
-
 -- | Make table of module definitions for storage in namespace/RefStore.
 --
 -- Definitions are transformed such that all free variables are resolved either to
@@ -161,27 +163,30 @@ evalUse mn h i = do
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info ->
-              Eval e (HM.HashMap Text (Term Name))
+              Eval e (HM.HashMap Text (Term Name, [Check]))
 loadModule m bod1 mi = do
-  modDefs1 <-
+  (modDefs1, modProps) <-
     case instantiate' bod1 of
-      (TList bd _ _bi) ->
-        fmap (HM.fromList . concat) $ forM bd $ \t -> do
-          dnm <- case t of
-            TDef {..} -> return $ Just _tDefName
-            TNative {..} -> return $ Just $ asString _tNativeName
-            TConst {..} -> return $ Just $ _aName _tConstArg
-            TSchema {..} -> return $ Just $ asString _tSchemaName
-            TTable {..} -> return $ Just $ asString _tTableName
-            TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
-            TProperty {..} -> return Nothing
-            _ -> evalError (_tInfo t) "Invalid module member"
-          return $ maybe [] (\dn -> [(dn,t)]) dnm
+      TList bodyClause _ _bi -> do
+
+        -- For every clause in the module definition, either add it to
+        -- modDefs1, or, for properties, accumulate in modProps
+        flip execStateT (HM.empty, []) $ forM_ bodyClause $ \t ->
+          case t of
+            TDef      {..} -> _1 . at _tDefName               ?= t
+            TNative   {..} -> _1 . at (asString _tNativeName) ?= t
+            TConst    {..} -> _1 . at (_aName _tConstArg)     ?= t
+            TSchema   {..} -> _1 . at (asString _tSchemaName) ?= t
+            TTable    {..} -> _1 . at (asString _tTableName)  ?= t
+            TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo -- >> return NoName
+            TProperty {..} -> _2 %= cons t
+            _ -> lift $ evalError (_tInfo t) "Invalid module member"
+
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
-    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
+    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(defName,defn) ->
       do
-        d' <- forM d $ \(f :: Name) -> do
+        defn' <- forM defn $ \(f :: Name) -> do
                 dm <- resolveRef f
                 case (dm,f) of
                   (Just t,_) -> return (Right t)
@@ -190,7 +195,7 @@ loadModule m bod1 mi = do
                         Just _ -> return (Left fn)
                         Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
                   (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-        return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
+        return (defn',defName,mapMaybe (either Just (const Nothing)) $ toList defn')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
               CyclicSCC vs ->
@@ -198,14 +203,31 @@ loadModule m bod1 mi = do
   let defs :: HM.HashMap Text Ref
       defs = foldl dresolve HM.empty sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
+      dresolve defns (defn,defName,_)
+        = HM.insert defName (Ref (fmap (unify defns) defn)) defns
       evalConstRef r@Ref {} = runPure $ evalConsts r
       evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
   installModule (m,evaluatedDefs)
   (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
-  return modDefs1
 
+  -- now merge in the properties
+  -- * keys that appear only in defns are fine -- they're definitions
+  -- without any properties
+  -- * keys that appear only in props aren't -- they're properties
+  -- without a definition
+  let defnsNoProps :: HM.HashMap Text (Term Name, [Check])
+      defnsNoProps = (,[]) <$> modDefs1
+
+  foldrM
+    (\(TProperty name prop info) accum -> if HM.member name accum
+      then pure $ accum & singular (ix name) . _2 %~ cons prop
+      else evalError info $
+        "Found a property without a corresponding definition (" ++
+        Text.unpack name ++ ")"
+    )
+    defnsNoProps
+    modProps
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)

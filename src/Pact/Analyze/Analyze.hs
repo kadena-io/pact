@@ -31,6 +31,7 @@ import Pact.Types.Runtime hiding (ColumnId, TableName, Term, Type, EObject,
                                   RowKey(..), WriteType(..))
 import Pact.Types.Version (pactVersion)
 
+import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
 -- a unique column, comprised of table name and column name

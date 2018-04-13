@@ -51,6 +51,7 @@ import Data.Semigroup
 import Pact.Types.Logger
 import Pact.Repl.Types
 
+import Debug.Trace
 
 
 initLibState :: Loggers -> IO LibState
@@ -339,13 +340,12 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
--- typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
         result <- liftIO $ verifyModule md
+        traceShowM md
         return $ tStr $ Text.pack $ show result
 
   _ -> argsError i as
 #endif
-
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def

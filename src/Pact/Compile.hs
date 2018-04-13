@@ -1,3 +1,6 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,12 +21,13 @@ module Pact.Compile
     (
      compile,compileExps
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
+    ,expToCheck
     )
 
 where
 
-import Text.Trifecta as TF
-import Text.Trifecta.Delta as TF
+import qualified Text.Trifecta as TF
+import {- qualified -} Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -42,11 +46,15 @@ import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 
+import Pact.Analyze.Prop hiding (TableName)
+import qualified Pact.Analyze.Prop as Prop
 import Pact.Types.Lang
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Hash
+
+import Debug.Trace
 
 type MkInfo = Exp -> Info
 
@@ -117,7 +125,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TTable {} -> return d
         TUse {} -> return d
         TProperty {} -> return d
-        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use allowed in module"
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, property-of allowed in module"
       mkModule docs body = do
         cm <- use csModule
         case cm of
@@ -139,6 +147,61 @@ currentModule :: Info -> Compile ModuleName
 currentModule i = use csModule >>= \m -> case m of
   Just cm -> return cm
   Nothing -> syntaxError i "Must be declared within module"
+
+pattern EList' :: [Exp] -> Exp
+pattern EList' ls <- EList ls Nothing _
+
+pattern EAtom' :: Text -> Exp
+pattern EAtom' tag <- EAtom tag Nothing Nothing _
+
+pattern ELitName :: Text -> Exp
+pattern ELitName lit <- ELiteral (LString lit) _
+
+expToProp :: Exp -> Maybe (Prop Bool)
+expToProp = (\case
+  EAtom' "abort" -> Just Abort
+  EAtom' "success" -> Just Success
+
+  -- (load "examples/verified-accounts/accounts.repl")
+  EList' [EAtom' "assuming", a, b] -> Implies <$> expToProp a <*> expToProp b
+  EList' [EAtom' "not", a] -> Not <$> expToProp a
+  EList' [EAtom' "and", a, b] -> And <$> expToProp a <*> expToProp b
+  EList' [EAtom' "or", a, b] -> Or <$> expToProp a <*> expToProp b
+
+  EList' [EAtom' "table-write", ELitName tab] -> Just (TableWrite (mkT tab))
+  EList' [EAtom' "table-read", ELitName tab] -> Just (TableRead (mkT tab))
+  EList' [EAtom' "column-write", ELitName tab, ELitName col]
+    -> Just (ColumnWrite (mkT tab) (mkC col))
+  EList' [EAtom' "cell-increase", ELitName tab, ELitName col]
+    -> Just (CellIncrease (mkT tab) (mkC col))
+  EList' [EAtom' "column-conserve", ELitName tab, ELitName col]
+    -> Just (ColumnConserve (mkT tab) (mkC col))
+  EList' [EAtom' "column-increase", ELitName tab, ELitName col]
+    -> Just (ColumnIncrease (mkT tab) (mkC col))
+
+  EList' [EAtom' "ks-name-authorized", ELitName name]
+    -> Just (KsNameAuthorized (mkK name))
+
+  -- EAtom' var -> Var var
+
+  _ -> Nothing) . traceShowId
+
+  where mkT = Prop.TableName . T.unpack
+        mkC = ColumnName . T.unpack
+        mkK = KeySetName
+
+expToCheck :: Exp -> Maybe Check
+expToCheck = (\case
+  EList' [EAtom' "satisfiable", body] -> Satisfiable <$> expToProp body
+  EList' [EAtom' "valid", body] -> Valid <$> expToProp body
+  _ -> Nothing) . traceShowId
+
+doProperty :: [Exp] -> Info -> Info -> Compile (Term Name)
+doProperty exprs namei i = case exprs of
+  [EAtom name Nothing Nothing _, body] -> case expToCheck body of
+    Just check -> pure $ TProperty name check i
+    Nothing -> syntaxError namei "Invalid property"
+  _ -> syntaxError namei "Invalid property"
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
@@ -268,7 +331,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
-      ("property-of",Nothing) -> pure (TProperty li)
+      ("property-of",Nothing) -> doProperty rest ai li
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li
@@ -333,9 +396,9 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile
 
-_compile :: Result ([Exp],String) -> IO (Either PactError [Term Name])
-_compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
-_compile (Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
+_compile :: TF.Result ([Exp],String) -> IO (Either PactError [Term Name])
+_compile (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
+_compile (TF.Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
 
 
 _compileStr :: String -> IO [Term Name]
@@ -352,8 +415,8 @@ _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (Failure e) -> putDoc (_errDoc e) >> error "Parse failed"
-            (Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
+            (TF.Failure e) -> putDoc (TF._errDoc e) >> error "Parse failed"
+            (TF.Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
     case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts

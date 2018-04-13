@@ -55,7 +55,7 @@ module Pact.Types.Lang
    _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
    PublicKey(..),
    KeySet(..),
-   KeySetName(..),
+   KeySetName(KeySetName),
    DefType(..),
    defTypeRep,
    NativeDefName(..),
@@ -118,6 +118,7 @@ import qualified Data.HashMap.Strict as HM
 
 import Data.Serialize (Serialize)
 
+import Pact.Analyze.Prop (Check, KeySetName(KeySetName))
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 --import Pact.Types.Crypto (Hash(..))
@@ -478,7 +479,7 @@ data Exp =
   EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
   -- | Special binding forms.
   EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
-           deriving (Eq,Generic)
+           deriving (Eq,Generic, Show)
 
 instance NFData Exp
 
@@ -489,14 +490,14 @@ maybeDelim :: Show a => String -> Maybe a -> String
 maybeDelim d t = maybe "" ((d ++) . show) t
 
 
-instance Show Exp where
-    show (ELiteral i _) = show i
-    show (ESymbol s _) = '\'':unpack s
-    show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
-    show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
-    show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
-    show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
-    show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
+-- instance Show Exp where
+--     show (ELiteral i _) = show i
+--     show (ESymbol s _) = '\'':unpack s
+--     show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
+--     show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
+--     show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
+--     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
+--     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
 
 $(makeLenses ''Exp)
 
@@ -531,11 +532,6 @@ instance FromJSON KeySet where
       where defPred = "keys-all"
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
-
-
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
-instance Show KeySetName where show (KeySetName s) = show s
 
 
 data DefType = Defun | Defpact deriving (Eq,Show)
@@ -731,7 +727,9 @@ data Term n =
     , _tInfo :: !Info
     } |
     TProperty {
-      _tInfo :: !Info
+      _tPropertyOf :: !Text
+    , _tCheck :: Check
+    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
@@ -828,7 +826,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
-    TProperty i >>= _ = TProperty i
+    TProperty propOf check i >>= _ = TProperty propOf check i
 
 
 instance FromJSON (Term n) where

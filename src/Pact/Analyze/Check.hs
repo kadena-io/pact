@@ -41,6 +41,7 @@ import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure,
                              allocateSymbolicCells, analyzeTerm, analyzeTermO,
                              analyzeProperty, mkInitialAnalyzeState,
                              runAnalyzeM)
+import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 
@@ -253,4 +254,4 @@ verifyModule (_mod, modRefs) = case HM.lookup "test" modRefs of
   Nothing -> pure $ Left $ CodeCompilationFailed "expected function 'test'"
   Just ref -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-    failedTcOrAnalyze tcState fun (Satisfiable $ Occurs Success)
+    failedTcOrAnalyze tcState fun (Satisfiable Success)

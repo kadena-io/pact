@@ -113,6 +113,7 @@ library
                     Pact.Analyze.Analyze
                   , Pact.Analyze.Check
                   , Pact.Analyze.Patterns
+                  , Pact.Analyze.Prop
                   , Pact.Analyze.Translate
                   , Pact.Analyze.Types
                   , Pact.Bench
