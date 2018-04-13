@@ -44,8 +44,11 @@ data TranslateFailure
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
   | TypeMismatch EType EType
   | UnexpectedNode String (AST Node)
+  | MissingConcreteType Node
   | AlternativeFailures [TranslateFailure]
   | MonadFailure String
+  -- For cases we don't handle yet:
+  | UnhandledType (Pact.Type Pact.UserType)
   deriving Show
 
 instance Monoid TranslateFailure where
@@ -77,33 +80,54 @@ genFresh baseName = do
   let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
   return $ (varName, Var varName)
 
-typeFromPact :: Pact.Type Pact.UserType -> EType
-typeFromPact ty = case ty of
-  TyUser (Pact.Schema _ _ fields _) -> EObjectTy $ Schema $ Map.fromList $ flip map fields $
-    \(Arg name ty _info) -> case ty of
-      TyPrim TyBool    -> (T.unpack name, EType TBool)
-      TyPrim TyDecimal -> (T.unpack name, EType TDecimal)
-      TyPrim TyInteger -> (T.unpack name, EType TInt)
-      TyPrim TyString  -> (T.unpack name, EType TStr)
-      TyPrim TyTime    -> (T.unpack name, EType TTime)
-      -- TODO: opaque data
-
-  -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema _ ty' -> typeFromPact ty'
-
-  TyPrim TyBool    -> EType TBool
-  TyPrim TyDecimal -> EType TDecimal
-  TyPrim TyInteger -> EType TInt
-  TyPrim TyString  -> EType TStr
-  TyPrim TyTime    -> EType TTime
-
-nodeSchema :: Node -> TranslateM Schema
-nodeSchema node = case typeFromPact pactType of
-    EType _primTy    -> throwError $ NotConvertibleToSchema pactType
-    EObjectTy schema -> pure $ schema
-
+translateType :: Node -> TranslateM EType
+translateType node = go $ _aTy node
   where
-    pactType = _aTy node
+    go = \case
+      TyUser (Pact.Schema _ _ fields _) ->
+        fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
+          \(Arg name ty _info) ->
+            ( T.unpack name
+            , case ty of
+                TyPrim TyBool    -> pure $ EType TBool
+                TyPrim TyDecimal -> pure $ EType TDecimal
+                TyPrim TyInteger -> pure $ EType TInt
+                TyPrim TyString  -> pure $ EType TStr
+                TyPrim TyTime    -> pure $ EType TTime
+                --
+                -- TODO: handle these:
+                --
+                TyPrim TyValue -> throwError $ UnhandledType ty
+                TyPrim TyKeySet -> throwError $ UnhandledType ty
+            )
+
+      -- TODO(joel): understand the difference between the TyUser and TySchema cases
+      TySchema _ ty' -> go ty'
+
+      -- In these cases, the typechecker failed to produce a concrete type.
+      TyAny -> throwError $ MissingConcreteType node
+      TyVar _ -> throwError $ MissingConcreteType node
+
+      TyPrim TyBool    -> pure $ EType TBool
+      TyPrim TyDecimal -> pure $ EType TDecimal
+      TyPrim TyInteger -> pure $ EType TInt
+      TyPrim TyString  -> pure $ EType TStr
+      TyPrim TyTime    -> pure $ EType TTime
+
+      --
+      -- TODO: handle these:
+      --
+      ty@(TyPrim TyValue) -> throwError $ UnhandledType ty
+      ty@(TyPrim TyKeySet) -> throwError $ UnhandledType ty
+      ty@(TyList _) -> throwError $ UnhandledType ty
+      ty@(TyFun _) -> throwError $ UnhandledType ty
+
+translateSchema :: Node -> TranslateM Schema
+translateSchema node = do
+  ty <- translateType node
+  case ty of
+    EType _primTy    -> throwError $ NotConvertibleToSchema $ _aTy node
+    EObjectTy schema -> pure $ schema
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody
@@ -122,35 +146,35 @@ translateBinding
   -> ETerm
   -> TranslateM ETerm
 translateBinding bindingsA schema bodyA rhsT = do
-  (bindings :: [(String, (Node, Text))]) <- for bindingsA $
+  (bindings :: [(String, EType, (Node, Text))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId ^. tiName
+      varType <- translateType varNode
       case colAst of
-        AST_StringLit colName -> pure (T.unpack colName, (varNode, varName))
-        _                     -> throwError $ NonStringLitInBinding colAst
+        AST_StringLit colName ->
+          pure (T.unpack colName, varType, (varNode, varName))
+        _ ->
+          throwError $ NonStringLitInBinding colAst
 
   (freshName, freshVar :: Term Object) <- genFresh "binding"
 
   let translateLet :: Term a -> Term a
-      translateLet innerBody = Let
-        freshName
-        rhsT
+      translateLet innerBody = Let freshName rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
-        (foldl'
-           (\body (colName, (varNode, varName)) ->
-             let varType = typeFromPact $ _aTy varNode
-                 colTerm = lit colName
-             in Let varName
-                  (case varType of
-                     EType ty ->
-                       ETerm   (At schema colTerm freshVar varType) ty
-                     EObjectTy sch ->
-                       EObject (At schema colTerm freshVar varType) sch)
-                  body)
-           innerBody
-           bindings)
+        foldl'
+          (\body (colName, varType, (_varNode, varName)) ->
+            let colTerm = lit colName
+            in Let varName
+              (case varType of
+                 EType ty ->
+                   ETerm   (At schema colTerm freshVar varType) ty
+                 EObjectTy sch ->
+                   EObject (At schema colTerm freshVar varType) sch)
+              body)
+          innerBody
+          bindings
 
-      nodeNames = Map.fromList $ snd <$> bindings
+      nodeNames = Map.fromList $ view _3 <$> bindings
 
   mapETerm translateLet <$> local (nodeNames <>) (translateBody bodyA)
 
@@ -175,8 +199,9 @@ translateNode = \case
 
   AST_Var node -> do
     varName <- view (ix node)
-    pure $ case typeFromPact (_aTy node) of
-      EType ty         -> ETerm (Var varName) ty
+    ty <- translateType node
+    pure $ case ty of
+      EType ty'        -> ETerm (Var varName) ty'
       EObjectTy schema -> EObject (Var varName) schema
 
   -- Int
@@ -194,7 +219,7 @@ translateNode = \case
 
   AST_NegativeVar node -> do
     name <- view (ix node)
-    EType ty <- pure $ typeFromPact (_aTy node)
+    EType ty <- translateType node
     case ty of
       TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name)) TInt)
       TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
@@ -349,7 +374,7 @@ translateNode = \case
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' _schema <- translateNode obj
-    schema <- nodeSchema (_aNode obj)
+    schema <- translateSchema $ _aNode obj
     pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
@@ -363,13 +388,13 @@ translateNode = \case
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
   AST_WithRead _ table key bindings schemaNode body -> do
-    schema <- nodeSchema schemaNode
+    schema <- translateSchema schemaNode
     ETerm key' TStr <- translateNode key
     let readT = EObject (Read (TableName (T.unpack table)) schema key') schema
     translateBinding bindings schema body readT
 
   AST_Bind _ objectA bindings schemaNode body -> do
-    schema <- nodeSchema schemaNode
+    schema <- translateSchema schemaNode
     objectT <- translateNode objectA
     translateBinding bindings schema body objectT
 
@@ -384,16 +409,16 @@ translateNode = \case
 
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
-    schema <- nodeSchema node
+    schema <- translateSchema node
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
 
   AST_At node colName obj -> do
     EObject obj' schema <- translateNode obj
     ETerm colName' TStr <- translateNode colName
-    -- let colName' = lit $ T.unpack colName
-    pure $ case typeFromPact (_aTy node) of
-      ty@(EType ty')         -> ETerm   (At schema colName' obj' ty) ty'
-      ty@(EObjectTy schema') -> EObject (At schema colName' obj' ty) schema'
+    ty <- translateType node
+    pure $ case ty of
+      EType ty'         -> ETerm   (At schema colName' obj' ty) ty'
+      EObjectTy schema' -> EObject (At schema colName' obj' ty) schema'
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -409,11 +434,11 @@ translateNode = \case
                  TyPrim TyTime    -> EType TTime
       v' <- translateNode v
       pure (k', (ty, v'))
-    schema <- nodeSchema node
+    schema <- translateSchema node
     pure $ EObject (LiteralObject $ Map.fromList kvs') schema
 
   --
   -- TODO: more cases.
   --
 
-  ast -> throwError (UnexpectedNode "translateNode" ast)
+  ast -> throwError $ UnexpectedNode "translateNode" ast
