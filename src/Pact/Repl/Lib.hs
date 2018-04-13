@@ -30,12 +30,14 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
+import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Criterion
 import Criterion.Types
 import Statistics.Resampling.Bootstrap
+import Pact.Analyze.Check
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
@@ -102,6 +104,10 @@ replDefs = ("Repl",
      ,defRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
+
+#if !defined(ghcjs_HOST_OS)
+     ,defRNative "verify" verify (funType tTyString [("module",tTyString)]) "verify MODULE"
+#endif
 
      ,defRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
@@ -324,6 +330,21 @@ tc i as = case as of
               _ -> do
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
+
+#if !defined(ghcjs_HOST_OS)
+verify :: RNativeFun LibState
+verify i as = case as of
+  [TLitString modName] -> do
+    mdm <- HM.lookup (ModuleName modName) <$> view (eeRefStore . rsModules)
+    case mdm of
+      Nothing -> evalError' i $ "No such module: " ++ show modName
+      Just md -> do
+-- typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
+        result <- liftIO $ verifyModule md
+        return $ tStr $ Text.pack $ show result
+
+  _ -> argsError i as
+#endif
 
 
 json' :: RNativeFun LibState
