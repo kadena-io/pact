@@ -298,27 +298,37 @@ instance Num (Term Decimal) where
   negate = DecUnaryArithOp Negate
 
 data Prop a where
+  -- TX success/failure
+  Abort            ::                             Prop Bool
+  Success          ::                             Prop Bool
+
+  -- Binding
+  -- Var              :: Text       ->               Prop a   -- non-HOAS style
+  -- WithArg          :: Text -> (Prop a -> Prop b) -> Prop b -- HOAS style
+
   -- Logical connectives
   Implies          :: Prop Bool  -> Prop Bool  -> Prop Bool
   Not              :: Prop Bool  ->               Prop Bool
   And              :: Prop Bool  -> Prop Bool  -> Prop Bool
   Or               :: Prop Bool  -> Prop Bool  -> Prop Bool
 
-  -- Domain properties
+  -- TODO: Int ops
+
+  -- TODO: String ops (e.g. empty)
+
+  -- DB properties
   TableWrite       :: TableName  ->               Prop Bool -- anything in table is written
   TableRead        :: TableName  ->               Prop Bool -- anything in table is read
   ColumnWrite      :: TableName  -> ColumnName -> Prop Bool -- particular column is written
-  --
-  -- TODO: these properties demonstrate that we probably want to parameterize
-  --       by a type (int/bool, etc), and allow appropriate e.g. numeric ops
-  --
   CellIncrease     :: TableName  -> ColumnName -> Prop Bool -- any cell at all in col increases
   ColumnConserve   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col == 0
   ColumnIncrease   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col >  0
   --
+  -- TODO: StaleRead?
+  --
+
+  -- Authorization
   KsNameAuthorized :: KeySetName ->               Prop Bool -- keyset authorized by name
-  Abort            ::                             Prop Bool
-  Success          ::                             Prop Bool
   --
   -- TODO: row-level keyset enforcement seems like it needs some form of
   --       unification, so that using a variable we can connect >1 domain
@@ -328,11 +338,6 @@ data Prop a where
   --
   --       RowKsEnforced  :: RowUid    ->            DomainProperty
   --       RowWrite       :: TableName -> RowUid  -> DomainProperty
-  --
-  -- TODO: Add constructors for constraining function arguments
-  --       - e.g.: x > 10 `Implies` table_write(t0)
-  --
-  -- TODO: StaleRead?
   --
 
 data Check where
