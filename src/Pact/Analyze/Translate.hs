@@ -253,8 +253,8 @@ translateNode = \case
       _        -> throwError undefined
 
   AST_Minutes minutes -> do
-    ETerm minutes' minutes <- translateNode minutes
-    case minutes of
+    ETerm minutes' minutesTy <- translateNode minutes
+    case minutesTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60) minutes') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60) minutes') TDecimal
       _        -> throwError undefined
@@ -302,8 +302,8 @@ translateNode = \case
         mkArith :: TranslateM ETerm
         mkArith = case args of
           [a, b] -> do
-            ETerm a' aTy <- translateNode a
-            ETerm b' bTy <- translateNode b
+            ETerm a' tyA <- translateNode a
+            ETerm b' tyB <- translateNode b
             if
               | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
                 -> let opFromName = \case
@@ -313,7 +313,7 @@ translateNode = \case
                          "/"           -> Div
                          "^"           -> Pow
                          "log"         -> Log
-                 in case (aTy, bTy) of
+                 in case (tyA, tyB) of
                    (TInt, TInt)         -> pure $
                      ETerm (IntArithOp (opFromName fn) a' b') TInt
                    (TDecimal, TDecimal) -> pure $
@@ -323,7 +323,7 @@ translateNode = \case
                    (TDecimal, TInt)     -> pure $
                      ETerm (DecIntArithOp (opFromName fn) a' b') TDecimal
                    _ -> throwError $ MalformedArithOp fn args
-              | otherwise -> case (aTy, bTy, fn) of
+              | otherwise -> case (tyA, tyB, fn) of
                 (TDecimal, TInt, "round")   -> pure $
                   ETerm (RoundingLikeOp2 Round a' b') TDecimal
                 (TDecimal, TInt, "ceiling") -> pure $
@@ -374,7 +374,6 @@ translateNode = \case
     | elem name ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' _schema <- translateNode obj
-    schema <- translateSchema $ _aNode obj
     pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do

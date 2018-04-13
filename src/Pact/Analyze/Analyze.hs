@@ -26,6 +26,7 @@ import Data.String (IsString(..))
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
+import Data.Traversable (for)
 import Pact.Types.Runtime hiding (ColumnId, TableName, Term, Type, EObject,
                                   RowKey(..), WriteType(..))
 import Pact.Types.Version (pactVersion)
@@ -312,11 +313,10 @@ namedAuth str = do
 
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
-  LiteralObject obj -> do
-    obj' <- iforM obj $ \colName (fieldType, ETerm tm _) -> do
+  LiteralObject obj -> Object <$>
+    for obj (\(fieldType, ETerm tm _) -> do
       val <- analyzeTerm tm
-      pure (fieldType, mkAVal val)
-    pure (Object obj')
+      pure (fieldType, mkAVal val))
 
   Read tn (Schema fields) rowId -> do
     rId <- analyzeTerm rowId
@@ -335,8 +335,8 @@ analyzeTermO = \case
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
     case val of
-      AVal  val -> throwError $ AValUnexpectedlySVal val
-      AnObj obj -> pure obj
+      AVal  val' -> throwError $ AValUnexpectedlySVal val'
+      AnObj obj  -> pure obj
 
   Let name (ETerm rhs _) body -> do
     val <- analyzeTerm rhs
@@ -358,23 +358,17 @@ analyzeTermO = \case
       Just False -> analyzeTermO else'
       Nothing    -> throwError "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
-  At schema@(Schema schemaFields) colName obj retType -> do
+  At _schema colName obj _retType -> do
     Object obj' <- analyzeTermO obj
-
-    -- Filter down to only fields which contain the type we're looking for
-    let relevantFields
-          = map fst
-          $ filter (\(_name, ty) -> ty == retType)
-          $ Map.toList schemaFields
 
     colName' <- analyzeTerm colName
 
     let getObjVal :: String -> AnalyzeM Object
         getObjVal fieldName = case Map.lookup fieldName obj' of
           Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
-          Just (fieldType, AVal val) -> throwError $
+          Just (fieldType, AVal _) -> throwError $
             ObjFieldOfWrongType fieldName fieldType
-          Just (fieldType, AnObj x) -> pure x
+          Just (_fieldType, AnObj x) -> pure x
 
     case unliteral colName' of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
@@ -480,7 +474,7 @@ analyzeTerm = \case
       analyzeTerm body
 
   Var name -> do
-    theScope <- view scope
+    -- theScope <- view scope
     -- traceShowM ("Var name", name, theScope)
     --
     -- TODO: probably throw AnalyzeFailures where we currently assume, because

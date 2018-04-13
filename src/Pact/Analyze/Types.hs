@@ -185,8 +185,8 @@ data ETerm where
 
 mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
 mapETerm f term = case term of
-  ETerm term ty    -> ETerm (f term) ty
-  EObject term sch -> EObject (f term) sch
+  ETerm term' ty    -> ETerm (f term') ty
+  EObject term' sch -> EObject (f term') sch
 
 data Term ret where
   IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a

@@ -107,7 +107,7 @@ checkTopFunction
   :: TopLevel Node
   -> Check
   -> IO CheckResult
-checkTopFunction (TopFun (FDefun _ _ (FunType _ retTy) args body' _)) check =
+checkTopFunction (TopFun (FDefun _ _ _ args body' _)) check =
   let argNodes :: [Node]
       argNodes = _nnNamed <$> args
 
