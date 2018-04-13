@@ -48,8 +48,8 @@ suite = tests
               (defun test:bool (x:integer)
                 (if (< x 10) true false))
             |]
-      expectPass code $ Valid $ Occurs Success
-      expectPass code $ Valid $ Not $ Occurs Abort
+      expectPass code $ Valid Success
+      expectPass code $ Valid $ Not Abort
 
   , scope "enforce.trivial" $ do
       let code =
@@ -57,10 +57,10 @@ suite = tests
               (defun test:bool ()
                 (enforce false "cannot pass"))
             |]
-      expectPass code $ Satisfiable $ Occurs Abort
-      expectPass code $ Valid $ Occurs Abort
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Valid Abort
 
-      expectFail code $ Satisfiable $ Occurs Success
+      expectFail code $ Satisfiable Success
 
   , scope "enforce.conditional" $ do
       let code =
@@ -70,11 +70,11 @@ suite = tests
                   (enforce (< x 5) "abort sometimes")
                   true))
             |]
-      expectPass code $ Satisfiable $ Occurs Abort
-      expectPass code $ Satisfiable $ Not $ Occurs Abort
-      expectPass code $ Satisfiable $ Occurs Success
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable $ Not Abort
+      expectPass code $ Satisfiable Success
 
-      expectFail code $ Valid $ Occurs Abort
+      expectFail code $ Valid $ Abort
 
   , scope "enforce.sequence" $ do
       let code =
@@ -86,7 +86,7 @@ suite = tests
                   true
                   false))
             |]
-      expectPass code $ Valid $ Occurs Abort
+      expectPass code $ Valid Abort
 
    , scope "enforce.sequence" $ do
       let code =
@@ -97,8 +97,8 @@ suite = tests
                   true
                   false))
             |]
-      expectPass code $ Satisfiable $ Occurs Abort
-      expectPass code $ Satisfiable $ Occurs Success
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
 
   , scope "enforce-keyset.name.static" $ do
       let code =
@@ -106,13 +106,11 @@ suite = tests
               (defun test:bool ()
                 (enforce-keyset 'ks))
             |]
-      expectPass code $ Satisfiable $ Occurs Abort
-      expectPass code $ Satisfiable $ Occurs Success
-      expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
-                                  `Implies` Occurs Abort
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
 
-      expectFail code $ Valid $ Not (Occurs $ KsNameAuthorized "different-ks")
-                                  `Implies` Occurs Abort
+      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") `Implies` Abort
 
   , scope "enforce-keyset.name.dynamic" $ do
       let code =
@@ -120,8 +118,7 @@ suite = tests
               (defun test:bool ()
                 (enforce-keyset (+ "k" "s")))
             |]
-      expectPass code $ Valid $ Not (Occurs $ KsNameAuthorized "ks")
-                      `Implies` Occurs Abort
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
 
   --
   -- TODO: enforce-keyset.object
@@ -142,7 +139,7 @@ suite = tests
                   (enforce (= stu-name "stu") "name is stu")
                   (enforce (= stu-balance 5) "balance is 5")))
             |]
-      in expectPass code $ Valid $ Occurs Success
+      in expectPass code $ Valid Success
 
   , scope "table-read.one-read" $
       let code =
@@ -160,7 +157,7 @@ suite = tests
                   )
                 )
             |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+      in expectPass code $ Valid $ Not Abort
 
   , scope "at.dynamic-key" $
       let code =
@@ -179,7 +176,7 @@ suite = tests
                   )
                 )
             |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+      in expectPass code $ Valid $ Not Abort
 
   -- TODO: pending fix for https://github.com/kadena-io/pact/issues/53
   -- , scope "at.object-in-object" $
@@ -194,7 +191,7 @@ suite = tests
   --               (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
   --                 (at "inner" obj)))
   --           |]
-  --     in expectPass code $ Valid $ Not $ Occurs Abort
+  --     in expectPass code $ Valid $ Not Abort
 
   --
   -- TODO: test TableRead
@@ -209,8 +206,8 @@ suite = tests
               (defun test:string ()
                 (insert tokens "stu" {"balance": 5}))
             |]
-      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
-      expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
+      expectPass code $ Valid $ TableWrite "tokens"
+      expectPass code $ Valid $ Not $ TableWrite "other"
 
   , scope "table-write.update" $ do
       let code =
@@ -221,7 +218,7 @@ suite = tests
               (defun test:string ()
                 (update tokens "stu" {"balance": 5}))
             |]
-      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+      expectPass code $ Valid $ TableWrite "tokens"
 
   , scope "table-write.write" $ do
       let code =
@@ -232,7 +229,7 @@ suite = tests
               (defun test:string ()
                 (write tokens "stu" {"balance": 5}))
             |]
-      expectPass code $ Valid $ Occurs $ TableWrite "tokens"
+      expectPass code $ Valid $ TableWrite "tokens"
 
   , scope "table-write.conditional" $ do
       let code =
@@ -245,9 +242,9 @@ suite = tests
                   (insert tokens "stu" {"balance": 5})
                   "didn't write"))
             |]
-      expectPass code $ Satisfiable $ Occurs $ TableWrite "tokens"
-      expectPass code $ Satisfiable $ Not $ Occurs $ TableWrite "tokens"
-      expectPass code $ Valid $ Not $ Occurs $ TableWrite "other"
+      expectPass code $ Satisfiable $ TableWrite "tokens"
+      expectPass code $ Satisfiable $ Not $ TableWrite "tokens"
+      expectPass code $ Valid $ Not $ TableWrite "other"
 
   , scope "table-write.conditional" $ do
       let code =
@@ -263,8 +260,7 @@ suite = tests
                   "didn't write"
                   (insert tokens "stu" {"balance": 5})))
             |]
-      expectPass code $ Valid $ Occurs Success
-                      `Implies` Not (Occurs $ TableWrite "tokens")
+      expectPass code $ Valid $ Success `Implies` Not (TableWrite "tokens")
 
   , scope "conserves-mass" $ do
       let code =
@@ -280,9 +276,8 @@ suite = tests
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectPass code $ Valid $ Occurs Success
-                      `Implies` Occurs (ColumnConserve "accounts" "balance")
-      -- expectPass code $ Valid $ Occurs $ CellIncrease "accounts" "balance"
+      expectPass code $ Valid $ Success `Implies` ColumnConserve "accounts" "balance"
+      -- expectPass code $ Valid $ CellIncrease "accounts" "balance"
 
   , scope "with-read" $ do
       let code =
@@ -293,7 +288,7 @@ suite = tests
                   (enforce (= bal 10) "Read after write failed")))
             |]
 
-      expectPass code $ Valid $ Occurs Success
+      expectPass code $ Valid Success
 
   , scope "with-read.nested" $ do
       let code =
@@ -306,7 +301,7 @@ suite = tests
                     (enforce (= bal 10) "Shadowing failed"))))
             |]
 
-      expectPass code $ Valid $ Occurs Success
+      expectPass code $ Valid Success
 
   , scope "with-read.overlapping-names" $ do
       let code =
@@ -324,7 +319,7 @@ suite = tests
                     num)))
             |]
 
-      expectPass code $ Valid $ Occurs Success
+      expectPass code $ Valid Success
 
   --
   -- TODO: pending fix for https://github.com/kadena-io/pact/issues/52
@@ -339,7 +334,7 @@ suite = tests
   --                   bal)))
   --           |]
   --
-  --     expectPass code $ Valid $ Occurs Success
+  --     expectPass code $ Valid Success
   --
   -- , scope "bind.from-literal" $ do
   --     let code =
@@ -351,7 +346,7 @@ suite = tests
   --                   bal)))
   --           |]
   --
-  --     expectPass code $ Valid $ Occurs Success
+  --     expectPass code $ Valid Success
 
   , scope "let" $ do
       scope "sanity" $ do
@@ -364,7 +359,7 @@ suite = tests
                       (enforce (> z y) "z > y")
                       true))
                 |]
-          in expectPass code $ Valid $ Not $ Occurs Abort
+          in expectPass code $ Valid $ Not Abort
 
         scope "2" $
           let code =
@@ -375,7 +370,7 @@ suite = tests
                       (enforce (< z y) "z > y")
                       true))
                 |]
-          in expectPass code $ Valid $ Occurs Abort
+          in expectPass code $ Valid Abort
 
       scope "let*.sanity" $
           let code =
@@ -385,7 +380,7 @@ suite = tests
                           (y (* x 10)))
                      (enforce (= 22 (+ x y)) "x + y = 22")))
                 |]
-          in expectPass code $ Valid $ Not $ Occurs Abort
+          in expectPass code $ Valid $ Not Abort
 
       scope "nested" $
           let code =
@@ -396,7 +391,7 @@ suite = tests
                      (let ((z (let ((w 1)) (+ (+ x y) w))))
                        (enforce (= 6 z) "2 + 3 + 1 = 6"))))
                 |]
-          in expectPass code $ Valid $ Not $ Occurs Abort
+          in expectPass code $ Valid $ Not Abort
 
   , scope "time" $
       let code =
@@ -430,7 +425,7 @@ suite = tests
                     "1.5 minutes later")
                 ))
             |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+      in expectPass code $ Valid $ Not Abort
 
   , scope "arith" $
       let code =
@@ -539,7 +534,7 @@ suite = tests
                   (enforce (= (ceiling -100.15234 2) -100.15) "")
                 ))
             |]
-      in expectPass code $ Valid $ Not $ Occurs Abort
+      in expectPass code $ Valid $ Not Abort
   ]
 
 main :: IO ()

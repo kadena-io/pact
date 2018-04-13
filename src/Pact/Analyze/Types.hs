@@ -297,24 +297,28 @@ instance Num (Term Decimal) where
   signum = DecUnaryArithOp Signum
   negate = DecUnaryArithOp Negate
 
---
--- TODO: collapse this into Prop.
---
-data DomainProperty where
-  TableWrite       :: TableName  ->               DomainProperty -- anything in table is written
-  TableRead        :: TableName  ->               DomainProperty -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnName -> DomainProperty -- particular column is written
+data Prop a where
+  -- Logical connectives
+  Implies          :: Prop Bool  -> Prop Bool  -> Prop Bool
+  Not              :: Prop Bool  ->               Prop Bool
+  And              :: Prop Bool  -> Prop Bool  -> Prop Bool
+  Or               :: Prop Bool  -> Prop Bool  -> Prop Bool
+
+  -- Domain properties
+  TableWrite       :: TableName  ->               Prop Bool -- anything in table is written
+  TableRead        :: TableName  ->               Prop Bool -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnName -> Prop Bool -- particular column is written
   --
   -- TODO: these properties demonstrate that we probably want to parameterize
   --       by a type (int/bool, etc), and allow appropriate e.g. numeric ops
   --
-  CellIncrease     :: TableName  -> ColumnName -> DomainProperty -- any cell at all in col increases
-  ColumnConserve   :: TableName  -> ColumnName -> DomainProperty -- sum of all changes in col == 0
-  ColumnIncrease   :: TableName  -> ColumnName -> DomainProperty -- sum of all changes in col >  0
+  CellIncrease     :: TableName  -> ColumnName -> Prop Bool -- any cell at all in col increases
+  ColumnConserve   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col == 0
+  ColumnIncrease   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col >  0
   --
-  KsNameAuthorized :: KeySetName ->               DomainProperty -- keyset authorized by name
-  Abort            ::                             DomainProperty
-  Success          ::                             DomainProperty
+  KsNameAuthorized :: KeySetName ->               Prop Bool -- keyset authorized by name
+  Abort            ::                             Prop Bool
+  Success          ::                             Prop Bool
   --
   -- TODO: row-level keyset enforcement seems like it needs some form of
   --       unification, so that using a variable we can connect >1 domain
@@ -325,21 +329,11 @@ data DomainProperty where
   --       RowKsEnforced  :: RowUid    ->            DomainProperty
   --       RowWrite       :: TableName -> RowUid  -> DomainProperty
   --
-  -- TODO: Add DomainProperty/ies for constraining function arguments
+  -- TODO: Add constructors for constraining function arguments
   --       - e.g.: x > 10 `Implies` table_write(t0)
-  --
-  -- TODO: possibly allow use of input as parameter to domain properties
-  --       - e.g.: column_increases_by(t0, x)     [where x is function input]
   --
   -- TODO: StaleRead?
   --
-
-data Prop a where
-  Implies :: Prop Bool      -> Prop Bool -> Prop Bool
-  Not     :: Prop Bool      ->              Prop Bool
-  And     :: Prop Bool      -> Prop Bool -> Prop Bool
-  Or      :: Prop Bool      -> Prop Bool -> Prop Bool
-  Occurs  :: DomainProperty ->              Prop Bool
 
 data Check where
   Satisfiable :: Prop Bool -> Check

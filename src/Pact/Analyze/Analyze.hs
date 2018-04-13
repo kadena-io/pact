@@ -649,20 +649,8 @@ analyzeTerm = \case
     --traceShowM n
     throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)
 
-analyzeDomainProperty :: DomainProperty -> AnalyzeM SBool
-analyzeDomainProperty Success = use succeeds
-analyzeDomainProperty Abort = bnot <$> analyzeDomainProperty Success
-analyzeDomainProperty (KsNameAuthorized (KeySetName n)) =
-  namedAuth $ literal $ T.unpack n
-analyzeDomainProperty (TableRead tn) = use $ tableRead tn
-analyzeDomainProperty (TableWrite tn) = use $ tableWritten tn
--- analyzeDomainProperty (CellIncrease tableName colName)
-analyzeDomainProperty (ColumnConserve tableName colName) =
-  (0 .==) <$> use (columnDelta tableName (literal colName))
-analyzeDomainProperty (ColumnIncrease tableName colName) =
-  (0 .<) <$> use (columnDelta tableName (literal colName))
-
 analyzeProperty :: Prop a -> AnalyzeM (SBV a)
+-- Logical connectives
 analyzeProperty (p1 `Implies` p2) = do
   b1 <- analyzeProperty p1
   b2 <- analyzeProperty p2
@@ -676,4 +664,16 @@ analyzeProperty (p1 `Or` p2) = do
   b2 <- analyzeProperty p2
   pure $ b1 ||| b2
 analyzeProperty (Not p) = bnot <$> analyzeProperty p
-analyzeProperty (Occurs dp) = analyzeDomainProperty dp
+
+-- Domain properties
+analyzeProperty Success = use succeeds
+analyzeProperty Abort = bnot <$> analyzeProperty Success
+analyzeProperty (KsNameAuthorized (KeySetName n)) =
+  namedAuth $ literal $ T.unpack n
+analyzeProperty (TableRead tn) = use $ tableRead tn
+analyzeProperty (TableWrite tn) = use $ tableWritten tn
+-- analyzeProperty (CellIncrease tableName colName)
+analyzeProperty (ColumnConserve tableName colName) =
+  (0 .==) <$> use (columnDelta tableName (literal colName))
+analyzeProperty (ColumnIncrease tableName colName) =
+  (0 .<) <$> use (columnDelta tableName (literal colName))
