@@ -12,11 +12,17 @@ packages:
     git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   extra-dep: true
+- location:
+    git: https://github.com/LeventErkok/sbv.git
+    commit: 55d4288c9a088852625a69d49644beb85446ec1c # symbolic_strings branch
+  extra-dep: true
 
 extra-deps:
   - bound-2
   - ed25519-donna-0.1.1
   - hashable-1.2.6.1
+  - easytest-0.2
+
 flags: {}
 
 extra-package-dbs: []
