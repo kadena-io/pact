@@ -461,7 +461,7 @@ Get metadata for KEYSET
 *module*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for MODULE. Returns a object with 'name', 'hash', 'blessed', and 'code' fields.
+Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', and 'code' fields.
 
 
 ### describe-table {#describe-table}

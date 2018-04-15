@@ -335,8 +335,7 @@ doTx :: Info -> Tx -> Maybe Text -> Repl (Either String (Term Name))
 doTx i t n = do
   e <- case t of
     Begin -> do
-      tid <- fmap succ <$> use (rEnv.eeTxId)
-      rEnv.eeTxId .= tid
+      rEnv.eeTxId %= fmap succ
       return $ evalBeginTx i
     Rollback -> return $ evalRollbackTx i
     Commit -> return $ void $ evalCommitTx i

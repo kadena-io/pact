@@ -108,7 +108,7 @@ dbDefs =
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     "Get metadata for MODULE. Returns a object with 'name', 'hash', 'blessed', and 'code' fields."
+     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', and 'code' fields."
     ])
 
 descTable :: RNativeFun e

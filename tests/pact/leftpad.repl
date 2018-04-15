@@ -5,7 +5,7 @@
 (module leftpad 'k
   (defconst VERSION 1)
   (defun left-pad (s i)
-    (+ (fold (+) "" (make-list 3 " ")) s)))
+    (+ (fold (+) "" (make-list i " ")) s)))
 
 (module impure 'k
   (defconst VERSION 1)
@@ -41,7 +41,7 @@
 (module leftpad 'k
   (defconst VERSION 2)
   (defun left-pad (s i)
-    (+ (fold (+) "" (make-list 3 " ")) s)))
+    (+ (fold (+) "" (make-list i " ")) s)))
 
 (module impure 'k
   (defconst VERSION 2)

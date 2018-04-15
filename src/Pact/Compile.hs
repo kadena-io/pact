@@ -134,11 +134,11 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
             csModule .= Just (modName,modHash)
             bd <- mapNonEmpty "module" (run >=> defOnly) body li
             csModule .= Nothing
-            blessed <- fmap concat $ forM bd $ \t -> case t of
-              TBless {..} -> return [_tBlessed]
-              _ -> return []
+            let blessed = HS.fromList $ (`concatMap` bd) $ \t -> case t of
+                  TBless {..} -> [_tBlessed]
+                  _ -> []
             return $ TModule
-              (Module modName (KeySetName k) docs code modHash (HS.fromList blessed))
+              (Module modName (KeySetName k) docs code modHash blessed)
               (abstract (const Nothing) (TList bd TyAny li)) li
 
 doModule _ li _ = syntaxError li "Invalid module definition"
