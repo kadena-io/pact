@@ -18,10 +18,10 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 ### bind {#bind}
 
-*src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *body*&nbsp;`*` *&rarr;*&nbsp;`<a>`
+*src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
 
 
-Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. 
+Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. 
 ```lisp
 pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 1
