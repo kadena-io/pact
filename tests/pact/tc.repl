@@ -107,7 +107,12 @@
     (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
       (at "wrapped" obj)))
 
-)
+  (defun bind-obj:integer ()
+    (let ((acct:object{account} { "balance": 10 }))
+      (bind acct { "balance" := bal }
+        bal)))
+
+  )
 
 (create-table persons)
 

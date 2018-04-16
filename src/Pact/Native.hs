@@ -160,8 +160,8 @@ langDefs =
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defNative (specialForm Bind) bind
-     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row),("body",TyAny)])
-     "Special form evaluates SRC to an object which is bound to with BINDINGS to run BODY. \
+     (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
+     "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
