@@ -182,9 +182,12 @@ expToProp = (\case
   EList' [EAtom' "ks-name-authorized", ELitName name]
     -> Just (KsNameAuthorized (mkK name))
 
+  EList' [EAtom' "ks-name-authorized", ESymbol name _]
+    -> Just (KsNameAuthorized (mkK name))
+
   -- EAtom' var -> Var var
 
-  _ -> Nothing) . traceShowId
+  _ -> Nothing) -- . traceShowId
 
   where mkT = Prop.TableName . T.unpack
         mkC = ColumnName . T.unpack
@@ -194,7 +197,7 @@ expToCheck :: Exp -> Maybe Check
 expToCheck = (\case
   EList' [EAtom' "satisfiable", body] -> Satisfiable <$> expToProp body
   EList' [EAtom' "valid", body] -> Valid <$> expToProp body
-  _ -> Nothing) . traceShowId
+  _ -> Nothing) -- . traceShowId
 
 doProperty :: [Exp] -> Info -> Info -> Compile (Term Name)
 doProperty exprs namei i = case exprs of
