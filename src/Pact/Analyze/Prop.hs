@@ -101,11 +101,12 @@ data Prop a where
   --
 
 deriving instance Eq (Prop Bool)
+deriving instance Show (Prop Bool)
 
 data Check where
   Satisfiable :: Prop Bool -> Check
   Valid       :: Prop Bool -> Check
-  deriving Eq
+  deriving (Eq, Show)
 
 ckProp :: Lens' Check (Prop Bool)
 ckProp = lens getter setter

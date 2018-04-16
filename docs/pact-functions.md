@@ -1312,5 +1312,5 @@ Typecheck MODULE, optionally enabling DEBUG output.
 *module*&nbsp;`string` *&rarr;*&nbsp;`string`
 
 
-verify MODULE
+Verify MODULE, checking that all properties hold.
 

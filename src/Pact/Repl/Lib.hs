@@ -51,8 +51,6 @@ import Pact.PersistPactDb
 import Pact.Types.Logger
 import Pact.Repl.Types
 
-import Debug.Trace
-
 
 initLibState :: Loggers -> IO LibState
 initLibState loggers = do
@@ -333,6 +331,9 @@ tc i as = case as of
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 #if !defined(ghcjs_HOST_OS)
+showResultLine :: CheckResult -> Text
+showResultLine = mappend "  " . Text.pack . either show show
+
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -340,9 +341,15 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        result <- liftIO $ verifyModule md
-        traceShowM md
-        return $ tStr $ Text.pack $ show result
+        results <- liftIO $ verifyModule md
+        setop $ Print $ tStr $ ifoldl
+          (\defName accum lineResults -> if null lineResults
+            then accum
+            else accum <> Text.unlines ("" : defName <> ":" : "" : fmap showResultLine lineResults))
+          "verifying properties:"
+          results
+
+        return (tStr "")
 
   _ -> argsError i as
 #endif

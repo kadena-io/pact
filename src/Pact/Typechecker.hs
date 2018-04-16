@@ -888,4 +888,4 @@ typecheckModule dbg (Module {..},refs) = do
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
-  fst <$> foldM tc (([],[]),0) (HM.elems refs)
+  fst <$> foldM tc (([],[]),0) (HM.elems (fst <$> refs))

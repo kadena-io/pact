@@ -188,9 +188,7 @@ failedTcOrAnalyze tcState fun check =
   where
     failures = tcState ^. tcFailures
 
-verifyModule :: ModuleData -> IO CheckResult
-verifyModule (_mod, modRefs) = case HM.lookup "test" modRefs of
-  Nothing -> pure $ Left $ CodeCompilationFailed "expected function 'test'"
-  Just ref -> do
-    (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-    failedTcOrAnalyze tcState fun (Satisfiable Success)
+verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
+verifyModule (_mod, modRefs) = iforM modRefs $ \name (ref, props) -> do
+  (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+  forM props $ failedTcOrAnalyze tcState fun

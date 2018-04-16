@@ -94,6 +94,7 @@ import Data.Semigroup
 import Text.Read (readMaybe)
 import Data.Hashable
 
+import Pact.Analyze.Prop (Check)
 import Pact.Types.Orphans ()
 import Pact.Types.Lang
 import Pact.Types.Util
@@ -389,7 +390,7 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
-type ModuleData = (Module,HM.HashMap Text Ref)
+type ModuleData = (Module,HM.HashMap Text (Ref, [Check]))
 
 -- | Storage for loaded modules and natives.
 data RefStore = RefStore {
