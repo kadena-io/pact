@@ -18,8 +18,9 @@
 
 module Pact.Repl.Lib where
 
-import Data.Default
 import Control.Arrow ((&&&))
+import Data.Default
+import Data.Semigroup
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Control.Monad.Reader
@@ -47,7 +48,6 @@ import Pact.Types.Runtime
 import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
-import Data.Semigroup
 import Pact.Types.Logger
 import Pact.Repl.Types
 
@@ -107,7 +107,7 @@ replDefs = ("Repl",
        "Typecheck MODULE, optionally enabling DEBUG output."
 
 #if !defined(ghcjs_HOST_OS)
-     ,defRNative "verify" verify (funType tTyString [("module",tTyString)]) "verify MODULE"
+     ,defRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
 #endif
 
      ,defRNative "json" json' (funType tTyValue [("exp",a)]) $

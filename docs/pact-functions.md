@@ -1306,3 +1306,11 @@ Convenience to build a keyset from keys present in message signatures, using 'ke
 
 Typecheck MODULE, optionally enabling DEBUG output.
 
+
+### verify {#verify}
+
+*module*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+verify MODULE
+
