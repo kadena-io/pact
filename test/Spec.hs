@@ -399,32 +399,30 @@ suite = tests
 
       expectPass code $ Valid Success
 
-  --
-  -- TODO: pending fix for https://github.com/kadena-io/pact/issues/52
-  --
-  -- , scope "bind.from-read" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:integer ()
-  --               (let ((obj:object{account} (read accounts "bob")))
-  --                 (bind obj { "balance" := bal }
-  --                   (enforce (= bal 10) "Bind failed")
-  --                   bal)))
-  --           |]
-  --
-  --     expectPass code $ Valid Success
-  --
-  -- , scope "bind.from-literal" $ do
-  --     let code =
-  --           [text|
-  --             (defun test:integer ()
-  --               (let ((acct:object{account} { "balance": 10 }))
-  --                 (bind acct { "balance" := bal }
-  --                   (enforce (= bal 10) "Bind failed")
-  --                   bal)))
-  --           |]
-  --
-  --     expectPass code $ Valid Success
+  , scope "bind.from-read" $ do
+      let code =
+            [text|
+              (defun test:integer ()
+                (update accounts "bob" { "balance": 10 })
+                (let ((obj:object{account} (read accounts "bob")))
+                  (bind obj { "balance" := bal }
+                    (enforce (= bal 10) "Bind failed")
+                    bal)))
+            |]
+
+      expectPass code $ Valid Success
+
+  , scope "bind.from-literal" $ do
+      let code =
+            [text|
+              (defun test:integer ()
+                (let ((acct:object{account} { "balance": 10 }))
+                  (bind acct { "balance" := bal }
+                    (enforce (= bal 10) "Bind failed")
+                    bal)))
+            |]
+
+      expectPass code $ Valid Success
 
   , scope "let" $ do
       scope "sanity" $ do
