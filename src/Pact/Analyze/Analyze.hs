@@ -27,29 +27,12 @@ import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Pact.Types.Runtime hiding (ColumnId, TableName, Term, Type, EObject,
-                                  RowKey(..), WriteType(..))
+import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
+                                  WriteType(..))
 import Pact.Types.Version (pactVersion)
 
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
-
--- a unique column, comprised of table name and column name
--- e.g. accounts__balance
-newtype ColumnId
-  = ColumnId String
-  deriving (Eq, Ord)
-
-instance SymWord ColumnId where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (ColumnId cid) = mkConcreteString cid
-  fromCW = wrappedStringFromCW ColumnId
-
-instance HasKind ColumnId where
-  kindOf _ = KString
-
-instance IsString ColumnId where
-  fromString = ColumnId
 
 -- a unique cell, from a column name and a row key
 -- e.g. balance__25
