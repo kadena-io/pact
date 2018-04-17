@@ -35,8 +35,6 @@ import Pact.Analyze.Patterns
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
-import Debug.Trace
-
 data TranslateFailure
   = BranchesDifferentTypes EType EType
   | NonStringLitInBinding (AST Node)
@@ -128,7 +126,7 @@ translateType node = go $ _aTy node
                 --
                 TyPrim TyValue  -> throwError $ UnhandledType node ty
                 TyPrim TyKeySet -> throwError $ UnhandledType node ty
-                other           -> throwError $ UnhandledType node ty
+                _               -> throwError $ UnhandledType node ty
             )
 
       -- TODO(joel): understand the difference between the TyUser and TySchema cases

@@ -423,7 +423,7 @@ analyzeTermO = \case
           Just (fieldType, AVal _) -> throwError $
             ObjFieldOfWrongType fieldName fieldType
           Just (_fieldType, AnObj x)  -> pure x
-          Just (fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
     case unliteral colName' of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
@@ -468,7 +468,7 @@ analyzeTerm = \case
           Just (_fieldType, AVal val) -> pure (mkSBV val)
           Just (fieldType, AnObj _x)  -> throwError $
             ObjFieldOfWrongType fieldName fieldType
-          Just (fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
     firstVal <- getObjVal firstName
 
