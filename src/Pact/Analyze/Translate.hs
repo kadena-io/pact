@@ -50,6 +50,7 @@ data TranslateFailure
   | MissingConcreteType (Pact.Type Pact.UserType)
   | AlternativeFailures [TranslateFailure]
   | MonadFailure String
+  | NonStaticColumns (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving Show
@@ -68,6 +69,7 @@ describeTranslateFailure = \case
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
   MonadFailure str -> "Translation failure: " <> T.pack str
+  NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   where
     tShow :: Show a => a -> Text
@@ -434,12 +436,13 @@ translateNode = \case
     schema <- translateSchema node
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
 
+  -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
-    columns' <- forM columns $ \col -> do
-      ETerm tm TStr <- translateNode col
-      pure tm
+    columns' <- forM columns $ \case
+      AST_Lit (LString col) -> pure col
+      bad                   -> throwError (NonStaticColumns bad)
 
     pure (EObject
       (ReadCols (TableName (T.unpack table)) schema key' columns')

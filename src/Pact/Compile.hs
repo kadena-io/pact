@@ -54,7 +54,7 @@ import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Hash
 
-import Debug.Trace
+-- import Debug.Trace
 
 type MkInfo = Exp -> Info
 

@@ -22,6 +22,7 @@ import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
@@ -74,19 +75,21 @@ instance Mergeable AnalyzeLog where
 
 data SymbolicCells
   = SymbolicCells
-    { _scIntValues    :: SArray CellId Integer
-    , _scBoolValues   :: SArray CellId Bool
-    , _scStringValues :: SArray CellId String
-    -- TODO: decimal
-    -- TODO: time
+    { _scIntValues     :: SArray CellId Integer
+    , _scBoolValues    :: SArray CellId Bool
+    , _scStringValues  :: SArray CellId String
+    , _scDecimalValues :: SArray CellId Decimal
+    , _scTimeValues    :: SArray CellId Time
     -- TODO: opaque blobs
     }
     deriving (Show)
 
 -- Implemented by-hand until 8.4, when we have DerivingStrategies
 instance Mergeable SymbolicCells where
-  symbolicMerge force test (SymbolicCells a b c) (SymbolicCells a' b' c') =
-      SymbolicCells (f a a') (f b b') (f c c')
+  symbolicMerge force test
+    (SymbolicCells a b c d e)
+    (SymbolicCells a' b' c' d' e')
+    = SymbolicCells (f a a') (f b b') (f c c') (f d d') (f e e')
     where
       f :: SymWord a => SArray CellId a -> SArray CellId a -> SArray CellId a
       f = symbolicMerge force test
@@ -176,6 +179,8 @@ allocateSymbolicCells tableNames = sequence $ TableMap $ Map.fromList $
       <$> newArray "intCells"
       <*> newArray "boolCells"
       <*> newArray "stringCells"
+      <*> newArray "decimalCells"
+      <*> newArray "timeCells"
 
 data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
@@ -314,6 +319,22 @@ stringCell
 stringCell tn sCn sRk =
   latticeState.lasTableCells.singular (ix tn).scStringValues.symArrayAt (sCellId sCn sRk)
 
+decimalCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState SDecimal
+decimalCell tn sCn sRk =
+  latticeState.lasTableCells.singular (ix tn).scDecimalValues.symArrayAt (sCellId sCn sRk)
+
+timeCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState STime
+timeCell tn sCn sRk =
+  latticeState.lasTableCells.singular (ix tn).scTimeValues.symArrayAt (sCellId sCn sRk)
+
 namedAuth :: SString -> AnalyzeM SBool
 namedAuth str = do
   arr <- view nameAuths
@@ -332,17 +353,33 @@ analyzeTermO = \case
     obj <- iforM fields $ \fieldName fieldType -> do
       let sCn = literal $ ColumnName fieldName
       x <- case fieldType of
-        EType TInt  -> mkAVal <$> use (intCell    tn sCn (coerceSBV rId))
-        EType TBool -> mkAVal <$> use (boolCell   tn sCn (coerceSBV rId))
-        EType TStr  -> mkAVal <$> use (stringCell tn sCn (coerceSBV rId))
-        -- TODO: more field types
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn (coerceSBV rId))
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn (coerceSBV rId))
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
       pure (fieldType, x)
     pure (Object obj)
 
-  ReadCols tn (Schema fields) rowId cols ->
+  ReadCols tn (Schema fields) rowId cols -> do
     -- Intersect both the returned object and its type with the requested
     -- columns
-    error "TODO: ReadCols"
+    let colSet = Set.fromList cols
+        relevantFields
+          = Map.filterWithKey (\k _ -> T.pack k `Set.member` colSet) fields
+
+    rId <- analyzeTerm rowId
+    tableRead tn .= true
+    obj <- iforM relevantFields $ \fieldName fieldType -> do
+      let sCn = literal $ ColumnName fieldName
+      x <- case fieldType of
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn (coerceSBV rId))
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn (coerceSBV rId))
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
+      pure (fieldType, x)
+    pure (Object obj)
 
   Var name -> do
     Just val <- view (scope . at name)

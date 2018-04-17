@@ -165,7 +165,7 @@ data Term ret where
   -- determine statically which fields can be accessed.
   At             ::                        Schema      -> Term String              -> Term Object    -> EType -> Term a
   Read           ::                        TableName   -> Schema -> Term String    ->                   Term Object
-  ReadCols       ::                        TableName   -> Schema -> Term String    -> [Term String]  -> Term Object
+  ReadCols       ::                        TableName   -> Schema -> Term String    -> [Text]         -> Term Object
   -- NOTE: pact really does return a string here:
   Write          ::                        TableName -> Term String -> Term Object -> Term String
 
@@ -260,6 +260,7 @@ instance Num (Term Decimal) where
   negate = DecUnaryArithOp Negate
 
 type Time = Int64
+type STime = SBV Time
 
 mkTime :: UTCTime -> Time
 mkTime utct
@@ -269,9 +270,8 @@ mkTime utct
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
+type SDecimal = SBV Decimal
 
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
   mantissa % 10 ^ places
-
-type SDecimal = (SWord8, SInteger)
