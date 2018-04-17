@@ -32,6 +32,7 @@ newtype Schema
 data AVal
   = AVal SBVI.SVal
   | AnObj Object
+  | OpaqueVal
   deriving (Eq, Show)
 
 mkSBV :: SBVI.SVal -> SBV a
@@ -111,6 +112,12 @@ data LogicalOp = AndOp | OrOp | NotOp
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
+data Any = Any
+  deriving (Show, Read, Eq, Ord, Data)
+
+instance HasKind Any
+instance SymWord Any
+
 -- The type of a simple type
 data Type a where
   TInt     :: Type Integer
@@ -118,6 +125,7 @@ data Type a where
   TStr     :: Type String
   TTime    :: Type Time
   TDecimal :: Type Decimal
+  TAny     :: Type Any
 
 data EType where
   -- TODO: parametrize over constraint
@@ -130,6 +138,7 @@ typeEq TBool    TBool    = Just Refl
 typeEq TStr     TStr     = Just Refl
 typeEq TTime    TTime    = Just Refl
 typeEq TDecimal TDecimal = Just Refl
+typeEq TAny     TAny     = Just Refl
 typeEq _        _        = Nothing
 
 instance Eq EType where

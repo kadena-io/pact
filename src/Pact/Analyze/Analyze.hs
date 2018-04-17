@@ -196,6 +196,7 @@ data AnalyzeFailure
   | UnsupportedRoundingLikeOp1 RoundingLikeOp
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
   | FailureMessage Text
+  | OpaqueValEncountered
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
   | UnhandledTerm Text
@@ -221,6 +222,7 @@ describeAnalyzeFailure = \case
   FailureMessage msg -> msg
   UnhandledObject obj -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> tShow obj
   UnhandledTerm termText -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> termText
+  OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
 
 tShow :: Show a => a -> Text
 tShow = T.pack . show
@@ -358,6 +360,7 @@ analyzeTermO = \case
         EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
         EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
         EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
+        EType TAny     -> pure OpaqueVal
       pure (fieldType, x)
     pure (Object obj)
 
@@ -378,6 +381,7 @@ analyzeTermO = \case
         EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
         EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
         EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
+        EType TAny     -> pure OpaqueVal
       pure (fieldType, x)
     pure (Object obj)
 
@@ -387,6 +391,7 @@ analyzeTermO = \case
     case val of
       AVal  val' -> throwError $ AValUnexpectedlySVal val'
       AnObj obj  -> pure obj
+      OpaqueVal  -> throwError OpaqueValEncountered
 
   Let name (ETerm rhs _) body -> do
     val <- analyzeTerm rhs
@@ -418,7 +423,8 @@ analyzeTermO = \case
           Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
           Just (fieldType, AVal _) -> throwError $
             ObjFieldOfWrongType fieldName fieldType
-          Just (_fieldType, AnObj x) -> pure x
+          Just (_fieldType, AnObj x)  -> pure x
+          Just (fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
     case unliteral colName' of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
@@ -461,8 +467,9 @@ analyzeTerm = \case
     let getObjVal fieldName = case Map.lookup fieldName obj' of
           Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
           Just (_fieldType, AVal val) -> pure (mkSBV val)
-          Just (fieldType, AnObj _x) -> throwError $
+          Just (fieldType, AnObj _x)  -> throwError $
             ObjFieldOfWrongType fieldName fieldType
+          Just (fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
     firstVal <- getObjVal firstName
 
@@ -506,7 +513,9 @@ analyzeTerm = \case
 
           EType TStr  -> stringCell tn sCn (coerceSBV sRk) .= mkSBV val'
           -- TODO: rest of cell types
+        -- TODO(joel): I'm not sure this is the right error to throw
         AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
+        OpaqueVal   -> throwError OpaqueValEncountered
 
     --
     -- TODO: make a constant on the pact side that this uses:
@@ -536,7 +545,8 @@ analyzeTerm = \case
     -- Assume the variable is well-typed after typechecking
     case val of
       AVal x -> pure (mkSBV x)
-      AnObj _ -> undefined
+      AnObj obj -> throwError $ AValUnexpectedlyObj obj
+      OpaqueVal -> throwError OpaqueValEncountered
 
   IntArithOp op x y -> do
     x' <- analyzeTerm x

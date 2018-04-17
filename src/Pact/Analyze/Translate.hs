@@ -118,6 +118,11 @@ translateType node = go $ _aTy node
                 TyPrim TyInteger -> pure $ EType TInt
                 TyPrim TyString  -> pure $ EType TStr
                 TyPrim TyTime    -> pure $ EType TTime
+
+                -- Pretend any and var are the same -- we can't analyze either
+                -- of them.
+                TyAny            -> pure $ EType TAny
+                TyVar _          -> pure $ EType TAny
                 --
                 -- TODO: handle these:
                 --
@@ -129,15 +134,15 @@ translateType node = go $ _aTy node
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
       TySchema _ ty' -> go ty'
 
-      -- In these cases, the typechecker failed to produce a concrete type.
-      ty@TyAny     -> throwError $ MissingConcreteType ty
-      ty@(TyVar _) -> throwError $ MissingConcreteType ty
-
       TyPrim TyBool    -> pure $ EType TBool
       TyPrim TyDecimal -> pure $ EType TDecimal
       TyPrim TyInteger -> pure $ EType TInt
       TyPrim TyString  -> pure $ EType TStr
       TyPrim TyTime    -> pure $ EType TTime
+
+      -- Pretend any and var are the same -- we can't analyze either of them.
+      TyAny            -> pure $ EType TAny
+      TyVar _          -> pure $ EType TAny
 
       --
       -- TODO: handle these:

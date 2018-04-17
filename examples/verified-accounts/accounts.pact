@@ -17,6 +17,7 @@
      amount:decimal
      ccy:string
      auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
+     data
      )
 
   (deftable accounts:{account}
@@ -35,6 +36,7 @@
       , "ccy": ccy
       , "auth": AUTH_KEYSET
       , "date": date
+      , "data": "Created account"
       }
     ))
 
@@ -67,7 +69,7 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
-    (read accounts id ['balance 'ccy 'date 'amount]))
+    (read accounts id ['balance 'ccy 'data 'date 'amount]))
 
   (defun account-keys ()
     "Get all account keys"
@@ -82,7 +84,8 @@
     (update accounts address
             { "balance": amount
             , "amount": amount
-            , "date": date }
+            , "date": date
+            , "data": "Admin account funding" }
       ))
 
   (defun read-all ()
@@ -138,8 +141,8 @@
   ;       (= final-balance initial-balance)))
   ;   )
 
-  (defun debit (acct amount date)
-    "Debit AMOUNT from ACCT balance recording DATE"
+  (defun debit (acct amount date data)
+    "Debit AMOUNT from ACCT balance recording DATE and DATA"
     (with-read accounts acct
               { "balance":= balance
               , "auth" := auth
@@ -149,6 +152,7 @@
                 { "balance": (- balance amount)
                 , "amount": (- amount)
                 , "date": date
+                , "data": data
                 }
           )))
 
@@ -167,14 +171,15 @@
   ;   (with-read 'delta accounts acct
   ;     { "balance" := amount }))
 
- (defun credit (acct amount date)
-   "Credit AMOUNT to ACCT balance recording DATE"
+ (defun credit (acct amount date data)
+   "Credit AMOUNT to ACCT balance recording DATE and DATA"
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
             , "date": date
+            , "data": data
             }
       )))
 
@@ -196,6 +201,7 @@
         , "ccy": ccy
         , "auth": (format "%s" [(pact-id)])
         , "date": 0
+        , "data": "Created pact account"
         }
       )
       a))
