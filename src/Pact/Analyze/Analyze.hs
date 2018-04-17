@@ -53,8 +53,8 @@ instance IsString CellId where
   fromString = CellId
 
 data AnalyzeEnv = AnalyzeEnv
-  { _scope     :: Map Text AVal      -- used with 'local' in a stack fashion
-  , _nameAuths :: SArray String Bool -- read-only
+  { _scope     :: Map Text AVal          -- used with 'local' as a stack
+  , _nameAuths :: SArray KeySetName Bool -- read-only
   } deriving Show
 
 newtype AnalyzeLog
@@ -333,13 +333,16 @@ timeCell
 timeCell tn sCn sRk =
   latticeState.lasTableCells.singular (ix tn).scTimeValues.symArrayAt (sCellId sCn sRk)
 
-namedAuth :: SString -> AnalyzeM SBool
-namedAuth str = do
-  arr <- view nameAuths
-  pure $ readArray arr str
-
 symRowKey :: SBV String -> SBV RowKey
 symRowKey = coerceSBV
+
+symKsName :: SBV String -> SBV KeySetName
+symKsName = coerceSBV
+
+namedAuth :: SBV KeySetName -> AnalyzeM (SBV Bool)
+namedAuth sKsn = do
+  arr <- view nameAuths
+  pure $ readArray arr sKsn
 
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
@@ -692,7 +695,7 @@ analyzeTerm = \case
       (NotOp, [a])    -> pure $ bnot a
       _               -> throwError $ MalformedLogicalOpExec op args
 
-  NameAuthorized str -> namedAuth =<< analyzeTerm str
+  NameAuthorized str -> namedAuth =<< symKsName <$> analyzeTerm str
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
@@ -719,8 +722,7 @@ analyzeProperty (Not p) = bnot <$> analyzeProperty p
 -- Domain properties
 analyzeProperty Success = use succeeds
 analyzeProperty Abort = bnot <$> analyzeProperty Success
-analyzeProperty (KsNameAuthorized (KeySetName n)) =
-  namedAuth $ literal $ T.unpack n
+analyzeProperty (KsNameAuthorized ksn) = namedAuth $ literal ksn
 analyzeProperty (TableRead tn) = use $ tableRead tn
 analyzeProperty (TableWrite tn) = use $ tableWritten tn
 -- analyzeProperty (CellIncrease tableName colName)
