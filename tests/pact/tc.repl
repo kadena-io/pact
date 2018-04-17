@@ -97,7 +97,12 @@
   (defun twoStrings:string ()
     (enforce-keyset (+ "k" "s")))
 
-)
+  (defun bind-obj:integer ()
+    (let ((acct:object{account} { "balance": 10 }))
+      (bind acct { "balance" := bal }
+        bal)))
+
+  )
 
 (create-table persons)
 
