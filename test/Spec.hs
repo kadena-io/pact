@@ -2,28 +2,18 @@
 {-# language QuasiQuotes       #-}
 {-# language Rank2Types        #-}
 
-import Control.Lens
-import           Control.Monad.State.Strict (runStateT, evalStateT)
-import           Data.Default               (def)
+import           Control.Lens
+import           Control.Monad.State.Strict (runStateT)
 import qualified Data.HashMap.Strict        as HM
-import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           EasyTest
 import           NeatInterpolation
 
-
 import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
-import           Pact.Analyze.Types         hiding (scope)
-import           Pact.Eval
-import           Pact.Native.Internal
-import           Pact.Persist.Pure
-import           Pact.PersistPactDb
 import           Pact.Repl
-import           Pact.Repl.Types
 import           Pact.Typechecker
-import           Pact.Types.Logger
 import           Pact.Types.Runtime
 import           Pact.Types.Typecheck
 
@@ -47,51 +37,8 @@ wrap code =
     (commit-tx)
   |]
 
-expectPass :: Text -> Check -> Test ()
-expectPass code check = expectRight =<< io (runTest (wrap code) check)
-
-expectFail :: Text -> Check -> Test ()
-expectFail code check = expectLeft =<< io (runTest (wrap code) check)
-
 rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
 rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
-
-loadModule :: FilePath -> ModuleName -> IO ModuleData
-loadModule fp mn = do
-  -- XXX(joel): I don't think we should execScript' here
-  (r,s) <- execScript' (Script False fp) fp
-  either (die def) (const (return ())) r
-  case view (rsModuleData mn) s of
-    Just m -> return m
-    Nothing -> die def $ "Module not found: " ++ show (fp,mn)
-
-loadFun :: FilePath -> ModuleName -> Text -> IO Ref
-loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
-  Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
-  Just (f, _checks)-> return f
-
-inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState)
-inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
-
-runCompiler :: String -> Text -> Text -> Check -> IO ()
-runCompiler = runCompilerDebug False
-
-runCompilerDebug :: Bool -> String -> Text -> Text -> Check -> IO ()
-runCompilerDebug dbg replPath' modName' funcName' check = do
-  (fun, tcState) <- inferFun dbg replPath' (ModuleName modName') funcName'
-  let failures = tcState ^. tcFailures
-  if Set.null failures
-  then do
-    r <- checkTopFunction fun check
-    putStrLn $ case r of
-      Left err  -> show err
-      Right res -> show res
-  else putStrLn $ "typechecking failed: " ++ show failures
-
-runCompilerTest :: String -> Text -> Text -> Check -> IO CheckResult
-runCompilerTest replPath modName funcName check = do
-  (fun, tcState) <- inferFun False replPath (ModuleName modName) funcName
-  failedTcOrAnalyze tcState fun check
 
 runTest :: Text -> Check -> IO CheckResult
 runTest code check = do
@@ -111,6 +58,12 @@ runTest code check = do
             Just (ref, _checks) -> do
               (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
               failedTcOrAnalyze tcState fun check
+
+expectPass :: Text -> Check -> Test ()
+expectPass code check = expectRight =<< io (runTest (wrap code) check)
+
+expectFail :: Text -> Check -> Test ()
+expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
 --
 -- For now, we're not testing conditionals or sequence on their own, but as
