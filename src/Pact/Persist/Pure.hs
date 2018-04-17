@@ -25,6 +25,7 @@ import Control.Monad.Reader ()
 import Control.Monad.State
 import Data.Default
 import Data.Typeable
+import Data.Semigroup (Semigroup)
 
 import Pact.Persist hiding (compileQuery)
 
@@ -34,12 +35,12 @@ instance Show PValue where show (PValue a) = show a
 
 newtype Tbl k = Tbl {
   _tbl :: M.Map k PValue
-  } deriving (Show,Monoid)
+  } deriving (Show,Semigroup,Monoid)
 makeLenses ''Tbl
 
 newtype Tables k = Tables {
   _tbls :: M.Map (Table k) (Tbl k)
-  } deriving (Show,Monoid)
+  } deriving (Show,Semigroup,Monoid)
 makeLenses ''Tables
 
 
