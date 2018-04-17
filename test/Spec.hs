@@ -68,7 +68,7 @@ loadModule fp mn = do
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
 loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
-  Just f -> return f
+  Just (f, _checks)-> return f
 
 inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO (TopLevel Node, TcState)
 inferFun dbg fp mn fn = loadFun fp mn fn >>= \r -> runTC 0 dbg (typecheckTopLevel r)
@@ -108,7 +108,7 @@ runTest code check = do
           case HM.lookup "test" modRefs of
             Nothing ->
               pure $ Left $ CodeCompilationFailed "expected function 'test'"
-            Just ref -> do
+            Just (ref, _checks) -> do
               (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
               failedTcOrAnalyze tcState fun check
 
