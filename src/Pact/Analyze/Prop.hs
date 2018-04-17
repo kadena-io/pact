@@ -10,6 +10,7 @@ import Data.SBV hiding (Satisfiable)
 import qualified Data.SBV.Internals as SBVI
 import Data.String (IsString(..))
 import Data.Text (Text)
+import qualified Data.Text as T
 import Pact.Types.Util (AsString)
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
@@ -23,9 +24,19 @@ mkConcreteString = SBVI.SBV
                  . SBVI.CW KString
                  . SBVI.CWString
 
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+newtype KeySetName
+  = KeySetName Text
+  deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+
 instance Show KeySetName where show (KeySetName s) = show s
+
+instance SymWord KeySetName where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (KeySetName t) = mkConcreteString $ T.unpack t
+  fromCW = wrappedStringFromCW $ KeySetName . T.pack
+
+instance HasKind KeySetName where
+  kindOf _ = KString
 
 newtype TableName
   = TableName String
