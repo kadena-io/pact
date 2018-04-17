@@ -100,7 +100,7 @@ library
                 , criterion >= 1.1.4.0 && < 1.2
                 , direct-sqlite
                 , safe-exceptions >= 0.1.5.0 && < 0.2
-                , statistics >= 0.13.3.0 && < 0.14
+                , statistics >= 0.13.3.0 && < 0.15
                 , snap-core
                 , snap-server
                 , ed25519-donna

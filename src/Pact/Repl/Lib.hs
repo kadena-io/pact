@@ -35,7 +35,11 @@ import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Criterion
 import Criterion.Types
+#if MIN_VERSION_statistics(0,14,0)
+import Statistics.Types (Estimate(..))
+#else
 import Statistics.Resampling.Bootstrap
+#endif
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
