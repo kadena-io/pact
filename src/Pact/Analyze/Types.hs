@@ -164,7 +164,8 @@ data Term ret where
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
   At             ::                        Schema      -> Term String              -> Term Object    -> EType -> Term a
-  Read           ::                        TableName   -> Schema -> Term String    ->           Term Object
+  Read           ::                        TableName   -> Schema -> Term String    ->                   Term Object
+  ReadCols       ::                        TableName   -> Schema -> Term String    -> [Term String]  -> Term Object
   -- NOTE: pact really does return a string here:
   Write          ::                        TableName -> Term String -> Term Object -> Term String
 

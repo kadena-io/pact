@@ -125,6 +125,10 @@ pattern NativeFuncSpecial f bdy <- FNative _ f _ (Just (_,SBinding bdy))
 pattern AST_Read :: Node -> Text -> AST Node -> AST Node
 pattern AST_Read node tn key <- App node (NativeFunc "read") [ShortTableName tn, key]
 
+pattern AST_ReadCols :: Node -> Text -> AST Node -> [AST Node] -> AST Node
+pattern AST_ReadCols node tn key columns
+  <- App node (NativeFunc "read") [ShortTableName tn, key, List _ columns]
+
 pattern AST_At :: a -> AST a -> AST a -> AST a
 pattern AST_At node colName obj <- App node (NativeFunc "at") [colName, obj]
 

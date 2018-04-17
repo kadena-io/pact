@@ -35,6 +35,8 @@ import Pact.Analyze.Patterns
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
+import Debug.Trace
+
 data TranslateFailure
   = BranchesDifferentTypes EType EType
   | NonStringLitInBinding (AST Node)
@@ -49,7 +51,7 @@ data TranslateFailure
   | AlternativeFailures [TranslateFailure]
   | MonadFailure String
   -- For cases we don't handle yet:
-  | UnhandledType (Pact.Type Pact.UserType)
+  | UnhandledType Node (Pact.Type Pact.UserType)
   deriving Show
 
 describeTranslateFailure :: TranslateFailure -> Text
@@ -66,7 +68,7 @@ describeTranslateFailure = \case
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
   MonadFailure str -> "Translation failure: " <> T.pack str
-  UnhandledType ty -> "Found a type we don't know how to translate yet: " <> tShow ty
+  UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   where
     tShow :: Show a => a -> Text
     tShow = T.pack . show
@@ -117,8 +119,9 @@ translateType node = go $ _aTy node
                 --
                 -- TODO: handle these:
                 --
-                TyPrim TyValue -> throwError $ UnhandledType ty
-                TyPrim TyKeySet -> throwError $ UnhandledType ty
+                TyPrim TyValue  -> throwError $ UnhandledType node ty
+                TyPrim TyKeySet -> throwError $ UnhandledType node ty
+                other           -> throwError $ UnhandledType node ty
             )
 
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
@@ -137,10 +140,10 @@ translateType node = go $ _aTy node
       --
       -- TODO: handle these:
       --
-      ty@(TyPrim TyValue) -> throwError $ UnhandledType ty
-      ty@(TyPrim TyKeySet) -> throwError $ UnhandledType ty
-      ty@(TyList _) -> throwError $ UnhandledType ty
-      ty@(TyFun _) -> throwError $ UnhandledType ty
+      ty@(TyPrim TyValue)  -> throwError $ UnhandledType node ty
+      ty@(TyPrim TyKeySet) -> throwError $ UnhandledType node ty
+      ty@(TyList _)        -> throwError $ UnhandledType node ty
+      ty@(TyFun _)         -> throwError $ UnhandledType node ty
 
 translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
@@ -430,6 +433,17 @@ translateNode = \case
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
     pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
+
+  AST_ReadCols node table key columns -> do
+    ETerm key' TStr <- translateNode key
+    schema <- translateSchema node
+    columns' <- forM columns $ \col -> do
+      ETerm tm TStr <- translateNode col
+      pure tm
+
+    pure (EObject
+      (ReadCols (TableName (T.unpack table)) schema key' columns')
+      schema)
 
   AST_At node colName obj -> do
     EObject obj' schema <- translateNode obj

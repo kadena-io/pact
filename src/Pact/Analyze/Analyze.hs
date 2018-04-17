@@ -356,6 +356,11 @@ analyzeTermO = \case
       pure (fieldType, x)
     pure (Object obj)
 
+  ReadCols tn (Schema fields) rowId cols ->
+    -- Intersect both the returned object and its type with the requested
+    -- columns
+    error "TODO: ReadCols"
+
   Var name -> do
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking

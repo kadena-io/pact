@@ -1,4 +1,5 @@
 ;; accounts module, admin keyset, and table
+; (load "examples/verified-accounts/accounts.repl")
 
 (enforce-pact-version "2.3")
 
@@ -15,9 +16,7 @@
      balance:decimal
      amount:decimal
      ccy:string
-     keyset:keyset
      auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
-     data
      )
 
   (deftable accounts:{account}
@@ -29,18 +28,17 @@
   (defconst ADMIN_KEYSET (read-keyset "accounts-admin-keyset"))
 
 
-  (defun create-account (address keyset ccy date)
+  (defun create-account (address ccy date)
     (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
       , "ccy": ccy
-      , "keyset": keyset
       , "auth": AUTH_KEYSET
       , "date": date
-      , "data": "Created account"
       }
     ))
 
+  ; TODO: defproperty?
   ; (property-of transfer conserves-mass)
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
@@ -52,9 +50,7 @@
     (with-read accounts id
               { "balance":= b
               , "ccy":= c
-              , "keyset" := ks
               , "auth" := auth }
-      (enforce-auth ks auth)
       { "balance": b, "ccy": c }
       ))
 
@@ -71,7 +67,7 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
-    (read accounts id ['balance 'ccy 'keyset 'data 'date 'amount]))
+    (read accounts id ['balance 'ccy 'date 'amount]))
 
   (defun account-keys ()
     "Get all account keys"
@@ -86,8 +82,7 @@
     (update accounts address
             { "balance": amount
             , "amount": amount
-            , "date": date
-            , "data": "Admin account funding" }
+            , "date": date }
       ))
 
   (defun read-all ()
@@ -99,6 +94,7 @@
       (debit payer amount date
             { "payee": payee
             , "payee-entity": payee-entity
+            ; TODO: can pact-analyze handle PACT_REF gracefully?
             , PACT_REF: (pact-id)
             })
       (credit payer amount date
@@ -142,20 +138,17 @@
   ;       (= final-balance initial-balance)))
   ;   )
 
-  (defun debit (acct amount date data)
-    "Debit AMOUNT from ACCT balance recording DATE and DATA"
+  (defun debit (acct amount date)
+    "Debit AMOUNT from ACCT balance recording DATE"
     (with-read accounts acct
               { "balance":= balance
-              , "keyset" := ks
               , "auth" := auth
               }
       (check-balance balance amount)
-      (enforce-auth ks auth)
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
                 , "date": date
-                , "data": data
                 }
           )))
 
@@ -174,15 +167,14 @@
   ;   (with-read 'delta accounts acct
   ;     { "balance" := amount }))
 
- (defun credit (acct amount date data)
-   "Credit AMOUNT to ACCT balance recording DATE and DATA"
+ (defun credit (acct amount date)
+   "Credit AMOUNT to ACCT balance recording DATE"
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
             , "date": date
-            , "data": data
             }
       )))
 
@@ -194,14 +186,6 @@
 
   (defconst ESCROW_ACCT "escrow-account")
 
-  (defun get-acct-keyset (acct)
-    ( with-read accounts acct { 'keyset := k } k))
-
-  (defun enforce-acct-keyset (acct)
-    (let ((k (get-acct-keyset acct)))
-      (enforce-keyset k)))
-
-
   (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-id)]))
 
   (defun new-pact-account (pfx ccy)
@@ -210,10 +194,8 @@
         { "balance": 0.0
         , "amount": 0.0
         , "ccy": ccy
-        , "keyset": ADMIN_KEYSET
         , "auth": (format "%s" [(pact-id)])
         , "date": 0
-        , "data": "Created pact account"
         }
       )
       a))
