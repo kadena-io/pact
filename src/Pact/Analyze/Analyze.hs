@@ -128,13 +128,6 @@ instance Mergeable LatticeAnalyzeState where
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
-  --
-  -- TODO: it seems that we'll need to accumulate constraints on
-  --       `SBV ColumnName`s as we project from objects and write tables.
-  --
-  --  In addition to column names coming from a whitelist determined by type,
-  --  also accum row key constraints -- that strings can't be empty.
-  --
   = GlobalAnalyzeState ()
   deriving (Show, Eq)
 
@@ -285,14 +278,17 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
 tableWritten :: TableName -> Lens' AnalyzeState SBool
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
 
+--
+-- NOTE: at the moment our `SBV ColumnName`s are actually always concrete. If
+-- in the future we want to start using free symbolic column names (and
+-- similarly, symbolic table names), we should accumulate constraints that
+-- column names must be one of the valid column names for that table (and if we
+-- know the type, this helps us constrain even further. also symbolic table
+-- names must be one of the statically-known tables.
+--
+
 columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
 columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn
-
---
--- TODO: accumulate symbolic column name and row key variables (in a Set, in
--- GlobalState) and then assert contraints that these variables must take names
--- from a whitelist, or never contain "__".
---
 
 sCellId :: SBV ColumnName -> SBV RowKey -> SBV CellId
 sCellId sCn sRk = coerceSBV $ coerceSBV sCn .++ "__" .++ coerceSBV sRk
@@ -342,6 +338,9 @@ namedAuth str = do
   arr <- view nameAuths
   pure $ readArray arr str
 
+symRowKey :: SBV String -> SBV RowKey
+symRowKey = coerceSBV
+
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$>
@@ -349,17 +348,17 @@ analyzeTermO = \case
       val <- analyzeTerm tm
       pure (fieldType, mkAVal val))
 
-  Read tn (Schema fields) rowId -> do
-    rId <- analyzeTerm rowId
+  Read tn (Schema fields) rowKey -> do
+    sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     obj <- iforM fields $ \fieldName fieldType -> do
       let sCn = literal $ ColumnName fieldName
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn (coerceSBV rId))
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn (coerceSBV rId))
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk)
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
         EType TAny     -> pure OpaqueVal
       pure (fieldType, x)
     pure (Object obj)
@@ -496,22 +495,22 @@ analyzeTerm = \case
     -- TODO: handle write of non-literal object
     --
     tableWritten tn .= true
-    sRk <- analyzeTerm rowKey
+    sRk <- symRowKey <$> analyzeTerm rowKey
     void $ iforM obj' $ \colName (fieldType, aval) -> do
       let sCn = literal $ ColumnName colName
       case aval of
         AVal val' -> case fieldType of
           EType TInt  -> do
-            let cell  :: Lens' AnalyzeState SInteger
-                cell  = intCell tn sCn (coerceSBV sRk)
-                next  = mkSBV val'
+            let cell :: Lens' AnalyzeState SInteger
+                cell = intCell tn sCn sRk
+                next = mkSBV val'
             prev <- use cell
             cell .= next
             columnDelta tn sCn += next - prev
 
-          EType TBool -> boolCell   tn sCn (coerceSBV sRk) .= mkSBV val'
+          EType TBool -> boolCell   tn sCn sRk .= mkSBV val'
 
-          EType TStr  -> stringCell tn sCn (coerceSBV sRk) .= mkSBV val'
+          EType TStr  -> stringCell tn sCn sRk .= mkSBV val'
           -- TODO: rest of cell types
         -- TODO(joel): I'm not sure this is the right error to throw
         AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
