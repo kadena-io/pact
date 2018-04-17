@@ -201,20 +201,44 @@ data AnalyzeFailure
   | KeyNotPresent String Object
   | MalformedLogicalOpExec LogicalOp [Term Bool]
   | ObjFieldOfWrongType String EType
-  | PossibleRoundoff String
+  | PossibleRoundoff Text
   | UnsupportedDecArithOp ArithOp
   | UnsupportedIntArithOp ArithOp
   | UnsupportedUnaryOp UnaryArithOp
   | UnsupportedRoundingLikeOp1 RoundingLikeOp
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
-  | FailureMessage String
+  | FailureMessage Text
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
-  | UnhandledTerm String ETerm
+  | UnhandledTerm Text
   deriving Show
 
+describeAnalyzeFailure :: AnalyzeFailure -> Text
+describeAnalyzeFailure = \case
+  -- these are internal errors. not quite as much care is taken on the messaging
+  AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
+  AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
+  AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
+  KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
+  MalformedLogicalOpExec op args -> "malformed logical op " <> tShow op <> " with args " <> tShow args
+  ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
+  PossibleRoundoff msg -> msg
+  UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
+  UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
+  UnsupportedUnaryOp op -> "unsupported unary arithmetic op: " <> tShow op
+  UnsupportedRoundingLikeOp1 op -> "unsupported rounding (1) op: " <> tShow op
+  UnsupportedRoundingLikeOp2 op -> "unsupported rounding (2) op: " <> tShow op
+
+  -- these are likely user-facing errors
+  FailureMessage msg -> msg
+  UnhandledObject obj -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> tShow obj
+  UnhandledTerm termText -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> termText
+
+tShow :: Show a => a -> Text
+tShow = T.pack . show
+
 instance IsString AnalyzeFailure where
-  fromString = FailureMessage
+  fromString = FailureMessage . T.pack
 
 newtype AnalyzeM a
   = AnalyzeM
@@ -640,9 +664,7 @@ analyzeTerm = \case
 
   PactVersion -> pure $ literal $ T.unpack pactVersion
 
-  n -> do
-    --traceShowM n
-    throwError $ UnhandledTerm "unhandled term" (ETerm n undefined)
+  n -> throwError $ UnhandledTerm $ tShow n
 
 analyzeProperty :: Prop a -> AnalyzeM (SBV a)
 -- Logical connectives

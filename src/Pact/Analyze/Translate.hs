@@ -44,13 +44,32 @@ data TranslateFailure
   | MalformedComparison Text [AST Node]
   | NotConvertibleToSchema (Pact.Type Pact.UserType)
   | TypeMismatch EType EType
-  | UnexpectedNode String (AST Node)
-  | MissingConcreteType Node
+  | UnexpectedNode (AST Node)
+  | MissingConcreteType (Pact.Type Pact.UserType)
   | AlternativeFailures [TranslateFailure]
   | MonadFailure String
   -- For cases we don't handle yet:
   | UnhandledType (Pact.Type Pact.UserType)
   deriving Show
+
+describeTranslateFailure :: TranslateFailure -> Text
+describeTranslateFailure = \case
+  BranchesDifferentTypes t1 t2 -> "two branches unexpectedly have different types: (" <> tShow t1 <> ") vs (" <> tShow t2 <> ")"
+  NonStringLitInBinding ast -> "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
+  EmptyBody -> "can't translate an empty body"
+  MalformedArithOp op args -> "Unsupported arithmetic op " <> op <> " with args " <> tShow args
+  MalformedLogicalOp op args -> "Unsupported logical op " <> op <> " with args " <> tShow args
+  MalformedComparison op args -> "Unsupported comparison op " <> op <> " with args " <> tShow args
+  NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
+  TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
+  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
+  AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
+  MonadFailure str -> "Translation failure: " <> T.pack str
+  UnhandledType ty -> "Found a type we don't know how to translate yet: " <> tShow ty
+  where
+    tShow :: Show a => a -> Text
+    tShow = T.pack . show
 
 instance Monoid TranslateFailure where
   mempty = AlternativeFailures []
@@ -106,8 +125,8 @@ translateType node = go $ _aTy node
       TySchema _ ty' -> go ty'
 
       -- In these cases, the typechecker failed to produce a concrete type.
-      TyAny -> throwError $ MissingConcreteType node
-      TyVar _ -> throwError $ MissingConcreteType node
+      ty@TyAny     -> throwError $ MissingConcreteType ty
+      ty@(TyVar _) -> throwError $ MissingConcreteType ty
 
       TyPrim TyBool    -> pure $ EType TBool
       TyPrim TyDecimal -> pure $ EType TDecimal
@@ -441,4 +460,4 @@ translateNode = \case
   -- TODO: more cases.
   --
 
-  ast -> throwError $ UnexpectedNode "translateNode" ast
+  ast -> throwError $ UnexpectedNode ast

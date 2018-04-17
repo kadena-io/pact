@@ -331,9 +331,6 @@ tc i as = case as of
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
 #if !defined(ghcjs_HOST_OS)
-showResultLine :: CheckResult -> Text
-showResultLine = mappend "  " . Text.pack . either show show
-
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -345,7 +342,7 @@ verify i as = case as of
         setop $ Print $ tStr $ ifoldl
           (\defName accum lineResults -> if null lineResults
             then accum
-            else accum <> Text.unlines ("" : defName <> ":" : "" : fmap showResultLine lineResults))
+            else accum <> Text.unlines ("" : defName <> ":" : "" : fmap describeCheckResult lineResults))
           "verifying properties:"
           results
 

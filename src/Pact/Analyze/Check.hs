@@ -1,3 +1,4 @@
+{-# language LambdaCase        #-}
 {-# language OverloadedStrings #-}
 {-# language Rank2Types        #-}
 {-# language TupleSections     #-}
@@ -6,6 +7,7 @@ module Pact.Analyze.Check
   ( checkTopFunction
   , verifyModule
   , failedTcOrAnalyze
+  , describeCheckResult
   , CheckFailure(..)
   , CheckSuccess(..)
   , CheckResult
@@ -37,8 +39,8 @@ import qualified Pact.Types.Typecheck as TC
 
 import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure,
                              allocateSymbolicCells, analyzeTerm, analyzeTermO,
-                             analyzeProperty, mkInitialAnalyzeState,
-                             runAnalyzeM)
+                             analyzeProperty, describeAnalyzeFailure,
+                             mkInitialAnalyzeState, runAnalyzeM)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
@@ -58,13 +60,47 @@ data CheckFailure
   | CodeCompilationFailed String
   deriving (Show)
 
+describeCheckFailure :: CheckFailure -> Text
+describeCheckFailure = \case
+  Invalid model ->
+    "Invalidating model found:\n" <>
+    T.pack (show model)
+  Unsatisfiable  -> "This property is unsatisfiable"
+  Unknown reason ->
+    "The solver returned unknown with reason:\n" <>
+    T.pack (show reason)
+  SatExtensionField model ->
+    "The solver return a model, but in an extension field containing infinite / epsilon:\n" <>
+    T.pack (show model)
+  ProofError lines' ->
+    "The prover errored:\n" <>
+    T.unlines (T.pack <$> lines')
+  TypecheckFailure fails ->
+    "The module failed to typecheck:\n" <>
+    (T.unlines $ map
+      (\(Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
+      (Set.toList fails))
+  AnalyzeFailure err        -> describeAnalyzeFailure err
+  TranslateFailure err      -> describeTranslateFailure err
+  CodeCompilationFailed msg -> T.pack msg
+
 data CheckSuccess
   = SatisfiedProperty SBVI.SMTModel
   | ProvedTheorem
   deriving (Show)
 
+describeCheckSuccess :: CheckSuccess -> Text
+describeCheckSuccess = \case
+  SatisfiedProperty model ->
+    "Property satisfied with model:\n" <>
+    T.pack (show model)
+  ProvedTheorem           -> "Property proven valid"
+
 type CheckResult
   = Either CheckFailure CheckSuccess
+
+describeCheckResult :: CheckResult -> Text
+describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 checkFunctionBody
   :: Check
