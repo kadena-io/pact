@@ -839,49 +839,47 @@ pact> (at "hash" (describe-module 'accounts))
 The [use](#use) special form allows
 a module hash to be specified, in order to pin the dependency version. When
 used within a module declaration, it introduces the dependency
-hash value into the module's hash, tying that version to the dependency hash.
+hash value into the module's hash.
 This allows a "dependency-only" upgrade to push the upgrade to the module version.
 
-### Inlined Dependencies and Blessed Versions: "No Leftpad"
+### Inlined Dependencies: "No Leftpad"
 Pact inlines all user-code references when a module is loaded, meaning that upstream definitions are
 injected into downstream code. At this point, upstream definitions are permanent: the only way to upgrade
 dependencies is to re-load the module code.
 
 This permanence is great for downstream/client code: the upstream provider cannot change what code
-gets executed in your module, once loaded. This avoids the tragic and sometimes systemic results of
-a bad upstream upgrade as seen in the "leftpad" Javascript/npm debacle, but it creates a big problem
+gets executed in your module, once loaded. It creates a big problem
 for upstream/provider code, as providers cannot upgrade the downstream code to address an exploit, or to
 introduce new features.
 
+A trade-off is needed to balance these opposing interests. Pact offers the ability for upstream
+code to break downstream dependent code at runtime. Table access is guarded to enforce
+that the module hash of the inlined dependency either matches the runtime version, or
+is in a set of "blessed" hashes, as specified by [bless](#bless) in the module declaration:
 
-To address this, providers can _bless_
+```lisp
+(module provider 'keyset
+  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  ...
+)
+```
 
-It creates a big problem for upstream/provider code: critical upgrades cannot be pushed down to dependent modules.
+Dependencies with these hashes will continue to function after the module is loaded.
+Unrecognized hashes will cause the transaction to fail. However, "pure" code that does
+not access the database are unaffected. This prevents a "leftpad situation" where trivial
+utility functions cannot harm downstream code stability.
 
-
-
-It benefits client code tremendouslythe stability downstream/client
-
-### Blessing hashes
-Past versions of a module can be _blessed_, in order to allow downstream dependencies to continue to
-use this module's
-When a module is loaded, all of its references are inlined, such that an upstream upgrade of a dependency
-module has no ability to change the code loaded in the downstream, dependent module. This benefits
-code stability from a user perspective, but creates a problem from the provider perspective when an upgrade
-is critical.
-
-critical
-exploit is found,
-The [use](#use) special form allows a
-in the runtime.
-When a module is loaded into the Pact interpreter runtime, all references to non-native definitions
-(ie, definitions loaded from Pact source) are inlined, which benefits code stability:
-a loaded module's dependencies thus cannot change until that module is re-loaded. The [use](#use) special form
-allows a _module hash_ to be supplied which both ensures the code loaded is what was intended, but
-also encodes a dependency version into the dependent module's hash, makin
-is upgrade
-(as opposed to are _inlined_, with
-benefits for execution performance and code sta
+### Phased upgrades with "v2" modules
+Upstream providers can use the bless mechanism to phase-in an important upgrade, by renaming
+the upgraded module to indicate the new version, and replacing the old module with a new,
+empty module that only blesses the last version (and whatever earlier versions desired).
+New clients will
+fail to import the "v1" code, requiring them to use the new version,
+while existing users can continue to use the old version,
+presumably up to some advertised time limit. The "empty" module can offer migration
+functions to handle migrating user data to the new module, for the user to self-upgrade
+in the time window.
 
 
 Syntax
