@@ -31,7 +31,7 @@ import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
 import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
-                                  WriteType(..))
+                                  WriteType(..), KeySet)
 import qualified Pact.Types.Runtime as Pact
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
@@ -57,6 +57,16 @@ instance IsString RowKey where
 symRowKey :: SBV String -> SBV RowKey
 symRowKey = coerceSBV
 
+-- KeySets are completely opaque to pact programs -- 256 should be enough for
+-- symbolic analysis?
+newtype KeySet
+  = KeySet Word8
+  deriving (Eq, Ord, Data, Show, Read)
+
+-- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
+instance SymWord KeySet
+instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
+
 -- a unique cell, from a column name and a row key
 -- e.g. balance__25
 newtype CellId
@@ -75,10 +85,10 @@ instance IsString CellId where
   fromString = CellId
 
 data AnalyzeEnv = AnalyzeEnv
-  { _scope     :: Map Text AVal          -- used with 'local' as a stack
-  , _nameAuths :: SArray KeySetName Bool -- read-only
+  { _scope     :: Map Text AVal            -- used with 'local' as a stack
+  , _keySets   :: SArray KeySetName KeySet -- read-only
+  , _ksAuths   :: SArray KeySet Bool       -- read-only
   } deriving Show
-
 
 allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
@@ -106,10 +116,10 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     sDecimal = symbolic
 
 mkAnalyzeEnv :: [(Text, Pact.Type TC.UserType)] -> Symbolic AnalyzeEnv
-mkAnalyzeEnv argTys = do
-  scope0 <- allocateArgs argTys
-  auths <- newArray "nameAuthorizations"
-  pure $ AnalyzeEnv scope0 auths
+mkAnalyzeEnv argTys = AnalyzeEnv
+  <$> allocateArgs argTys
+  <*> newArray "keySets"
+  <*> newArray "keySetAuths"
 
 newtype AnalyzeLog
   = AnalyzeLog ()
@@ -392,8 +402,9 @@ symKsName = coerceSBV
 
 namedAuth :: SBV KeySetName -> AnalyzeM (SBV Bool)
 namedAuth sKsn = do
-  arr <- view nameAuths
-  pure $ readArray arr sKsn
+  kSets <- view keySets
+  auths <- view ksAuths
+  pure $ readArray auths $ readArray kSets sKsn
 
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
