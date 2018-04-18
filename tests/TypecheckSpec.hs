@@ -50,6 +50,7 @@ checkFuns = describe "tc.pact typecheck" $ do
   checkFun "tests/pact/tc.repl" "tctest" "sort2"
   checkFun "tests/pact/tc.repl" "tctest" "partials"
   checkFun "tests/pact/tc.repl" "tctest" "twoStrings"
+  checkFun "tests/pact/tc.repl" "tctest" "test-inner"
   checkFun "tests/pact/tc.repl" "tctest" "bind-obj"
   checkFun "examples/cp/cp.repl" "cp" "issue"
   checkFun "examples/accounts/accounts.repl" "accounts" "transfer"
