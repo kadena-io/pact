@@ -44,24 +44,6 @@ mkAVal (SBVI.SBV sval) = AVal sval
 coerceSBV :: SBV a -> SBV b
 coerceSBV = SBVI.SBV . SBVI.unSBV
 
-newtype RowKey
-  = RowKey String
-  deriving (Eq, Ord, Show)
-
-instance SymWord RowKey where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (RowKey s) = mkConcreteString s
-  fromCW = wrappedStringFromCW RowKey
-
-instance HasKind RowKey where
-  kindOf _ = KString
-
-instance IsString RowKey where
-  fromString = RowKey
-
-type SRowKey
-  = SBV RowKey
-
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
 

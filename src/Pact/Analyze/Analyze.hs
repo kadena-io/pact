@@ -35,6 +35,24 @@ import Pact.Types.Version (pactVersion)
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
+newtype RowKey
+  = RowKey String
+  deriving (Eq, Ord, Show)
+
+instance SymWord RowKey where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (RowKey s) = mkConcreteString s
+  fromCW = wrappedStringFromCW RowKey
+
+instance HasKind RowKey where
+  kindOf _ = KString
+
+instance IsString RowKey where
+  fromString = RowKey
+
+symRowKey :: SBV String -> SBV RowKey
+symRowKey = coerceSBV
+
 -- a unique cell, from a column name and a row key
 -- e.g. balance__25
 newtype CellId
@@ -332,9 +350,6 @@ timeCell
   -> Lens' AnalyzeState STime
 timeCell tn sCn sRk =
   latticeState.lasTableCells.singular (ix tn).scTimeValues.symArrayAt (sCellId sCn sRk)
-
-symRowKey :: SBV String -> SBV RowKey
-symRowKey = coerceSBV
 
 symKsName :: SBV String -> SBV KeySetName
 symKsName = coerceSBV
