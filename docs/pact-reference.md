@@ -821,6 +821,67 @@ and [pact-state](#pact-state) repl functions to simulate pact executions.
 
 It is not possible yet (as of Pact 2.3.0) to simulate pact execution in the pact server API.
 
+Dependency Management
+---
+Pact supports a number of features to manage a module's dependencies on other Pact modules.
+
+### Module Hashes
+Once loaded, a Pact module is associated with a hash computed from the module's source code text.
+This module hash uniquely identifies the version of the module.
+Module hashes can be examined with [describe-module](#describe-module):
+
+```
+pact> (at "hash" (describe-module 'accounts))
+"9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+```
+
+### Pinning module versions with `use`
+The [use](#use) special form allows
+a module hash to be specified, in order to pin the dependency version. When
+used within a module declaration, it introduces the dependency
+hash value into the module's hash, tying that version to the dependency hash.
+This allows a "dependency-only" upgrade to push the upgrade to the module version.
+
+### Inlined Dependencies and Blessed Versions: "No Leftpad"
+Pact inlines all user-code references when a module is loaded, meaning that upstream definitions are
+injected into downstream code. At this point, upstream definitions are permanent: the only way to upgrade
+dependencies is to re-load the module code.
+
+This permanence is great for downstream/client code: the upstream provider cannot change what code
+gets executed in your module, once loaded. This avoids the tragic and sometimes systemic results of
+a bad upstream upgrade as seen in the "leftpad" Javascript/npm debacle, but it creates a big problem
+for upstream/provider code, as providers cannot upgrade the downstream code to address an exploit, or to
+introduce new features.
+
+
+To address this, providers can _bless_
+
+It creates a big problem for upstream/provider code: critical upgrades cannot be pushed down to dependent modules.
+
+
+
+It benefits client code tremendouslythe stability downstream/client
+
+### Blessing hashes
+Past versions of a module can be _blessed_, in order to allow downstream dependencies to continue to
+use this module's
+When a module is loaded, all of its references are inlined, such that an upstream upgrade of a dependency
+module has no ability to change the code loaded in the downstream, dependent module. This benefits
+code stability from a user perspective, but creates a problem from the provider perspective when an upgrade
+is critical.
+
+critical
+exploit is found,
+The [use](#use) special form allows a
+in the runtime.
+When a module is loaded into the Pact interpreter runtime, all references to non-native definitions
+(ie, definitions loaded from Pact source) are inlined, which benefits code stability:
+a loaded module's dependencies thus cannot change until that module is re-loaded. The [use](#use) special form
+allows a _module hash_ to be supplied which both ensures the code loaded is what was intended, but
+also encodes a dependency version into the dependent module's hash, makin
+is upgrade
+(as opposed to are _inlined_, with
+benefits for execution performance and code sta
 
 
 Syntax
@@ -979,6 +1040,18 @@ Tables and objects can only take a schema type literal.
 
 Special forms {#special-forms}
 ---
+
+### bless {#bless}
+```
+(bless HASH)
+```
+
+Within a module declaration, bless a previous version of that module as identified by HASH.
+See [foo](#bar) for a discussion of
+
+declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that module
+hash matches HASH, failing if not. Use [describe-module](#describe-module) to query for the
+hash of a loaded module on the chain.
 
 ### defun {#defun}
 
