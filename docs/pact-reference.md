@@ -868,11 +868,11 @@ is in a set of "blessed" hashes, as specified by [bless](#bless) in the module d
 
 Dependencies with these hashes will continue to function after the module is loaded.
 Unrecognized hashes will cause the transaction to fail. However, "pure" code that does
-not access the database are unaffected. This prevents a "leftpad situation" where trivial
-utility functions cannot harm downstream code stability.
+not access the database is unaffected. This prevents a "leftpad situation" where trivial
+utility functions can harm downstream code stability.
 
 ### Phased upgrades with "v2" modules
-Upstream providers can use the bless mechanism to phase-in an important upgrade, by renaming
+Upstream providers can use the bless mechanism to phase in an important upgrade, by renaming
 the upgraded module to indicate the new version, and replacing the old module with a new,
 empty module that only blesses the last version (and whatever earlier versions desired).
 New clients will
