@@ -14,7 +14,6 @@ import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
-import Data.String (IsString(..))
 import Data.Thyme
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
 

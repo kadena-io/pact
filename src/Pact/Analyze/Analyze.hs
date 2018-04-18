@@ -1,4 +1,5 @@
 {-# language DeriveFunctor              #-}
+{-# language DeriveDataTypeable         #-}
 {-# language DeriveTraversable          #-}
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
@@ -19,6 +20,7 @@ import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
+import Data.Data (Data)
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -30,6 +32,8 @@ import qualified Data.Text as T
 import Data.Traversable (for)
 import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
                                   WriteType(..))
+import qualified Pact.Types.Runtime as Pact
+import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
 
 import Pact.Analyze.Prop
@@ -74,6 +78,38 @@ data AnalyzeEnv = AnalyzeEnv
   { _scope     :: Map Text AVal          -- used with 'local' as a stack
   , _nameAuths :: SArray KeySetName Bool -- read-only
   } deriving Show
+
+
+allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
+allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
+    let name' = T.unpack name
+    var <- case ty of
+      TyPrim TyInteger -> mkAVal <$> sInteger name'
+      TyPrim TyBool    -> mkAVal <$> sBool name'
+      TyPrim TyDecimal -> mkAVal <$> sDecimal name'
+      TyPrim TyTime    -> mkAVal <$> sInt64 name'
+      TyPrim TyString  -> mkAVal <$> sString name'
+      TyUser _         -> mkAVal <$> (free_ :: Symbolic (SBV UserType))
+
+      -- TODO
+      TyPrim TyValue   -> error "unimplemented type analysis"
+      TyPrim TyKeySet  -> error "unimplemented type analysis"
+      TyAny            -> error "unimplemented type analysis"
+      TyVar _v         -> error "unimplemented type analysis"
+      TyList _         -> error "unimplemented type analysis"
+      TySchema _ _     -> error "unimplemented type analysis"
+      TyFun _          -> error "unimplemented type analysis"
+    pure (name, var)
+
+  where
+    sDecimal :: String -> Symbolic (SBV Decimal)
+    sDecimal = symbolic
+
+mkAnalyzeEnv :: [(Text, Pact.Type TC.UserType)] -> Symbolic AnalyzeEnv
+mkAnalyzeEnv argTys = do
+  scope0 <- allocateArgs argTys
+  auths <- newArray "nameAuthorizations"
+  pure $ AnalyzeEnv scope0 auths
 
 newtype AnalyzeLog
   = AnalyzeLog ()

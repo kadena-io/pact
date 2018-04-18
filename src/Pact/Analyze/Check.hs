@@ -37,9 +37,9 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (AnalyzeEnv(..), AnalyzeFailure,
-                             allocateSymbolicCells, analyzeTerm, analyzeTermO,
-                             analyzeProperty, describeAnalyzeFailure,
+import Pact.Analyze.Analyze (AnalyzeFailure, allocateSymbolicCells,
+                             analyzeTerm, analyzeTermO, analyzeProperty,
+                             describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, runAnalyzeM)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
@@ -121,11 +121,8 @@ checkFunctionBody check body argTys nodeNames tableNames =
 
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
-        scope0 <- allocateArgs argTys
-        nameAuths' <- newArray "nameAuthorizations"
+        env0 <- mkAnalyzeEnv argTys
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
-
-        let env0   = AnalyzeEnv scope0 nameAuths'
 
         case runExcept $ runRWST (runAnalyzeM action) env0 state0 of
           Left cf -> do
@@ -170,30 +167,6 @@ checkTopFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function a
 
 tcName :: Node -> Text
 tcName = _tiName . _aId
-
-sDecimal :: String -> Symbolic (SBV Decimal)
-sDecimal = symbolic
-
-allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
-allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
-  let name' = T.unpack name
-  var <- case ty of
-    TyPrim TyInteger -> mkAVal <$> sInteger name'
-    TyPrim TyBool    -> mkAVal <$> sBool name'
-    TyPrim TyDecimal -> mkAVal <$> sDecimal name'
-    TyPrim TyTime    -> mkAVal <$> sInt64 name'
-    TyPrim TyString  -> mkAVal <$> sString name'
-    TyUser _         -> mkAVal <$> (free_ :: Symbolic (SBV UserType))
-
-    -- TODO
-    TyPrim TyValue   -> error "unimplemented type analysis"
-    TyPrim TyKeySet  -> error "unimplemented type analysis"
-    TyAny            -> error "unimplemented type analysis"
-    TyVar _v         -> error "unimplemented type analysis"
-    TyList _         -> error "unimplemented type analysis"
-    TySchema _ _     -> error "unimplemented type analysis"
-    TyFun _          -> error "unimplemented type analysis"
-  pure (name, var)
 
 -- This does not use the underlying property -- this merely dispatches to
 -- sat/prove appropriately, and accordingly translates sat/unsat to
