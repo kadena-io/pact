@@ -220,6 +220,7 @@ data Term ret where
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
   Logical        ::                        LogicalOp    -> [Term Bool]    ->           Term Bool
   ReadKeySet     ::                        Term String  ->                             Term KeySet
+  KsAuthorized   ::                        Term KeySet  ->                             Term Bool
   NameAuthorized ::                        Term String  ->                             Term Bool
   Concat         ::                        Term String  -> Term String    ->           Term String
   PactVersion    ::                                                                    Term String

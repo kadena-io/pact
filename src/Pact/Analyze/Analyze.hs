@@ -399,11 +399,22 @@ ksCell tn sCn sRk =
 symKsName :: SBV String -> SBV KeySetName
 symKsName = coerceSBV
 
+-- TODO: potentially switch to lenses here for the following 3 functions:
+
 resolveKeySet :: SBV KeySetName -> AnalyzeM (SBV KeySet)
 resolveKeySet sKsn = readArray <$> view keySets <*> pure sKsn
 
 nameAuthorized :: SBV KeySetName -> AnalyzeM (SBV Bool)
 nameAuthorized sKsn = readArray <$> view ksAuths <*> resolveKeySet sKsn
+
+ksAuthorized :: SBV KeySet -> AnalyzeM (SBV Bool)
+ksAuthorized sKs = readArray <$> view ksAuths <*> pure sKs
+
+--keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
+--keySetNamed sKsn = keySets.symArrayAt sKsn
+--
+--ksnAuthorization :: SBV KeySetName -> Lens' AnalyzeEnv (SBV Bool)
+--ksnAuthorization sKsn = _todoKsnAuthorization
 
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
@@ -767,6 +778,8 @@ analyzeTerm = \case
       _               -> throwError $ MalformedLogicalOpExec op args
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
+
+  KsAuthorized ks -> ksAuthorized =<< analyzeTerm ks
 
   NameAuthorized str -> nameAuthorized =<< symKsName <$> analyzeTerm str
 

@@ -162,8 +162,20 @@ suite = tests
             |]
       expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
 
+  , scope "enforce-keyset.value" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-keyset (read-keyset (+ "k" "s"))))
+            |]
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
+
+      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") `Implies` Abort
+
   --
-  -- TODO: enforce-keyset.object
+  -- TODO: test row-level keyset property
   --
 
   , scope "table-read.multiple-read" $

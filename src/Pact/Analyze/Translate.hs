@@ -264,14 +264,17 @@ translateNode = \case
     ETerm nameT TStr <- translateNode nameA
     return $ ETerm (ReadKeySet nameT) TKeySet
 
-  --
-  -- TODO: add object support
-  --
-  AST_EnforceKeyset ks
-    | ks ^? aNode.aTy == Just (TyPrim TyString)
+  AST_EnforceKeyset ksA
+    | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
-      ETerm ksNameTerm TStr <- translateNode ks
-      return $ ETerm (Enforce (NameAuthorized ksNameTerm)) TBool
+      ETerm ksnT TStr <- translateNode ksA
+      return $ ETerm (Enforce (NameAuthorized ksnT)) TBool
+
+  AST_EnforceKeyset ksA
+    | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
+    -> do
+      ETerm ksT TKeySet <- translateNode ksA
+      return $ ETerm (Enforce (KsAuthorized ksT)) TBool
 
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
