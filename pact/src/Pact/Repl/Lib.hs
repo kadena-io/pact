@@ -35,7 +35,7 @@ import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Criterion
 import Criterion.Types
-import Statistics.Resampling.Bootstrap
+import Statistics.Types
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck

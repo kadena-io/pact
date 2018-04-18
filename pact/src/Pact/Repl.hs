@@ -166,13 +166,13 @@ handleMultilineInput input prevLines lastResult =
        -- indicating open parens / continuing input.
        Failure (ErrInfo _ [TF.Lines x y z w])
          -- check we've consumed:
-         -- * n + 1 newlines (unlines concats a newline at the end)
+         -- n + 1 newlines (unlines concats a newline at the end)
          | x == fromIntegral (length prevLines + 1) &&
-         -- * and 0 chars on the last line
+         -- and 0 chars on the last line
            y == 0 &&
-         -- * all the bytes
+         -- all the bytes
            z == fromIntegral (utf8BytesLength joinedInput) &&
-         -- * but none since the trailing newline
+         -- but none since the trailing newline
            w == 0
 
            -- If so, continue accepting input

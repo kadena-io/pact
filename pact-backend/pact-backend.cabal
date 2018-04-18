@@ -1,0 +1,148 @@
+name:                pact-backend
+version:             2.3.8
+synopsis:            Smart contract language library and REPL
+description:
+            Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
+            logic to be deployed and executed on a blockchain/distributed ledger. For more information see
+            <http://kadena.io/pact>.
+homepage:            https://github.com/kadena-io/pact
+bug-reports:         https://github.com/kadena-io/pact/issues
+license:             BSD3
+license-file:        LICENSE
+author:              Stuart Popejoy
+maintainer:          stuart@kadena.io
+copyright:           Copyright (C) 2016 Stuart Popejoy
+category:            Language
+build-type:          Simple
+cabal-version:       >=1.22
+
+library
+  hs-source-dirs: src
+  exposed-modules:
+    Pact.ApiReq
+    Pact.Bench
+    Pact.Docgen
+    Pact.Interpreter
+    Pact.Main
+    Pact.MockDb
+    Pact.Persist.MockPersist
+    Pact.Persist.SQLite
+    Pact.PersistPactDb.Regression
+    Pact.Server.ApiServer
+    Pact.Server.History.Persistence
+    Pact.Server.History.Service
+    Pact.Server.History.Types
+    Pact.Server.PactService
+    Pact.Server.Server
+    Pact.Types.API
+    Pact.Types.Command
+    Pact.Types.Crypto
+    Pact.Types.RPC
+    Pact.Types.SQLite
+    Pact.Types.Server
+
+
+  -- other-extensions:
+  build-depends:
+      Decimal >= 0.4.2 && < 0.5
+    , aeson >= 0.11.3.0 && < 1.3
+    , ansi-wl-pprint >= 0.6.7.3 && < 0.7
+    , async
+    , attoparsec >= 0.13.0.2 && < 0.14
+    , base >=4.9.0.0 && < 4.10
+    , base16-bytestring >=0.1.1.6 && < 0.2
+    , blake2
+    , bound >= 2 && < 2.1
+    , bytestring >=0.10.8.1 && < 0.11
+    , cereal >=0.5.4.0 && < 0.6
+    , containers >= 0.5.7.1 && < 0.6
+    , criterion >= 1.3 && < 1.5
+    , crypto-api
+    , data-default >= 0.7.1.1 && < 0.8
+    , deepseq >= 1.4.2.0 && < 1.5
+    , direct-sqlite
+    , directory >= 1.2.6.2 && < 1.4
+    , ed25519-donna
+    , exceptions >= 0.8.3 && < 0.9
+    , fast-logger
+    , filepath >= 1.4.1.0 && < 1.5
+    , hashable >= 1.2 && < 1.3
+    , hspec >= 2.2.4 && < 2.5
+    , lens >= 4.14 && < 4.16
+    , lens-aeson >= 1.0.0.5 && < 1.1
+    , mtl >= 2.2.1 && < 2.3
+    , old-locale >= 1.0.0.7 && < 1.1
+    , optparse-applicative >= 0.12.1.0 && < 0.15
+    , pact
+    , parsers >= 0.12.4 && < 0.13
+    , safe >= 0.3.11 && < 0.4
+    , safe-exceptions >= 0.1.5.0 && < 0.2
+    , scientific >= 0.3.4.9 && < 0.4
+    , semigroups >= 0.18.2 && < 0.19
+    , snap-core
+    , snap-server
+    , statistics >= 0.14 && < 0.15
+    , stm >= 2.4.4.1 && < 2.5
+    , text >= 1.2.2.1 && < 1.3
+    , thyme == 0.3.6.0
+    , transformers >= 0.5.2.0 && < 0.6
+    , trifecta >= 1.6 && < 1.8
+    , unordered-containers >= 0.2.7.2 && < 0.3
+    , utf8-string >= 1.0.1.1 && < 1.1
+    , vector >= 0.11.0.0 && < 0.13
+    , vector-space >= 0.10.4 && < 0.13
+    , yaml
+    -- Was 0.7.4
+
+  if !os(windows)
+    build-depends:   unix
+
+  default-language:    Haskell2010
+  ghc-options:         -Wall -O2
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+
+executable pact
+  main-is:             Repl.hs
+  build-depends:
+      base
+    , pact
+    , pact-backend
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+
+executable bench
+  main-is:             Bench.hs
+  build-depends:
+      base
+    , pact
+    , pact-backend
+  hs-source-dirs:      executables
+  ghc-options:         -Wall -threaded -rtsopts
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+test-suite hspec
+  type: exitcode-stdio-1.0
+  main-is: hspec.hs
+  hs-source-dirs: tests
+  default-language: Haskell2010
+  build-depends:
+      base
+    , hspec
+    , pact
+    , pact-backend
+    , aeson
+    , containers
+    , directory
+    , filepath
+    , data-default
+    , lens
+    , unordered-containers
+    , ansi-wl-pprint
+    , bytestring
+  other-modules:
+    DocgenSpec
+    PersistSpec
