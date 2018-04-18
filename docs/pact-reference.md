@@ -821,6 +821,66 @@ and [pact-state](#pact-state) repl functions to simulate pact executions.
 
 It is not possible yet (as of Pact 2.3.0) to simulate pact execution in the pact server API.
 
+Dependency Management
+---
+Pact supports a number of features to manage a module's dependencies on other Pact modules.
+
+### Module Hashes
+Once loaded, a Pact module is associated with a hash computed from the module's source code text.
+This module hash uniquely identifies the version of the module.
+Module hashes can be examined with [describe-module](#describe-module):
+
+```
+pact> (at "hash" (describe-module 'accounts))
+"9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+```
+
+### Pinning module versions with `use`
+The [use](#use) special form allows
+a module hash to be specified, in order to pin the dependency version. When
+used within a module declaration, it introduces the dependency
+hash value into the module's hash.
+This allows a "dependency-only" upgrade to push the upgrade to the module version.
+
+### Inlined Dependencies: "No Leftpad"
+Pact inlines all user-code references when a module is loaded, meaning that upstream definitions are
+injected into downstream code. At this point, upstream definitions are permanent: the only way to upgrade
+dependencies is to re-load the module code.
+
+This permanence is great for downstream/client code: the upstream provider cannot change what code
+gets executed in your module, once loaded. It creates a big problem
+for upstream/provider code, as providers cannot upgrade the downstream code to address an exploit, or to
+introduce new features.
+
+### Blessing hashes
+A trade-off is needed to balance these opposing interests. Pact offers the ability for upstream
+code to break downstream dependent code at runtime. Table access is guarded to enforce
+that the module hash of the inlined dependency either matches the runtime version, or
+is in a set of "blessed" hashes, as specified by [bless](#bless) in the module declaration:
+
+```lisp
+(module provider 'keyset
+  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  ...
+)
+```
+
+Dependencies with these hashes will continue to function after the module is loaded.
+Unrecognized hashes will cause the transaction to fail. However, "pure" code that does
+not access the database is unaffected. This prevents a "leftpad situation" where trivial
+utility functions can harm downstream code stability.
+
+### Phased upgrades with "v2" modules
+Upstream providers can use the bless mechanism to phase in an important upgrade, by renaming
+the upgraded module to indicate the new version, and replacing the old module with a new,
+empty module that only blesses the last version (and whatever earlier versions desired).
+New clients will
+fail to import the "v1" code, requiring them to use the new version,
+while existing users can continue to use the old version,
+presumably up to some advertised time limit. The "empty" module can offer migration
+functions to handle migrating user data to the new module, for the user to self-upgrade
+in the time window.
 
 
 Syntax
@@ -979,6 +1039,23 @@ Tables and objects can only take a schema type literal.
 
 Special forms {#special-forms}
 ---
+
+### bless {#bless}
+```
+(bless HASH)
+```
+
+Within a module declaration, bless a previous version of that module as identified by HASH.
+See [Dependency managment](#dependency-management) for a discussion of the blessing mechanism.
+
+```lisp
+(module provider 'keyset
+  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  ...
+)
+```
+
 
 ### defun {#defun}
 
