@@ -1063,6 +1063,85 @@ Pacts can be tested in repl scripts using the
 It is not possible yet (as of Pact 2.3.0) to simulate pact execution in
 the pact server API.
 
+Dependency Management
+---------------------
+
+Pact supports a number of features to manage a module’s dependencies on
+other Pact modules.
+
+Module Hashes
+~~~~~~~~~~~~~
+
+Once loaded, a Pact module is associated with a hash computed from the
+module’s source code text. This module hash uniquely identifies the
+version of the module. Module hashes can be examined with
+`describe-module <#describe-module>`__:
+
+::
+
+    pact> (at "hash" (describe-module 'accounts))
+    "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+
+Pinning module versions with ``use``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The `use <#use>`__ special form allows a module hash to be specified, in
+order to pin the dependency version. When used within a module
+declaration, it introduces the dependency hash value into the module’s
+hash. This allows a “dependency-only” upgrade to push the upgrade to the
+module version.
+
+Inlined Dependencies: “No Leftpad”
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Pact inlines all user-code references when a module is loaded, meaning
+that upstream definitions are injected into downstream code. At this
+point, upstream definitions are permanent: the only way to upgrade
+dependencies is to re-load the module code.
+
+This permanence is great for downstream/client code: the upstream
+provider cannot change what code gets executed in your module, once
+loaded. It creates a big problem for upstream/provider code, as
+providers cannot upgrade the downstream code to address an exploit, or
+to introduce new features.
+
+Blessing hashes
+~~~~~~~~~~~~~~~
+
+A trade-off is needed to balance these opposing interests. Pact offers
+the ability for upstream code to break downstream dependent code at
+runtime. Table access is guarded to enforce that the module hash of the
+inlined dependency either matches the runtime version, or is in a set of
+“blessed” hashes, as specified by `bless <#bless>`__ in the module
+declaration:
+
+.. code:: lisp
+
+    (module provider 'keyset
+      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+      ...
+    )
+
+Dependencies with these hashes will continue to function after the
+module is loaded. Unrecognized hashes will cause the transaction to
+fail. However, “pure” code that does not access the database are
+unaffected. This prevents a “leftpad situation” where trivial utility
+functions cannot harm downstream code stability.
+
+Phased upgrades with “v2” modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Upstream providers can use the bless mechanism to phase-in an important
+upgrade, by renaming the upgraded module to indicate the new version,
+and replacing the old module with a new, empty module that only blesses
+the last version (and whatever earlier versions desired). New clients
+will fail to import the “v1” code, requiring them to use the new
+version, while existing users can continue to use the old version,
+presumably up to some advertised time limit. The “empty” module can
+offer migration functions to handle migrating user data to the new
+module, for the user to self-upgrade in the time window.
+
 Syntax
 ======
 
@@ -1248,6 +1327,26 @@ Consts
 
 Special forms
 -------------
+
+bless
+~~~~~
+
+::
+
+    (bless HASH)
+
+Within a module declaration, bless a previous version of that module as
+identified by HASH. See `Dependency
+managment <#dependency-management>`__ for a discussion of the blessing
+mechanism.
+
+.. code:: lisp
+
+    (module provider 'keyset
+      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+      ...
+    )
 
 defun
 ~~~~~
@@ -1705,11 +1804,10 @@ Index LIST at IDX, or get value with key IDX from OBJECT.
 bind
 ~~~~
 
-*src* ``object:<{row}>`` *binding* ``binding:<{row}>`` *body* ``*``
-*→* ``<a>``
+*src* ``object:<{row}>`` *binding* ``binding:<{row}>`` *→* ``<a>``
 
 Special form evaluates SRC to an object which is bound to with BINDINGS
-to run BODY.
+over subsequent body statements.
 
 .. code:: lisp
 
@@ -1868,6 +1966,21 @@ Interpolate VARS into TEMPLATE using {}.
     pact> (format "My {} has {}" ["dog" "fleas"])
     "My dog has fleas"
 
+hash
+~~~~
+
+*value* ``<a>`` *→* ``string``
+
+Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly
+while other values are converted using their JSON representation.
+
+.. code:: lisp
+
+    pact> (hash "hello")
+    "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
+    pact> (hash { 'foo: 1 })
+    "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"
+
 identity
 ~~~~~~~~
 
@@ -1927,6 +2040,18 @@ list-modules
 *→* ``[string]``
 
 List modules available for loading.
+
+make-list
+~~~~~~~~~
+
+*length* ``integer`` *value* ``<a>`` *→* ``[<a>]``
+
+Create list by repeating VALUE LENGTH times.
+
+.. code:: lisp
+
+    pact> (make-list 5 true)
+    [true true true true true]
 
 map
 ~~~
@@ -2070,6 +2195,18 @@ from OBJECT. If COUNT is negative, take from end.
     pact> (take ['name] { 'name: "Vlad", 'active: false})
     {"name": "Vlad"}
 
+tx-hash
+~~~~~~~
+
+*→* ``string``
+
+Obtain hash of current transaction as a string.
+
+.. code:: lisp
+
+    pact> (tx-hash)
+    "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+
 typeof
 ~~~~~~
 
@@ -2137,8 +2274,8 @@ describe-module
 
 *module* ``string`` *→* ``value``
 
-Get metadata for MODULE. Returns a JSON object with ‘name’, ‘hash’ and
-‘code’ fields.
+Get metadata for MODULE. Returns an object with ‘name’, ‘hash’,
+‘blessed’, and ‘code’ fields.
 
 describe-table
 ~~~~~~~~~~~~~~
@@ -2986,6 +3123,18 @@ Clears any previous pact execution state.
 
     (env-entity "my-org")
     (env-entity)
+
+env-hash
+~~~~~~~~
+
+*hash* ``string`` *→* ``string``
+
+Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash.
+
+.. code:: lisp
+
+    pact> (env-hash (hash "hello"))
+    "Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
 
 env-keys
 ~~~~~~~~

@@ -852,6 +852,7 @@ gets executed in your module, once loaded. It creates a big problem
 for upstream/provider code, as providers cannot upgrade the downstream code to address an exploit, or to
 introduce new features.
 
+### Blessing hashes
 A trade-off is needed to balance these opposing interests. Pact offers the ability for upstream
 code to break downstream dependent code at runtime. Table access is guarded to enforce
 that the module hash of the inlined dependency either matches the runtime version, or
@@ -1045,11 +1046,16 @@ Special forms {#special-forms}
 ```
 
 Within a module declaration, bless a previous version of that module as identified by HASH.
-See [foo](#bar) for a discussion of
+See [Dependency managment](#dependency-management) for a discussion of the blessing mechanism.
 
-declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that module
-hash matches HASH, failing if not. Use [describe-module](#describe-module) to query for the
-hash of a loaded module on the chain.
+```lisp
+(module provider 'keyset
+  (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+  (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+  ...
+)
+```
+
 
 ### defun {#defun}
 
