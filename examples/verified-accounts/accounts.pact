@@ -56,8 +56,7 @@
       { "balance": b, "ccy": c }
       ))
 
-  (property-of test
-    (valid (not abort)))
+  (property (valid (not abort)))
   (defun test:bool (x:integer)
     (if (< x 10) true false))
 

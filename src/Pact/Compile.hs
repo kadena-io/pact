@@ -199,10 +199,17 @@ expToCheck = (\case
   EList' [EAtom' "valid", body] -> Valid <$> expToProp body
   _ -> Nothing) -- . traceShowId
 
+doPropertyOf :: [Exp] -> Info -> Info -> Compile (Term Name)
+doPropertyOf exprs namei i = case exprs of
+  [EAtom name Nothing Nothing _, body] -> case expToCheck body of
+    Just check -> pure $ TProperty (Just name) check i
+    Nothing -> syntaxError namei "Invalid property"
+  _ -> syntaxError namei "Invalid property"
+
 doProperty :: [Exp] -> Info -> Info -> Compile (Term Name)
 doProperty exprs namei i = case exprs of
-  [EAtom name Nothing Nothing _, body] -> case expToCheck body of
-    Just check -> pure $ TProperty name check i
+  [body] -> case expToCheck body of
+    Just check -> pure $ TProperty Nothing check i
     Nothing -> syntaxError namei "Invalid property"
   _ -> syntaxError namei "Invalid property"
 
@@ -334,7 +341,8 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
-      ("property-of",Nothing) -> doProperty rest ai li
+      ("property-of",Nothing) -> doPropertyOf rest ai li
+      ("property",Nothing) -> doProperty rest ai li
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li

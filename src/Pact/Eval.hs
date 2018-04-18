@@ -165,24 +165,37 @@ evalUse mn h i = do
 loadModule :: Module -> Scope n Term Name -> Info ->
               Eval e (HM.HashMap Text (Term Name, [Check]))
 loadModule m bod1 mi = do
-  (modDefs1, modProps) <-
+  (modDefs1, modProps, leftoverProps) <-
     case instantiate' bod1 of
       TList bodyClause _ _bi -> do
+        let modDefsL = _1
+            modPropsL = _2
+            leftoverPropsL = _3
 
         -- For every clause in the module definition, either add it to
-        -- modDefs1, or, for properties, accumulate in modProps
-        flip execStateT (HM.empty, []) $ forM_ bodyClause $ \t ->
+        -- modDefs, or, for properties, accumulate in modProps or
+        -- leftoverProps.
+        flip execStateT (HM.empty, [], []) $ forM_ bodyClause $ \t ->
           case t of
-            TDef      {..} -> _1 . at _tDefName               ?= t
-            TNative   {..} -> _1 . at (asString _tNativeName) ?= t
-            TConst    {..} -> _1 . at (_aName _tConstArg)     ?= t
-            TSchema   {..} -> _1 . at (asString _tSchemaName) ?= t
-            TTable    {..} -> _1 . at (asString _tTableName)  ?= t
+            TDef      {..} -> do
+              leftoverProps' <- use leftoverPropsL
+              forM_ leftoverProps' $ \(TProperty Nothing check i) ->
+                modPropsL %= cons (TProperty (Just _tDefName) check i)
+              modDefsL . at _tDefName ?= t
+            TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
+            TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
+            TSchema   {..} -> modDefsL . at (asString _tSchemaName) ?= t
+            TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
             TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo -- >> return NoName
-            TProperty {..} -> _2 %= cons t
+            TProperty {..} -> case _tPropertyOf of
+              Just name -> modPropsL %= cons t
+              Nothing   -> _3 %= cons t -- why doesn't leftoverPropsL work here?
             _ -> lift $ evalError (_tInfo t) "Invalid module member"
 
       t -> evalError (_tInfo t) "Malformed module"
+
+  when (not (null leftoverProps))
+    (evalError mi "Trailing unattached property")
 
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(defName,defn) ->
@@ -212,7 +225,8 @@ loadModule m bod1 mi = do
       defnsNoProps = (,[]) <$> modDefs1
 
   defnsWithProps <- foldrM
-    (\(TProperty name prop info) accum -> if HM.member name accum
+    -- invariant: all properties have an attached name at this point
+    (\(TProperty (Just name) prop info) accum -> if HM.member name accum
       then pure $ accum & singular (ix name) . _2 %~ cons prop
       else evalError info $
         "Found a property without a corresponding definition (" ++

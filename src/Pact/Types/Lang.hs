@@ -728,7 +728,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TProperty {
-      _tPropertyOf :: !Text
+      _tPropertyOf :: !(Maybe Text)
     , _tCheck :: Check
     , _tInfo :: !Info
     }
