@@ -116,6 +116,7 @@ translateType node = go $ _aTy node
                 TyPrim TyInteger -> pure $ EType TInt
                 TyPrim TyString  -> pure $ EType TStr
                 TyPrim TyTime    -> pure $ EType TTime
+                TyPrim TyKeySet  -> pure $ EType TKeySet
 
                 -- Pretend any and var are the same -- we can't analyze either
                 -- of them.
@@ -125,18 +126,21 @@ translateType node = go $ _aTy node
                 -- TODO: handle these:
                 --
                 TyPrim TyValue  -> throwError $ UnhandledType node ty
-                TyPrim TyKeySet -> throwError $ UnhandledType node ty
                 _               -> throwError $ UnhandledType node ty
             )
 
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
       TySchema _ ty' -> go ty'
 
+      --
+      -- TODO: dedupe this stuff. we have this in 3 places.
+      --
       TyPrim TyBool    -> pure $ EType TBool
       TyPrim TyDecimal -> pure $ EType TDecimal
       TyPrim TyInteger -> pure $ EType TInt
       TyPrim TyString  -> pure $ EType TStr
       TyPrim TyTime    -> pure $ EType TTime
+      TyPrim TyKeySet  -> pure $ EType TKeySet
 
       -- Pretend any and var are the same -- we can't analyze either of them.
       TyAny            -> pure $ EType TAny
@@ -146,7 +150,6 @@ translateType node = go $ _aTy node
       -- TODO: handle these:
       --
       ty@(TyPrim TyValue)  -> throwError $ UnhandledType node ty
-      ty@(TyPrim TyKeySet) -> throwError $ UnhandledType node ty
       ty@(TyList _)        -> throwError $ UnhandledType node ty
       ty@(TyFun _)         -> throwError $ UnhandledType node ty
 
@@ -256,6 +259,10 @@ translateNode = \case
   AST_Enforce _ cond _msg -> do
     ETerm condTerm TBool <- translateNode cond
     pure $ ETerm (Enforce condTerm) TBool
+
+  AST_ReadKeyset nameA -> do
+    ETerm nameT TStr <- translateNode nameA
+    return $ ETerm (ReadKeySet nameT) TKeySet
 
   --
   -- TODO: add object support
@@ -471,6 +478,7 @@ translateNode = \case
                  TyPrim TyInteger -> EType TInt
                  TyPrim TyString  -> EType TStr
                  TyPrim TyTime    -> EType TTime
+                 TyPrim TyKeySet  -> EType TKeySet
       v' <- translateNode v
       pure (k', (ty, v'))
     schema <- translateSchema node

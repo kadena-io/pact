@@ -20,7 +20,6 @@ import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
-import Data.Data (Data)
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -31,7 +30,7 @@ import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
 import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
-                                  WriteType(..), KeySet)
+                                  WriteType(..), KeySet, TKeySet)
 import qualified Pact.Types.Runtime as Pact
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
@@ -56,16 +55,6 @@ instance IsString RowKey where
 
 symRowKey :: SBV String -> SBV RowKey
 symRowKey = coerceSBV
-
--- KeySets are completely opaque to pact programs -- 256 should be enough for
--- symbolic analysis?
-newtype KeySet
-  = KeySet Word8
-  deriving (Eq, Ord, Data, Show, Read)
-
--- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
-instance SymWord KeySet
-instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
 
 -- a unique cell, from a column name and a row key
 -- e.g. balance__25
@@ -144,6 +133,7 @@ data SymbolicCells
     , _scStringValues  :: SArray CellId String
     , _scDecimalValues :: SArray CellId Decimal
     , _scTimeValues    :: SArray CellId Time
+    , _scKsValues      :: SArray CellId KeySet
     -- TODO: opaque blobs
     }
     deriving (Show)
@@ -151,12 +141,12 @@ data SymbolicCells
 -- Implemented by-hand until 8.4, when we have DerivingStrategies
 instance Mergeable SymbolicCells where
   symbolicMerge force test
-    (SymbolicCells a b c d e)
-    (SymbolicCells a' b' c' d' e')
-    = SymbolicCells (f a a') (f b b') (f c c') (f d d') (f e e')
+    (SymbolicCells a b c d e f)
+    (SymbolicCells a' b' c' d' e' f')
+    = SymbolicCells (m a a') (m b b') (m c c') (m d d') (m e e') (m f f')
     where
-      f :: SymWord a => SArray CellId a -> SArray CellId a -> SArray CellId a
-      f = symbolicMerge force test
+      m :: SymWord a => SArray CellId a -> SArray CellId a -> SArray CellId a
+      m = symbolicMerge force test
 
 newtype TableMap a
   = TableMap { _tableMap :: Map TableName a }
@@ -238,6 +228,7 @@ allocateSymbolicCells tableNames = sequence $ TableMap $ Map.fromList $
       <*> newArray "stringCells"
       <*> newArray "decimalCells"
       <*> newArray "timeCells"
+      <*> newArray "keySetCells"
 
 data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
@@ -397,14 +388,22 @@ timeCell
 timeCell tn sCn sRk =
   latticeState.lasTableCells.singular (ix tn).scTimeValues.symArrayAt (sCellId sCn sRk)
 
+ksCell
+  :: TableName
+  -> SBV ColumnName
+  -> SBV RowKey
+  -> Lens' AnalyzeState (SBV KeySet)
+ksCell tn sCn sRk =
+  latticeState.lasTableCells.singular (ix tn).scKsValues.symArrayAt (sCellId sCn sRk)
+
 symKsName :: SBV String -> SBV KeySetName
 symKsName = coerceSBV
 
-namedAuth :: SBV KeySetName -> AnalyzeM (SBV Bool)
-namedAuth sKsn = do
-  kSets <- view keySets
-  auths <- view ksAuths
-  pure $ readArray auths $ readArray kSets sKsn
+resolveKeySet :: SBV KeySetName -> AnalyzeM (SBV KeySet)
+resolveKeySet sKsn = readArray <$> view keySets <*> pure sKsn
+
+nameAuthorized :: SBV KeySetName -> AnalyzeM (SBV Bool)
+nameAuthorized sKsn = readArray <$> view ksAuths <*> resolveKeySet sKsn
 
 analyzeTermO :: Term Object -> AnalyzeM Object
 analyzeTermO = \case
@@ -424,27 +423,29 @@ analyzeTermO = \case
         EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk)
         EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk)
         EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
         EType TAny     -> pure OpaqueVal
       pure (fieldType, x)
     pure (Object obj)
 
-  ReadCols tn (Schema fields) rowId cols -> do
+  ReadCols tn (Schema fields) rowKey cols -> do
     -- Intersect both the returned object and its type with the requested
     -- columns
     let colSet = Set.fromList cols
         relevantFields
           = Map.filterWithKey (\k _ -> T.pack k `Set.member` colSet) fields
 
-    rId <- analyzeTerm rowId
+    sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     obj <- iforM relevantFields $ \fieldName fieldType -> do
       let sCn = literal $ ColumnName fieldName
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn (coerceSBV rId))
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn (coerceSBV rId))
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn (coerceSBV rId))
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn (coerceSBV rId))
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn (coerceSBV rId))
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk)
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
         EType TAny     -> pure OpaqueVal
       pure (fieldType, x)
     pure (Object obj)
@@ -556,9 +557,6 @@ analyzeTerm = \case
   --
   Write tn rowKey obj -> do
     Object obj' <- analyzeTermO obj
-    --
-    -- TODO: handle write of non-literal object
-    --
     tableWritten tn .= true
     sRk <- symRowKey <$> analyzeTerm rowKey
     void $ iforM obj' $ \colName (fieldType, aval) -> do
@@ -573,10 +571,21 @@ analyzeTerm = \case
             cell .= next
             columnDelta tn sCn += next - prev
 
-          EType TBool -> boolCell   tn sCn sRk .= mkSBV val'
+          EType TBool    -> boolCell    tn sCn sRk .= mkSBV val'
+          EType TStr     -> stringCell  tn sCn sRk .= mkSBV val'
 
-          EType TStr  -> stringCell tn sCn sRk .= mkSBV val'
-          -- TODO: rest of cell types
+          --
+          -- TODO: we should support column delta for decimals
+          --
+          EType TDecimal -> decimalCell tn sCn sRk .= mkSBV val'
+
+          EType TTime    -> timeCell    tn sCn sRk .= mkSBV val'
+          EType TKeySet  -> ksCell      tn sCn sRk .= mkSBV val'
+
+          -- TODO: what to do with EType TAny here?
+
+          -- TODO: handle EObjectTy here
+
         -- TODO(joel): I'm not sure this is the right error to throw
         AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
         OpaqueVal   -> throwError OpaqueValEncountered
@@ -757,7 +766,9 @@ analyzeTerm = \case
       (NotOp, [a])    -> pure $ bnot a
       _               -> throwError $ MalformedLogicalOpExec op args
 
-  NameAuthorized str -> namedAuth =<< symKsName <$> analyzeTerm str
+  ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
+
+  NameAuthorized str -> nameAuthorized =<< symKsName <$> analyzeTerm str
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
@@ -784,7 +795,7 @@ analyzeProperty (Not p) = bnot <$> analyzeProperty p
 -- Domain properties
 analyzeProperty Success = use succeeds
 analyzeProperty Abort = bnot <$> analyzeProperty Success
-analyzeProperty (KsNameAuthorized ksn) = namedAuth $ literal ksn
+analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literal ksn
 analyzeProperty (TableRead tn) = use $ tableRead tn
 analyzeProperty (TableWrite tn) = use $ tableWritten tn
 -- analyzeProperty (CellIncrease tableName colName)

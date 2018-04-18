@@ -131,6 +131,17 @@ suite = tests
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
 
+  , scope "read-keyset.equality" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce
+                  (= (read-keyset "ks")
+                     (read-keyset (+ "k" "s")))
+                  "keysets equality failed"))
+            |]
+      expectPass code $ Valid Success
+
   , scope "enforce-keyset.name.static" $ do
       let code =
             [text|

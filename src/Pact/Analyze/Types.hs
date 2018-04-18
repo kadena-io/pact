@@ -15,7 +15,8 @@ import Data.Map.Strict (Map)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.Internals as SBVI
 import Data.Thyme
-import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject)
+import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
+                               TKeySet)
 
 import Pact.Analyze.Prop
 
@@ -48,6 +49,16 @@ data UserType = UserType
 
 deriving instance HasKind UserType
 deriving instance SymWord UserType
+
+-- KeySets are completely opaque to pact programs -- 256 should be enough for
+-- symbolic analysis?
+newtype KeySet
+  = KeySet Word8
+  deriving (Eq, Ord, Data, Show, Read)
+
+-- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
+instance SymWord KeySet
+instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
 
 -- Operations that apply to a pair of either integer or decimal, resulting in
 -- the same:
@@ -106,6 +117,7 @@ data Type a where
   TStr     :: Type String
   TTime    :: Type Time
   TDecimal :: Type Decimal
+  TKeySet  :: Type KeySet
   TAny     :: Type Any
 
 data EType where
@@ -120,6 +132,7 @@ typeEq TStr     TStr     = Just Refl
 typeEq TTime    TTime    = Just Refl
 typeEq TDecimal TDecimal = Just Refl
 typeEq TAny     TAny     = Just Refl
+typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
 instance Eq EType where
@@ -206,6 +219,7 @@ data Term ret where
 
   Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
   Logical        ::                        LogicalOp    -> [Term Bool]    ->           Term Bool
+  ReadKeySet     ::                        Term String  ->                             Term KeySet
   NameAuthorized ::                        Term String  ->                             Term Bool
   Concat         ::                        Term String  -> Term String    ->           Term String
   PactVersion    ::                                                                    Term String
