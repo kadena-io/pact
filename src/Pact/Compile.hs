@@ -54,8 +54,6 @@ import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Hash
 
--- import Debug.Trace
-
 type MkInfo = Exp -> Info
 
 mkEmptyInfo :: MkInfo
@@ -125,7 +123,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TTable {} -> return d
         TUse {} -> return d
         TProperty {} -> return d
-        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, property-of allowed in module"
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, property, property-of allowed in module"
       mkModule docs body = do
         cm <- use csModule
         case cm of
@@ -179,10 +177,10 @@ expToProp = (\case
   EList' [EAtom' "column-increase", ELitName tab, ELitName col]
     -> Just (ColumnIncrease (mkT tab) (mkC col))
 
-  EList' [EAtom' "ks-name-authorized", ELitName name]
+  EList' [EAtom' "authorized-by", ELitName name]
     -> Just (KsNameAuthorized (mkK name))
 
-  EList' [EAtom' "ks-name-authorized", ESymbol name _]
+  EList' [EAtom' "authorized-by", ESymbol name _]
     -> Just (KsNameAuthorized (mkK name))
 
   -- EAtom' var -> Var var
@@ -194,10 +192,7 @@ expToProp = (\case
         mkK = KeySetName
 
 expToCheck :: Exp -> Maybe Check
-expToCheck = (\case
-  EList' [EAtom' "satisfiable", body] -> Satisfiable <$> expToProp body
-  EList' [EAtom' "valid", body] -> Valid <$> expToProp body
-  _ -> Nothing) -- . traceShowId
+expToCheck body = Valid <$> expToProp body
 
 doPropertyOf :: [Exp] -> Info -> Info -> Compile (Term Name)
 doPropertyOf exprs namei i = case exprs of
@@ -341,8 +336,8 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
-      ("property-of",Nothing) -> doPropertyOf rest ai li
-      ("property",Nothing) -> doProperty rest ai li
+      ("@property-of",Nothing) -> doPropertyOf rest ai li
+      ("@property",Nothing) -> doProperty rest ai li
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li

@@ -41,7 +41,7 @@
     ))
 
   ; TODO: defproperty?
-  ; (property-of transfer conserves-mass)
+  ; (@property-of transfer conserves-mass)
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
     (debit src amount date { "transfer-to": dest })
@@ -56,15 +56,14 @@
       { "balance": b, "ccy": c }
       ))
 
-  (property (valid (not abort)))
+  (@property (not abort))
   (defun test:bool (x:integer)
     (if (< x 10) true false))
 
-  (property-of read-account-admin
-    (valid
-      (assuming
-          (not (ks-name-authorized 'accounts-admin-keyset))
-          abort)))
+  (@property-of read-account-admin
+    (assuming
+        (not (authorized-by 'accounts-admin-keyset))
+        abort))
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
@@ -111,10 +110,10 @@
       )))
 
 
-  ; (property-of enforce-auth
+  ; (@property
   ;   (assuming
-  ;     (not (admin current-user))
-  ;     (not transaction-succeeds)))
+  ;     (not (authorized-by 'accounts-admin-keyset))
+  ;     abort))
   (defun enforce-auth (keyset:keyset auth)
     (if (= auth AUTH_KEYSET)
       (enforce-keyset keyset)
@@ -122,7 +121,7 @@
         "Invalid access of pact account")))
 
 
-  ; (property-of debit
+  ; (@property-of debit
   ;   (let
   ;     (with-read 'initial accounts acct
   ;       { "balance" := initial-balance
@@ -155,7 +154,7 @@
                 }
           )))
 
-  ; (property-of debit
+  ; (@property-of debit
   ;   (let
   ;     (with-read 'initial accounts acct
   ;       { "balance" := initial-balance })
@@ -166,7 +165,7 @@
   ;   ))
 
   ; ; alternately
-  ; (property-of debit
+  ; (@property-of debit
   ;   (with-read 'delta accounts acct
   ;     { "balance" := amount }))
 

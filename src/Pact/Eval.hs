@@ -181,6 +181,7 @@ loadModule m bod1 mi = do
               leftoverProps' <- use leftoverPropsL
               forM_ leftoverProps' $ \(TProperty Nothing check i) ->
                 modPropsL %= cons (TProperty (Just _tDefName) check i)
+              _3 .= []
               modDefsL . at _tDefName ?= t
             TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
             TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
