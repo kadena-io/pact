@@ -90,7 +90,7 @@ syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse as i = case as of
   [m] -> mkM m Nothing
-  [m,eh@(ELiteral (LString h) _)] -> mkHash "use" h eh >>= mkM m . Just
+  [m,eh@(ELiteral (LString h) _)] -> mkM m . Just =<< mkHash "use" h eh
   _ -> syntaxError i "use requires module name (symbol/string/bare atom) and optional hash"
   where
     mkM m h = case m of
