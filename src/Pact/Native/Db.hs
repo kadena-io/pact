@@ -29,6 +29,8 @@ import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
 import Data.Aeson (toJSON,object,(.=))
 import Pact.Eval
+import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
@@ -106,7 +108,7 @@ dbDefs =
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     "Get metadata for MODULE. Returns a JSON object with 'name', 'hash' and 'code' fields."
+     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', and 'code' fields."
     ])
 
 descTable :: RNativeFun e
@@ -130,6 +132,7 @@ descModule i [TLitString t] = do
     Just (Module{..},_) ->
       return $ TObject [(tStr "name",tStr $ asString _mName),
                         (tStr "hash", tStr $ asString _mHash),
+                        (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
                         (tStr "code", tStr $ asString _mCode)] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
@@ -296,8 +299,19 @@ guardTable i TTable {..} = do
       findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
   r <- foldr findMod Nothing . reverse <$> use evalCallStack
   case r of
-    (Just mn) | mn == _tModule -> return ()
+    (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
     _ -> do
       m <- getModule (_faInfo i) _tModule
       enforceKeySetName (_faInfo i) (_mKeySet m)
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
+
+enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
+enforceBlessedHashes i mn h = do
+  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  case mm of
+    Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
+    Just (Module{..},_)
+      | h == _mHash -> return () -- current version ok
+      | h `HS.member` _mBlessed -> return () -- hash is blessed
+      | otherwise -> evalError' i $
+                     "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h

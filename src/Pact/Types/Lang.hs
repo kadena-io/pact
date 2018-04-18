@@ -67,8 +67,8 @@ module Pact.Types.Lang
    Module(..),
    ConstVal(..),
    Term(..),
-   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
-   tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tInfo,tKeySet,
+   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
+   tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
@@ -113,8 +113,8 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
 import Control.DeepSeq
 import Data.Maybe
+import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
-
 
 import Data.Serialize (Serialize)
 
@@ -611,17 +611,18 @@ data Module = Module {
   , _mDocs :: !(Maybe Text)
   , _mCode :: !Code
   , _mHash :: !Hash
+  , _mBlessed :: !(HS.HashSet Hash)
   } deriving (Eq)
 instance Show Module where
   show Module {..} =
-    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ maybeDelim " " _mDocs ++ ")"
+    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash ]
+    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed ]
     ++ maybe [] (return . ("docs" .=)) _mDocs
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code" <*> o .: "hash"
+    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -713,6 +714,10 @@ data Term n =
     , _tModuleHash :: !(Maybe Hash)
     , _tInfo :: !Info
     } |
+    TBless {
+      _tBlessed :: !Hash
+    , _tInfo :: !Info
+    } |
     TValue {
       _tValue :: !Value
     , _tInfo :: !Info
@@ -726,6 +731,7 @@ data Term n =
     TTable {
       _tTableName :: !TableName
     , _tModule :: ModuleName
+    , _tHash :: !Hash
     , _tTableType :: !(Type (Term n))
     , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
@@ -751,6 +757,7 @@ instance Show n => Show (Term n) where
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
     show (TUse m h _) = "(TUse " ++ show m ++ maybeDelim " " h ++ ")"
+    show (TBless hs _) = "(TBless " ++ show hs ++ ")"
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
@@ -791,14 +798,16 @@ instance Eq1 Term where
     a == m && b == n
   liftEq _ (TUse a b c) (TUse m n o) =
     a == m && b == n && c == o
+  liftEq _ (TBless a b) (TBless m n) =
+    a == m && b == n
   liftEq _ (TValue a b) (TValue m n) =
     a == m && b == n
   liftEq eq (TStep a b c d) (TStep m n o p) =
     liftEq (liftEq eq) a m && liftEq eq b n && liftEq (liftEq eq) c o && d == p
   liftEq eq (TSchema a b c d e) (TSchema m n o p q) =
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
-  liftEq eq (TTable a b c d e) (TTable m n o p q) =
-    a == m && b == n && liftEq (liftEq eq) c o && d == p && e == q
+  liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
+    a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
   liftEq _ _ _ = False
 
 
@@ -820,10 +829,11 @@ instance Monad Term where
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
     TUse m h i >>= _ = TUse m h i
+    TBless hs i >>= _ = TBless hs i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
-    TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
+    TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tDocs _tInfo
 
 
 instance FromJSON (Term n) where
@@ -888,6 +898,7 @@ typeof t = case t of
       TObject {..} -> Right $ TySchema TyObject _tObjectType
       TKeySet {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"
+      TBless {} -> Left "bless"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
@@ -924,7 +935,7 @@ termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
 termEq (TLiteral a _) (TLiteral b _) = a == b
 termEq (TKeySet a _) (TKeySet b _) = a == b
 termEq (TValue a _) (TValue b _) = a == b
-termEq (TTable a b c d _) (TTable e f g h _) = a == e && b == f && c == g && d == h
+termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
 termEq _ _ = False
 
@@ -943,6 +954,7 @@ abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
 abbrev (TUse m h _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
+abbrev TBless {} = "<bless ...>"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"

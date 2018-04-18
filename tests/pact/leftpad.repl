@@ -1,0 +1,73 @@
+(begin-tx)
+
+(define-keyset 'k (sig-keyset))
+
+(module leftpad 'k
+  (defconst VERSION 1)
+  (defun left-pad (s i)
+    (+ (fold (+) "" (make-list i " ")) s)))
+
+(module impure 'k
+  (defconst VERSION 1)
+  (deftable foo)
+  (defun ins (k v) (insert foo k v)))
+
+(create-table foo)
+
+(commit-tx)
+
+(begin-tx)
+
+(use leftpad)
+(use impure)
+
+(module dep 'k
+  (defconst IMPURE_V1_HASH (at 'hash (describe-module 'impure)))
+  (defun dep-leftpad () (left-pad "hello" 3))
+  (defun dep-impure (k v) (ins k { "value": v })))
+
+(commit-tx)
+
+(begin-tx)
+
+(expect "leftpad works" "   hello" (dep.dep-leftpad))
+(dep.dep-impure "a" 1)
+(expect "impure works" { "value": 1 } (read impure.foo "a"))
+
+(rollback-tx)
+
+(begin-tx)
+
+(module leftpad 'k
+  (defconst VERSION 2)
+  (defun left-pad (s i)
+    (+ (fold (+) "" (make-list i " ")) s)))
+
+(module impure 'k
+  (defconst VERSION 2)
+  (deftable foo)
+  (defun ins (k v) (insert foo k v)))
+
+(commit-tx)
+
+(begin-tx)
+
+(expect "leftpad works after update" "   hello" (dep.dep-leftpad))
+(expect-failure "impure fails after update" (dep.dep-impure "b" 1))
+
+(rollback-tx)
+
+(begin-tx)
+
+(use dep)
+
+(module impure 'k
+  (defconst VERSION 3)
+  (bless "66ccab1b8248d95db2662b2b5bcb6cc4cfb287d8d40a0636aa108351ad3a20ba915c51840ecf576be38d93a49f18da1f38e2cb0239beaca51f0e7d0a19bc75cf")
+  (deftable foo)
+  (defun ins (k v) (insert foo k v)))
+
+(commit-tx)
+
+(dep.dep-impure "b" 1)
+(expect "impure works with blessed hash" { "value": 1 } (read impure.foo "b"))

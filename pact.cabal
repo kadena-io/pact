@@ -55,7 +55,7 @@ library
 
   -- other-extensions:
   build-depends:       Decimal >= 0.4.2 && < 0.5
-                     , aeson >= 0.11.3.0 && < 1.1
+                     , aeson >= 0.11.3.0 && < 1.2
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , attoparsec >= 0.13.0.2 && < 0.14
                      , base >=4.9.0.0 && < 4.10
@@ -190,6 +190,7 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+              , hlint >= 2.0
   other-modules:
                 Blake2Spec
               , DocgenSpec

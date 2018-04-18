@@ -111,6 +111,8 @@ replDefs = ("Repl",
      "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defRNative "print" print' (funType tTyString [("value",a)])
      "Print a string, mainly to format newlines correctly"
+     ,defRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
+     "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ])
      where
        json = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
@@ -228,24 +230,13 @@ tx Begin i as = do
              [TLitString n] -> return $ Just n
              [] -> return Nothing
              _ -> argsError i as
-  tid <- fmap succ <$> view eeTxId
-  setenv eeTxId tid
-  evalBeginTx (_faInfo i)
+  setop $ Tx (_faInfo i) Begin tname
   setLibState $ set rlsTxName tname
-  return $ txmsg tname tid "Begin"
-
-tx Rollback i [] = do
-  evalRollbackTx (_faInfo i)
-  tid <- view eeTxId
-  tname <- viewLibState (view rlsTxName)
-  return $ txmsg tname tid "Rollback"
-tx Commit i [] = do
-  newmods <- use (evalRefs.rsNew)
-  setop $ UpdateEnv $ Endo (over (eeRefStore.rsModules) (HM.union (HM.fromList newmods)))
-  void $ evalCommitTx (_faInfo i)
-  tid <- view eeTxId
+  return (tStr "")
+tx t i [] = do
   tname <- modifyLibState (set rlsTxName Nothing &&& view rlsTxName)
-  return $ txmsg tname tid "Commit"
+  setop (Tx (_faInfo i) t tname)
+  return (tStr "")
 tx _ i as = argsError i as
 
 recordTest :: Text -> Maybe (FunApp,Text) -> Eval LibState ()
@@ -336,3 +327,11 @@ sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss)
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")
 print' i as = argsError i as
+
+envHash :: RNativeFun LibState
+envHash i [TLitString s] = case fromText' s of
+  Left err -> evalError' i $ "Bad hash value: " ++ show s ++ ": " ++ err
+  Right h -> do
+    setenv eeHash h
+    return $ tStr $ "Set tx hash to " <> s
+envHash i as = argsError i as

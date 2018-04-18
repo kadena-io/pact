@@ -715,6 +715,7 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
+toAST TBless {..} = die _tInfo "Bless not supported"
 toAST TStep {..} = do
   ent <- forM _tStepEntity $ \e -> do
     e' <- toAST e

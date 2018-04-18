@@ -78,7 +78,7 @@ exToTx Local = Nothing
 
 runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
 runPayload c@Command{..} = do
-  let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm _cmdSigs
+  let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm c
       runRpc (Continuation ym) = applyContinuation ym _cmdSigs
       Payload{..} = _cmdPayload
   case _pAddress of
@@ -93,13 +93,13 @@ runPayload c@Command{..} = do
 
 
 
-applyExec :: RequestKey -> ExecMsg ParsedCode -> [UserSig] -> CommandM p CommandResult
-applyExec rk (ExecMsg parsedCode edata) ks = do
+applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p CommandResult
+applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
   (CommandState refStore) <- liftIO $ readMVar _ceState
   let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (userSigsToPactKeySet ks) edata Nothing) refStore
+                (MsgData (userSigsToPactKeySet _cmdSigs) edata Nothing _cmdHash) refStore
   pr <- liftIO $ evalExec evalEnv parsedCode
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
   return $ jsonResult _ceMode rk $ CommandSuccess (last (erOutput pr))

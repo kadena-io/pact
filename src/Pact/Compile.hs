@@ -41,6 +41,7 @@ import Data.Maybe
 import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.HashSet as HS
 
 import Pact.Types.Lang
 import Pact.Types.Util
@@ -63,7 +64,7 @@ mkTextInfo s e = Info (Just (Code $ T.take (_pLength d) $ T.drop (fromIntegral $
 
 data CompileState = CompileState {
   _csFresh :: Int,
-  _csModule :: Maybe ModuleName
+  _csModule :: Maybe (ModuleName,Hash)
   }
 instance Default CompileState where def = CompileState 0 def
 makeLenses ''CompileState
@@ -89,7 +90,7 @@ syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse as i = case as of
   [m] -> mkM m Nothing
-  [m,ELiteral (LString h) _] -> mkH h >>= mkM m
+  [m,eh@(ELiteral (LString h) _)] -> mkM m . Just =<< mkHash "use" h eh
   _ -> syntaxError i "use requires module name (symbol/string/bare atom) and optional hash"
   where
     mkM m h = case m of
@@ -98,9 +99,11 @@ doUse as i = case as of
       (EAtom s Nothing Nothing _) -> mk s h
       _ -> syntaxError i "use: module name must be symbol/string/bare atom"
     mk s h = return $ TUse (ModuleName s) h i
-    mkH h = case fromText' h of
-      Left e -> syntaxError i $ "use: bad hash: " ++ e
-      Right mh -> return (Just mh)
+
+mkHash :: String -> Text -> Exp -> Compile Hash
+mkHash msg h el = case fromText' h of
+      Left e -> mkInfo el >>= \i -> syntaxError i $ msg ++ ": bad hash: " ++ e
+      Right mh -> return mh
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
@@ -116,25 +119,31 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TSchema {} -> return d
         TTable {} -> return d
         TUse {} -> return d
-        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use allowed in module"
+        TBless {} -> return d
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, bless allowed in module"
       mkModule docs body = do
         cm <- use csModule
         case cm of
           Just _ -> syntaxError li "Invalid nested module"
           Nothing -> do
-            csModule .= Just (ModuleName n)
-            bd <- mapNonEmpty "module" (run >=> defOnly) body li
-            csModule .= Nothing
             let code = case li of
                   Info Nothing -> "<code unavailable>"
                   Info (Just (c,_)) -> c
+                modName = ModuleName n
+                modHash = hash $ encodeUtf8 $ _unCode code
+            csModule .= Just (modName,modHash)
+            bd <- mapNonEmpty "module" (run >=> defOnly) body li
+            csModule .= Nothing
+            let blessed = HS.fromList $ (`concatMap` bd) $ \t -> case t of
+                  TBless {..} -> [_tBlessed]
+                  _ -> []
             return $ TModule
-              (Module (ModuleName n) (KeySetName k) docs code (hash $ encodeUtf8 $ _unCode code))
+              (Module modName (KeySetName k) docs code modHash blessed)
               (abstract (const Nothing) (TList bd TyAny li)) li
 
 doModule _ li _ = syntaxError li "Invalid module definition"
 
-currentModule :: Info -> Compile ModuleName
+currentModule :: Info -> Compile (ModuleName,Hash)
 currentModule i = use csModule >>= \m -> case m of
   Just cm -> return cm
   Nothing -> syntaxError i "Must be declared within module"
@@ -154,7 +163,7 @@ doDef es defType namei i =
           dty <- FunType <$> pure args <*> maybeTyVar namei ty
           cm <- currentModule i
           db <- abstract (`elemIndex` argsn) <$> runBody body i
-          return $ TDef dn cm defType dty db ddocs i
+          return $ TDef dn (fst cm) defType dty db ddocs i
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -229,7 +238,7 @@ doConst es i = case es of
       v' <- run v
       cm <- currentModule i
       a <- Arg <$> pure dn <*> maybeTyVar i ty <*> pure i
-      return $ TConst a cm (CVRaw v') docs i
+      return $ TConst a (fst cm) (CVRaw v') docs i
 
 doSchema :: [Exp] -> Info -> Compile (Term Name)
 doSchema es i = case es of
@@ -242,7 +251,7 @@ doSchema es i = case es of
       fs <- forM as $ \a -> case a of
         EAtom an Nothing ty _ai -> mkInfo a >>= \ai -> Arg an <$> maybeTyVar ai ty <*> pure ai
         _ -> syntaxError i "Invalid schema field definition"
-      return $ TSchema (TypeName utn) cm docs fs i
+      return $ TSchema (TypeName utn) (fst cm) docs fs i
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
@@ -256,7 +265,11 @@ doTable es i = case es of
         Just ot@TyUser {} -> return $ liftTy i ot
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
-      return $ TTable (TableName tn) cm tty docs i
+      return $ TTable (TableName tn) (fst cm) (snd cm) tty docs i
+
+doBless :: [Exp] -> Info -> Compile (Term Name)
+doBless [he@(ELiteral (LString s) _)] i = mkHash "bless" s he >>= \h -> return $ TBless h i
+doBless _ i = syntaxError i "Invalid bless, must contain valid hash"
 
 mkInfo :: Exp -> Compile Info
 mkInfo e = ask >>= \f -> return (f e)
@@ -278,6 +291,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
       ("defconst",Nothing) -> doConst rest li
       ("defschema",Nothing) -> doSchema rest li
       ("deftable",Nothing) -> doTable rest li
+      ("bless",Nothing) -> doBless rest li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
           (preArgs,be@(EBinding bs _):bbody) ->

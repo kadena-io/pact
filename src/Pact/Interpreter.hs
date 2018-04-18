@@ -42,9 +42,12 @@ data PactDbEnv e = PactDbEnv {
 data MsgData = MsgData {
   mdSigs :: !(S.Set PublicKey),
   mdData :: !Value,
-  mdStep :: !(Maybe PactStep)
+  mdStep :: !(Maybe PactStep),
+  mdHash :: !Hash
   }
-instance Default MsgData where def = MsgData def Null def
+
+initMsgData :: Hash -> MsgData
+initMsgData = MsgData def Null def
 
 data EvalResult = EvalResult {
   erInput :: ![Term Name],
@@ -78,6 +81,7 @@ setupEvalEnv dbEnv ent mode msgData refStore =
   , _eePactDb = pdPactDb dbEnv
   , _eePactDbVar = pdPactDbVar dbEnv
   , _eePurity = PImpure
+  , _eeHash = mdHash msgData
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing
