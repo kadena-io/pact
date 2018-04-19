@@ -1,4 +1,4 @@
-name:                pact-backend
+name:                pact-server
 version:             2.3.8
 synopsis:            Smart contract language library and REPL
 description:
@@ -106,7 +106,7 @@ executable pact
   build-depends:
       base
     , pact
-    , pact-backend
+    , pact-server
   hs-source-dirs:      executables
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -118,7 +118,7 @@ executable bench
   build-depends:
       base
     , pact
-    , pact-backend
+    , pact-server
   hs-source-dirs:      executables
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -133,7 +133,7 @@ test-suite hspec
       base
     , hspec
     , pact
-    , pact-backend
+    , pact-server
     , aeson
     , containers
     , directory

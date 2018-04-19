@@ -11,8 +11,8 @@ in
     };
     packages = {
       pact = ./pact;
-      pact-backend = ./pact-backend;
-      pact-frontend = ./pact-frontend;
+      pact-server = ./pact-server;
+      pact-ghcjs = ./pact-ghcjs;
 
       cabal-doctest = pkgs.fetchFromGitHub {
         owner = "phadej";
@@ -65,8 +65,8 @@ in
     };
     
     shells = {
-      ghc = ["pact" "pact-backend" "pact-frontend"];
-      ghcjs = ["pact" "pact-frontend"];
+      ghc = ["pact" "pact-server" "pact-ghcjs"];
+      ghcjs = ["pact" "pact-ghcjs"];
     };
   
   })

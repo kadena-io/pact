@@ -1,4 +1,4 @@
-name:                pact-frontend
+name:                pact-ghcjs
 version:             2.3.8
 synopsis:            Frontend to the Pact smart contract language library
 description:
