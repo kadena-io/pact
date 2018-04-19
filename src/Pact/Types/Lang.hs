@@ -111,6 +111,7 @@ import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
+import Data.Semigroup (Semigroup)
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
@@ -135,7 +136,7 @@ instance Pretty Parsed where pretty = pretty . _pDelta
 
 
 newtype Code = Code { _unCode :: Text }
-  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Monoid,Generic,NFData,AsString)
+  deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
 instance Show Code where show = unpack . _unCode
 instance Pretty Code where
   pretty (Code c) | T.compareLength c maxLen == GT =
