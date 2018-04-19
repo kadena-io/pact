@@ -1,6 +1,7 @@
 {-# language DeriveFunctor              #-}
 {-# language DeriveDataTypeable         #-}
 {-# language DeriveTraversable          #-}
+{-# language FlexibleInstances          #-}
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language LambdaCase                 #-}
@@ -25,7 +26,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.String (IsString(..))
-import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError,
+                        name)
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
@@ -37,24 +39,6 @@ import Pact.Types.Version (pactVersion)
 
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
-
-newtype RowKey
-  = RowKey String
-  deriving (Eq, Ord, Show)
-
-instance SymWord RowKey where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (RowKey s) = mkConcreteString s
-  fromCW = wrappedStringFromCW RowKey
-
-instance HasKind RowKey where
-  kindOf _ = KString
-
-instance IsString RowKey where
-  fromString = RowKey
-
-symRowKey :: SBV String -> SBV RowKey
-symRowKey = coerceSBV
 
 -- a unique cell, from a column name and a row key
 -- e.g. balance__25
@@ -83,12 +67,12 @@ allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
 allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     let name' = T.unpack name
     var <- case ty of
-      TyPrim TyInteger -> mkAVal <$> sInteger name'
-      TyPrim TyBool    -> mkAVal <$> sBool name'
-      TyPrim TyDecimal -> mkAVal <$> sDecimal name'
-      TyPrim TyTime    -> mkAVal <$> sInt64 name'
-      TyPrim TyString  -> mkAVal <$> sString name'
-      TyUser _         -> mkAVal <$> (free_ :: Symbolic (SBV UserType))
+      TyPrim TyInteger -> mkAVal . sansProv <$> sInteger name'
+      TyPrim TyBool    -> mkAVal . sansProv <$> sBool name'
+      TyPrim TyDecimal -> mkAVal . sansProv <$> sDecimal name'
+      TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
+      TyPrim TyString  -> mkAVal . sansProv <$> sString name'
+      TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
 
       -- TODO
       TyPrim TyValue   -> error "unimplemented type analysis"
@@ -138,7 +122,7 @@ data SymbolicCells
     }
     deriving (Show)
 
--- Implemented by-hand until 8.4, when we have DerivingStrategies
+-- Implemented by-hand until 8.2, when we have DerivingStrategies
 instance Mergeable SymbolicCells where
   symbolicMerge force test
     (SymbolicCells a b c d e f)
@@ -160,7 +144,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds      :: SBool
+    { _lasSucceeds      :: SBV Bool
     , _lasTablesRead    :: SFunArray TableName Bool
     , _lasTablesWritten :: SFunArray TableName Bool
     , _lasColumnDeltas  :: TableMap (SFunArray ColumnName Integer)
@@ -270,6 +254,11 @@ describeAnalyzeFailure = \case
   FailureMessage msg -> msg
   UnhandledObject obj -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> tShow obj
   UnhandledTerm termText -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> termText
+  --
+  -- TODO: maybe we should differentiate between opaque values and type
+  -- variables, because the latter would probably mean a problem from type
+  -- inference or the need for a type annotation?
+  --
   OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
 
 tShow :: Show a => a -> Text
@@ -310,8 +299,8 @@ instance (Mergeable a) => Mergeable (AnalyzeM a) where
 symArrayAt
   :: forall array k v
    . (SymWord k, SymWord v, SymArray array)
-  => SBV k -> Lens' (array k v) (SBV v)
-symArrayAt symKey = lens getter setter
+  => S k -> Lens' (array k v) (SBV v)
+symArrayAt (S _ symKey) = lens getter setter
   where
     getter :: array k v -> SBV v
     getter arr = readArray arr symKey
@@ -324,14 +313,14 @@ type instance IxValue (TableMap a) = a
 instance Ixed (TableMap a) where ix k = tableMap.ix k
 instance At (TableMap a) where at k = tableMap.at k
 
-succeeds :: Lens' AnalyzeState SBool
-succeeds = latticeState.lasSucceeds
+succeeds :: Lens' AnalyzeState (S Bool)
+succeeds = latticeState.lasSucceeds.sbv2S
 
-tableRead :: TableName -> Lens' AnalyzeState SBool
-tableRead tn = latticeState.lasTablesRead.symArrayAt (literal tn)
+tableRead :: TableName -> Lens' AnalyzeState (S Bool)
+tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
-tableWritten :: TableName -> Lens' AnalyzeState SBool
-tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
+tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
+tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
 --
 -- NOTE: at the moment our `SBV ColumnName`s are actually always concrete. If
@@ -342,73 +331,76 @@ tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literal tn)
 -- names must be one of the statically-known tables.
 --
 
-columnDelta :: TableName -> SBV ColumnName -> Lens' AnalyzeState SInteger
-columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn
+columnDelta :: TableName -> S ColumnName -> Lens' AnalyzeState (S Integer)
+columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn.sbv2S
 
-sCellId :: SBV ColumnName -> SBV RowKey -> SBV CellId
-sCellId sCn sRk = coerceSBV $ coerceSBV sCn .++ "__" .++ coerceSBV sRk
+sCellId :: S ColumnName -> S RowKey -> S CellId
+sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
 
 intCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SInteger
-intCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scIntValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Integer)
+intCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scIntValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
 boolCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SBool
-boolCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scBoolValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Bool)
+boolCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scBoolValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
 stringCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SString
-stringCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scStringValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S String)
+stringCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scStringValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
 decimalCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState SDecimal
-decimalCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scDecimalValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Decimal)
+decimalCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
 timeCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState STime
-timeCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scTimeValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Time)
+timeCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scTimeValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
 ksCell
   :: TableName
-  -> SBV ColumnName
-  -> SBV RowKey
-  -> Lens' AnalyzeState (SBV KeySet)
-ksCell tn sCn sRk =
-  latticeState.lasTableCells.singular (ix tn).scKsValues.symArrayAt (sCellId sCn sRk)
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S KeySet)
+ksCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scKsValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
 
-symKsName :: SBV String -> SBV KeySetName
-symKsName = coerceSBV
+symKsName :: S String -> S KeySetName
+symKsName = coerceS
 
 -- TODO: potentially switch to lenses here for the following 3 functions:
 
-resolveKeySet :: SBV KeySetName -> AnalyzeM (SBV KeySet)
-resolveKeySet sKsn = readArray <$> view keySets <*> pure sKsn
+resolveKeySet :: S KeySetName -> AnalyzeM (S KeySet)
+resolveKeySet sKsn = fmap sansProv $
+  readArray <$> view keySets <*> pure (sSbv sKsn)
 
-nameAuthorized :: SBV KeySetName -> AnalyzeM (SBV Bool)
-nameAuthorized sKsn = readArray <$> view ksAuths <*> resolveKeySet sKsn
+nameAuthorized :: S KeySetName -> AnalyzeM (S Bool)
+nameAuthorized sKsn = fmap sansProv $
+  readArray <$> view ksAuths <*> (sSbv <$> resolveKeySet sKsn)
 
-ksAuthorized :: SBV KeySet -> AnalyzeM (SBV Bool)
-ksAuthorized sKs = readArray <$> view ksAuths <*> pure sKs
+ksAuthorized :: S KeySet -> AnalyzeM (S Bool)
+ksAuthorized sKs = fmap sansProv $
+  readArray <$> view ksAuths <*> pure (sSbv sKs)
 
 --keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
 --keySetNamed sKsn = keySets.symArrayAt sKsn
@@ -427,7 +419,7 @@ analyzeTermO = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     obj <- iforM fields $ \fieldName fieldType -> do
-      let sCn = literal $ ColumnName fieldName
+      let sCn  = literalS $ ColumnName fieldName
       x <- case fieldType of
         EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
         EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
@@ -436,8 +428,14 @@ analyzeTermO = \case
         EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
         EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
         EType TAny     -> pure OpaqueVal
+        --
+        -- TODO: if we add nested object support here, we need to install
+        --       the correct provenance into AVals all the way down into
+        --       sub-objects.
+        --
+
       pure (fieldType, x)
-    pure (Object obj)
+    pure $ Object obj
 
   ReadCols tn (Schema fields) rowKey cols -> do
     -- Intersect both the returned object and its type with the requested
@@ -449,7 +447,7 @@ analyzeTermO = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     obj <- iforM relevantFields $ \fieldName fieldType -> do
-      let sCn = literal $ ColumnName fieldName
+      let sCn = literalS $ ColumnName fieldName
       x <- case fieldType of
         EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
         EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
@@ -458,16 +456,22 @@ analyzeTermO = \case
         EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
         EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
         EType TAny     -> pure OpaqueVal
+        --
+        -- TODO: if we add nested object support here, we need to install
+        --       the correct provenance into AVals all the way down into
+        --       sub-objects.
+        --
+
       pure (fieldType, x)
-    pure (Object obj)
+    pure $ Object obj
 
   Var name -> do
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
     case val of
-      AVal  val' -> throwError $ AValUnexpectedlySVal val'
-      AnObj obj  -> pure obj
-      OpaqueVal  -> throwError OpaqueValEncountered
+      AVal _ val' -> throwError $ AValUnexpectedlySVal val'
+      AnObj obj   -> pure obj
+      OpaqueVal   -> throwError OpaqueValEncountered
 
   Let name (ETerm rhs _) body -> do
     val <- analyzeTerm rhs
@@ -484,36 +488,36 @@ analyzeTermO = \case
 
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
-    case unliteral testPasses of
+    case unliteralS testPasses of
       Just True  -> analyzeTermO then'
       Just False -> analyzeTermO else'
       Nothing    -> throwError "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
-  At _schema colName obj _retType -> do
-    Object obj' <- analyzeTermO obj
+  At _schema colName objT _retType -> do
+    obj@(Object fields) <- analyzeTermO objT
 
     colName' <- analyzeTerm colName
 
     let getObjVal :: String -> AnalyzeM Object
-        getObjVal fieldName = case Map.lookup fieldName obj' of
-          Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
-          Just (fieldType, AVal _) -> throwError $
+        getObjVal fieldName = case Map.lookup fieldName fields of
+          Nothing -> throwError $ KeyNotPresent fieldName obj
+          Just (fieldType, AVal _ _) -> throwError $
             ObjFieldOfWrongType fieldName fieldType
-          Just (_fieldType, AnObj x)  -> pure x
+          Just (_fieldType, AnObj subObj) -> pure subObj
           Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
-    case unliteral colName' of
+    case unliteralS colName' of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
       Just concreteColName -> getObjVal concreteColName
 
-  obj -> throwError $ UnhandledObject obj
+  objT -> throwError $ UnhandledObject objT
 
 analyzeTerm
-  :: forall a. (Show a, SymWord a) => Term a -> AnalyzeM (SBV a)
+  :: forall a. (Show a, SymWord a) => Term a -> AnalyzeM (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
-    ite testPasses (analyzeTerm then') (analyzeTerm else')
+    iteS testPasses (analyzeTerm then') (analyzeTerm else')
 
   Enforce cond -> do
     cond' <- analyzeTerm cond
@@ -525,8 +529,8 @@ analyzeTerm = \case
 
   Literal a -> pure a
 
-  At schema@(Schema schemaFields) colName obj retType -> do
-    Object obj' <- analyzeTermO obj
+  At schema@(Schema schemaFields) colNameT objT retType -> do
+    obj@(Object fields) <- analyzeTermO objT
 
     -- Filter down to only fields which contain the type we're looking for
     let relevantFields
@@ -534,17 +538,20 @@ analyzeTerm = \case
           $ filter (\(_name, ty) -> ty == retType)
           $ Map.toList schemaFields
 
-    colName' <- analyzeTerm colName
+    colName :: S String <- analyzeTerm colNameT
 
     firstName:relevantFields' <- case relevantFields of
       [] -> throwError $ AtHasNoRelevantFields retType schema
       _ -> pure relevantFields
 
-    let getObjVal fieldName = case Map.lookup fieldName obj' of
-          Nothing -> throwError $ KeyNotPresent fieldName (Object obj')
-          Just (_fieldType, AVal val) -> pure (mkSBV val)
-          Just (fieldType, AnObj _x)  -> throwError $
+    let getObjVal fieldName = case Map.lookup fieldName fields of
+          Nothing -> throwError $ KeyNotPresent fieldName obj
+
+          Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+
+          Just (fieldType, AnObj _subObj) -> throwError $
             ObjFieldOfWrongType fieldName fieldType
+
           Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
 
     firstVal <- getObjVal firstName
@@ -557,7 +564,7 @@ analyzeTerm = \case
     foldrM
       (\fieldName rest -> do
         val <- getObjVal fieldName
-        pure $ ite (colName' .== literal fieldName) val rest
+        pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
       )
       firstVal
       relevantFields'
@@ -571,27 +578,27 @@ analyzeTerm = \case
     tableWritten tn .= true
     sRk <- symRowKey <$> analyzeTerm rowKey
     void $ iforM obj' $ \colName (fieldType, aval) -> do
-      let sCn = literal $ ColumnName colName
+      let sCn = literalS $ ColumnName colName
       case aval of
-        AVal val' -> case fieldType of
+        AVal mProv val' -> case fieldType of
           EType TInt  -> do
-            let cell :: Lens' AnalyzeState SInteger
+            let cell :: Lens' AnalyzeState (S Integer)
                 cell = intCell tn sCn sRk
-                next = mkSBV val'
+                next = mkS mProv val'
             prev <- use cell
             cell .= next
             columnDelta tn sCn += next - prev
 
-          EType TBool    -> boolCell    tn sCn sRk .= mkSBV val'
-          EType TStr     -> stringCell  tn sCn sRk .= mkSBV val'
+          EType TBool    -> boolCell    tn sCn sRk .= mkS mProv val'
+          EType TStr     -> stringCell  tn sCn sRk .= mkS mProv val'
 
           --
           -- TODO: we should support column delta for decimals
           --
-          EType TDecimal -> decimalCell tn sCn sRk .= mkSBV val'
+          EType TDecimal -> decimalCell tn sCn sRk .= mkS mProv val'
 
-          EType TTime    -> timeCell    tn sCn sRk .= mkSBV val'
-          EType TKeySet  -> ksCell      tn sCn sRk .= mkSBV val'
+          EType TTime    -> timeCell    tn sCn sRk .= mkS mProv val'
+          EType TKeySet  -> ksCell      tn sCn sRk .= mkS mProv val'
 
           -- TODO: what to do with EType TAny here?
 
@@ -604,7 +611,7 @@ analyzeTerm = \case
     --
     -- TODO: make a constant on the pact side that this uses:
     --
-    pure $ literal "Write succeeded"
+    pure $ literalS "Write succeeded"
 
   Let name (ETerm rhs _) body -> do
     val <- analyzeTerm rhs
@@ -628,7 +635,7 @@ analyzeTerm = \case
     Just val <- view (scope . at name)
     -- Assume the variable is well-typed after typechecking
     case val of
-      AVal x -> pure (mkSBV x)
+      AVal mProv sval -> pure $ mkS mProv sval
       AnObj obj -> throwError $ AValUnexpectedlyObj obj
       OpaqueVal -> throwError OpaqueValEncountered
 
@@ -658,10 +665,10 @@ analyzeTerm = \case
     x' <- analyzeTerm x
     y' <- analyzeTerm y
     case op of
-      Add -> pure $ sFromIntegral x' + y'
-      Sub -> pure $ sFromIntegral x' - y'
-      Mul -> pure $ sFromIntegral x' * y'
-      Div -> pure $ sFromIntegral x' / y'
+      Add -> pure $ fromIntegralS x' + y'
+      Sub -> pure $ fromIntegralS x' - y'
+      Mul -> pure $ fromIntegralS x' * y'
+      Div -> pure $ fromIntegralS x' / y'
       Pow -> throwError $ UnsupportedDecArithOp op
       Log -> throwError $ UnsupportedDecArithOp op
 
@@ -669,10 +676,10 @@ analyzeTerm = \case
     x' <- analyzeTerm x
     y' <- analyzeTerm y
     case op of
-      Add -> pure $ x' + sFromIntegral y'
-      Sub -> pure $ x' - sFromIntegral y'
-      Mul -> pure $ x' * sFromIntegral y'
-      Div -> pure $ x' / sFromIntegral y'
+      Add -> pure $ x' + fromIntegralS y'
+      Sub -> pure $ x' - fromIntegralS y'
+      Mul -> pure $ x' * fromIntegralS y'
+      Div -> pure $ x' / fromIntegralS y'
       Pow -> throwError $ UnsupportedDecArithOp op
       Log -> throwError $ UnsupportedDecArithOp op
 
@@ -706,25 +713,25 @@ analyzeTerm = \case
     pure $ case op of
       -- The only SReal -> SInteger conversion function that sbv provides is
       -- sRealToSInteger, which computes the floor.
-      Floor   -> sRealToSInteger x'
+      Floor   -> realToIntegerS x'
 
       -- For ceiling we use the identity:
       -- ceil(x) = -floor(-x)
-      Ceiling -> negate (sRealToSInteger (negate x'))
+      Ceiling -> negate (realToIntegerS (negate x'))
 
       -- Round is much more complicated because pact uses the banker's method,
       -- where a real exactly between two integers (_.5) is rounded to the
       -- nearest even.
       Round   ->
-        let wholePart      = sRealToSInteger x'
-            wholePartIsOdd = wholePart `sMod` 2 .== 1
-            isExactlyHalf  = sFromIntegral wholePart + 1 / 2 .== x'
+        let wholePart      = realToIntegerS x'
+            wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+            isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x'
 
-        in ite isExactlyHalf
+        in iteS isExactlyHalf
           -- nearest even number!
-          (wholePart + oneIf wholePartIsOdd)
+          (wholePart + oneIfS wholePartIsOdd)
           -- otherwise we take the floor of `x + 0.5`
-          (sRealToSInteger (x' + 0.5))
+          (realToIntegerS (x' + 0.5))
 
   -- In the decimal rounding operations we shift the number left by `precision`
   -- digits, round using the integer method, and shift back right.
@@ -737,31 +744,31 @@ analyzeTerm = \case
   RoundingLikeOp2 op x precision -> do
     x'         <- analyzeTerm x
     precision' <- analyzeTerm precision
-    let digitShift :: SInteger
-        digitShift = 10 .^ precision'
-        x'' = x' * sFromIntegral digitShift
+    let digitShift :: S Integer
+        digitShift = sansProv $ 10 .^ sSbv precision'
+        x'' = x' * fromIntegralS digitShift
 
     x''' <- analyzeTerm (RoundingLikeOp1 op (Literal x''))
 
-    pure $ sFromIntegral x''' / sFromIntegral digitShift
+    pure $ fromIntegralS x''' / fromIntegralS digitShift
 
   AddTime time (ETerm secs TInt) -> do
     time' <- analyzeTerm time
     secs' <- analyzeTerm secs
-    pure $ time' + sFromIntegral secs'
+    pure $ time' + fromIntegralS secs'
 
   AddTime time (ETerm secs TDecimal) -> do
     time' <- analyzeTerm time
     secs' <- analyzeTerm secs
-    if isConcrete secs'
-    then pure $ time' + sFromIntegral (sRealToSInteger secs')
+    if isConcreteS secs'
+    then pure $ time' + fromIntegralS (realToIntegerS secs')
     else throwError $ PossibleRoundoff
       "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
   Comparison op x y -> do
     x' <- analyzeTerm x
     y' <- analyzeTerm y
-    pure $ case op of
+    pure $ sansProv $ case op of
       Gt  -> x' .> y'
       Lt  -> x' .< y'
       Gte -> x' .>= y'
@@ -785,11 +792,11 @@ analyzeTerm = \case
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
-  PactVersion -> pure $ literal $ T.unpack pactVersion
+  PactVersion -> pure $ literalS $ T.unpack pactVersion
 
   n -> throwError $ UnhandledTerm $ tShow n
 
-analyzeProperty :: Prop a -> AnalyzeM (SBV a)
+analyzeProperty :: Prop a -> AnalyzeM (S a)
 -- Logical connectives
 analyzeProperty (p1 `Implies` p2) = do
   b1 <- analyzeProperty p1
@@ -808,11 +815,11 @@ analyzeProperty (Not p) = bnot <$> analyzeProperty p
 -- Domain properties
 analyzeProperty Success = use succeeds
 analyzeProperty Abort = bnot <$> analyzeProperty Success
-analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literal ksn
+analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProperty (TableRead tn) = use $ tableRead tn
 analyzeProperty (TableWrite tn) = use $ tableWritten tn
 -- analyzeProperty (CellIncrease tableName colName)
 analyzeProperty (ColumnConserve tableName colName) =
-  (0 .==) <$> use (columnDelta tableName (literal colName))
+  sansProv . (0 .==) <$> use (columnDelta tableName (literalS colName))
 analyzeProperty (ColumnIncrease tableName colName) =
-  (0 .<) <$> use (columnDelta tableName (literal colName))
+  sansProv . (0 .<) <$> use (columnDelta tableName (literalS colName))

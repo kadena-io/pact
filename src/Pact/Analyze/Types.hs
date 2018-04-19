@@ -4,6 +4,7 @@
 {-# language GADTs               #-}
 {-# language Rank2Types          #-}
 {-# language StandaloneDeriving  #-}
+{-# language TemplateHaskell     #-}
 {-# language TypeOperators       #-}
 
 module Pact.Analyze.Types where
@@ -12,15 +13,138 @@ import Control.Lens hiding (op, (.>), (...))
 import Data.Data
 import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
-import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
 import Data.Thyme
+import Data.String (IsString(..))
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
                                TKeySet)
 
 import Pact.Analyze.Prop
 
-newtype Object
+newtype RowKey
+  = RowKey String
+  deriving (Eq, Ord, Show)
+
+instance SymWord RowKey where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (RowKey s) = mkConcreteString s
+  fromCW = wrappedStringFromCW RowKey
+
+instance HasKind RowKey where
+  kindOf _ = KString
+
+instance IsString RowKey where
+  fromString = RowKey
+
+symRowKey :: S String -> S RowKey
+symRowKey = coerceS
+
+--
+-- TODO: Future improvement could be allowing multiple columns in a table
+--       to contain keysets, and track the row+column a keyset is from.
+--
+data Provenance
+  = Provenance
+    { _provTableName :: TableName
+    , _provRowKey    :: SBV RowKey } -- TODO: I guess this could be S RowKey
+  deriving (Eq, Show)
+
+-- Symbolic value carrying provenance, for tracking if values have come from a
+-- particular table+row.
+data S a
+  = S (Maybe Provenance) (SBV a)
+  deriving (Show)
+
+instance SymWord a => Mergeable (S a) where
+  symbolicMerge f t (S prov1 x) (S prov2 y)
+    | prov1 == prov2 = S prov1   (symbolicMerge f t x y)
+    | otherwise      = S Nothing (symbolicMerge f t x y)
+
+-- We provide instances for EqSymbolic, OrdSymboic, Boolean because we need
+-- these operators for `S a` now that we work with that instead of `SBV a`
+-- everywhere:
+
+instance EqSymbolic (S a) where
+  (S _ x) .== (S _ y) = x .== y
+
+instance SymWord a => OrdSymbolic (S a) where
+  S _ x .< S _ y = x .< y
+
+-- We don't care about preserving the provenance value here as we are most
+-- interested in tracking `SBV KeySet`s, but really as soon as we apply a
+-- transformation to a symbolic value, we are no longer working with the value
+-- that was sourced from the database.
+instance Boolean (S Bool) where
+  true            = S Nothing true
+  false           = S Nothing false
+  bnot (S _ x)    = S Nothing (bnot x)
+  S _ x &&& S _ y = S Nothing (x &&& y)
+  S _ x ||| S _ y = S Nothing (x ||| y)
+
+instance IsString (S String) where
+  fromString = sansProv . fromString
+
+instance Num (S Integer) where
+  S _ x + S _ y  = S Nothing (x + y)
+  S _ x * S _ y  = S Nothing (x * y)
+  abs (S _ x)    = S Nothing (abs x)
+  signum (S _ x) = S Nothing (signum x)
+  fromInteger i  = S Nothing (fromInteger i)
+  negate (S _ x) = S Nothing (negate x)
+
+instance Num (S Decimal) where
+  S _ x + S _ y  = S Nothing (x + y)
+  S _ x * S _ y  = S Nothing (x * y)
+  abs (S _ x)    = S Nothing (abs x)
+  signum (S _ x) = S Nothing (signum x)
+  fromInteger i  = S Nothing (fromInteger i)
+  negate (S _ x) = S Nothing (negate x)
+
+instance Fractional (S Decimal) where
+  fromRational = literalS . fromRational
+  S _ x / S _ y = S Nothing (x / y)
+
+instance SDivisible (S Integer) where
+  S _ a `sQuotRem` S _ b = a `sQuotRem` b & both %~ S Nothing
+  S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ S Nothing
+
+instance Num (S Time) where
+  S _ x + S _ y  = S Nothing (x + y)
+  S _ x * S _ y  = S Nothing (x * y)
+  abs (S _ x)    = S Nothing (abs x)
+  signum (S _ x) = S Nothing (signum x)
+  fromInteger i  = S Nothing (fromInteger i)
+  negate (S _ x) = S Nothing (negate x)
+
+instance Provable (Symbolic (S Bool)) where
+  forAll_   = fmap sSbv
+  forAll _  = fmap sSbv
+  forSome_  = fmap sSbv
+  forSome _ = fmap sSbv
+
+-- Until SBV adds a typeclass for strConcat/(.++):
+(.++) :: S String -> S String -> S String
+S _ a .++ S _ b = S Nothing (SBV.strConcat a b)
+
+sSbv :: S a -> SBV a
+sSbv = (\(S _ sbv) -> sbv)
+
+-- Beware: not a law-abiding Iso. Drops provenance info.
+sbv2S :: Iso' (SBV a) (S a)
+sbv2S = iso sansProv sSbv
+
+sbv2SFrom :: Provenance -> Iso' (SBV a) (S a)
+sbv2SFrom prov = iso (withProv prov) sSbv
+
+s2Sbv :: Iso' (S a) (SBV a)
+s2Sbv = from sbv2S
+
+mkProv :: TableName -> S RowKey -> Provenance
+mkProv tn (S _ sRk) = Provenance tn sRk
+
+data Object
   = Object (Map String (EType, AVal))
   deriving (Eq, Show)
 
@@ -30,19 +154,56 @@ newtype Schema
 
 -- | Untyped symbolic value.
 data AVal
-  = AVal SBVI.SVal
+  = AVal (Maybe Provenance) SBVI.SVal
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
 
-mkSBV :: SBVI.SVal -> SBV a
-mkSBV = SBVI.SBV
+mkS :: Maybe Provenance -> SBVI.SVal -> S a
+mkS mProv sval = S mProv (SBVI.SBV sval)
 
-mkAVal :: SBV a -> AVal
-mkAVal (SBVI.SBV sval) = AVal sval
+sansProv :: SBV a -> S a
+sansProv = S Nothing
+
+literalS :: SymWord a => a -> S a
+literalS a = sansProv $ literal a
+
+unliteralS :: SymWord a => S a -> Maybe a
+unliteralS = unliteral . sSbv
+
+withProv :: Provenance -> SBV a -> S a
+withProv prov sym = S (Just prov) sym
+
+mkAVal :: S a -> AVal
+mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 
 coerceSBV :: SBV a -> SBV b
 coerceSBV = SBVI.SBV . SBVI.unSBV
+
+coerceS :: S a -> S b
+coerceS (S mProv a) = S mProv $ coerceSBV a
+
+iteS :: Mergeable a => S Bool -> a -> a -> a
+iteS sbool = ite (sSbv sbool)
+
+liftSbv :: (SBV a -> SBV b) -> S a -> S b
+liftSbv f = sansProv . f . sSbv
+
+fromIntegralS
+  :: forall a b
+  . (Integral a, HasKind a, Num a, SymWord a, HasKind b, Num b, SymWord b)
+  => S a
+  -> S b
+fromIntegralS = liftSbv sFromIntegral
+
+realToIntegerS :: S AlgReal -> S Integer
+realToIntegerS = liftSbv sRealToSInteger
+
+oneIfS :: (Num a, SymWord a) => S Bool -> S a
+oneIfS = liftSbv oneIf
+
+isConcreteS :: SymWord a => S a -> Bool
+isConcreteS = isConcrete . sSbv
 
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
@@ -157,7 +318,7 @@ data Term ret where
   Enforce        ::                        Term Bool    ->                             Term Bool
   -- TODO: do we need a noop to handle a sequence of one expression?
   Sequence       ::                        ETerm        -> Term a         ->           Term a
-  Literal        ::                        SBV a        ->                             Term a
+  Literal        ::                        S a          ->                             Term a
 
   --
   -- TODO: we need to allow computed keys here
@@ -246,7 +407,7 @@ deriving instance Eq (Type a)
 deriving instance Show EType
 
 lit :: SymWord a => a -> Term a
-lit = Literal . literal
+lit = Literal . literalS
 
 instance Num (Term Integer) where
   fromInteger = Literal . fromInteger
@@ -280,3 +441,5 @@ type SDecimal = SBV Decimal
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
   mantissa % 10 ^ places
+
+makeLenses ''Object
