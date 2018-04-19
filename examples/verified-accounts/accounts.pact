@@ -40,7 +40,7 @@
     ))
 
   ; TODO: defproperty?
-  ; (@property-of transfer conserves-mass)
+  ; (@property conserves-mass)
   (defun transfer (src dest amount date)
     "transfer AMOUNT from SRC to DEST"
     (debit src amount date { "transfer-to": dest })
@@ -55,7 +55,7 @@
       { "balance": b, "ccy": c }
       ))
 
-  (@property-of read-account-admin
+  (@property
     (when
         (not (authorized-by 'accounts-admin-keyset))
         abort))
@@ -79,7 +79,7 @@
   (defun read-all ()
     (map (read-account-admin) (keys accounts)))
 
-  ; (@property-of debit
+  ; (@property
   ;   (let
   ;     (with-read 'initial accounts acct
   ;       { "balance" := initial-balance
