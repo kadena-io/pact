@@ -118,7 +118,9 @@ instance Num (S Time) where
   fromInteger i  = S Nothing (fromInteger i)
   negate (S _ x) = S Nothing (negate x)
 
-instance Provable (Symbolic (S Bool)) where
+type PredicateS = Symbolic (S Bool)
+
+instance Provable PredicateS where
   forAll_   = fmap sSbv
   forAll _  = fmap sSbv
   forSome_  = fmap sSbv
