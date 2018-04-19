@@ -26,8 +26,7 @@
   (defconst AUTH_KEYSET 'K
     "Indicates keyset-governed account")
 
-  (defconst ADMIN_KEYSET (read-keyset "accounts-admin-keyset"))
-
+  (defconst PACT_REF "ref")
 
   (defun create-account (address ccy date)
     (insert accounts address
@@ -56,10 +55,6 @@
       { "balance": b, "ccy": c }
       ))
 
-  (@property (not abort))
-  (defun test:bool (x:integer)
-    (if (< x 10) true false))
-
   (@property-of read-account-admin
     (assuming
         (not (authorized-by 'accounts-admin-keyset))
@@ -68,11 +63,6 @@
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'data 'date 'amount]))
-
-  (defun account-keys ()
-    "Get all account keys"
-    (enforce-keyset 'accounts-admin-keyset)
-    (keys accounts))
 
   (defun check-balance (balance amount)
     (enforce (<= amount balance) "Insufficient funds"))
@@ -88,38 +78,6 @@
 
   (defun read-all ()
     (map (read-account-admin) (keys accounts)))
-
-  (defpact payment (payer payer-entity payee payee-entity amount date)
-    "Debit PAYER at PAYER-ENTITY then credit PAYEE at PAYEE-ENTITY for AMOUNT on DATE"
-    (step-with-rollback payer-entity
-      (debit payer amount date
-            { "payee": payee
-            , "payee-entity": payee-entity
-            ; TODO: can pact-analyze handle PACT_REF gracefully?
-            , PACT_REF: (pact-id)
-            })
-      (credit payer amount date
-           { PACT_REF: (pact-id), "note": "rollback" }))
-
-    (step payee-entity
-      (credit payee amount date
-            { "payer": payer
-            , "payer-entity": payer-entity
-            , PACT_REF: (pact-id)
-            }
-      )))
-
-
-  ; (@property
-  ;   (assuming
-  ;     (not (authorized-by 'accounts-admin-keyset))
-  ;     abort))
-  (defun enforce-auth (keyset:keyset auth)
-    (if (= auth AUTH_KEYSET)
-      (enforce-keyset keyset)
-      (enforce (= auth (format "%s" [(pact-id)]))
-        "Invalid access of pact account")))
-
 
   ; (@property-of debit
   ;   (let
@@ -139,6 +97,21 @@
   ;       (= final-balance initial-balance)))
   ;   )
 
+
+  ; (@property
+  ;   (let
+  ;     (with-read 'initial accounts acct
+  ;       { "balance" := initial-balance })
+  ;     (with-read 'final accounts acct
+  ;       { "balance" := final-balance })
+
+  ;     (= final-balance (+ initial-balance amount))
+  ;   ))
+
+  ; ; alternately
+  ; (@property
+  ;   (with-read 'delta accounts acct
+  ;     { "balance" := amount }))
   (defun debit (acct amount date data)
     "Debit AMOUNT from ACCT balance recording DATE and DATA"
     (with-read accounts acct
@@ -154,21 +127,6 @@
                 }
           )))
 
-  ; (@property-of debit
-  ;   (let
-  ;     (with-read 'initial accounts acct
-  ;       { "balance" := initial-balance })
-  ;     (with-read 'final accounts acct
-  ;       { "balance" := final-balance })
-
-  ;     (= final-balance (+ initial-balance amount))
-  ;   ))
-
-  ; ; alternately
-  ; (@property-of debit
-  ;   (with-read 'delta accounts acct
-  ;     { "balance" := amount }))
-
  (defun credit (acct amount date data)
    "Credit AMOUNT to ACCT balance recording DATE and DATA"
    (with-read accounts acct
@@ -180,31 +138,6 @@
             , "data": data
             }
       )))
-
-  (defconst PACT_REF "ref")
-
-
-
-
-
-  (defconst ESCROW_ACCT "escrow-account")
-
-  (defun get-pact-account (pfx:string) (format "{}-{}" [pfx (pact-id)]))
-
-  (defun new-pact-account (pfx ccy)
-    (let ((a (get-pact-account pfx)))
-      (insert accounts a
-        { "balance": 0.0
-        , "amount": 0.0
-        , "ccy": ccy
-        , "auth": (format "%s" [(pact-id)])
-        , "date": 0
-        , "data": "Created pact account"
-        }
-      )
-      a))
-
-
 )
 
 (create-table accounts)
