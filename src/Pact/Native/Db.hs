@@ -307,10 +307,11 @@ guardTable i t = evalError' i $ "Internal error: guardTable called with non-tabl
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
-  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  mmRs <- fmap fst . HM.lookup mn <$> view (eeRefStore.rsModules)
+  mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
-    Just (Module{..},_)
+    Just (Module{..})
       | h == _mHash -> return () -- current version ok
       | h `HS.member` _mBlessed -> return () -- hash is blessed
       | otherwise -> evalError' i $

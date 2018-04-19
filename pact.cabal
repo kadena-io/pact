@@ -195,6 +195,7 @@ test-suite hspec
                 Blake2Spec
               , DocgenSpec
               , KeysetSpec
+              , HlintSpec
               , PactTestsSpec
               , ParserSpec
               , PersistSpec
