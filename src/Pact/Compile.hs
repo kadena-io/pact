@@ -161,10 +161,10 @@ expToProp = (\case
   EAtom' "success" -> Just Success
 
   -- (load "examples/verified-accounts/accounts.repl")
-  EList' [EAtom' "assuming", a, b] -> Implies <$> expToProp a <*> expToProp b
-  EList' [EAtom' "not", a] -> Not <$> expToProp a
-  EList' [EAtom' "and", a, b] -> And <$> expToProp a <*> expToProp b
-  EList' [EAtom' "or", a, b] -> Or <$> expToProp a <*> expToProp b
+  EList' [EAtom' "when", a, b] -> Implies <$> expToProp a <*> expToProp b
+  EList' [EAtom' "not", a]         -> Not <$> expToProp a
+  EList' [EAtom' "and", a, b]      -> And <$> expToProp a <*> expToProp b
+  EList' [EAtom' "or", a, b]       -> Or <$> expToProp a <*> expToProp b
 
   EList' [EAtom' "table-write", ELitName tab] -> Just (TableWrite (mkT tab))
   EList' [EAtom' "table-read", ELitName tab] -> Just (TableRead (mkT tab))

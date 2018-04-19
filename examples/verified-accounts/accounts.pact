@@ -56,7 +56,7 @@
       ))
 
   (@property-of read-account-admin
-    (assuming
+    (when
         (not (authorized-by 'accounts-admin-keyset))
         abort))
   (defun read-account-admin (id)
