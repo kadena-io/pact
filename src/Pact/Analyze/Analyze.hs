@@ -149,20 +149,26 @@ data LatticeAnalyzeState
     , _lasTablesWritten :: SFunArray TableName Bool
     , _lasColumnDeltas  :: TableMap (SFunArray ColumnName Integer)
     , _lasTableCells    :: TableMap SymbolicCells
+    , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
+    , _lasRowsEnforced  :: TableMap (SFunArray RowKey Bool)
     }
   deriving (Show)
 
--- Implemented by-hand until 8.4, when we have DerivingStrategies
+-- Implemented by-hand until 8.2, when we have DerivingStrategies
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
-    (LatticeAnalyzeState success  tsRead  tsWritten  deltas  cells)
-    (LatticeAnalyzeState success' tsRead' tsWritten' deltas' cells') =
+    (LatticeAnalyzeState
+      success  tsRead  tsWritten  deltas  cells  rsRead  rsEnforced)
+    (LatticeAnalyzeState
+      success' tsRead' tsWritten' deltas' cells' rsRead' rsEnforced') =
       LatticeAnalyzeState
-        (symbolicMerge force test success   success')
-        (symbolicMerge force test tsRead    tsRead')
-        (symbolicMerge force test tsWritten tsWritten')
-        (symbolicMerge force test deltas    deltas')
-        (symbolicMerge force test cells     cells')
+        (symbolicMerge force test success    success')
+        (symbolicMerge force test tsRead     tsRead')
+        (symbolicMerge force test tsWritten  tsWritten')
+        (symbolicMerge force test deltas     deltas')
+        (symbolicMerge force test cells      cells')
+        (symbolicMerge force test rsRead     rsRead')
+        (symbolicMerge force test rsEnforced rsEnforced')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -189,17 +195,22 @@ mkInitialAnalyzeState tableCells = AnalyzeState
         { _lasSucceeds      = true
         , _lasTablesRead    = mkSFunArray $ const false
         , _lasTablesWritten = mkSFunArray $ const false
-        , _lasColumnDeltas  = columnDeltas
+        , _lasColumnDeltas  = mkPerTableSFunArray 0
         , _lasTableCells    = tableCells
+        , _lasRowsRead      = mkPerTableSFunArray false
+        , _lasRowsEnforced  = mkPerTableSFunArray false
         }
     , _globalState = GlobalAnalyzeState ()
     }
 
   where
-    columnDeltas :: TableMap (SFunArray ColumnName Integer)
-    columnDeltas = TableMap $ Map.fromList $ zip
-      (Map.keys $ _tableMap tableCells)
-      (repeat $ mkSFunArray (const 0))
+    tableNames :: [TableName]
+    tableNames = Map.keys $ _tableMap tableCells
+
+    mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
+    mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
+      tableNames
+      (repeat $ mkSFunArray $ const defaultV)
 
 allocateSymbolicCells :: [TableName] -> Symbolic (TableMap SymbolicCells)
 allocateSymbolicCells tableNames = sequence $ TableMap $ Map.fromList $
