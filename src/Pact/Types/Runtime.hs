@@ -80,9 +80,6 @@ import qualified Data.ByteString.Lazy.UTF8 as BSL
 import qualified Data.Set as S
 import Data.String
 import Data.Default
-import Data.Thyme
-import Data.Thyme.Format.Aeson ()
-import Data.Thyme.Time.Core
 import Data.Typeable
 import Data.Word
 import Control.Monad.Catch
@@ -97,6 +94,7 @@ import Data.Hashable
 import Pact.Types.Orphans ()
 import Pact.Types.Lang
 import Pact.Types.Util
+import Pact.Types.Time
 
 
 data StackFrame = StackFrame {
@@ -189,10 +187,12 @@ timeCodec = Codec enc dec
   where
     enc t = object [ day .= d,
                      micros .= encoder integerCodec (fromIntegral (toMicroseconds s)) ]
-      where (UTCTime (ModifiedJulianDay d) s) = unUTCTime t
+      where
+        (ModifiedJulianDay d) = t ^. _utctDay
+        s = t ^. _utctDayTime
     {-# INLINE enc #-}
     dec = withObject "UTCTime" $ \o ->
-      mkUTCTime <$> (ModifiedJulianDay <$> o .: day) <*>
+      utcTimeFromDaysAndDayTime <$> (ModifiedJulianDay <$> o .: day) <*>
       (fromMicroseconds . fromIntegral <$> (o .: micros >>= decoder integerCodec))
     {-# INLINE dec #-}
     day = "_P_timed"
