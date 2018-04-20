@@ -5,6 +5,7 @@ module PactTestsSpec (spec) where
 import Test.Hspec
 
 import Pact.Repl
+import Pact.ReplCommon
 import Pact.Repl.Types
 import Pact.Types.Runtime
 import System.Directory

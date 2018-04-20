@@ -1,0 +1,27 @@
+(env-data
+ {
+ "intn": 1,
+ "ints": "1",
+ "nintn": -1,
+ "nints": "-1",
+ "dec": 1.0, ;; pact decimals are coerced to string
+ "ndec": -1.0,
+ "bool": true,
+ "str": "hello",
+ "obj": { "list": [ { "a": true } {"b": "hello" } ] },
+ "list": [1 2 3]
+ })
+(expect "read-integer with number value" 1 (read-integer "intn"))
+(expect "read-integer with string value" 1 (read-integer "ints"))
+(expect "read-integer with neg number value" -1 (read-integer "nints"))
+(expect "read-integer with neg string value" -1 (read-integer "nintn"))
+(expect "read-decimal with number value" 1.0 (read-decimal "dec"))
+(expect "read-decimal with neg number value" -1.0 (read-decimal "ndec"))
+(expect "read-msg for object" { "list": [ { "a": true } {"b": "hello" } ] } (read-msg "obj"))
+(expect "read-msg for list" [1 2 3] (read-msg "list"))
+(expect "read-msg for bool" true (read-msg "bool"))
+(expect "read-msg for string" "hello" (read-msg "str"))
+(expect "read-msg for integer" 1 (read-msg "intn"))
+(expect "read-msg for neg integer" -1 (read-msg "nintn"))
+(env-data { "foo": true })
+(expect "read-msg with no args" (json { "foo": true}) (read-msg))

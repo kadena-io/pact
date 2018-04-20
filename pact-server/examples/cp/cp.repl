@@ -1,0 +1,104 @@
+(env-data { "module-admin-keyset": { "keys": ["admin"], "pred": "keys-all"}})
+(env-keys ["admin"])
+(begin-tx)
+(load "auth.pact")
+(load "cash.pact")
+(load "orders.pact")
+(commit-tx)
+(begin-tx)
+(load "cp.pact")
+(commit-tx)
+(typecheck 'cp)
+(begin-tx)
+(use 'cp)
+(use 'cash)
+(module cp-test 'cp-module-admin
+  (defconst t1 (time "2016-09-01T11:00:00Z"))
+  (defconst t2 (add-time t1 30))
+  (defconst t3 (add-time t2 30))
+  (defun runpact-scenario-1 (order-id cusip)
+    (issue-order-fill-settle
+      "AGENT" "TRADER" "agent" "trader" cusip "GE CP"
+      100000.0 7.35 30 1000.0 order-id t1)
+  )
+)
+
+(create-account "agent" "USD" 0.0 t1)
+(create-account "trader" "USD" 100000.0 t1)
+
+(commit-tx)
+(expect "check discount compute" 612.5 (cp.calculate-discount 100000.0 7.35 30))
+(begin-tx)
+(use 'cp)
+(use 'cash)
+(use 'orders)
+(use 'cp-test)
+
+; Issue new CUSIP
+(issue "agent" "cusip1" "GE CP" 100000.0 7.35 30 1000.0 t1)
+
+; Verify inventory
+(expect "agent has inventory" 1 (at "qty" (cp.read-inventory "agent" "cusip1")))
+
+; trader sends order, agent fills
+(new-order "order1" "cusip1" "trader" "agent" 1 99387.5 "USD" t1)
+
+(fill-order-transfer "order1" "agent" t2)
+
+; verify order state
+(expect "order record correct"
+  {
+  "price": 99387.5,
+  "qty": 1,
+  "status": ORDER_FILLED,
+  "ccy": "USD", "order-date": t1,
+  "cusip": "cusip1", "buyer": "trader", "seller": "agent",
+  "modify-date": t2
+  }
+  (read-order "order1"))
+
+; verify inventory has transferred
+(expect "agent inventory" 0 (at "qty" (read-inventory "agent" "cusip1")))
+(expect "trader inventory" 1 (at "qty" (read-inventory "trader" "cusip1")))
+
+; trader settles
+(settle-order "order1" "cusip1" "trader" "agent" t3)
+
+; verify cash
+(expect "trader balance" 612.5 (at "balance" (read-account "trader")))
+(expect "agent balance" 99387.5 (at "balance" (read-account "agent")))
+
+; verify order status
+(expect "order paid" ORDER_PAID (at "status" (read-order "order1")))
+
+
+
+;;
+;;
+(rollback-tx)
+
+(use 'cp)
+(use 'cp-test)
+(use 'orders)
+
+(env-entity "AGENT")
+(runpact-scenario-1 "order2" "cusip2")
+(expect "agent has inventory" 1 (at "qty" (cp.read-inventory "agent" "cusip2")))
+
+(env-step 1)
+(env-entity "TRADER")
+(runpact-scenario-1 "order2" "cusip2")
+(expect "order NEW" ORDER_NEW (at "status" (read-order "order2")))
+
+(env-step 2)
+(env-entity "AGENT")
+(runpact-scenario-1 "order2" "cusip2")
+(expect "trader inventory" 1 (at "qty" (read-inventory "trader" "cusip2")))
+
+(env-step 3)
+(env-entity "TRADER")
+(runpact-scenario-1 "order2" "cusip2")
+(env-step 4)
+(env-entity "AGENT")
+(runpact-scenario-1 "order2" "cusip2")
+(expect "order paid" ORDER_PAID (at "status" (read-order "order2")))

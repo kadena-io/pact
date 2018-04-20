@@ -25,6 +25,7 @@ library
     Pact.Interpreter
     Pact.Main
     Pact.MockDb
+    Pact.Repl
     Pact.Persist.MockPersist
     Pact.Persist.SQLite
     Pact.PersistPactDb.Regression
@@ -67,6 +68,7 @@ library
     , fast-logger
     , filepath >= 1.4.1.0 && < 1.5
     , hashable >= 1.2 && < 1.3
+    , haskeline >= 0.7.3
     , hspec >= 2.2.4 && < 2.5
     , lens >= 4.14 && < 4.16
     , lens-aeson >= 1.0.0.5 && < 1.1
@@ -145,4 +147,7 @@ test-suite hspec
     , bytestring
   other-modules:
     DocgenSpec
+    PactTestsSpec
+    ParserSpec
     PersistSpec
+    TypecheckSpec

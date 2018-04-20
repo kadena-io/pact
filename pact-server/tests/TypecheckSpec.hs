@@ -4,6 +4,7 @@ module TypecheckSpec (spec) where
 import Test.Hspec
 import Pact.Typechecker hiding (debug)
 import Pact.Repl
+import Pact.ReplCommon
 import Pact.Types.Runtime
 import Pact.Types.Typecheck
 import Data.Default

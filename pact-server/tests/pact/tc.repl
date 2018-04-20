@@ -1,0 +1,124 @@
+;; NB this is both a Pact test and used in TypecheckSpec.hs tests too
+
+(env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
+(begin-tx)
+(define-keyset 'keyset (read-keyset "msgkeys"))
+(module tctest 'keyset
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (defconst FOUR (+ 2 2))
+
+  (deftable persons:{person})
+
+  (defun add-person (person)
+    (insert persons (at 'name person) person))
+
+  (defun update-age (name age)
+    (update persons name { "age": age }))
+
+  (defun bad-update (name)
+    (update persons name { "handle": "stuff" }))
+
+  (defun addToAll (i:integer vals:[integer]) (map (+ i) vals))
+
+  (defun unconsumed-app-typevar ()
+    (if true "hello" "goodbye"))
+
+  (defschema account balance:integer)
+  (deftable accounts:{account})
+
+  (defun will-overload-conflict (amount)
+    (>= 0 amount)
+    (- 0 amount)
+    (if true amount amount)
+    )
+
+  (defun at-typed-object (person:object{person})
+    (at "age" person))
+
+  (defun at-typed-list (vals:[integer])
+    (at 1 vals))
+
+  (defun age-gt (age person)
+    (> age (at-typed-object person)))
+
+  (defun adults ()
+    (filter (age-gt 18) (map (read persons) (keys persons))))
+
+  (defun filter-map ()
+    (filter (> 1) (map1)))
+
+  (defun three-arg (a) (> a 1))
+
+  (defun filter-map12 ()
+    (filter (three-arg 1) [1 2 3]))
+
+  (defun map1 ()
+    (map (mod 2) [1 2 3]))
+
+  (defun plus-int (x:integer y) (+ x y))
+
+  (defun fold1 ()
+    (fold (plus-int) 1 [2 3 4]))
+
+  (defun fold2 ()
+    (fold (+) 1 [2 3 4]))
+
+  (defun select1 ()
+    (select persons ['name 'dob] (where "age" (<= 18)))
+    (select persons (where "age" (<= 18))))
+
+  (defun select2 ()
+    (select persons (not? (and? (where "name" (= "Sam")) (where "age" (<= 18))))))
+
+
+  (defun sort1 ()
+    (sort [3 1 2]))
+
+  (defun sort2 ()
+    (sort ['age] (map (read persons) (keys persons))))
+
+  (defun partials ()
+    (not? (= 10) 20)
+    (and? (= 10) (> 20) 10)
+    (or? (= 10) (> 20) 10)
+    (and? (not? (= 10)) (> 20) 10)
+    )
+
+
+  (defun checkWhere ()
+    (let ((sam:object{person} { 'name: "Sam", 'age: 23, 'dob: (parse-time "%F" "1996-12-31") }))
+      (where "age" (= 10) sam)))
+
+  (defun twoStrings:string ()
+    (enforce-keyset (+ "k" "s")))
+
+  (defun bind-obj:integer ()
+    (let ((acct:object{account} { "balance": 10 }))
+      (bind acct { "balance" := bal }
+        bal)))
+
+  )
+
+(create-table persons)
+
+(commit-tx)
+
+(use 'tctest)
+(expect-failure "missing fields" (add-person { "name": "Mary" }))
+(expect-failure "bad field"
+                (add-person { "name": "Mary",
+                            "age": 20,
+                            "dob": (parse-time "%F" "1996-12-31"),
+                            "handle": "@mary" }))
+(add-person { "name": "Mary", "age": 20, "dob": (parse-time "%F" "1996-12-31") })
+(update-age "Mary" 25)
+(expect-failure "bad update" (bad-update "Mary" "@mary123"))
+(expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
+(expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
+
+(typecheck 'tctest)

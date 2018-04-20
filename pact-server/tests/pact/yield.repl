@@ -1,0 +1,39 @@
+(begin-tx)
+(define-keyset 'k (sig-keyset))
+(module yieldtest 'k
+  (defpact tester (name)
+    (step-with-rollback
+     "A"
+     (let ((nameA (+ name "->A")))
+       (yield { "a-result": nameA})
+       nameA)
+     "rollback-a")
+    (step
+     "B"
+     (resume { "a-result" := ar }
+             (+ ar "->B")))))
+(commit-tx)
+(use 'yieldtest)
+
+(env-entity "B")
+(tester "stu")
+(expect "step 0 skips B" false (at "executed" (pact-state)))
+
+(env-entity "A")
+(expect "step 0 executes" "stu->A" (tester "stu"))
+;; set resume for step 1
+(env-step 1 false (at "yield" (pact-state)))
+(env-entity "B")
+(expect "step 1 executes" "stu->A->B" (tester "stu"))
+;; test 1 skips A
+(env-entity "A")
+(tester "stu")
+(expect "step 1 skips A" false (at "executed" (pact-state)))
+
+;; test rollback
+(env-step 0 true)
+(expect "step 1 rollback executes" "rollback-a" (tester "stu"))
+;; test no rollback for B
+(env-entity "B")
+(tester "stu")
+(expect "step 0 rollback skips B" false (at "executed" (pact-state)))

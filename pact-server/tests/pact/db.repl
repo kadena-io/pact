@@ -1,0 +1,63 @@
+(env-data { "k": { "keys": ["admin"], "pred": "=" },
+            "k2": { "keys": ["admin"], "pred": "=" } })
+(env-keys ["admin"])
+(begin-tx)
+(define-keyset 'dbtest-admin (read-keyset "k"))
+(module dbtest 'dbtest-admin
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defconst ID_A "A")
+  (defconst ROW_A:object{person}
+    { 'name:"joe", 'age:46, "dob":(parse-time "%F" "1970-01-01") })
+
+  (defun read-persons (k) (read persons k))
+
+  (deftable stuff)
+
+  )
+(define-keyset 'dbtest2-admin (read-keyset "k2"))
+(module dbtest2 'dbtest2-admin
+  (defun read-persons2 (k)
+    (read-persons k)))
+
+(create-table persons)
+(create-table stuff)
+
+(commit-tx)
+
+(use 'dbtest)
+(begin-tx)
+(insert persons ID_A ROW_A)
+(expect-failure "dupe key should fail" (insert persons ID_A ROW_A))
+(commit-tx)
+(expect "keys works" [ID_A] (keys persons))
+(expect "txids works" [1] (txids persons 1))
+(expect "txlog works"
+        (json [{"value":ROW_A,"key":ID_A,"table":"USER_dbtest_persons"}])
+        (txlog persons 1))
+
+(expect "keylog works" [{"txid": 1, "value": ROW_A}] (keylog persons ID_A 1))
+
+(insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })
+(expect "object stored as value" "value" (typeof (at "stuff" (read stuff "k"))))
+
+(expect "select works" [ROW_A] (select persons (where 'age (= 46))))
+(expect "select works (miss)" [] (select persons (where 'age (= 45))))
+
+(env-keys ["joe"])
+
+(expect "read-persons works w/o admin key" ROW_A (read-persons ID_A))
+(expect "read-persons2 works w/o admin key" ROW_A (dbtest2.read-persons2 ID_A))
+
+
+(expect-failure "insert protected by admin key" (insert persons "foo" ROW_A))
+(expect-failure "keys protected by admin key" (keys persons))
+(expect-failure "txids protected by admin key" (txids persons 0))
+(expect-failure "txlog protected by admin key" (txlog persons 2))
+(expect-failure "keylogs protected by admin key" (keylog persons "" 2))

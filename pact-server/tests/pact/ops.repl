@@ -1,0 +1,110 @@
+;; ops.repl : tests for operators, math
+
+"===== +"
+(expect "+ integer integer" 4 (+ 2 2))
+(expect "+ integer decimal" 4.0 (+ 1 3.0))
+(expect "+ decimal integer" 4.0 (+ 1.0 3))
+(expect "+ decimal decimal" 7.0 (+ 1.2 5.8))
+(expect "+ string string" "foobar" (+ "foo" "bar"))
+(expect "+ list list" [1 2 3 4 5] (+ [1 2 3] [4 5]))
+(expect "+ object object" { "a": 2, "b": 4, "c": false}
+  (+ { "a": 2 } { "b": 4, "c": false}))
+(expect "+ object object, left-biased merge" { "a": 4}
+  (+ { "a": 4} {"a": true}))
+(expect-failure "+ integer string" (+ 2 "hello"))
+(expect-failure "+ list string" (+ [2] "hello"))
+(expect-failure "+ object decimal" (+ {3: 4} 1.0))
+
+"===== -"
+(expect "- integer, - integer integer" (- 2) (- 0 2))
+(expect "- decimal, - decimal decimal" (- 4.5) (- 3.5 8))
+(expect "neg integer lit, - integer integer" -2 (- 0 2))
+(expect "neg dec lit, - decimal decimal" -4.5 (- 3.5 8))
+(expect "- integer decimal" 2.0 (- 3.0 1))
+(expect "- decimal integer" 3.5 (- 4 0.5))
+
+"===== *"
+(expect "* integer integer" 6 (* 2 3))
+(expect "* decimal decimal" 18.0 (* 1.5 12.0))
+(expect "* integer decimal" 2.5 (* 5 0.5))
+(expect "* decimal integer" 10.0 (* 2.5 4))
+
+"===== /"
+(expect "/ integer integer" 2 (/ 11 5))
+(expect "/ decimal decimal" 6.0 (/ 15.0 2.5))
+(expect "/ decimal integer" 2.0 (/ 4.0 2))
+(expect "/ integer decimal" 3.5 (/ 7 2.0))
+(expect-failure "div by 0, integer" (/ 11 0))
+(expect-failure "div by 0, decimal" (/ 11.0 0.0))
+
+"===== logic"
+(expect "andTT" true (and true true))
+(expect "andTF" false (and true false))
+(expect "andFT" false (and false true))
+(expect "andFF" false (and false false))
+(expect "orTT" true (or true true))
+(expect "orTF" true (or true false))
+(expect "orFT" true (or false true))
+(expect "orFF" false (or false false))
+(expect "not" true (not false))
+(expect "and short-circuit" false
+        (and false (enforce false "shouldn't happen")))
+(expect "or short-circuit" true
+        (or true (enforce false "shouldn't happen")))
+
+"===== comparators, eq"
+(expect "< decimal decimal" true (< 10.0 11.0))
+(expect "<= decimal decimal" true (<= 11.0 11.0))
+(expect "> decimal decimal" true (> 11.0 10.0))
+(expect ">= decimal decimal" true (>= 11.1 11.0))
+(expect "= decimal decimal" true (= 10.0 10.0))
+(expect "!= decimal decimal" true (!= 10.0 10.1))
+
+(expect "< integer integer" true (< 10 11))
+(expect "<= integer integer" true (<= 11 11))
+(expect "> integer integer" true (> 11 10))
+(expect ">= integer integer" true (>= 12 11))
+(expect "= integer integer" true (= 10 10))
+(expect "!= integer integer" true (!= 10 88))
+
+(expect-failure "< decimal integer" (< 10.0 11))
+(expect-failure "<= decimal integer" (<= 11.0 11))
+(expect-failure "> decimal integer" (> 11.0 10))
+(expect-failure ">= decimal integer" (>= 12.0 11))
+(expect "= decimal integer false" false (= 10.0 10))
+
+(expect-failure "< integer decimal" (< 10 11.0))
+(expect-failure "<= integer decimal" (<= 11 11.0))
+(expect-failure "> integer decimal" (> 11 10.0))
+(expect-failure ">= integer decimal" (>= 12 11.0))
+(expect "= integer decimal false" false (= 10 10.0))
+
+(expect "< string string" true (< "a" "b"))
+(expect "<= string string" true (<= "a" "a"))
+(expect "> string string" true (> "b" "a"))
+(expect ">= string string" true (>= "ba" "a"))
+(expect "= string string" true (= "hello" "hello"))
+(expect "!= string string" true (!= "hello" "goodbye"))
+
+"===== math"
+(expect "sqrt decimal" 4.0 (sqrt 16.0))
+(expect "sqrt integer" 4.0 (sqrt 16))
+(expect "mod" 3 (mod 8 5))
+(expect "log" 4.0 (log 2.0 16))
+(expect "ln" 4.094 (round (ln 60) 3))
+(expect "exp" 20.086 (round (exp 3) 3))
+(expect "abs" 10.23 (abs (- 10.23)))
+
+"===== truncating"
+(expect "round" 100 (round 100.1))
+(expect "ceiling" 101 (ceiling 100.001))
+(expect "floor" 101 (ceiling 100.001))
+(expect "round 3 prec" 100.124 (round 100.1239 3))
+(expect "ceiling 2 prec" 101.95 (ceiling 101.9401 2))
+(expect "floor 1 prec" 100.1 (ceiling 100.01 1))
+
+"===== other equality"
+(expect "= list list" true (= [1 2 3] [1 2 3]))
+(expect "not = list list" false (= [1 3 2] [1 2 3]))
+(expect "= object object" true (= { "a": 1 } { "a": 1 }))
+(expect "not = object object" false (= { "a": 1 } { "a": 1, "b": 2 }))

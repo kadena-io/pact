@@ -6,7 +6,7 @@
     root = ./.;
     overrides = self: super: {
       # Don't run a package's test suite
-      thyme = nixpkgs.haskell.lib.dontCheck super.thyme;
+      # thyme = nixpkgs.haskell.lib.dontCheck super.thyme;
       #
       # Don't enforce package's version constraints
       # bar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.bar;
@@ -20,11 +20,11 @@
       # bytestring = "0.10.8.1";
       #
       # Use a particular commit from github
-      thyme = nixpkgs.fetchFromGitHub {
-        owner = "kadena-io";
-        repo = "thyme";
-        rev = "6ee9fcb026ebdb49b810802a981d166680d867c9";
-        sha256 = "09fcf896bs6i71qhj5w6qbwllkv3gywnn5wfsdrcm0w1y6h8i88f";
-      };
+      # thyme = nixpkgs.fetchFromGitHub {
+      #   owner = "kadena-io";
+      #   repo = "thyme";
+      #   rev = "6ee9fcb026ebdb49b810802a981d166680d867c9";
+      #   sha256 = "09fcf896bs6i71qhj5w6qbwllkv3gywnn5wfsdrcm0w1y6h8i88f";
+      # };
     };
   }

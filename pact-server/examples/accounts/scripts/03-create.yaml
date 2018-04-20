@@ -1,0 +1,16 @@
+# Provides mock system module for 'accounts'
+
+code: |-
+  (use 'accounts)
+  (use 'system)
+  (create-account "Alice" (read-keyset "alice-keyset") "USD" (get-system-time))
+  (create-account "Bob" (read-keyset "bob-keyset") "USD" (get-system-time))
+  (fund-account "Alice" 100.0 (get-system-time))
+  (read-all)
+data:
+  alice-keyset: ["7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"]
+  bob-keyset: ["ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"]
+keyPairs:
+  - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+    secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+nonce: step03

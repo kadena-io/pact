@@ -31,7 +31,7 @@ library
     Pact.Persist
     Pact.Persist.Pure
     Pact.PersistPactDb
-    Pact.Repl
+    Pact.ReplCommon
     Pact.Repl.Lib
     Pact.Repl.Types
     Pact.Typechecker
@@ -84,8 +84,6 @@ library
     , utf8-string >= 1.0.1.1 && < 1.1
     , vector >= 0.11.0.0 && < 0.13
     , vector-space >= 0.10.4 && < 0.13
-    , haskeline >= 0.7.3
-    -- Was 0.7.4
 
   if !impl(ghcjs)
     build-depends:
@@ -119,7 +117,4 @@ test-suite hspec
   other-modules:
     Blake2Spec
     KeysetSpec
-    PactTestsSpec
-    ParserSpec
-    TypecheckSpec
     TypesSpec

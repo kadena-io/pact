@@ -1,0 +1,67 @@
+;; time.repl: time unit tests
+(define-keyset 'k (sig-keyset))
+(module stuff 'k
+  (defconst T (time "2010-12-21T13:23:45Z"))
+  (defconst T2 (add-time T 0.001002))
+  (defun time-rt (fmt t)
+    (parse-time fmt (format-time fmt t))))
+
+(expect "parse-time YMD"
+  (time "2016-07-22T00:00:00Z") (parse-time "%Y-%m-%d" "2016-07-22"))
+
+(expect "add 1 day" (time "2016-07-23T00:00:00Z")
+  (add-time (time "2016-07-22T00:00:00Z") (days 1)))
+
+(expect "diff-time 1hr" (hours 1)
+  (diff-time (time "2016-07-22T11:26:35Z") (time "2016-07-22T10:26:35Z")))
+
+(expect "day=24h" (hours 24) (days 1))
+
+(expect "hour=60m" (minutes 60) (hours 1))
+
+(expect "minutes=60.0" 60.0 (minutes 1))
+
+(expect "test %%" "%" (format-time "%%" T)) ; hour of day (24-hour), space-padded to two chars, `" 0"`–`"23"`
+(expect "test %k" "13" (format-time "%k" T)) ; hour of day (24-hour), space-padded to two chars, `" 0"`–`"23"`
+(expect "test %I" "01" (format-time "%I" T)) ; - hour of day-half (12-hour), 0-padded to two chars, `"01"`–`"12"`
+(expect "test %l" " 1" (format-time "%l" T)) ; `%l` - hour of day-half (12-hour), space-padded to two chars, `" 1"`–`"12"`
+(expect "test %M" "23" (format-time "%M" T)) ; `%M` - minute of hour, 0-padded to two chars, `"00"`–`"59"`
+(expect "test %S" "45" (format-time "%S" T)) ; `%S` - second of minute (without decimal part), 0-padded to two chars, `"00"`–`"60"`
+(expect "test %q" "001002000000" (format-time "%q" T2)) ; `%q` - picosecond of second, 0-padded to twelve chars, `"000000000000"`–`"999999999999"`. /EXTENSION/ UNSUPPORTED, broken in thyme
+(expect "test %v" "001002" (format-time "%v" T2)) ; `%v` - microsecond of second, 0-padded to six chars, `"000000"`–`"999999"`. /EXTENSION/
+(expect "test %Q" ".001002" (format-time "%Q" T2)) ; `%Q` - decimal point and fraction of second, up to 6 second decimals, without trailing zeros.
+                                   ;        For a whole number of seconds, `%Q` produces the empty string. /EXTENSION/
+(expect "test %s" "1292937825" (format-time "%s" T)) ; `%s` - number of whole seconds since the Unix epoch. For times before
+                              ; the Unix epoch, this is a negative number. Note that in `%s.%q` and `%s%Q`
+                              ; the decimals are positive, not negative. For example, 0.9 seconds
+                              ; before the Unix epoch is formatted as `"-1.1"` with `%s%Q`.
+
+(expect "test %D" "12/21/10" (format-time "%D" T)) ; `%D` - same as `%m\/%d\/%y`
+(expect "test %F" "2010-12-21" (format-time "%F" T)) ; `%F` - same as `%Y-%m-%d`
+(expect "test %x" "12/21/10" (format-time "%x" T)) ; `%x` - as 'dateFmt' `locale` (e.g. `%m\/%d\/%y`)
+(expect "test %Y" "2010" (format-time "%Y" T)) ; `%Y` - year, no padding.
+(expect "test %y" "10" (format-time "%y" T)) ; `%y` - year of century, 0-padded to two chars, `"00"`–`"99"`
+(expect "test %C" "20" (format-time "%C" T)) ; `%C` - century, no padding.
+(expect "test %B" "December" (format-time "%B" T)) ; `%B` - month name, long form ('fst' from 'months' `locale`), `"January"`–`"December"`
+(expect "test %b" "Dec" (format-time "%b" T)) ; `%b`, `%h` - month name, short form ('snd' from 'months' `locale`), `"Jan"`–`"Dec"`
+(expect "test %h" "Dec" (format-time "%h" T)) ; `%b`, `%h` - month name, short form ('snd' from 'months' `locale`), `"Jan"`–`"Dec"`
+(expect "test %m" "12" (format-time "%m" T)) ; `%m` - month of year, 0-padded to two chars, `"01"`–`"12"`
+(expect "test %d" "21" (format-time "%d" T)) ; `%d` - day of month, 0-padded to two chars, `"01"`–`"31"`
+(expect "test %e" "21" (format-time "%e" T)) ; `%e` - day of month, space-padded to two chars, `" 1"`–`"31"`
+(expect "test %j" "355" (format-time "%j" T)) ; `%j` - day of year, 0-padded to three chars, `"001"`–`"366"`
+(expect "test %G" "2010" (format-time "%G" T)) ; `%G` - year for Week Date format, no padding.
+(expect "test %g" "10" (format-time "%g" T)) ; `%g` - year of century for Week Date format, 0-padded to two chars, `"00"`–`"99"`
+(expect "test %f" "20" (format-time "%f" T)) ; `%f` - century for Week Date format, no padding. /EXTENSION/
+(expect "test %V" "51" (format-time "%V" T)) ; `%V` - week of year for Week Date format, 0-padded to two chars, `"01"`–`"53"`
+(expect "test %u" "2" (format-time "%u" T)) ; `%u` - day of week for Week Date format, `"1"`–`"7"`
+(expect "test %a" "Tue" (format-time "%a" T)) ; `%a` - day of week, short form ('snd' from 'wDays' `locale`), `"Sun"`–`"Sat"`
+(expect "test %A" "Tuesday" (format-time "%A" T)) ; `%A` - day of week, long form ('fst' from 'wDays' `locale`), `"Sunday"`–`"Saturday"`
+(expect "test %U" "51" (format-time "%U" T)) ; `%U` - week of year where weeks start on Sunday (as 'sundayStartWeek'), 0-padded to two chars, `"00"`–`"53"`
+(expect "test %w" "2" (format-time "%w" T)) ; `%w` - day of week number, `"0"` (= Sunday) – `"6"` (= Saturday)
+(expect "test %W" "51" (format-time "%W" T)) ; `%W` - week of year where weeks start on Monday (as 'Data.Thyme.Calendar.WeekdayOfMonth.mondayStartWeek'), 0-padded to two chars, `"00"`–`"53"`
+
+;; tests from thyme docs, here a roundtrip
+
+(expect "roundtrip 1" T (time-rt "%Y-%m-%dT%H:%M:%S%N" T))
+(expect "roundtrip 2" T (time-rt "%a, %_d %b %Y %H:%M:%S %Z" T))
+(expect "roundtrip 3" T2 (time-rt "%Y-%m-%d %H:%M:%S.%v" T2))
