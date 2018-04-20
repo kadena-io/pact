@@ -13,8 +13,6 @@
 module Pact.Types.Orphans where
 
 import Data.Serialize
-import Data.Thyme
-import Data.Thyme.Internal.Micro
 import Data.Decimal
 import qualified Data.Aeson as A
 import Text.Trifecta.Combinators (DeltaParsing(..))
@@ -27,10 +25,6 @@ import qualified Data.Text as T
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Default
 import Control.DeepSeq
-
-instance Serialize Micro
-instance Serialize NominalDiffTime
-instance Serialize UTCTime
 
 instance (Serialize i) => Serialize (DecimalRaw i) where
     put (Decimal p i) = put p >> put i
