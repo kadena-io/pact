@@ -54,7 +54,9 @@ data Provenance
 -- Symbolic value carrying provenance, for tracking if values have come from a
 -- particular table+row.
 data S a
-  = S (Maybe Provenance) (SBV a)
+  = S
+    { _sProv :: Maybe Provenance
+    , _sSbv  :: SBV a }
   deriving (Show)
 
 instance SymWord a => Mergeable (S a) where
@@ -121,24 +123,21 @@ instance Num (S Time) where
 type PredicateS = Symbolic (S Bool)
 
 instance Provable PredicateS where
-  forAll_   = fmap sSbv
-  forAll _  = fmap sSbv
-  forSome_  = fmap sSbv
-  forSome _ = fmap sSbv
+  forAll_   = fmap _sSbv
+  forAll _  = fmap _sSbv
+  forSome_  = fmap _sSbv
+  forSome _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S String -> S String -> S String
 S _ a .++ S _ b = S Nothing (SBV.strConcat a b)
 
-sSbv :: S a -> SBV a
-sSbv = (\(S _ sbv) -> sbv)
-
 -- Beware: not a law-abiding Iso. Drops provenance info.
 sbv2S :: Iso' (SBV a) (S a)
-sbv2S = iso sansProv sSbv
+sbv2S = iso sansProv _sSbv
 
 sbv2SFrom :: Provenance -> Iso' (SBV a) (S a)
-sbv2SFrom prov = iso (withProv prov) sSbv
+sbv2SFrom prov = iso (withProv prov) _sSbv
 
 s2Sbv :: Iso' (S a) (SBV a)
 s2Sbv = from sbv2S
@@ -171,7 +170,7 @@ literalS :: SymWord a => a -> S a
 literalS a = sansProv $ literal a
 
 unliteralS :: SymWord a => S a -> Maybe a
-unliteralS = unliteral . sSbv
+unliteralS = unliteral . _sSbv
 
 withProv :: Provenance -> SBV a -> S a
 withProv prov sym = S (Just prov) sym
@@ -186,10 +185,10 @@ coerceS :: S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
 
 iteS :: Mergeable a => S Bool -> a -> a -> a
-iteS sbool = ite (sSbv sbool)
+iteS sbool = ite (_sSbv sbool)
 
 liftSbv :: (SBV a -> SBV b) -> S a -> S b
-liftSbv f = sansProv . f . sSbv
+liftSbv f = sansProv . f . _sSbv
 
 fromIntegralS
   :: forall a b
@@ -205,7 +204,7 @@ oneIfS :: (Num a, SymWord a) => S Bool -> S a
 oneIfS = liftSbv oneIf
 
 isConcreteS :: SymWord a => S a -> Bool
-isConcreteS = isConcrete . sSbv
+isConcreteS = isConcrete . _sSbv
 
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show)
@@ -444,4 +443,5 @@ mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
   mantissa % 10 ^ places
 
+makeLenses ''S
 makeLenses ''Object

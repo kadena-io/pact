@@ -345,6 +345,12 @@ tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 columnDelta :: TableName -> S ColumnName -> Lens' AnalyzeState (S Integer)
 columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn.sbv2S
 
+rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).symArrayAt sRk.sbv2S
+
+rowEnforced :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowEnforced tn sRk = latticeState.lasRowsEnforced.singular (ix tn).symArrayAt sRk.sbv2S
+
 sCellId :: S ColumnName -> S RowKey -> S CellId
 sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
 
@@ -403,15 +409,21 @@ symKsName = coerceS
 
 resolveKeySet :: S KeySetName -> AnalyzeM (S KeySet)
 resolveKeySet sKsn = fmap sansProv $
-  readArray <$> view keySets <*> pure (sSbv sKsn)
+  readArray <$> view keySets <*> pure (_sSbv sKsn)
 
 nameAuthorized :: S KeySetName -> AnalyzeM (S Bool)
 nameAuthorized sKsn = fmap sansProv $
-  readArray <$> view ksAuths <*> (sSbv <$> resolveKeySet sKsn)
+  readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
 ksAuthorized :: S KeySet -> AnalyzeM (S Bool)
-ksAuthorized sKs = fmap sansProv $
-  readArray <$> view ksAuths <*> pure (sSbv sKs)
+ksAuthorized sKs = do
+  -- NOTE: we know that KsAuthorized constructions are only emitted within
+  -- Enforced constructions, so we know that this keyset is being enforced
+  -- here.
+  case sKs ^. sProv of
+    Just (Provenance tn sRk) -> rowEnforced tn (sansProv sRk) .= true
+    Nothing -> pure ()
+  fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 --keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
 --keySetNamed sKsn = keySets.symArrayAt sKsn
@@ -429,6 +441,7 @@ analyzeTermO = \case
   Read tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
+    rowRead tn sRk .= true
     obj <- iforM fields $ \fieldName fieldType -> do
       let sCn  = literalS $ ColumnName fieldName
       x <- case fieldType of
@@ -457,6 +470,7 @@ analyzeTermO = \case
 
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
+    rowRead tn sRk .= true
     obj <- iforM relevantFields $ \fieldName fieldType -> do
       let sCn = literalS $ ColumnName fieldName
       x <- case fieldType of
@@ -756,7 +770,7 @@ analyzeTerm = \case
     x'         <- analyzeTerm x
     precision' <- analyzeTerm precision
     let digitShift :: S Integer
-        digitShift = sansProv $ 10 .^ sSbv precision'
+        digitShift = sansProv $ 10 .^ _sSbv precision'
         x'' = x' * fromIntegralS digitShift
 
     x''' <- analyzeTerm (RoundingLikeOp1 op (Literal x''))
