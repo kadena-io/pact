@@ -292,7 +292,7 @@ instance MFunctor AnalyzeT where
   hoist nat m = AnalyzeT $ RWST $ \r s -> ExceptT $
     nat $ runExceptT $ runRWST (runAnalyzeT m) r s
 
-type AnalyzeM a = AnalyzeT Identity a
+type Analyze a = AnalyzeT Identity a
 
 makeLenses ''AnalyzeEnv
 makeLenses ''TableMap
@@ -301,7 +301,7 @@ makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 
-instance (Mergeable a) => Mergeable (AnalyzeM a) where
+instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = AnalyzeT $ RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
@@ -441,7 +441,7 @@ ksAuthorized sKs = do
 --ksnAuthorization :: SBV KeySetName -> Lens' AnalyzeEnv (SBV Bool)
 --ksnAuthorization sKsn = _todoKsnAuthorization
 
-analyzeTermO :: Term Object -> AnalyzeM Object
+analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$>
     for obj (\(fieldType, ETerm tm _) -> do
@@ -533,7 +533,7 @@ analyzeTermO = \case
 
     colName' <- analyzeTerm colName
 
-    let getObjVal :: String -> AnalyzeM Object
+    let getObjVal :: String -> Analyze Object
         getObjVal fieldName = case Map.lookup fieldName fields of
           Nothing -> throwError $ KeyNotPresent fieldName obj
           Just (fieldType, AVal _ _) -> throwError $
@@ -548,7 +548,7 @@ analyzeTermO = \case
   objT -> throwError $ UnhandledObject objT
 
 analyzeTerm
-  :: forall a. (Show a, SymWord a) => Term a -> AnalyzeM (S a)
+  :: forall a. (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
