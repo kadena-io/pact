@@ -15,7 +15,9 @@
 module Pact.Analyze.Analyze where
 
 import Control.Monad
-import Control.Monad.Except (MonadError, ExceptT(..), runExcept, throwError)
+import Control.Monad.Except (MonadError, ExceptT(..), runExcept, runExceptT,
+                             throwError)
+import Control.Monad.Morph (MFunctor(..))
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
@@ -286,9 +288,10 @@ newtype AnalyzeT m a
 instance MonadTrans AnalyzeT where
   lift = AnalyzeT . lift . lift
 
---
--- TODO: remove M from name
---
+instance MFunctor AnalyzeT where
+  hoist nat m = AnalyzeT $ RWST $ \r s -> ExceptT $
+    nat $ runExceptT $ runRWST (runAnalyzeT m) r s
+
 type AnalyzeM a = AnalyzeT Identity a
 
 makeLenses ''AnalyzeEnv
@@ -414,15 +417,15 @@ symKsName = coerceS
 
 -- TODO: potentially switch to lenses here for the following 3 functions:
 
-resolveKeySet :: S KeySetName -> AnalyzeM (S KeySet)
+resolveKeySet :: forall m. Monad m => S KeySetName -> AnalyzeT m (S KeySet)
 resolveKeySet sKsn = fmap sansProv $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
-nameAuthorized :: S KeySetName -> AnalyzeM (S Bool)
+nameAuthorized :: forall m. Monad m => S KeySetName -> AnalyzeT m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
   readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
-ksAuthorized :: S KeySet -> AnalyzeM (S Bool)
+ksAuthorized :: forall m. Monad m => S KeySet -> AnalyzeT m (S Bool)
 ksAuthorized sKs = do
   -- NOTE: we know that KsAuthorized constructions are only emitted within
   -- Enforced constructions, so we know that this keyset is being enforced
@@ -828,7 +831,7 @@ analyzeTerm = \case
 
   n -> throwError $ UnhandledTerm $ tShow n
 
-analyzeProperty :: Prop a -> AnalyzeM (S a)
+analyzeProperty :: Prop a -> AnalyzeT Symbolic (S a)
 -- Logical connectives
 analyzeProperty (p1 `Implies` p2) = do
   b1 <- analyzeProperty p1

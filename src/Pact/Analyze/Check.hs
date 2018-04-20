@@ -14,8 +14,9 @@ module Pact.Analyze.Check
   ) where
 
 import Control.Concurrent.MVar
-import Control.Monad.Except (runExcept)
+import Control.Monad.Except (runExcept, runExceptT)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Morph (hoist, generalize)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
@@ -37,7 +38,7 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (AnalyzeFailure, allocateSymbolicCells,
+import Pact.Analyze.Analyze (AnalyzeFailure, AnalyzeT, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProperty,
                              describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, runAnalyzeT)
@@ -115,16 +116,20 @@ checkFunctionBody check body argTys nodeNames tableNames =
 
     Right tm -> do
       let prop   = check ^. ckProp
+          action :: AnalyzeT Symbolic (S Bool)
           action = case tm of
-            ETerm   body'' _ -> analyzeTerm  body'' *> analyzeProperty prop
-            EObject body'' _ -> analyzeTermO body'' *> analyzeProperty prop
+            ETerm   body'' _ ->
+              (hoist generalize $ analyzeTerm  body'') *> analyzeProperty prop
+            EObject body'' _ ->
+              (hoist generalize $ analyzeTermO body'') *> analyzeProperty prop
 
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
         env0 <- mkAnalyzeEnv argTys
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
+        eAnalysis <- runExceptT $ runRWST (runAnalyzeT action) env0 state0
 
-        case runExcept $ runRWST (runAnalyzeT action) env0 state0 of
+        case eAnalysis of
           Left cf -> do
             liftIO $ putMVar compileFailureVar cf
             pure false
