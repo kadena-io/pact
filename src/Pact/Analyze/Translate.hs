@@ -42,12 +42,10 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           GHC.TypeLits
-import           System.Locale              (defaultTimeLocale)
 
 import qualified Pact.Types.Info as P
 import           Pact.Types.Lang
@@ -57,6 +55,7 @@ import           Pact.Types.Lang
                  )
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Persistence     (WriteType)
+import           Pact.Types.Time            (parseTime, defaultTimeLocale)
 import           Pact.Types.Typecheck       (AST, Named (..), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact

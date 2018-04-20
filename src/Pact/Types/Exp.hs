@@ -51,9 +51,6 @@ import Prelude
 import Data.Text (Text,pack)
 import Data.Aeson
 import Data.Maybe (fromMaybe)
-import Data.Thyme
-import Data.Thyme.Time.Core (secondsToDiffTime)
-import System.Locale
 import GHC.Generics (Generic)
 import Data.Decimal
 import Control.DeepSeq
@@ -64,6 +61,7 @@ import Test.QuickCheck
 import Pact.Types.Info
 import Pact.Types.Pretty
 import Pact.Types.SizeOf
+import Pact.Types.Time
 import Pact.Types.Type
 import Pact.Types.Codec
 import Pact.Types.Util (genBareText)

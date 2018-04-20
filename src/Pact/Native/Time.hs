@@ -22,15 +22,14 @@ module Pact.Native.Time
 
 import Control.Monad
 import Prelude
-import Data.Thyme
 import Data.Decimal
-import System.Locale
 import Data.AffineSpace
 import Data.Text (Text, pack, unpack)
 
 import Pact.Types.Pretty
 import Pact.Types.Runtime
 import Pact.Native.Internal
+import Pact.Types.Time
 
 
 timedoc :: Text

@@ -62,7 +62,6 @@ import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
-import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           GHC.TypeLits
 import           Prelude                      hiding (Float)
@@ -70,6 +69,7 @@ import           Prelude                      hiding (Float)
 import           Pact.Types.Pretty            hiding (list)
 import qualified Pact.Types.Pretty            as Pretty
 import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Time              (UTCTime, microseconds, mkUTCTime, Day(..))
 import           Pact.Types.Util              (AsString)
 
 import           Pact.Analyze.LegacySFunArray (SFunArray)
@@ -242,10 +242,10 @@ timeIso :: PactIso UTCTime Time
 timeIso = PactIso $ iso mkTime unMkTime
   where
     mkTime :: UTCTime -> Time
-    mkTime utct = view microseconds (utct .-. toEnum 0)
+    mkTime utct = view microseconds (utct .-. mkUTCTime (ModifiedJulianDay 0) 0)
 
     unMkTime :: Time -> UTCTime
-    unMkTime time = toEnum 0 .+^ view (from microseconds) time
+    unMkTime time = mkUTCTime (ModifiedJulianDay 0) 0 .+^ view (from microseconds) time
 
 isGuardTy :: Pact.Type v -> Bool
 isGuardTy (Pact.TyPrim (Pact.TyGuard _)) = True

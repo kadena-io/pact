@@ -42,8 +42,6 @@ import Data.Serialize (Serialize)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text
-import Data.Thyme.Clock.POSIX (getPOSIXTime)
-import Data.Thyme.Time.Core (toMicroseconds)
 import Data.Word (Word64)
 
 -- internal pact modules
@@ -51,6 +49,7 @@ import Data.Word (Word64)
 import Pact.Parse
 import Pact.Types.ChainId (ChainId)
 import Pact.Types.Gas
+import Pact.Types.Time (getPOSIXTime, toMicroseconds)
 import Pact.Types.Util (AsString, lensyToJSON, lensyParseJSON)
 
 -- | Name of "entity", ie confidential counterparty in an encrypted exchange, in privacy-supporting platforms.

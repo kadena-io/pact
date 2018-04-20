@@ -14,8 +14,6 @@
 module Pact.Types.Orphans where
 
 import Data.Serialize
-import Data.Thyme
-import Data.Thyme.Internal.Micro
 import Data.Decimal
 import qualified Data.Aeson as A
 import Text.Trifecta.Combinators (DeltaParsing(..))
@@ -33,10 +31,6 @@ import Bound
 import Control.Applicative ((<|>))
 import Test.QuickCheck (Arbitrary(..))
 
-
-instance Serialize Micro
-instance Serialize NominalDiffTime
-instance Serialize UTCTime
 
 instance (Arbitrary i) => Arbitrary (DecimalRaw i) where
   arbitrary = Decimal <$> arbitrary <*> arbitrary

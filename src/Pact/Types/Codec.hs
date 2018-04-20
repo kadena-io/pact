@@ -38,10 +38,10 @@ import Data.Aeson hiding (Object)
 import Data.Aeson.Types (Parser,parse)
 import Data.Text (Text,unpack)
 import Data.Decimal (Decimal,DecimalRaw(..))
-import Data.Thyme.Time.Core
 import Text.Read (readMaybe)
-import Data.Ratio (denominator)
-import System.Locale
+import Data.Ratio ((%), denominator)
+
+import Pact.Types.Time
 
 
 -- | Min, max values that Javascript doesn't mess up.
@@ -116,7 +116,7 @@ timeCodec = Codec enc dec
       | otherwise = object [ highprec .= formatTime loc highPrecFormat t ]
       where (UTCTime (ModifiedJulianDay _d) s) = unUTCTime t
             denom :: DiffTime -> Integer
-            denom = denominator . toSeconds
+            denom = denominator . (% 1000) . fromIntegral . toMicroseconds
     {-# INLINE enc #-}
     dec = withObject "time" $ \o ->
       (o .: field >>= mkTime pactISO8601Format) <|>

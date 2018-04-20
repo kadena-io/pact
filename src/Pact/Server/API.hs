@@ -1,13 +1,13 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE OverloadedLists #-}
 
@@ -48,8 +48,6 @@ import Data.Default
 import Data.Proxy
 import Data.Swagger as Swagger hiding (Info,version)
 import Data.Text (Text)
-import Data.Thyme.Clock (UTCTime)
-import Data.Thyme.Time.Core (fromMicroseconds,fromGregorian,mkUTCTime)
 import GHC.Generics
 import Servant.API
 #if !defined(ghcjs_HOST_OS)
@@ -77,6 +75,7 @@ import Pact.Types.Pretty
 import Pact.Types.Runtime (PactError,PactErrorType,StackFrame,PactEvent)
 import Pact.Types.Swagger
 import Pact.Types.Term
+import Pact.Types.Time (UTCTime,fromMicroseconds,fromGregorian,mkUTCTime)
 import Pact.Types.Util
 
 -- | Public Pact REST API.
@@ -307,20 +306,27 @@ instance ToSchema Literal where
     (optionsOf $ optionConstructor $ toNiceString 1)
       { Swagger.unwrapUnaryRecords = True }
 
+#ifdef USE_THYME
 newtype DummyTime = DummyTime UTCTime
   deriving (Generic)
+
 instance ToJSON DummyTime where
   toJSON (DummyTime t) = encoder timeCodec t
+
+-- For the time package there already a ToSchema instance provided by the swagger2
+-- package. However, that instance if probably wrong.
+--
 instance ToSchema UTCTime where
   declareNamedSchema _ = namedSchema "UTCTime" $ sketchSchema $
     DummyTime $ mkUTCTime
                 (fromGregorian 1970 01 01)
                 (fromMicroseconds 0)
+#endif
+
 instance ToSchema Decimal where
   declareNamedSchema _ = return $
     NamedSchema (Just "Decimal")
                 (schemaOf $ swaggerType SwaggerNumber)
-
 
 -- Adapted from 'Map k v' as a naive instance will cause an infinite loop!!
 -- 2.2 swagger2 compat means not using 'additionalProperties' for now

@@ -37,7 +37,6 @@ import qualified Data.Set as S
 import Data.Text (Text, unpack)
 import qualified Data.Text as Text
 import Data.Text.Encoding
-import Data.Thyme.Time.Core
 import qualified Data.Vector as V
 import Data.List (isInfixOf)
 
@@ -74,6 +73,7 @@ import Pact.Gas.Table
 import Pact.Types.PactValue
 import Pact.Types.Capability
 import Pact.Runtime.Utils
+import Pact.Types.Time
 
 
 initLibState :: Loggers -> Maybe String -> IO LibState

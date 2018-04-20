@@ -23,7 +23,6 @@ import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Thyme hiding (Vector)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)
@@ -32,6 +31,7 @@ import Test.QuickCheck.Instances()
 
 import Pact.Types.Orphans()
 
+import Pact.Types.Time
 
 
 -- |  Estimate of number of bytes needed to represent data type
