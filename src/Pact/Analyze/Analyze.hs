@@ -15,8 +15,7 @@
 module Pact.Analyze.Analyze where
 
 import Control.Monad
-import Control.Monad.Except (MonadError, ExceptT(..), Except, runExcept,
-                             throwError)
+import Control.Monad.Except (MonadError, ExceptT(..), runExcept, throwError)
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
@@ -278,11 +277,19 @@ tShow = T.pack . show
 instance IsString AnalyzeFailure where
   fromString = FailureMessage . T.pack
 
-newtype AnalyzeM a
-  = AnalyzeM
-    { runAnalyzeM :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure) a }
+newtype AnalyzeT m a
+  = AnalyzeT
+    { runAnalyzeT :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (ExceptT AnalyzeFailure m) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
+
+instance MonadTrans AnalyzeT where
+  lift = AnalyzeT . lift . lift
+
+--
+-- TODO: remove M from name
+--
+type AnalyzeM a = AnalyzeT Identity a
 
 makeLenses ''AnalyzeEnv
 makeLenses ''TableMap
@@ -292,7 +299,7 @@ makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 
 instance (Mergeable a) => Mergeable (AnalyzeM a) where
-  symbolicMerge force test left right = AnalyzeM $ RWST $ \r s -> ExceptT $ Identity $
+  symbolicMerge force test left right = AnalyzeT $ RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -300,7 +307,7 @@ instance (Mergeable a) => Mergeable (AnalyzeM a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runExcept . runRWST (runAnalyzeM act) r
+    let run act = runExcept . runRWST (runAnalyzeT act) r
     in do
       lTup <- run left s
       let gs = lTup ^. _2.globalState

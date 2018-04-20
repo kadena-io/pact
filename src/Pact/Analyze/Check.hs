@@ -40,7 +40,7 @@ import qualified Pact.Types.Typecheck as TC
 import Pact.Analyze.Analyze (AnalyzeFailure, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProperty,
                              describeAnalyzeFailure, mkAnalyzeEnv,
-                             mkInitialAnalyzeState, runAnalyzeM)
+                             mkInitialAnalyzeState, runAnalyzeT)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
@@ -124,7 +124,7 @@ checkFunctionBody check body argTys nodeNames tableNames =
         env0 <- mkAnalyzeEnv argTys
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
 
-        case runExcept $ runRWST (runAnalyzeM action) env0 state0 of
+        case runExcept $ runRWST (runAnalyzeT action) env0 state0 of
           Left cf -> do
             liftIO $ putMVar compileFailureVar cf
             pure false
