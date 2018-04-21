@@ -20,7 +20,7 @@ cache:
 matrix:
   include:
   # OSX Build El Cap
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=nix ARGS=""
     compiler: "nix osx default (el cap)"
     os: osx
     addons:
@@ -29,7 +29,7 @@ matrix:
           - result/ghc/pact-server/bin/pact
 
   # Linux build
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=nix ARGS=""
     compiler: "nix default linux"
     addons:
       artifacts:
@@ -59,6 +59,7 @@ before_install:
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; command curl -sSL https://rvm.io/mpapis.asc | gpg --import -; then rvm get stable; fi
 
 install:
+- uname -a
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
