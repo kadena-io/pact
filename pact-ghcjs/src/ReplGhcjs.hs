@@ -10,7 +10,7 @@ import GHCJS.Foreign.Callback
 import GHCJS.Types
 import Prelude hiding (log)
 
-import Pact.Repl (evalString)
+import Pact.ReplCommon (evalString)
 
 foreign import javascript unsafe "evalCmd = $1"
     evalCmd :: Callback (JSVal -> JSVal -> IO JSVal) -> IO ()

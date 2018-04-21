@@ -18,12 +18,12 @@ cabal-version:       >=1.22
 
 executable pact
   main-is:             ReplGhcjs.hs
-  build-depends:
-    ghcjs-base
   cpp-options:  -DGHCJS_BROWSER
 
-  build-depends:       base
-                     , pact
+  build-depends:
+      base
+    , ghcjs-base
+    , pact
   hs-source-dirs:      src
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls

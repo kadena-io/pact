@@ -7,7 +7,7 @@ in
     overrides = self: super: {
       hastache = pkgs.haskell.lib.dontCheck super.hastache;
       statistics = pkgs.haskell.lib.dontCheck super.statistics;
-      thyme = pkgs.haskell.lib.dontCheck super.thyme;
+      thyme = pkgs.haskell.lib.enableCabalFlag (pkgs.haskell.lib.dontCheck super.thyme) "ghcjs";
     };
     packages = {
       pact = ./pact;
@@ -65,7 +65,7 @@ in
     };
     
     shells = {
-      ghc = ["pact" "pact-server" "pact-ghcjs"];
+      ghc = ["pact" "pact-server"];
       ghcjs = ["pact" "pact-ghcjs"];
     };
   
