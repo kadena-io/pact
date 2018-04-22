@@ -65,7 +65,7 @@ install:
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
-  nix-build | awk '{ if (length($0) < 32) print }' > log.txt.f2
+  nix-build | awk '{ print substr($0, 0, 64) }'
   set +ex
 
 script:
