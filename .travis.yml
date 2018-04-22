@@ -65,7 +65,7 @@ install:
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
-  nix-build --store https://nixcache.reflex-frp.org # 2>&1 >/dev/null | awk '{ print substr($0, 0, 64) }'
+  nix-build --substituters https://nixcache.reflex-frp.org # 2>&1 >/dev/null | awk '{ print substr($0, 0, 64) }'
   set +ex
 
 script:
