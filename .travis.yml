@@ -57,14 +57,14 @@ before_install:
 - unset CC
 # https://github.com/travis-ci/travis-ci/issues/6307
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; command curl -sSL https://rvm.io/mpapis.asc | gpg --import -; then rvm get stable; fi
+- sudo mkdir /etc/nix
+- sudo "echo substituters = https://nixcache.reflex-frp.org https://cache.nixos.org/" >> /etc/nix/nix.conf
+- sudo "echo trusted-public-keys = ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" >> /etc/nix/nix.conf
+- cat /etc/nix/nix.conf
 
 install:
 - uname -a
 - nix-build --version
-- mkdir /etc/nix
-- echo substituters = https://nixcache.reflex-frp.org https://cache.nixos.org/ >> /etc/nix/nix.conf
-- echo trusted-public-keys = ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= >> /etc/nix/nix.conf
-- cat /etc/nix/nix.conf
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
