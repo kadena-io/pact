@@ -62,6 +62,7 @@ install:
 - uname -a
 - nix-build --version
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+- cat /etc/nix/nix.conf
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
