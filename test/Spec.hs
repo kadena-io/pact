@@ -356,9 +356,18 @@ suite = tests
   --           |]
   --     in expectPass code $ Valid $ Not Abort
 
-  --
-  -- TODO: test TableRead
-  --
+  , scope "table-read" $ do
+      let code =
+            [text|
+              (defschema token-row balance:integer)
+              (deftable tokens:{token-row})
+
+              (defun test:integer ()
+                (with-read tokens "stu" {"balance" := bal}
+                  bal))
+            |]
+      expectPass code $ Valid $ TableRead "tokens"
+      expectPass code $ Valid $ Not $ TableRead "other"
 
   , scope "table-write.insert" $ do
       let code =
