@@ -1,6 +1,7 @@
 {-# language OverloadedStrings #-}
 {-# language QuasiQuotes       #-}
 {-# language Rank2Types        #-}
+{-# language TypeApplications  #-}
 
 import           Control.Lens
 import           Control.Monad.State.Strict (runStateT)
@@ -190,15 +191,15 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Not $ Exists "row" (Ty (Rep @RowKey)) $
         RowWrite "tokens" (PVar "row")
-      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row")
-      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowEnforced "tokens" (PVar "row")
-      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
         Not $ RowEnforced "tokens" (PVar "row")
-      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
 
   , scope "enforce-keyset.row-level.write" $ do
@@ -219,17 +220,17 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowWrite "tokens" (PVar "row")
-      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row")
-      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowEnforced "tokens" (PVar "row")
-      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
         Not $ RowEnforced "tokens" (PVar "row")
-      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
-      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+      expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
       --
       -- TODO: allow user to use un-munged arg names:
