@@ -23,24 +23,6 @@ import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
 
 import Pact.Analyze.Prop
 
-newtype RowKey
-  = RowKey String
-  deriving (Eq, Ord, Show)
-
-instance SymWord RowKey where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (RowKey s) = mkConcreteString s
-  fromCW = wrappedStringFromCW RowKey
-
-instance HasKind RowKey where
-  kindOf _ = KString
-
-instance IsString RowKey where
-  fromString = RowKey
-
-symRowKey :: S String -> S RowKey
-symRowKey = coerceS
-
 --
 -- TODO: Future improvement could be allowing multiple columns in a table
 --       to contain keysets, and track the row+column a keyset is from.
@@ -145,6 +127,9 @@ s2Sbv = from sbv2S
 mkProv :: TableName -> S RowKey -> Provenance
 mkProv tn (S _ sRk) = Provenance tn sRk
 
+symRowKey :: S String -> S RowKey
+symRowKey = coerceS
+
 data Object
   = Object (Map String (EType, AVal))
   deriving (Eq, Show)
@@ -177,6 +162,9 @@ withProv prov sym = S (Just prov) sym
 
 mkAVal :: S a -> AVal
 mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
+
+mkAVal' :: SBV a -> AVal
+mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
 coerceSBV :: SBV a -> SBV b
 coerceSBV = SBVI.SBV . SBVI.unSBV
@@ -388,16 +376,7 @@ data Term ret where
   PactVersion    ::                                                                    Term String
 
   --
-  -- TODO: figure out the object representation we use here:
-  --
-  -- ObjAuthorized  ::                     Term Obj     ->                     Term Bool
-  --
-  -- TODO: we will also want to handle cases where load a keyset object by its
-  -- name, and then use the object: e.g.:
-  --
-  --   (defconst ADMIN_KEYSET (read-keyset "accounts-admin-keyset"))
-  --
-  --  and then ADMIN_KEYSET is used in the code
+  -- TODO: add support for defconst
   --
 
 deriving instance Show a => Show (Term a)

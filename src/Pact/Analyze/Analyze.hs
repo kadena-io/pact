@@ -244,6 +244,7 @@ data AnalyzeFailure
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
   | FailureMessage Text
   | OpaqueValEncountered
+  | VarNotInScope Text
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
   | UnhandledTerm Text
@@ -269,6 +270,7 @@ describeAnalyzeFailure = \case
   FailureMessage msg -> msg
   UnhandledObject obj -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> tShow obj
   UnhandledTerm termText -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> termText
+  VarNotInScope name -> "variable not in scope: " <> name
   --
   -- TODO: maybe we should differentiate between opaque values and type
   -- variables, because the latter would probably mean a problem from type
@@ -446,6 +448,15 @@ ksAuthorized sKs = do
 --
 --ksnAuthorization :: SBV KeySetName -> Lens' AnalyzeEnv (SBV Bool)
 --ksnAuthorization sKsn = _todoKsnAuthorization
+
+lookupVal :: Monad m => Text -> AnalyzeT m (S a)
+lookupVal name = do
+  mVal <- view $ scope . at name
+  case mVal of
+    Nothing -> throwError $ VarNotInScope name
+    Just (AVal mProv sval) -> pure $ mkS mProv sval
+    Just (AnObj obj) -> throwError $ AValUnexpectedlyObj obj
+    Just (OpaqueVal) -> throwError OpaqueValEncountered
 
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
@@ -665,21 +676,7 @@ analyzeTerm = \case
     local (scope.at name ?~ AnObj rhs') $
       analyzeTerm body
 
-  Var name -> do
-    -- theScope <- view scope
-    -- traceShowM ("Var name", name, theScope)
-    --
-    -- TODO: probably throw AnalyzeFailures where we currently assume, because
-    --       it's possible we've messed up translation for future non-trivial
-    --       forms.
-    --
-    -- Assume the term is well-scoped after typechecking
-    Just val <- view (scope . at name)
-    -- Assume the variable is well-typed after typechecking
-    case val of
-      AVal mProv sval -> pure $ mkS mProv sval
-      AnObj obj -> throwError $ AValUnexpectedlyObj obj
-      OpaqueVal -> throwError OpaqueValEncountered
+  Var name -> lookupVal name
 
   IntArithOp op x y -> do
     x' <- analyzeTerm x
@@ -839,6 +836,18 @@ analyzeTerm = \case
   n -> throwError $ UnhandledTerm $ tShow n
 
 analyzeProperty :: Prop a -> AnalyzeT Symbolic (S a)
+analyzeProperty Success = use succeeds
+analyzeProperty Abort = bnot <$> analyzeProperty Success
+
+-- Abstraction
+analyzeProperty (Forall name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- lift (forall_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
+analyzeProperty (Exists name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- lift (exists_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
+analyzeProperty (PVar name) = lookupVal name
+
 -- Logical connectives
 analyzeProperty (p1 `Implies` p2) = do
   b1 <- analyzeProperty p1
@@ -854,10 +863,7 @@ analyzeProperty (p1 `Or` p2) = do
   pure $ b1 ||| b2
 analyzeProperty (Not p) = bnot <$> analyzeProperty p
 
--- Domain properties
-analyzeProperty Success = use succeeds
-analyzeProperty Abort = bnot <$> analyzeProperty Success
-analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+-- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn
 analyzeProperty (TableWrite tn) = use $ tableWritten tn
 -- analyzeProperty (CellIncrease tableName colName)
@@ -865,3 +871,9 @@ analyzeProperty (ColumnConserve tableName colName) =
   sansProv . (0 .==) <$> use (columnDelta tableName (literalS colName))
 analyzeProperty (ColumnIncrease tableName colName) =
   sansProv . (0 .<) <$> use (columnDelta tableName (literalS colName))
+analyzeProperty (RowRead tn pRk)  = use . rowRead tn =<< analyzeProperty pRk
+analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
+
+-- Authorization
+analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+analyzeProperty (RowEnforced tn pRk) = use . rowEnforced tn =<< analyzeProperty pRk

@@ -14,7 +14,7 @@ import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
 import           Pact.Repl
 import           Pact.Typechecker
-import           Pact.Types.Runtime
+import           Pact.Types.Runtime         hiding (RowKey)
 import           Pact.Types.Typecheck
 
 wrap :: Text -> Text
@@ -174,9 +174,68 @@ suite = tests
 
       expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") `Implies` Abort
 
-  --
-  -- TODO: test row-level keyset property
-  --
+  , scope "enforce-keyset.row-level.read" $ do
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer
+                ks:keyset)
+              (deftable tokens:{token-row})
+
+              (defun test:bool (acct:string)
+                (with-read tokens acct { "ks" := ks, "balance" := bal }
+                  (enforce-keyset ks)
+                  bal))
+            |]
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
+      expectPass code $ Valid $ Not $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowWrite "tokens" (PVar "row")
+      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowRead "tokens" (PVar "row")
+      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowEnforced "tokens" (PVar "row")
+      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        Not $ RowEnforced "tokens" (PVar "row")
+      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+
+  , scope "enforce-keyset.row-level.write" $ do
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer
+                ks:keyset)
+              (deftable tokens:{token-row})
+
+              (defun test:bool (acct:string)
+                (with-read tokens acct { "ks" := ks, "balance" := bal }
+                  (let ((new-bal (+ bal 1)))
+                    (update tokens acct {"balance": new-bal})
+                    (enforce-keyset ks)
+                    new-bal)))
+            |]
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
+      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowWrite "tokens" (PVar "row")
+      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowRead "tokens" (PVar "row")
+      expectPass code $ Valid $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        RowEnforced "tokens" (PVar "row")
+      expectPass code $ Satisfiable $ Exists "row" (Ty (Rep :: Rep RowKey)) $
+        Not $ RowEnforced "tokens" (PVar "row")
+      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+      expectPass code $ Valid $ Forall "row" (Ty (Rep :: Rep RowKey)) $
+        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+      --
+      -- TODO: allow user to use un-munged arg names:
+      --
+      expectPass code $ Valid $ RowWrite "tokens" (PVar "test.test_acct")
+                      `Implies` RowEnforced "tokens" (PVar "test.test_acct")
 
   , scope "table-read.multiple-read" $
       let code =

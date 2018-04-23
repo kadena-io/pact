@@ -1,7 +1,9 @@
-{-# language FlexibleInstances #-}
-{-# language GADTs #-}
+{-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
-{-# language StandaloneDeriving #-}
+{-# language ScopedTypeVariables        #-}
+{-# language StandaloneDeriving         #-}
+{-# language TypeOperators              #-}
+
 module Pact.Analyze.Prop where
 
 import Control.Lens (Lens', lens)
@@ -10,6 +12,7 @@ import Data.SBV hiding (Satisfiable)
 import qualified Data.SBV.Internals as SBVI
 import Data.String (IsString(..))
 import Data.Text (Text)
+import Data.Typeable (Typeable, (:~:)(Refl), eqT)
 import qualified Data.Text as T
 import Pact.Types.Util (AsString)
 
@@ -68,14 +71,42 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
+newtype RowKey
+  = RowKey String
+  deriving (Eq, Ord, Show)
+
+instance SymWord RowKey where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (RowKey s) = mkConcreteString s
+  fromCW = wrappedStringFromCW RowKey
+
+instance HasKind RowKey where
+  kindOf _ = KString
+
+instance IsString RowKey where
+  fromString = RowKey
+
+-- We can't use Proxy because deriving Eq doesn't work
+-- We're still 8.0, so we can't use the new TypeRep yet:
+data Rep a = Rep deriving (Eq, Show)
+data Ty where Ty :: (SymWord t, Typeable t) => Rep t -> Ty
+instance Eq Ty where
+  Ty (Rep :: Rep a) == Ty (Rep :: Rep b) =
+    case eqT :: Maybe (a :~: b) of
+      Just Refl -> True
+      _ -> False
+deriving instance Show Ty
+
 data Prop a where
   -- TX success/failure
   Abort            ::                             Prop Bool
   Success          ::                             Prop Bool
 
-  -- Binding
-  -- Var              :: Text       ->               Prop a   -- non-HOAS style
-  -- WithArg          :: Text -> (Prop a -> Prop b) -> Prop b -- HOAS style
+  -- Abstraction
+  Forall           :: Text -> Ty -> Prop a -> Prop a
+  --Forall         :: (SymWord a, Typeable a) => (Prop a -> Prop b) -> Prop b
+  Exists           :: Text -> Ty -> Prop a -> Prop a
+  PVar             :: Text ->                 Prop a
 
   -- Logical connectives
   Implies          :: Prop Bool  -> Prop Bool  -> Prop Bool
@@ -88,31 +119,24 @@ data Prop a where
   -- TODO: String ops (e.g. empty)
 
   -- DB properties
-  TableWrite       :: TableName  ->               Prop Bool -- anything in table is written
-  TableRead        :: TableName  ->               Prop Bool -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnName -> Prop Bool -- particular column is written
-  CellIncrease     :: TableName  -> ColumnName -> Prop Bool -- any cell at all in col increases
-  ColumnConserve   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col == 0
-  ColumnIncrease   :: TableName  -> ColumnName -> Prop Bool -- sum of all changes in col >  0
+  TableWrite       :: TableName  ->                Prop Bool -- anything in table is written
+  TableRead        :: TableName  ->                Prop Bool -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool -- particular column is written
+  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool -- any cell at all in col increases
+  ColumnConserve   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col == 0
+  ColumnIncrease   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col >  0
+  RowRead          :: TableName  -> Prop RowKey -> Prop Bool
+  RowWrite         :: TableName  -> Prop RowKey -> Prop Bool
   --
   -- TODO: StaleRead?
   --
 
   -- Authorization
-  KsNameAuthorized :: KeySetName ->               Prop Bool -- keyset authorized by name
-  --
-  -- TODO: row-level keyset enforcement seems like it needs some form of
-  --       unification, so that using a variable we can connect >1 domain
-  --       property?
-  --
-  --       e.g.: forall row. RowWrite("balances", r) `Implies` RowKsEnforced(r)
-  --
-  --       RowKsEnforced  :: RowUid    ->            DomainProperty
-  --       RowWrite       :: TableName -> RowUid  -> DomainProperty
-  --
+  KsNameAuthorized :: KeySetName ->                Prop Bool -- keyset authorized by name
+  RowEnforced      :: TableName  -> Prop RowKey -> Prop Bool
 
-deriving instance Eq (Prop Bool)
-deriving instance Show (Prop Bool)
+deriving instance Eq (Prop a)
+deriving instance Show a => Show (Prop a)
 
 data Check where
   Satisfiable :: Prop Bool -> Check
