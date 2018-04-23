@@ -440,7 +440,7 @@ ksAuthorized sKs = do
   -- Enforced constructions, so we know that this keyset is being enforced
   -- here.
   case sKs ^. sProv of
-    Just (Provenance tn sCn sRk) -> rowEnforced tn sCn (sansProv sRk) .= true
+    Just (Provenance tn sCn sRk) -> rowEnforced tn sCn sRk .= true
     Nothing -> pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 

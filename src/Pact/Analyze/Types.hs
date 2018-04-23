@@ -27,7 +27,7 @@ data Provenance
   = Provenance
     { _provTableName  :: TableName
     , _provColumnName :: S ColumnName
-    , _provRowKey     :: SBV RowKey } -- TODO: make this `S RowKey` now
+    , _provRowKey     :: S RowKey }
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -122,7 +122,7 @@ s2Sbv :: Iso' (S a) (SBV a)
 s2Sbv = from sbv2S
 
 mkProv :: TableName -> S ColumnName -> S RowKey -> Provenance
-mkProv tn sCn (S _ sRk') = Provenance tn sCn sRk'
+mkProv tn sCn sRk = Provenance tn sCn sRk
 
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
