@@ -151,6 +151,7 @@ data LatticeAnalyzeState
     , _lasColumnDeltas  :: TableMap (SFunArray ColumnName Integer)
     , _lasTableCells    :: TableMap SymbolicCells
     , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
+    , _lasRowsWritten   :: TableMap (SFunArray RowKey Bool)
     , _lasRowsEnforced  :: TableMap (SFunArray RowKey Bool)
     }
   deriving (Show)
@@ -159,17 +160,18 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsRead  tsWritten  deltas  cells  rsRead  rsEnforced)
+      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  rsEnforced)
     (LatticeAnalyzeState
-      success' tsRead' tsWritten' deltas' cells' rsRead' rsEnforced') =
-      LatticeAnalyzeState
-        (symbolicMerge force test success    success')
-        (symbolicMerge force test tsRead     tsRead')
-        (symbolicMerge force test tsWritten  tsWritten')
-        (symbolicMerge force test deltas     deltas')
-        (symbolicMerge force test cells      cells')
-        (symbolicMerge force test rsRead     rsRead')
-        (symbolicMerge force test rsEnforced rsEnforced')
+      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' rsEnforced')
+        = LatticeAnalyzeState
+          (symbolicMerge force test success    success')
+          (symbolicMerge force test tsRead     tsRead')
+          (symbolicMerge force test tsWritten  tsWritten')
+          (symbolicMerge force test deltas     deltas')
+          (symbolicMerge force test cells      cells')
+          (symbolicMerge force test rsRead     rsRead')
+          (symbolicMerge force test rsWritten  rsWritten')
+          (symbolicMerge force test rsEnforced rsEnforced')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -199,6 +201,7 @@ mkInitialAnalyzeState tableCells = AnalyzeState
         , _lasColumnDeltas  = mkPerTableSFunArray 0
         , _lasTableCells    = tableCells
         , _lasRowsRead      = mkPerTableSFunArray false
+        , _lasRowsWritten   = mkPerTableSFunArray false
         , _lasRowsEnforced  = mkPerTableSFunArray false
         }
     , _globalState = GlobalAnalyzeState ()
@@ -357,6 +360,9 @@ columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sC
 
 rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
 rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).symArrayAt sRk.sbv2S
+
+rowWritten :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).symArrayAt sRk.sbv2S
 
 rowEnforced :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
 rowEnforced tn sRk = latticeState.lasRowsEnforced.singular (ix tn).symArrayAt sRk.sbv2S
@@ -610,8 +616,9 @@ analyzeTerm = \case
   --
   Write tn rowKey obj -> do
     Object obj' <- analyzeTermO obj
-    tableWritten tn .= true
     sRk <- symRowKey <$> analyzeTerm rowKey
+    tableWritten tn .= true
+    rowWritten tn sRk .= true
     void $ iforM obj' $ \colName (fieldType, aval) -> do
       let sCn = literalS $ ColumnName colName
       case aval of
