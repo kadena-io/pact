@@ -152,7 +152,7 @@ data LatticeAnalyzeState
     , _lasTableCells    :: TableMap SymbolicCells
     , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
     , _lasRowsWritten   :: TableMap (SFunArray RowKey Bool)
-    , _lasRowsEnforced  :: TableMap (SFunArray CellId Bool)
+    , _lasCellsEnforced :: TableMap (SFunArray CellId Bool)
     }
   deriving (Show)
 
@@ -160,9 +160,9 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  rsEnforced)
+      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  csEnforced)
     (LatticeAnalyzeState
-      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' rsEnforced')
+      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' csEnforced')
         = LatticeAnalyzeState
           (symbolicMerge force test success    success')
           (symbolicMerge force test tsRead     tsRead')
@@ -171,7 +171,7 @@ instance Mergeable LatticeAnalyzeState where
           (symbolicMerge force test cells      cells')
           (symbolicMerge force test rsRead     rsRead')
           (symbolicMerge force test rsWritten  rsWritten')
-          (symbolicMerge force test rsEnforced rsEnforced')
+          (symbolicMerge force test csEnforced csEnforced')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -202,7 +202,7 @@ mkInitialAnalyzeState tableCells = AnalyzeState
         , _lasTableCells    = tableCells
         , _lasRowsRead      = mkPerTableSFunArray false
         , _lasRowsWritten   = mkPerTableSFunArray false
-        , _lasRowsEnforced  = mkPerTableSFunArray false
+        , _lasCellsEnforced = mkPerTableSFunArray false
         }
     , _globalState = GlobalAnalyzeState ()
     }
@@ -372,12 +372,12 @@ rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).
 sCellId :: S ColumnName -> S RowKey -> S CellId
 sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
 
-rowEnforced
+cellEnforced
   :: TableName
   -> S ColumnName
   -> S RowKey
   -> Lens' AnalyzeState (S Bool)
-rowEnforced tn sCn sRk = latticeState.lasRowsEnforced.singular (ix tn).
+cellEnforced tn sCn sRk = latticeState.lasCellsEnforced.singular (ix tn).
   symArrayAt (sCellId sCn sRk).sbv2S
 
 intCell
@@ -447,7 +447,7 @@ ksAuthorized sKs = do
   -- Enforced constructions, so we know that this keyset is being enforced
   -- here.
   case sKs ^. sProv of
-    Just (Provenance tn sCn sRk) -> rowEnforced tn sCn sRk .= true
+    Just (Provenance tn sCn sRk) -> cellEnforced tn sCn sRk .= true
     Nothing -> pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
@@ -886,4 +886,4 @@ analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
 analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProperty (RowEnforced tn cn pRk) = do
   sRk <- analyzeProperty pRk
-  use $ rowEnforced tn (literalS cn) sRk
+  use $ cellEnforced tn (literalS cn) sRk
