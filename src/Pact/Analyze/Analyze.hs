@@ -358,18 +358,25 @@ tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 --
 
 columnDelta :: TableName -> S ColumnName -> Lens' AnalyzeState (S Integer)
-columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).symArrayAt sCn.sbv2S
+columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).
+  symArrayAt sCn.sbv2S
 
 rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
-rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).symArrayAt sRk.sbv2S
+rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).
+  symArrayAt sRk.sbv2S
 
 rowWritten :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
-rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).symArrayAt sRk.sbv2S
+rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).
+  symArrayAt sRk.sbv2S
 
 sCellId :: S ColumnName -> S RowKey -> S CellId
 sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
 
-rowEnforced :: TableName -> S ColumnName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowEnforced
+  :: TableName
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Bool)
 rowEnforced tn sCn sRk = latticeState.lasRowsEnforced.singular (ix tn).
   symArrayAt (sCellId sCn sRk).sbv2S
 
