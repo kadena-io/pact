@@ -374,10 +374,6 @@ data Term ret where
   Concat         ::                        Term String  -> Term String    ->           Term String
   PactVersion    ::                                                                    Term String
 
-  --
-  -- TODO: add support for defconst
-  --
-
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
 
