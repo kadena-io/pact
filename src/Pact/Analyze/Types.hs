@@ -14,7 +14,7 @@ import Data.Data
 import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
 import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError, name)
-import qualified Data.SBV as SBV
+import qualified Data.SBV.String as SBV
 import qualified Data.SBV.Internals as SBVI
 import Data.Thyme
 import Data.String (IsString(..))
@@ -111,7 +111,7 @@ instance Provable PredicateS where
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S String -> S String -> S String
-S _ a .++ S _ b = S Nothing (SBV.strConcat a b)
+S _ a .++ S _ b = S Nothing (SBV.concat a b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
 sbv2S :: Iso' (SBV a) (S a)

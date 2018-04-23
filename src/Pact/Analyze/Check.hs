@@ -180,7 +180,7 @@ runCheck :: Provable a => Check -> a -> IO CheckResult
 runCheck (Satisfiable _prop) provable = do
   (SatResult smtRes) <- sat provable
   pure $ case smtRes of
-    SBV.Unsatisfiable _config -> Left Unsatisfiable
+    SBV.Unsatisfiable{} -> Left Unsatisfiable
     SBV.Satisfiable _config model -> Right $ SatisfiedProperty model
     SBV.SatExtField _config model -> Left $ SatExtensionField model
     SBV.Unknown _config reason -> Left $ Unknown reason
@@ -188,7 +188,7 @@ runCheck (Satisfiable _prop) provable = do
 runCheck (Valid _prop) provable = do
   (ThmResult smtRes) <- prove provable
   pure $ case smtRes of
-    SBV.Unsatisfiable _config -> Right ProvedTheorem
+    SBV.Unsatisfiable{} -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
     SBV.SatExtField _config model -> Left $ SatExtensionField model
     SBV.Unknown _config reason -> Left $ Unknown reason
