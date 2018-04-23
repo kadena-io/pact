@@ -146,18 +146,21 @@ checkTopFunction
   -> Check
   -> IO CheckResult
 checkTopFunction (TopFun (FDefun _ _ _ args body' _)) check =
-  let argNodes :: [Node]
-      argNodes = _nnNamed <$> args
+  let nodes :: [Node]
+      nodes = _nnNamed <$> args
 
-      -- extract the typechecker's name for a node, eg "analyze-tests.layup_x".
-      nodeNames :: [Text]
-      nodeNames = tcName <$> argNodes
-
-      nodeNames' :: Map Node Text
-      nodeNames' = Map.fromList $ zip argNodes nodeNames
+      -- Extract the plain/unmunged names from the source code. We use the
+      -- munged names for let/bind/with-read/etc -bound variables, but plain
+      -- names for the args for usability. Because let/bind/etc can't shadow
+      -- these unmunged names, we retain our SSA property.
+      names :: [Text]
+      names = _nnName <$> args
 
       argTys :: [(Text, Pact.Type TC.UserType)]
-      argTys = zip nodeNames (_aTy <$> argNodes)
+      argTys = zip names (_aTy <$> nodes)
+
+      nodeNames :: Map Node Text
+      nodeNames = Map.fromList $ zip nodes names
 
       --
       -- TODO: FIXME: this is broken for anything but our current tests. we
@@ -166,12 +169,9 @@ checkTopFunction (TopFun (FDefun _ _ _ args body' _)) check =
       tableNames :: [TableName]
       tableNames = ["accounts", "tokens", "owners"]
 
-  in checkFunctionBody check body' argTys nodeNames' tableNames
+  in checkFunctionBody check body' argTys nodeNames tableNames
 
 checkTopFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
-
-tcName :: Node -> Text
-tcName = _tiName . _aId
 
 -- This does not use the underlying property -- this merely dispatches to
 -- sat/prove appropriately, and accordingly translates sat/unsat to

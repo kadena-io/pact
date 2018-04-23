@@ -179,7 +179,7 @@ translateBinding
 translateBinding bindingsA schema bodyA rhsT = do
   (bindings :: [(String, EType, (Node, Text))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
-      let varName = varNode ^. aId ^. tiName
+      let varName = varNode ^. aId.tiName
       varType <- translateType varNode
       case colAst of
         AST_StringLit colName ->
@@ -215,7 +215,7 @@ translateNode = \case
 
   AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
-    let varName = varNode ^. aId ^. tiName
+    let varName = varNode ^. aId.tiName
     local (at varNode ?~ varName) $ do
       --
       -- TODO: do we only want to allow subsequent bindings to reference

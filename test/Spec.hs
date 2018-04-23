@@ -253,11 +253,8 @@ suite = tests
         RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
-      --
-      -- TODO: allow user to use un-munged arg names:
-      --
-      expectPass code $ Valid $ RowWrite "tokens" (PVar "test.test_acct")
-                      `Implies` RowEnforced "tokens" "ks" (PVar "test.test_acct")
+      expectPass code $ Valid $ RowWrite "tokens" (PVar "acct")
+                      `Implies` RowEnforced "tokens" "ks" (PVar "acct")
 
   , scope "enforce-keyset.row-level.write.invalidation" $ do
       let code =
