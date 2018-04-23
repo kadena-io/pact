@@ -23,14 +23,11 @@ import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
 
 import Pact.Analyze.Prop
 
---
--- TODO: Future improvement could be allowing multiple columns in a table
---       to contain keysets, and track the row+column a keyset is from.
---
 data Provenance
   = Provenance
-    { _provTableName :: TableName
-    , _provRowKey    :: SBV RowKey } -- TODO: I guess this could be S RowKey
+    { _provTableName  :: TableName
+    , _provColumnName :: S ColumnName
+    , _provRowKey     :: SBV RowKey } -- TODO: make this `S RowKey` now
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -39,7 +36,7 @@ data S a
   = S
     { _sProv :: Maybe Provenance
     , _sSbv  :: SBV a }
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance SymWord a => Mergeable (S a) where
   symbolicMerge f t (S prov1 x) (S prov2 y)
@@ -124,8 +121,8 @@ sbv2SFrom prov = iso (withProv prov) _sSbv
 s2Sbv :: Iso' (S a) (SBV a)
 s2Sbv = from sbv2S
 
-mkProv :: TableName -> S RowKey -> Provenance
-mkProv tn (S _ sRk) = Provenance tn sRk
+mkProv :: TableName -> S ColumnName -> S RowKey -> Provenance
+mkProv tn sCn (S _ sRk') = Provenance tn sCn sRk'
 
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS

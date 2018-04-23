@@ -196,11 +196,32 @@ suite = tests
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row")
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-        RowEnforced "tokens" (PVar "row")
+        RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-        Not $ RowEnforced "tokens" (PVar "row")
+        Not $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+
+  , scope "enforce-keyset.row-level.multiple-keysets" $ do
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer
+                ks1:keyset
+                ks2:keyset)
+              (deftable tokens:{token-row})
+
+              (defun test:bool (acct:string)
+                (with-read tokens acct { "ks1" := ks, "balance" := bal }
+                  (enforce-keyset ks)
+                  bal))
+            |]
+      expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks1" (PVar "row")
+      -- Using the other keyset:
+      expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks2" (PVar "row")
 
   , scope "enforce-keyset.row-level.write" $ do
       let code =
@@ -225,18 +246,18 @@ suite = tests
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row")
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-        RowEnforced "tokens" (PVar "row")
+        RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-        Not $ RowEnforced "tokens" (PVar "row")
+        Not $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" (PVar "row")
+        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
       --
       -- TODO: allow user to use un-munged arg names:
       --
       expectPass code $ Valid $ RowWrite "tokens" (PVar "test.test_acct")
-                      `Implies` RowEnforced "tokens" (PVar "test.test_acct")
+                      `Implies` RowEnforced "tokens" "ks" (PVar "test.test_acct")
 
   , scope "table-read.multiple-read" $
       let code =

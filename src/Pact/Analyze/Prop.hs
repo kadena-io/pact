@@ -99,8 +99,8 @@ deriving instance Show Ty
 
 data Prop a where
   -- TX success/failure
-  Abort            ::                             Prop Bool
-  Success          ::                             Prop Bool
+  Abort            :: Prop Bool
+  Success          :: Prop Bool
 
   -- Abstraction
   Forall           :: Text -> Ty -> Prop a -> Prop a
@@ -132,8 +132,8 @@ data Prop a where
   --
 
   -- Authorization
-  KsNameAuthorized :: KeySetName ->                Prop Bool -- keyset authorized by name
-  RowEnforced      :: TableName  -> Prop RowKey -> Prop Bool
+  KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
+  RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
 deriving instance Eq (Prop a)
 deriving instance Show a => Show (Prop a)

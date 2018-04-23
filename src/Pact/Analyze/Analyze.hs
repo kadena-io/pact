@@ -152,7 +152,7 @@ data LatticeAnalyzeState
     , _lasTableCells    :: TableMap SymbolicCells
     , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
     , _lasRowsWritten   :: TableMap (SFunArray RowKey Bool)
-    , _lasRowsEnforced  :: TableMap (SFunArray RowKey Bool)
+    , _lasRowsEnforced  :: TableMap (SFunArray CellId Bool)
     }
   deriving (Show)
 
@@ -366,11 +366,12 @@ rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).symArrayAt sRk.sbv2S
 rowWritten :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
 rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).symArrayAt sRk.sbv2S
 
-rowEnforced :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
-rowEnforced tn sRk = latticeState.lasRowsEnforced.singular (ix tn).symArrayAt sRk.sbv2S
-
 sCellId :: S ColumnName -> S RowKey -> S CellId
 sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
+
+rowEnforced :: TableName -> S ColumnName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowEnforced tn sCn sRk = latticeState.lasRowsEnforced.singular (ix tn).
+  symArrayAt (sCellId sCn sRk).sbv2S
 
 intCell
   :: TableName
@@ -378,7 +379,7 @@ intCell
   -> S RowKey
   -> Lens' AnalyzeState (S Integer)
 intCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scIntValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 boolCell
   :: TableName
@@ -386,7 +387,7 @@ boolCell
   -> S RowKey
   -> Lens' AnalyzeState (S Bool)
 boolCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scBoolValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 stringCell
   :: TableName
@@ -394,7 +395,7 @@ stringCell
   -> S RowKey
   -> Lens' AnalyzeState (S String)
 stringCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scStringValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 decimalCell
   :: TableName
@@ -402,7 +403,7 @@ decimalCell
   -> S RowKey
   -> Lens' AnalyzeState (S Decimal)
 decimalCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 timeCell
   :: TableName
@@ -410,7 +411,7 @@ timeCell
   -> S RowKey
   -> Lens' AnalyzeState (S Time)
 timeCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scTimeValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 ksCell
   :: TableName
@@ -418,7 +419,7 @@ ksCell
   -> S RowKey
   -> Lens' AnalyzeState (S KeySet)
 ksCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scKsValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sRk)
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
 
 symKsName :: S String -> S KeySetName
 symKsName = coerceS
@@ -439,7 +440,7 @@ ksAuthorized sKs = do
   -- Enforced constructions, so we know that this keyset is being enforced
   -- here.
   case sKs ^. sProv of
-    Just (Provenance tn sRk) -> rowEnforced tn (sansProv sRk) .= true
+    Just (Provenance tn sCn sRk) -> rowEnforced tn sCn (sansProv sRk) .= true
     Nothing -> pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
@@ -876,4 +877,6 @@ analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
 
 -- Authorization
 analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProperty (RowEnforced tn pRk) = use . rowEnforced tn =<< analyzeProperty pRk
+analyzeProperty (RowEnforced tn cn pRk) = do
+  sRk <- analyzeProperty pRk
+  use $ rowEnforced tn (literalS cn) sRk
