@@ -872,6 +872,8 @@ analyzeTerm = \case
   n -> throwError $ UnhandledTerm $ tShow n
 
 analyzeProperty :: Prop a -> AnalyzeT Symbolic (S a)
+analyzeProperty (PLit a) = pure $ literalS a
+
 analyzeProperty Success = use succeeds
 analyzeProperty Abort = bnot <$> analyzeProperty Success
 
@@ -884,11 +886,8 @@ analyzeProperty (Exists name (Ty (Rep :: Rep ty)) p) = do
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
 analyzeProperty (PVar name) = lookupVal name
 
--- Logical connectives
-analyzeProperty (p1 `Implies` p2) = do
-  b1 <- analyzeProperty p1
-  b2 <- analyzeProperty p2
-  pure $ b1 ==> b2
+---- Logical connectives
+analyzeProperty (Not p) = bnot <$> analyzeProperty p
 analyzeProperty (p1 `And` p2) = do
   b1 <- analyzeProperty p1
   b2 <- analyzeProperty p2
@@ -897,7 +896,6 @@ analyzeProperty (p1 `Or` p2) = do
   b1 <- analyzeProperty p1
   b2 <- analyzeProperty p2
   pure $ b1 ||| b2
-analyzeProperty (Not p) = bnot <$> analyzeProperty p
 
 -- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn

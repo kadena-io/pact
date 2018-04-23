@@ -1,3 +1,4 @@
+{-# language FlexibleInstances          #-}
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language ScopedTypeVariables        #-}
@@ -98,6 +99,9 @@ instance Eq Ty where
 deriving instance Show Ty
 
 data Prop a where
+  -- Literals
+  PLit             :: SymWord a => a -> Prop a
+
   -- TX success/failure
   Abort            :: Prop Bool
   Success          :: Prop Bool
@@ -108,8 +112,7 @@ data Prop a where
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
-  -- Logical connectives
-  Implies          :: Prop Bool  -> Prop Bool  -> Prop Bool
+  -- -- Logical connectives
   Not              :: Prop Bool  ->               Prop Bool
   And              :: Prop Bool  -> Prop Bool  -> Prop Bool
   Or               :: Prop Bool  -> Prop Bool  -> Prop Bool
@@ -137,6 +140,13 @@ data Prop a where
 
 deriving instance Eq (Prop a)
 deriving instance Show a => Show (Prop a)
+
+instance Boolean (Prop Bool) where
+  true = PLit True
+  false = PLit False
+  bnot p = Not p
+  p1 &&& p2 = p1 `And` p2
+  p1 ||| p2 = p1 `Or` p2
 
 data Check where
   Satisfiable :: Prop Bool -> Check

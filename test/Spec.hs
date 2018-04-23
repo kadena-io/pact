@@ -8,6 +8,7 @@ import           Control.Monad.State.Strict (runStateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
+import           Data.SBV                   (Boolean(..))
 import           EasyTest
 import           NeatInterpolation
 
@@ -151,9 +152,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
 
-      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") `Implies` Abort
+      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") ==> Abort
 
   , scope "enforce-keyset.name.dynamic" $ do
       let code =
@@ -161,7 +162,7 @@ suite = tests
               (defun test:bool ()
                 (enforce-keyset (+ "k" "s")))
             |]
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
 
   , scope "enforce-keyset.value" $ do
       let code =
@@ -171,9 +172,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") `Implies` Abort
+      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
 
-      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") `Implies` Abort
+      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") ==> Abort
 
   , scope "enforce-keyset.row-level.read" $ do
       let code =
@@ -200,7 +201,7 @@ suite = tests
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
         Not $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+        RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
 
   , scope "enforce-keyset.row-level.multiple-keysets" $ do
       let code =
@@ -218,10 +219,10 @@ suite = tests
                   bal))
             |]
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks1" (PVar "row")
+        RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks1" (PVar "row")
       -- Using the other keyset:
       expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks2" (PVar "row")
+        RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks2" (PVar "row")
 
   , scope "enforce-keyset.row-level.write" $ do
       let code =
@@ -250,11 +251,11 @@ suite = tests
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
         Not $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+        RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+        RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ RowWrite "tokens" (PVar "acct")
-                      `Implies` RowEnforced "tokens" "ks" (PVar "acct")
+                            ==> RowEnforced "tokens" "ks" (PVar "acct")
 
   , scope "enforce-keyset.row-level.write.invalidation" $ do
       let code =
@@ -280,9 +281,9 @@ suite = tests
       -- invalidation:
       --
       expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+        RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
       expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+        RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
 
   , scope "table-read.multiple-read" $
       let code =
@@ -429,7 +430,7 @@ suite = tests
                   "didn't write"
                   (insert tokens "stu" {"balance": 5})))
             |]
-      expectPass code $ Valid $ Success `Implies` Not (TableWrite "tokens")
+      expectPass code $ Valid $ Success ==> Not (TableWrite "tokens")
 
   , scope "conserves-mass" $ do
       let code =
@@ -445,7 +446,7 @@ suite = tests
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectPass code $ Valid $ Success `Implies` ColumnConserve "accounts" "balance"
+      expectPass code $ Valid $ Success ==> ColumnConserve "accounts" "balance"
       -- expectPass code $ Valid $ CellIncrease "accounts" "balance"
 
   , scope "with-read" $ do
