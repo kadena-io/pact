@@ -259,6 +259,34 @@ suite = tests
       expectPass code $ Valid $ RowWrite "tokens" (PVar "test.test_acct")
                       `Implies` RowEnforced "tokens" "ks" (PVar "test.test_acct")
 
+  , scope "enforce-keyset.row-level.write.invalidation" $ do
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer
+                ks:keyset)
+              (deftable tokens:{token-row})
+
+              (defun test:bool (acct:string user-controlled:keyset)
+                ;; Overwrite existing keyset:
+                (update tokens acct {"ks": user-controlled})
+                ;; Then standard row-level keyset enforcement occurs:
+                (with-read tokens acct { "ks" := ks, "balance" := bal }
+                  (let ((new-bal (+ bal 1)))
+                    (update tokens acct {"balance": new-bal})
+                    (enforce-keyset ks)
+                    new-bal)))
+            |]
+      -- When a user overwrites an existing keyset and then enforces *that* new
+      -- keyset, we don't consider the row to have been enforced due to
+      -- invalidation:
+      --
+      expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+        RowRead "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+      expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+        RowWrite "tokens" (PVar "row") `Implies` RowEnforced "tokens" "ks" (PVar "row")
+
   , scope "table-read.multiple-read" $
       let code =
             [text|

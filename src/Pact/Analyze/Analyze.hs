@@ -74,10 +74,10 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
       TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
       TyPrim TyString  -> mkAVal . sansProv <$> sString name'
       TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
+      TyPrim TyKeySet  -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV KeySet))
 
       -- TODO
       TyPrim TyValue   -> error "unimplemented type analysis"
-      TyPrim TyKeySet  -> error "unimplemented type analysis"
       TyAny            -> error "unimplemented type analysis"
       TyVar _v         -> error "unimplemented type analysis"
       TyList _         -> error "unimplemented type analysis"
@@ -153,6 +153,11 @@ data LatticeAnalyzeState
     , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
     , _lasRowsWritten   :: TableMap (SFunArray RowKey Bool)
     , _lasCellsEnforced :: TableMap (SFunArray CellId Bool)
+    -- We currently maintain cellsWritten only for deciding whether a cell has
+    -- been "invalidated" for the purposes of keyset enforcement. If a keyset
+    -- has been overwritten and *then* enforced, that does not constitute valid
+    -- enforcement of the keyset.
+    , _lasCellsWritten  :: TableMap (SFunArray CellId Bool)
     }
   deriving (Show)
 
@@ -160,9 +165,11 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  csEnforced)
+      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  csEnforced
+      csWritten)
     (LatticeAnalyzeState
-      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' csEnforced')
+      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' csEnforced'
+      csWritten')
         = LatticeAnalyzeState
           (symbolicMerge force test success    success')
           (symbolicMerge force test tsRead     tsRead')
@@ -172,6 +179,7 @@ instance Mergeable LatticeAnalyzeState where
           (symbolicMerge force test rsRead     rsRead')
           (symbolicMerge force test rsWritten  rsWritten')
           (symbolicMerge force test csEnforced csEnforced')
+          (symbolicMerge force test csWritten  csWritten')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -203,6 +211,7 @@ mkInitialAnalyzeState tableCells = AnalyzeState
         , _lasRowsRead      = mkPerTableSFunArray false
         , _lasRowsWritten   = mkPerTableSFunArray false
         , _lasCellsEnforced = mkPerTableSFunArray false
+        , _lasCellsWritten  = mkPerTableSFunArray false
         }
     , _globalState = GlobalAnalyzeState ()
     }
@@ -380,53 +389,67 @@ cellEnforced
 cellEnforced tn sCn sRk = latticeState.lasCellsEnforced.singular (ix tn).
   symArrayAt (sCellId sCn sRk).sbv2S
 
+cellWritten
+  :: TableName
+  -> S ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Bool)
+cellWritten tn sCn sRk = latticeState.lasCellsWritten.singular (ix tn).
+  symArrayAt (sCellId sCn sRk).sbv2S
+
 intCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S Integer)
-intCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scIntValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+intCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 boolCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S Bool)
-boolCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scBoolValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+boolCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 stringCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S String)
-stringCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scStringValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+stringCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 decimalCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S Decimal)
-decimalCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+decimalCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 timeCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S Time)
-timeCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scTimeValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+timeCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 ksCell
   :: TableName
   -> S ColumnName
   -> S RowKey
+  -> S Bool
   -> Lens' AnalyzeState (S KeySet)
-ksCell tn sCn sRk = latticeState.lasTableCells.singular (ix tn).scKsValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk)
+ksCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
+  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
 
 symKsName :: S String -> S KeySetName
 symKsName = coerceS
@@ -447,8 +470,10 @@ ksAuthorized sKs = do
   -- Enforced constructions, so we know that this keyset is being enforced
   -- here.
   case sKs ^. sProv of
-    Just (Provenance tn sCn sRk) -> cellEnforced tn sCn sRk .= true
-    Nothing -> pure ()
+    Just (Provenance tn sCn sRk sDirty) ->
+      cellEnforced tn sCn sRk %= (||| bnot sDirty)
+    Nothing ->
+      pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 --keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
@@ -479,13 +504,14 @@ analyzeTermO = \case
     rowRead tn sRk .= true
     obj <- iforM fields $ \fieldName fieldType -> do
       let sCn  = literalS $ ColumnName fieldName
+      sDirty <- use $ cellWritten tn sCn sRk
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk)
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -508,13 +534,14 @@ analyzeTermO = \case
     rowRead tn sRk .= true
     obj <- iforM relevantFields $ \fieldName fieldType -> do
       let sCn = literalS $ ColumnName fieldName
+      sDirty <- use $ cellWritten tn sCn sRk
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk)
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk)
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk)
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk)
+        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -640,26 +667,27 @@ analyzeTerm = \case
     rowWritten tn sRk .= true
     void $ iforM obj' $ \colName (fieldType, aval) -> do
       let sCn = literalS $ ColumnName colName
+      cellWritten tn sCn sRk .= true
       case aval of
         AVal mProv val' -> case fieldType of
           EType TInt  -> do
             let cell :: Lens' AnalyzeState (S Integer)
-                cell = intCell tn sCn sRk
+                cell = intCell tn sCn sRk true
                 next = mkS mProv val'
             prev <- use cell
             cell .= next
             columnDelta tn sCn += next - prev
 
-          EType TBool    -> boolCell    tn sCn sRk .= mkS mProv val'
-          EType TStr     -> stringCell  tn sCn sRk .= mkS mProv val'
+          EType TBool    -> boolCell    tn sCn sRk true .= mkS mProv val'
+          EType TStr     -> stringCell  tn sCn sRk true .= mkS mProv val'
 
           --
           -- TODO: we should support column delta for decimals
           --
-          EType TDecimal -> decimalCell tn sCn sRk .= mkS mProv val'
+          EType TDecimal -> decimalCell tn sCn sRk true .= mkS mProv val'
 
-          EType TTime    -> timeCell    tn sCn sRk .= mkS mProv val'
-          EType TKeySet  -> ksCell      tn sCn sRk .= mkS mProv val'
+          EType TTime    -> timeCell    tn sCn sRk true .= mkS mProv val'
+          EType TKeySet  -> ksCell      tn sCn sRk true .= mkS mProv val'
 
           -- TODO: what to do with EType TAny here?
 
