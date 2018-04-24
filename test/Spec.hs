@@ -82,7 +82,7 @@ suite = tests
                 (if (< x 10) true false))
             |]
       expectPass code $ Valid Success
-      expectPass code $ Valid $ Not Abort
+      expectPass code $ Valid $ bnot Abort
 
   , scope "enforce.trivial" $ do
       let code =
@@ -104,7 +104,7 @@ suite = tests
                   true))
             |]
       expectPass code $ Satisfiable Abort
-      expectPass code $ Satisfiable $ Not Abort
+      expectPass code $ Satisfiable $ bnot Abort
       expectPass code $ Satisfiable Success
 
       expectFail code $ Valid $ Abort
@@ -152,9 +152,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
+      expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
 
-      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") ==> Abort
+      expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
 
   , scope "enforce-keyset.name.dynamic" $ do
       let code =
@@ -162,7 +162,7 @@ suite = tests
               (defun test:bool ()
                 (enforce-keyset (+ "k" "s")))
             |]
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
+      expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
 
   , scope "enforce-keyset.value" $ do
       let code =
@@ -172,9 +172,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not (KsNameAuthorized "ks") ==> Abort
+      expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
 
-      expectFail code $ Valid $ Not (KsNameAuthorized "different-ks") ==> Abort
+      expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
 
   , scope "enforce-keyset.row-level.read" $ do
       let code =
@@ -192,14 +192,14 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ Not $ Exists "row" (Ty (Rep @RowKey)) $
+      expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
         RowWrite "tokens" (PVar "row")
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row")
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-        Not $ RowEnforced "tokens" "ks" (PVar "row")
+        bnot $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
 
@@ -249,7 +249,7 @@ suite = tests
       expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
         RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-        Not $ RowEnforced "tokens" "ks" (PVar "row")
+        bnot $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
@@ -318,7 +318,7 @@ suite = tests
                   )
                 )
             |]
-      in expectPass code $ Valid $ Not Abort
+      in expectPass code $ Valid $ bnot Abort
 
   , scope "at.dynamic-key" $
       let code =
@@ -337,7 +337,7 @@ suite = tests
                   )
                 )
             |]
-      in expectPass code $ Valid $ Not Abort
+      in expectPass code $ Valid $ bnot Abort
 
   -- TODO: pending fix for https://github.com/kadena-io/pact/issues/53
   -- , scope "at.object-in-object" $
@@ -352,7 +352,7 @@ suite = tests
   --               (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
   --                 (at "inner" obj)))
   --           |]
-  --     in expectPass code $ Valid $ Not Abort
+  --     in expectPass code $ Valid $ bnot Abort
 
   , scope "table-read" $ do
       let code =
@@ -365,7 +365,7 @@ suite = tests
                   bal))
             |]
       expectPass code $ Valid $ TableRead "tokens"
-      expectPass code $ Valid $ Not $ TableRead "other"
+      expectPass code $ Valid $ bnot $ TableRead "other"
 
   , scope "table-write.insert" $ do
       let code =
@@ -377,7 +377,7 @@ suite = tests
                 (insert tokens "stu" {"balance": 5}))
             |]
       expectPass code $ Valid $ TableWrite "tokens"
-      expectPass code $ Valid $ Not $ TableWrite "other"
+      expectPass code $ Valid $ bnot $ TableWrite "other"
 
   , scope "table-write.update" $ do
       let code =
@@ -413,8 +413,8 @@ suite = tests
                   "didn't write"))
             |]
       expectPass code $ Satisfiable $ TableWrite "tokens"
-      expectPass code $ Satisfiable $ Not $ TableWrite "tokens"
-      expectPass code $ Valid $ Not $ TableWrite "other"
+      expectPass code $ Satisfiable $ bnot $ TableWrite "tokens"
+      expectPass code $ Valid $ bnot $ TableWrite "other"
 
   , scope "table-write.conditional" $ do
       let code =
@@ -430,7 +430,7 @@ suite = tests
                   "didn't write"
                   (insert tokens "stu" {"balance": 5})))
             |]
-      expectPass code $ Valid $ Success ==> Not (TableWrite "tokens")
+      expectPass code $ Valid $ Success ==> bnot (TableWrite "tokens")
 
   , scope "conserves-mass" $ do
       let code =
@@ -527,7 +527,7 @@ suite = tests
                       (enforce (> z y) "z > y")
                       true))
                 |]
-          in expectPass code $ Valid $ Not Abort
+          in expectPass code $ Valid $ bnot Abort
 
         scope "2" $
           let code =
@@ -548,7 +548,7 @@ suite = tests
                           (y (* x 10)))
                      (enforce (= 22 (+ x y)) "x + y = 22")))
                 |]
-          in expectPass code $ Valid $ Not Abort
+          in expectPass code $ Valid $ bnot Abort
 
       scope "nested" $
           let code =
@@ -559,7 +559,7 @@ suite = tests
                      (let ((z (let ((w 1)) (+ (+ x y) w))))
                        (enforce (= 6 z) "2 + 3 + 1 = 6"))))
                 |]
-          in expectPass code $ Valid $ Not Abort
+          in expectPass code $ Valid $ bnot Abort
 
   , scope "time" $
       let code =
@@ -593,7 +593,7 @@ suite = tests
                     "1.5 minutes later")
                 ))
             |]
-      in expectPass code $ Valid $ Not Abort
+      in expectPass code $ Valid $ bnot Abort
 
   , scope "arith" $
       let code =
@@ -702,7 +702,7 @@ suite = tests
                   (enforce (= (ceiling -100.15234 2) -100.15) "")
                 ))
             |]
-      in expectPass code $ Valid $ Not Abort
+      in expectPass code $ Valid $ bnot Abort
   ]
 
 main :: IO ()

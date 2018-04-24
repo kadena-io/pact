@@ -231,9 +231,6 @@ data RoundingLikeOp
   | Floor
   deriving (Show, Eq)
 
-data LogicalOp = AndOp | OrOp | NotOp
-  deriving (Show, Eq)
-
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 

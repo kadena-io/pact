@@ -243,7 +243,7 @@ data AnalyzeFailure
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
   | KeyNotPresent String Object
-  | MalformedLogicalOpExec LogicalOp [Term Bool]
+  | MalformedLogicalOpExec LogicalOp Int
   | ObjFieldOfWrongType String EType
   | PossibleRoundoff Text
   | UnsupportedDecArithOp ArithOp
@@ -266,7 +266,7 @@ describeAnalyzeFailure = \case
   AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
   AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
   KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
-  MalformedLogicalOpExec op args -> "malformed logical op " <> tShow op <> " with args " <> tShow args
+  MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
   ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
   PossibleRoundoff msg -> msg
   UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
@@ -857,7 +857,7 @@ analyzeTerm = \case
       (AndOp, [a, b]) -> pure $ a &&& b
       (OrOp, [a, b])  -> pure $ a ||| b
       (NotOp, [a])    -> pure $ bnot a
-      _               -> throwError $ MalformedLogicalOpExec op args
+      _               -> throwError $ MalformedLogicalOpExec op $ length args
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
@@ -886,16 +886,17 @@ analyzeProperty (Exists name (Ty (Rep :: Rep ty)) p) = do
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
 analyzeProperty (PVar name) = lookupVal name
 
----- Logical connectives
-analyzeProperty (Not p) = bnot <$> analyzeProperty p
-analyzeProperty (p1 `And` p2) = do
-  b1 <- analyzeProperty p1
-  b2 <- analyzeProperty p2
-  pure $ b1 &&& b2
-analyzeProperty (p1 `Or` p2) = do
-  b1 <- analyzeProperty p1
-  b2 <- analyzeProperty p2
-  pure $ b1 ||| b2
+-- Boolean ops
+
+-- TODO: potentially deduplicate this with the other bool impl for Term, by
+-- abstracting over the analyze function
+analyzeProperty (PLogical op props) = do
+  sBools <- traverse analyzeProperty props
+  case (op, sBools) of
+    (AndOp, [a, b]) -> pure $ a &&& b
+    (OrOp,  [a, b]) -> pure $ a ||| b
+    (NotOp, [a])    -> pure $ bnot a
+    _               -> throwError $ MalformedLogicalOpExec op $ length props
 
 -- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn

@@ -98,6 +98,9 @@ instance Eq Ty where
       _ -> False
 deriving instance Show Ty
 
+data LogicalOp = AndOp | OrOp | NotOp
+  deriving (Show, Eq)
+
 data Prop a where
   -- Literals
   PLit             :: SymWord a => a -> Prop a
@@ -112,10 +115,8 @@ data Prop a where
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
-  -- -- Logical connectives
-  Not              :: Prop Bool  ->               Prop Bool
-  And              :: Prop Bool  -> Prop Bool  -> Prop Bool
-  Or               :: Prop Bool  -> Prop Bool  -> Prop Bool
+  -- Boolean ops
+  PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- TODO: Int ops
 
@@ -138,15 +139,15 @@ data Prop a where
   KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
-deriving instance Eq (Prop a)
+deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
 instance Boolean (Prop Bool) where
-  true = PLit True
-  false = PLit False
-  bnot p = Not p
-  p1 &&& p2 = p1 `And` p2
-  p1 ||| p2 = p1 `Or` p2
+  true   = PLit True
+  false  = PLit False
+  bnot p = PLogical NotOp [p]
+  p1 &&& p2 = PLogical AndOp [p1, p2]
+  p1 ||| p2 = PLogical OrOp [p1, p2]
 
 data Check where
   Satisfiable :: Prop Bool -> Check

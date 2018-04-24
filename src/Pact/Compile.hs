@@ -161,10 +161,12 @@ expToProp = (\case
   EAtom' "success" -> Just Success
 
   -- (load "examples/verified-accounts/accounts.repl")
-  EList' [EAtom' "when", a, b] -> Or <$> (Not <$> expToProp a) <*> expToProp b
-  EList' [EAtom' "not", a]     -> Not <$> expToProp a
-  EList' [EAtom' "and", a, b]  -> And <$> expToProp a <*> expToProp b
-  EList' [EAtom' "or", a, b]   -> Or <$> expToProp a <*> expToProp b
+  EList' [EAtom' "when", a, b] -> do
+    propNotA <- PLogical NotOp <$> traverse expToProp [a]
+    PLogical OrOp . (propNotA:) <$> traverse expToProp [b]
+  EList' [EAtom' "not", a]     -> PLogical NotOp <$> traverse expToProp [a]
+  EList' [EAtom' "and", a, b]  -> PLogical AndOp <$> traverse expToProp [a, b]
+  EList' [EAtom' "or", a, b]   -> PLogical OrOp  <$> traverse expToProp [a, b]
 
   EList' [EAtom' "table-write", ELitName tab] -> Just (TableWrite (mkT tab))
   EList' [EAtom' "table-read", ELitName tab] -> Just (TableRead (mkT tab))
