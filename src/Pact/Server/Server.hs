@@ -65,6 +65,7 @@ usage =
   \entity     - Entity name for simulating privacy, defaults to \"entity\" \n\
   \\n"
 
+-- | Serve the a file given a configuration.
 serve :: FilePath -> IO ()
 serve configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
