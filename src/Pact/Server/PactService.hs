@@ -28,8 +28,7 @@ module Pact.Server.PactService
 where
 
 import Prelude
-
-import Control.Concurrent
+import Control.Concurrent.STM(newTVarIO, readTVar, writeTVar, TVar, atomically)
 import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -51,7 +50,7 @@ initPactService config loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
       mkCEI p = do
-        cmdVar <- newMVar (CommandState initRefStore)
+        cmdVar <- newTVarIO (CommandState initRefStore)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
@@ -74,7 +73,7 @@ initPactService config loggers = do
 -- | handle asynchronous exceptions to cleanup resources. 
 -- | For example, see here, for an example of canonical form
 -- | of calling this method.
-applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
+applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> TVar CommandState -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
@@ -124,14 +123,14 @@ applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p Command
 applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   env <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
-  (CommandState refStore) <- liftIO $ readMVar $ env^.ceState
+  (CommandState refStore) <- liftIO $ atomically $ readTVar $ env^.ceState
   let evalEnv = setupEvalEnv (env^.ceDbEnv) (env^.ceEntity) (env^.ceMode)
                 (MsgData 
                     (userSigsToPactKeySet (_cmdSigs)) 
                     edata Nothing 
                     (_cmdHash)) refStore
   pr <- liftIO $ evalExec evalEnv parsedCode
-  void $ liftIO $ swapMVar (env^.ceState) $ CommandState (erRefStore pr)
+  void $ liftIO $ atomically $ writeTVar (env^.ceState) $ CommandState (erRefStore pr)
   return $ jsonResult (env^.ceMode) rk $ CommandSuccess (last (erOutput pr))
 
 -- | Unsupported function, raises an error. 
