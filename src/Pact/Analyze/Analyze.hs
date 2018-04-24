@@ -603,16 +603,172 @@ analyzeTermO = \case
 
 type Analyzer term m a = term a -> AnalyzeT m (S a)
 
+analyzeDecArithOp
+  :: (Monad m)
+  => Analyzer term m Decimal
+  -> ArithOp
+  -> term Decimal
+  -> term Decimal
+  -> AnalyzeT m (S Decimal)
+analyzeDecArithOp analyze op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  case op of
+    Add -> pure $ x + y
+    Sub -> pure $ x - y
+    Mul -> pure $ x * y
+    Div -> pure $ x / y
+    Pow -> throwError $ UnsupportedDecArithOp op
+    Log -> throwError $ UnsupportedDecArithOp op
+
+analyzeIntArithOp
+  :: (Monad m)
+  => Analyzer term m Integer
+  -> ArithOp
+  -> term Integer
+  -> term Integer
+  -> AnalyzeT m (S Integer)
+analyzeIntArithOp analyze op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  case op of
+    Add -> pure $ x + y
+    Sub -> pure $ x - y
+    Mul -> pure $ x * y
+    Div -> pure $ x `sDiv` y
+    Pow -> throwError $ UnsupportedDecArithOp op
+    Log -> throwError $ UnsupportedDecArithOp op
+
+analyzeIntDecArithOp
+  :: (Monad m)
+  => Analyzer term m Integer
+  -> Analyzer term m Decimal
+  -> ArithOp
+  -> term Integer
+  -> term Decimal
+  -> AnalyzeT m (S Decimal)
+analyzeIntDecArithOp analyzeI analyzeD op xT yT = do
+  x <- analyzeI xT
+  y <- analyzeD yT
+  case op of
+    Add -> pure $ fromIntegralS x + y
+    Sub -> pure $ fromIntegralS x - y
+    Mul -> pure $ fromIntegralS x * y
+    Div -> pure $ fromIntegralS x / y
+    Pow -> throwError $ UnsupportedDecArithOp op
+    Log -> throwError $ UnsupportedDecArithOp op
+
+analyzeDecIntArithOp
+  :: (Monad m)
+  => Analyzer term m Decimal
+  -> Analyzer term m Integer
+  -> ArithOp
+  -> term Decimal
+  -> term Integer
+  -> AnalyzeT m (S Decimal)
+analyzeDecIntArithOp analyzeD analyzeI op xT yT = do
+  x <- analyzeD xT
+  y <- analyzeI yT
+  case op of
+    Add -> pure $ x + fromIntegralS y
+    Sub -> pure $ x - fromIntegralS y
+    Mul -> pure $ x * fromIntegralS y
+    Div -> pure $ x / fromIntegralS y
+    Pow -> throwError $ UnsupportedDecArithOp op
+    Log -> throwError $ UnsupportedDecArithOp op
+
+analyzeUnaryArithOp
+  :: (Monad m, Num a, SymWord a)
+  => Analyzer term m a
+  -> UnaryArithOp
+  -> term a
+  -> AnalyzeT m (S a)
+analyzeUnaryArithOp analyze op term = do
+  x <- analyze term
+  case op of
+    Negate -> pure $ negate x
+    Sqrt   -> throwError $ UnsupportedUnaryOp op
+    Ln     -> throwError $ UnsupportedUnaryOp op
+    Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
+    Abs    -> pure $ abs x
+    Signum -> pure $ signum x
+
+analyzeModOp
+  :: (Monad m)
+  => Analyzer term m Integer
+  -> term Integer
+  -> term Integer
+  -> AnalyzeT m (S Integer)
+analyzeModOp analyze xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  pure $ x `sMod` y
+
+analyzeRoundingLikeOp1
+  :: (Monad m)
+  => Analyzer term m Decimal
+  -> RoundingLikeOp
+  -> term Decimal
+  -> AnalyzeT m (S Integer)
+analyzeRoundingLikeOp1 analyze op x = do
+  x' <- analyze x
+  pure $ case op of
+    -- The only SReal -> SInteger conversion function that sbv provides is
+    -- sRealToSInteger, which computes the floor.
+    Floor   -> realToIntegerS x'
+
+    -- For ceiling we use the identity:
+    -- ceil(x) = -floor(-x)
+    Ceiling -> negate (realToIntegerS (negate x'))
+
+    -- Round is much more complicated because pact uses the banker's method,
+    -- where a real exactly between two integers (_.5) is rounded to the
+    -- nearest even.
+    Round   ->
+      let wholePart      = realToIntegerS x'
+          wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+          isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x'
+
+      in iteS isExactlyHalf
+        -- nearest even number!
+        (wholePart + oneIfS wholePartIsOdd)
+        -- otherwise we take the floor of `x + 0.5`
+        (realToIntegerS (x' + 0.5))
+
+-- In the decimal rounding operations we shift the number left by `precision`
+-- digits, round using the integer method, and shift back right.
+--
+-- x': SReal            := -100.15234
+-- precision': SInteger := 2
+-- x'': SReal           := -10015.234
+-- x''': SInteger       := -10015
+-- return: SReal        := -100.15
+analyzeRoundingLikeOp2
+  :: (Monad m)
+  => Analyzer term m Decimal
+  -> Analyzer term m Integer
+  -> (forall a. S a -> term a)
+  -> RoundingLikeOp
+  -> term Decimal
+  -> term Integer
+  -> AnalyzeT m (S Decimal)
+analyzeRoundingLikeOp2 analyzeD analyzeI injS op x precision = do
+  x'         <- analyzeD x
+  precision' <- analyzeI precision
+  let digitShift = over s2Sbv (10 .^) precision' :: S Integer
+      x''        = x' * fromIntegralS digitShift
+  x''' <- analyzeRoundingLikeOp1 analyzeD op (injS x'')
+  pure $ fromIntegralS x''' / fromIntegralS digitShift
+
 analyzeLogicalOp
-  :: forall (m :: * -> *) (term :: * -> *) a
-  .  (Boolean (S a), Monad m)
+  :: (Monad m, Boolean (S a))
   => Analyzer term m a
   -> LogicalOp
   -> [term a]
   -> AnalyzeT m (S a)
 analyzeLogicalOp analyze op terms = do
-  sBools <- traverse analyze terms
-  case (op, sBools) of
+  symBools <- traverse analyze terms
+  case (op, symBools) of
     (AndOp, [a, b]) -> pure $ a &&& b
     (OrOp,  [a, b]) -> pure $ a ||| b
     (NotOp, [a])    -> pure $ bnot a
@@ -733,118 +889,18 @@ analyzeTerm = \case
 
   Var name -> lookupVal name
 
-  IntArithOp op x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    case op of
-      Add -> pure $ x' + y'
-      Sub -> pure $ x' - y'
-      Mul -> pure $ x' * y'
-      Div -> pure $ x' `sDiv` y'
-      Pow -> throwError $ UnsupportedIntArithOp op
-      Log -> throwError $ UnsupportedIntArithOp op
-
-  DecArithOp op x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    case op of
-      Add -> pure $ x' + y'
-      Sub -> pure $ x' - y'
-      Mul -> pure $ x' * y'
-      Div -> pure $ x' / y'
-      Pow -> throwError $ UnsupportedDecArithOp op
-      Log -> throwError $ UnsupportedDecArithOp op
-
-  IntDecArithOp op x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    case op of
-      Add -> pure $ fromIntegralS x' + y'
-      Sub -> pure $ fromIntegralS x' - y'
-      Mul -> pure $ fromIntegralS x' * y'
-      Div -> pure $ fromIntegralS x' / y'
-      Pow -> throwError $ UnsupportedDecArithOp op
-      Log -> throwError $ UnsupportedDecArithOp op
-
-  DecIntArithOp op x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    case op of
-      Add -> pure $ x' + fromIntegralS y'
-      Sub -> pure $ x' - fromIntegralS y'
-      Mul -> pure $ x' * fromIntegralS y'
-      Div -> pure $ x' / fromIntegralS y'
-      Pow -> throwError $ UnsupportedDecArithOp op
-      Log -> throwError $ UnsupportedDecArithOp op
-
-  ModOp x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    pure $ x' `sMod` y'
-
-  IntUnaryArithOp op x -> do
-    x' <- analyzeTerm x
-    case op of
-      Negate -> pure $ negate x'
-      Sqrt   -> throwError $ UnsupportedUnaryOp op
-      Ln     -> throwError $ UnsupportedUnaryOp op
-      Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
-      Abs    -> pure $ abs x'
-      Signum -> pure $ signum x'
-
-  DecUnaryArithOp op x -> do
-    x' <- analyzeTerm x
-    case op of
-      Negate -> pure $ negate x'
-      Sqrt   -> throwError $ UnsupportedUnaryOp op
-      Ln     -> throwError $ UnsupportedUnaryOp op
-      Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
-      Abs    -> pure $ abs x'
-      Signum -> pure $ signum x'
-
-  RoundingLikeOp1 op x -> do
-    x' <- analyzeTerm x
-    pure $ case op of
-      -- The only SReal -> SInteger conversion function that sbv provides is
-      -- sRealToSInteger, which computes the floor.
-      Floor   -> realToIntegerS x'
-
-      -- For ceiling we use the identity:
-      -- ceil(x) = -floor(-x)
-      Ceiling -> negate (realToIntegerS (negate x'))
-
-      -- Round is much more complicated because pact uses the banker's method,
-      -- where a real exactly between two integers (_.5) is rounded to the
-      -- nearest even.
-      Round   ->
-        let wholePart      = realToIntegerS x'
-            wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-            isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x'
-
-        in iteS isExactlyHalf
-          -- nearest even number!
-          (wholePart + oneIfS wholePartIsOdd)
-          -- otherwise we take the floor of `x + 0.5`
-          (realToIntegerS (x' + 0.5))
-
-  -- In the decimal rounding operations we shift the number left by `precision`
-  -- digits, round using the integer method, and shift back right.
   --
-  -- x': SReal            := -100.15234
-  -- precision': SInteger := 2
-  -- x'': SReal           := -10015.234
-  -- x''': SInteger       := -10015
-  -- return: SReal        := -100.15
-  RoundingLikeOp2 op x precision -> do
-    x'         <- analyzeTerm x
-    precision' <- analyzeTerm precision
-    let digitShift :: S Integer
-        digitShift = sansProv $ 10 .^ _sSbv precision'
-        x'' = x' * fromIntegralS digitShift
-
-    x''' <- analyzeTerm (RoundingLikeOp1 op (Literal x''))
-
-    pure $ fromIntegralS x''' / fromIntegralS digitShift
+  -- TODO: use typeclass?
+  --
+  DecArithOp op x y -> analyzeDecArithOp analyzeTerm op x y
+  IntArithOp op x y -> analyzeIntArithOp analyzeTerm op x y
+  IntDecArithOp op x y -> analyzeIntDecArithOp analyzeTerm analyzeTerm op x y
+  DecIntArithOp op x y -> analyzeDecIntArithOp analyzeTerm analyzeTerm op x y
+  IntUnaryArithOp op x -> analyzeUnaryArithOp analyzeTerm op x
+  DecUnaryArithOp op x -> analyzeUnaryArithOp analyzeTerm op x
+  ModOp x y -> analyzeModOp analyzeTerm x y
+  RoundingLikeOp1 op x -> analyzeRoundingLikeOp1 analyzeTerm op x
+  RoundingLikeOp2 op x precision -> analyzeRoundingLikeOp2 analyzeTerm analyzeTerm Literal op x precision
 
   AddTime time (ETerm secs TInt) -> do
     time' <- analyzeTerm time
@@ -886,6 +942,7 @@ analyzeTerm = \case
 
 analyzeProperty :: Prop a -> AnalyzeT Symbolic (S a)
 analyzeProperty (PLit a) = pure $ literalS a
+analyzeProperty (PSym a) = pure . sansProv $ a
 
 analyzeProperty Success = use succeeds
 analyzeProperty Abort = bnot <$> analyzeProperty Success
@@ -904,6 +961,21 @@ analyzeProperty (PStrConcat p1 p2) =
   (.++) <$> analyzeProperty p1 <*> analyzeProperty p2
 analyzeProperty (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProperty p
 analyzeProperty (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProperty p
+
+-- Numeric ops
+analyzeProperty (PDecArithOp op x y)      = analyzeDecArithOp analyzeProperty op x y
+analyzeProperty (PIntArithOp op x y)      = analyzeIntArithOp analyzeProperty op x y
+analyzeProperty (PIntDecArithOp op x y)   = analyzeIntDecArithOp analyzeProperty analyzeProperty op x y
+analyzeProperty (PDecIntArithOp op x y)   = analyzeDecIntArithOp analyzeProperty analyzeProperty op x y
+analyzeProperty (PIntUnaryArithOp op x)   = analyzeUnaryArithOp analyzeProperty op x
+analyzeProperty (PDecUnaryArithOp op x)   = analyzeUnaryArithOp analyzeProperty op x
+analyzeProperty (PModOp x y)              = analyzeModOp analyzeProperty x y
+analyzeProperty (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 analyzeProperty op x
+analyzeProperty (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 analyzeProperty analyzeProperty (PSym . _sSbv) op x p
+
+-- TODO: AddTime
+
+-- TODO: Comparison
 
 -- Boolean ops
 analyzeProperty (PLogical op props) = analyzeLogicalOp analyzeProperty op props

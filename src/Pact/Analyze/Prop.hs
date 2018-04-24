@@ -9,6 +9,7 @@ module Pact.Analyze.Prop where
 
 import Control.Lens (Lens', lens)
 import Data.Aeson (ToJSON, FromJSON)
+import qualified Data.Decimal as Decimal
 import Data.SBV hiding (Satisfiable)
 import qualified Data.SBV.Internals as SBVI
 import Data.String (IsString(..))
@@ -98,28 +99,100 @@ instance Eq Ty where
       _ -> False
 deriving instance Show Ty
 
+-- Pact uses Data.Decimal which is arbitrary-precision
+type Decimal = AlgReal
+
 data LogicalOp = AndOp | OrOp | NotOp
+  deriving (Show, Eq)
+
+-- Operations that apply to a pair of either integer or decimal, resulting in
+-- the same:
+-- integer -> integer -> integer
+-- decimal -> decimal -> decimal
+--
+-- Or:
+-- integer -> decimal -> integer
+-- decimal -> integer -> integer
+data ArithOp
+  = Add
+  | Sub
+  | Mul
+  | Div
+  | Pow
+  | Log
+  deriving (Show, Eq)
+
+-- integer -> integer
+-- decimal -> decimal
+data UnaryArithOp
+  = Negate
+  | Sqrt
+  | Ln
+  | Exp
+  | Abs
+
+  -- Implemented only for the sake of the Num instance
+  | Signum
+  deriving (Show, Eq)
+
+-- decimal -> integer -> decimal
+-- decimal -> decimal
+data RoundingLikeOp
+  = Round
+  | Ceiling
+  | Floor
+  deriving (Show, Eq)
+
+data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
   deriving (Show, Eq)
 
 data Prop a where
   -- Literals
-  PLit             :: SymWord a => a -> Prop a
+  PLit             :: SymWord a => a   -> Prop a
+  --
+  -- TODO: change this to `S a`, once we move S into Prop
+  --
+  PSym             ::              SBV a -> Prop a
 
   -- TX success/failure
+  --
+  -- TODO: remove one of these.
+  --
   Abort            :: Prop Bool
   Success          :: Prop Bool
 
   -- Abstraction
   Forall           :: Text -> Ty -> Prop a -> Prop a
-  --Forall         :: (SymWord a, Typeable a) => (Prop a -> Prop b) -> Prop b
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
+  --PAdd             :: Num a => Prop a -> Prop a -> Prop a
+  --PTimes           :: Num a => Prop a -> Prop a -> Prop a
+  --PAbs             :: Num a => Prop a ->           Prop a
+  --PSignum          :: Num a => Prop a ->           Prop a
+  --PNegate          :: Num a => Prop a ->           Prop a
 
   -- String ops
-  PStrConcat        :: Prop String -> Prop String -> Prop String
-  PStrLength        :: Prop String ->                Prop Integer
-  PStrEmpty         :: Prop String ->                Prop Bool
+  PStrConcat       :: Prop String -> Prop String -> Prop String
+  PStrLength       :: Prop String ->                Prop Integer
+  PStrEmpty        :: Prop String ->                Prop Bool
+
+  -- Numeric ops
+  PDecArithOp      :: ArithOp      -> Prop Decimal -> Prop Decimal -> Prop Decimal
+  PIntArithOp      :: ArithOp      -> Prop Integer -> Prop Integer -> Prop Integer
+  PDecUnaryArithOp :: UnaryArithOp                 -> Prop Decimal -> Prop Decimal
+  PIntUnaryArithOp :: UnaryArithOp                 -> Prop Integer -> Prop Integer
+
+  PDecIntArithOp   :: ArithOp -> Prop Decimal -> Prop Integer -> Prop Decimal
+  PIntDecArithOp   :: ArithOp -> Prop Integer -> Prop Decimal -> Prop Decimal
+
+  PModOp           :: Prop Integer   -> Prop Integer ->                 Prop Integer
+  PRoundingLikeOp1 :: RoundingLikeOp -> Prop Decimal ->                 Prop Integer
+  PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal
+
+  -- TODO: AddTime
+
+  -- TODO: Comparison
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -150,6 +223,26 @@ instance Boolean (Prop Bool) where
   bnot p = PLogical NotOp [p]
   p1 &&& p2 = PLogical AndOp [p1, p2]
   p1 ||| p2 = PLogical OrOp [p1, p2]
+
+instance Num (Prop Integer) where
+  fromInteger = PLit . fromInteger
+  (+)    = PIntArithOp Add
+  (*)    = PIntArithOp Mul
+  abs    = PIntUnaryArithOp Abs
+  signum = PIntUnaryArithOp Signum
+  negate = PIntUnaryArithOp Negate
+
+mkDecimal :: Decimal.Decimal -> Decimal
+mkDecimal (Decimal.Decimal places mantissa) = fromRational $
+  mantissa % 10 ^ places
+
+instance Num (Prop Decimal) where
+  fromInteger = PLit . mkDecimal . fromInteger
+  (+)    = PDecArithOp Add
+  (*)    = PDecArithOp Mul
+  abs    = PDecUnaryArithOp Abs
+  signum = PDecUnaryArithOp Signum
+  negate = PDecUnaryArithOp Negate
 
 data Check where
   Satisfiable :: Prop Bool -> Check

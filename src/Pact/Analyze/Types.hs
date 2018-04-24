@@ -11,7 +11,6 @@ module Pact.Analyze.Types where
 
 import Control.Lens hiding (op, (.>), (...))
 import Data.Data
-import qualified Data.Decimal as Decimal
 import Data.Map.Strict (Map)
 import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV.String as SBV
@@ -190,47 +189,6 @@ newtype KeySet
 instance SymWord KeySet
 instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
 
--- Operations that apply to a pair of either integer or decimal, resulting in
--- the same:
--- integer -> integer -> integer
--- decimal -> decimal -> decimal
---
--- Or:
--- integer -> decimal -> integer
--- decimal -> integer -> integer
-data ArithOp
-  = Add
-  | Sub
-  | Mul
-  | Div
-  | Pow
-  | Log
-  deriving (Show, Eq)
-
--- integer -> integer
--- decimal -> decimal
-data UnaryArithOp
-  = Negate
-  | Sqrt
-  | Ln
-  | Exp
-  | Abs
-
-  -- Implemented only for the sake of the Num instance
-  | Signum
-  deriving (Show, Eq)
-
--- decimal -> integer -> decimal
--- decimal -> decimal
-data RoundingLikeOp
-  = Round
-  | Ceiling
-  | Floor
-  deriving (Show, Eq)
-
-data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
-  deriving (Show, Eq)
-
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
@@ -387,13 +345,7 @@ mkTime utct
     * (1000000 * 60 * 60 * 24))
   + (utct ^. _utctDayTime . microseconds)
 
--- Pact uses Data.Decimal which is arbitrary-precision
-type Decimal = AlgReal
 type SDecimal = SBV Decimal
-
-mkDecimal :: Decimal.Decimal -> Decimal
-mkDecimal (Decimal.Decimal places mantissa) = fromRational $
-  mantissa % 10 ^ places
 
 makeLenses ''S
 makeLenses ''Object
