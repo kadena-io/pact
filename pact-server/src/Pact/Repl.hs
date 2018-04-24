@@ -29,8 +29,9 @@ module Pact.Repl
     ,ReplState(..),rEnv,rEvalState,rMode,rOut
     ) where
 
+
 import Control.Applicative
-import Control.Lens hiding (op)
+import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.State.Strict
 import qualified Data.ByteString as BS
@@ -40,7 +41,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import GHC.Word (Word8)
-import Prelude hiding (exp,print,putStrLn)
+import Prelude hiding (print,putStrLn)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import qualified Text.Trifecta.Delta as TF
 import System.IO

@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP             #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -32,12 +31,12 @@ import Data.Char
 import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (exp,print,putStrLn)
-import Text.Trifecta as TF hiding (line,err,try,newline)
+import Prelude hiding (exp)
+import Text.Trifecta as TF hiding (err,try,newline)
 import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
-import Data.Monoid hiding ((<>))
+import Data.Monoid
 import System.FilePath
 
 import Pact.Compile
