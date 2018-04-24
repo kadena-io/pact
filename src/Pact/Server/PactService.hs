@@ -101,7 +101,7 @@ exToTx Local = Nothing
 runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
 runPayload c@Command{..} = do
   let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm c
-      runRpc (Continuation ym) = applyContinuation ym $ _cmdSigs
+      runRpc (Continuation ym) = applyContinuation ym _cmdSigs
       Payload{..} = _cmdPayload
   case _pAddress of
     Just Address{..} -> do
