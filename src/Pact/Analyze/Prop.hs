@@ -8,7 +8,7 @@
 module Pact.Analyze.Prop where
 
 import Control.Lens (Lens', lens)
-import Data.Aeson
+import Data.Aeson (ToJSON, FromJSON)
 import Data.SBV hiding (Satisfiable)
 import qualified Data.SBV.Internals as SBVI
 import Data.String (IsString(..))
