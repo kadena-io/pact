@@ -69,7 +69,7 @@ instance Boolean (S Bool) where
 instance IsString (S String) where
   fromString = sansProv . fromString
 
-instance Num (S Integer) where
+instance (Num a, SymWord a) => Num (S a) where
   S _ x + S _ y  = S Nothing (x + y)
   S _ x * S _ y  = S Nothing (x * y)
   abs (S _ x)    = S Nothing (abs x)
@@ -77,29 +77,13 @@ instance Num (S Integer) where
   fromInteger i  = S Nothing (fromInteger i)
   negate (S _ x) = S Nothing (negate x)
 
-instance Num (S Decimal) where
-  S _ x + S _ y  = S Nothing (x + y)
-  S _ x * S _ y  = S Nothing (x * y)
-  abs (S _ x)    = S Nothing (abs x)
-  signum (S _ x) = S Nothing (signum x)
-  fromInteger i  = S Nothing (fromInteger i)
-  negate (S _ x) = S Nothing (negate x)
-
-instance Fractional (S Decimal) where
+instance (Fractional a, SymWord a) => Fractional (S a) where
   fromRational = literalS . fromRational
   S _ x / S _ y = S Nothing (x / y)
 
 instance SDivisible (S Integer) where
   S _ a `sQuotRem` S _ b = a `sQuotRem` b & both %~ S Nothing
   S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ S Nothing
-
-instance Num (S Time) where
-  S _ x + S _ y  = S Nothing (x + y)
-  S _ x * S _ y  = S Nothing (x * y)
-  abs (S _ x)    = S Nothing (abs x)
-  signum (S _ x) = S Nothing (signum x)
-  fromInteger i  = S Nothing (fromInteger i)
-  negate (S _ x) = S Nothing (negate x)
 
 type PredicateS = Symbolic (S Bool)
 
