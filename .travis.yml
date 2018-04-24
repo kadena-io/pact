@@ -69,7 +69,7 @@ install:
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
-  NIX_CONF_DIR=$HOME nix-build
+  NIX_CONF_DIR=$HOME nix-build --option extra-binary-caches http://18.188.255.165
   set +ex
 
 script:
