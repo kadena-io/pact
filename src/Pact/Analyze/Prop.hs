@@ -118,9 +118,11 @@ data Prop a where
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
-  -- TODO: Int ops
+  -- String ops
+  PStrConcat        :: Prop String -> Prop String -> Prop String
+  PStrLength        :: Prop String ->                Prop Integer
+  PStrEmpty         :: Prop String ->                Prop Bool
 
-  -- TODO: String ops (e.g. empty)
 
   -- DB properties
   TableWrite       :: TableName  ->                Prop Bool -- anything in table is written

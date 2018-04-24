@@ -29,6 +29,7 @@ import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError,
                         name)
+import qualified Data.SBV.String as SBV
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
@@ -897,6 +898,12 @@ analyzeProperty (PLogical op props) = do
     (OrOp,  [a, b]) -> pure $ a ||| b
     (NotOp, [a])    -> pure $ bnot a
     _               -> throwError $ MalformedLogicalOpExec op $ length props
+
+-- String ops
+analyzeProperty (PStrConcat p1 p2) =
+  (.++) <$> analyzeProperty p1 <*> analyzeProperty p2
+analyzeProperty (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProperty p
+analyzeProperty (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProperty p
 
 -- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn
