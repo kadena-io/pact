@@ -102,6 +102,8 @@ deriving instance Show Ty
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
 
+type Time = Int64
+
 data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)
 
@@ -184,9 +186,17 @@ data Prop a where
   PRoundingLikeOp1 :: RoundingLikeOp -> Prop Decimal ->                 Prop Integer
   PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal
 
-  -- TODO: AddTime
+  -- Time
+  PIntAddTime      :: Prop Time -> Prop Integer -> Prop Time
+  PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
 
-  -- TODO: Comparison
+  -- Comparison
+  --
+  -- TODO: we currently can't add this constructor without implementing Eq by
+  --       hand due to the existential. Via `TProperty` in the upstream `Term`,
+  --       we have an Eq obligation.
+  --
+  --PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool

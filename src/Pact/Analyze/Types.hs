@@ -336,7 +336,6 @@ instance Num (Term Decimal) where
   signum = DecUnaryArithOp Signum
   negate = DecUnaryArithOp Negate
 
-type Time = Int64
 type STime = SBV Time
 
 mkTime :: UTCTime -> Time

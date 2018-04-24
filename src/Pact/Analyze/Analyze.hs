@@ -760,6 +760,51 @@ analyzeRoundingLikeOp2 analyzeD analyzeI injS op x precision = do
   x''' <- analyzeRoundingLikeOp1 analyzeD op (injS x'')
   pure $ fromIntegralS x''' / fromIntegralS digitShift
 
+analyzeIntAddTime
+  :: (Monad m)
+  => Analyzer term m Time
+  -> Analyzer term m Integer
+  -> term Time
+  -> term Integer
+  -> AnalyzeT m (S Time)
+analyzeIntAddTime analyzeTime analyzeI timeT secsT = do
+  time <- analyzeTime timeT
+  secs <- analyzeI secsT
+  pure $ time + fromIntegralS secs
+
+analyzeDecAddTime
+  :: (Monad m)
+  => Analyzer term m Time
+  -> Analyzer term m Decimal
+  -> term Time
+  -> term Decimal
+  -> AnalyzeT m (S Time)
+analyzeDecAddTime analyzeTime analyzeD timeT secsT = do
+  time <- analyzeTime timeT
+  secs <- analyzeD secsT
+  if isConcreteS secs
+  then pure $ time + fromIntegralS (realToIntegerS secs)
+  else throwError $ PossibleRoundoff
+    "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
+
+analyzeComparisonOp
+  :: (Monad m, SymWord a)
+  => Analyzer term m a
+  -> ComparisonOp
+  -> term a
+  -> term a
+  -> AnalyzeT m (S Bool)
+analyzeComparisonOp analyze op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  pure $ sansProv $ case op of
+    Gt  -> x .> y
+    Lt  -> x .< y
+    Gte -> x .>= y
+    Lte -> x .<= y
+    Eq  -> x .== y
+    Neq -> x ./= y
+
 analyzeLogicalOp
   :: (Monad m, Boolean (S a))
   => Analyzer term m a
@@ -902,29 +947,10 @@ analyzeTerm = \case
   RoundingLikeOp1 op x -> analyzeRoundingLikeOp1 analyzeTerm op x
   RoundingLikeOp2 op x precision -> analyzeRoundingLikeOp2 analyzeTerm analyzeTerm Literal op x precision
 
-  AddTime time (ETerm secs TInt) -> do
-    time' <- analyzeTerm time
-    secs' <- analyzeTerm secs
-    pure $ time' + fromIntegralS secs'
+  AddTime time (ETerm secs TInt) -> analyzeIntAddTime analyzeTerm analyzeTerm time secs
+  AddTime time (ETerm secs TDecimal) -> analyzeDecAddTime analyzeTerm analyzeTerm time secs
 
-  AddTime time (ETerm secs TDecimal) -> do
-    time' <- analyzeTerm time
-    secs' <- analyzeTerm secs
-    if isConcreteS secs'
-    then pure $ time' + fromIntegralS (realToIntegerS secs')
-    else throwError $ PossibleRoundoff
-      "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
-
-  Comparison op x y -> do
-    x' <- analyzeTerm x
-    y' <- analyzeTerm y
-    pure $ sansProv $ case op of
-      Gt  -> x' .> y'
-      Lt  -> x' .< y'
-      Gte -> x' .>= y'
-      Lte -> x' .<= y'
-      Eq  -> x' .== y'
-      Neq -> x' ./= y'
+  Comparison op x y -> analyzeComparisonOp analyzeTerm op x y
 
   Logical op args -> analyzeLogicalOp analyzeTerm op args
 
@@ -973,9 +999,12 @@ analyzeProperty (PModOp x y)              = analyzeModOp analyzeProperty x y
 analyzeProperty (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 analyzeProperty op x
 analyzeProperty (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 analyzeProperty analyzeProperty (PSym . _sSbv) op x p
 
--- TODO: AddTime
+analyzeProperty (PIntAddTime time secs)   = analyzeIntAddTime analyzeProperty analyzeProperty time secs
+analyzeProperty (PDecAddTime time secs)   = analyzeDecAddTime analyzeProperty analyzeProperty time secs
 
--- TODO: Comparison
+-- TODO: once we can support the `PComparison` constructor (currently we can't
+--       without writing an `Eq` instance by hand):
+--analyzeProperty (PComparison op x y)      = analyzeComparisonOp analyzeProperty op x y
 
 -- Boolean ops
 analyzeProperty (PLogical op props) = analyzeLogicalOp analyzeProperty op props
