@@ -166,12 +166,6 @@ data Prop a where
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
-  --PAdd             :: Num a => Prop a -> Prop a -> Prop a
-  --PTimes           :: Num a => Prop a -> Prop a -> Prop a
-  --PAbs             :: Num a => Prop a ->           Prop a
-  --PSignum          :: Num a => Prop a ->           Prop a
-  --PNegate          :: Num a => Prop a ->           Prop a
-
   -- String ops
   PStrConcat       :: Prop String -> Prop String -> Prop String
   PStrLength       :: Prop String ->                Prop Integer
