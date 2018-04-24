@@ -101,12 +101,6 @@ S _ a .++ S _ b = S Nothing (SBV.concat a b)
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
 sbv2S = iso sansProv _sSbv
 
-sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
-sbv2SFrom prov = iso (withProv prov) _sSbv
-
-s2Sbv :: Iso (S a) (S b) (SBV a) (SBV b)
-s2Sbv = from sbv2S
-
 mkProv :: TableName -> S ColumnName -> S RowKey -> S Bool -> Provenance
 mkProv tn sCn sRk sDirty = Provenance tn sCn sRk sDirty
 
@@ -135,13 +129,19 @@ sansProv :: SBV a -> S a
 sansProv = S Nothing
 
 literalS :: SymWord a => a -> S a
-literalS a = sansProv $ literal a
+literalS = sansProv . literal
 
 unliteralS :: SymWord a => S a -> Maybe a
 unliteralS = unliteral . _sSbv
 
 withProv :: Provenance -> SBV a -> S a
 withProv prov sym = S (Just prov) sym
+
+sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
+sbv2SFrom prov = iso (withProv prov) _sSbv
+
+s2Sbv :: Iso (S a) (S b) (SBV a) (SBV b)
+s2Sbv = from sbv2S
 
 mkAVal :: S a -> AVal
 mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
@@ -158,21 +158,18 @@ coerceS (S mProv a) = S mProv $ coerceSBV a
 iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
-liftSbv :: (SBV a -> SBV b) -> S a -> S b
-liftSbv f = sansProv . f . _sSbv
-
 fromIntegralS
   :: forall a b
-  . (Integral a, HasKind a, Num a, SymWord a, HasKind b, Num b, SymWord b)
+  .  (Integral a, HasKind a, Num a, SymWord a, HasKind b, Num b, SymWord b)
   => S a
   -> S b
-fromIntegralS = liftSbv sFromIntegral
+fromIntegralS = over s2Sbv sFromIntegral
 
-realToIntegerS :: S AlgReal -> S Integer
-realToIntegerS = liftSbv sRealToSInteger
+realToIntegerS :: S Decimal -> S Integer
+realToIntegerS = over s2Sbv sRealToSInteger
 
 oneIfS :: (Num a, SymWord a) => S Bool -> S a
-oneIfS = liftSbv oneIf
+oneIfS = over s2Sbv oneIf
 
 isConcreteS :: SymWord a => S a -> Bool
 isConcreteS = isConcrete . _sSbv
