@@ -114,13 +114,13 @@ instance Provable PredicateS where
 S _ a .++ S _ b = S Nothing (SBV.concat a b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
-sbv2S :: Iso' (SBV a) (S a)
+sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
 sbv2S = iso sansProv _sSbv
 
-sbv2SFrom :: Provenance -> Iso' (SBV a) (S a)
+sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
 sbv2SFrom prov = iso (withProv prov) _sSbv
 
-s2Sbv :: Iso' (S a) (SBV a)
+s2Sbv :: Iso (S a) (S b) (SBV a) (SBV b)
 s2Sbv = from sbv2S
 
 mkProv :: TableName -> S ColumnName -> S RowKey -> S Bool -> Provenance
