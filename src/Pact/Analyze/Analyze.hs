@@ -1,6 +1,7 @@
 {-# language DeriveFunctor              #-}
 {-# language DeriveDataTypeable         #-}
 {-# language DeriveTraversable          #-}
+{-# language FlexibleContexts           #-}
 {-# language FlexibleInstances          #-}
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
@@ -600,6 +601,23 @@ analyzeTermO = \case
 
   objT -> throwError $ UnhandledObject objT
 
+type Analyzer term m a = term a -> AnalyzeT m (S a)
+
+analyzeLogicalOp
+  :: forall (m :: * -> *) (term :: * -> *) a
+  .  (Boolean (S a), Monad m)
+  => Analyzer term m a
+  -> LogicalOp
+  -> [term a]
+  -> AnalyzeT m (S a)
+analyzeLogicalOp analyze op terms = do
+  sBools <- traverse analyze terms
+  case (op, sBools) of
+    (AndOp, [a, b]) -> pure $ a &&& b
+    (OrOp,  [a, b]) -> pure $ a ||| b
+    (NotOp, [a])    -> pure $ bnot a
+    _               -> throwError $ MalformedLogicalOpExec op $ length terms
+
 analyzeTerm
   :: forall a. (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
@@ -852,13 +870,7 @@ analyzeTerm = \case
       Eq  -> x' .== y'
       Neq -> x' ./= y'
 
-  Logical op args -> do
-    args' <- forM args analyzeTerm
-    case (op, args') of
-      (AndOp, [a, b]) -> pure $ a &&& b
-      (OrOp, [a, b])  -> pure $ a ||| b
-      (NotOp, [a])    -> pure $ bnot a
-      _               -> throwError $ MalformedLogicalOpExec op $ length args
+  Logical op args -> analyzeLogicalOp analyzeTerm op args
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
@@ -887,23 +899,14 @@ analyzeProperty (Exists name (Ty (Rep :: Rep ty)) p) = do
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
 analyzeProperty (PVar name) = lookupVal name
 
--- Boolean ops
-
--- TODO: potentially deduplicate this with the other bool impl for Term, by
--- abstracting over the analyze function
-analyzeProperty (PLogical op props) = do
-  sBools <- traverse analyzeProperty props
-  case (op, sBools) of
-    (AndOp, [a, b]) -> pure $ a &&& b
-    (OrOp,  [a, b]) -> pure $ a ||| b
-    (NotOp, [a])    -> pure $ bnot a
-    _               -> throwError $ MalformedLogicalOpExec op $ length props
-
 -- String ops
 analyzeProperty (PStrConcat p1 p2) =
   (.++) <$> analyzeProperty p1 <*> analyzeProperty p2
 analyzeProperty (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProperty p
 analyzeProperty (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProperty p
+
+-- Boolean ops
+analyzeProperty (PLogical op props) = analyzeLogicalOp analyzeProperty op props
 
 -- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn

@@ -115,14 +115,14 @@ data Prop a where
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
-  -- Boolean ops
-  PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- String ops
   PStrConcat        :: Prop String -> Prop String -> Prop String
   PStrLength        :: Prop String ->                Prop Integer
   PStrEmpty         :: Prop String ->                Prop Bool
 
+  -- Boolean ops
+  PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- DB properties
   TableWrite       :: TableName  ->                Prop Bool -- anything in table is written
