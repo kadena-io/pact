@@ -40,6 +40,7 @@ module Pact.Types.Server
 
 import Control.Applicative
 import Control.Concurrent.MVar
+import Control.Concurrent.STM
 import Control.Exception.Safe
 import Control.Lens
 import Control.Monad.Reader
@@ -84,7 +85,7 @@ data CommandEnv p = CommandEnv {
       _ceEntity :: Maybe EntityName
     , _ceMode :: ExecutionMode
     , _ceDbEnv :: PactDbEnv p
-    , _ceState :: MVar CommandState
+    , _ceState :: TVar CommandState
     }
 $(makeLenses ''CommandEnv)
 
