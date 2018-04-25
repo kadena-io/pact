@@ -64,11 +64,11 @@ library
 
 
   -- other-extensions:
-  build-depends:       Decimal >= 0.4.2 && < 0.5
-                     , aeson >= 0.11.3.0 && < 1.2
+  build-depends:       Decimal >= 0.4.2 && < 0.6
+                     , aeson >= 0.11.3.0 && < 1.4
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
                      , attoparsec >= 0.13.0.2 && < 0.14
-                     , base >=4.9.0.0 && < 4.10
+                     , base >=4.9.0.0 && < 4.12
                      , base16-bytestring >=0.1.1.6 && < 0.2
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
@@ -77,15 +77,15 @@ library
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
                      , directory >= 1.2.6.2 && < 1.4
-                     , exceptions >= 0.8.3 && < 0.9
+                     , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
                      , hashable >= 1.2.6.0 && < 1.3
-                     , hspec >= 2.2.4 && < 2.5
-                     , lens >= 4.14 && < 4.16
+                     , hspec >= 2.2.4 && < 2.6
+                     , lens >= 4.14 && < 4.17
                      , lens-aeson >= 1.0.0.5 && < 1.1
                      , mtl >= 2.2.1 && < 2.3
                      , old-locale >= 1.0.0.7 && < 1.1
-                     , optparse-applicative >= 0.12.1.0 && < 0.14
+                     , optparse-applicative >= 0.12.1.0 && < 0.15
                      , parsers >= 0.12.4 && < 0.13
                      , safe >= 0.3.11 && < 0.4
                      , scientific >= 0.3.4.9 && < 0.4
@@ -94,11 +94,11 @@ library
                      , text >= 1.2.2.1 && < 1.3
                      -- kadena ghcjs compat fork
                      , transformers >= 0.5.2.0 && < 0.6
-                     , trifecta >= 1.6 && < 1.7
+                     , trifecta >= 1.6 && < 1.8
                      , unordered-containers >= 0.2.7.2 && < 0.3
                      , utf8-string >= 1.0.1.1 && < 1.1
-                     , vector >= 0.11.0.0 && < 0.12
-                     , vector-space >= 0.10.4 && < 0.11
+                     , vector >= 0.11.0.0 && < 0.13
+                     , vector-space >= 0.10.4 && < 0.14
                      , haskeline >= 0.7.4
   if !impl(ghcjs) && !os(windows)
     build-depends:   unix
@@ -106,7 +106,7 @@ library
   if !impl(ghcjs)
     build-depends:
                   async
-                , criterion >= 1.1.4.0 && < 1.2
+                , criterion >= 1.1.4.0 && < 1.5
                 , direct-sqlite
                 , safe-exceptions >= 0.1.5.0 && < 0.2
                 , statistics >= 0.13.3.0 && < 0.15
