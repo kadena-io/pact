@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -66,7 +65,17 @@ data CompileState = CompileState {
   _csModule :: Maybe ModuleName
   }
 instance Default CompileState where def = CompileState 0 def
-makeLenses ''CompileState
+--makeLenses ''CompileState
+csFresh :: Lens' CompileState Int
+csFresh f_acUWt (CompileState x1_acUWu x2_acUWv)
+  = fmap
+      (\ y1_acUWw -> CompileState y1_acUWw x2_acUWv) (f_acUWt x1_acUWu)
+{-# INLINE csFresh #-}
+csModule :: Lens' CompileState (Maybe ModuleName)
+csModule f_acUWx (CompileState x1_acUWy x2_acUWz)
+  = fmap
+      (\ y1_acUWA -> CompileState x1_acUWy y1_acUWA) (f_acUWx x2_acUWz)
+{-# INLINE csModule #-}
 
 type Compile a = ReaderT MkInfo (StateT CompileState (Except PactError)) a
 

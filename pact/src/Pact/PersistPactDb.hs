@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -55,7 +54,43 @@ data DbEnv p = DbEnv
   , _txRecord :: M.Map TxTable [TxLog Value]
   , _txId :: Maybe TxId
   }
-makeLenses ''DbEnv
+--makeLenses ''DbEnv
+db :: forall p_a7D73. Lens' (DbEnv p_a7D73) p_a7D73
+db f_a7D7H (DbEnv x1_a7D7I x2_a7D7J x3_a7D7K x4_a7D7L x5_a7D7M)
+  = fmap
+      (\ y1_a7D7N -> DbEnv y1_a7D7N x2_a7D7J x3_a7D7K x4_a7D7L x5_a7D7M)
+      (f_a7D7H x1_a7D7I)
+{-# INLINE db #-}
+logger :: forall p_a7D73. Lens' (DbEnv p_a7D73) Logger
+logger f_a7D7O (DbEnv x1_a7D7P x2_a7D7Q x3_a7D7R x4_a7D7S x5_a7D7T)
+  = fmap
+      (\ y1_a7D7U -> DbEnv x1_a7D7P x2_a7D7Q y1_a7D7U x4_a7D7S x5_a7D7T)
+      (f_a7D7O x3_a7D7R)
+{-# INLINE logger #-}
+persist ::
+  forall p_a7D73. Lens' (DbEnv p_a7D73) (Persister p_a7D73)
+persist
+  f_a7D7V
+  (DbEnv x1_a7D7W x2_a7D7X x3_a7D7Y x4_a7D7Z x5_a7D80)
+  = fmap
+      (\ y1_a7D81 -> DbEnv x1_a7D7W y1_a7D81 x3_a7D7Y x4_a7D7Z x5_a7D80)
+      (f_a7D7V x2_a7D7X)
+{-# INLINE persist #-}
+txId :: forall p_a7D73. Lens' (DbEnv p_a7D73) (Maybe TxId)
+txId f_a7D82 (DbEnv x1_a7D83 x2_a7D84 x3_a7D85 x4_a7D86 x5_a7D87)
+  = fmap
+      (\ y1_a7D88 -> DbEnv x1_a7D83 x2_a7D84 x3_a7D85 x4_a7D86 y1_a7D88)
+      (f_a7D82 x5_a7D87)
+{-# INLINE txId #-}
+txRecord ::
+  forall p_a7D73. Lens' (DbEnv p_a7D73) (M.Map TxTable [TxLog Value])
+txRecord
+  f_a7D89
+  (DbEnv x1_a7D8a x2_a7D8b x3_a7D8c x4_a7D8d x5_a7D8e)
+  = fmap
+      (\ y1_a7D8f -> DbEnv x1_a7D8a x2_a7D8b x3_a7D8c y1_a7D8f x5_a7D8e)
+      (f_a7D89 x4_a7D8d)
+{-# INLINE txRecord #-}
 
 initDbEnv :: Loggers -> Persister p -> p -> DbEnv p
 initDbEnv loggers funrec p = DbEnv {

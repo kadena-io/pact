@@ -9,7 +9,6 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -108,7 +107,6 @@ instance Show StackFrame where
     show (StackFrame n i app) = renderInfo i ++ ": " ++ case app of
       Nothing -> unpack n
       Just (_,as) -> "(" ++ unpack n ++ concatMap (\a -> " " ++ unpack (asString a)) as ++ ")"
-makeLenses ''StackFrame
 
 
 data PactError =
@@ -287,7 +285,6 @@ instance (FromJSON v) => FromJSON (Columns v) where
                   (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
     {-# INLINE parseJSON #-}
 
-makeLenses ''Columns
 
 -- | Specify key and value types for database domains.
 data Domain k v where
@@ -311,7 +308,6 @@ data TxLog v =
     , _txKey :: !Text
     , _txValue :: !v
     } deriving (Eq,Show,Typeable,Generic,Foldable,Functor,Traversable)
-makeLenses ''TxLog
 instance Hashable v => Hashable (TxLog v)
 
 instance ToJSON v => ToJSON (TxLog v) where
@@ -387,7 +383,6 @@ data PactStep = PactStep {
     , _psPactId :: !PactId
     , _psResume :: !(Maybe (Term Name))
 } deriving (Eq,Show)
-makeLenses ''PactStep
 
 type ModuleData = (Module,HM.HashMap Text Ref)
 
@@ -396,7 +391,6 @@ data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
     } deriving (Eq,Show)
-makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
 
 
@@ -413,7 +407,6 @@ data PactExec = PactExec
   , _peStep :: Int
   , _pePactId :: PactId
   } deriving (Eq,Show)
-makeLenses ''PactExec
 
 -- | Indicates level of db access offered in current Eval monad.
 data Purity =
@@ -453,7 +446,6 @@ data EvalEnv e = EvalEnv {
       -- | Pure indicator
     , _eePurity :: Purity
     } -- deriving (Eq,Show)
-makeLenses ''EvalEnv
 
 
 
@@ -467,7 +459,6 @@ data RefState = RefState {
     , _rsNew :: [(ModuleName,ModuleData)]
     }
                 deriving (Eq,Show)
-makeLenses ''RefState
 instance Default RefState where def = RefState HM.empty HM.empty def
 
 -- | Update for newly-loaded modules.
@@ -485,7 +476,6 @@ data EvalState = EvalState {
       -- | Pact execution trace, if any
     , _evalPactExec :: !(Maybe PactExec)
     }
-makeLenses ''EvalState
 instance Show EvalState where
     show (EvalState m y _) = "EvalState " ++ show m ++ " " ++ show y
 instance Default EvalState where def = EvalState def def def
@@ -670,3 +660,433 @@ mkSysReadEnv = mkPureEnv EnvSysRead PSysRead $ \d k e -> case d of
   KeySets -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
   Modules -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
   _ -> diePure e
+
+
+------------------------------------------------------------------------------
+--makeLenses ''StackFrame
+sfApp :: Lens' StackFrame (Maybe (FunApp, [Text]))
+sfApp f_a3Our (StackFrame x1_a3Ous x2_a3Out x3_a3Ouu)
+  = fmap
+      (\ y1_a3Ouv -> StackFrame x1_a3Ous x2_a3Out y1_a3Ouv)
+      (f_a3Our x3_a3Ouu)
+{-# INLINE sfApp #-}
+sfLoc :: Lens' StackFrame Info
+sfLoc f_a3Ouw (StackFrame x1_a3Oux x2_a3Ouy x3_a3Ouz)
+  = fmap
+      (\ y1_a3OuA -> StackFrame x1_a3Oux y1_a3OuA x3_a3Ouz)
+      (f_a3Ouw x2_a3Ouy)
+{-# INLINE sfLoc #-}
+sfName :: Lens' StackFrame Text
+sfName f_a3OuB (StackFrame x1_a3OuC x2_a3OuD x3_a3OuE)
+  = fmap
+      (\ y1_a3OuF -> StackFrame y1_a3OuF x2_a3OuD x3_a3OuE)
+      (f_a3OuB x1_a3OuC)
+{-# INLINE sfName #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''Columns
+columns ::
+  forall v_a3Ovk v_a3PM3.
+  Iso (Columns v_a3Ovk) (Columns v_a3PM3) (M.Map ColumnId v_a3Ovk) (M.Map ColumnId v_a3PM3)
+columns = iso (\ (Columns x_a3PM4) -> x_a3PM4) Columns
+{-# INLINE columns #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''TxLog
+txDomain :: forall v_a3PMf. Lens' (TxLog v_a3PMf) Text
+txDomain f_a3PYH (TxLog x1_a3PYI x2_a3PYJ x3_a3PYK)
+  = fmap
+      (\ y1_a3PYL -> TxLog y1_a3PYL x2_a3PYJ x3_a3PYK) (f_a3PYH x1_a3PYI)
+{-# INLINE txDomain #-}
+txKey :: forall v_a3PMf. Lens' (TxLog v_a3PMf) Text
+txKey f_a3PYM (TxLog x1_a3PYN x2_a3PYO x3_a3PYP)
+  = fmap
+      (\ y1_a3PYQ -> TxLog x1_a3PYN y1_a3PYQ x3_a3PYP) (f_a3PYM x2_a3PYO)
+{-# INLINE txKey #-}
+txValue ::
+  forall v_a3PMf v_a3PYG.
+  Lens (TxLog v_a3PMf) (TxLog v_a3PYG) v_a3PMf v_a3PYG
+txValue f_a3PYR (TxLog x1_a3PYS x2_a3PYT x3_a3PYU)
+  = fmap
+      (\ y1_a3PYV -> TxLog x1_a3PYS x2_a3PYT y1_a3PYV) (f_a3PYR x3_a3PYU)
+{-# INLINE txValue #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''PactStep
+psPactId :: Lens' PactStep PactId
+psPactId f_a3QzW (PactStep x1_a3QzX x2_a3QzY x3_a3QzZ x4_a3QA0)
+  = fmap
+      (\ y1_a3QA1 -> PactStep x1_a3QzX x2_a3QzY y1_a3QA1 x4_a3QA0)
+      (f_a3QzW x3_a3QzZ)
+{-# INLINE psPactId #-}
+psResume :: Lens' PactStep (Maybe (Term Name))
+psResume f_a3QA2 (PactStep x1_a3QA3 x2_a3QA4 x3_a3QA5 x4_a3QA6)
+  = fmap
+      (\ y1_a3QA7 -> PactStep x1_a3QA3 x2_a3QA4 x3_a3QA5 y1_a3QA7)
+      (f_a3QA2 x4_a3QA6)
+{-# INLINE psResume #-}
+psRollback :: Lens' PactStep Bool
+psRollback f_a3QA8 (PactStep x1_a3QA9 x2_a3QAa x3_a3QAb x4_a3QAc)
+  = fmap
+      (\ y1_a3QAd -> PactStep x1_a3QA9 y1_a3QAd x3_a3QAb x4_a3QAc)
+      (f_a3QA8 x2_a3QAa)
+{-# INLINE psRollback #-}
+psStep :: Lens' PactStep Int
+psStep f_a3QAe (PactStep x1_a3QAf x2_a3QAg x3_a3QAh x4_a3QAi)
+  = fmap
+      (\ y1_a3QAj -> PactStep y1_a3QAj x2_a3QAg x3_a3QAh x4_a3QAi)
+      (f_a3QAe x1_a3QAf)
+{-# INLINE psStep #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''RefStore
+rsModules :: Lens' RefStore (HM.HashMap ModuleName ModuleData)
+rsModules f_a3QDq (RefStore x1_a3QDr x2_a3QDs)
+  = fmap
+      (\ y1_a3QDt -> RefStore x1_a3QDr y1_a3QDt) (f_a3QDq x2_a3QDs)
+{-# INLINE rsModules #-}
+rsNatives :: Lens' RefStore (HM.HashMap Name Ref)
+rsNatives f_a3QDu (RefStore x1_a3QDv x2_a3QDw)
+  = fmap
+      (\ y1_a3QDx -> RefStore y1_a3QDx x2_a3QDw) (f_a3QDu x1_a3QDv)
+{-# INLINE rsNatives #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''PactExec
+peExecuted :: Lens' PactExec Bool
+peExecuted
+  f_a3QQo
+  (PactExec x1_a3QQp x2_a3QQq x3_a3QQr x4_a3QQs x5_a3QQt)
+  = fmap
+      (\ y1_a3QQu
+         -> PactExec x1_a3QQp x2_a3QQq y1_a3QQu x4_a3QQs x5_a3QQt)
+      (f_a3QQo x3_a3QQr)
+{-# INLINE peExecuted #-}
+pePactId :: Lens' PactExec PactId
+pePactId
+  f_a3QQv
+  (PactExec x1_a3QQw x2_a3QQx x3_a3QQy x4_a3QQz x5_a3QQA)
+  = fmap
+      (\ y1_a3QQB
+         -> PactExec x1_a3QQw x2_a3QQx x3_a3QQy x4_a3QQz y1_a3QQB)
+      (f_a3QQv x5_a3QQA)
+{-# INLINE pePactId #-}
+peStep :: Lens' PactExec Int
+peStep
+  f_a3QQC
+  (PactExec x1_a3QQD x2_a3QQE x3_a3QQF x4_a3QQG x5_a3QQH)
+  = fmap
+      (\ y1_a3QQI
+         -> PactExec x1_a3QQD x2_a3QQE x3_a3QQF y1_a3QQI x5_a3QQH)
+      (f_a3QQC x4_a3QQG)
+{-# INLINE peStep #-}
+peStepCount :: Lens' PactExec Int
+peStepCount
+  f_a3QQJ
+  (PactExec x1_a3QQK x2_a3QQL x3_a3QQM x4_a3QQN x5_a3QQO)
+  = fmap
+      (\ y1_a3QQP
+         -> PactExec y1_a3QQP x2_a3QQL x3_a3QQM x4_a3QQN x5_a3QQO)
+      (f_a3QQJ x1_a3QQK)
+{-# INLINE peStepCount #-}
+peYield :: Lens' PactExec (Maybe (Term Name))
+peYield
+  f_a3QQQ
+  (PactExec x1_a3QQR x2_a3QQS x3_a3QQT x4_a3QQU x5_a3QQV)
+  = fmap
+      (\ y1_a3QQW
+         -> PactExec x1_a3QQR y1_a3QQW x3_a3QQT x4_a3QQU x5_a3QQV)
+      (f_a3QQQ x2_a3QQS)
+{-# INLINE peYield #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''EvalEnv
+eeEntity ::
+  forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (Maybe EntityName)
+eeEntity
+  f_a3QYO
+  (EvalEnv x1_a3QYP
+           x2_a3QYQ
+           x3_a3QYR
+           x4_a3QYS
+           x5_a3QYT
+           x6_a3QYU
+           x7_a3QYV
+           x8_a3QYW
+           x9_a3QYX)
+  = fmap
+      (\ y1_a3QYY
+         -> EvalEnv
+              x1_a3QYP
+              x2_a3QYQ
+              x3_a3QYR
+              x4_a3QYS
+              y1_a3QYY
+              x6_a3QYU
+              x7_a3QYV
+              x8_a3QYW
+              x9_a3QYX)
+      (f_a3QYO x5_a3QYT)
+{-# INLINE eeEntity #-}
+eeMsgBody :: forall e_a3QRj. Lens' (EvalEnv e_a3QRj) Value
+eeMsgBody
+  f_a3QYZ
+  (EvalEnv x1_a3QZ0
+           x2_a3QZ1
+           x3_a3QZ2
+           x4_a3QZ3
+           x5_a3QZ4
+           x6_a3QZ5
+           x7_a3QZ6
+           x8_a3QZ7
+           x9_a3QZ8)
+  = fmap
+      (\ y1_a3QZ9
+         -> EvalEnv
+              x1_a3QZ0
+              x2_a3QZ1
+              y1_a3QZ9
+              x4_a3QZ3
+              x5_a3QZ4
+              x6_a3QZ5
+              x7_a3QZ6
+              x8_a3QZ7
+              x9_a3QZ8)
+      (f_a3QYZ x3_a3QZ2)
+{-# INLINE eeMsgBody #-}
+eeMsgSigs ::
+  forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (S.Set PublicKey)
+eeMsgSigs
+  f_a3QZa
+  (EvalEnv x1_a3QZb
+           x2_a3QZc
+           x3_a3QZd
+           x4_a3QZe
+           x5_a3QZf
+           x6_a3QZg
+           x7_a3QZh
+           x8_a3QZi
+           x9_a3QZj)
+  = fmap
+      (\ y1_a3QZk
+         -> EvalEnv
+              x1_a3QZb
+              y1_a3QZk
+              x3_a3QZd
+              x4_a3QZe
+              x5_a3QZf
+              x6_a3QZg
+              x7_a3QZh
+              x8_a3QZi
+              x9_a3QZj)
+      (f_a3QZa x2_a3QZc)
+{-# INLINE eeMsgSigs #-}
+eePactDb ::
+  forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (PactDb e_a3QRj)
+eePactDb
+  f_a3QZl
+  (EvalEnv x1_a3QZm
+           x2_a3QZn
+           x3_a3QZo
+           x4_a3QZp
+           x5_a3QZq
+           x6_a3QZr
+           x7_a3QZs
+           x8_a3QZt
+           x9_a3QZu)
+  = fmap
+      (\ y1_a3QZv
+         -> EvalEnv
+              x1_a3QZm
+              x2_a3QZn
+              x3_a3QZo
+              x4_a3QZp
+              x5_a3QZq
+              x6_a3QZr
+              x7_a3QZs
+              y1_a3QZv
+              x9_a3QZu)
+      (f_a3QZl x8_a3QZt)
+{-# INLINE eePactDb #-}
+eePactDbVar ::
+  forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (MVar e_a3QRj)
+eePactDbVar
+  f_a3QZw
+  (EvalEnv x1_a3QZx
+           x2_a3QZy
+           x3_a3QZz
+           x4_a3QZA
+           x5_a3QZB
+           x6_a3QZC
+           x7_a3QZD
+           x8_a3QZE
+           x9_a3QZF)
+  = fmap
+      (\ y1_a3QZG
+         -> EvalEnv
+              x1_a3QZx
+              x2_a3QZy
+              x3_a3QZz
+              x4_a3QZA
+              x5_a3QZB
+              x6_a3QZC
+              y1_a3QZG
+              x8_a3QZE
+              x9_a3QZF)
+      (f_a3QZw x7_a3QZD)
+{-# INLINE eePactDbVar #-}
+eePactStep ::
+  forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (Maybe PactStep)
+eePactStep
+  f_a3QZH
+  (EvalEnv x1_a3QZI
+           x2_a3QZJ
+           x3_a3QZK
+           x4_a3QZL
+           x5_a3QZM
+           x6_a3QZN
+           x7_a3QZO
+           x8_a3QZP
+           x9_a3QZQ)
+  = fmap
+      (\ y1_a3QZR
+         -> EvalEnv
+              x1_a3QZI
+              x2_a3QZJ
+              x3_a3QZK
+              x4_a3QZL
+              x5_a3QZM
+              y1_a3QZR
+              x7_a3QZO
+              x8_a3QZP
+              x9_a3QZQ)
+      (f_a3QZH x6_a3QZN)
+{-# INLINE eePactStep #-}
+eePurity :: forall e_a3QRj. Lens' (EvalEnv e_a3QRj) Purity
+eePurity
+  f_a3QZS
+  (EvalEnv x1_a3QZT
+           x2_a3QZU
+           x3_a3QZV
+           x4_a3QZW
+           x5_a3QZX
+           x6_a3QZY
+           x7_a3QZZ
+           x8_a3R00
+           x9_a3R01)
+  = fmap
+      (\ y1_a3R02
+         -> EvalEnv
+              x1_a3QZT
+              x2_a3QZU
+              x3_a3QZV
+              x4_a3QZW
+              x5_a3QZX
+              x6_a3QZY
+              x7_a3QZZ
+              x8_a3R00
+              y1_a3R02)
+      (f_a3QZS x9_a3R01)
+{-# INLINE eePurity #-}
+eeRefStore :: forall e_a3QRj. Lens' (EvalEnv e_a3QRj) RefStore
+eeRefStore
+  f_a3R03
+  (EvalEnv x1_a3R04
+           x2_a3R05
+           x3_a3R06
+           x4_a3R07
+           x5_a3R08
+           x6_a3R09
+           x7_a3R0a
+           x8_a3R0b
+           x9_a3R0c)
+  = fmap
+      (\ y1_a3R0d
+         -> EvalEnv
+              y1_a3R0d
+              x2_a3R05
+              x3_a3R06
+              x4_a3R07
+              x5_a3R08
+              x6_a3R09
+              x7_a3R0a
+              x8_a3R0b
+              x9_a3R0c)
+      (f_a3R03 x1_a3R04)
+{-# INLINE eeRefStore #-}
+eeTxId :: forall e_a3QRj. Lens' (EvalEnv e_a3QRj) (Maybe TxId)
+eeTxId
+  f_a3R0e
+  (EvalEnv x1_a3R0f
+           x2_a3R0g
+           x3_a3R0h
+           x4_a3R0i
+           x5_a3R0j
+           x6_a3R0k
+           x7_a3R0l
+           x8_a3R0m
+           x9_a3R0n)
+  = fmap
+      (\ y1_a3R0o
+         -> EvalEnv
+              x1_a3R0f
+              x2_a3R0g
+              x3_a3R0h
+              y1_a3R0o
+              x5_a3R0j
+              x6_a3R0k
+              x7_a3R0l
+              x8_a3R0m
+              x9_a3R0n)
+      (f_a3R0e x4_a3R0i)
+{-# INLINE eeTxId #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''RefState
+rsLoaded :: Lens' RefState (HM.HashMap Name Ref)
+rsLoaded f_a3R62 (RefState x1_a3R63 x2_a3R64 x3_a3R65)
+  = fmap
+      (\ y1_a3R66 -> RefState y1_a3R66 x2_a3R64 x3_a3R65)
+      (f_a3R62 x1_a3R63)
+{-# INLINE rsLoaded #-}
+rsLoadedModules :: Lens' RefState (HM.HashMap ModuleName Module)
+rsLoadedModules f_a3R67 (RefState x1_a3R68 x2_a3R69 x3_a3R6a)
+  = fmap
+      (\ y1_a3R6b -> RefState x1_a3R68 y1_a3R6b x3_a3R6a)
+      (f_a3R67 x2_a3R69)
+{-# INLINE rsLoadedModules #-}
+rsNew :: Lens' RefState [(ModuleName, ModuleData)]
+rsNew f_a3R6c (RefState x1_a3R6d x2_a3R6e x3_a3R6f)
+  = fmap
+      (\ y1_a3R6g -> RefState x1_a3R6d x2_a3R6e y1_a3R6g)
+      (f_a3R6c x3_a3R6f)
+{-# INLINE rsNew #-}
+
+
+------------------------------------------------------------------------------
+--makeLenses ''EvalState
+evalCallStack :: Lens' EvalState [StackFrame]
+evalCallStack f_a3R8y (EvalState x1_a3R8z x2_a3R8A x3_a3R8B)
+  = fmap
+      (\ y1_a3R8C -> EvalState x1_a3R8z y1_a3R8C x3_a3R8B)
+      (f_a3R8y x2_a3R8A)
+{-# INLINE evalCallStack #-}
+evalPactExec :: Lens' EvalState (Maybe PactExec)
+evalPactExec f_a3R8D (EvalState x1_a3R8E x2_a3R8F x3_a3R8G)
+  = fmap
+      (\ y1_a3R8H -> EvalState x1_a3R8E x2_a3R8F y1_a3R8H)
+      (f_a3R8D x3_a3R8G)
+{-# INLINE evalPactExec #-}
+evalRefs :: Lens' EvalState RefState
+evalRefs f_a3R8I (EvalState x1_a3R8J x2_a3R8K x3_a3R8L)
+  = fmap
+      (\ y1_a3R8M -> EvalState y1_a3R8M x2_a3R8K x3_a3R8L)
+      (f_a3R8I x1_a3R8J)
+{-# INLINE evalRefs #-}

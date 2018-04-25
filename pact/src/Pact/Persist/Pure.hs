@@ -2,10 +2,11 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+
+
 
 module Pact.Persist.Pure
   (
@@ -35,20 +36,38 @@ instance Show PValue where show (PValue a) = show a
 newtype Tbl k = Tbl {
   _tbl :: M.Map k PValue
   } deriving (Show,Monoid)
-makeLenses ''Tbl
+--makeLenses ''Tbl
+tbl ::
+  forall k_a7x7L k_a7xbw.
+  Iso (Tbl k_a7x7L) (Tbl k_a7xbw) (M.Map k_a7x7L PValue) (M.Map k_a7xbw PValue)
+tbl = iso (\ (Tbl x_a7xbx) -> x_a7xbx) Tbl
+{-# INLINE tbl #-}
 
 newtype Tables k = Tables {
   _tbls :: M.Map (Table k) (Tbl k)
   } deriving (Show,Monoid)
-makeLenses ''Tables
+--makeLenses ''Tables
+tbls ::
+  forall k_a7xbC k_a7xfj.
+  Iso (Tables k_a7xbC) (Tables k_a7xfj) (M.Map (Table k_a7xbC) (Tbl k_a7xbC)) (M.Map (Table k_a7xfj) (Tbl k_a7xfj))
+tbls = iso (\ (Tables x_a7xfk) -> x_a7xfk) Tables
+{-# INLINE tbls #-}
 
 
 data Db = Db {
   _dataTables :: !(Tables DataKey),
   _txTables :: !(Tables TxKey)
   } deriving (Show)
-makeLenses ''Db
 instance Default Db where def = Db mempty mempty
+--makeLenses ''Db
+dataTables :: Lens' Db (Tables DataKey)
+dataTables f_a7xhg (Db x1_a7xhh x2_a7xhi)
+  = fmap (\ y1_a7xhj -> Db y1_a7xhj x2_a7xhi) (f_a7xhg x1_a7xhh)
+{-# INLINE dataTables #-}
+txTables :: Lens' Db (Tables TxKey)
+txTables f_a7xhk (Db x1_a7xhl x2_a7xhm)
+  = fmap (\ y1_a7xhn -> Db x1_a7xhl y1_a7xhn) (f_a7xhk x2_a7xhm)
+{-# INLINE txTables #-}
 
 tblType :: Table k -> Lens' Db (Tables k)
 tblType DataTable {} = dataTables
@@ -58,8 +77,16 @@ data PureDb = PureDb {
   _committed :: !Db,
   _temp :: !Db
   }
-makeLenses ''PureDb
 instance Default PureDb where def = PureDb def def
+--makeLenses ''PureDb
+committed :: Lens' PureDb Db
+committed f_a7xja (PureDb x1_a7xjb x2_a7xjc)
+  = fmap (\ y1_a7xjd -> PureDb y1_a7xjd x2_a7xjc) (f_a7xja x1_a7xjb)
+{-# INLINE committed #-}
+temp :: Lens' PureDb Db
+temp f_a7xje (PureDb x1_a7xjf x2_a7xjg)
+  = fmap (\ y1_a7xjh -> PureDb x1_a7xjf y1_a7xjh) (f_a7xje x2_a7xjg)
+{-# INLINE temp #-}
 
 initPureDb :: PureDb
 initPureDb = def

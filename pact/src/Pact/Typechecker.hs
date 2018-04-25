@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -131,7 +130,32 @@ data RoleTys = RoleTys
 instance Show RoleTys where
   show (RoleTys a b c d) =
     "RoleTys { candArgTy=" ++ show a ++ ", AST=" ++ show (_aNode b) ++ ", tyVar=" ++ show c ++ ", resolvedTy=" ++ show d ++ "}"
-makeLenses ''RoleTys
+
+--makeLenses ''RoleTys
+rtAST :: Lens' RoleTys (AST Node)
+rtAST f_a1yIj (RoleTys x1_a1yIk x2_a1yIl x3_a1yIm x4_a1yIn)
+  = fmap
+      (\ y1_a1yIo -> RoleTys x1_a1yIk y1_a1yIo x3_a1yIm x4_a1yIn)
+      (f_a1yIj x2_a1yIl)
+{-# INLINE rtAST #-}
+rtCandArgTy :: Lens' RoleTys (Type UserType)
+rtCandArgTy f_a1yIp (RoleTys x1_a1yIq x2_a1yIr x3_a1yIs x4_a1yIt)
+  = fmap
+      (\ y1_a1yIu -> RoleTys y1_a1yIu x2_a1yIr x3_a1yIs x4_a1yIt)
+      (f_a1yIp x1_a1yIq)
+{-# INLINE rtCandArgTy #-}
+rtResolvedTy :: Lens' RoleTys (Type UserType)
+rtResolvedTy f_a1yIv (RoleTys x1_a1yIw x2_a1yIx x3_a1yIy x4_a1yIz)
+  = fmap
+      (\ y1_a1yIA -> RoleTys x1_a1yIw x2_a1yIx x3_a1yIy y1_a1yIA)
+      (f_a1yIv x4_a1yIz)
+{-# INLINE rtResolvedTy #-}
+rtTyVar :: Lens' RoleTys (TypeVar UserType)
+rtTyVar f_a1yIB (RoleTys x1_a1yIC x2_a1yID x3_a1yIE x4_a1yIF)
+  = fmap
+      (\ y1_a1yIG -> RoleTys x1_a1yIC x2_a1yID y1_a1yIG x4_a1yIF)
+      (f_a1yIB x3_a1yIE)
+{-# INLINE rtTyVar #-}
 
 
 
