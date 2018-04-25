@@ -58,8 +58,10 @@ before_install:
 - unset CC
 # https://github.com/travis-ci/travis-ci/issues/6307
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; command curl -sSL https://rvm.io/mpapis.asc | gpg --import -; then rvm get stable; fi
+- cat /proc/meminfo
+- cat /proc/cpuinfo
 - echo $NIX_CONF_DIR
-- echo "substituters = http://18.218.26.95:8080 https://nixcache.reflex-frp.org https://cache.nixos.org/" >> $HOME/nix.conf
+- echo "substituters = http://cache.mightybyte.net:8080 https://nixcache.reflex-frp.org https://cache.nixos.org/" >> $HOME/nix.conf
 - echo "trusted-public-keys = mightybyte.net-1:zrv/N/IZxigM3yAHbaBUpJbzqPuKmwNOBbbmPBQU9w8= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" >> $HOME/nix.conf
 - echo "require-sigs = false" >> $HOME/nix.conf
 - cat $HOME/nix.conf
@@ -70,7 +72,7 @@ install:
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - |
   set -ex
-  NIX_CONF_DIR=$HOME nix-build
+  NIX_CONF_DIR=$HOME travis_wait nix-build
   set +ex
 
 script:
