@@ -40,7 +40,7 @@ import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
 import Pact.Analyze.Analyze (AnalyzeFailure, AnalyzeT, allocateSymbolicCells,
-                             analyzeTerm, analyzeTermO, analyzeProperty,
+                             analyzeTerm, analyzeTermO, analyzeProp,
                              describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, runAnalyzeT)
 import Pact.Analyze.Prop
@@ -123,9 +123,9 @@ checkFunctionBody check body argTys nodeNames tableNames =
           action :: AnalyzeT Symbolic (S Bool)
           action = case tm of
             ETerm   body'' _ ->
-              (hoist generalize $ analyzeTerm  body'') *> analyzeProperty prop
+              (hoist generalize $ analyzeTerm  body'') *> analyzeProp prop
             EObject body'' _ ->
-              (hoist generalize $ analyzeTermO body'') *> analyzeProperty prop
+              (hoist generalize $ analyzeTermO body'') *> analyzeProp prop
 
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do

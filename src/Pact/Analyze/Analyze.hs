@@ -606,7 +606,7 @@ class (MonadError AnalyzeFailure m) => Analyzer m term where
   analyze :: (Show a, SymWord a) => term a -> m (S a)
 
 instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
-instance Analyzer (AnalyzeT Symbolic) Prop where analyze = analyzeProperty
+instance Analyzer (AnalyzeT Symbolic) Prop where analyze = analyzeProp
 
 class SymTerm term where
   liftS :: S a -> term a
@@ -953,62 +953,62 @@ analyzeTerm = \case
 
   n -> throwError $ UnhandledTerm $ tShow n
 
-analyzeProperty :: Prop a -> AnalyzeT Symbolic (S a)
-analyzeProperty (PLit a) = pure $ literalS a
-analyzeProperty (PSym a) = pure . sansProv $ a
+analyzeProp :: Prop a -> AnalyzeT Symbolic (S a)
+analyzeProp (PLit a) = pure $ literalS a
+analyzeProp (PSym a) = pure . sansProv $ a
 
-analyzeProperty Success = use succeeds
-analyzeProperty Abort = bnot <$> analyzeProperty Success
+analyzeProp Success = use succeeds
+analyzeProp Abort = bnot <$> analyzeProp Success
 
 -- Abstraction
-analyzeProperty (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
   sbv <- lift (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
-analyzeProperty (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
   sbv <- lift (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProperty p
-analyzeProperty (PVar name) = lookupVal name
+  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (PVar name) = lookupVal name
 
 -- String ops
-analyzeProperty (PStrConcat p1 p2) =
-  (.++) <$> analyzeProperty p1 <*> analyzeProperty p2
-analyzeProperty (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProperty p
-analyzeProperty (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProperty p
+analyzeProp (PStrConcat p1 p2) =
+  (.++) <$> analyzeProp p1 <*> analyzeProp p2
+analyzeProp (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProp p
+analyzeProp (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProp p
 
 -- Numeric ops
---analyzeProperty (PDecArithOp op x y)      = analyzeDecArithOp op x y
-analyzeProperty (PIntArithOp op x y)      = analyzeIntArithOp op x y
-analyzeProperty (PIntDecArithOp op x y)   = analyzeIntDecArithOp op x y
-analyzeProperty (PDecIntArithOp op x y)   = analyzeDecIntArithOp op x y
-analyzeProperty (PIntUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeProperty (PDecUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeProperty (PModOp x y)              = analyzeModOp x y
-analyzeProperty (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
-analyzeProperty (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
+--analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
+analyzeProp (PIntArithOp op x y)      = analyzeIntArithOp op x y
+analyzeProp (PIntDecArithOp op x y)   = analyzeIntDecArithOp op x y
+analyzeProp (PDecIntArithOp op x y)   = analyzeDecIntArithOp op x y
+analyzeProp (PIntUnaryArithOp op x)   = analyzeUnaryArithOp op x
+analyzeProp (PDecUnaryArithOp op x)   = analyzeUnaryArithOp op x
+analyzeProp (PModOp x y)              = analyzeModOp x y
+analyzeProp (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
+analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 
-analyzeProperty (PIntAddTime time secs)   = analyzeIntAddTime time secs
-analyzeProperty (PDecAddTime time secs)   = analyzeDecAddTime time secs
+analyzeProp (PIntAddTime time secs)   = analyzeIntAddTime time secs
+analyzeProp (PDecAddTime time secs)   = analyzeDecAddTime time secs
 
 -- TODO: once we can support the `PComparison` constructor (currently we can't
 --       without writing an `Eq` instance by hand):
---analyzeProperty (PComparison op x y)      = analyzeComparisonOp op x y
+--analyzeProp (PComparison op x y)      = analyzeComparisonOp op x y
 
 -- Boolean ops
-analyzeProperty (PLogical op props) = analyzeLogicalOp op props
+analyzeProp (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
-analyzeProperty (TableRead tn) = use $ tableRead tn
-analyzeProperty (TableWrite tn) = use $ tableWritten tn
--- analyzeProperty (CellIncrease tableName colName)
-analyzeProperty (ColumnConserve tableName colName) =
+analyzeProp (TableRead tn) = use $ tableRead tn
+analyzeProp (TableWrite tn) = use $ tableWritten tn
+-- analyzeProp (CellIncrease tableName colName)
+analyzeProp (ColumnConserve tableName colName) =
   sansProv . (0 .==) <$> use (columnDelta tableName (literalS colName))
-analyzeProperty (ColumnIncrease tableName colName) =
+analyzeProp (ColumnIncrease tableName colName) =
   sansProv . (0 .<) <$> use (columnDelta tableName (literalS colName))
-analyzeProperty (RowRead tn pRk)  = use . rowRead tn =<< analyzeProperty pRk
-analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
+analyzeProp (RowRead tn pRk)  = use . rowRead tn =<< analyzeProp pRk
+analyzeProp (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProp pRk
 
 -- Authorization
-analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProperty (RowEnforced tn cn pRk) = do
-  sRk <- analyzeProperty pRk
+analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+analyzeProp (RowEnforced tn cn pRk) = do
+  sRk <- analyzeProp pRk
   use $ cellEnforced tn (literalS cn) sRk
