@@ -553,6 +553,10 @@ analyzeTermO = \case
       val <- analyzeTerm tm
       pure (fieldType, mkAVal val))
 
+  --
+  -- TODO: dedupe Read/ReadCols.
+  --
+
   Read tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
