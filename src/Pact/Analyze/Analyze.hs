@@ -311,12 +311,26 @@ instance MFunctor AnalyzeT where
 
 type Analyze a = AnalyzeT Identity a
 
+data QueryEnv res
+  = QueryEnv
+    { _qeAnalyzeEnv    :: AnalyzeEnv
+    , _qeAnalyzeState  :: AnalyzeState
+    , _qeAnalyzeResult :: S res
+    }
+
+newtype Query res a
+  = Query
+    { runQuery :: ReaderT (QueryEnv res) (ExceptT AnalyzeFailure Symbolic) a }
+  deriving (Functor, Applicative, Monad, MonadReader (QueryEnv res),
+            MonadError AnalyzeFailure)
+
 makeLenses ''AnalyzeEnv
 makeLenses ''TableMap
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
+makeLenses ''QueryEnv
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = AnalyzeT $ RWST $ \r s -> ExceptT $ Identity $
@@ -953,19 +967,25 @@ analyzeTerm = \case
 
   n -> throwError $ UnhandledTerm $ tShow n
 
+analysisResult :: Query res (S res)
+analysisResult = view qeAnalyzeResult
+
+liftSymbolic :: Symbolic a -> Query res a
+liftSymbolic = Query . lift . lift
+
 analyzeProp :: Prop a -> AnalyzeT Symbolic (S a)
 analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PSym a) = pure . sansProv $ a
+analyzeProp (PSym a) = pure $ sansProv a
 
 analyzeProp Success = use succeeds
 analyzeProp Abort = bnot <$> analyzeProp Success
 
 -- Abstraction
 analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
-  sbv <- lift (forall_ :: Symbolic (SBV ty))
+  sbv <- lift{-Symbolic-} (forall_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
-  sbv <- lift (exists_ :: Symbolic (SBV ty))
+  sbv <- lift{-Symbolic-} (exists_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (PVar name) = lookupVal name
 
