@@ -6,6 +6,7 @@
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language LambdaCase                 #-}
+{-# language MultiParamTypeClasses      #-}
 {-# language OverloadedStrings          #-}
 {-# language Rank2Types                 #-}
 {-# language ScopedTypeVariables        #-}
@@ -601,16 +602,25 @@ analyzeTermO = \case
 
   objT -> throwError $ UnhandledObject objT
 
-type Analyzer term m a = term a -> AnalyzeT m (S a)
+class (MonadError AnalyzeFailure m) => Analyzer m term where
+  analyze :: (Show a, SymWord a) => term a -> m (S a)
+
+instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
+instance Analyzer (AnalyzeT Symbolic) Prop where analyze = analyzeProperty
+
+class SymTerm term where
+  liftS :: S a -> term a
+
+instance SymTerm Term where liftS = Literal
+instance SymTerm Prop where liftS = PSym . _sSbv
 
 analyzeDecArithOp
-  :: (Monad m)
-  => Analyzer term m Decimal
-  -> ArithOp
+  :: Analyzer m term
+  => ArithOp
   -> term Decimal
   -> term Decimal
-  -> AnalyzeT m (S Decimal)
-analyzeDecArithOp analyze op xT yT = do
+  -> m (S Decimal)
+analyzeDecArithOp op xT yT = do
   x <- analyze xT
   y <- analyze yT
   case op of
@@ -622,13 +632,12 @@ analyzeDecArithOp analyze op xT yT = do
     Log -> throwError $ UnsupportedDecArithOp op
 
 analyzeIntArithOp
-  :: (Monad m)
-  => Analyzer term m Integer
-  -> ArithOp
+  :: Analyzer m term
+  => ArithOp
   -> term Integer
   -> term Integer
-  -> AnalyzeT m (S Integer)
-analyzeIntArithOp analyze op xT yT = do
+  -> m (S Integer)
+analyzeIntArithOp op xT yT = do
   x <- analyze xT
   y <- analyze yT
   case op of
@@ -640,16 +649,14 @@ analyzeIntArithOp analyze op xT yT = do
     Log -> throwError $ UnsupportedDecArithOp op
 
 analyzeIntDecArithOp
-  :: (Monad m)
-  => Analyzer term m Integer
-  -> Analyzer term m Decimal
-  -> ArithOp
+  :: Analyzer m term
+  => ArithOp
   -> term Integer
   -> term Decimal
-  -> AnalyzeT m (S Decimal)
-analyzeIntDecArithOp analyzeI analyzeD op xT yT = do
-  x <- analyzeI xT
-  y <- analyzeD yT
+  -> m (S Decimal)
+analyzeIntDecArithOp op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
   case op of
     Add -> pure $ fromIntegralS x + y
     Sub -> pure $ fromIntegralS x - y
@@ -659,16 +666,14 @@ analyzeIntDecArithOp analyzeI analyzeD op xT yT = do
     Log -> throwError $ UnsupportedDecArithOp op
 
 analyzeDecIntArithOp
-  :: (Monad m)
-  => Analyzer term m Decimal
-  -> Analyzer term m Integer
-  -> ArithOp
+  :: Analyzer m term
+  => ArithOp
   -> term Decimal
   -> term Integer
-  -> AnalyzeT m (S Decimal)
-analyzeDecIntArithOp analyzeD analyzeI op xT yT = do
-  x <- analyzeD xT
-  y <- analyzeI yT
+  -> m (S Decimal)
+analyzeDecIntArithOp op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
   case op of
     Add -> pure $ x + fromIntegralS y
     Sub -> pure $ x - fromIntegralS y
@@ -678,12 +683,11 @@ analyzeDecIntArithOp analyzeD analyzeI op xT yT = do
     Log -> throwError $ UnsupportedDecArithOp op
 
 analyzeUnaryArithOp
-  :: (Monad m, Num a, SymWord a)
-  => Analyzer term m a
-  -> UnaryArithOp
+  :: (Analyzer m term, Num a, Show a, SymWord a)
+  => UnaryArithOp
   -> term a
-  -> AnalyzeT m (S a)
-analyzeUnaryArithOp analyze op term = do
+  -> m (S a)
+analyzeUnaryArithOp op term = do
   x <- analyze term
   case op of
     Negate -> pure $ negate x
@@ -694,23 +698,18 @@ analyzeUnaryArithOp analyze op term = do
     Signum -> pure $ signum x
 
 analyzeModOp
-  :: (Monad m)
-  => Analyzer term m Integer
+  :: Analyzer m term
+  => term Integer
   -> term Integer
-  -> term Integer
-  -> AnalyzeT m (S Integer)
-analyzeModOp analyze xT yT = do
-  x <- analyze xT
-  y <- analyze yT
-  pure $ x `sMod` y
+  -> m (S Integer)
+analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
 
 analyzeRoundingLikeOp1
-  :: (Monad m)
-  => Analyzer term m Decimal
-  -> RoundingLikeOp
+  :: Analyzer m term
+  => RoundingLikeOp
   -> term Decimal
-  -> AnalyzeT m (S Integer)
-analyzeRoundingLikeOp1 analyze op x = do
+  -> m (S Integer)
+analyzeRoundingLikeOp1 op x = do
   x' <- analyze x
   pure $ case op of
     -- The only SReal -> SInteger conversion function that sbv provides is
@@ -744,57 +743,50 @@ analyzeRoundingLikeOp1 analyze op x = do
 -- x''': SInteger       := -10015
 -- return: SReal        := -100.15
 analyzeRoundingLikeOp2
-  :: (Monad m)
-  => Analyzer term m Decimal
-  -> Analyzer term m Integer
-  -> (forall a. S a -> term a)
-  -> RoundingLikeOp
+  :: forall m term
+   . (Analyzer m term, SymTerm term)
+  => RoundingLikeOp
   -> term Decimal
   -> term Integer
-  -> AnalyzeT m (S Decimal)
-analyzeRoundingLikeOp2 analyzeD analyzeI injS op x precision = do
-  x'         <- analyzeD x
-  precision' <- analyzeI precision
+  -> m (S Decimal)
+analyzeRoundingLikeOp2 op x precision = do
+  x'         <- analyze x
+  precision' <- analyze precision
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 analyzeD op (injS x'')
+  x''' <- analyzeRoundingLikeOp1 op (liftS x'' :: term Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
 
 analyzeIntAddTime
-  :: (Monad m)
-  => Analyzer term m Time
-  -> Analyzer term m Integer
-  -> term Time
+  :: Analyzer m term
+  => term Time
   -> term Integer
-  -> AnalyzeT m (S Time)
-analyzeIntAddTime analyzeTime analyzeI timeT secsT = do
-  time <- analyzeTime timeT
-  secs <- analyzeI secsT
+  -> m (S Time)
+analyzeIntAddTime timeT secsT = do
+  time <- analyze timeT
+  secs <- analyze secsT
   pure $ time + fromIntegralS secs
 
 analyzeDecAddTime
-  :: (Monad m)
-  => Analyzer term m Time
-  -> Analyzer term m Decimal
-  -> term Time
+  :: Analyzer m term
+  => term Time
   -> term Decimal
-  -> AnalyzeT m (S Time)
-analyzeDecAddTime analyzeTime analyzeD timeT secsT = do
-  time <- analyzeTime timeT
-  secs <- analyzeD secsT
+  -> m (S Time)
+analyzeDecAddTime timeT secsT = do
+  time <- analyze timeT
+  secs <- analyze secsT
   if isConcreteS secs
   then pure $ time + fromIntegralS (realToIntegerS secs)
   else throwError $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 analyzeComparisonOp
-  :: (Monad m, SymWord a)
-  => Analyzer term m a
-  -> ComparisonOp
+  :: (Analyzer m term, SymWord a, Show a)
+  => ComparisonOp
   -> term a
   -> term a
-  -> AnalyzeT m (S Bool)
-analyzeComparisonOp analyze op xT yT = do
+  -> m (S Bool)
+analyzeComparisonOp op xT yT = do
   x <- analyze xT
   y <- analyze yT
   pure $ sansProv $ case op of
@@ -806,12 +798,11 @@ analyzeComparisonOp analyze op xT yT = do
     Neq -> x ./= y
 
 analyzeLogicalOp
-  :: (Monad m, Boolean (S a))
-  => Analyzer term m a
-  -> LogicalOp
+  :: (Analyzer m term, Boolean (S a), Show a, SymWord a)
+  => LogicalOp
   -> [term a]
-  -> AnalyzeT m (S a)
-analyzeLogicalOp analyze op terms = do
+  -> m (S a)
+analyzeLogicalOp op terms = do
   symBools <- traverse analyze terms
   case (op, symBools) of
     (AndOp, [a, b]) -> pure $ a &&& b
@@ -819,8 +810,7 @@ analyzeLogicalOp analyze op terms = do
     (NotOp, [a])    -> pure $ bnot a
     _               -> throwError $ MalformedLogicalOpExec op $ length terms
 
-analyzeTerm
-  :: forall a. (Show a, SymWord a) => Term a -> Analyze (S a)
+analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
@@ -934,25 +924,22 @@ analyzeTerm = \case
 
   Var name -> lookupVal name
 
-  --
-  -- TODO: use typeclass?
-  --
-  DecArithOp op x y -> analyzeDecArithOp analyzeTerm op x y
-  IntArithOp op x y -> analyzeIntArithOp analyzeTerm op x y
-  IntDecArithOp op x y -> analyzeIntDecArithOp analyzeTerm analyzeTerm op x y
-  DecIntArithOp op x y -> analyzeDecIntArithOp analyzeTerm analyzeTerm op x y
-  IntUnaryArithOp op x -> analyzeUnaryArithOp analyzeTerm op x
-  DecUnaryArithOp op x -> analyzeUnaryArithOp analyzeTerm op x
-  ModOp x y -> analyzeModOp analyzeTerm x y
-  RoundingLikeOp1 op x -> analyzeRoundingLikeOp1 analyzeTerm op x
-  RoundingLikeOp2 op x precision -> analyzeRoundingLikeOp2 analyzeTerm analyzeTerm Literal op x precision
+  DecArithOp op x y              -> analyzeDecArithOp op x y
+  IntArithOp op x y              -> analyzeIntArithOp op x y
+  IntDecArithOp op x y           -> analyzeIntDecArithOp op x y
+  DecIntArithOp op x y           -> analyzeDecIntArithOp op x y
+  IntUnaryArithOp op x           -> analyzeUnaryArithOp op x
+  DecUnaryArithOp op x           -> analyzeUnaryArithOp op x
+  ModOp x y                      -> analyzeModOp x y
+  RoundingLikeOp1 op x           -> analyzeRoundingLikeOp1 op x
+  RoundingLikeOp2 op x precision -> analyzeRoundingLikeOp2 op x precision
 
-  AddTime time (ETerm secs TInt) -> analyzeIntAddTime analyzeTerm analyzeTerm time secs
-  AddTime time (ETerm secs TDecimal) -> analyzeDecAddTime analyzeTerm analyzeTerm time secs
+  AddTime time (ETerm secs TInt)     -> analyzeIntAddTime time secs
+  AddTime time (ETerm secs TDecimal) -> analyzeDecAddTime time secs
 
-  Comparison op x y -> analyzeComparisonOp analyzeTerm op x y
+  Comparison op x y -> analyzeComparisonOp op x y
 
-  Logical op args -> analyzeLogicalOp analyzeTerm op args
+  Logical op args -> analyzeLogicalOp op args
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
@@ -989,25 +976,25 @@ analyzeProperty (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProperty p
 analyzeProperty (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProperty p
 
 -- Numeric ops
-analyzeProperty (PDecArithOp op x y)      = analyzeDecArithOp analyzeProperty op x y
-analyzeProperty (PIntArithOp op x y)      = analyzeIntArithOp analyzeProperty op x y
-analyzeProperty (PIntDecArithOp op x y)   = analyzeIntDecArithOp analyzeProperty analyzeProperty op x y
-analyzeProperty (PDecIntArithOp op x y)   = analyzeDecIntArithOp analyzeProperty analyzeProperty op x y
-analyzeProperty (PIntUnaryArithOp op x)   = analyzeUnaryArithOp analyzeProperty op x
-analyzeProperty (PDecUnaryArithOp op x)   = analyzeUnaryArithOp analyzeProperty op x
-analyzeProperty (PModOp x y)              = analyzeModOp analyzeProperty x y
-analyzeProperty (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 analyzeProperty op x
-analyzeProperty (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 analyzeProperty analyzeProperty (PSym . _sSbv) op x p
+--analyzeProperty (PDecArithOp op x y)      = analyzeDecArithOp op x y
+analyzeProperty (PIntArithOp op x y)      = analyzeIntArithOp op x y
+analyzeProperty (PIntDecArithOp op x y)   = analyzeIntDecArithOp op x y
+analyzeProperty (PDecIntArithOp op x y)   = analyzeDecIntArithOp op x y
+analyzeProperty (PIntUnaryArithOp op x)   = analyzeUnaryArithOp op x
+analyzeProperty (PDecUnaryArithOp op x)   = analyzeUnaryArithOp op x
+analyzeProperty (PModOp x y)              = analyzeModOp x y
+analyzeProperty (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
+analyzeProperty (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 
-analyzeProperty (PIntAddTime time secs)   = analyzeIntAddTime analyzeProperty analyzeProperty time secs
-analyzeProperty (PDecAddTime time secs)   = analyzeDecAddTime analyzeProperty analyzeProperty time secs
+analyzeProperty (PIntAddTime time secs)   = analyzeIntAddTime time secs
+analyzeProperty (PDecAddTime time secs)   = analyzeDecAddTime time secs
 
 -- TODO: once we can support the `PComparison` constructor (currently we can't
 --       without writing an `Eq` instance by hand):
---analyzeProperty (PComparison op x y)      = analyzeComparisonOp analyzeProperty op x y
+--analyzeProperty (PComparison op x y)      = analyzeComparisonOp op x y
 
 -- Boolean ops
-analyzeProperty (PLogical op props) = analyzeLogicalOp analyzeProperty op props
+analyzeProperty (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
 analyzeProperty (TableRead tn) = use $ tableRead tn
