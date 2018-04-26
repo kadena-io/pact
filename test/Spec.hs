@@ -133,6 +133,19 @@ suite = tests
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
 
+    , scope "enforce.sequence" $ do
+      let code =
+            [text|
+              (defun test:bool (x:integer)
+                (enforce (> x 0) "positive")
+                (if (< x 10)
+                  true
+                  false))
+            |]
+      expectPass code $ Satisfiable Abort
+      expectPass code $ Satisfiable Success
+      expectPass code $ Valid $ (PComparison Gt "x" (0 :: Prop Integer)) ==> Success
+
   , scope "read-keyset.equality" $ do
       let code =
             [text|

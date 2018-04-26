@@ -217,6 +217,9 @@ data Prop a where
 --deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
+instance IsString (Prop a) where
+  fromString = PVar . fromString
+
 instance Boolean (Prop Bool) where
   true   = PLit True
   false  = PLit False
