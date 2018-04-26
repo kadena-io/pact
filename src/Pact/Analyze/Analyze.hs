@@ -532,6 +532,18 @@ ksAuthorized sKs = do
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
+lookupObj
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => Text
+  -> m Object
+lookupObj name = do
+  mVal <- view (scope . at name)
+  case mVal of
+    Nothing -> throwError $ VarNotInScope name
+    Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
+    Just (AnObj obj) -> pure obj
+    Just (OpaqueVal) -> throwError OpaqueValEncountered
+
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
@@ -605,13 +617,7 @@ analyzeTermO = \case
       pure (fieldType, x)
     pure $ Object obj
 
-  Var name -> do
-    Just val <- view (scope . at name)
-    -- Assume the variable is well-typed after typechecking
-    case val of
-      AVal _ val' -> throwError $ AValUnexpectedlySVal val'
-      AnObj obj   -> pure obj
-      OpaqueVal   -> throwError OpaqueValEncountered
+  Var name -> lookupObj name
 
   Let name (ETerm rhs _) body -> do
     val <- analyzeTerm rhs
