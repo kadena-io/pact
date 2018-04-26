@@ -41,7 +41,7 @@ import qualified Pact.Types.Typecheck as TC
 import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProp,
                              describeAnalyzeFailure, mkAnalyzeEnv,
-                             mkInitialAnalyzeState, mkQueryEnv, runAnalyzeT,
+                             mkInitialAnalyzeState, mkQueryEnv, runAnalyze,
                              queryAction)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
@@ -128,7 +128,7 @@ checkFunctionBody check body argTys nodeNames tableNames =
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyzeT act) aEnv state0
+              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf

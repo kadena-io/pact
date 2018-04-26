@@ -17,9 +17,8 @@
 module Pact.Analyze.Analyze where
 
 import Control.Monad
-import Control.Monad.Except (MonadError, ExceptT(..), runExcept, runExceptT,
+import Control.Monad.Except (MonadError, Except, ExceptT(..), runExcept,
                              throwError)
-import Control.Monad.Morph (MFunctor(..))
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
@@ -296,20 +295,11 @@ tShow = T.pack . show
 instance IsString AnalyzeFailure where
   fromString = FailureMessage . T.pack
 
-newtype AnalyzeT m a
-  = AnalyzeT
-    { runAnalyzeT :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (ExceptT AnalyzeFailure m) a }
+newtype Analyze a
+  = Analyze
+    { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
-
-instance MonadTrans AnalyzeT where
-  lift = AnalyzeT . lift . lift
-
-instance MFunctor AnalyzeT where
-  hoist nat m = AnalyzeT $ RWST $ \r s -> ExceptT $
-    nat $ runExceptT $ runRWST (runAnalyzeT m) r s
-
-type Analyze a = AnalyzeT Identity a
 
 data QueryEnv
   = QueryEnv
@@ -336,7 +326,7 @@ makeLenses ''SymbolicCells
 makeLenses ''QueryEnv
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = AnalyzeT $ RWST $ \r s -> ExceptT $ Identity $
+  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -344,7 +334,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runExcept . runRWST (runAnalyzeT act) r
+    let run act = runExcept . runRWST (runAnalyze act) r
     in do
       lTup <- run left s
       let gs = lTup ^. _2.globalState
@@ -370,8 +360,8 @@ instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 class (MonadError AnalyzeFailure m) => Analyzer m term where
   analyze :: (Show a, SymWord a) => term a -> m (S a)
 
-instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
-instance Analyzer Query Prop               where analyze = analyzeProp
+instance Analyzer Analyze Term where analyze = analyzeTerm
+instance Analyzer Query Prop   where analyze = analyzeProp
 
 class SymbolicTerm term where
   injectS :: S a -> term a
@@ -520,7 +510,7 @@ nameAuthorized
 nameAuthorized sKsn = fmap sansProv $
   readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
-ksAuthorized :: forall m. Monad m => S KeySet -> AnalyzeT m (S Bool)
+ksAuthorized :: S KeySet -> Analyze (S Bool)
 ksAuthorized sKs = do
   -- NOTE: we know that KsAuthorized constructions are only emitted within
   -- Enforced constructions, so we know that this keyset is being enforced
