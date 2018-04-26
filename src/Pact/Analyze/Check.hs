@@ -16,7 +16,6 @@ module Pact.Analyze.Check
 import Control.Concurrent.MVar
 import Control.Monad.Except (runExcept, runExceptT)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Morph (hoist, generalize)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
@@ -39,10 +38,11 @@ import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
 import qualified Pact.Types.Typecheck as TC
 
-import Pact.Analyze.Analyze (AnalyzeFailure, AnalyzeT, allocateSymbolicCells,
+import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProp,
                              describeAnalyzeFailure, mkAnalyzeEnv,
-                             mkInitialAnalyzeState, runAnalyzeT)
+                             mkInitialAnalyzeState, mkQueryEnv, runAnalyzeT,
+                             queryAction)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
@@ -119,26 +119,32 @@ checkFunctionBody check body argTys nodeNames tableNames =
     Left reason -> pure $ Left $ TranslateFailure reason
 
     Right tm -> do
-      let prop   = check ^. ckProp
-          action :: AnalyzeT Symbolic (S Bool)
-          action = case tm of
-            ETerm   body'' _ ->
-              (hoist generalize $ analyzeTerm  body'') *> analyzeProp prop
-            EObject body'' _ ->
-              (hoist generalize $ analyzeTermO body'') *> analyzeProp prop
-
       compileFailureVar <- newEmptyMVar
       checkResult <- runCheck check $ do
-        env0 <- mkAnalyzeEnv argTys
+        aEnv <- mkAnalyzeEnv argTys
         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
-        eAnalysis <- runExceptT $ runRWST (runAnalyzeT action) env0 state0
 
-        case eAnalysis of
-          Left cf -> do
-            liftIO $ putMVar compileFailureVar cf
-            pure false
-          Right (propResult, _env, _log) ->
-            pure propResult
+        let prop = check ^. ckProp
+
+            go :: Analyze AVal -> Symbolic (S Bool)
+            go act = do
+              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyzeT act) aEnv state0
+              case eAnalysis of
+                Left cf -> do
+                  liftIO $ putMVar compileFailureVar cf
+                  pure false
+                Right (propResult, state1, _log) -> do
+                  let qEnv = mkQueryEnv aEnv state1 propResult
+                  eQuery <- runExceptT $ runReaderT (queryAction $ analyzeProp prop) qEnv
+                  case eQuery of
+                    Left cf' -> do
+                      liftIO $ putMVar compileFailureVar cf'
+                      pure false
+                    Right symAction -> pure $ symAction
+
+        case tm of
+          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
+          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
 
       mVarVal <- tryTakeMVar compileFailureVar
       pure $ case mVarVal of

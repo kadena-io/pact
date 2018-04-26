@@ -62,9 +62,9 @@ instance IsString CellId where
   fromString = CellId
 
 data AnalyzeEnv = AnalyzeEnv
-  { _scope     :: Map Text AVal            -- used with 'local' as a stack
-  , _keySets   :: SArray KeySetName KeySet -- read-only
-  , _ksAuths   :: SArray KeySet Bool       -- read-only
+  { _aeScope     :: Map Text AVal            -- used with 'local' as a stack
+  , _aeKeySets   :: SArray KeySetName KeySet -- read-only
+  , _aeKsAuths   :: SArray KeySet Bool       -- read-only
   } deriving Show
 
 allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
@@ -311,17 +311,20 @@ instance MFunctor AnalyzeT where
 
 type Analyze a = AnalyzeT Identity a
 
-data QueryEnv res
+data QueryEnv
   = QueryEnv
     { _qeAnalyzeEnv    :: AnalyzeEnv
-    , _qeAnalyzeState  :: AnalyzeState
-    , _qeAnalyzeResult :: S res
+    , _model           :: AnalyzeState
+    , _qeAnalyzeResult :: AVal
     }
 
-newtype Query res a
+mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
+mkQueryEnv = QueryEnv
+
+newtype Query a
   = Query
-    { runQuery :: ReaderT (QueryEnv res) (ExceptT AnalyzeFailure Symbolic) a }
-  deriving (Functor, Applicative, Monad, MonadReader (QueryEnv res),
+    { queryAction :: ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic) a }
+  deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
 makeLenses ''AnalyzeEnv
@@ -347,6 +350,34 @@ instance (Mergeable a) => Mergeable (Analyze a) where
       let gs = lTup ^. _2.globalState
       rTup <- run right $ s & globalState .~ gs
       return $ symbolicMerge force test lTup rTup
+
+class HasAnalyzeEnv a where
+  {-# MINIMAL analyzeEnv #-}
+  analyzeEnv :: Lens' a AnalyzeEnv
+
+  scope :: Lens' a (Map Text AVal)
+  scope = analyzeEnv.aeScope
+
+  keySets :: Lens' a (SArray KeySetName KeySet)
+  keySets = analyzeEnv.aeKeySets
+
+  ksAuths :: Lens' a (SArray KeySet Bool)
+  ksAuths = analyzeEnv.aeKsAuths
+
+instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
+instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
+
+class (MonadError AnalyzeFailure m) => Analyzer m term where
+  analyze :: (Show a, SymWord a) => term a -> m (S a)
+
+instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
+instance Analyzer Query Prop               where analyze = analyzeProp
+
+class SymbolicTerm term where
+  injectS :: S a -> term a
+
+instance SymbolicTerm Term where injectS = Literal
+instance SymbolicTerm Prop where injectS = PSym . _sSbv
 
 symArrayAt
   :: forall array k v
@@ -471,13 +502,21 @@ ksCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValue
 symKsName :: S String -> S KeySetName
 symKsName = coerceS
 
--- TODO: potentially switch to lenses here for the following 3 functions:
-
-resolveKeySet :: forall m. Monad m => S KeySetName -> AnalyzeT m (S KeySet)
+-- TODO: switch to lens
+resolveKeySet
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => S KeySetName
+  -> m (S KeySet)
 resolveKeySet sKsn = fmap sansProv $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
-nameAuthorized :: forall m. Monad m => S KeySetName -> AnalyzeT m (S Bool)
+--keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
+--keySetNamed sKsn = aeKeySets.symArrayAt sKsn
+
+nameAuthorized
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => S KeySetName
+  -> m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
   readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
@@ -493,13 +532,10 @@ ksAuthorized sKs = do
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
---keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
---keySetNamed sKsn = keySets.symArrayAt sKsn
---
---ksnAuthorization :: SBV KeySetName -> Lens' AnalyzeEnv (SBV Bool)
---ksnAuthorization sKsn = _todoKsnAuthorization
-
-lookupVal :: Monad m => Text -> AnalyzeT m (S a)
+lookupVal
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => Text
+  -> m (S a)
 lookupVal name = do
   mVal <- view $ scope . at name
   case mVal of
@@ -615,18 +651,6 @@ analyzeTermO = \case
       Just concreteColName -> getObjVal concreteColName
 
   objT -> throwError $ UnhandledObject objT
-
-class (MonadError AnalyzeFailure m) => Analyzer m term where
-  analyze :: (Show a, SymWord a) => term a -> m (S a)
-
-instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
-instance Analyzer (AnalyzeT Symbolic) Prop where analyze = analyzeProp
-
-class SymbolicTerm term where
-  injectS :: S a -> term a
-
-instance SymbolicTerm Term where injectS = Literal
-instance SymbolicTerm Prop where injectS = PSym . _sSbv
 
 analyzeDecArithOp
   :: Analyzer m term
@@ -967,25 +991,22 @@ analyzeTerm = \case
 
   n -> throwError $ UnhandledTerm $ tShow n
 
-analysisResult :: Query res (S res)
-analysisResult = view qeAnalyzeResult
-
-liftSymbolic :: Symbolic a -> Query res a
+liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
-analyzeProp :: Prop a -> AnalyzeT Symbolic (S a)
+analyzeProp :: Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
 analyzeProp (PSym a) = pure $ sansProv a
 
-analyzeProp Success = use succeeds
+analyzeProp Success = view $ model.succeeds
 analyzeProp Abort = bnot <$> analyzeProp Success
 
 -- Abstraction
 analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
-  sbv <- lift{-Symbolic-} (forall_ :: Symbolic (SBV ty))
+  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
-  sbv <- lift{-Symbolic-} (exists_ :: Symbolic (SBV ty))
+  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (PVar name) = lookupVal name
 
@@ -1017,18 +1038,22 @@ analyzeProp (PDecAddTime time secs)   = analyzeDecAddTime time secs
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
-analyzeProp (TableRead tn) = use $ tableRead tn
-analyzeProp (TableWrite tn) = use $ tableWritten tn
+analyzeProp (TableRead tn)  = view $ model.tableRead tn
+analyzeProp (TableWrite tn) = view $ model.tableWritten tn
 -- analyzeProp (CellIncrease tableName colName)
 analyzeProp (ColumnConserve tableName colName) =
-  sansProv . (0 .==) <$> use (columnDelta tableName (literalS colName))
+  sansProv . (0 .==) <$> view (model.columnDelta tableName (literalS colName))
 analyzeProp (ColumnIncrease tableName colName) =
-  sansProv . (0 .<) <$> use (columnDelta tableName (literalS colName))
-analyzeProp (RowRead tn pRk)  = use . rowRead tn =<< analyzeProp pRk
-analyzeProp (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProp pRk
+  sansProv . (0 .<) <$> view (model.columnDelta tableName (literalS colName))
+analyzeProp (RowRead tn pRk)  = do
+  sRk <- analyzeProp pRk
+  view $ model.rowRead tn sRk
+analyzeProp (RowWrite tn pRk) = do
+  sRk <- analyzeProp pRk
+  view $ model.rowWritten tn sRk
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
-  use $ cellEnforced tn (literalS cn) sRk
+  view $ model.cellEnforced tn (literalS cn) sRk
