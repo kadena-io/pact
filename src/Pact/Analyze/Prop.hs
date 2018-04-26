@@ -191,12 +191,7 @@ data Prop a where
   PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
 
   -- Comparison
-  --
-  -- TODO: we currently can't add this constructor without implementing Eq by
-  --       hand due to the existential. Via `TProperty` in the upstream `Term`,
-  --       we have an Eq obligation.
-  --
-  --PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
+  PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -218,7 +213,8 @@ data Prop a where
   KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
-deriving instance Eq a => Eq (Prop a)
+-- NOTE: PComparison's existential currently prevents this:
+--deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
 instance Boolean (Prop Bool) where
@@ -251,7 +247,7 @@ instance Num (Prop Decimal) where
 data Check where
   Satisfiable :: Prop Bool -> Check
   Valid       :: Prop Bool -> Check
-  deriving (Eq, Show)
+  deriving (Show)
 
 ckProp :: Lens' Check (Prop Bool)
 ckProp = lens getter setter

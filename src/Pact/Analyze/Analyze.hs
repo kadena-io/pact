@@ -1036,9 +1036,7 @@ analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 analyzeProp (PIntAddTime time secs)   = analyzeIntAddTime time secs
 analyzeProp (PDecAddTime time secs)   = analyzeDecAddTime time secs
 
--- TODO: once we can support the `PComparison` constructor (currently we can't
---       without writing an `Eq` instance by hand):
---analyzeProp (PComparison op x y)      = analyzeComparisonOp op x y
+analyzeProp (PComparison op x y) = analyzeComparisonOp op x y
 
 -- Boolean ops
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
