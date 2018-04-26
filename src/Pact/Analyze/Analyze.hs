@@ -608,11 +608,11 @@ class (MonadError AnalyzeFailure m) => Analyzer m term where
 instance Analyzer (AnalyzeT Identity) Term where analyze = analyzeTerm
 instance Analyzer (AnalyzeT Symbolic) Prop where analyze = analyzeProp
 
-class SymTerm term where
-  liftS :: S a -> term a
+class SymbolicTerm term where
+  injectS :: S a -> term a
 
-instance SymTerm Term where liftS = Literal
-instance SymTerm Prop where liftS = PSym . _sSbv
+instance SymbolicTerm Term where injectS = Literal
+instance SymbolicTerm Prop where injectS = PSym . _sSbv
 
 analyzeDecArithOp
   :: Analyzer m term
@@ -744,7 +744,7 @@ analyzeRoundingLikeOp1 op x = do
 -- return: SReal        := -100.15
 analyzeRoundingLikeOp2
   :: forall m term
-   . (Analyzer m term, SymTerm term)
+   . (Analyzer m term, SymbolicTerm term)
   => RoundingLikeOp
   -> term Decimal
   -> term Integer
@@ -754,7 +754,7 @@ analyzeRoundingLikeOp2 op x precision = do
   precision' <- analyze precision
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 op (liftS x'' :: term Decimal)
+  x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: term Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
 
 analyzeIntAddTime
