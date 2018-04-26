@@ -122,8 +122,8 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TSchema {} -> return d
         TTable {} -> return d
         TUse {} -> return d
-        TProperty {} -> return d
-        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, property, property-of allowed in module"
+        TMeta {} -> return d
+        t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, meta allowed in module"
       mkModule docs body = do
         cm <- use csModule
         case cm of
@@ -196,19 +196,8 @@ expToProp = (\case
 expToCheck :: Exp -> Maybe Check
 expToCheck body = Valid <$> expToProp body
 
-doPropertyOf :: [Exp] -> Info -> Info -> Compile (Term Name)
-doPropertyOf exprs namei i = case exprs of
-  [EAtom name Nothing Nothing _, body] -> case expToCheck body of
-    Just check -> pure $ TProperty (Just name) check i
-    Nothing -> syntaxError namei "Invalid property"
-  _ -> syntaxError namei "Invalid property"
-
-doProperty :: [Exp] -> Info -> Info -> Compile (Term Name)
-doProperty exprs namei i = case exprs of
-  [body] -> case expToCheck body of
-    Just check -> pure $ TProperty Nothing check i
-    Nothing -> syntaxError namei "Invalid property"
-  _ -> syntaxError namei "Invalid property"
+doMeta :: Text -> Exp -> Info -> Compile (Term Name)
+doMeta name exp i = pure $ TMeta name exp i
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
@@ -338,8 +327,9 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
-      ("@property-of",Nothing) -> doPropertyOf rest ai li
-      ("@property",Nothing) -> doProperty rest ai li
+      (name, Nothing)
+        | T.head name == '@' && length rest == 1
+        -> doMeta (T.tail name) (head rest) li
       ("use",Nothing) -> doUse rest li
       ("module",Nothing) -> doModule rest li ai
       ("defun",Nothing) -> doDef rest Defun ai li

@@ -51,9 +51,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Unsafe.Coerce
 import Data.Aeson (Value)
-import qualified Data.Text as Text
 
-import Pact.Analyze.Prop (Check)
 import Pact.Types.Runtime
 
 evalBeginTx :: Info -> Eval e ()
@@ -163,39 +161,45 @@ evalUse mn h i = do
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info ->
-              Eval e (HM.HashMap Text (Term Name, [Check]))
+              Eval e ()
 loadModule m bod1 mi = do
-  (modDefs1, modProps, leftoverProps) <-
+  (modDefs1, propMap, leftoverMeta) <-
     case instantiate' bod1 of
       TList bodyClause _ _bi -> do
         let modDefsL = _1
-            modPropsL = _2
-            leftoverPropsL = _3
+            propMapL :: Lens' (a, b, c) b
+            propMapL = _2
+            leftoverMetaL :: Lens' (a, b, c) c
+            leftoverMetaL = _3
 
         -- For every clause in the module definition, either add it to
-        -- modDefs, or, for properties, accumulate in modProps or
-        -- leftoverProps.
-        flip execStateT (HM.empty, [], []) $ forM_ bodyClause $ \t ->
+        -- modDefs, or, for metadata, accumulate in modMeta or
+        -- leftoverMeta.
+        flip execStateT (HM.empty, HM.empty, []) $ forM_ bodyClause $ \t ->
           case t of
             TDef      {..} -> do
-              leftoverProps' <- use leftoverPropsL
-              forM_ leftoverProps' $ \(TProperty Nothing check i) ->
-                modPropsL %= cons (TProperty (Just _tDefName) check i)
-              _3 .= []
+              leftoverMeta' <- use leftoverMetaL
+              forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
+                case tag of
+                  "property" -> do
+                    old <- use (propMapL . at _tDefName)
+                    let old' = fromMaybe [] old
+                    propMapL . at _tDefName ?= (tag, expr) : old'
+                  _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
+
+              leftoverMetaL .= []
               modDefsL . at _tDefName ?= t
             TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
             TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
             TSchema   {..} -> modDefsL . at (asString _tSchemaName) ?= t
             TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
             TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo -- >> return NoName
-            TProperty {..} -> case _tPropertyOf of
-              Just name -> modPropsL %= cons t
-              Nothing   -> _3 %= cons t -- why doesn't leftoverPropsL work here?
+            TMeta     {..} -> leftoverMetaL %= cons t
             _ -> lift $ evalError (_tInfo t) "Invalid module member"
 
       t -> evalError (_tInfo t) "Malformed module"
 
-  when (not (null leftoverProps))
+  when (not (null leftoverMeta))
     (evalError mi "Trailing unattached property")
 
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
@@ -217,45 +221,27 @@ loadModule m bod1 mi = do
               CyclicSCC vs ->
                 evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
 
-  -- now merge in the properties
-  -- * keys that appear only in defns are fine -- they're definitions
-  -- without any properties
-  -- * keys that appear only in props aren't -- they're properties
-  -- without a definition
-  let defnsNoProps :: HM.HashMap Text (Term Name, [Check])
-      defnsNoProps = (,[]) <$> modDefs1
-
-  defnsWithProps <- foldrM
-    -- invariant: all properties have an attached name at this point
-    (\(TProperty (Just name) prop info) accum -> if HM.member name accum
-      then pure $ accum & singular (ix name) . _2 %~ cons prop
-      else evalError info $
-        "Found a property without a corresponding definition (" ++
-        Text.unpack name ++ ")"
-    )
-    defnsNoProps
-    modProps
-
   -- These defs combine an evaluable reference with the properties that hold of
   -- it.
-  let defs :: HM.HashMap Text (Ref, [Check])
+  let defs :: HM.HashMap Text (Ref, [(Text, Exp)])
       defs = foldl dresolve HM.empty sorted
 
-      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
+      -- insert a fresh Ref into the map, fmapping the Either to a Ref via
+      -- 'unify'
       dresolve
-        :: HM.HashMap Text (Ref, [Check])
+        :: HM.HashMap Text (Ref, [(Text, Exp)])
         -> (Term (Either Text Ref), Text, [Text])
-        -> HM.HashMap Text (Ref, [Check])
+        -> HM.HashMap Text (Ref, [(Text, Exp)])
       dresolve defns (defn,defName,_)
         = HM.insert defName
-          (Ref (fmap (unify defns) defn), (defnsWithProps ^?! ix defName . _2))
+          (Ref (fmap (unify defns) defn), propMap ^. at defName . non [])
           defns
       evalConstRef = runPure . evalConsts
   evaluatedDefs <- (traverse . _1) evalConstRef defs
   installModule (m, evaluatedDefs)
-  (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
+  evalRefs.rsNew %= cons (_mName m, (m, evaluatedDefs))
 
-  pure defnsWithProps
+  pure ()
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -271,7 +257,7 @@ resolveRef nn@(Name _ _) = do
     Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
-unify :: HM.HashMap Text (Ref, [Check]) -> Either Text Ref -> Ref
+unify :: HM.HashMap Text (Ref, [(Text, Exp)]) -> Either Text Ref -> Ref
 unify _ (Right d) = d
 unify m (Left f) = fst (m HM.! f)
 
@@ -319,7 +305,7 @@ reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
-reduce TProperty {..} = evalError _tInfo "Properties can't be evaluated"
+reduce TMeta {..} = evalError _tInfo "Metadata can't be evaluated"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

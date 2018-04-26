@@ -67,12 +67,13 @@ module Pact.Types.Lang
    Module(..),
    ConstVal(..),
    Term(..),
-   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tCheck,tConstArg,tConstVal,
+   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,
-   tModule,tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tPropertyOf,
+   tModule,tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,
    tSchemaName, tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,
    tValue,tVar,
+   tName,tExp,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -119,7 +120,7 @@ import qualified Data.HashMap.Strict as HM
 
 import Data.Serialize (Serialize)
 
-import Pact.Analyze.Prop (Check, KeySetName(KeySetName))
+import Pact.Analyze.Prop (KeySetName(KeySetName))
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 --import Pact.Types.Crypto (Hash(..))
@@ -727,9 +728,9 @@ data Term n =
     , _tDocs :: !(Maybe Text)
     , _tInfo :: !Info
     } |
-    TProperty {
-      _tPropertyOf :: !(Maybe Text)
-    , _tCheck :: Check
+    TMeta {
+      _tName :: !Text
+    , _tExp  :: !Exp
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -762,7 +763,7 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tDocs ++ ")"
-    show TProperty {} = "TProperty"
+    show TMeta {} = "TMeta"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -827,7 +828,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule (fmap (>>= f) _tTableType) _tDocs _tInfo
-    TProperty propOf check i >>= _ = TProperty propOf check i
+    TMeta name exps i >>= _ = TMeta name exps i
 
 
 instance FromJSON (Term n) where
@@ -896,7 +897,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
-      TProperty {} -> Left "property"
+      TMeta {} -> Left "meta"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -953,7 +954,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TProperty {} = "<property>"
+abbrev TMeta {} = "<meta>"
 
 
 

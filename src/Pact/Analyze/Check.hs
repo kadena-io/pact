@@ -21,6 +21,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict (evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -45,6 +46,7 @@ import Pact.Analyze.Analyze (AnalyzeFailure, AnalyzeT, allocateSymbolicCells,
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
+import Pact.Compile (expToCheck)
 
 data CheckFailure
   = Invalid SBVI.SMTModel
@@ -55,6 +57,7 @@ data CheckFailure
   | TypecheckFailure (Set TC.Failure)
   | AnalyzeFailure AnalyzeFailure
   | TranslateFailure TranslateFailure
+  | PropertyParseError Exp
   --
   -- TODO: maybe remove this constructor from from CheckFailure.
   --
@@ -83,6 +86,7 @@ describeCheckFailure = \case
       (Set.toList fails))
   AnalyzeFailure err        -> describeAnalyzeFailure err
   TranslateFailure err      -> describeTranslateFailure err
+  PropertyParseError expr   -> "Couldn't parse property: " <> T.pack (show expr)
   CodeCompilationFailed msg -> T.pack msg
 
 data CheckSuccess
@@ -205,4 +209,10 @@ failedTcOrAnalyze tcState fun check =
 verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
 verifyModule (_mod, modRefs) = for modRefs $ \(ref, props) -> do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-  forM props $ failedTcOrAnalyze tcState fun
+  results <- forM props $ \case
+    ("property", expr) -> fmap Just $
+      case expToCheck expr of
+        Nothing    -> pure $ Left $ PropertyParseError expr
+        Just check -> failedTcOrAnalyze tcState fun check
+    _ -> pure Nothing
+  pure $ catMaybes results
