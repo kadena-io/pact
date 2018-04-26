@@ -26,6 +26,8 @@ import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Map.Strict.Merge
+import Data.Maybe (catMaybes)
 import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError,
@@ -35,7 +37,7 @@ import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
 import Data.Traversable (for)
 import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
-                                  WriteType(..), KeySet, TKeySet)
+                                  WriteType(..), KeySet, TKeySet, SchemaVar)
 import qualified Pact.Types.Runtime as Pact
 import qualified Pact.Types.Typecheck as TC
 import Pact.Types.Version (pactVersion)
@@ -64,6 +66,7 @@ data AnalyzeEnv = AnalyzeEnv
   { _aeScope     :: Map Text AVal            -- used with 'local' as a stack
   , _aeKeySets   :: SArray KeySetName KeySet -- read-only
   , _aeKsAuths   :: SArray KeySet Bool       -- read-only
+  , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
   } deriving Show
 
 allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
@@ -91,11 +94,11 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     sDecimal :: String -> Symbolic (SBV Decimal)
     sDecimal = symbolic
 
-mkAnalyzeEnv :: [(Text, Pact.Type TC.UserType)] -> Symbolic AnalyzeEnv
-mkAnalyzeEnv argTys = AnalyzeEnv
-  <$> allocateArgs argTys
-  <*> newArray "keySets"
-  <*> newArray "keySetAuths"
+-- mkAnalyzeEnv :: [(Text, Pact.Type TC.UserType)] -> Symbolic AnalyzeEnv
+-- mkAnalyzeEnv argTys = AnalyzeEnv
+--   <$> allocateArgs argTys
+--   <*> newArray "keySets"
+--   <*> newArray "keySetAuths"
 
 newtype AnalyzeLog
   = AnalyzeLog ()
@@ -115,12 +118,12 @@ instance Mergeable AnalyzeLog where
 
 data SymbolicCells
   = SymbolicCells
-    { _scIntValues     :: SArray CellId Integer
-    , _scBoolValues    :: SArray CellId Bool
-    , _scStringValues  :: SArray CellId String
-    , _scDecimalValues :: SArray CellId Decimal
-    , _scTimeValues    :: SArray CellId Time
-    , _scKsValues      :: SArray CellId KeySet
+    { _scIntValues     :: Map ColumnName (SArray RowKey Integer)
+    , _scBoolValues    :: Map ColumnName (SArray RowKey Bool)
+    , _scStringValues  :: Map ColumnName (SArray RowKey String)
+    , _scDecimalValues :: Map ColumnName (SArray RowKey Decimal)
+    , _scTimeValues    :: Map ColumnName (SArray RowKey Time)
+    , _scKsValues      :: Map ColumnName (SArray RowKey KeySet)
     -- TODO: opaque blobs
     }
     deriving (Show)
@@ -130,10 +133,34 @@ instance Mergeable SymbolicCells where
   symbolicMerge force test
     (SymbolicCells a b c d e f)
     (SymbolicCells a' b' c' d' e' f')
-    = SymbolicCells (m a a') (m b b') (m c c') (m d d') (m e e') (m f f')
+    = SymbolicCells (m' a a') (m' b b') (m' c c') (m' d d') (m' e e') (m' f f')
     where
-      m :: SymWord a => SArray CellId a -> SArray CellId a -> SArray CellId a
+      m :: SymWord a => SArray RowKey a -> SArray RowKey a -> SArray RowKey a
       m = symbolicMerge force test
+      m'
+        :: SymWord a
+        => Map ColumnName (SArray RowKey a)
+        -> Map ColumnName (SArray RowKey a)
+        -> Map ColumnName (SArray RowKey a)
+      m' l r = merge
+        (mapMissing $ \_ _ -> error "bad symbolic cells merge")
+        (mapMissing $ \_ _ -> error "bad symbolic cells merge")
+        (zipWithMatched $ \_k a b -> m a b)
+        l
+        r
+
+newtype ColumnMap a
+  = ColumnMap { _columnMap :: Map ColumnName a }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Mergeable a => Mergeable (ColumnMap a) where
+  symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
+    merge
+      (mapMissing $ \_ _ -> error "bad column map merge")
+      (mapMissing $ \_ _ -> error "bad column map merge")
+      (zipWithMatched $ \_k l r -> symbolicMerge force test l r)
+      left
+      right
 
 newtype TableMap a
   = TableMap { _tableMap :: Map TableName a }
@@ -147,19 +174,20 @@ instance Mergeable a => Mergeable (TableMap a) where
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds      :: SBV Bool
-    , _lasTablesRead    :: SFunArray TableName Bool
-    , _lasTablesWritten :: SFunArray TableName Bool
-    , _lasColumnDeltas  :: TableMap (SFunArray ColumnName Integer)
-    , _lasTableCells    :: TableMap SymbolicCells
-    , _lasRowsRead      :: TableMap (SFunArray RowKey Bool)
-    , _lasRowsWritten   :: TableMap (SFunArray RowKey Bool)
-    , _lasCellsEnforced :: TableMap (SFunArray CellId Bool)
+    { _lasSucceeds            :: SBV Bool
+    , _lasMaintainsInvariants :: SBV Bool
+    , _lasTablesRead          :: SFunArray TableName Bool
+    , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasColumnDeltas        :: TableMap (ColumnMap (S Integer))
+    , _lasTableCells          :: TableMap SymbolicCells
+    , _lasRowsRead            :: TableMap (SFunArray RowKey Bool)
+    , _lasRowsWritten         :: TableMap (SFunArray RowKey Bool)
+    , _lasCellsEnforced       :: TableMap (ColumnMap (SFunArray RowKey Bool))
     -- We currently maintain cellsWritten only for deciding whether a cell has
     -- been "invalidated" for the purposes of keyset enforcement. If a keyset
     -- has been overwritten and *then* enforced, that does not constitute valid
     -- enforcement of the keyset.
-    , _lasCellsWritten  :: TableMap (SFunArray CellId Bool)
+    , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     }
   deriving (Show)
 
@@ -167,21 +195,22 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsRead  tsWritten  deltas  cells  rsRead  rsWritten  csEnforced
-      csWritten)
+      success  tsInvariants  tsRead  tsWritten  deltas  cells  rsRead
+      rsWritten  csEnforced  csWritten)
     (LatticeAnalyzeState
-      success' tsRead' tsWritten' deltas' cells' rsRead' rsWritten' csEnforced'
-      csWritten')
+      success' tsInvariants' tsRead' tsWritten' deltas' cells' rsRead'
+      rsWritten' csEnforced' csWritten')
         = LatticeAnalyzeState
-          (symbolicMerge force test success    success')
-          (symbolicMerge force test tsRead     tsRead')
-          (symbolicMerge force test tsWritten  tsWritten')
-          (symbolicMerge force test deltas     deltas')
-          (symbolicMerge force test cells      cells')
-          (symbolicMerge force test rsRead     rsRead')
-          (symbolicMerge force test rsWritten  rsWritten')
-          (symbolicMerge force test csEnforced csEnforced')
-          (symbolicMerge force test csWritten  csWritten')
+          (symbolicMerge force test success      success')
+          (symbolicMerge force test tsInvariants tsInvariants)
+          (symbolicMerge force test tsRead       tsRead')
+          (symbolicMerge force test tsWritten    tsWritten')
+          (symbolicMerge force test deltas       deltas')
+          (symbolicMerge force test cells        cells')
+          (symbolicMerge force test rsRead       rsRead')
+          (symbolicMerge force test rsWritten    rsWritten')
+          (symbolicMerge force test csEnforced   csEnforced')
+          (symbolicMerge force test csWritten    csWritten')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -195,6 +224,25 @@ data AnalyzeState
     }
   deriving (Show)
 
+makeLenses ''ColumnMap
+makeLenses ''AnalyzeEnv
+makeLenses ''TableMap
+makeLenses ''AnalyzeState
+makeLenses ''GlobalAnalyzeState
+makeLenses ''LatticeAnalyzeState
+makeLenses ''SymbolicCells
+makeLenses ''QueryEnv
+
+type instance Index (ColumnMap a) = ColumnName
+type instance IxValue (ColumnMap a) = a
+instance Ixed (ColumnMap a) where ix k = columnMap.ix k
+instance At (ColumnMap a) where at k = columnMap.at k
+
+type instance Index (TableMap a) = TableName
+type instance IxValue (TableMap a) = a
+instance Ixed (TableMap a) where ix k = tableMap.ix k
+instance At (TableMap a) where at k = tableMap.at k
+
 instance Mergeable AnalyzeState where
   -- NOTE: We discard the left global state because this is out-of-date and was
   -- already fed to the right computation -- we use the updated right global
@@ -202,43 +250,142 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-mkInitialAnalyzeState :: TableMap SymbolicCells -> AnalyzeState
-mkInitialAnalyzeState tableCells = AnalyzeState
+mkInitialAnalyzeState
+  :: [(Text, TC.UserType)]
+  -> TableMap SymbolicCells
+  -> AnalyzeState
+mkInitialAnalyzeState tables tableCells = AnalyzeState
     { _latticeState = LatticeAnalyzeState
-        { _lasSucceeds      = true
-        , _lasTablesRead    = mkSFunArray $ const false
-        , _lasTablesWritten = mkSFunArray $ const false
-        , _lasColumnDeltas  = mkPerTableSFunArray 0
-        , _lasTableCells    = tableCells
-        , _lasRowsRead      = mkPerTableSFunArray false
-        , _lasRowsWritten   = mkPerTableSFunArray false
-        , _lasCellsEnforced = mkPerTableSFunArray false
-        , _lasCellsWritten  = mkPerTableSFunArray false
+        { _lasSucceeds            = true
+        , _lasMaintainsInvariants = true
+        , _lasTablesRead          = mkSFunArray $ const false
+        , _lasTablesWritten       = mkSFunArray $ const false
+        , _lasColumnDeltas        = columnDeltas
+        , _lasTableCells          = tableCells
+        , _lasRowsRead            = mkPerTableSFunArray false
+        , _lasRowsWritten         = mkPerTableSFunArray false
+        , _lasCellsEnforced       = cellsEnforced
+        , _lasCellsWritten        = cellsWritten
         }
     , _globalState = GlobalAnalyzeState ()
     }
 
   where
     tableNames :: [TableName]
-    tableNames = Map.keys $ _tableMap tableCells
+    tableNames = map (TableName . T.unpack . fst) tables
+
+    columnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
+    cellsEnforced
+      = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
+    cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
+
+    mkTableColumnMap
+      :: (Pact.Type TC.UserType -> Bool) -> a -> TableMap (ColumnMap a)
+    mkTableColumnMap f defValue = TableMap $ Map.fromList $
+      flip fmap tables $ \(name, userTy) ->
+        let fields = TC._utFields userTy
+            columnMap = ColumnMap $ Map.fromList $ catMaybes $
+              flip fmap fields $ \(Arg name ty _) ->
+                if f ty
+                then Just (ColumnName (T.unpack name), defValue)
+                else Nothing
+        in (TableName (T.unpack name), columnMap)
 
     mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
 
-allocateSymbolicCells :: [TableName] -> Symbolic (TableMap SymbolicCells)
-allocateSymbolicCells tableNames = sequence $ TableMap $ Map.fromList $
-    (, mkCells) <$> tableNames
+allocateSymbolicCells
+  :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  -> Symbolic (TableMap SymbolicCells)
+allocateSymbolicCells tables = do
+  cellsList <- forM tables $ \(name, TC.Schema _ _ fields _, checks) -> do
+    let checks' = Map.fromList checks
+    let fields' = Map.fromList $ map (\(Arg name ty _i) -> (name, ty)) fields
+
+    -- The schema fields and invariants on them should somewhat match:
+    let merged = merge
+          -- It's okay if we have a field without an invariant
+          (mapMissing     $ \_k ty      -> (ty, Nothing))
+          -- But an invariant without a field is an error
+          (mapMissing     $ \k _check   -> error "missing field")
+          (zipWithMatched $ \k ty check -> (ty, Just check))
+          fields'
+          checks'
+    (TableName (T.unpack name),) <$> mkCells merged
+
+  pure $ TableMap $ Map.fromList cellsList
+
   where
-    mkCells :: Symbolic SymbolicCells
-    mkCells = SymbolicCells
-      <$> newArray "intCells"
-      <*> newArray "boolCells"
-      <*> newArray "stringCells"
-      <*> newArray "decimalCells"
-      <*> newArray "timeCells"
-      <*> newArray "keySetCells"
+    mkCells
+      :: Map Text (Pact.Type TC.UserType, Maybe (SchemaInvariant Bool))
+      -> Symbolic SymbolicCells
+    mkCells fields =
+
+      let cells = SymbolicCells
+            Map.empty
+            Map.empty
+            Map.empty
+            Map.empty
+            Map.empty
+            Map.empty
+
+      -- fold over the fields, creating an array with constrained values for
+      -- each column
+      in ifoldlM
+        (\colName cells (ty, someInvariant) ->
+          let colName' = T.unpack colName
+          in case ty of
+              TyPrim TyInteger -> do
+                arr <- newConstrainedArray someInvariant $
+                  "int cells (" ++ colName' ++ ")"
+                pure $ cells & scIntValues . at (ColumnName colName') ?~ arr
+              TyPrim TyBool    -> do
+                arr <- newConstrainedArray someInvariant $
+                  "bool cells (" ++ colName' ++ ")"
+                pure $ cells & scBoolValues . at (ColumnName colName') ?~ arr
+              TyPrim TyDecimal -> do
+                arr <- newConstrainedArray someInvariant $
+                  "decimal cells (" ++ colName' ++ ")"
+                pure $ cells & scDecimalValues . at (ColumnName colName') ?~ arr
+              TyPrim TyTime    -> do
+                arr <- newConstrainedArray someInvariant $
+                  "time cells (" ++ colName' ++ ")"
+                pure $ cells & scTimeValues . at (ColumnName colName') ?~ arr
+              TyPrim TyString  -> do
+                arr <- newConstrainedArray someInvariant $
+                  "string cells (" ++ colName' ++ ")"
+                pure $ cells & scStringValues . at (ColumnName colName') ?~ arr
+              TyPrim TyKeySet  -> do
+                arr <- newConstrainedArray someInvariant $
+                  "keyset cells (" ++ colName' ++ ")"
+                pure $ cells & scKsValues . at (ColumnName colName') ?~ arr
+              _ -> pure cells -- error (show ty)
+        )
+        cells
+        fields
+
+mkSVal :: SBV a -> SBVI.SVal
+mkSVal (SBVI.SBV v) = v
+
+-- Create an array with an invariant applied to it's values
+newConstrainedArray
+  :: forall a b. (SymWord a, HasKind a, HasKind b)
+  => Maybe (SchemaInvariant Bool)
+  -> String
+  -> Symbolic (SArray a b)
+newConstrainedArray mInvariant msg = do
+  arr <- newArray msg
+  (k :: SBV a) <- forall_
+  case mInvariant of
+    Nothing -> pure ()
+    Just invariant ->
+      case checkSchemaInvariant invariant (mkSVal (readArray arr k)) of
+        Just constraint -> constrain constraint
+        Nothing -> error "TODO"
+    Just _someOtherType -> error "TODO"
+  pure arr
 
 data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
@@ -317,13 +464,27 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-makeLenses ''AnalyzeEnv
-makeLenses ''TableMap
-makeLenses ''AnalyzeState
-makeLenses ''GlobalAnalyzeState
-makeLenses ''LatticeAnalyzeState
-makeLenses ''SymbolicCells
-makeLenses ''QueryEnv
+mkAnalyzeEnv
+  :: [(Text, Pact.Type TC.UserType)]
+  -> [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  -> Symbolic AnalyzeEnv
+mkAnalyzeEnv argTys tables = do
+  args        <- allocateArgs argTys
+  keySets     <- newArray "keySets"
+  keySetAuths <- newArray "keySetAuths"
+
+  pure $ foldr
+    (\(tableName, _ut, someInvariants) env -> foldr
+      (\(colName, invariant) env' ->
+        let tableName' = TableName (T.unpack tableName)
+            colName'   = ColumnName (T.unpack colName)
+        in env' & invariants . at (tableName', colName') ?~ invariant
+      )
+      env
+      someInvariants
+    )
+    (AnalyzeEnv args keySets keySetAuths Map.empty)
+    tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -387,13 +548,11 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
-type instance Index (TableMap a) = TableName
-type instance IxValue (TableMap a) = a
-instance Ixed (TableMap a) where ix k = tableMap.ix k
-instance At (TableMap a) where at k = tableMap.at k
-
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
+
+maintainsInvariants :: Lens' AnalyzeState SBool
+maintainsInvariants = latticeState.lasMaintainsInvariants
 
 tableRead :: TableName -> Lens' AnalyzeState (S Bool)
 tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
@@ -410,9 +569,9 @@ tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 -- names must be one of the statically-known tables.
 --
 
-columnDelta :: TableName -> S ColumnName -> Lens' AnalyzeState (S Integer)
-columnDelta tn sCn = latticeState.lasColumnDeltas.singular (ix tn).
-  symArrayAt sCn.sbv2S
+columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
+columnDelta tn cn = latticeState.lasColumnDeltas.singular (ix tn).
+  singular (ix cn)
 
 rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
 rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).
@@ -422,78 +581,75 @@ rowWritten :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
 rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
 
-sCellId :: S ColumnName -> S RowKey -> S CellId
-sCellId sCn sRk = coerceS $ coerceS sCn .++ "__" .++ coerceS sRk
-
 cellEnforced
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> Lens' AnalyzeState (S Bool)
-cellEnforced tn sCn sRk = latticeState.lasCellsEnforced.singular (ix tn).
-  symArrayAt (sCellId sCn sRk).sbv2S
+cellEnforced tn cn sRk = latticeState.lasCellsEnforced.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
 
 cellWritten
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> Lens' AnalyzeState (S Bool)
-cellWritten tn sCn sRk = latticeState.lasCellsWritten.singular (ix tn).
-  symArrayAt (sCellId sCn sRk).sbv2S
+cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
 
 intCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S Integer)
-intCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+intCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 boolCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S Bool)
-boolCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+boolCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 stringCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S String)
-stringCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+stringCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 decimalCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S Decimal)
-decimalCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+decimalCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 timeCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S Time)
-timeCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+timeCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 ksCell
   :: TableName
-  -> S ColumnName
+  -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' AnalyzeState (S KeySet)
-ksCell tn sCn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
-  symArrayAt (sCellId sCn sRk).sbv2SFrom (mkProv tn sCn sRk sDirty)
+ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
 
 symKsName :: S String -> S KeySetName
 symKsName = coerceS
@@ -592,15 +748,15 @@ analyzeTermO = \case
     tableRead tn .= true
     rowRead tn sRk .= true
     obj <- iforM fields $ \fieldName fieldType -> do
-      let sCn  = literalS $ ColumnName fieldName
-      sDirty <- use $ cellWritten tn sCn sRk
+      let cn  = ColumnName fieldName
+      sDirty <- use $ cellWritten tn cn sRk
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk sDirty)
+        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -622,15 +778,15 @@ analyzeTermO = \case
     tableRead tn .= true
     rowRead tn sRk .= true
     obj <- iforM relevantFields $ \fieldName fieldType -> do
-      let sCn = literalS $ ColumnName fieldName
-      sDirty <- use $ cellWritten tn sCn sRk
+      let cn = ColumnName fieldName
+      sDirty <- use $ cellWritten tn cn sRk
       x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn sCn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn sCn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn sCn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn sCn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    tn sCn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn sCn sRk sDirty)
+        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -943,29 +1099,29 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    void $ iforM obj' $ \colName (fieldType, av) -> do
-      let sCn = literalS $ ColumnName colName
-      cellWritten tn sCn sRk .= true
-      case av of
+    void $ iforM obj' $ \colName (fieldType, aval) -> do
+      let cn = ColumnName colName
+      cellWritten tn cn sRk .= true
+      case aval of
         AVal mProv val' -> case fieldType of
           EType TInt  -> do
             let cell :: Lens' AnalyzeState (S Integer)
-                cell = intCell tn sCn sRk true
+                cell = intCell tn cn sRk true
                 next = mkS mProv val'
             prev <- use cell
             cell .= next
-            columnDelta tn sCn += next - prev
+            columnDelta tn cn += next - prev
 
-          EType TBool    -> boolCell    tn sCn sRk true .= mkS mProv val'
-          EType TStr     -> stringCell  tn sCn sRk true .= mkS mProv val'
+          EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
+          EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
 
           --
           -- TODO: we should support column delta for decimals
           --
-          EType TDecimal -> decimalCell tn sCn sRk true .= mkS mProv val'
+          EType TDecimal -> decimalCell tn cn sRk true .= mkS mProv val'
 
-          EType TTime    -> timeCell    tn sCn sRk true .= mkS mProv val'
-          EType TKeySet  -> ksCell      tn sCn sRk true .= mkS mProv val'
+          EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
+          EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
 
           -- TODO: what to do with EType TAny here?
 
@@ -1023,6 +1179,29 @@ analyzeTerm = \case
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
+
+checkInvariantsHeld :: Monad m => AnalyzeT m (S Bool)
+checkInvariantsHeld = sansProv <$> use maintainsInvariants
+
+checkSchemaInvariant' :: Monad m => SchemaInvariant a -> SBVI.SVal -> AnalyzeT m (SBV a)
+checkSchemaInvariant' invariant sval = case checkSchemaInvariant invariant sval of
+  Nothing -> throwError "TODO"
+  Just ret -> pure ret
+
+checkSchemaInvariant :: SchemaInvariant a -> SBVI.SVal -> Maybe (SBV a)
+checkSchemaInvariant invariant sval = case invariant of
+  SchemaDecimalComparison op a b -> do
+    a' <- checkSchemaInvariant a sval
+    b' <- checkSchemaInvariant b sval
+    Just $ case op of
+      Gt  -> a' .>  b'
+      Lt  -> a' .<  b'
+      Gte -> a' .>= b'
+      Lte -> a' .<= b'
+      Eq  -> a' .== b'
+      Neq -> a' ./= b'
+  SchemaDecimalLiteral d -> Just (literal d)
+  SchemaVar _            -> Just (SBVI.SBV sval)
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
@@ -1090,3 +1269,19 @@ analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   view $ model.cellEnforced tn (literalS cn) sRk
+
+-- analyzeProperty (TableRead tn) = use $ tableRead tn
+-- analyzeProperty (TableWrite tn) = use $ tableWritten tn
+-- -- analyzeProperty (CellIncrease tableName colName)
+-- analyzeProperty (ColumnConserve tableName colName) =
+--   sansProv . (0 .==) <$> use (columnDelta tableName colName)
+-- analyzeProperty (ColumnIncrease tableName colName) =
+--   sansProv . (0 .<) <$> use (columnDelta tableName colName)
+-- analyzeProperty (RowRead tn pRk)  = use . rowRead tn =<< analyzeProperty pRk
+-- analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
+
+-- -- Authorization
+-- analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+-- analyzeProperty (RowEnforced tn cn pRk) = do
+--   sRk <- analyzeProperty pRk
+--   use $ cellEnforced tn cn sRk

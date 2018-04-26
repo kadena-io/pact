@@ -17,7 +17,7 @@
      amount:decimal
      ccy:string
      auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
-     data
+     data:value
      )
 
   (deftable accounts:{account}
@@ -28,23 +28,21 @@
 
   (defconst PACT_REF "ref")
 
-  (defun create-account (address ccy date)
+  (defun create-account (address ccy)
     (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
-      , "ccy": ccy
       , "auth": AUTH_KEYSET
-      , "date": date
       , "data": "Created account"
       }
     ))
 
   ; TODO: defproperty?
   ; (@property conserves-mass)
-  (defun transfer (src dest amount date)
+  (defun transfer (src dest amount)
     "transfer AMOUNT from SRC to DEST"
-    (debit src amount date { "transfer-to": dest })
-    (credit dest amount date { "transfer-from": src }))
+    (debit src amount { "transfer-to": dest })
+    (credit dest amount { "transfer-from": src }))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -62,17 +60,16 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
-    (read accounts id ['balance 'ccy 'data 'date 'amount]))
+    (read accounts id ['balance 'ccy 'data 'amount]))
 
-  (defun check-balance (balance amount)
+  (defun check-balance (balance:decimal amount:decimal)
     (enforce (<= amount balance) "Insufficient funds"))
 
-  (defun fund-account (address amount date)
+  (defun fund-account (address amount)
     (enforce-keyset 'accounts-admin-keyset)
     (update accounts address
             { "balance": amount
             , "amount": amount
-            , "date": date
             , "data": "Admin account funding" }
       ))
 
@@ -112,8 +109,8 @@
   ; (@property
   ;   (with-read 'delta accounts acct
   ;     { "balance" := amount }))
-  (defun debit (acct amount date data)
-    "Debit AMOUNT from ACCT balance recording DATE and DATA"
+  (defun debit (acct amount data)
+    "Debit AMOUNT from ACCT balance recording DATA"
     (with-read accounts acct
               { "balance":= balance
               , "auth" := auth
@@ -122,19 +119,17 @@
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
-                , "date": date
                 , "data": data
                 }
           )))
 
- (defun credit (acct amount date data)
-   "Credit AMOUNT to ACCT balance recording DATE and DATA"
+ (defun credit (acct amount data)
+   "Credit AMOUNT to ACCT balance recording DATA"
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
-            , "date": date
             , "data": data
             }
       )))

@@ -21,7 +21,7 @@ module Pact.Compile
     (
      compile,compileExps
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
-    ,expToCheck
+    ,expToCheck, expToInvariant
     )
 
 where
@@ -39,6 +39,7 @@ import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
 import Control.Exception
+import qualified Data.Set as Set
 import Data.String
 import Control.Lens
 import Data.Maybe
@@ -46,9 +47,9 @@ import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 
-import Pact.Analyze.Prop hiding (TableName)
+import Pact.Analyze.Prop hiding (Type, TableName)
 import qualified Pact.Analyze.Prop as Prop
-import Pact.Types.Lang
+import Pact.Types.Lang hiding (SchemaVar)
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
@@ -195,6 +196,25 @@ expToProp = (\case
 
 expToCheck :: Exp -> Maybe Check
 expToCheck body = Valid <$> expToProp body
+
+expToInvariant :: Exp -> Maybe SomeSchemaInvariant
+expToInvariant = \case
+  -- TODO: this is hard without already knowing the type
+  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
+  ELiteral (LDecimal d) _ -> Just
+    (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)
+  EList' [EAtom' op, a, b]
+    | op `Set.member` Set.fromList [">", "<", ">=", "<=", "==", "/="] -> do
+    SomeSchemaInvariant a' TDecimal <- expToInvariant a
+    SomeSchemaInvariant b' TDecimal <- expToInvariant b
+    let op' = case op of
+          ">" -> Gt
+          "<" -> Lt
+          ">=" -> Gte
+          "<=" -> Lte
+          "==" -> Eq
+          "/=" -> Neq
+    Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
 
 doMeta :: Text -> Exp -> Info -> Compile (Term Name)
 doMeta name exp i = pure $ TMeta name exp i

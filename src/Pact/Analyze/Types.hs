@@ -25,7 +25,7 @@ import Pact.Analyze.Prop
 data Provenance
   = Provenance
     { _provTableName  :: TableName
-    , _provColumnName :: S ColumnName
+    , _provColumnName :: ColumnName
     , _provRowKey     :: S RowKey
     , _provDirty      :: S Bool
     }
@@ -106,8 +106,8 @@ S _ a .++ S _ b = sansProv $ SBV.concat a b
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
 sbv2S = iso sansProv _sSbv
 
-mkProv :: TableName -> S ColumnName -> S RowKey -> S Bool -> Provenance
-mkProv tn sCn sRk sDirty = Provenance tn sCn sRk sDirty
+mkProv :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
+mkProv tn cn sRk sDirty = Provenance tn cn sRk sDirty
 
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
@@ -179,46 +179,12 @@ data UserType = UserType
 deriving instance HasKind UserType
 deriving instance SymWord UserType
 
--- KeySets are completely opaque to pact programs -- 256 should be enough for
--- symbolic analysis?
-newtype KeySet
-  = KeySet Word8
-  deriving (Eq, Ord, Data, Show, Read)
-
--- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
-instance SymWord KeySet
-instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
-
-data Any = Any
-  deriving (Show, Read, Eq, Ord, Data)
-
-instance HasKind Any
-instance SymWord Any
-
--- The type of a simple type
-data Type a where
-  TInt     :: Type Integer
-  TBool    :: Type Bool
-  TStr     :: Type String
-  TTime    :: Type Time
-  TDecimal :: Type Decimal
-  TKeySet  :: Type KeySet
-  TAny     :: Type Any
-
 data EType where
   -- TODO: parametrize over constraint
   EType :: (Show a, SymWord a) => Type a -> EType
   EObjectTy :: Schema -> EType
 
-typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt     TInt     = Just Refl
-typeEq TBool    TBool    = Just Refl
-typeEq TStr     TStr     = Just Refl
-typeEq TTime    TTime    = Just Refl
-typeEq TDecimal TDecimal = Just Refl
-typeEq TAny     TAny     = Just Refl
-typeEq TKeySet  TKeySet  = Just Refl
-typeEq _        _        = Nothing
+deriving instance Show EType
 
 instance Eq EType where
   EType a == EType b = case typeEq a b of
@@ -312,10 +278,6 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
-
-deriving instance Show (Type a)
-deriving instance Eq (Type a)
-deriving instance Show EType
 
 lit :: SymWord a => a -> Term a
 lit = Literal . literalS

@@ -1,6 +1,8 @@
+{-# language DeriveDataTypeable         #-}
 {-# language FlexibleInstances          #-}
 {-# language GADTs                      #-}
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language LambdaCase                 #-}
 {-# language ScopedTypeVariables        #-}
 {-# language StandaloneDeriving         #-}
 {-# language TypeOperators              #-}
@@ -9,9 +11,13 @@ module Pact.Analyze.Prop where
 
 import Control.Lens (Lens', lens)
 import Data.Aeson (ToJSON, FromJSON)
+import Data.Data (Data)
 import qualified Data.Decimal as Decimal
 import Data.SBV hiding (Satisfiable)
 import qualified Data.SBV.Internals as SBVI
+import Data.Semigroup ((<>))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Typeable (Typeable, (:~:)(Refl), eqT)
@@ -261,3 +267,71 @@ ckProp = lens getter setter
 
     setter (Satisfiable _) p = Satisfiable p
     setter (Valid _) p = Valid p
+
+data Any = Any
+  deriving (Show, Read, Eq, Ord, Data)
+
+instance HasKind Any
+instance SymWord Any
+
+-- KeySets are completely opaque to pact programs -- 256 should be enough for
+-- symbolic analysis?
+newtype KeySet
+  = KeySet Word8
+  deriving (Eq, Ord, Data, Show, Read)
+
+-- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
+instance SymWord KeySet
+instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
+
+-- The type of a simple type
+data Type a where
+  TInt     :: Type Integer
+  TBool    :: Type Bool
+  TStr     :: Type String
+  TTime    :: Type Time
+  TDecimal :: Type Decimal
+  TKeySet  :: Type KeySet
+  TAny     :: Type Any
+
+deriving instance Show (Type a)
+deriving instance Eq (Type a)
+
+typeEq :: Type a -> Type b -> Maybe (a :~: b)
+typeEq TInt     TInt     = Just Refl
+typeEq TBool    TBool    = Just Refl
+typeEq TStr     TStr     = Just Refl
+typeEq TTime    TTime    = Just Refl
+typeEq TDecimal TDecimal = Just Refl
+typeEq TAny     TAny     = Just Refl
+typeEq TKeySet  TKeySet  = Just Refl
+typeEq _        _        = Nothing
+
+data SchemaInvariant a where
+  SchemaDecimalComparison
+    :: ComparisonOp
+    -> SchemaInvariant Decimal
+    -> SchemaInvariant Decimal
+    -> SchemaInvariant Bool
+
+  SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
+  SchemaVar :: Text -> SchemaInvariant a
+
+deriving instance Eq (SchemaInvariant a)
+deriving instance Show (SchemaInvariant a)
+
+data SomeSchemaInvariant where
+  SomeSchemaInvariant :: SchemaInvariant a -> Type a -> SomeSchemaInvariant
+
+deriving instance Show SomeSchemaInvariant
+
+instance Eq SomeSchemaInvariant where
+  SomeSchemaInvariant a ta == SomeSchemaInvariant b tb = case typeEq ta tb of
+    Nothing   -> False
+    Just Refl -> a == b
+
+invariantVars :: SchemaInvariant a -> Set Text
+invariantVars = \case
+  SchemaDecimalComparison _ a b -> invariantVars a <> invariantVars b
+  SchemaDecimalLiteral _        -> Set.empty
+  SchemaVar v                   -> Set.singleton v

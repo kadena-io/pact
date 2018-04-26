@@ -1,4 +1,6 @@
+{-# language GADTs             #-}
 {-# language LambdaCase        #-}
+{-# language NamedFieldPuns    #-}
 {-# language OverloadedStrings #-}
 {-# language Rank2Types        #-}
 {-# language TupleSections     #-}
@@ -42,11 +44,13 @@ import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProp,
                              describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, mkQueryEnv, runAnalyze,
-                             queryAction)
+                             queryAction,
+                             mkInitialAnalyzeState, runAnalyzeT,
+                             checkInvariantsHeld)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
-import Pact.Compile (expToCheck)
+import Pact.Compile (expToCheck, expToInvariant)
 
 data CheckFailure
   = Invalid SBVI.SMTModel
@@ -108,13 +112,14 @@ describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 checkFunctionBody
-  :: Check
+  :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  -> HM.HashMap Text (Ref, [Check])
+  -> Maybe Check
   -> [AST Node]
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
-  -> [TableName]
   -> IO CheckResult
-checkFunctionBody check body argTys nodeNames tableNames =
+checkFunctionBody tables _modRefs (Just check) body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
 
@@ -146,16 +151,75 @@ checkFunctionBody check body argTys nodeNames tableNames =
           ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
           EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
 
+      -- let prop   = check ^. ckProp
+      --     action :: AnalyzeT Symbolic (S Bool)
+      --     action = case tm of
+      --       ETerm   body'' _ ->
+      --         hoist generalize (analyzeTerm  body'')
+      --           *> analyzeProperty prop
+      --           *> checkInvariantsHeld
+      --       EObject body'' _ ->
+      --         hoist generalize (analyzeTermO body'')
+      --           *> analyzeProperty prop
+      --           *> checkInvariantsHeld
+
+      -- checkResult <- runCheck check $ do
+      --   env0      <- mkAnalyzeEnv argTys tables
+      --   state0    <- mkInitialAnalyzeState
+      --     (tables & traverse %~ (\(a, b, c) -> (a, b)))
+      --     <$> allocateSymbolicCells tables
+      --   eAnalysis <- runExceptT $ runRWST (runAnalyzeT action) env0 state0
+
+      --   case eAnalysis of
+      --     Left cf -> do
+      --       liftIO $ putMVar compileFailureVar cf
+      --       pure false
+      --     Right (propResult, _env, _log) ->
+      --       pure propResult
+
+      mVarVal <- tryTakeMVar compileFailureVar
+      pure $ case mVarVal of
+        Nothing -> checkResult
+        Just cf -> Left (AnalyzeFailure cf)
+
+checkFunctionBody tables _modRefs Nothing body argTys nodeNames =
+  case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
+    Left reason -> pure $ Left $ TranslateFailure reason
+
+    Right tm -> do
+      compileFailureVar <- newEmptyMVar
+
+      let action = case tm of
+            ETerm   body'' _ ->
+              hoist generalize (analyzeTerm  body'') *> checkInvariantsHeld
+            EObject body'' _ ->
+              hoist generalize (analyzeTermO body'') *> checkInvariantsHeld
+
+      checkResult <- runProvable $ do
+        env0 <- mkAnalyzeEnv argTys tables
+        state0 <- mkInitialAnalyzeState
+          (tables & traverse %~ (\(a, b, c) -> (a, b)))
+          <$> allocateSymbolicCells tables
+
+        case runExcept $ runRWST (runAnalyzeT action) env0 state0 of
+          Left cf -> do
+            liftIO $ putMVar compileFailureVar cf
+            pure false
+          Right (propResult, _env, _log) ->
+            pure propResult
+
       mVarVal <- tryTakeMVar compileFailureVar
       pure $ case mVarVal of
         Nothing -> checkResult
         Just cf -> Left (AnalyzeFailure cf)
 
 checkTopFunction
-  :: TopLevel Node
-  -> Check
+  :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  -> HM.HashMap Text (Ref, [Check])
+  -> TopLevel Node
+  -> Maybe Check
   -> IO CheckResult
-checkTopFunction (TopFun (FDefun _ _ _ args body' _)) check =
+checkTopFunction tables modRefs (TopFun (FDefun _ _ _ args body' _)) check =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -172,16 +236,19 @@ checkTopFunction (TopFun (FDefun _ _ _ args body' _)) check =
       nodeNames :: Map Node Text
       nodeNames = Map.fromList $ zip nodes names
 
-      --
-      -- TODO: FIXME: this is broken for anything but our current tests. we
-      --              need to extract these from the program.
-      --
-      tableNames :: [TableName]
-      tableNames = ["accounts", "tokens", "owners"]
+  in checkFunctionBody tables modRefs check body' argTys nodeNames
 
-  in checkFunctionBody check body' argTys nodeNames tableNames
+checkTopFunction _ _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
-checkTopFunction _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+runProvable :: Provable a => a -> IO CheckResult
+runProvable provable = do
+  (ThmResult smtRes) <- prove provable
+  pure $ case smtRes of
+    SBV.Unsatisfiable{}           -> Right ProvedTheorem
+    SBV.Satisfiable _config model -> Left $ Invalid model
+    SBV.SatExtField _config model -> Left $ SatExtensionField model
+    SBV.Unknown _config reason    -> Left $ Unknown reason
+    SBV.ProofError _config strs   -> Left $ ProofError strs
 
 -- This does not use the underlying property -- this merely dispatches to
 -- sat/prove appropriately, and accordingly translates sat/unsat to
@@ -204,21 +271,50 @@ runCheck (Valid _prop) provable = do
     SBV.Unknown _config reason -> Left $ Unknown reason
     SBV.ProofError _config strs -> Left $ ProofError strs
 
-failedTcOrAnalyze :: TcState -> TopLevel Node -> Check -> IO CheckResult
-failedTcOrAnalyze tcState fun check =
+failedTcOrAnalyze
+  :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  -> HM.HashMap Text (Ref, [Check])
+  -> TcState
+  -> TopLevel Node
+  -> Maybe Check
+  -> IO CheckResult
+failedTcOrAnalyze tables modRefs tcState fun check =
     if Set.null failures
-    then checkTopFunction fun check
+    then checkTopFunction tables modRefs fun check
     else pure $ Left $ TypecheckFailure failures
   where
     failures = tcState ^. tcFailures
 
 verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
-verifyModule (_mod, modRefs) = for modRefs $ \(ref, props) -> do
-  (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-  results <- forM props $ \case
-    ("property", expr) -> fmap Just $
-      case expToCheck expr of
-        Nothing    -> pure $ Left $ PropertyParseError expr
-        Just check -> failedTcOrAnalyze tcState fun check
-    _ -> pure Nothing
-  pure $ catMaybes results
+verifyModule (_mod, modRefs) = do
+
+  let tables = flip HM.filter modRefs $ \(ref, _checks) -> case ref of
+        Ref (TTable _ _ _ _ _) -> True
+        Direct (TTable {})     -> False
+        _                      -> False
+
+  tables' <- for (HM.toList tables) $ \(name, (ref, metas)) -> do
+    let invariants = catMaybes $ flip fmap metas $ \(name, meta) -> case name of
+          "invariant" -> do
+            SomeSchemaInvariant expr TBool <- expToInvariant meta
+            [v] <- pure $ Set.toList (invariantVars expr)
+            pure (v, expr)
+    (TopTable _info _name (TyUser schema), tcState) <- runTC 0 False $ typecheckTopLevel ref
+    pure (name, schema, invariants)
+
+  -- convert metas to checks
+  let modRefs' :: HM.HashMap Text (Ref, [Check])
+      modRefs' = flip fmap modRefs $ \(ref, metas) ->
+        (ref, catMaybes $ flip fmap metas $ \(name, meta) -> case name of
+          "property" -> expToCheck meta
+          _          -> Nothing)
+
+  for modRefs' $ \(ref, props) -> do
+    (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+    case fun of
+      TopFun (FDefun {}) -> do
+        result  <- failedTcOrAnalyze tables' modRefs' tcState fun Nothing
+        results <- forM props $
+          failedTcOrAnalyze tables' modRefs' tcState fun . Just
+        pure $ result : results
+      _ -> pure []

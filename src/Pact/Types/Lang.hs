@@ -245,7 +245,7 @@ instance ToJSON Literal where
     {-# INLINE toJSON #-}
 
 
-newtype TypeName = TypeName Text
+newtype TypeName = TypeName { unTypeName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
 

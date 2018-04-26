@@ -177,6 +177,12 @@ loadModule m bod1 mi = do
         -- leftoverMeta.
         flip execStateT (HM.empty, HM.empty, []) $ forM_ bodyClause $ \t ->
           case t of
+            TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
+            TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
+            TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
+            TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo
+            TMeta     {..} -> leftoverMetaL %= cons t
+
             TDef      {..} -> do
               leftoverMeta' <- use leftoverMetaL
               forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
@@ -189,12 +195,20 @@ loadModule m bod1 mi = do
 
               leftoverMetaL .= []
               modDefsL . at _tDefName ?= t
-            TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
-            TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
-            TSchema   {..} -> modDefsL . at (asString _tSchemaName) ?= t
-            TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
-            TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo -- >> return NoName
-            TMeta     {..} -> leftoverMetaL %= cons t
+
+            TSchema   {..} -> do
+              leftoverMeta' <- use leftoverMetaL
+              forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
+                case tag of
+                  "invariant" -> do
+                    let schemaName = unTypeName _tSchemaName
+                    old <- use (propMapL . at schemaName)
+                    let old' = fromMaybe [] old
+                    propMapL . at schemaName ?= (tag, expr) : old'
+                  _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
+
+              leftoverMetaL .= []
+              modDefsL . at (asString _tSchemaName) ?= t
             _ -> lift $ evalError (_tInfo t) "Invalid module member"
 
       t -> evalError (_tInfo t) "Malformed module"

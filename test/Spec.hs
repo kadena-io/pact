@@ -59,7 +59,7 @@ runTest code check = do
               pure $ Left $ CodeCompilationFailed "expected function 'test'"
             Just (ref, _checks) -> do
               (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-              failedTcOrAnalyze tcState fun check
+              failedTcOrAnalyze tables modRefs tcState fun check
 
 expectPass :: Text -> Check -> Test ()
 expectPass code check = expectRight =<< io (runTest (wrap code) check)
