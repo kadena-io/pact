@@ -1017,7 +1017,7 @@ analyzeProp (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProp p
 analyzeProp (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProp p
 
 -- Numeric ops
---analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
+analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
 analyzeProp (PIntArithOp op x y)      = analyzeIntArithOp op x y
 analyzeProp (PIntDecArithOp op x y)   = analyzeIntDecArithOp op x y
 analyzeProp (PDecIntArithOp op x y)   = analyzeDecIntArithOp op x y
