@@ -528,6 +528,30 @@ ksAuthorized sKs = do
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
+aval
+  :: MonadError AnalyzeFailure m
+  => (Maybe Provenance -> SBVI.SVal -> m a)
+  -> (Object -> m a)
+  -> AVal
+  -> m a
+aval elimVal elimObj = \case
+  AVal mProv sval -> elimVal mProv sval
+  AnObj obj       -> elimObj obj
+  OpaqueVal       -> throwError OpaqueValEncountered
+
+-- | Function composition that consumes two args instead of one
+(...) :: (a -> b) -> (x -> y -> a) -> x -> y -> b
+(...) = (.) . (.)
+
+expectVal :: MonadError AnalyzeFailure m => AVal -> m (S a)
+expectVal = aval (pure ... mkS) (throwError . AValUnexpectedlyObj)
+
+expectObj :: MonadError AnalyzeFailure m => AVal -> m Object
+expectObj = aval ((throwError . AValUnexpectedlySVal) ... getSVal) pure
+  where
+    getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
+    getSVal = flip const
+
 lookupObj
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
@@ -919,10 +943,10 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    void $ iforM obj' $ \colName (fieldType, aval) -> do
+    void $ iforM obj' $ \colName (fieldType, av) -> do
       let sCn = literalS $ ColumnName colName
       cellWritten tn sCn sRk .= true
-      case aval of
+      case av of
         AVal mProv val' -> case fieldType of
           EType TInt  -> do
             let cell :: Lens' AnalyzeState (S Integer)
