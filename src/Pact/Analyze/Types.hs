@@ -39,17 +39,23 @@ data S a
     , _sSbv  :: SBV a }
   deriving (Eq, Show)
 
+sansProv :: SBV a -> S a
+sansProv = S Nothing
+
+withProv :: Provenance -> SBV a -> S a
+withProv prov sym = S (Just prov) sym
+
 instance SymWord a => Mergeable (S a) where
-  symbolicMerge f t (S prov1 x) (S prov2 y)
-    | prov1 == prov2 = S prov1   (symbolicMerge f t x y)
-    | otherwise      = S Nothing (symbolicMerge f t x y)
+  symbolicMerge f t (S mProv1 x) (S mProv2 y)
+    | mProv1 == mProv2 = S mProv1 $ symbolicMerge f t x y
+    | otherwise        = sansProv $ symbolicMerge f t x y
 
 -- We provide instances for EqSymbolic, OrdSymboic, Boolean because we need
 -- these operators for `S a` now that we work with that instead of `SBV a`
 -- everywhere:
 
 instance EqSymbolic (S a) where
-  (S _ x) .== (S _ y) = x .== y
+  S _ x .== S _ y = x .== y
 
 instance SymWord a => OrdSymbolic (S a) where
   S _ x .< S _ y = x .< y
@@ -59,30 +65,30 @@ instance SymWord a => OrdSymbolic (S a) where
 -- transformation to a symbolic value, we are no longer working with the value
 -- that was sourced from the database.
 instance Boolean (S Bool) where
-  true            = S Nothing true
-  false           = S Nothing false
-  bnot (S _ x)    = S Nothing (bnot x)
-  S _ x &&& S _ y = S Nothing (x &&& y)
-  S _ x ||| S _ y = S Nothing (x ||| y)
+  true            = sansProv true
+  false           = sansProv false
+  bnot (S _ x)    = sansProv $ bnot x
+  S _ x &&& S _ y = sansProv $ x &&& y
+  S _ x ||| S _ y = sansProv $ x ||| y
 
 instance IsString (S String) where
   fromString = sansProv . fromString
 
 instance (Num a, SymWord a) => Num (S a) where
-  S _ x + S _ y  = S Nothing (x + y)
-  S _ x * S _ y  = S Nothing (x * y)
-  abs (S _ x)    = S Nothing (abs x)
-  signum (S _ x) = S Nothing (signum x)
-  fromInteger i  = S Nothing (fromInteger i)
-  negate (S _ x) = S Nothing (negate x)
+  S _ x + S _ y  = sansProv $ x + y
+  S _ x * S _ y  = sansProv $ x * y
+  abs (S _ x)    = sansProv $ abs x
+  signum (S _ x) = sansProv $ signum x
+  fromInteger i  = sansProv $ fromInteger i
+  negate (S _ x) = sansProv $ negate x
 
 instance (Fractional a, SymWord a) => Fractional (S a) where
   fromRational = literalS . fromRational
-  S _ x / S _ y = S Nothing (x / y)
+  S _ x / S _ y = sansProv $ x / y
 
 instance SDivisible (S Integer) where
-  S _ a `sQuotRem` S _ b = a `sQuotRem` b & both %~ S Nothing
-  S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ S Nothing
+  S _ a `sQuotRem` S _ b = a `sQuotRem` b & both %~ sansProv
+  S _ a `sDivMod`  S _ b = a `sDivMod`  b & both %~ sansProv
 
 type PredicateS = Symbolic (S Bool)
 
@@ -94,7 +100,7 @@ instance Provable PredicateS where
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S String -> S String -> S String
-S _ a .++ S _ b = S Nothing (SBV.concat a b)
+S _ a .++ S _ b = sansProv $ SBV.concat a b
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
@@ -124,17 +130,11 @@ data AVal
 mkS :: Maybe Provenance -> SBVI.SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
 
-sansProv :: SBV a -> S a
-sansProv = S Nothing
-
 literalS :: SymWord a => a -> S a
 literalS = sansProv . literal
 
 unliteralS :: SymWord a => S a -> Maybe a
 unliteralS = unliteral . _sSbv
-
-withProv :: Provenance -> SBV a -> S a
-withProv prov sym = S (Just prov) sym
 
 sbv2SFrom :: Provenance -> Iso (SBV a) (SBV b) (S a) (S b)
 sbv2SFrom prov = iso (withProv prov) _sSbv
