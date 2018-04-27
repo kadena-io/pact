@@ -144,7 +144,10 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ (PComparison Gt "x" (0 :: Prop Integer)) ==> Success
+      expectPass code $ Valid $ (PComparison Gt "x" (0 :: Prop Integer)) ==>
+        Success
+      expectPass code $ Valid $ (PComparison Eq "x" (5 :: Prop Integer)) ==>
+        Success &&& (PComparison Eq (Result :: Prop Bool) true)
 
   , scope "read-keyset.equality" $ do
       let code =

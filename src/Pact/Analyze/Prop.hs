@@ -162,6 +162,7 @@ data Prop a where
   --
   Abort            :: Prop Bool
   Success          :: Prop Bool
+  Result           :: Prop a
 
   -- Abstraction
   Forall           :: Text -> Ty -> Prop a -> Prop a

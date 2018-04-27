@@ -1025,6 +1025,7 @@ liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
 analyzePropO :: Prop Object -> Query Object
+analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar name) = lookupObj name
 
 analyzeProp :: Prop a -> Query (S a)
@@ -1032,7 +1033,8 @@ analyzeProp (PLit a) = pure $ literalS a
 analyzeProp (PSym a) = pure $ sansProv a
 
 analyzeProp Success = view $ model.succeeds
-analyzeProp Abort = bnot <$> analyzeProp Success
+analyzeProp Abort   = bnot <$> analyzeProp Success
+analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 
 -- Abstraction
 analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
