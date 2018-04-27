@@ -204,30 +204,40 @@ mapETerm f term = case term of
   EObject term' sch -> EObject (f term') sch
 
 data Term ret where
-  IfThenElse     ::                        Term Bool    -> Term a         -> Term a -> Term a
-  Enforce        ::                        Term Bool    ->                             Term Bool
-  -- TODO: do we need a noop to handle a sequence of one expression?
-  Sequence       ::                        ETerm        -> Term a         ->           Term a
-  Literal        ::                        S a          ->                             Term a
-
+  -- Literals
+  Literal        :: S a                       -> Term a
   --
   -- TODO: we need to allow computed keys here
   --
-  LiteralObject  ::                        Map String (EType, ETerm)      ->           Term Object
+  LiteralObject  :: Map String (EType, ETerm) -> Term Object
+
+  -- Variable binding
+  Let            :: Text -> ETerm -> Term a  -> Term a
+  Var            :: Text ->                     Term a
+
+  -- Control flow
+  IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
+  Sequence       :: ETerm     -> Term a ->           Term a
+
+  -- Conditional transaction abort
+  Enforce        :: Term Bool -> Term Bool
+
+  -- Keyset access
+  ReadKeySet      :: Term String -> Term KeySet
+  KsAuthorized    :: Term KeySet -> Term Bool
+  NameAuthorized  :: Term String -> Term Bool
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
-  At             ::                        Schema      -> Term String              -> Term Object    -> EType -> Term a
-  Read           ::                        TableName   -> Schema -> Term String    ->                   Term Object
-  ReadCols       ::                        TableName   -> Schema -> Term String    -> [Text]         -> Term Object
-  -- NOTE: pact really does return a string here:
-  Write          ::                        TableName -> Term String -> Term Object -> Term String
+  At             :: Schema -> Term String -> Term Object -> EType -> Term a
 
-  Let            ::                        Text         -> ETerm         -> Term a  -> Term a
-  -- TODO: not sure if we need a separate `Bind` ctor for object binding. try
-  --       just using Let+At first.
-  Var            ::                        Text         ->                             Term a
+  -- Table access
+  Read           :: TableName -> Schema      -> Term String ->           Term Object
+  ReadCols       :: TableName -> Schema      -> Term String -> [Text] -> Term Object
+  Write          :: TableName -> Term String -> Term Object ->           Term String
 
+  -- Arithmetic ops
+  --
   -- We partition the arithmetic operations in to these classes:
   -- * DecArithOp, IntArithOp: binary operators applied to (and returning) the
   --   same type (either integer or decimal).
@@ -249,32 +259,26 @@ data Term ret where
   -- * RoundingLikeOp2: Rounding decimals to decimals with a specified level of
   --   precision.
   --   - Operations: { round floor ceiling }
-  --
-  -- * AddTime: Arguably not an arithmetic op, but under the hood it's just
-  --   adding some number of (micro)seconds.
-
-  DecArithOp      :: ArithOp      -> Term Decimal -> Term Decimal -> Term Decimal
-  IntArithOp      :: ArithOp      -> Term Integer -> Term Integer -> Term Integer
-  DecUnaryArithOp :: UnaryArithOp                 -> Term Decimal -> Term Decimal
-  IntUnaryArithOp :: UnaryArithOp                 -> Term Integer -> Term Integer
-
-  DecIntArithOp   :: ArithOp -> Term Decimal -> Term Integer -> Term Decimal
-  IntDecArithOp   :: ArithOp -> Term Integer -> Term Decimal -> Term Decimal
-
-  ModOp           :: Term Integer   -> Term Integer -> Term Integer
-  RoundingLikeOp1 :: RoundingLikeOp -> Term Decimal -> Term Integer
+  DecArithOp      :: ArithOp        -> Term Decimal -> Term Decimal -> Term Decimal
+  IntArithOp      :: ArithOp        -> Term Integer -> Term Integer -> Term Integer
+  DecUnaryArithOp :: UnaryArithOp   -> Term Decimal ->                 Term Decimal
+  IntUnaryArithOp :: UnaryArithOp   -> Term Integer ->                 Term Integer
+  DecIntArithOp   :: ArithOp        -> Term Decimal -> Term Integer -> Term Decimal
+  IntDecArithOp   :: ArithOp        -> Term Integer -> Term Decimal -> Term Decimal
+  ModOp           :: Term Integer   -> Term Integer ->                 Term Integer
+  RoundingLikeOp1 :: RoundingLikeOp -> Term Decimal ->                 Term Integer
   RoundingLikeOp2 :: RoundingLikeOp -> Term Decimal -> Term Integer -> Term Decimal
 
   -- invariant (inaccessible): a ~ Integer or a ~ Decimal
   AddTime         :: Term Time -> ETerm -> Term Time
 
-  Comparison     :: (Show a, SymWord a) => ComparisonOp -> Term a         -> Term a -> Term Bool
-  Logical        ::                        LogicalOp    -> [Term Bool]    ->           Term Bool
-  ReadKeySet     ::                        Term String  ->                             Term KeySet
-  KsAuthorized   ::                        Term KeySet  ->                             Term Bool
-  NameAuthorized ::                        Term String  ->                             Term Bool
-  Concat         ::                        Term String  -> Term String    ->           Term String
-  PactVersion    ::                                                                    Term String
+  Comparison      :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+
+  Logical         :: LogicalOp -> [Term Bool] -> Term Bool
+
+  Concat          :: Term String -> Term String -> Term String
+
+  PactVersion     :: Term String
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
