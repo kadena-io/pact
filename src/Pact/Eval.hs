@@ -54,6 +54,8 @@ import Data.Aeson (Value)
 
 import Pact.Types.Runtime
 
+import Debug.Trace
+
 evalBeginTx :: Info -> Eval e ()
 evalBeginTx i = beginTx i =<< view eeTxId
 {-# INLINE evalBeginTx #-}
@@ -201,9 +203,11 @@ loadModule m bod1 mi = do
               forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
                 case tag of
                   "invariant" -> do
+                    traceM "loadModule invariant"
                     let schemaName = unTypeName _tSchemaName
                     old <- use (propMapL . at schemaName)
                     let old' = fromMaybe [] old
+                    traceShowM ("loadModule invariant", (tag, expr) : old')
                     propMapL . at schemaName ?= (tag, expr) : old'
                   _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
 

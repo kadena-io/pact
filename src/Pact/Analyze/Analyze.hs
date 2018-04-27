@@ -13,6 +13,7 @@
 {-# language TemplateHaskell            #-}
 {-# language TupleSections              #-}
 {-# language TypeFamilies               #-}
+{-# language TypeApplications           #-}
 
 module Pact.Analyze.Analyze where
 
@@ -45,22 +46,7 @@ import Pact.Types.Version (pactVersion)
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
--- a unique cell, from a column name and a row key
--- e.g. balance__25
-newtype CellId
-  = CellId String
-  deriving (Eq, Ord)
-
-instance SymWord CellId where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (CellId cid) = mkConcreteString cid
-  fromCW = wrappedStringFromCW CellId
-
-instance HasKind CellId where
-  kindOf _ = KString
-
-instance IsString CellId where
-  fromString = CellId
+import Debug.Trace
 
 data AnalyzeEnv = AnalyzeEnv
   { _aeScope     :: Map Text AVal            -- used with 'local' as a stack
@@ -118,12 +104,12 @@ instance Mergeable AnalyzeLog where
 
 data SymbolicCells
   = SymbolicCells
-    { _scIntValues     :: Map ColumnName (SArray RowKey Integer)
-    , _scBoolValues    :: Map ColumnName (SArray RowKey Bool)
-    , _scStringValues  :: Map ColumnName (SArray RowKey String)
-    , _scDecimalValues :: Map ColumnName (SArray RowKey Decimal)
-    , _scTimeValues    :: Map ColumnName (SArray RowKey Time)
-    , _scKsValues      :: Map ColumnName (SArray RowKey KeySet)
+    { _scIntValues     :: ColumnMap (SArray RowKey Integer)
+    , _scBoolValues    :: ColumnMap (SArray RowKey Bool)
+    , _scStringValues  :: ColumnMap (SArray RowKey String)
+    , _scDecimalValues :: ColumnMap (SArray RowKey Decimal)
+    , _scTimeValues    :: ColumnMap (SArray RowKey Time)
+    , _scKsValues      :: ColumnMap (SArray RowKey KeySet)
     -- TODO: opaque blobs
     }
     deriving (Show)
@@ -133,25 +119,14 @@ instance Mergeable SymbolicCells where
   symbolicMerge force test
     (SymbolicCells a b c d e f)
     (SymbolicCells a' b' c' d' e' f')
-    = SymbolicCells (m' a a') (m' b b') (m' c c') (m' d d') (m' e e') (m' f f')
+    = SymbolicCells (m a a') (m b b') (m c c') (m d d') (m e e') (m f f')
     where
-      m :: SymWord a => SArray RowKey a -> SArray RowKey a -> SArray RowKey a
+      m :: Mergeable a => ColumnMap a -> ColumnMap a -> ColumnMap a
       m = symbolicMerge force test
-      m'
-        :: SymWord a
-        => Map ColumnName (SArray RowKey a)
-        -> Map ColumnName (SArray RowKey a)
-        -> Map ColumnName (SArray RowKey a)
-      m' l r = merge
-        (mapMissing $ \_ _ -> error "bad symbolic cells merge")
-        (mapMissing $ \_ _ -> error "bad symbolic cells merge")
-        (zipWithMatched $ \_k a b -> m a b)
-        l
-        r
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Monoid)
 
 instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
@@ -202,7 +177,7 @@ instance Mergeable LatticeAnalyzeState where
       rsWritten' csEnforced' csWritten')
         = LatticeAnalyzeState
           (symbolicMerge force test success      success')
-          (symbolicMerge force test tsInvariants tsInvariants)
+          (symbolicMerge force test tsInvariants tsInvariants')
           (symbolicMerge force test tsRead       tsRead')
           (symbolicMerge force test tsWritten    tsWritten')
           (symbolicMerge force test deltas       deltas')
@@ -282,14 +257,14 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
     mkTableColumnMap
       :: (Pact.Type TC.UserType -> Bool) -> a -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
-      flip fmap tables $ \(name, userTy) ->
+      flip fmap tables $ \(tabName, userTy) ->
         let fields = TC._utFields userTy
-            columnMap = ColumnMap $ Map.fromList $ catMaybes $
-              flip fmap fields $ \(Arg name ty _) ->
+            colMap = ColumnMap $ Map.fromList $ catMaybes $
+              flip fmap fields $ \(Arg argName ty _) ->
                 if f ty
-                then Just (ColumnName (T.unpack name), defValue)
+                then Just (ColumnName (T.unpack argName), defValue)
                 else Nothing
-        in (TableName (T.unpack name), columnMap)
+        in (TableName (T.unpack tabName), colMap)
 
     mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
@@ -300,20 +275,22 @@ allocateSymbolicCells
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
   -> Symbolic (TableMap SymbolicCells)
 allocateSymbolicCells tables = do
-  cellsList <- forM tables $ \(name, TC.Schema _ _ fields _, checks) -> do
+  cellsList <- forM tables $ \(tabName, TC.Schema _ _ fields _, checks) -> do
     let checks' = Map.fromList checks
-    let fields' = Map.fromList $ map (\(Arg name ty _i) -> (name, ty)) fields
+        fields' = Map.fromList $
+          map (\(Arg argName ty _i) -> (argName, ty)) fields
 
     -- The schema fields and invariants on them should somewhat match:
     let merged = merge
           -- It's okay if we have a field without an invariant
-          (mapMissing     $ \_k ty      -> (ty, Nothing))
+          (mapMissing     $ \_k ty       -> (ty, Nothing))
           -- But an invariant without a field is an error
-          (mapMissing     $ \k _check   -> error "missing field")
-          (zipWithMatched $ \k ty check -> (ty, Just check))
+          (mapMissing     $ \k _check    ->
+            error ("missing field: " ++ T.unpack k))
+          (zipWithMatched $ \_k ty check -> (ty, Just check))
           fields'
           checks'
-    (TableName (T.unpack name),) <$> mkCells merged
+    (TableName (T.unpack tabName),) <$> mkCells merged
 
   pure $ TableMap $ Map.fromList cellsList
 
@@ -323,13 +300,7 @@ allocateSymbolicCells tables = do
       -> Symbolic SymbolicCells
     mkCells fields =
 
-      let cells = SymbolicCells
-            Map.empty
-            Map.empty
-            Map.empty
-            Map.empty
-            Map.empty
-            Map.empty
+      let cells0 = SymbolicCells mempty mempty mempty mempty mempty mempty
 
       -- fold over the fields, creating an array with constrained values for
       -- each column
@@ -363,7 +334,7 @@ allocateSymbolicCells tables = do
                 pure $ cells & scKsValues . at (ColumnName colName') ?~ arr
               _ -> pure cells -- error (show ty)
         )
-        cells
+        cells0
         fields
 
 mkSVal :: SBV a -> SBVI.SVal
@@ -377,14 +348,13 @@ newConstrainedArray
   -> Symbolic (SArray a b)
 newConstrainedArray mInvariant msg = do
   arr <- newArray msg
-  (k :: SBV a) <- forall_
-  case mInvariant of
+  k   <- forall_ @a
+  () <- case mInvariant of
     Nothing -> pure ()
-    Just invariant ->
-      case checkSchemaInvariant invariant (mkSVal (readArray arr k)) of
-        Just constraint -> constrain constraint
-        Nothing -> error "TODO"
-    Just _someOtherType -> error "TODO"
+    Just invariant -> do
+      traceShowM invariant
+      constrain $ traceShowId $
+        runReader (checkSchemaInvariant invariant) (mkSVal (readArray arr k))
   pure arr
 
 data AnalyzeFailure
@@ -470,7 +440,7 @@ mkAnalyzeEnv
   -> Symbolic AnalyzeEnv
 mkAnalyzeEnv argTys tables = do
   args        <- allocateArgs argTys
-  keySets     <- newArray "keySets"
+  keySets'    <- newArray "keySets'"
   keySetAuths <- newArray "keySetAuths"
 
   pure $ foldr
@@ -483,7 +453,7 @@ mkAnalyzeEnv argTys tables = do
       env
       someInvariants
     )
-    (AnalyzeEnv args keySets keySetAuths Map.empty)
+    (AnalyzeEnv args keySets' keySetAuths Map.empty)
     tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
@@ -739,10 +709,7 @@ analyzeTermO = \case
       val <- analyzeTerm tm
       pure (fieldType, mkAVal val))
 
-  --
-  -- TODO: dedupe Read/ReadCols.
-  --
-
+  -- TODO: is this subsumed by ReadCols?
   Read tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
@@ -1183,25 +1150,33 @@ liftSymbolic = Query . lift . lift
 checkInvariantsHeld :: Monad m => AnalyzeT m (S Bool)
 checkInvariantsHeld = sansProv <$> use maintainsInvariants
 
-checkSchemaInvariant' :: Monad m => SchemaInvariant a -> SBVI.SVal -> AnalyzeT m (SBV a)
-checkSchemaInvariant' invariant sval = case checkSchemaInvariant invariant sval of
-  Nothing -> throwError "TODO"
-  Just ret -> pure ret
-
-checkSchemaInvariant :: SchemaInvariant a -> SBVI.SVal -> Maybe (SBV a)
-checkSchemaInvariant invariant sval = case invariant of
+checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
+checkSchemaInvariant = \case
   SchemaDecimalComparison op a b -> do
-    a' <- checkSchemaInvariant a sval
-    b' <- checkSchemaInvariant b sval
-    Just $ case op of
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
       Gt  -> a' .>  b'
       Lt  -> a' .<  b'
       Gte -> a' .>= b'
       Lte -> a' .<= b'
       Eq  -> a' .== b'
       Neq -> a' ./= b'
-  SchemaDecimalLiteral d -> Just (literal d)
-  SchemaVar _            -> Just (SBVI.SBV sval)
+  SchemaIntComparison op a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
+      Gt  -> a' .>  b'
+      Lt  -> a' .<  b'
+      Gte -> a' .>= b'
+      Lte -> a' .<= b'
+      Eq  -> a' .== b'
+      Neq -> a' ./= b'
+
+  SchemaDecimalLiteral d -> pure $ literal d
+  SchemaIntLiteral i     -> pure $ literal i
+
+  SchemaVar _            -> SBVI.SBV <$> ask
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult

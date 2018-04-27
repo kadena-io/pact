@@ -41,11 +41,12 @@ import Text.PrettyPrint.ANSI.Leijen (putDoc)
 import Control.Exception
 import qualified Data.Set as Set
 import Data.String
-import Control.Lens
+import Control.Lens hiding (op)
 import Data.Maybe
 import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
+import Data.Type.Equality
 
 import Pact.Analyze.Prop hiding (Type, TableName)
 import qualified Pact.Analyze.Prop as Prop
@@ -157,7 +158,7 @@ pattern ELitName :: Text -> Exp
 pattern ELitName lit <- ELiteral (LString lit) _
 
 expToProp :: Exp -> Maybe (Prop Bool)
-expToProp = (\case
+expToProp = \case
   EAtom' "abort" -> Just Abort
   EAtom' "success" -> Just Success
 
@@ -188,7 +189,7 @@ expToProp = (\case
 
   -- EAtom' var -> Var var
 
-  _ -> Nothing) -- . traceShowId
+  _ -> Nothing
 
   where mkT = Prop.TableName . T.unpack
         mkC = ColumnName . T.unpack
@@ -200,13 +201,17 @@ expToCheck body = Valid <$> expToProp body
 expToInvariant :: Exp -> Maybe SomeSchemaInvariant
 expToInvariant = \case
   -- TODO: this is hard without already knowing the type
-  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
+  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
+
   ELiteral (LDecimal d) _ -> Just
     (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)
+  ELiteral (LInteger i) _ -> Just
+    (SomeSchemaInvariant (SchemaIntLiteral i) TInt)
+
   EList' [EAtom' op, a, b]
     | op `Set.member` Set.fromList [">", "<", ">=", "<=", "==", "/="] -> do
-    SomeSchemaInvariant a' TDecimal <- expToInvariant a
-    SomeSchemaInvariant b' TDecimal <- expToInvariant b
+    SomeSchemaInvariant a' aTy <- expToInvariant a
+    SomeSchemaInvariant b' bTy <- expToInvariant b
     let op' = case op of
           ">" -> Gt
           "<" -> Lt
@@ -214,7 +219,11 @@ expToInvariant = \case
           "<=" -> Lte
           "==" -> Eq
           "/=" -> Neq
-    Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
+    case typeEq aTy bTy of
+      Just Refl -> case aTy of
+        TDecimal -> Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
+        TInt     -> Just (SomeSchemaInvariant (SchemaIntComparison op' a' b') TBool)
+      Nothing   -> Nothing
 
 doMeta :: Text -> Exp -> Info -> Compile (Term Name)
 doMeta name exp i = pure $ TMeta name exp i

@@ -314,7 +314,15 @@ data SchemaInvariant a where
     -> SchemaInvariant Decimal
     -> SchemaInvariant Bool
 
+  SchemaIntComparison
+    :: ComparisonOp
+    -> SchemaInvariant Integer
+    -> SchemaInvariant Integer
+    -> SchemaInvariant Bool
+
   SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
+  SchemaIntLiteral :: Integer -> SchemaInvariant Integer
+
   SchemaVar :: Text -> SchemaInvariant a
 
 deriving instance Eq (SchemaInvariant a)
@@ -333,5 +341,9 @@ instance Eq SomeSchemaInvariant where
 invariantVars :: SchemaInvariant a -> Set Text
 invariantVars = \case
   SchemaDecimalComparison _ a b -> invariantVars a <> invariantVars b
+  SchemaIntComparison _ a b     -> invariantVars a <> invariantVars b
+
   SchemaDecimalLiteral _        -> Set.empty
+  SchemaIntLiteral _            -> Set.empty
+
   SchemaVar v                   -> Set.singleton v
