@@ -662,6 +662,28 @@ lookupVal name = do
     Just (AnObj obj) -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal) -> throwError OpaqueValEncountered
 
+analyzeAtO
+  :: forall m term
+   . Analyzer m term
+  => term String
+  -> term Object
+  -> m Object
+analyzeAtO colNameT objT = do
+    obj@(Object fields) <- analyzeO objT
+    sCn <- analyze colNameT
+
+    let getObjVal :: String -> m Object
+        getObjVal fieldName = case Map.lookup fieldName fields of
+          Nothing -> throwError $ KeyNotPresent fieldName obj
+          Just (fieldType, AVal _ _) -> throwError $
+            ObjFieldOfWrongType fieldName fieldType
+          Just (_fieldType, AnObj subObj) -> pure subObj
+          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+
+    case unliteralS sCn of
+      Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
+      Just concreteColName -> getObjVal concreteColName
+
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$>
@@ -755,22 +777,7 @@ analyzeTermO = \case
       Just False -> analyzeTermO else'
       Nothing    -> throwError "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
-  At _schema colName objT _retType -> do
-    obj@(Object fields) <- analyzeTermO objT
-
-    colName' <- analyzeTerm colName
-
-    let getObjVal :: String -> Analyze Object
-        getObjVal fieldName = case Map.lookup fieldName fields of
-          Nothing -> throwError $ KeyNotPresent fieldName obj
-          Just (fieldType, AVal _ _) -> throwError $
-            ObjFieldOfWrongType fieldName fieldType
-          Just (_fieldType, AnObj subObj) -> pure subObj
-          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
-
-    case unliteralS colName' of
-      Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
-      Just concreteColName -> getObjVal concreteColName
+  At _schema colNameT objT _retType -> analyzeAtO colNameT objT
 
   objT -> throwError $ UnhandledObject objT
 
