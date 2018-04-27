@@ -977,6 +977,53 @@ analyzeLogicalOp op terms = do
     (NotOp, [a])    -> pure $ bnot a
     _               -> throwError $ MalformedLogicalOpExec op $ length terms
 
+analyzeAt
+  :: (Analyzer m term, SymWord a)
+  => Schema
+  -> term String
+  -> term Object
+  -> EType
+  -> m (S a)
+analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
+  obj@(Object fields) <- analyzeO objT
+
+  -- Filter down to only fields which contain the type we're looking for
+  let relevantFields
+        = map fst
+        $ filter (\(_name, ty) -> ty == retType)
+        $ Map.toList schemaFields
+
+  colName :: S String <- analyze colNameT
+
+  firstName:relevantFields' <- case relevantFields of
+    [] -> throwError $ AtHasNoRelevantFields retType schema
+    _ -> pure relevantFields
+
+  let getObjVal fieldName = case Map.lookup fieldName fields of
+        Nothing -> throwError $ KeyNotPresent fieldName obj
+
+        Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+
+        Just (fieldType, AnObj _subObj) -> throwError $
+          ObjFieldOfWrongType fieldName fieldType
+
+        Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+
+  firstVal <- getObjVal firstName
+
+  -- Fold over each relevant field, building a sequence of `ite`s. We require
+  -- at least one matching field, ie firstVal. At first glance, this should
+  -- just be a `foldr1M`, but we want the type of accumulator and element to
+  -- differ, because elements are `String` `fieldName`s, while the accumulator
+  -- is an `SBV a`.
+  foldrM
+    (\fieldName rest -> do
+      val <- getObjVal fieldName
+      pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
+    )
+    firstVal
+    relevantFields'
+
 analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
@@ -993,45 +1040,7 @@ analyzeTerm = \case
 
   Literal a -> pure a
 
-  At schema@(Schema schemaFields) colNameT objT retType -> do
-    obj@(Object fields) <- analyzeTermO objT
-
-    -- Filter down to only fields which contain the type we're looking for
-    let relevantFields
-          = map fst
-          $ filter (\(_name, ty) -> ty == retType)
-          $ Map.toList schemaFields
-
-    colName :: S String <- analyzeTerm colNameT
-
-    firstName:relevantFields' <- case relevantFields of
-      [] -> throwError $ AtHasNoRelevantFields retType schema
-      _ -> pure relevantFields
-
-    let getObjVal fieldName = case Map.lookup fieldName fields of
-          Nothing -> throwError $ KeyNotPresent fieldName obj
-
-          Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
-
-          Just (fieldType, AnObj _subObj) -> throwError $
-            ObjFieldOfWrongType fieldName fieldType
-
-          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
-
-    firstVal <- getObjVal firstName
-
-    -- Fold over each relevant field, building a sequence of `ite`s. We require
-    -- at least one matching field, ie firstVal. At first glance, this should
-    -- just be a `foldr1M`, but we want the type of accumulator and element to
-    -- differ, because elements are `String` `fieldName`s, while the accumulator
-    -- is an `SBV a`.
-    foldrM
-      (\fieldName rest -> do
-        val <- getObjVal fieldName
-        pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
-      )
-      firstVal
-      relevantFields'
+  At schema colNameT objT retType -> analyzeAt schema colNameT objT retType
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
@@ -1174,6 +1183,7 @@ checkSchemaInvariant = \case
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar name) = lookupObj name
+-- TODO: At
 
 analyzeProp :: Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1182,6 +1192,10 @@ analyzeProp (PSym a) = pure $ sansProv a
 analyzeProp Success = view $ model.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success
 analyzeProp Result  = expectVal =<< view qeAnalyzeResult
+
+-- TODO: At
+
+-- TODO: analyzeProp Result = _ <$> view qeAnalyzeResult
 
 -- Abstraction
 analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do

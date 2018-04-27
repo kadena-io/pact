@@ -175,6 +175,9 @@ data Prop a where
   Exists           :: Text -> Ty -> Prop a -> Prop a
   PVar             :: Text ->                 Prop a
 
+  -- Object ops
+  --PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
+
   -- String ops
   PStrConcat       :: Prop String -> Prop String -> Prop String
   PStrLength       :: Prop String ->                Prop Integer
