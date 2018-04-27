@@ -358,10 +358,16 @@ instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 class (MonadError AnalyzeFailure m) => Analyzer m term where
-  analyze :: (Show a, SymWord a) => term a -> m (S a)
+  analyze  :: (Show a, SymWord a) => term a -> m (S a)
+  analyzeO :: term Object -> m Object
 
-instance Analyzer Analyze Term where analyze = analyzeTerm
-instance Analyzer Query Prop   where analyze = analyzeProp
+instance Analyzer Analyze Term where
+  analyze  = analyzeTerm
+  analyzeO = analyzeTermO
+
+instance Analyzer Query Prop where
+  analyze  = analyzeProp
+  analyzeO = analyzePropO
 
 class SymbolicTerm term where
   injectS :: S a -> term a
@@ -993,6 +999,9 @@ analyzeTerm = \case
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
+
+analyzePropO :: Prop Object -> Query Object
+analyzePropO (PVar name) = lookupObj name
 
 analyzeProp :: Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
