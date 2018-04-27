@@ -1185,10 +1185,9 @@ analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
 analyzeProp (PVar name) = lookupVal name
 
 -- String ops
-analyzeProp (PStrConcat p1 p2) =
-  (.++) <$> analyzeProp p1 <*> analyzeProp p2
-analyzeProp (PStrLength p) = (s2Sbv %~ SBV.length) <$> analyzeProp p
-analyzeProp (PStrEmpty p)  = (s2Sbv %~ SBV.null)   <$> analyzeProp p
+analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
+analyzeProp (PStrLength p)     = over s2Sbv SBV.length <$> analyzeProp p
+analyzeProp (PStrEmpty p)      = over s2Sbv SBV.null   <$> analyzeProp p
 
 -- Numeric ops
 analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
