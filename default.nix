@@ -65,7 +65,7 @@ in
     };
     
     shells = {
-      ghc = ["pact" "pact-server"];
+      ghc = ["pact" "pact-server" "pact-ghcjs"];
       ghcjs = ["pact" "pact-ghcjs"];
     };
   

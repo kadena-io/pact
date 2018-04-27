@@ -22,8 +22,11 @@ executable pact
 
   build-depends:
       base
-    , ghcjs-base
+    , mtl
     , pact
+    , reflex
+    , reflex-dom
+    , text
   hs-source-dirs:      src
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
