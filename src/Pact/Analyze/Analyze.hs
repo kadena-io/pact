@@ -662,6 +662,38 @@ lookupVal name = do
     Just (AnObj obj) -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal) -> throwError OpaqueValEncountered
 
+analyzeRead :: TableName -> Map String EType -> Term String -> Analyze Object
+analyzeRead tn fields rowKey = do
+  sRk <- symRowKey <$> analyzeTerm rowKey
+  tableRead tn .= true
+  rowRead tn sRk .= true
+  obj <- iforM fields $ \fieldName fieldType -> do
+    let cn = ColumnName fieldName
+    sDirty <- use $ cellWritten tn cn sRk
+    x <- case fieldType of
+      EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+      EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+      EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+      EType TDecimal -> do
+        S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
+        mInvariant <- view (invariants . at (tn, cn))
+        case mInvariant of
+          Nothing -> pure ()
+          Just invariant -> addConstraint $
+            runReader (checkSchemaInvariant invariant) sbvVal
+        pure $ mkAVal' (SBVI.SBV sbvVal)
+      EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+      EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
+      EType TAny     -> pure OpaqueVal
+      --
+      -- TODO: if we add nested object support here, we need to install
+      --       the correct provenance into AVals all the way down into
+      --       sub-objects.
+      --
+
+    pure (fieldType, x)
+  pure $ Object obj
+
 analyzeAtO
   :: forall m term
    . Analyzer m term
@@ -738,39 +770,7 @@ analyzeTermO = \case
       val <- analyzeTerm tm
       pure (fieldType, mkAVal val))
 
-  -- TODO: is this subsumed by ReadCols?
-  Read tn (Schema fields) rowKey -> do
-    sRk <- symRowKey <$> analyzeTerm rowKey
-    tableRead tn .= true
-    rowRead tn sRk .= true
-    obj <- iforM fields $ \fieldName fieldType -> do
-      let cn  = ColumnName fieldName
-      sDirty <- use $ cellWritten tn cn sRk
-      x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-        -- EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
-        EType TDecimal -> do
-          S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
-          mInvariant <- view (invariants . at (tn, cn))
-          case mInvariant of
-            Nothing -> pure ()
-            Just invariant -> addConstraint $
-              runReader (checkSchemaInvariant invariant) sbvVal
-          pure $ mkAVal' (SBVI.SBV sbvVal)
-
-        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
-        EType TAny     -> pure OpaqueVal
-        --
-        -- TODO: if we add nested object support here, we need to install
-        --       the correct provenance into AVals all the way down into
-        --       sub-objects.
-        --
-
-      pure (fieldType, x)
-    pure $ Object obj
+  Read tn (Schema fields) rowKey -> analyzeRead tn fields rowKey
 
   ReadCols tn (Schema fields) rowKey cols -> do
     -- Intersect both the returned object and its type with the requested
@@ -779,28 +779,7 @@ analyzeTermO = \case
         relevantFields
           = Map.filterWithKey (\k _ -> T.pack k `Set.member` colSet) fields
 
-    sRk <- symRowKey <$> analyzeTerm rowKey
-    tableRead tn .= true
-    rowRead tn sRk .= true
-    obj <- iforM relevantFields $ \fieldName fieldType -> do
-      let cn = ColumnName fieldName
-      sDirty <- use $ cellWritten tn cn sRk
-      x <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
-        EType TAny     -> pure OpaqueVal
-        --
-        -- TODO: if we add nested object support here, we need to install
-        --       the correct provenance into AVals all the way down into
-        --       sub-objects.
-        --
-
-      pure (fieldType, x)
-    pure $ Object obj
+    analyzeRead tn relevantFields rowKey
 
   Var name -> lookupObj name
 
