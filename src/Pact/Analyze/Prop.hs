@@ -156,7 +156,7 @@ data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
 
 data Prop a where
   -- Literals
-  PLit             :: SymWord a => a   -> Prop a
+  PLit             :: SymWord a => a     -> Prop a
   --
   -- TODO: change this to `S a`, once we move S into Prop
   --
@@ -184,14 +184,12 @@ data Prop a where
   PStrEmpty        :: Prop String ->                Prop Bool
 
   -- Numeric ops
-  PDecArithOp      :: ArithOp      -> Prop Decimal -> Prop Decimal -> Prop Decimal
-  PIntArithOp      :: ArithOp      -> Prop Integer -> Prop Integer -> Prop Integer
-  PDecUnaryArithOp :: UnaryArithOp                 -> Prop Decimal -> Prop Decimal
-  PIntUnaryArithOp :: UnaryArithOp                 -> Prop Integer -> Prop Integer
-
-  PDecIntArithOp   :: ArithOp -> Prop Decimal -> Prop Integer -> Prop Decimal
-  PIntDecArithOp   :: ArithOp -> Prop Integer -> Prop Decimal -> Prop Decimal
-
+  PDecArithOp      :: ArithOp        -> Prop Decimal -> Prop Decimal -> Prop Decimal
+  PIntArithOp      :: ArithOp        -> Prop Integer -> Prop Integer -> Prop Integer
+  PDecUnaryArithOp :: UnaryArithOp   -> Prop Decimal ->                 Prop Decimal
+  PIntUnaryArithOp :: UnaryArithOp   -> Prop Integer ->                 Prop Integer
+  PDecIntArithOp   :: ArithOp        -> Prop Decimal -> Prop Integer -> Prop Decimal
+  PIntDecArithOp   :: ArithOp        -> Prop Integer -> Prop Decimal -> Prop Decimal
   PModOp           :: Prop Integer   -> Prop Integer ->                 Prop Integer
   PRoundingLikeOp1 :: RoundingLikeOp -> Prop Decimal ->                 Prop Integer
   PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal

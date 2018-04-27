@@ -270,6 +270,9 @@ data Term ret where
   RoundingLikeOp2 :: RoundingLikeOp -> Term Decimal -> Term Integer -> Term Decimal
 
   -- invariant (inaccessible): a ~ Integer or a ~ Decimal
+  --
+  -- TODO: possibly split into two constructors, like in Prop:
+  --
   AddTime         :: Term Time -> ETerm -> Term Time
 
   Comparison      :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
