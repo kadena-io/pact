@@ -684,6 +684,53 @@ analyzeAtO colNameT objT = do
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
       Just concreteColName -> getObjVal concreteColName
 
+analyzeAt
+  :: (Analyzer m term, SymWord a)
+  => Schema
+  -> term String
+  -> term Object
+  -> EType
+  -> m (S a)
+analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
+  obj@(Object fields) <- analyzeO objT
+
+  -- Filter down to only fields which contain the type we're looking for
+  let relevantFields
+        = map fst
+        $ filter (\(_name, ty) -> ty == retType)
+        $ Map.toList schemaFields
+
+  colName :: S String <- analyze colNameT
+
+  firstName:relevantFields' <- case relevantFields of
+    [] -> throwError $ AtHasNoRelevantFields retType schema
+    _ -> pure relevantFields
+
+  let getObjVal fieldName = case Map.lookup fieldName fields of
+        Nothing -> throwError $ KeyNotPresent fieldName obj
+
+        Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+
+        Just (fieldType, AnObj _subObj) -> throwError $
+          ObjFieldOfWrongType fieldName fieldType
+
+        Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+
+  firstVal <- getObjVal firstName
+
+  -- Fold over each relevant field, building a sequence of `ite`s. We require
+  -- at least one matching field, ie firstVal. At first glance, this should
+  -- just be a `foldr1M`, but we want the type of accumulator and element to
+  -- differ, because elements are `String` `fieldName`s, while the accumulator
+  -- is an `SBV a`.
+  foldrM
+    (\fieldName rest -> do
+      val <- getObjVal fieldName
+      pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
+    )
+    firstVal
+    relevantFields'
+
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$>
@@ -977,53 +1024,6 @@ analyzeLogicalOp op terms = do
     (NotOp, [a])    -> pure $ bnot a
     _               -> throwError $ MalformedLogicalOpExec op $ length terms
 
-analyzeAt
-  :: (Analyzer m term, SymWord a)
-  => Schema
-  -> term String
-  -> term Object
-  -> EType
-  -> m (S a)
-analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
-  obj@(Object fields) <- analyzeO objT
-
-  -- Filter down to only fields which contain the type we're looking for
-  let relevantFields
-        = map fst
-        $ filter (\(_name, ty) -> ty == retType)
-        $ Map.toList schemaFields
-
-  colName :: S String <- analyze colNameT
-
-  firstName:relevantFields' <- case relevantFields of
-    [] -> throwError $ AtHasNoRelevantFields retType schema
-    _ -> pure relevantFields
-
-  let getObjVal fieldName = case Map.lookup fieldName fields of
-        Nothing -> throwError $ KeyNotPresent fieldName obj
-
-        Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
-
-        Just (fieldType, AnObj _subObj) -> throwError $
-          ObjFieldOfWrongType fieldName fieldType
-
-        Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
-
-  firstVal <- getObjVal firstName
-
-  -- Fold over each relevant field, building a sequence of `ite`s. We require
-  -- at least one matching field, ie firstVal. At first glance, this should
-  -- just be a `foldr1M`, but we want the type of accumulator and element to
-  -- differ, because elements are `String` `fieldName`s, while the accumulator
-  -- is an `SBV a`.
-  foldrM
-    (\fieldName rest -> do
-      val <- getObjVal fieldName
-      pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
-    )
-    firstVal
-    relevantFields'
-
 analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
@@ -1133,7 +1133,6 @@ analyzeTerm = \case
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
   KsAuthorized ks -> ksAuthorized =<< analyzeTerm ks
-
   NameAuthorized str -> nameAuthorized =<< symKsName <$> analyzeTerm str
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
