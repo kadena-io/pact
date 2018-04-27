@@ -1092,15 +1092,15 @@ analyzeTerm = \case
 
   Var name -> lookupVal name
 
-  DecArithOp op x y              -> analyzeDecArithOp op x y
-  IntArithOp op x y              -> analyzeIntArithOp op x y
-  IntDecArithOp op x y           -> analyzeIntDecArithOp op x y
-  DecIntArithOp op x y           -> analyzeDecIntArithOp op x y
-  IntUnaryArithOp op x           -> analyzeUnaryArithOp op x
-  DecUnaryArithOp op x           -> analyzeUnaryArithOp op x
-  ModOp x y                      -> analyzeModOp x y
-  RoundingLikeOp1 op x           -> analyzeRoundingLikeOp1 op x
-  RoundingLikeOp2 op x precision -> analyzeRoundingLikeOp2 op x precision
+  DecArithOp op x y         -> analyzeDecArithOp op x y
+  IntArithOp op x y         -> analyzeIntArithOp op x y
+  IntDecArithOp op x y      -> analyzeIntDecArithOp op x y
+  DecIntArithOp op x y      -> analyzeDecIntArithOp op x y
+  IntUnaryArithOp op x      -> analyzeUnaryArithOp op x
+  DecUnaryArithOp op x      -> analyzeUnaryArithOp op x
+  ModOp x y                 -> analyzeModOp x y
+  RoundingLikeOp1 op x      -> analyzeRoundingLikeOp1 op x
+  RoundingLikeOp2 op x prec -> analyzeRoundingLikeOp2 op x prec
 
   AddTime time (ETerm secs TInt)     -> analyzeIntAddTime time secs
   AddTime time (ETerm secs TDecimal) -> analyzeDecAddTime time secs
@@ -1200,8 +1200,8 @@ analyzeProp (PModOp x y)              = analyzeModOp x y
 analyzeProp (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
 analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 
-analyzeProp (PIntAddTime time secs)   = analyzeIntAddTime time secs
-analyzeProp (PDecAddTime time secs)   = analyzeDecAddTime time secs
+analyzeProp (PIntAddTime time secs) = analyzeIntAddTime time secs
+analyzeProp (PDecAddTime time secs) = analyzeDecAddTime time secs
 
 analyzeProp (PComparison op x y) = analyzeComparisonOp op x y
 
