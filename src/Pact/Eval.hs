@@ -231,7 +231,7 @@ evalConsts (Ref r) = case r of
     CVRaw raw -> do
       v <- reduce =<< traverse evalConsts raw
       traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
-      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tDocs _tInfo)
+      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
     _ -> return $ Ref c
   _ -> Ref <$> traverse evalConsts r
 evalConsts r = return r
@@ -268,8 +268,8 @@ reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce TSchema {..} = TSchema _tSchemaName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
-reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
+reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
+reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -301,7 +301,7 @@ reduceApp TDef {..} as ai = do
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
+      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs <$> _tMeta)
   appCall fa ai as $
     case _tDefType of
       Defun -> reduceBody bod'
