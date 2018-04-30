@@ -44,8 +44,7 @@ import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
                              analyzeTerm, analyzeTermO, analyzeProp,
                              describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, mkQueryEnv, runAnalyze,
-                             queryAction,
-                             mkInitialAnalyzeState, runAnalyzeT,
+                             queryAction, mkInitialAnalyzeState,
                              checkInvariantsHeld)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
@@ -125,81 +124,55 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
     Right tm -> do
       compileFailureVar <- newEmptyMVar
 
+      let prop   = check ^. ckProp
+          action :: AnalyzeT Symbolic (S Bool)
+          action = case tm of
+            ETerm   body'' _ -> do
+              _ <- hoist generalize (analyzeTerm  body'')
+              (&&&) <$> analyzeProperty prop <*> checkInvariantsHeld
+            EObject body'' _ -> do
+              _ <- hoist generalize (analyzeTermO body'')
+              (&&&) <$> analyzeProperty prop <*> checkInvariantsHeld
+
       checkResult <- runCheck check $ do
-        aEnv <- mkAnalyzeEnv argTys
-        state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
+        env0      <- mkAnalyzeEnv argTys tables
+        state0    <- mkInitialAnalyzeState
+          (tables & traverse %~ (\(a, b, _c) -> (a, b)))
+          <$> allocateSymbolicCells tables
+        eAnalysis <- runExceptT $ runRWST (runAnalyze action) env0 state0
 
-        let prop = check ^. ckProp
+        case eAnalysis of
+          Left cf -> do
+            liftIO $ putMVar compileFailureVar cf
+            pure false
+          Right (propResult, _env, _log) ->
+            pure propResult
 
-            go :: Analyze AVal -> Symbolic (S Bool)
-            go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
-              case eAnalysis of
-                Left cf -> do
-                  liftIO $ putMVar compileFailureVar cf
-                  pure false
-                Right (propResult, state1, _log) -> do
-                  let qEnv = mkQueryEnv aEnv state1 propResult
-                  eQuery <- runExceptT $ runReaderT (queryAction $ analyzeProp prop) qEnv
-                  case eQuery of
-                    Left cf' -> do
-                      liftIO $ putMVar compileFailureVar cf'
-                      pure false
-                    Right symAction -> pure $ symAction
+--       checkResult <- runCheck check $ do
+--         aEnv <- mkAnalyzeEnv argTys tables
+--         state0 <- mkInitialAnalyzeState <$> allocateSymbolicCells tableNames
 
-        case tm of
-          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+--         let prop = check ^. ckProp
 
-      -- let prop   = check ^. ckProp
-      --     action :: AnalyzeT Symbolic (S Bool)
-      --     action = case tm of
-      --       ETerm   body'' _ ->
-      --         hoist generalize (analyzeTerm  body'')
-      --           *> analyzeProperty prop
-      --           *> checkInvariantsHeld
-      --       EObject body'' _ ->
-      --         hoist generalize (analyzeTermO body'')
-      --           *> analyzeProperty prop
-      --           *> checkInvariantsHeld
+--             go :: Analyze AVal -> Symbolic (S Bool)
+--             go act = do
+--               let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
+--               case eAnalysis of
+--                 Left cf -> do
+--                   liftIO $ putMVar compileFailureVar cf
+--                   pure false
+--                 Right (propResult, state1, _log) -> do
+--                   let qEnv = mkQueryEnv aEnv state1 propResult
+--                   eQuery <- runExceptT $ runReaderT (queryAction $ analyzeProp prop) qEnv
+--                   case eQuery of
+--                     Left cf' -> do
+--                       liftIO $ putMVar compileFailureVar cf'
+--                       pure false
+--                     Right symAction -> pure $ symAction
 
-      -- checkResult <- runCheck check $ do
-      --   env0      <- mkAnalyzeEnv argTys tables
-      --   state0    <- mkInitialAnalyzeState
-      --     (tables & traverse %~ (\(a, b, c) -> (a, b)))
-      --     <$> allocateSymbolicCells tables
-      --   eAnalysis <- runExceptT $ runRWST (runAnalyzeT action) env0 state0
-
-      --   case eAnalysis of
-      --     Left cf -> do
-      --       liftIO $ putMVar compileFailureVar cf
-      --       pure false
-      --     Right (propResult, _env, _log) ->
-      --       pure propResult
-
-      -- let prop   = check ^. ckProp
-      --     action :: AnalyzeT Symbolic (S Bool)
-      --     action = case tm of
-      --       ETerm   body'' _ -> do
-      --         _ <- hoist generalize (analyzeTerm  body'')
-      --         (&&&) <$> analyzeProperty prop <*> checkInvariantsHeld
-      --       EObject body'' _ -> do
-      --         _ <- hoist generalize (analyzeTermO body'')
-      --         (&&&) <$> analyzeProperty prop <*> checkInvariantsHeld
-
-      -- checkResult <- runCheck check $ do
-      --   env0      <- mkAnalyzeEnv argTys tables
-      --   state0    <- mkInitialAnalyzeState
-      --     (tables & traverse %~ (\(a, b, _c) -> (a, b)))
-      --     <$> allocateSymbolicCells tables
-      --   eAnalysis <- runExceptT $ runRWST (runAnalyzeT action) env0 state0
-
-      --   case eAnalysis of
-      --     Left cf -> do
-      --       liftIO $ putMVar compileFailureVar cf
-      --       pure false
-      --     Right (propResult, _env, _log) ->
-      --       pure propResult
+--         case tm of
+--           ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
+--           EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
 
       mVarVal <- tryTakeMVar compileFailureVar
       pure $ case mVarVal of

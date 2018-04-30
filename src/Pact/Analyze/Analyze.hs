@@ -199,6 +199,13 @@ data AnalyzeState
     }
   deriving (Show)
 
+data QueryEnv
+  = QueryEnv
+    { _qeAnalyzeEnv    :: AnalyzeEnv
+    , _model           :: AnalyzeState
+    , _qeAnalyzeResult :: AVal
+    }
+
 makeLenses ''ColumnMap
 makeLenses ''AnalyzeEnv
 makeLenses ''TableMap
@@ -417,13 +424,6 @@ newtype Analyze a
     { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
-
-data QueryEnv
-  = QueryEnv
-    { _qeAnalyzeEnv    :: AnalyzeEnv
-    , _model           :: AnalyzeState
-    , _qeAnalyzeResult :: AVal
-    }
 
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
 mkQueryEnv = QueryEnv
@@ -1147,7 +1147,8 @@ analyzeTerm = \case
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
-checkInvariantsHeld :: Monad m => AnalyzeT m (S Bool)
+
+checkInvariantsHeld :: Analyze (S Bool)
 checkInvariantsHeld = sansProv <$> use maintainsInvariants
 
 checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
@@ -1229,9 +1230,9 @@ analyzeProp (TableRead tn)  = view $ model.tableRead tn
 analyzeProp (TableWrite tn) = view $ model.tableWritten tn
 -- analyzeProp (CellIncrease tableName colName)
 analyzeProp (ColumnConserve tableName colName) =
-  sansProv . (0 .==) <$> view (model.columnDelta tableName (literalS colName))
+  sansProv . (0 .==) <$> view (model.columnDelta tableName colName)
 analyzeProp (ColumnIncrease tableName colName) =
-  sansProv . (0 .<) <$> view (model.columnDelta tableName (literalS colName))
+  sansProv . (0 .<) <$> view (model.columnDelta tableName colName)
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   view $ model.rowRead tn sRk
@@ -1243,20 +1244,4 @@ analyzeProp (RowWrite tn pRk) = do
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
-  view $ model.cellEnforced tn (literalS cn) sRk
-
--- analyzeProperty (TableRead tn) = use $ tableRead tn
--- analyzeProperty (TableWrite tn) = use $ tableWritten tn
--- -- analyzeProperty (CellIncrease tableName colName)
--- analyzeProperty (ColumnConserve tableName colName) =
---   sansProv . (0 .==) <$> use (columnDelta tableName colName)
--- analyzeProperty (ColumnIncrease tableName colName) =
---   sansProv . (0 .<) <$> use (columnDelta tableName colName)
--- analyzeProperty (RowRead tn pRk)  = use . rowRead tn =<< analyzeProperty pRk
--- analyzeProperty (RowWrite tn pRk) = use . rowWritten tn =<< analyzeProperty pRk
-
--- -- Authorization
--- analyzeProperty (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
--- analyzeProperty (RowEnforced tn cn pRk) = do
---   sRk <- analyzeProperty pRk
---   use $ cellEnforced tn cn sRk
+  view $ model.cellEnforced tn cn sRk
