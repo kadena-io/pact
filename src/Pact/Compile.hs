@@ -42,6 +42,7 @@ import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
+import qualified Data.Map.Strict as M
 
 import Pact.Types.Lang
 import Pact.Types.Util
@@ -90,11 +91,11 @@ syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse as i = case as of
   [m] -> mkM m Nothing
-  [m,eh@(ELiteral (LString h) _)] -> mkM m . Just =<< mkHash "use" h eh
+  [m,eh@(ELitString h)] -> mkM m . Just =<< mkHash "use" h eh
   _ -> syntaxError i "use requires module name (symbol/string/bare atom) and optional hash"
   where
     mkM m h = case m of
-      (ELiteral (LString s) _) -> mk s h -- TODO deprecate
+      (ELitString s) -> mk s h -- TODO deprecate
       (ESymbol s _) -> mk s h -- TODO deprecate
       (EAtom s Nothing Nothing _) -> mk s h
       _ -> syntaxError i "use: module name must be symbol/string/bare atom"
@@ -105,11 +106,20 @@ mkHash msg h el = case fromText' h of
       Left e -> mkInfo el >>= \i -> syntaxError i $ msg ++ ": bad hash: " ++ e
       Right mh -> return mh
 
+justDocs :: Text -> Maybe Meta
+justDocs docs = Just $ Meta docs def
+
+mkMeta :: Text -> [Exp] -> Compile (Maybe Meta)
+mkMeta docs ps = Just . Meta docs . M.fromList <$> mapM toMetas ps
+  where toMetas (EList' [EAtom' k,v]) = return (k,v)
+        toMetas bad = mkInfo bad >>= \i -> syntaxError i "mkMeta: malformed meta form, expected (atom expression)"
+
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   case es of
     [] -> syntaxError ai "Empty module"
-    (ELiteral (LString docs) _:body) -> mkModule (Just docs) body
+    (ELitString docs:body) -> mkModule (justDocs docs) body
+    (EList' (ELitString docs:ps):body) -> mkMeta docs ps >>= \m -> mkModule m body
     body -> mkModule Nothing body
     where
       defOnly d = case d of
@@ -151,8 +161,10 @@ currentModule i = use csModule >>= \m -> case m of
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
     case es of
-      (EAtom dn Nothing ty _:EList args Nothing _:ELiteral (LString docs) _:body) ->
-          mkDef dn ty args (Just docs) body
+      (EAtom dn Nothing ty _:EList args Nothing _:ELitString docs:body) ->
+          mkDef dn ty args (justDocs docs) body
+      (EAtom dn Nothing ty _:EList args Nothing _:EList' (ELitString docs:ps):body) ->
+          mkMeta docs ps >>= \m -> mkDef dn ty args m body
       (EAtom dn Nothing ty _:EList args Nothing _:body) ->
           mkDef dn ty args Nothing body
       _ -> syntaxError namei "Invalid def"
@@ -231,7 +243,9 @@ doLets _ i = syntaxError i "Invalid let declaration"
 doConst :: [Exp] -> Info -> Compile (Term Name)
 doConst es i = case es of
   [EAtom dn Nothing ct _,t] -> mkConst dn ct t Nothing
-  [EAtom dn Nothing ct _,t,ELiteral (LString docs) _] -> mkConst dn ct t (Just docs)
+  [EAtom dn Nothing ct _,t,ELitString docs] -> mkConst dn ct t (justDocs docs)
+  [EAtom dn Nothing ct _,t,EList' (ELitString docs:ps)] ->
+    mkMeta docs ps >>= \m -> mkConst dn ct t m
   _ -> syntaxError i "Invalid defconst"
   where
     mkConst dn ty v docs = do
@@ -242,7 +256,9 @@ doConst es i = case es of
 
 doSchema :: [Exp] -> Info -> Compile (Term Name)
 doSchema es i = case es of
-  (EAtom utn Nothing Nothing _:ELiteral (LString docs) _:as) -> mkUT utn (Just docs) as
+  (EAtom utn Nothing Nothing _:ELitString docs:as) -> mkUT utn (justDocs docs) as
+  (EAtom utn Nothing Nothing _:EList' (ELitString docs:ps):as) ->
+    mkMeta docs ps >>= \m -> mkUT utn m as
   (EAtom utn Nothing Nothing _:as) -> mkUT utn Nothing as
   _ -> syntaxError i "Invalid schema definition"
   where
@@ -256,7 +272,9 @@ doSchema es i = case es of
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
   [EAtom tn Nothing ty _] -> mkT tn ty Nothing
-  [EAtom tn Nothing ty _,ELiteral (LString docs) _] -> mkT tn ty (Just docs)
+  [EAtom tn Nothing ty _,ELitString docs] -> mkT tn ty (justDocs docs)
+  [EAtom tn Nothing ty _,EList' (ELitString docs:ps)] ->
+    mkMeta docs ps >>= \m -> mkT tn ty m
   _ -> syntaxError i "Invalid table definition"
   where
     mkT tn ty docs = do
@@ -268,7 +286,7 @@ doTable es i = case es of
       return $ TTable (TableName tn) (fst cm) (snd cm) tty docs i
 
 doBless :: [Exp] -> Info -> Compile (Term Name)
-doBless [he@(ELiteral (LString s) _)] i = mkHash "bless" s he >>= \h -> return $ TBless h i
+doBless [he@(ELitString s)] i = mkHash "bless" s he >>= \h -> return $ TBless h i
 doBless _ i = syntaxError i "Invalid bless, must contain valid hash"
 
 mkInfo :: Exp -> Compile Info

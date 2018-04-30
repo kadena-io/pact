@@ -604,7 +604,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
     Named n <$> trackNode t' an <*> pure an
   tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
   ft' <- traverse toUserType _tFunType
-  return $ FDefun _tInfo fn ft' args tcs _tDocs
+  return $ FDefun _tInfo fn ft' args tcs _tMeta
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 

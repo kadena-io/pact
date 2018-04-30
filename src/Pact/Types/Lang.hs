@@ -53,6 +53,8 @@ module Pact.Types.Lang
    isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
    Exp(..),eLiteral,eAtom,eBinding,eList,eLitListType,eObject,eParsed,eQualifier,eSymbol,eType,
    _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
+   pattern EList',pattern ELitList,pattern ELitString,pattern EAtom',
+   Meta(..),
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
@@ -68,7 +70,7 @@ module Pact.Types.Lang
    ConstVal(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
-   tDefBody,tDefName,tDefType,tDocs,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
+   tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
@@ -103,7 +105,7 @@ import Data.Thyme
 import Data.Thyme.Format.Aeson ()
 import System.Locale
 import Data.Scientific
-import GHC.Generics
+import GHC.Generics (Generic)
 import Data.Decimal
 import Data.Hashable
 import Data.List.NonEmpty (NonEmpty (..))
@@ -116,6 +118,7 @@ import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 
 import Data.Serialize (Serialize)
 
@@ -483,6 +486,16 @@ data Exp =
 
 instance NFData Exp
 
+
+pattern EList' :: [Exp] -> Exp
+pattern EList' ls <- EList ls Nothing _
+pattern ELitList :: [Exp] -> Exp
+pattern ELitList ls <- EList ls (Just _) _
+pattern EAtom' :: Text -> Exp
+pattern EAtom' tag <- EAtom tag Nothing Nothing _
+pattern ELitString :: Text -> Exp
+pattern ELitString s <- ELiteral (LString s) _
+
 makePrisms ''Exp
 
 
@@ -502,7 +515,22 @@ instance Show Exp where
 $(makeLenses ''Exp)
 
 
-
+data Meta = Meta
+  { _mDocs :: !Text
+  , _mMetas :: !(M.Map Text Exp)
+  } deriving (Eq,Generic)
+instance NFData Meta
+instance Ord Meta where
+  Meta ad am `compare` Meta bd bm = (ad,M.keys am) `compare` (bd,M.keys bm)
+instance Show Meta where
+  show Meta {..} = case M.toList _mMetas of
+    [] -> show _mDocs
+    ms -> "(" ++ show _mDocs ++ " " ++
+      unwords ((`map` ms) $ \(k,v) ->
+          "(" ++ show k ++ " " ++ show v ++ ")")
+      ++ ")"
+instance ToJSON Meta where
+  toJSON Meta {..} = object [ "docs" .= _mDocs, "metas" .= toJSON (show <$> _mMetas) ]
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 
@@ -609,7 +637,7 @@ instance Show TableName where show (TableName s) = show s
 data Module = Module {
     _mName :: !ModuleName
   , _mKeySet :: !KeySetName
-  , _mDocs :: !(Maybe Text)
+  , _mMeta :: !(Maybe Meta)
   , _mCode :: !Code
   , _mHash :: !Hash
   , _mBlessed :: !(HS.HashSet Hash)
@@ -620,10 +648,13 @@ instance Show Module where
 instance ToJSON Module where
   toJSON Module {..} = object $
     ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed ]
-    ++ maybe [] (return . ("docs" .=)) _mDocs
+    ++ maybe [] (return . ("meta" .=)) _mMeta
+-- | TODO when we figure out how/if we're storing modules in the database we can
+-- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> o .:? "docs" <*> o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
+    o .: "name" <*> o .: "keyset" <*> pure Nothing {- o .:? "meta" -} <*>
+    o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -658,7 +689,7 @@ data Term n =
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tDocs :: !(Maybe Text)
+    , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
     } |
     TNative {
@@ -672,7 +703,7 @@ data Term n =
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !ModuleName
     , _tConstVal :: !(ConstVal (Term n))
-    , _tDocs :: !(Maybe Text)
+    , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
     } |
     TApp {
@@ -698,7 +729,7 @@ data Term n =
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !ModuleName
-    , _tDocs :: !(Maybe Text)
+    , _tMeta :: !(Maybe Meta)
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
     } |
@@ -734,7 +765,7 @@ data Term n =
     , _tModule :: ModuleName
     , _tHash :: !Hash
     , _tTableType :: !(Type (Term n))
-    , _tDocs :: !(Maybe Text)
+    , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -745,11 +776,11 @@ instance Show n => Show (Term n) where
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
-      show _tFunType ++ maybeDelim " " _tDocs ++ ")"
+      show _tFunType ++ maybeDelim " " _tMeta ++ ")"
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
-      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tDocs ++ ")"
+      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tMeta ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show (unscope b) ++ " " ++ show c ++ ")"
@@ -764,10 +795,10 @@ instance Show n => Show (Term n) where
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
     show TSchema {..} =
       "(TSchema " ++ asString' _tModule ++ "." ++ asString' _tSchemaName ++ " " ++
-      show _tFields ++ maybeDelim " " _tDocs ++ ")"
+      show _tFields ++ maybeDelim " " _tMeta ++ ")"
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
-      ++ maybeDelim " " _tDocs ++ ")"
+      ++ maybeDelim " " _tMeta ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -833,8 +864,8 @@ instance Monad Term where
     TBless hs i >>= _ = TBless hs i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
-    TSchema {..} >>= f = TSchema _tSchemaName _tModule _tDocs (fmap (fmap (>>= f)) _tFields) _tInfo
-    TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tDocs _tInfo
+    TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
+    TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
 
 
 instance FromJSON (Term n) where

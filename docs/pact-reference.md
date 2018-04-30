@@ -1040,6 +1040,34 @@ Tables and objects can only take a schema type literal.
 Special forms {#special-forms}
 ---
 
+### Docs and metadata
+Many special forms like [defun](#defun) accept optional documentation strings,
+in the following form:
+
+```lisp
+(defun foo (bar)
+  "Do the thing with BAR"
+  ...)
+```
+
+However, in this position an optional _metadata section_ can specify docs and
+metadata, where metadata can be tagged with any key desired.
+The following code provides a docstring of "does the thing with BAR" and specifies metadata of type
+`property` and `example`:
+
+```lisp
+(defun foo (bar)
+  ("does the thing with BAR"
+    (property [(when something abort)])
+    (example (foo "my house")))
+  ...)
+```
+
+Thus, the metadata form is DOC PAIR*, where a PAIR is (ATOM EXPR). The Pact
+language lexer/compiler ignores all EXPR forms, to be lexed/compiled at some later stage
+by whatever tool recognizes ATOM.
+
+
 ### bless {#bless}
 ```
 (bless HASH)
@@ -1060,10 +1088,10 @@ See [Dependency managment](#dependency-management) for a discussion of the bless
 ### defun {#defun}
 
 ```lisp
-(defun NAME ARGLIST [DOCSTRING] BODY...)
+(defun NAME ARGLIST [DOC-OR-META] BODY...)
 ```
 
-Define NAME as a function, accepting ARGLIST arguments, with optional DOCSTRING.
+Define NAME as a function, accepting ARGLIST arguments, with optional DOC-OR-META.
 Arguments are in scope for BODY, one or more expressions.
 
 ```lisp
@@ -1075,10 +1103,10 @@ Arguments are in scope for BODY, one or more expressions.
 
 ### defconst {#defconst}
 ```lisp
-(defun NAME VALUE [DOCSTRING])
+(defun NAME VALUE [DOC-OR-META])
 ```
 
-Define NAME as VALUE, with option DOCSTRING. Value is evaluated upon module load and "memoized".
+Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon module load and "memoized".
 
 ```lisp
 (defconst COLOR_RED="#FF0000" "Red in hex")
@@ -1089,7 +1117,7 @@ Define NAME as VALUE, with option DOCSTRING. Value is evaluated upon module load
 ### defpact {#defpact}
 
 ```
-(defpact NAME ARGLIST [DOCSTRING] STEPS...)
+(defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 ```
 
 Define NAME as a _pact_, a multistep computation intended for private transactions.
@@ -1111,7 +1139,7 @@ or "private" (with entity indicator). With private steps, failures result in a r
 ### defschema {#defschema}
 
 ```
-(defschema NAME [DOCSTRING] FIELDS...)
+(defschema NAME [DOC-OR-META] FIELDS...)
 ```
 
 Define NAME as a _schema_, which specifies a list of FIELDS. Each field
@@ -1129,7 +1157,7 @@ is in the form `FIELDNAME[:FIELDTYPE]`.
 ### deftable {#deftable}
 
 ```
-(deftable NAME[:SCHEMA] [DOCSTRING])
+(deftable NAME[:SCHEMA] [DOC-OR-META])
 ```
 
 Define NAME as a _table_, used in database functions. Note the
@@ -1211,10 +1239,10 @@ hash of a loaded module on the chain.
 
 ### module {#module}
 ```
-(module NAME KEYSET [DOCSTRING] DEFS...)
+(module NAME KEYSET [DOC-OR-META] DEFS...)
 ```
 
-Define and install module NAME, guarded by keyset KEYSET, with optional DOCSTRING.
+Define and install module NAME, guarded by keyset KEYSET, with optional DOC-OR-META.
 DEFS must be [defun](#defun) or [defpact](#defpact) expressions only.
 
 ```lisp
