@@ -1063,7 +1063,7 @@ The following code provides a docstring of "does the thing with BAR" and specifi
   ...)
 ```
 
-Thus, the metadata form is DOC [PAIR [PAIR [...]]], where a PAIR is (ATOM EXPR). The Pact
+Thus, the metadata form is DOC PAIR*, where a PAIR is (ATOM EXPR). The Pact
 language lexer/compiler ignores all EXPR forms, to be lexed/compiled at some later stage
 by whatever tool recognizes ATOM.
 
