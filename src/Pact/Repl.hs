@@ -98,7 +98,7 @@ completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
 replSettings :: (MonadIO m, MonadState ReplState m) => Settings m
 replSettings = Settings
   completeFn
-  Nothing -- don't write history
+  (Just ".pact-history") -- write history to ".pact-history"
   True -- automatically add each line to history
 
 generalRepl :: ReplMode -> IO (Either () (Term Name))
