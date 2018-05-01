@@ -22,11 +22,13 @@ executable pact
 
   build-depends:
       base
+    , bytestring
     , containers
     , mtl
     , pact
     , reflex
     , reflex-dom
+    , string-qq
     , text
   hs-source-dirs:      src
   ghc-options:         -Wall -threaded -rtsopts

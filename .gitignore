@@ -14,3 +14,11 @@ result
 /web/npm-debug.log
 log/
 /deleteme.sqllite
+all.js
+all.js.externs
+lib.js
+out.js
+out.stats
+rts.js
+runmain.js
+manifest.webapp

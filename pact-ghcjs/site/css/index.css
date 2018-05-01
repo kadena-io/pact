@@ -20,7 +20,7 @@ body {
     right: 0;
 }
 
-#code_examples, #code_examples_fieldset, #code_examples-button, #gist_integration,
+#code_examples, .code_examples_fieldset, #code_examples-button, #gist_integration,
 #gist_integration_fieldset, #gist_integration-button {
     margin: 0;
     padding: 0 0;
@@ -68,13 +68,13 @@ body {
   margin-left: 10px;
 }
 
-#view_mode {
+.view_mode {
   background-color: #fff;
   display: inline-block;
   margin: 0px;
   padding: 0px;
 }
-#view_mode label {
+.view_mode label {
   cursor: pointer;
   display: inline-block;
   padding-top: 5px;
@@ -83,7 +83,7 @@ body {
   padding-right: 10px;
   text-align: center;
 }
-#view_mode li {
+.view_mode li {
   background-color: #fff;
   display: inline-block;
   padding: 0px;
@@ -91,17 +91,17 @@ body {
   margin: 0px;
   border: 0px;
 }
-#view_mode input[type="radio"] {
+.view_mode input[type="radio"] {
   display:none;
   border-top: solid 1px #fff;
   border-left: solid 1px #fff;
   border-right: solid 1px #fff;
 }
 
-#view_mode input[type="radio"]:checked + label {
+.view_mode input[type="radio"]:checked + label {
   background-color: #eee;
 }
-#view_mode input[type=checked]:checked + label {
+.view_mode input[type=checked]:checked + label {
   background-color: #eee;
   border: solid 1px #ddd;
   border-bottom: 0px;
@@ -267,8 +267,38 @@ iframe {
     #showAfterLoad {
         text-align: center;
     }
-    #view_mode {
+    .view_mode {
         float: none !important;
     }
 
+}
+
+.repl-input-controls {
+    width: 100%;
+}
+
+.repl-input-controls textarea {
+    width: 90%;
+    padding: 0;
+    margin: 0;
+}
+textarea {
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.repl-input-controls button {
+    width: 9%;
+    padding: 0;
+    margin: 0;
+}
+
+.code-example-dropdown {
+    border-bottom: solid 1px black;
+}
+
+.logo-image {
+    position: relative;
+    top: 4px;
+    right: 3px;
 }
