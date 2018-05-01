@@ -1148,8 +1148,8 @@ liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
 
-checkInvariantsHeld :: Analyze (S Bool)
-checkInvariantsHeld = sansProv <$> use maintainsInvariants
+checkInvariantsHeld :: Query (S Bool)
+checkInvariantsHeld = sansProv <$> view (model.maintainsInvariants)
 
 checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
 checkSchemaInvariant = \case
