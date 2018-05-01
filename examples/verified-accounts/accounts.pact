@@ -41,8 +41,8 @@
   ; (@property conserves-mass)
   (defun transfer (src dest amount)
     "transfer AMOUNT from SRC to DEST"
-    (debit src amount { "transfer-to": dest })
-    (credit dest amount { "transfer-from": src }))
+    (debit src amount)
+    (credit dest amount))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -109,8 +109,8 @@
   ; (@property
   ;   (with-read 'delta accounts acct
   ;     { "balance" := amount }))
-  (defun debit (acct amount data)
-    "Debit AMOUNT from ACCT balance recording DATA"
+  (defun debit (acct amount)
+    "Debit AMOUNT from ACCT balance"
     (with-read accounts acct
               { "balance":= balance
               , "auth" := auth
@@ -119,18 +119,16 @@
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
-                , "data": data
                 }
           )))
 
- (defun credit (acct amount data)
-   "Credit AMOUNT to ACCT balance recording DATA"
+ (defun credit (acct amount)
+   "Credit AMOUNT to ACCT balance"
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct
             { "balance": (+ balance amount)
             , "amount": amount
-            , "data": data
             }
       )))
 )
