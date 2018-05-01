@@ -17,7 +17,6 @@
      amount:decimal
      ccy:string
      auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
-     data:value
      )
 
   (deftable accounts:{account}
@@ -33,7 +32,6 @@
       { "balance": 0.0
       , "amount": 0.0
       , "auth": AUTH_KEYSET
-      , "data": "Created account"
       }
     ))
 
@@ -60,7 +58,7 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
-    (read accounts id ['balance 'ccy 'data 'amount]))
+    (read accounts id ['balance 'ccy 'amount]))
 
   (defun check-balance (balance:decimal amount:decimal)
     (enforce (<= amount balance) "Insufficient funds"))
@@ -69,12 +67,11 @@
     (enforce-keyset 'accounts-admin-keyset)
     (update accounts address
             { "balance": amount
-            , "amount": amount
-            , "data": "Admin account funding" }
+            , "amount": amount }
       ))
 
-  (defun read-all ()
-    (map (read-account-admin) (keys accounts)))
+  ; (defun read-all ()
+  ;   (map (read-account-admin) (keys accounts)))
 
   ; (@property
   ;   (let
