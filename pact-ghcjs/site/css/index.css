@@ -1,0 +1,274 @@
+/* Page layout */
+
+html, body {
+  height: 100%;
+}
+
+.ace_scrollbar {
+    display: none !important;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  color: rgb(29, 34, 45);
+}
+
+#more_information {
+    position: fixed;
+    top: 0;
+    right: 0;
+}
+
+#code_examples, #code_examples_fieldset, #code_examples-button, #gist_integration,
+#gist_integration_fieldset, #gist_integration-button {
+    margin: 0;
+    padding: 0 0;
+    border: solid 1px #fff;
+    display: inline-block;
+    font-family: 'Roboto', sans-serif;
+    font-size: 15px;
+    background: white;
+}
+
+#compile_now {
+    background-color: #d4ebe3;
+}
+
+#column2, #code {
+    background: #fdf6e3;
+}
+
+#showAfterLoad {
+    display: none;
+}
+
+#wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+#options {
+  border-bottom: solid 2px #ddd;
+}
+#options input {
+  vertical-align: middle;
+  margin-bottom: 5px;
+}
+#showjs, #compile_now {
+  margin-left: 10px;
+}
+#auto_compile {
+  margin-left: 10px;
+}
+
+#view_mode {
+  background-color: #fff;
+  display: inline-block;
+  margin: 0px;
+  padding: 0px;
+}
+#view_mode label {
+  cursor: pointer;
+  display: inline-block;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-left: 10px;
+  padding-right: 10px;
+  text-align: center;
+}
+#view_mode li {
+  background-color: #fff;
+  display: inline-block;
+  padding: 0px;
+  padding-left: 0px;
+  margin: 0px;
+  border: 0px;
+}
+#view_mode input[type="radio"] {
+  display:none;
+  border-top: solid 1px #fff;
+  border-left: solid 1px #fff;
+  border-right: solid 1px #fff;
+}
+
+#view_mode input[type="radio"]:checked + label {
+  background-color: #eee;
+}
+#view_mode input[type=checked]:checked + label {
+  background-color: #eee;
+  border: solid 1px #ddd;
+  border-bottom: 0px;
+}
+
+#editor_view {
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  margin-top: 0px;
+
+}
+
+#column1, #column2 {
+  position: relative;
+  flex: 1;
+}
+
+#column2 {
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+  overflow: auto;
+}
+
+#code {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.code-input {
+    width: 100%;
+    height: 100%;
+}
+
+.repl-history {
+  width: 100%;
+  height: 100%;
+}
+
+.repl-input {
+  width: 100%;
+  position: absolute;
+  bottom: 0;
+}
+
+.separator {
+  flex-basis: 2px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  background-color: #ddd;
+}
+
+/* Typography */
+
+h1, h2, h3 {
+  line-height: 110%;
+}
+
+h1 {
+  font-size: 1.5em;
+  font-weight: 300;
+  margin: 8px;
+}
+
+h2, h3 {
+  margin: 40px 0 10px 0;
+}
+
+a, a:visited, a:active, a:hover {
+  color: #c4953a;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.info {
+  margin-top: -6px;
+  font-size: 12px;
+  font-variant: small-caps;
+}
+
+blockquote {
+  font-style: italic;
+  display: block;
+  padding: 10px 40px;
+  margin: 0;
+}
+
+iframe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.loading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  font-family: monospace;
+  color: darkgray;
+  margin: 15px;
+  font-size: 15px;
+}
+
+#code {
+  overflow: visible;
+}
+
+.ui-state-disabled {
+    display: none;
+}
+.tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted black;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: black;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 100;
+    top: 150%;
+    left: 50%;
+    margin-left: -100px;
+}
+
+.tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent black transparent;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+}
+
+@media (max-width: 800px) {
+    #hideIfTiny {
+        display: none;
+    }
+    #showAfterLoad {
+        text-align: center;
+    }
+    #view_mode {
+        float: none !important;
+    }
+
+}

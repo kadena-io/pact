@@ -1,9 +1,15 @@
-{ rpRef ? "ea3c9a1536a987916502701fb6d319a880fdec96" }:
+{ rpRef ? "ea3c9a1536a987916502701fb6d319a880fdec96", rpSha ?  "0339ds5xa4ymc7xs8nzpa4mvm09lzscisdgpdfc6rykwhbgw9w2a" }:
 
-let rp = builtins.fetchTarball "https://github.com/mightybyte/reflex-platform/archive/${rpRef}.tar.gz";
+let rp = (import <nixpkgs> {}).fetchFromGitHub {
+           owner = "mightybyte";
+           repo = "reflex-platform";
+           rev = rpRef;
+           sha256 = rpSha;
+         };
 
 in
   (import rp {}).project ({ pkgs, ... }: {
+    name = "pact-umbrella";
     overrides = self: super: {
       hastache = pkgs.haskell.lib.dontCheck super.hastache;
       statistics = pkgs.haskell.lib.dontCheck super.statistics;

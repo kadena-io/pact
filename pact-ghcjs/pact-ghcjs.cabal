@@ -22,6 +22,7 @@ executable pact
 
   build-depends:
       base
+    , containers
     , mtl
     , pact
     , reflex

@@ -5,8 +5,10 @@
 .cabal-sandbox
 /cabal.sandbox.config
 dist
+dist-ghcjs
 dist-newstyle
 docs/_build
+result
 /web/pact.js
 /web/pact.min.js
 /web/npm-debug.log

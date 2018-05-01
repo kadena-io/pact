@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecursiveDo       #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecursiveDo         #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -8,19 +9,25 @@
 
 module Main where
 
+------------------------------------------------------------------------------
+import           Control.Monad.State.Strict
 import           Control.Monad.Trans
 import           Data.Char
 import           Data.Monoid
+import           Data.Sequence (Seq)
+import qualified Data.Sequence as S
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Reflex
 import           Reflex.Dom
-
-import Pact.ReplCommon (evalString)
+------------------------------------------------------------------------------
+import           Pact.ReplCommon
+import           Pact.Repl.Types
+import           Pact.Types.Lang
+------------------------------------------------------------------------------
 
 main :: IO ()
 main = mainWidgetWithHead headWidget app
---  where
---    css = "html, body { height: 100%; }"
 
 headWidget :: MonadWidget t m => m ()
 headWidget = do
@@ -83,35 +90,63 @@ codeWidget iv sv = do
         & textAreaConfig_attributes .~ constDyn ("class" =: "code-input")
       return $ value ta
 
+data DisplayedSnippet
+  = InputSnippet Text
+  | OutputSnippet Text
+  deriving (Eq,Ord,Show,Read)
+
+dummyData :: Seq DisplayedSnippet
+dummyData = S.fromList
+      [ OutputSnippet ";; Welcome to the Pact interactive repl"
+      , OutputSnippet ";; Enter pact commands here"
+      ]
+
+snippetWidget :: MonadWidget t m => DisplayedSnippet -> m ()
+snippetWidget (InputSnippet t) = el "pre" $ text t
+snippetWidget (OutputSnippet t) = el "pre" $ text t
+
 replWidget :: MonadWidget t m => m ()
 replWidget = do
+    initState <- liftIO $ initReplState Interactive
+    let runInput input snippets =
+          snippets <> S.singleton (InputSnippet input) -- <> runExpr input
+
     elAttr "div" ("id" =: "code") $ mdo
-      (e,_) <- elAttr' "pre" ("class" =: "repl-history" <> "tabindex" =: "0" <> "autofocus" =: "") $ do
-        dynText $ (<>) <$> output <*> curCmd
-        text "|"
-      --ti <- textInput $ def
-      --  & textInputConfig_attributes .~ constDyn ("class" =: "repl-input")
-      performEvent_ (liftIO . print <$> domEvent Keyup e)
-      curCmd <- foldDyn ($) "" $ leftmost
-        [ f <$> domEvent Keypress e
-        , g <$> domEvent Keyup e
-        ]
-      let newCommand = tag (current curCmd) (ffilter (==13) $ domEvent Keyup e)
-      commandHist <- foldDyn ($) [] ((:) <$> newCommand)
-      output <- foldDyn ($) initialText $ leftmost
-        [ addCommand <$> newCommand
-        ]
+      replState <- holdDyn (Left "init", initState) evalResult
+      snippets <- holdUniqDyn =<< foldDyn ($) dummyData (leftmost
+        [ runInput <$> newInput
+        , (\r ss -> ss <> S.singleton (OutputSnippet (showResult $ fst r))) <$> evalResult
+        ])
+      --history <- foldDyn ($) emptyHistory $
+      --  (addHistoryUnlessConsecutiveDupe <$> newInput)
+      dyn $ mapM_ snippetWidget <$> snippets
+      ti <- textArea $ def
+        & attributes .~ constDyn mempty -- ("class" =: "repl-input")
+        & setValue .~ (mempty <$ enterPressed)
+      (b,_) <- el' "button" $ text "Evaluate"
+      let enterPressed = domEvent Click b
+      let newInput = tag (current $ value ti) enterPressed
+      --let filterKey k = ffilter (==k) $ _textArea_keydown ti
+      --    enterPressed = filterKey 13
+      --    upPressed = filterKey 38
+      --    downPressed = filterKey 40
+      --evalResult <- performEvent (liftIO . myEvalString <$> newInput)
+      evalResult <- performEvent (attachWith runExpr (current replState) newInput)
       return ()
-  where
-    prompt = "λ "
-    f :: Word -> Text -> Text
-    f key old = old <> T.singleton (chr $ fromIntegral key)
-    initialText = T.unlines
-      [ ";; Welcome to the Pact interactive repl"
-      , ";; Enter pact commands here"
-      ] <> prompt
-    g :: Word -> Text -> Text
-    g 8 = T.dropEnd 1
-    g 13 = const mempty
-    g _ = id
-    addCommand cmd out = out <> cmd <> "\n" <> prompt
+
+runExpr
+    :: MonadIO m
+    => (Either String (Term Name), ReplState)
+    -> Text
+    -> m (Either String (Term Name), ReplState)
+runExpr (a,s) e = liftIO $ runStateT (evalRepl' $ T.unpack e) s
+
+myEvalString :: Text -> IO Text
+myEvalString cmd = do
+  (er,s) <- initReplState StringEval >>= runStateT (evalRepl' $ T.unpack cmd)
+  return $ case er of
+    (Right v) -> T.pack $ show v
+    (Left e) -> "Error: " <> T.pack e
+
+showResult (Right v) = T.pack $ show v
+showResult (Left e) = "Error: " <> T.pack e
