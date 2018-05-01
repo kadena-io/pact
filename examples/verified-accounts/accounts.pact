@@ -27,20 +27,21 @@
 
   (defconst PACT_REF "ref")
 
-  (defun create-account (address ccy)
+  (defun create-account (address:string ccy)
     (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
+      , "ccy": ccy
       , "auth": AUTH_KEYSET
       }
     ))
 
   ; TODO: defproperty?
   ; (@property conserves-mass)
-  (defun transfer (src dest amount)
+  (defun transfer (src:string dest:decimal amount:decimal)
     "transfer AMOUNT from SRC to DEST"
-    (debit src amount)
-    (credit dest amount))
+    (debit src amount))
+    ; (credit dest amount))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -48,7 +49,9 @@
               { "balance":= b
               , "ccy":= c
               , "auth" := auth }
-      { "balance": b, "ccy": c }
+      ; TODO: we can't handle this object yet
+      ; { "balance": b, "ccy": c }
+      b
       ))
 
   (@property
@@ -70,38 +73,6 @@
             , "amount": amount }
       ))
 
-  ; (defun read-all ()
-  ;   (map (read-account-admin) (keys accounts)))
-
-  ; (@property
-  ;   (let
-  ;     (with-read 'initial accounts acct
-  ;       { "balance" := initial-balance
-  ;       , "keyset" := ks
-  ;       , "auth" := auth
-  ;       })
-  ;     (with-read 'final accounts acct
-  ;       { "balance" := final-balance })
-
-  ;     (if
-  ;       (and
-  ;         (>= initial-balance amount)
-  ;         (= ks auth))
-  ;       (= final-balance (- initial-balance amount))
-  ;       (= final-balance initial-balance)))
-  ;   )
-
-
-  ; (@property
-  ;   (let
-  ;     (with-read 'initial accounts acct
-  ;       { "balance" := initial-balance })
-  ;     (with-read 'final accounts acct
-  ;       { "balance" := final-balance })
-
-  ;     (= final-balance (+ initial-balance amount))
-  ;   ))
-
   ; ; alternately
   ; (@property
   ;   (with-read 'delta accounts acct
@@ -112,7 +83,7 @@
               { "balance":= balance
               , "auth" := auth
               }
-      (check-balance balance amount)
+      ; (check-balance balance amount)
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
