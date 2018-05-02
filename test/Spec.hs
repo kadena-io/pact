@@ -86,6 +86,19 @@ suite = tests
         (PIntArithOp Mul neg1 "x")
         (Result :: Prop Integer)
 
+  , scope "inlining" $ do
+      let code =
+            [text|
+              (defun helper:integer (b:integer)
+                (if (< b 10)
+                  10
+                  b))
+
+              (defun test:integer (a:integer)
+                (helper a))
+            |]
+      expectPass code $ Valid $ PComparison Gte (Result :: Prop Integer) 10
+
   , scope "success" $ do
       let code =
             [text|
