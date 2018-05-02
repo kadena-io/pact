@@ -273,6 +273,9 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
 
+addConstraint :: SBool -> Analyze ()
+addConstraint = tell . Constraints . constrain
+
 allocateSymbolicCells
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
   -> Symbolic (TableMap SymbolicCells)
@@ -726,8 +729,8 @@ analyzeTermO = \case
           traceShowM $ is
           case mInvariant of
             Nothing -> traceM "not checking invariant" >> pure ()
-            Just invariant -> traceM "checking invariant" >> tell $ Constraints $
-              constrain $ runReader (checkSchemaInvariant invariant) sbvVal
+            Just invariant -> traceM "checking invariant" >> addConstraint $
+              runReader (checkSchemaInvariant invariant) sbvVal
           pure $ mkAVal' (SBVI.SBV sbvVal)
 
         EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
