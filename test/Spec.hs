@@ -75,7 +75,18 @@ expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
 suite :: Test ()
 suite = tests
-  [ scope "success" $ do
+  [ scope "result" $ do
+      let code =
+            [text|
+              (defun test:integer (x:integer)
+                (* x -1))
+            |]
+          neg1 = (-1) :: Prop Integer
+      expectPass code $ Valid $ PComparison Eq
+        (PIntArithOp Mul neg1 "x")
+        (Result :: Prop Integer)
+
+  , scope "success" $ do
       let code =
             [text|
               (defun test:bool (x:integer)
