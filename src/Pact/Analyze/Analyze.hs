@@ -23,6 +23,7 @@ import Control.Monad.Except (MonadError, Except, ExceptT(..), runExceptT, runExc
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
+import Control.Monad.Writer (MonadWriter(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
@@ -87,7 +88,7 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
 --   <*> newArray "keySetAuths"
 
 newtype Constraints
-  = Constraints (Symbolic ())
+  = Constraints { runConstraints :: Symbolic () }
 
 instance Monoid Constraints where
   mempty = Constraints (pure ())
@@ -417,7 +418,8 @@ newtype Analyze a
   = Analyze
     { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
-            MonadState AnalyzeState, MonadError AnalyzeFailure)
+            MonadState AnalyzeState, MonadError AnalyzeFailure,
+            MonadWriter Constraints)
 
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
 mkQueryEnv = QueryEnv
@@ -724,7 +726,7 @@ analyzeTermO = \case
           traceShowM $ is
           case mInvariant of
             Nothing -> traceM "not checking invariant" >> pure ()
-            Just invariant -> traceM "checking invariant" >> Analyze $ lift $ lift $
+            Just invariant -> traceM "checking invariant" >> tell $ Constraints $
               constrain $ runReader (checkSchemaInvariant invariant) sbvVal
           pure $ mkAVal' (SBVI.SBV sbvVal)
 

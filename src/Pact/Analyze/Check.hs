@@ -45,7 +45,7 @@ import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
                              describeAnalyzeFailure, mkAnalyzeEnv,
                              mkInitialAnalyzeState, mkQueryEnv, runAnalyze,
                              queryAction, mkInitialAnalyzeState,
-                             checkInvariantsHeld)
+                             checkInvariantsHeld, runConstraints)
 import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
@@ -139,9 +139,10 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
                   pure false
-                Right (propResult, state1, _log) -> do
+                Right (propResult, state1, constraints) -> do
                   let qEnv = mkQueryEnv aEnv state1 propResult
                       qAction = (&&&) <$> analyzeProp prop <*> checkInvariantsHeld
+                  runConstraints constraints
                   eQuery <- runExceptT $ runReaderT (queryAction qAction) qEnv
                   case eQuery of
                     Left cf' -> do
