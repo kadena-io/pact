@@ -86,20 +86,14 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
 --   <*> newArray "keySets"
 --   <*> newArray "keySetAuths"
 
-newtype AnalyzeLog
-  = AnalyzeLog ()
+newtype Constraints
+  = Constraints (Symbolic ())
 
-instance Monoid AnalyzeLog where
-  mempty = AnalyzeLog ()
-  mappend _ _ = AnalyzeLog ()
+instance Monoid Constraints where
+  mempty = Constraints (pure ())
+  mappend (Constraints act1) (Constraints act2) = Constraints $ act1 *> act2
 
-instance Mergeable AnalyzeLog where
-  --
-  -- NOTE: If we change the underlying representation of AnalyzeLog to a list,
-  -- the default Mergeable instance for this will have the wrong semantics, as
-  -- it requires that lists have the same length. We more likely want to use
-  -- monoidal semantics for anything we log:
-  --
+instance Mergeable Constraints where
   symbolicMerge _f _t = mappend
 
 data SymbolicCells
@@ -421,7 +415,7 @@ instance IsString AnalyzeFailure where
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (ExceptT AnalyzeFailure Symbolic) a }
+    { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (ExceptT AnalyzeFailure Symbolic) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
 
