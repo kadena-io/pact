@@ -17,7 +17,7 @@ import Control.Monad.State.Strict (StateT)
 import Control.Concurrent (MVar)
 import Pact.PersistPactDb (DbEnv)
 import Pact.Persist.Pure (PureDb)
-import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp)
+import Pact.Types.Runtime (EvalEnv,EvalState,Term,Name,FunApp,Info)
 import Data.Text (Text)
 
 data ReplMode =
@@ -51,6 +51,7 @@ data LibOp =
     Noop |
     UpdateEnv (Endo (EvalEnv LibState)) |
     Load FilePath Bool |
+    Tx Info Tx (Maybe Text) |
     Print (Term Name) |
     TcErrors [String]
 instance Default LibOp where def = Noop

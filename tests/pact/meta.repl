@@ -1,0 +1,18 @@
+(define-keyset 'k (sig-keyset))
+
+(module mod 'k
+  ("this defines mod"
+   (property (do (crazy stuff))))
+
+  (defun foo ()
+    ("foo the town"
+     (example (foo)))
+    1)
+
+  (defconst BAR 1 ("barring disbelief" (anything 1)))
+
+  (defschema schema
+    ("a schema" (property stuff)))
+
+  (deftable tbl ("a table" (baz quux)))
+)

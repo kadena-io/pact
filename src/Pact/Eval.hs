@@ -167,54 +167,66 @@ loadModule :: Module -> Scope n Term Name -> Info ->
 loadModule m bod1 mi = do
   (modDefs1, propMap, leftoverMeta) <-
     case instantiate' bod1 of
-      TList bodyClause _ _bi -> do
-        let modDefsL = _1
-            propMapL :: Lens' (a, b, c) b
-            propMapL = _2
-            leftoverMetaL :: Lens' (a, b, c) c
-            leftoverMetaL = _3
+      -- TList bodyClause _ _bi -> do
+      --   let modDefsL = _1
+      --       propMapL :: Lens' (a, b, c) b
+      --       propMapL = _2
+      --       leftoverMetaL :: Lens' (a, b, c) c
+      --       leftoverMetaL = _3
 
-        -- For every clause in the module definition, either add it to
-        -- modDefs, or, for metadata, accumulate in modMeta or
-        -- leftoverMeta.
-        flip execStateT (HM.empty, HM.empty, []) $ forM_ bodyClause $ \t ->
-          case t of
-            TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
-            TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
-            TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
-            TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo
-            TMeta     {..} -> leftoverMetaL %= cons t
+      --   -- For every clause in the module definition, either add it to
+      --   -- modDefs, or, for metadata, accumulate in modMeta or
+      --   -- leftoverMeta.
+      --   flip execStateT (HM.empty, HM.empty, []) $ forM_ bodyClause $ \t ->
+      --     case t of
+      --       TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
+      --       TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
+      --       TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
+      --       TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo
+      --       TMeta     {..} -> leftoverMetaL %= cons t
 
-            TDef      {..} -> do
-              leftoverMeta' <- use leftoverMetaL
-              forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
-                case tag of
-                  "property" -> do
-                    old <- use (propMapL . at _tDefName)
-                    let old' = fromMaybe [] old
-                    propMapL . at _tDefName ?= (tag, expr) : old'
-                  _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
+      --       TDef      {..} -> do
+      --         leftoverMeta' <- use leftoverMetaL
+      --         forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
+      --           case tag of
+      --             "property" -> do
+      --               old <- use (propMapL . at _tDefName)
+      --               let old' = fromMaybe [] old
+      --               propMapL . at _tDefName ?= (tag, expr) : old'
+      --             _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
 
-              leftoverMetaL .= []
-              modDefsL . at _tDefName ?= t
+      --         leftoverMetaL .= []
+      --         modDefsL . at _tDefName ?= t
 
-            TSchema   {..} -> do
-              leftoverMeta' <- use leftoverMetaL
-              forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
-                case tag of
-                  "invariant" -> do
-                    traceM "loadModule invariant"
-                    let schemaName = unTypeName _tSchemaName
-                    old <- use (propMapL . at schemaName)
-                    let old' = fromMaybe [] old
-                    traceShowM ("loadModule invariant", (tag, expr) : old')
-                    propMapL . at schemaName ?= (tag, expr) : old'
-                  _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
+      --       TSchema   {..} -> do
+      --         leftoverMeta' <- use leftoverMetaL
+      --         forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
+      --           case tag of
+      --             "invariant" -> do
+      --               traceM "loadModule invariant"
+      --               let schemaName = unTypeName _tSchemaName
+      --               old <- use (propMapL . at schemaName)
+      --               let old' = fromMaybe [] old
+      --               traceShowM ("loadModule invariant", (tag, expr) : old')
+      --               propMapL . at schemaName ?= (tag, expr) : old'
+      --             _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
 
-              leftoverMetaL .= []
-              modDefsL . at (asString _tSchemaName) ?= t
-            _ -> lift $ evalError (_tInfo t) "Invalid module member"
+      --         leftoverMetaL .= []
+      --         modDefsL . at (asString _tSchemaName) ?= t
+      --       _ -> lift $ evalError (_tInfo t) "Invalid module member"
 
+      (TList bd _ _bi) ->
+        fmap (HM.fromList . concat) $ forM bd $ \t -> do
+          dnm <- case t of
+            TDef {..} -> return $ Just _tDefName
+            TNative {..} -> return $ Just $ asString _tNativeName
+            TConst {..} -> return $ Just $ _aName _tConstArg
+            TSchema {..} -> return $ Just $ asString _tSchemaName
+            TTable {..} -> return $ Just $ asString _tTableName
+            TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+            TBless {..} -> return Nothing
+            _ -> evalError (_tInfo t) "Invalid module member"
+          return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
 
   when (not (null leftoverMeta))
@@ -285,7 +297,7 @@ evalConsts (Ref r) = case r of
     CVRaw raw -> do
       v <- reduce =<< traverse evalConsts raw
       traverse reduce _tConstArg >>= \a -> typecheck [(a,v)]
-      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tDocs _tInfo)
+      return $ Ref (TConst _tConstArg _tModule (CVEval raw $ liftTerm v) _tMeta _tInfo)
     _ -> return $ Ref c
   _ -> Ref <$> traverse evalConsts r
 evalConsts r = return r
@@ -320,10 +332,10 @@ reduce (TBinding ps bod c i) = case c of
   BindSchema _ -> evalError i "Unexpected schema binding"
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
+reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
-reduce TSchema {..} = TSchema _tSchemaName _tModule _tDocs <$> traverse (traverse reduce) _tFields <*> pure _tInfo
-reduce TTable {..} = TTable _tTableName _tModule <$> mapM reduce _tTableType <*> pure _tDocs <*> pure _tInfo
-reduce TMeta {..} = evalError _tInfo "Metadata can't be evaluated"
+reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
+reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -355,7 +367,7 @@ reduceApp TDef {..} as ai = do
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') _tDocs
+      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs <$> _tMeta)
   appCall fa ai as $
     case _tDefType of
       Defun -> reduceBody bod'

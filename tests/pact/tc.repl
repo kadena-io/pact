@@ -97,6 +97,16 @@
   (defun twoStrings:string ()
     (enforce-keyset (+ "k" "s")))
 
+  (defschema inner
+    name:string)
+
+  (defschema wrapper
+    wrapped:object{inner})
+
+  (defun test-inner:object{inner} ()
+    (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
+      (at "wrapped" obj)))
+
   (defun bind-obj:integer ()
     (let ((acct:object{account} { "balance": 10 }))
       (bind acct { "balance" := bal }

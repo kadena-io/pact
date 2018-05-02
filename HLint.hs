@@ -11,3 +11,4 @@ ignore "Use <$>"
 ignore "Redundant bracket"
 ignore "Use lambda-case"
 ignore "Use $>" -- added temporarily
+ignore "Evaluate"

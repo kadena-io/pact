@@ -592,7 +592,7 @@ mangleFunType f = over ftReturn (mangleType f) .
 -- | Build Defuns and natives from Terms.
 toFun :: Term (Either Ref (AST Node)) -> TC (Fun Node)
 toFun (TVar (Left (Direct TNative {..})) _) = do
-  ft' <- traverse (traverse toUserType') _tFunTypes
+  ft' <- traverse (traverse toUserType') (fmap (fmap (fmap Right)) _tFunTypes)
   return $ FNative _tInfo (asString _tNativeName) ft' Nothing -- we deal with special form in App
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
@@ -604,7 +604,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
     Named n <$> trackNode t' an <*> pure an
   tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
   ft' <- traverse toUserType _tFunType
-  return $ FDefun _tInfo fn ft' args tcs _tDocs
+  return $ FDefun _tInfo fn ft' args tcs _tMeta
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -715,6 +715,7 @@ toAST TTable {..} = do
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
+toAST TBless {..} = die _tInfo "Bless not supported"
 toAST TStep {..} = do
   ent <- forM _tStepEntity $ \e -> do
     e' <- toAST e
@@ -737,16 +738,16 @@ trackNode ty i = trackAST node >> return node
   where node = Node i ty
 
 -- | Main type transform, expecting that vars can only refer to a user type.
-toUserType :: Term (Either Ref (AST Node)) -> TC UserType
+toUserType :: forall n . Show n => Term (Either Ref n) -> TC UserType
 toUserType t = case t of
   (TVar (Left r) _) -> derefUT r
   _ -> die (_tInfo t) $ "toUserType: expected user type: " ++ show t
   where
-    derefUT (Ref r) = toUserType' r
+    derefUT (Ref r) = toUserType' (fmap Left r :: Term (Either Ref n))
     derefUT Direct {} = die (_tInfo t) $ "toUserType: unexpected direct ref: " ++ show t
 
-toUserType' :: Show n => Term n -> TC UserType
-toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType') _tFields <*> pure _tInfo
+toUserType' :: Show n => Term (Either Ref n) -> TC UserType
+toUserType' TSchema {..} = Schema _tSchemaName _tModule <$> mapM (traverse toUserType) _tFields <*> pure _tInfo
 toUserType' t = die (_tInfo t) $ "toUserType: expected user type: " ++ show t
 
 bindArgs :: Info -> [a] -> Int -> TC a
