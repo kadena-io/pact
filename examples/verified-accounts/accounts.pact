@@ -11,9 +11,10 @@
 \  Version: 0.2                                                                \
 \  Author: Stuart Popejoy"
 
-  (@invariant (>= balance 0))
+
   (defschema account
-    "Row type for accounts table."
+    ("Row type for accounts table."
+      (invariant (>= balance 0.0)))
      balance:decimal
      amount:decimal
      ccy:string
@@ -21,7 +22,8 @@
      )
 
   (deftable accounts:{account}
-    "Main table for accounts module.")
+    ("Main table for accounts module."
+      (invariant (>= balance 0.0))))
 
   (defconst AUTH_KEYSET 'K
     "Indicates keyset-governed account")
@@ -55,12 +57,12 @@
       b
       ))
 
-  (@property
-    (when
-        (not (authorized-by 'accounts-admin-keyset))
-        abort))
   (defun read-account-admin (id)
-    "Read data for account ID, admin version"
+    ("Read data for account ID, admin version"
+      (property
+        (when
+            (not (authorized-by 'accounts-admin-keyset))
+            abort)))
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 
@@ -69,6 +71,7 @@
 
   (defun fund-account (address amount)
     (enforce-keyset 'accounts-admin-keyset)
+    (enforce (>= amount 0.0))
     (update accounts address
             { "balance": amount
             , "amount": amount }

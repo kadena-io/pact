@@ -413,9 +413,6 @@ describeAnalyzeFailure = \case
   --
   OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
 
-tShow :: Show a => a -> Text
-tShow = T.pack . show
-
 instance IsString AnalyzeFailure where
   fromString = FailureMessage . T.pack
 
@@ -725,13 +722,14 @@ analyzeTermO = \case
         EType TDecimal -> do
           S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
           mInvariant <- view (invariants . at (tn, cn))
-          traceM "maybe checking decimal invariant"
+          -- traceM "maybe checking decimal invariant"
           is <- view invariants
-          traceShowM $ is
+          traceShowM (mInvariant, is)
           case mInvariant of
-            Nothing -> traceM "not checking invariant" >> pure ()
-            Just invariant -> traceM "checking invariant" >> Analyze $ lift $ lift $
-              constrain $ runReader (checkSchemaInvariant invariant) sbvVal
+            Nothing -> pure ()
+            Just invariant -> do
+              traceM "checking invariant"
+              Analyze $ lift $ lift $ constrain $ runReader (checkSchemaInvariant invariant) sbvVal
           pure $ mkAVal' (SBVI.SBV sbvVal)
 
         EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
@@ -1091,13 +1089,30 @@ analyzeTerm = \case
             cell .= next
             columnDelta tn cn += next - prev
 
+            mInvariant <- view (invariants . at (tn, cn))
+            case mInvariant of
+              Nothing -> pure ()
+              Just invariant -> do
+                traceM "checking int invariant"
+                let inv = runReader (checkSchemaInvariant invariant) val'
+                maintainsInvariants %= (&&& inv)
+
           EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
           EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
 
           --
           -- TODO: we should support column delta for decimals
           --
-          EType TDecimal -> decimalCell tn cn sRk true .= mkS mProv val'
+          EType TDecimal -> do
+            decimalCell tn cn sRk true .= mkS mProv val'
+
+            mInvariant <- view (invariants . at (tn, cn))
+            case mInvariant of
+              Nothing -> pure ()
+              Just invariant -> do
+                traceM "checking decimal invariant"
+                let inv = runReader (checkSchemaInvariant invariant) val'
+                maintainsInvariants %= (&&& inv)
 
           EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
           EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'

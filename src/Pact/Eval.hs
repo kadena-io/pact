@@ -165,7 +165,8 @@ evalUse mn h i = do
 loadModule :: Module -> Scope n Term Name -> Info ->
               Eval e ()
 loadModule m bod1 mi = do
-  (modDefs1, propMap, leftoverMeta) <-
+  modDefs1 <-
+  -- (modDefs1, propMap, leftoverMeta) <-
     case instantiate' bod1 of
       -- TList bodyClause _ _bi -> do
       --   let modDefsL = _1
@@ -229,8 +230,8 @@ loadModule m bod1 mi = do
           return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
 
-  when (not (null leftoverMeta))
-    (evalError mi "Trailing unattached property")
+  -- when (not (null leftoverMeta))
+  --   (evalError mi "Trailing unattached property")
 
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(defName,defn) ->
@@ -253,21 +254,21 @@ loadModule m bod1 mi = do
 
   -- These defs combine an evaluable reference with the properties that hold of
   -- it.
-  let defs :: HM.HashMap Text (Ref, [(Text, Exp)])
+  let defs :: HM.HashMap Text Ref -- (Ref, [(Text, Exp)])
       defs = foldl dresolve HM.empty sorted
 
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via
       -- 'unify'
-      dresolve
-        :: HM.HashMap Text (Ref, [(Text, Exp)])
-        -> (Term (Either Text Ref), Text, [Text])
-        -> HM.HashMap Text (Ref, [(Text, Exp)])
-      dresolve defns (defn,defName,_)
-        = HM.insert defName
-          (Ref (fmap (unify defns) defn), propMap ^. at defName . non [])
-          defns
+      -- dresolve
+      --   :: HM.HashMap Text (Ref, [(Text, Exp)])
+      --   -> (Term (Either Text Ref), Text, [Text])
+      --   -> HM.HashMap Text (Ref, [(Text, Exp)])
+      dresolve defns (defn,defName,_) = HM.insert defName (Ref (fmap (unify defns) defn)) defns
+        -- = HM.insert defName
+        --   (Ref (fmap (unify defns) defn), propMap ^. at defName . non [])
+        --   defns
       evalConstRef = runPure . evalConsts
-  evaluatedDefs <- (traverse . _1) evalConstRef defs
+  evaluatedDefs <- traverse evalConstRef defs
   installModule (m, evaluatedDefs)
   evalRefs.rsNew %= cons (_mName m, (m, evaluatedDefs))
 
@@ -276,7 +277,7 @@ loadModule m bod1 mi = do
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
-  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n._1
+  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n
   case dsm of
     d@Just {} -> return d
     Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
@@ -287,9 +288,9 @@ resolveRef nn@(Name _ _) = do
     Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
 
 
-unify :: HM.HashMap Text (Ref, [(Text, Exp)]) -> Either Text Ref -> Ref
+unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right d) = d
-unify m (Left f) = fst (m HM.! f)
+unify m (Left f)  = m HM.! f
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
@@ -430,7 +431,7 @@ resolveFreeVars i b = traverse r b where
 
 installModule :: ModuleData ->  Eval e ()
 installModule (m,defsProps) = do
-  let defs = fst <$> defsProps
+  let defs = defsProps
   (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ defs)
   (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
 

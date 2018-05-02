@@ -166,12 +166,6 @@ currentModule i = use csModule >>= \m -> case m of
   Just cm -> return cm
   Nothing -> syntaxError i "Must be declared within module"
 
-pattern EList' :: [Exp] -> Exp
-pattern EList' ls <- EList ls Nothing _
-
-pattern EAtom' :: Text -> Exp
-pattern EAtom' tag <- EAtom tag Nothing Nothing _
-
 pattern ELitName :: Text -> Exp
 pattern ELitName lit <- ELiteral (LString lit) _
 
@@ -219,7 +213,7 @@ expToCheck body = Valid <$> expToProp body
 expToInvariant :: Exp -> Maybe SomeSchemaInvariant
 expToInvariant = \case
   -- TODO: this is hard without already knowing the type
-  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
+  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
 
   ELiteral (LDecimal d) _ -> Just
     (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)

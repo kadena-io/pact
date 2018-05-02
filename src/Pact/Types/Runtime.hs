@@ -389,7 +389,7 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
-type ModuleData = (Module,HM.HashMap Text (Ref, [(Text, Exp)]))
+type ModuleData = (Module,HM.HashMap Text Ref)
 
 -- | Storage for loaded modules and natives.
 data RefStore = RefStore {

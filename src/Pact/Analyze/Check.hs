@@ -5,6 +5,8 @@
 {-# language Rank2Types        #-}
 {-# language TupleSections     #-}
 
+{-# language ScopedTypeVariables     #-}
+
 module Pact.Analyze.Check
   ( checkTopFunction
   , verifyModule
@@ -22,7 +24,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict (evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
 import Control.Lens hiding (op, (.>), (...))
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
@@ -50,6 +52,8 @@ import Pact.Analyze.Prop
 import Pact.Analyze.Translate
 import Pact.Analyze.Types
 import Pact.Compile (expToCheck, expToInvariant)
+
+import Debug.Trace
 
 data CheckFailure
   = Invalid SBVI.SMTModel
@@ -224,7 +228,7 @@ checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function
 
 runProvable :: Provable a => a -> IO CheckResult
 runProvable provable = do
-  (ThmResult smtRes) <- prove provable
+  (ThmResult smtRes) <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
     SBV.Unsatisfiable{}           -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
@@ -245,7 +249,7 @@ runCheck (Satisfiable _prop) provable = do
     SBV.Unknown _config reason -> Left $ Unknown reason
     SBV.ProofError _config strs -> Left $ ProofError strs
 runCheck (Valid _prop) provable = do
-  (ThmResult smtRes) <- proveWith z3 provable
+  (ThmResult smtRes) <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
     SBV.Unsatisfiable{} -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
@@ -269,29 +273,43 @@ failedTcOrAnalyze tables tcState fun check =
 verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
 verifyModule (_mod, modRefs) = do
 
-  let tables = flip HM.filter modRefs $ \(ref, _metas) -> case ref of
-        Ref (TTable _ _ _ _ _) -> True
-        Direct (TTable {})     -> False
-        _                      -> False
+  let tables = flip mapMaybe (HM.toList modRefs) $ \case
+        (name, Ref (table@TTable {})) -> Just (name, table)
+        (_, Direct (TTable {}))       -> Nothing
+        _                             -> Nothing
 
-  tables' <- for (HM.toList tables) $ \(tabName, (ref, metas)) -> do
-    let invariants = catMaybes $ flip fmap metas $ \(colName, meta) -> do
-          "invariant" <- pure colName
+  -- TODO: we need to figure out how to connect tables to their schemas (and
+  -- metas thereof)
+  tables' <- for tables $ \(tabName, tab) -> do
+    let metas :: [(Text, Exp)]
+        metas = tab ^@.. tMeta . _Just . mMetas . itraversed
+    let invariants :: [(Text, SchemaInvariant Bool)]
+        invariants = catMaybes $ flip fmap metas $ \(metaName, meta) -> do
+          "invariant" <- pure metaName
           SomeSchemaInvariant expr TBool <- expToInvariant meta
           [v] <- pure $ Set.toList (invariantVars expr)
           pure (v, expr)
     (TopTable _info _name (TyUser schema), _tcState)
-      <- runTC 0 False $ typecheckTopLevel ref
+      <- runTC 0 False $ typecheckTopLevel (Ref tab)
     pure (tabName, schema, invariants)
 
-  -- convert metas to checks
-  let modRefs' :: HM.HashMap Text (Ref, [Check])
-      modRefs' = flip fmap modRefs $ \(ref, metas) ->
-        (ref, catMaybes $ flip fmap metas $ \(name, meta) -> case name of
-          "property" -> expToCheck meta
-          _          -> Nothing)
+  let defns = flip HM.filter modRefs $ \ref -> case ref of
+        Ref (defn@TDef {}) -> True -- Just (ref, defn)
+        Direct (TTable {}) -> False
+        _                  -> False
 
-  for modRefs' $ \(ref, props) -> do
+  -- convert metas to checks
+  (defns' :: HM.HashMap Text (Ref, [Check])) <- for defns $ \ref -> do
+    let Ref defn = ref
+        metas :: [(Text, Exp)]
+        metas = defn ^@.. tMeta . _Just . mMetas . itraversed
+    let checks :: [Check]
+        checks = catMaybes $ flip fmap metas $ \(metaName, meta) -> do
+          "property" <- pure metaName
+          expToCheck meta
+    pure (ref, checks)
+
+  for defns' $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
       TopFun (FDefun {}) -> do
