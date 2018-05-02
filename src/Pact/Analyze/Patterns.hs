@@ -36,6 +36,9 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
+pattern AST_InlinedApp :: [AST a] -> AST a
+pattern AST_InlinedApp body <- App _node (FDefun _ _ _ _ body _) _args
+
 pattern AST_Let :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
 pattern AST_Let node bindings body = Binding node bindings body BindLet
 

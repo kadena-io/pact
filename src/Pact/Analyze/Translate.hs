@@ -228,6 +228,8 @@ translateNode = \case
         ETerm   bodyTm bodyTy -> ETerm   (Let varName rhsETerm bodyTm) bodyTy
         EObject bodyTm bodyTy -> EObject (Let varName rhsETerm bodyTm) bodyTy
 
+  AST_InlinedApp body -> translateBody body
+
   AST_Var node -> do
     varName <- view (ix node)
     ty <- translateType node

@@ -98,15 +98,32 @@ expectPass code check = expectRight =<< io (runTest (wrap code) check)
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
---
--- For now, we're not testing conditionals or sequence on their own, but as
--- they affect other "features". e.g. we test enforce.conditional or
--- enforce.sequence, but Not sequence.enforce or conditional.enforce.
---
-
 suite :: Test ()
 suite = tests
-  [ scope "success" $ do
+  [ scope "result" $ do
+      let code =
+            [text|
+              (defun test:integer (x:integer)
+                (* x -1))
+            |]
+      expectPass code $ Valid $ PComparison Eq
+        (PIntArithOp Mul (-1) "x")
+        (Result :: Prop Integer)
+
+  , scope "inlining" $ do
+      let code =
+            [text|
+              (defun helper:integer (b:integer)
+                (if (< b 10)
+                  10
+                  b))
+
+              (defun test:integer (a:integer)
+                (helper a))
+            |]
+      expectPass code $ Valid $ PComparison Gte (Result :: Prop Integer) 10
+
+  , scope "success" $ do
       let code =
             [text|
               (defun test:bool (x:integer)
