@@ -18,7 +18,7 @@
 module Pact.Analyze.Analyze where
 
 import Control.Monad
-import Control.Monad.Except (MonadError, Except, ExceptT(..), runExcept,
+import Control.Monad.Except (MonadError, Except, ExceptT(..), runExceptT, runExcept,
                              throwError)
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
@@ -355,13 +355,13 @@ newConstrainedArray
   -> Symbolic (SArray a b)
 newConstrainedArray mInvariant msg = do
   arr <- newArray msg
-  k   <- forall_ @a
-  () <- case mInvariant of
-    Nothing -> pure ()
-    Just invariant -> do
-      traceShowM invariant
-      constrain $ traceShowId $
-        runReader (checkSchemaInvariant invariant) (mkSVal (readArray arr k))
+  -- k   <- forall_ @a
+  -- () <- case mInvariant of
+  --   Nothing -> pure ()
+  --   Just invariant -> do
+  --     traceShowM invariant
+  --     constrain $ traceShowId $
+  --       runReader (checkSchemaInvariant invariant) (mkSVal (readArray arr k))
   pure arr
 
 data AnalyzeFailure
@@ -421,7 +421,7 @@ instance IsString AnalyzeFailure where
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (Except AnalyzeFailure) a }
+    { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (ExceptT AnalyzeFailure Symbolic) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
 
@@ -457,7 +457,7 @@ mkAnalyzeEnv argTys tables = do
     tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
+  symbolicMerge force test left right = Analyze $ RWST $ \r s ->
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -465,7 +465,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runExcept . runRWST (runAnalyze act) r
+    let run act = runRWST (runAnalyze act) r
     in do
       lTup <- run left s
       let gs = lTup ^. _2.globalState
@@ -721,7 +721,19 @@ analyzeTermO = \case
         EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
         EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
         EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+        -- EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+        EType TDecimal -> do
+          S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
+          mInvariant <- view (invariants . at (tn, cn))
+          traceM "maybe checking decimal invariant"
+          is <- view invariants
+          traceShowM $ is
+          case mInvariant of
+            Nothing -> traceM "not checking invariant" >> pure ()
+            Just invariant -> traceM "checking invariant" >> Analyze $ lift $ lift $
+              constrain $ runReader (checkSchemaInvariant invariant) sbvVal
+          pure $ mkAVal' (SBVI.SBV sbvVal)
+
         EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
         EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
         EType TAny     -> pure OpaqueVal

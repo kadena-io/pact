@@ -11,6 +11,7 @@
 \  Version: 0.2                                                                \
 \  Author: Stuart Popejoy"
 
+  (@invariant (>= balance 0))
   (defschema account
     "Row type for accounts table."
      balance:decimal
@@ -29,7 +30,7 @@
 
   (defun create-account (address:string ccy)
     (insert accounts address
-      { "balance": 0.0
+      { "balance": -10.0
       , "amount": 0.0
       , "ccy": ccy
       , "auth": AUTH_KEYSET
@@ -38,10 +39,10 @@
 
   ; TODO: defproperty?
   ; (@property conserves-mass)
-  (defun transfer (src:string dest:decimal amount:decimal)
-    "transfer AMOUNT from SRC to DEST"
-    (debit src amount))
-    ; (credit dest amount))
+  ; (defun transfer (src:string dest:decimal amount:decimal)
+  ;   "transfer AMOUNT from SRC to DEST"
+  ;   (debit src amount))
+  ;   (credit dest amount))
 
   (defun read-account-user (id)
     "Read data for account ID"

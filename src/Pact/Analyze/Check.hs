@@ -134,7 +134,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
+              eAnalysis <- runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
@@ -173,7 +173,7 @@ checkFunctionBody tables Nothing body argTys nodeNames =
 
         let go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
+              eAnalysis <- runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
@@ -245,7 +245,7 @@ runCheck (Satisfiable _prop) provable = do
     SBV.Unknown _config reason -> Left $ Unknown reason
     SBV.ProofError _config strs -> Left $ ProofError strs
 runCheck (Valid _prop) provable = do
-  (ThmResult smtRes) <- proveWith (z3 {verbose=True}) provable
+  (ThmResult smtRes) <- proveWith z3 provable
   pure $ case smtRes of
     SBV.Unsatisfiable{} -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
@@ -269,7 +269,7 @@ failedTcOrAnalyze tables tcState fun check =
 verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
 verifyModule (_mod, modRefs) = do
 
-  let tables = flip HM.filter modRefs $ \(ref, _checks) -> case ref of
+  let tables = flip HM.filter modRefs $ \(ref, _metas) -> case ref of
         Ref (TTable _ _ _ _ _) -> True
         Direct (TTable {})     -> False
         _                      -> False
