@@ -67,12 +67,6 @@ expectPass code check = expectRight =<< io (runTest (wrap code) check)
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectLeft =<< io (runTest (wrap code) check)
 
---
--- For now, we're not testing conditionals or sequence on their own, but as
--- they affect other "features". e.g. we test enforce.conditional or
--- enforce.sequence, but Not sequence.enforce or conditional.enforce.
---
-
 suite :: Test ()
 suite = tests
   [ scope "result" $ do
