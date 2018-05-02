@@ -415,7 +415,7 @@ instance IsString AnalyzeFailure where
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (ExceptT AnalyzeFailure Symbolic) a }
+    { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
             MonadState AnalyzeState, MonadError AnalyzeFailure)
 
@@ -451,7 +451,7 @@ mkAnalyzeEnv argTys tables = do
     tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = Analyze $ RWST $ \r s ->
+  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -459,7 +459,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runRWST (runAnalyze act) r
+    let run act = runExcept . runRWST (runAnalyze act) r
     in do
       lTup <- run left s
       let gs = lTup ^. _2.globalState

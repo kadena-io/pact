@@ -134,7 +134,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
-              eAnalysis <- runExceptT $ runRWST (runAnalyze act) aEnv state0
+              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
@@ -173,7 +173,7 @@ checkFunctionBody tables Nothing body argTys nodeNames =
 
         let go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
-              eAnalysis <- runExceptT $ runRWST (runAnalyze act) aEnv state0
+              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
