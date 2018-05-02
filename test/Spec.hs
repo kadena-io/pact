@@ -81,9 +81,8 @@ suite = tests
               (defun test:integer (x:integer)
                 (* x -1))
             |]
-          neg1 = (-1) :: Prop Integer
       expectPass code $ Valid $ PComparison Eq
-        (PIntArithOp Mul neg1 "x")
+        (PIntArithOp Mul (-1) "x")
         (Result :: Prop Integer)
 
   , scope "inlining" $ do
