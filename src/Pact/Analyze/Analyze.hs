@@ -669,21 +669,29 @@ analyzeRead tn fields rowKey = do
   rowRead tn sRk .= true
   obj <- iforM fields $ \fieldName fieldType -> do
     let cn = ColumnName fieldName
+    mInvariant <- view (invariants . at (tn, cn))
     sDirty <- use $ cellWritten tn cn sRk
+
+    let constrained :: forall a. S a -> Analyze AVal
+        constrained (S _prov (SBVI.SBV sval)) = do
+          case mInvariant of
+            Nothing -> pure ()
+            Just invariant -> addConstraint $
+              runReader (checkSchemaInvariant invariant) sval
+          pure $ mkAVal' (SBVI.SBV sval)
+
     x <- case fieldType of
-      EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-      EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-      EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-      EType TDecimal -> do
-        S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
-        mInvariant <- view (invariants . at (tn, cn))
-        case mInvariant of
-          Nothing -> pure ()
-          Just invariant -> addConstraint $
-            runReader (checkSchemaInvariant invariant) sbvVal
-        pure $ mkAVal' (SBVI.SBV sbvVal)
-      EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+      EType TInt     -> constrained =<< use (intCell     tn cn sRk sDirty)
+      EType TBool    -> constrained =<< use (boolCell    tn cn sRk sDirty)
+      EType TStr     -> constrained =<< use (stringCell  tn cn sRk sDirty)
+      EType TDecimal -> constrained =<< use (decimalCell tn cn sRk sDirty)
+      EType TTime    -> constrained =<< use (timeCell    tn cn sRk sDirty)
+
+      --
+      -- TODO: FIXME: can't use constrained here?
+      --
       EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
+
       EType TAny     -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
@@ -1036,7 +1044,6 @@ analyzeTerm = \case
 
       let checkInvariants :: SBVI.SVal -> Analyze ()
           checkInvariants val = do
-
             mInvariant <- view (invariants . at (tn, cn))
             case mInvariant of
               Nothing -> pure ()
