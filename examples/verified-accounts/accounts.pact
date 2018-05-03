@@ -86,7 +86,7 @@
               { "balance":= balance
               , "auth" := auth
               }
-      ; (check-balance balance amount)
+      (check-balance balance amount)
       (update accounts acct
                 { "balance": (- balance amount)
                 , "amount": (- amount)
@@ -95,6 +95,7 @@
 
  (defun credit (acct amount)
    "Credit AMOUNT to ACCT balance"
+   (enforce (>= amount 0.0))
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct

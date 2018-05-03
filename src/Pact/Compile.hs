@@ -237,8 +237,8 @@ expToInvariant schemaTys = \case
     SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a
     SomeSchemaInvariant b' bTy <- expToInvariant schemaTys b
     let op' = case op of
-          ">" -> Gt
-          "<" -> Lt
+          ">"  -> Gt
+          "<"  -> Lt
           ">=" -> Gte
           "<=" -> Lte
           "==" -> Eq
