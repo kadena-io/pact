@@ -101,10 +101,12 @@ invariants for any possible DB modification.
 ## How do you use it?
 
 After supplying any desired invariant and property annotations in your module,
-property checking is run by typechecking the module with an extra boolean
-argument to check all properties and invariants:
+property checking is run by invoking `verify`:
 
-`(typecheck 'module-name true)`
+`(verify 'module-name)`
+
+This will typecheck the code and, if that succeeds, check all invariants and
+properties.
 
 ## Expressing schema invariants
 
@@ -143,7 +145,7 @@ and return values can be referred to by the name `result`:
 ```
 
 Here you can also see that the standard arithmetic operators on integers and
-decimals work as usual in Pact code.
+decimals work as they do in normal Pact code.
 
 We can also define properties in terms of the standard comparison operators:
 
@@ -172,25 +174,56 @@ where `(when x y)` is equivalent to `(or (not x) y)`:
   (* x -1))
 ```
 
-### Transaction abort/success
+### Transaction abort and success
+
+By default, every `@property` is predicated on the successful completion of the
+transaction which would contain an invocation of the function under test. This
+means that properties like the following:
+
+```
+(@property (!= result 0))
+(defun ensured-positive (val:integer)
+  (enforce (> val 0))
+  val)
+```
+
+will pass due to the use of `enforce`.
+
+At run-time on the blockchain, if an `enforce` call fails, the containing
+transaction is aborted. Because `@property` is only concerned with transactions
+that succeed, the necessary conditions to pass each `enforce` call are assumed.
+
+<!---
+
+### Valid, satisfiable, and explicit transaction abort/success
+
+TODO: more. talk about @valid, @satisfiable, and the lack of the default
+success condition of @property.
 
 Pact's property language supports the notions of `success` and `abort` to
 describe whether programs will successfully run to completion within a
 transaction on the blockchain:
 
 ```
-(@property abort)
+(@valid abort)
 (defun failure-guaranteed:bool ()
   (enforce false "cannot pass"))
 ```
 
+TODO: more
 
+-->
 
-### authorization (includes name vs value)
+### Keyset Authorization
+
+TODO: name-based
+TODO: value-based
+
+### Database access
 
 TODO
 
-### Database access
+### Mass conservation
 
 TODO
 
