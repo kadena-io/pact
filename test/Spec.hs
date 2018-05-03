@@ -278,6 +278,28 @@ suite = tests
         RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" "acct"
 
+  , scope "enforce-keyset.row-level.read.syntax" $ do
+      let code =
+            [text|
+              (defschema token-row
+                name:string
+                balance:integer
+                ks:keyset)
+              (deftable tokens:{token-row})
+
+              (defun test:bool (acct:string)
+                ("test"
+                  (property (forall (row:string)
+                    (row-enforced "tokens" "ks" row))))
+                (with-read tokens acct { "ks" := ks, "balance" := bal }
+                  (enforce-keyset ks)
+                  bal))
+            |]
+
+      -- TODO: come up with better tests. Right now this just tests that this
+      -- parses correctly.
+      expectPass code $ Satisfiable Abort
+
   , scope "enforce-keyset.row-level.multiple-keysets" $ do
       let code =
             [text|

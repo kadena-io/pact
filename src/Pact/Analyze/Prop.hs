@@ -353,12 +353,13 @@ data Prop a where
   PVar             :: Text ->                 Prop a
 
   -- Object ops
+  -- Note: PAt is the one property we can't yet parse because of the EType it
+  -- includes
   PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
 
   -- String ops
   PStrConcat       :: Prop String -> Prop String -> Prop String
   PStrLength       :: Prop String ->                Prop Integer
-  PStrEmpty        :: Prop String ->                Prop Bool
 
   -- Numeric ops
   PDecArithOp      :: ArithOp        -> Prop Decimal -> Prop Decimal -> Prop Decimal
