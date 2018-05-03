@@ -23,9 +23,9 @@ property _statically_, before any code is deployed to the blockchain.
 
 Compared with conventional unit testing, wherein the behavior of a program is
 validated for a single combination of inputs and the author hopes this case
-generalizes for to possible inputs, the Pact property checking system
-_automatically_ checks the code under test against all possible inputs, and
-therefore all possible execution paths.
+generalizes to all inputs, the Pact property checking system _automatically_
+checks the code under test against all possible inputs, and therefore all
+possible execution paths.
 
 Pact does this by allowing authors to specify _schema invariants_ about columns
 in database tables, and to state and prove _properties_ about functions with
@@ -38,11 +38,11 @@ invariants correspond to a simplified initial step towards refinement types,
 from the world of formal verification.
 
 For this initial release we don't yet support 100% of the Pact language, and
-our property checker _itself_ has not yet been formally verified, but this is
-only the first step. We're excited to continue broadening support for every
-possible Pact program, eventually prove correctness of the property checker,
-and continually enable authors to express ever more sophisticated properties
-about their smart contracts over time.
+the implementation of the property checker _itself_ has not yet been formally
+verified, but this is only the first step. We're excited to continue broadening
+support for every possible Pact program, eventually prove correctness of the
+property checker, and continually enable authors to express ever more
+sophisticated properties about their smart contracts over time.
 
 ## What do properties and schema invariants look like?
 
