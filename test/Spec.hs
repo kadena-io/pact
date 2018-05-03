@@ -185,9 +185,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
+      expectPass code $ Valid $ Success ==> KsNameAuthorized "ks"
 
-      expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
+      expectFail code $ Valid $ Success ==> KsNameAuthorized "different-ks"
 
   , scope "enforce-keyset.name.dynamic" $ do
       let code =
