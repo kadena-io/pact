@@ -182,7 +182,7 @@ means that properties like the following:
 ```
 (@property (!= result 0))
 (defun ensured-positive (val:integer)
-  (enforce (> val 0))
+  (enforce (> val 0) "val is not positive")
   val)
 ```
 
@@ -216,6 +216,7 @@ TODO: more
 ### Keyset Authorization
 
 TODO: name-based
+
 TODO: value-based
 
 ### Database access
@@ -230,6 +231,95 @@ TODO
 
 TODO
 
-## A worked example
+## A simple balance transfer example
 
-TODO ...balance transfer...
+Let's work through an example where we write a function to transfer some amount
+of a balance across two accounts for the given table, with the invariant that
+balances can not be negative:
+
+```
+(@invariant (>= balance 0))
+(defschema account
+  balance:integer
+  ks:keyset)
+
+(deftable accounts:{account})
+```
+
+The following code to transfer a balance between two accounts may look correct
+at first study, but it turns out that there are number of bugs which we can
+eradicate with the help of another property.
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+Let's use `conserves-mass` to ensure that it's not possible for the function to
+be used to create or destroy any money.
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+Now, when we use `verify` to check all properties in this module, Pact's
+property checker points out that it's able to falsify the mass conservation
+property by passing in an `amount` of `-1`. Let's fix that, and try again:
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (enforce (> amount 0)         "Non-positive amount")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+When we run `verify` this time, the property checker is yet again able to find
+a combination of inputs that break our mass conservation property! It's able to
+falsify the property when `from` and `to` are set to the same account. When
+this is the case, we see that the code actually creates money out of thin air!
+At this point we can add another `enforce` to prevent this scenario:
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (enforce (> amount 0)         "Non-positive amount")
+    (enforce (!= from to)         "Sender is the recipient")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+And now we see that finally the property checker verifies that our function
+always conserves mass for the balance column.
