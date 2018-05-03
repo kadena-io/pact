@@ -115,7 +115,7 @@ Schema invariants are formed by the following BNF grammar:
 <comparator>
   ::= <
     | <=
-    | ==
+    | =
     | !=
     | >=
     | >
