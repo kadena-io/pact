@@ -22,8 +22,7 @@
      )
 
   (deftable accounts:{account}
-    ("Main table for accounts module."
-      (invariant (>= balance 0.0))))
+    "Main table for accounts module.")
 
   (defconst AUTH_KEYSET 'K
     "Indicates keyset-governed account")
@@ -32,7 +31,7 @@
 
   (defun create-account (address:string ccy)
     (insert accounts address
-      { "balance": -10.0
+      { "balance": 0.0
       , "amount": 0.0
       , "ccy": ccy
       , "auth": AUTH_KEYSET

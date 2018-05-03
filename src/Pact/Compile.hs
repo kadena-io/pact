@@ -52,11 +52,12 @@ import qualified Data.Map.Strict as M
 
 import Pact.Analyze.Prop hiding (Type, TableName)
 import qualified Pact.Analyze.Prop as Prop
-import Pact.Types.Lang hiding (SchemaVar)
+import Pact.Types.Lang hiding (SchemaVar, TKeySet)
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..))
 import Pact.Types.Hash
+import Pact.Types.Typecheck (UserType)
 
 type MkInfo = Exp -> Info
 
@@ -210,10 +211,21 @@ expToProp = \case
 expToCheck :: Exp -> Maybe Check
 expToCheck body = Valid <$> expToProp body
 
-expToInvariant :: Exp -> Maybe SomeSchemaInvariant
-expToInvariant = \case
-  -- TODO: this is hard without already knowing the type
-  EAtom' var -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
+-- We pass in the type of the variable so we can use it to construct
+-- `SomeSchemaInvariant` when we encounter a var.
+-- TODO(joel): finish these!
+expToInvariant :: [Arg UserType] -> Exp -> Maybe SomeSchemaInvariant
+expToInvariant schemaTys = \case
+  EAtom' var -> case find (\arg -> arg ^. aName == var) schemaTys of
+    Just (Arg _name (TyPrim primTy) _info) -> case primTy of
+      TyInteger -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
+      TyDecimal -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
+      TyTime    -> Just (SomeSchemaInvariant (SchemaVar var) TTime)
+      TyBool    -> Just (SomeSchemaInvariant (SchemaVar var) TBool)
+      TyString  -> Just (SomeSchemaInvariant (SchemaVar var) TStr)
+      TyKeySet  -> Just (SomeSchemaInvariant (SchemaVar var) TKeySet)
+      TyValue   -> Nothing
+    _ -> Nothing
 
   ELiteral (LDecimal d) _ -> Just
     (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)
@@ -222,8 +234,8 @@ expToInvariant = \case
 
   EList' [EAtom' op, a, b]
     | op `Set.member` Set.fromList [">", "<", ">=", "<=", "==", "/="] -> do
-    SomeSchemaInvariant a' aTy <- expToInvariant a
-    SomeSchemaInvariant b' bTy <- expToInvariant b
+    SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a
+    SomeSchemaInvariant b' bTy <- expToInvariant schemaTys b
     let op' = case op of
           ">" -> Gt
           "<" -> Lt

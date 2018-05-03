@@ -71,9 +71,9 @@ pattern AST_If node cond then' else' <-
 pattern AST_StringLit :: forall a. Text -> AST a
 pattern AST_StringLit str <- AST_Lit (LString str)
 
-pattern AST_Enforce :: forall a. a -> AST a -> Text -> AST a
-pattern AST_Enforce node cond msg <-
-  App node (NativeFunc "enforce") [cond, AST_StringLit msg]
+pattern AST_Enforce :: forall a. a -> AST a -> AST a
+pattern AST_Enforce node cond <-
+  App node (NativeFunc "enforce") (cond:_rest)
 
 pattern AST_ReadKeyset :: forall a. AST a -> AST a
 pattern AST_ReadKeyset name <-

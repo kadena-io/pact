@@ -46,8 +46,6 @@ import Pact.Types.Version (pactVersion)
 import Pact.Analyze.Prop
 import Pact.Analyze.Types
 
-import Debug.Trace
-
 data AnalyzeEnv = AnalyzeEnv
   { _aeScope     :: Map Text AVal            -- used with 'local' as a stack
   , _aeKeySets   :: SArray KeySetName KeySet -- read-only
@@ -279,31 +277,20 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
       (repeat $ mkSFunArray $ const defaultV)
 
 allocateSymbolicCells
-  :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  :: [(Text, TC.UserType)]
   -> Symbolic (TableMap SymbolicCells)
 allocateSymbolicCells tables = do
-  cellsList <- forM tables $ \(tabName, TC.Schema _ _ fields _, checks) -> do
-    let checks' = Map.fromList checks
-        fields' = Map.fromList $
+  cellsList <- forM tables $ \(tabName, TC.Schema _ _ fields _) -> do
+    let fields' = Map.fromList $
           map (\(Arg argName ty _i) -> (argName, ty)) fields
 
-    -- The schema fields and invariants on them should somewhat match:
-    let merged = merge
-          -- It's okay if we have a field without an invariant
-          (mapMissing     $ \_k ty       -> (ty, Nothing))
-          -- But an invariant without a field is an error
-          (mapMissing     $ \k _check    ->
-            error ("missing field: " ++ T.unpack k))
-          (zipWithMatched $ \_k ty check -> (ty, Just check))
-          fields'
-          checks'
-    (TableName (T.unpack tabName),) <$> mkCells merged
+    (TableName (T.unpack tabName),) <$> mkCells fields'
 
   pure $ TableMap $ Map.fromList cellsList
 
   where
     mkCells
-      :: Map Text (Pact.Type TC.UserType, Maybe (SchemaInvariant Bool))
+      :: Map Text (Pact.Type TC.UserType)
       -> Symbolic SymbolicCells
     mkCells fields =
 
@@ -312,32 +299,26 @@ allocateSymbolicCells tables = do
       -- fold over the fields, creating an array with constrained values for
       -- each column
       in ifoldlM
-        (\colName cells (ty, someInvariant) ->
+        (\colName cells ty ->
           let colName' = T.unpack colName
           in case ty of
               TyPrim TyInteger -> do
-                arr <- newConstrainedArray someInvariant $
-                  "int cells (" ++ colName' ++ ")"
+                arr <- newArray $ "int cells (" ++ colName' ++ ")"
                 pure $ cells & scIntValues . at (ColumnName colName') ?~ arr
               TyPrim TyBool    -> do
-                arr <- newConstrainedArray someInvariant $
-                  "bool cells (" ++ colName' ++ ")"
+                arr <- newArray $ "bool cells (" ++ colName' ++ ")"
                 pure $ cells & scBoolValues . at (ColumnName colName') ?~ arr
               TyPrim TyDecimal -> do
-                arr <- newConstrainedArray someInvariant $
-                  "decimal cells (" ++ colName' ++ ")"
+                arr <- newArray $ "decimal cells (" ++ colName' ++ ")"
                 pure $ cells & scDecimalValues . at (ColumnName colName') ?~ arr
               TyPrim TyTime    -> do
-                arr <- newConstrainedArray someInvariant $
-                  "time cells (" ++ colName' ++ ")"
+                arr <- newArray $ "time cells (" ++ colName' ++ ")"
                 pure $ cells & scTimeValues . at (ColumnName colName') ?~ arr
               TyPrim TyString  -> do
-                arr <- newConstrainedArray someInvariant $
-                  "string cells (" ++ colName' ++ ")"
+                arr <- newArray $ "string cells (" ++ colName' ++ ")"
                 pure $ cells & scStringValues . at (ColumnName colName') ?~ arr
               TyPrim TyKeySet  -> do
-                arr <- newConstrainedArray someInvariant $
-                  "keyset cells (" ++ colName' ++ ")"
+                arr <- newArray $ "keyset cells (" ++ colName' ++ ")"
                 pure $ cells & scKsValues . at (ColumnName colName') ?~ arr
               _ -> pure cells -- error (show ty)
         )
@@ -346,23 +327,6 @@ allocateSymbolicCells tables = do
 
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
-
--- Create an array with an invariant applied to it's values
-newConstrainedArray
-  :: forall a b. (SymWord a, HasKind a, HasKind b)
-  => Maybe (SchemaInvariant Bool)
-  -> String
-  -> Symbolic (SArray a b)
-newConstrainedArray mInvariant msg = do
-  arr <- newArray msg
-  -- k   <- forall_ @a
-  -- () <- case mInvariant of
-  --   Nothing -> pure ()
-  --   Just invariant -> do
-  --     traceShowM invariant
-  --     constrain $ traceShowId $
-  --       runReader (checkSchemaInvariant invariant) (mkSVal (readArray arr k))
-  pure arr
 
 data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
@@ -722,13 +686,9 @@ analyzeTermO = \case
         EType TDecimal -> do
           S _prov (SBVI.SBV sbvVal) <- use (decimalCell tn cn sRk sDirty)
           mInvariant <- view (invariants . at (tn, cn))
-          -- traceM "maybe checking decimal invariant"
-          is <- view invariants
-          traceShowM (mInvariant, is)
           case mInvariant of
             Nothing -> pure ()
             Just invariant -> do
-              traceM "checking invariant"
               Analyze $ lift $ lift $ constrain $ runReader (checkSchemaInvariant invariant) sbvVal
           pure $ mkAVal' (SBVI.SBV sbvVal)
 
@@ -1079,47 +1039,43 @@ analyzeTerm = \case
     void $ iforM obj' $ \colName (fieldType, aval) -> do
       let cn = ColumnName colName
       cellWritten tn cn sRk .= true
+
+      let checkInvariants :: SBVI.SVal -> Analyze ()
+          checkInvariants val = do
+
+            mInvariant <- view (invariants . at (tn, cn))
+            case mInvariant of
+              Nothing -> pure ()
+              Just invariant -> do
+                let inv = runReader (checkSchemaInvariant invariant) val
+                maintainsInvariants %= (&&& inv)
+
       case aval of
-        AVal mProv val' -> case fieldType of
-          EType TInt  -> do
-            let cell :: Lens' AnalyzeState (S Integer)
-                cell = intCell tn cn sRk true
-                next = mkS mProv val'
-            prev <- use cell
-            cell .= next
-            columnDelta tn cn += next - prev
+        AVal mProv val' -> do
+          checkInvariants val'
+          case fieldType of
+            EType TInt  -> do
+              let cell :: Lens' AnalyzeState (S Integer)
+                  cell = intCell tn cn sRk true
+                  next = mkS mProv val'
+              prev <- use cell
+              cell .= next
+              columnDelta tn cn += next - prev
 
-            mInvariant <- view (invariants . at (tn, cn))
-            case mInvariant of
-              Nothing -> pure ()
-              Just invariant -> do
-                traceM "checking int invariant"
-                let inv = runReader (checkSchemaInvariant invariant) val'
-                maintainsInvariants %= (&&& inv)
+            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
+            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
 
-          EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
-          EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
+            --
+            -- TODO: we should support column delta for decimals
+            --
+            EType TDecimal -> decimalCell tn cn sRk true .= mkS mProv val'
 
-          --
-          -- TODO: we should support column delta for decimals
-          --
-          EType TDecimal -> do
-            decimalCell tn cn sRk true .= mkS mProv val'
+            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
+            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
 
-            mInvariant <- view (invariants . at (tn, cn))
-            case mInvariant of
-              Nothing -> pure ()
-              Just invariant -> do
-                traceM "checking decimal invariant"
-                let inv = runReader (checkSchemaInvariant invariant) val'
-                maintainsInvariants %= (&&& inv)
+            -- TODO: what to do with EType TAny here?
 
-          EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
-          EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
-
-          -- TODO: what to do with EType TAny here?
-
-          -- TODO: handle EObjectTy here
+            -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
         AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''

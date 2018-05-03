@@ -54,8 +54,6 @@ import Data.Aeson (Value)
 
 import Pact.Types.Runtime
 
-import Debug.Trace
-
 evalBeginTx :: Info -> Eval e ()
 evalBeginTx i = beginTx i =<< view eeTxId
 {-# INLINE evalBeginTx #-}
@@ -166,56 +164,7 @@ loadModule :: Module -> Scope n Term Name -> Info ->
               Eval e ()
 loadModule m bod1 mi = do
   modDefs1 <-
-  -- (modDefs1, propMap, leftoverMeta) <-
     case instantiate' bod1 of
-      -- TList bodyClause _ _bi -> do
-      --   let modDefsL = _1
-      --       propMapL :: Lens' (a, b, c) b
-      --       propMapL = _2
-      --       leftoverMetaL :: Lens' (a, b, c) c
-      --       leftoverMetaL = _3
-
-      --   -- For every clause in the module definition, either add it to
-      --   -- modDefs, or, for metadata, accumulate in modMeta or
-      --   -- leftoverMeta.
-      --   flip execStateT (HM.empty, HM.empty, []) $ forM_ bodyClause $ \t ->
-      --     case t of
-      --       TNative   {..} -> modDefsL . at (asString _tNativeName) ?= t
-      --       TConst    {..} -> modDefsL . at (_aName _tConstArg)     ?= t
-      --       TTable    {..} -> modDefsL . at (asString _tTableName)  ?= t
-      --       TUse      {..} -> lift $ evalUse _tModuleName _tModuleHash _tInfo
-      --       TMeta     {..} -> leftoverMetaL %= cons t
-
-      --       TDef      {..} -> do
-      --         leftoverMeta' <- use leftoverMetaL
-      --         forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
-      --           case tag of
-      --             "property" -> do
-      --               old <- use (propMapL . at _tDefName)
-      --               let old' = fromMaybe [] old
-      --               propMapL . at _tDefName ?= (tag, expr) : old'
-      --             _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
-
-      --         leftoverMetaL .= []
-      --         modDefsL . at _tDefName ?= t
-
-      --       TSchema   {..} -> do
-      --         leftoverMeta' <- use leftoverMetaL
-      --         forM_ leftoverMeta' $ \(TMeta tag expr _i) ->
-      --           case tag of
-      --             "invariant" -> do
-      --               traceM "loadModule invariant"
-      --               let schemaName = unTypeName _tSchemaName
-      --               old <- use (propMapL . at schemaName)
-      --               let old' = fromMaybe [] old
-      --               traceShowM ("loadModule invariant", (tag, expr) : old')
-      --               propMapL . at schemaName ?= (tag, expr) : old'
-      --             _ -> lift $ evalError _tInfo "Unrecognized metaproperty"
-
-      --         leftoverMetaL .= []
-      --         modDefsL . at (asString _tSchemaName) ?= t
-      --       _ -> lift $ evalError (_tInfo t) "Invalid module member"
-
       (TList bd _ _bi) ->
         fmap (HM.fromList . concat) $ forM bd $ \t -> do
           dnm <- case t of
@@ -229,9 +178,6 @@ loadModule m bod1 mi = do
             _ -> evalError (_tInfo t) "Invalid module member"
           return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
-
-  -- when (not (null leftoverMeta))
-  --   (evalError mi "Trailing unattached property")
 
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(defName,defn) ->
@@ -257,16 +203,8 @@ loadModule m bod1 mi = do
   let defs :: HM.HashMap Text Ref -- (Ref, [(Text, Exp)])
       defs = foldl dresolve HM.empty sorted
 
-      -- insert a fresh Ref into the map, fmapping the Either to a Ref via
-      -- 'unify'
-      -- dresolve
-      --   :: HM.HashMap Text (Ref, [(Text, Exp)])
-      --   -> (Term (Either Text Ref), Text, [Text])
-      --   -> HM.HashMap Text (Ref, [(Text, Exp)])
-      dresolve defns (defn,defName,_) = HM.insert defName (Ref (fmap (unify defns) defn)) defns
-        -- = HM.insert defName
-        --   (Ref (fmap (unify defns) defn), propMap ^. at defName . non [])
-        --   defns
+      dresolve defns (defn,defName,_) =
+        HM.insert defName (Ref (fmap (unify defns) defn)) defns
       evalConstRef = runPure . evalConsts
   evaluatedDefs <- traverse evalConstRef defs
   installModule (m, evaluatedDefs)

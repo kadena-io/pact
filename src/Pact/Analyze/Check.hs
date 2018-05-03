@@ -53,8 +53,6 @@ import Pact.Analyze.Translate
 import Pact.Analyze.Types
 import Pact.Compile (expToCheck, expToInvariant)
 
-import Debug.Trace
-
 data CheckFailure
   = Invalid SBVI.SMTModel
   | Unsatisfiable
@@ -129,10 +127,10 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
       compileFailureVar <- newEmptyMVar
 
       checkResult <- runCheck check $ do
+        let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
         aEnv <- mkAnalyzeEnv argTys tables
-        state0 <- mkInitialAnalyzeState
-          (tables & traverse %~ (\(a, b, _c) -> (a, b)))
-          <$> allocateSymbolicCells tables
+        state0
+          <- mkInitialAnalyzeState tables' <$> allocateSymbolicCells tables'
 
         let prop = check ^. ckProp
 
@@ -145,7 +143,9 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                   pure false
                 Right (propResult, state1, _log) -> do
                   let qEnv = mkQueryEnv aEnv state1 propResult
-                      qAction = (&&&) <$> analyzeProp prop <*> checkInvariantsHeld
+                      qAction = (&&&)
+                        <$> analyzeProp prop
+                        <*> checkInvariantsHeld
                   eQuery <- runExceptT $ runReaderT (queryAction qAction) qEnv
                   case eQuery of
                     Left cf' -> do
@@ -170,10 +170,10 @@ checkFunctionBody tables Nothing body argTys nodeNames =
       compileFailureVar <- newEmptyMVar
 
       checkResult <- runProvable $ do
+        let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
         aEnv <- mkAnalyzeEnv argTys tables
-        state0 <- mkInitialAnalyzeState
-          (tables & traverse %~ (\(a, b, _c) -> (a, b)))
-          <$> allocateSymbolicCells tables
+        state0
+          <- mkInitialAnalyzeState tables' <$> allocateSymbolicCells tables'
 
         let go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
@@ -228,7 +228,7 @@ checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function
 
 runProvable :: Provable a => a -> IO CheckResult
 runProvable provable = do
-  (ThmResult smtRes) <- proveWith (z3 {verbose=False}) provable
+  ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
     SBV.Unsatisfiable{}           -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
@@ -249,7 +249,7 @@ runCheck (Satisfiable _prop) provable = do
     SBV.Unknown _config reason -> Left $ Unknown reason
     SBV.ProofError _config strs -> Left $ ProofError strs
 runCheck (Valid _prop) provable = do
-  (ThmResult smtRes) <- proveWith (z3 {verbose=False}) provable
+  ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
     SBV.Unsatisfiable{} -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
@@ -273,33 +273,46 @@ failedTcOrAnalyze tables tcState fun check =
 verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
 verifyModule (_mod, modRefs) = do
 
+  -- All tables defined in this module. We're going to look through these for
+  -- their schemas, which we'll look through for invariants.
   let tables = flip mapMaybe (HM.toList modRefs) $ \case
         (name, Ref (table@TTable {})) -> Just (name, table)
-        (_, Direct (TTable {}))       -> Nothing
         _                             -> Nothing
 
-  -- TODO: we need to figure out how to connect tables to their schemas (and
-  -- metas thereof)
-  tables' <- for tables $ \(tabName, tab) -> do
+  -- TODO: need mapMaybe for HashMap
+  let schemas = HM.fromList $ flip mapMaybe (HM.toList modRefs) $ \case
+        (name, Ref (schema@TSchema {})) -> Just (name, schema)
+        _                               -> Nothing
+
+  -- All function definitions in this module. We're going to look through these
+  -- for properties.
+  let defns = flip HM.filter modRefs $ \ref -> case ref of
+        Ref (TDef {}) -> True
+        _             -> False
+
+  tablesWithInvariants <- for tables $ \(tabName, tab) -> do
+    (TopTable _info _name (TyUser schema), _tcState)
+      <- runTC 0 False $ typecheckTopLevel (Ref tab)
+
+    let schemaName = unTypeName (_utName schema)
+
+    -- look through every meta-property in the schema for invariants
     let metas :: [(Text, Exp)]
-        metas = tab ^@.. tMeta . _Just . mMetas . itraversed
+        metas = schemas ^@.. ix schemaName . tMeta . _Just . mMetas . itraversed
+
     let invariants :: [(Text, SchemaInvariant Bool)]
         invariants = catMaybes $ flip fmap metas $ \(metaName, meta) -> do
           "invariant" <- pure metaName
-          SomeSchemaInvariant expr TBool <- expToInvariant meta
+          SomeSchemaInvariant expr TBool
+            <- expToInvariant (_utFields schema) meta
           [v] <- pure $ Set.toList (invariantVars expr)
           pure (v, expr)
-    (TopTable _info _name (TyUser schema), _tcState)
-      <- runTC 0 False $ typecheckTopLevel (Ref tab)
+
     pure (tabName, schema, invariants)
 
-  let defns = flip HM.filter modRefs $ \ref -> case ref of
-        Ref (defn@TDef {}) -> True -- Just (ref, defn)
-        Direct (TTable {}) -> False
-        _                  -> False
-
   -- convert metas to checks
-  (defns' :: HM.HashMap Text (Ref, [Check])) <- for defns $ \ref -> do
+  defnsWithChecks <- for defns $ \ref -> do
+    -- look through every meta-property in the definition for invariants
     let Ref defn = ref
         metas :: [(Text, Exp)]
         metas = defn ^@.. tMeta . _Just . mMetas . itraversed
@@ -309,12 +322,15 @@ verifyModule (_mod, modRefs) = do
           expToCheck meta
     pure (ref, checks)
 
-  for defns' $ \(ref, props) -> do
+  -- Now the meat of verification! For each definition in the module we check
+  -- 1. that is maintains all invariants
+  -- 2. that is passes any properties declared for it
+  for defnsWithChecks $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
       TopFun (FDefun {}) -> do
-        result  <- failedTcOrAnalyze tables' tcState fun Nothing
+        result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
         results <- forM props $
-          failedTcOrAnalyze tables' tcState fun . Just
+          failedTcOrAnalyze tablesWithInvariants tcState fun . Just
         pure $ result : results
       _ -> pure []

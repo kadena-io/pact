@@ -258,7 +258,7 @@ translateNode = \case
       TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
       _ -> undefined
 
-  AST_Enforce _ cond _msg -> do
+  AST_Enforce _ cond -> do
     ETerm condTerm TBool <- translateNode cond
     pure $ ETerm (Enforce condTerm) TBool
 
