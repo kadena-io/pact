@@ -235,6 +235,7 @@ suite = tests
         bnot $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" "acct"
 
   , scope "enforce-keyset.row-level.multiple-keysets" $ do
       let code =
@@ -480,7 +481,6 @@ suite = tests
             |]
 
       expectPass code $ Valid $ Success ==> ColumnConserve "accounts" "balance"
-      -- expectPass code $ Valid $ CellIncrease "accounts" "balance"
 
   , scope "with-read" $ do
       let code =
