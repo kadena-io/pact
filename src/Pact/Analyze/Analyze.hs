@@ -23,6 +23,7 @@ import Control.Monad.Except (MonadError, Except, ExceptT(..), runExceptT, runExc
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
+import Control.Monad.Writer (MonadWriter(..))
 import Control.Lens hiding (op, (.>), (...))
 import Data.Foldable (foldrM)
 import Data.Map.Strict (Map)
@@ -84,20 +85,14 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
 --   <*> newArray "keySets"
 --   <*> newArray "keySetAuths"
 
-newtype AnalyzeLog
-  = AnalyzeLog ()
+newtype Constraints
+  = Constraints { runConstraints :: Symbolic () }
 
-instance Monoid AnalyzeLog where
-  mempty = AnalyzeLog ()
-  mappend _ _ = AnalyzeLog ()
+instance Monoid Constraints where
+  mempty = Constraints (pure ())
+  mappend (Constraints act1) (Constraints act2) = Constraints $ act1 *> act2
 
-instance Mergeable AnalyzeLog where
-  --
-  -- NOTE: If we change the underlying representation of AnalyzeLog to a list,
-  -- the default Mergeable instance for this will have the wrong semantics, as
-  -- it requires that lists have the same length. We more likely want to use
-  -- monoidal semantics for anything we log:
-  --
+instance Mergeable Constraints where
   symbolicMerge _f _t = mappend
 
 data SymbolicCells
@@ -276,6 +271,9 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
 
+addConstraint :: SBool -> Analyze ()
+addConstraint = tell . Constraints . constrain
+
 allocateSymbolicCells
   :: [(Text, TC.UserType)]
   -> Symbolic (TableMap SymbolicCells)
@@ -382,9 +380,10 @@ instance IsString AnalyzeFailure where
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv AnalyzeLog AnalyzeState (ExceptT AnalyzeFailure Symbolic) a }
+    { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
-            MonadState AnalyzeState, MonadError AnalyzeFailure)
+            MonadState AnalyzeState, MonadError AnalyzeFailure,
+            MonadWriter Constraints)
 
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
 mkQueryEnv = QueryEnv
@@ -418,7 +417,7 @@ mkAnalyzeEnv argTys tables = do
     tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = Analyze $ RWST $ \r s ->
+  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -426,7 +425,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runRWST (runAnalyze act) r
+    let run act = runExcept . runRWST (runAnalyze act) r
     in do
       lTup <- run left s
       let gs = lTup ^. _2.globalState
@@ -688,8 +687,8 @@ analyzeTermO = \case
           mInvariant <- view (invariants . at (tn, cn))
           case mInvariant of
             Nothing -> pure ()
-            Just invariant -> do
-              Analyze $ lift $ lift $ constrain $ runReader (checkSchemaInvariant invariant) sbvVal
+            Just invariant -> addConstraint $
+              runReader (checkSchemaInvariant invariant) sbvVal
           pure $ mkAVal' (SBVI.SBV sbvVal)
 
         EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
