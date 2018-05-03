@@ -183,8 +183,9 @@ checkFunctionBody tables Nothing body argTys nodeNames =
                 Left cf -> do
                   liftIO $ putMVar compileFailureVar cf
                   pure false
-                Right (propResult, state1, _log) -> do
+                Right (propResult, state1, constraints) -> do
                   let qEnv = mkQueryEnv aEnv state1 propResult
+                  runConstraints constraints
                   eQuery <- runExceptT $ runReaderT (queryAction checkInvariantsHeld) qEnv
                   case eQuery of
                     Left cf' -> do
