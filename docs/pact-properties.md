@@ -51,14 +51,11 @@ the definition of the function to which it corresponds. Note that the function
 farms out its implementation of keyset enforcement to another function,
 `enforce-admin`, and we don't have to be concerned about how that happens to be
 implemented. Our property states that if the transaction submitted to the
-blockchain does not have the proper signatures to satisfy the
-`accounts-admin-keyset`, the transaction will `abort`:
+blockchain runs successfully, it must be the case that the transaction has the
+proper signatures to satisfy the keyset named `admins`:
 
 ```
-(@property
-  (when
-    (not (authorized-by 'accounts-admin-keyset))
-    abort))
+(@property (authorized-by 'admins))
 (defun read-account (id)
   "Read data for account ID"
   (enforce-admin)
