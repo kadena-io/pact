@@ -221,8 +221,8 @@ expToInvariant schemaTys = \case
       TyInteger -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
       TyDecimal -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
       TyTime    -> Just (SomeSchemaInvariant (SchemaVar var) TTime)
-      TyBool    -> Just (SomeSchemaInvariant (SchemaVar var) TBool)
       TyString  -> Just (SomeSchemaInvariant (SchemaVar var) TStr)
+      TyBool    -> Just (SomeSchemaInvariant (SchemaVar var) TBool)
       TyKeySet  -> Just (SomeSchemaInvariant (SchemaVar var) TKeySet)
       TyValue   -> Nothing
     _ -> Nothing
@@ -231,6 +231,12 @@ expToInvariant schemaTys = \case
     (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)
   ELiteral (LInteger i) _ -> Just
     (SomeSchemaInvariant (SchemaIntLiteral i) TInt)
+  ELiteral (LString s) _ -> Just
+    (SomeSchemaInvariant (SchemaStringLiteral s) TStr)
+  ELiteral (LTime t) _ -> Just
+    (SomeSchemaInvariant (SchemaTimeLiteral (mkTime t)) TTime)
+  ELiteral (LBool b) _ -> Just
+    (SomeSchemaInvariant (SchemaBoolLiteral b) TBool)
 
   EList' [EAtom' op, a, b]
     | op `Set.member` Set.fromList [">", "<", ">=", "<=", "=", "!="] -> do
@@ -241,13 +247,45 @@ expToInvariant schemaTys = \case
           "<"  -> Lt
           ">=" -> Gte
           "<=" -> Lte
-          "=" -> Eq
+          "="  -> Eq
           "!=" -> Neq
+        opEqNeq = case op of
+          "="  -> Just Eq'
+          "!=" -> Just Neq'
+          _    -> Nothing
+
     case typeEq aTy bTy of
       Just Refl -> case aTy of
-        TDecimal -> Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
-        TInt     -> Just (SomeSchemaInvariant (SchemaIntComparison op' a' b') TBool)
+        TDecimal ->
+          Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
+        TInt     ->
+          Just (SomeSchemaInvariant (SchemaIntComparison op' a' b') TBool)
+        TStr     ->
+          Just (SomeSchemaInvariant (SchemaStringComparison op' a' b') TBool)
+        TTime    ->
+          Just (SomeSchemaInvariant (SchemaTimeComparison op' a' b') TBool)
+
+        TBool    -> do
+          opEqNeq' <- opEqNeq
+          pure (SomeSchemaInvariant (SchemaBoolEqNeq opEqNeq' a' b') TBool)
+        TKeySet  -> do
+          opEqNeq' <- opEqNeq
+          pure (SomeSchemaInvariant (SchemaKeySetEqNeq opEqNeq' a' b') TBool)
       Nothing   -> Nothing
+
+  EList' (EAtom' op:args)
+    | op `Set.member` Set.fromList ["and", "or", "not"] -> do
+    operands' <- forM args $ \arg -> do
+      SomeSchemaInvariant arg' TBool <- expToInvariant schemaTys arg
+      Just arg'
+    case (op, operands') of
+      ("and", [a, b]) ->
+        Just $ SomeSchemaInvariant (SchemaLogicalOp AndOp [a, b]) TBool
+      ("or", [a, b]) ->
+        Just $ SomeSchemaInvariant (SchemaLogicalOp OrOp [a, b]) TBool
+      ("not", [a]) ->
+        Just $ SomeSchemaInvariant (SchemaLogicalOp NotOp [a]) TBool
+      _ -> Nothing
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =

@@ -15,7 +15,6 @@ import Data.Map.Strict (Map)
 import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError)
 import qualified Data.SBV.String as SBV
 import qualified Data.SBV.Internals as SBVI
-import Data.Thyme
 import Data.String (IsString(..))
 import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
                                TKeySet)
@@ -306,12 +305,6 @@ instance Num (Term Decimal) where
   negate = DecUnaryArithOp Negate
 
 type STime = SBV Time
-
-mkTime :: UTCTime -> Time
-mkTime utct
-  = ((utct ^. _utctDay . to toModifiedJulianDay . to fromIntegral)
-    * (1000000 * 60 * 60 * 24))
-  + (utct ^. _utctDayTime . microseconds)
 
 type SDecimal = SBV Decimal
 

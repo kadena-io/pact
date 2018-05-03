@@ -1139,6 +1139,8 @@ checkInvariantsHeld = do
 
 checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
 checkSchemaInvariant = \case
+
+  -- comparison
   SchemaDecimalComparison op a b -> do
     a' <- checkSchemaInvariant a
     b' <- checkSchemaInvariant b
@@ -1149,6 +1151,7 @@ checkSchemaInvariant = \case
       Lte -> a' .<= b'
       Eq  -> a' .== b'
       Neq -> a' ./= b'
+
   SchemaIntComparison op a b -> do
     a' <- checkSchemaInvariant a
     b' <- checkSchemaInvariant b
@@ -1160,10 +1163,58 @@ checkSchemaInvariant = \case
       Eq  -> a' .== b'
       Neq -> a' ./= b'
 
+  SchemaTimeComparison op a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
+      Gt  -> a' .>  b'
+      Lt  -> a' .<  b'
+      Gte -> a' .>= b'
+      Lte -> a' .<= b'
+      Eq  -> a' .== b'
+      Neq -> a' ./= b'
+
+  SchemaStringComparison op a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
+      Gt  -> a' .>  b'
+      Lt  -> a' .<  b'
+      Gte -> a' .>= b'
+      Lte -> a' .<= b'
+      Eq  -> a' .== b'
+      Neq -> a' ./= b'
+
+  SchemaBoolEqNeq op a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
+      Eq'  -> a' .== b'
+      Neq' -> a' ./= b'
+
+  SchemaKeySetEqNeq op a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ case op of
+      Eq'  -> a' .== b'
+      Neq' -> a' ./= b'
+
+  -- literals
   SchemaDecimalLiteral d -> pure $ literal d
   SchemaIntLiteral i     -> pure $ literal i
+  SchemaStringLiteral s  -> pure $ literal (T.unpack s)
+  SchemaTimeLiteral t    -> pure $ literal t
+  SchemaBoolLiteral b    -> pure $ literal b
 
   SchemaVar _            -> SBVI.SBV <$> ask
+
+  SchemaLogicalOp op args -> do
+    args' <- for args checkSchemaInvariant
+    case (op, args') of
+      (AndOp, [a, b]) -> pure $ a &&& b
+      (OrOp,  [a, b]) -> pure $ a ||| b
+      (NotOp, [a])    -> pure $ bnot a
+      _               -> error "impossible schema logical op"
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult

@@ -9,7 +9,7 @@
 
 module Pact.Analyze.Prop where
 
-import Control.Lens (Lens', lens)
+import Control.Lens
 import Data.Aeson (ToJSON, FromJSON)
 import Data.Data (Data)
 import qualified Data.Decimal as Decimal
@@ -20,6 +20,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.String (IsString(..))
 import Data.Text (Text)
+import Data.Thyme
 import Data.Typeable (Typeable, (:~:)(Refl), eqT)
 import qualified Data.Text as T
 import Pact.Types.Util (AsString)
@@ -110,6 +111,12 @@ type Decimal = AlgReal
 
 type Time = Int64
 
+mkTime :: UTCTime -> Time
+mkTime utct
+  = ((utct ^. _utctDay . to toModifiedJulianDay . to fromIntegral)
+    * (1000000 * 60 * 60 * 24))
+  + (utct ^. _utctDayTime . microseconds)
+
 data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)
 
@@ -149,6 +156,9 @@ data RoundingLikeOp
   = Round
   | Ceiling
   | Floor
+  deriving (Show, Eq)
+
+data EqNeq = Eq' | Neq'
   deriving (Show, Eq)
 
 data ComparisonOp = Gt | Lt | Gte | Lte | Eq | Neq
@@ -308,7 +318,20 @@ typeEq TAny     TAny     = Just Refl
 typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
+-- The schema invariant language consists of:
+--
+-- * comparisons
+--   - { <, >, <=, >= } apply to { integer, decimal, string, time }
+--   - { =, != } apply to { integer, decimal, string, time, bool, keyset }
+-- * literals
+-- * variables
+-- * logical operations
+--
+-- The language is stateless. Arithmetic could be added if we decide it's
+-- useful.
 data SchemaInvariant a where
+
+  -- comparisons
   SchemaDecimalComparison
     :: ComparisonOp
     -> SchemaInvariant Decimal
@@ -321,10 +344,45 @@ data SchemaInvariant a where
     -> SchemaInvariant Integer
     -> SchemaInvariant Bool
 
-  SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
-  SchemaIntLiteral :: Integer -> SchemaInvariant Integer
+  SchemaStringComparison
+    :: ComparisonOp
+    -> SchemaInvariant String
+    -> SchemaInvariant String
+    -> SchemaInvariant Bool
 
+  SchemaTimeComparison
+    :: ComparisonOp
+    -> SchemaInvariant Time
+    -> SchemaInvariant Time
+    -> SchemaInvariant Bool
+
+  SchemaBoolEqNeq
+    :: EqNeq
+    -> SchemaInvariant Bool
+    -> SchemaInvariant Bool
+    -> SchemaInvariant Bool
+
+  SchemaKeySetEqNeq
+    :: EqNeq
+    -> SchemaInvariant KeySet
+    -> SchemaInvariant KeySet
+    -> SchemaInvariant Bool
+
+  -- literals
+  SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
+  SchemaIntLiteral     :: Integer -> SchemaInvariant Integer
+  SchemaStringLiteral  :: Text    -> SchemaInvariant String
+  SchemaTimeLiteral    :: Time    -> SchemaInvariant Time
+  SchemaBoolLiteral    :: Bool    -> SchemaInvariant Bool
+
+  -- variables
   SchemaVar :: Text -> SchemaInvariant a
+
+  -- logical operations
+  SchemaLogicalOp
+    :: LogicalOp
+    -> [SchemaInvariant Bool]
+    -> SchemaInvariant Bool
 
 deriving instance Eq (SchemaInvariant a)
 deriving instance Show (SchemaInvariant a)
@@ -343,6 +401,10 @@ invariantVars :: SchemaInvariant a -> Set Text
 invariantVars = \case
   SchemaDecimalComparison _ a b -> invariantVars a <> invariantVars b
   SchemaIntComparison _ a b     -> invariantVars a <> invariantVars b
+  SchemaStringComparison _ a b  -> invariantVars a <> invariantVars b
+  SchemaTimeComparison _ a b    -> invariantVars a <> invariantVars b
+  SchemaBoolEqNeq _ a b         -> invariantVars a <> invariantVars b
+  SchemaKeySetEqNeq _ a b       -> invariantVars a <> invariantVars b
 
   SchemaDecimalLiteral _        -> Set.empty
   SchemaIntLiteral _            -> Set.empty
