@@ -9,10 +9,10 @@
 
 module Pact.Analyze.Types where
 
-import Control.Lens hiding (op, (.>), (...))
+import Control.Lens
 import Data.Data
 import Data.Map.Strict (Map)
-import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError, name)
+import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError)
 import qualified Data.SBV.String as SBV
 import qualified Data.SBV.Internals as SBVI
 import Data.Thyme

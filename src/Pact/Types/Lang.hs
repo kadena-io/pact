@@ -260,10 +260,10 @@ data Arg o = Arg {
   _aName :: Text,
   _aType :: Type o,
   _aInfo :: Info
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance NFData o => NFData (Arg o)
--- instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
+instance Show o => Show (Arg o) where show (Arg n t _) = unpack n ++ ":" ++ show t
 instance (Pretty o) => Pretty (Arg o)
   where pretty (Arg n t _) = pretty n PP.<> colon PP.<> pretty t
 
@@ -274,11 +274,11 @@ instance Eq1 Arg where
 data FunType o = FunType {
   _ftArgs :: [Arg o],
   _ftReturn :: Type o
-  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
+  } deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance NFData o => NFData (FunType o)
--- instance Show o => Show (FunType o) where
---   show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
+instance Show o => Show (FunType o) where
+  show (FunType as t) = "(" ++ unwords (map show as) ++ " -> " ++ show t ++ ")"
 instance (Pretty o) => Pretty (FunType o) where
   pretty (FunType as t) = parens (hsep (map pretty as) <+> "->" <+> pretty t)
 
@@ -302,7 +302,7 @@ data PrimType =
   TyString |
   TyValue |
   TyKeySet
-  deriving (Eq,Ord,Generic,Show)
+  deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
 
@@ -325,14 +325,14 @@ tyValue = "value"
 tyKeySet = "keyset"
 tyTable = "table"
 
--- instance Show PrimType where
---   show TyInteger = unpack tyInteger
---   show TyDecimal = unpack tyDecimal
---   show TyTime = unpack tyTime
---   show TyBool = unpack tyBool
---   show TyString = unpack tyString
---   show TyValue = unpack tyValue
---   show TyKeySet = unpack tyKeySet
+instance Show PrimType where
+  show TyInteger = unpack tyInteger
+  show TyDecimal = unpack tyDecimal
+  show TyTime = unpack tyTime
+  show TyBool = unpack tyBool
+  show TyString = unpack tyString
+  show TyValue = unpack tyValue
+  show TyKeySet = unpack tyKeySet
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =
@@ -393,7 +393,7 @@ data Type v =
   TySchema { _tySchema :: SchemaType, _tySchemaType :: Type v } |
   TyFun { _tyFunType :: FunType v } |
   TyUser { _tyUser :: v }
-    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
+    deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance Eq1 Type where
   liftEq _ TyAny TyAny = True
@@ -407,16 +407,16 @@ instance Eq1 Type where
 
 instance NFData v => NFData (Type v)
 
--- instance (Show v) => Show (Type v) where
---   show (TyPrim t) = show t
---   show (TyList t) | isAnyTy t = unpack tyList
---                   | otherwise = "[" ++ show t ++ "]"
---   show (TySchema s t) | isAnyTy t = show s
---                       | otherwise = show s ++ ":" ++ show t
---   show (TyFun f) = show f
---   show (TyUser v) = show v
---   show TyAny = "*"
---   show (TyVar n) = show n
+instance (Show v) => Show (Type v) where
+  show (TyPrim t) = show t
+  show (TyList t) | isAnyTy t = unpack tyList
+                  | otherwise = "[" ++ show t ++ "]"
+  show (TySchema s t) | isAnyTy t = show s
+                      | otherwise = show s ++ ":" ++ show t
+  show (TyFun f) = show f
+  show (TyUser v) = show v
+  show TyAny = "*"
+  show (TyVar n) = show n
 
 instance (Pretty o) => Pretty (Type o) where
   pretty ty = case ty of
@@ -487,7 +487,7 @@ data Exp =
   EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
   -- | Special binding forms.
   EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
-           deriving (Eq,Generic, Show)
+           deriving (Eq,Generic)
 
 instance NFData Exp
 
@@ -508,14 +508,14 @@ maybeDelim :: Show a => String -> Maybe a -> String
 maybeDelim d t = maybe "" ((d ++) . show) t
 
 
--- instance Show Exp where
---     show (ELiteral i _) = show i
---     show (ESymbol s _) = '\'':unpack s
---     show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
---     show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
---     show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
---     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
---     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
+instance Show Exp where
+    show (ELiteral i _) = show i
+    show (ESymbol s _) = '\'':unpack s
+    show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
+    show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
+    show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
+    show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
+    show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
 
 $(makeLenses ''Exp)
 

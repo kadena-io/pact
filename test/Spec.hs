@@ -161,7 +161,7 @@ suite = tests
       expectPass code $ Satisfiable $ bnot Abort
       expectPass code $ Satisfiable Success
 
-      expectFail code $ Valid $ Abort
+      expectFail code $ Valid Abort
 
   , scope "enforce.sequence" $ do
       let code =

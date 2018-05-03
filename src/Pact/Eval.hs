@@ -7,7 +7,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TupleSections #-}
 -- |
 -- Module      :  Pact.Eval
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -40,7 +39,7 @@ import Prelude
 import Bound
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
-import Safe hiding (at)
+import Safe
 import Data.Default
 import Control.Arrow hiding (app)
 import Data.Maybe

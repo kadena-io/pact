@@ -100,7 +100,7 @@ genFresh baseName = do
   id %= succ
   -- similar to how let-bound variables are named e.g. "let4_x":
   let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
-  return $ (varName, Var varName)
+  return (varName, Var varName)
 
 translateType :: Node -> TranslateM EType
 translateType node = go $ _aTy node
@@ -158,7 +158,7 @@ translateSchema node = do
   ty <- translateType node
   case ty of
     EType _primTy    -> throwError $ NotConvertibleToSchema $ _aTy node
-    EObjectTy schema -> pure $ schema
+    EObjectTy schema -> pure schema
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody [] = throwError EmptyBody

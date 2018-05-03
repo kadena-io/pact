@@ -18,7 +18,7 @@
 module Pact.Analyze.Analyze where
 
 import Control.Monad
-import Control.Monad.Except (MonadError, Except, ExceptT(..), runExceptT, runExcept,
+import Control.Monad.Except (MonadError, Except, ExceptT(..), runExcept,
                              throwError)
 import Control.Monad.Reader
 import Control.Monad.State (MonadState)
@@ -1038,7 +1038,7 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    void $ iforM obj' $ \colName (fieldType, aval) -> do
+    void $ iforM obj' $ \colName (fieldType, aval') -> do
       let cn = ColumnName colName
       cellWritten tn cn sRk .= true
 
@@ -1051,7 +1051,7 @@ analyzeTerm = \case
                 let inv = runReader (checkSchemaInvariant invariant) val
                 maintainsInvariants %= (&&& inv)
 
-      case aval of
+      case aval' of
         AVal mProv val' -> do
           checkInvariants val'
           case fieldType of
@@ -1133,9 +1133,9 @@ liftSymbolic = Query . lift . lift
 
 checkInvariantsHeld :: Query (S Bool)
 checkInvariantsHeld = do
-  succeeds  <- view (model.succeeds)
+  success   <- view (model.succeeds)
   maintains <- sansProv <$> view (model.maintainsInvariants)
-  pure $ succeeds ==> maintains
+  pure $ success ==> maintains
 
 checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
 checkSchemaInvariant = \case

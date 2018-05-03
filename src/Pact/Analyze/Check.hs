@@ -3,9 +3,6 @@
 {-# language NamedFieldPuns    #-}
 {-# language OverloadedStrings #-}
 {-# language Rank2Types        #-}
-{-# language TupleSections     #-}
-
-{-# language ScopedTypeVariables     #-}
 
 module Pact.Analyze.Check
   ( checkTopFunction
@@ -23,7 +20,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
 import Control.Monad.State.Strict (evalStateT)
 import Control.Monad.Trans.RWS.Strict (RWST(..))
-import Control.Lens hiding (op, (.>), (...))
+import Control.Lens
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Set as Set
@@ -36,7 +33,7 @@ import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
 import qualified Data.SBV as SBV
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.Text as T
-import Pact.Typechecker hiding (debug)
+import Pact.Typechecker
 import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type, EObject)
 import qualified Pact.Types.Runtime as Pact
 import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
@@ -86,7 +83,7 @@ describeCheckFailure = \case
     T.unlines (T.pack <$> lines')
   TypecheckFailure fails ->
     "The module failed to typecheck:\n" <>
-    (T.unlines $ map
+    T.unlines (map
       (\(Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
       (Set.toList fails))
   AnalyzeFailure err        -> describeAnalyzeFailure err
@@ -152,7 +149,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                     Left cf' -> do
                       liftIO $ putMVar compileFailureVar cf'
                       pure false
-                    Right symAction -> pure $ symAction
+                    Right symAction -> pure symAction
 
         case tm of
           ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
@@ -191,7 +188,7 @@ checkFunctionBody tables Nothing body argTys nodeNames =
                     Left cf' -> do
                       liftIO $ putMVar compileFailureVar cf'
                       pure false
-                    Right symAction -> pure $ symAction
+                    Right symAction -> pure symAction
 
         case tm of
           ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
