@@ -76,15 +76,17 @@ zero:
 
 ## How does it work?
 
-Pact's property checker works by realizing Pact's semantics in an SMT
-(satisfiability modulo theories) solver (currently Microsoft's Z3 theorem
-prover), and by building and testing the validity of a model; i.e., proving
-that there is no possible assignment of values to SMT variables for which the
-expressed proposition about the program is false.
+Pact's property checker works by realizing the language's semantics in an SMT
+("Satisfiability Modulo Theories") solver, and by building and testing the
+validity of a model. The SMT solver proves that there is no possible assignment
+of values to symbolic variables which can falsify a provided proposition about
+some Pact code. Pact currently uses Microsoft's [Z3 theorem
+prover](https://github.com/Z3Prover/z3/wiki) to power its property checking
+system.
 
-The model is built from the combination of the functions in a Pact module, the
-invariants declared on schemas in the module, and the properties proposed for
-each function.
+Such a model is built from the combination of the functions in a Pact module,
+the properties provided for those functions, and invariants declared on schemas
+in the module.
 
 For any function definition in a Pact module, any subsequent call to another
 function is inlined. Before any properties are tested, this inlined code must
