@@ -23,9 +23,9 @@ property _statically_, before any code is deployed to the blockchain.
 
 Compared with conventional unit testing, wherein the behavior of a program is
 validated for a single combination of inputs and the author hopes this case
-generalizes for to possible inputs, the Pact property checking system
-_automatically_ checks the code under test against all possible inputs, and
-therefore all possible execution paths.
+generalizes to all inputs, the Pact property checking system _automatically_
+checks the code under test against all possible inputs, and therefore all
+possible execution paths.
 
 Pact does this by allowing authors to specify _schema invariants_ about columns
 in database tables, and to state and prove _properties_ about functions with
@@ -38,11 +38,11 @@ invariants correspond to a simplified initial step towards refinement types,
 from the world of formal verification.
 
 For this initial release we don't yet support 100% of the Pact language, and
-our property checker _itself_ has not yet been formally verified, but this is
-only the first step. We're excited to continue broadening support for every
-possible Pact program, eventually prove correctness of the property checker,
-and continually enable authors to express ever more sophisticated properties
-about their smart contracts over time.
+the implementation of the property checker _itself_ has not yet been formally
+verified, but this is only the first step. We're excited to continue broadening
+support for every possible Pact program, eventually prove correctness of the
+property checker, and continually enable authors to express ever more
+sophisticated properties about their smart contracts over time.
 
 ## What do properties and schema invariants look like?
 
@@ -51,14 +51,11 @@ the definition of the function to which it corresponds. Note that the function
 farms out its implementation of keyset enforcement to another function,
 `enforce-admin`, and we don't have to be concerned about how that happens to be
 implemented. Our property states that if the transaction submitted to the
-blockchain does not have the proper signatures to satisfy the
-`accounts-admin-keyset`, the transaction will `abort`:
+blockchain runs successfully, it must be the case that the transaction has the
+proper signatures to satisfy the keyset named `admins`:
 
 ```
-(@property
-  (when
-    (not (authorized-by 'accounts-admin-keyset))
-    abort))
+(@property (authorized-by 'admins))
 (defun read-account (id)
   "Read data for account ID"
   (enforce-admin)
@@ -79,15 +76,17 @@ zero:
 
 ## How does it work?
 
-Pact's property checker works by realizing Pact's semantics in an SMT
-(satisfiability modulo theories) solver (currently Microsoft's Z3 theorem
-prover), and by building and testing the validity of a model; i.e., proving
-that there is no possible assignment of values to SMT variables for which the
-expressed proposition about the program is false.
+Pact's property checker works by realizing the language's semantics in an SMT
+("Satisfiability Modulo Theories") solver, and by building and testing the
+validity of a model. The SMT solver proves that there is no possible assignment
+of values to symbolic variables which can falsify a provided proposition about
+some Pact code. Pact currently uses Microsoft's [Z3 theorem
+prover](https://github.com/Z3Prover/z3/wiki) to power its property checking
+system.
 
-The model is built from the combination of the functions in a Pact module, the
-invariants declared on schemas in the module, and the properties proposed for
-each function.
+Such a model is built from the combination of the functions in a Pact module,
+the properties provided for those functions, and invariants declared on schemas
+in the module.
 
 For any function definition in a Pact module, any subsequent call to another
 function is inlined. Before any properties are tested, this inlined code must
@@ -101,10 +100,12 @@ invariants for any possible DB modification.
 ## How do you use it?
 
 After supplying any desired invariant and property annotations in your module,
-property checking is run by typechecking the module with an extra boolean
-argument to check all properties and invariants:
+property checking is run by invoking `verify`:
 
-`(typecheck 'module-name true)`
+`(verify 'module-name)`
+
+This will typecheck the code and, if that succeeds, check all invariants and
+properties.
 
 ## Expressing schema invariants
 
@@ -114,7 +115,7 @@ Schema invariants are formed by the following BNF grammar:
 <comparator>
   ::= <
     | <=
-    | ==
+    | =
     | !=
     | >=
     | >
@@ -143,7 +144,7 @@ and return values can be referred to by the name `result`:
 ```
 
 Here you can also see that the standard arithmetic operators on integers and
-decimals work as usual in Pact code.
+decimals work as they do in normal Pact code.
 
 We can also define properties in terms of the standard comparison operators:
 
@@ -172,25 +173,57 @@ where `(when x y)` is equivalent to `(or (not x) y)`:
   (* x -1))
 ```
 
-### Transaction abort/success
+### Transaction abort and success
+
+By default, every `@property` is predicated on the successful completion of the
+transaction which would contain an invocation of the function under test. This
+means that properties like the following:
+
+```
+(@property (!= result 0))
+(defun ensured-positive (val:integer)
+  (enforce (> val 0) "val is not positive")
+  val)
+```
+
+will pass due to the use of `enforce`.
+
+At run-time on the blockchain, if an `enforce` call fails, the containing
+transaction is aborted. Because `@property` is only concerned with transactions
+that succeed, the necessary conditions to pass each `enforce` call are assumed.
+
+<!---
+
+### Valid, satisfiable, and explicit transaction abort/success
+
+TODO: more. talk about @valid, @satisfiable, and the lack of the default
+success condition of @property.
 
 Pact's property language supports the notions of `success` and `abort` to
 describe whether programs will successfully run to completion within a
 transaction on the blockchain:
 
 ```
-(@property abort)
+(@valid abort)
 (defun failure-guaranteed:bool ()
   (enforce false "cannot pass"))
 ```
 
+TODO: more
 
+-->
 
-### authorization (includes name vs value)
+### Keyset Authorization
+
+TODO: name-based
+
+TODO: value-based
+
+### Database access
 
 TODO
 
-### Database access
+### Mass conservation
 
 TODO
 
@@ -198,6 +231,95 @@ TODO
 
 TODO
 
-## A worked example
+## A simple balance transfer example
 
-TODO ...balance transfer...
+Let's work through an example where we write a function to transfer some amount
+of a balance across two accounts for the given table, with the invariant that
+balances can not be negative:
+
+```
+(@invariant (>= balance 0))
+(defschema account
+  balance:integer
+  ks:keyset)
+
+(deftable accounts:{account})
+```
+
+The following code to transfer a balance between two accounts may look correct
+at first study, but it turns out that there are number of bugs which we can
+eradicate with the help of another property.
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+Let's use `conserves-mass` to ensure that it's not possible for the function to
+be used to create or destroy any money.
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+Now, when we use `verify` to check all properties in this module, Pact's
+property checker points out that it's able to falsify the mass conservation
+property by passing in an `amount` of `-1`. Let's fix that, and try again:
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (enforce (> amount 0)         "Non-positive amount")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+When we run `verify` this time, the property checker is yet again able to find
+a combination of inputs that break our mass conservation property! It's able to
+falsify the property when `from` and `to` are set to the same account. When
+this is the case, we see that the code actually creates money out of thin air!
+At this point we can add another `enforce` to prevent this scenario:
+
+```
+(@property (row-enforced 'accounts 'ks from))
+(@property (conserves-mass 'accounts 'balance))
+(defun transfer (from:string to:string amount:integer)
+  "Transfer money between accounts"
+  (let ((from-bal (at 'balance (read accounts from)))
+        (from-ks  (at 'ks      (read accounts from)))
+        (to-bal   (at 'balance (read accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (enforce (> amount 0)         "Non-positive amount")
+    (enforce (!= from to)         "Sender is the recipient")
+    (update accounts from { "balance": (- from-bal amount) })
+    (update accounts to   { "balance": (+ to-bal amount) })))
+```
+
+And now we see that finally the property checker verifies that our function
+always conserves mass for the balance column.

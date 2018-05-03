@@ -222,9 +222,9 @@ suite = tests
             |]
       expectPass code $ Satisfiable Abort
       expectPass code $ Satisfiable Success
-      expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
+      expectPass code $ Valid $ Success ==> KsNameAuthorized "ks"
 
-      expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
+      expectFail code $ Valid $ Success ==> KsNameAuthorized "different-ks"
 
   , scope "enforce-keyset.name.dynamic" $ do
       let code =
@@ -272,6 +272,7 @@ suite = tests
         bnot $ RowEnforced "tokens" "ks" (PVar "row")
       expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
         RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" "acct"
 
   , scope "enforce-keyset.row-level.multiple-keysets" $ do
       let code =
@@ -517,7 +518,6 @@ suite = tests
             |]
 
       expectPass code $ Valid $ Success ==> ColumnConserve "accounts" "balance"
-      -- expectPass code $ Valid $ CellIncrease "accounts" "balance"
 
   , scope "with-read" $ do
       let code =
