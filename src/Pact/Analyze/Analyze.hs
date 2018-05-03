@@ -1217,19 +1217,16 @@ checkSchemaInvariant = \case
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar name) = lookupObj name
--- TODO: At
+analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 
-analyzeProp :: Prop a -> Query (S a)
+analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
 analyzeProp (PSym a) = pure $ sansProv a
 
 analyzeProp Success = view $ model.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success
 analyzeProp Result  = expectVal =<< view qeAnalyzeResult
-
--- TODO: At
-
--- TODO: analyzeProp Result = _ <$> view qeAnalyzeResult
+analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
 
 -- Abstraction
 analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do

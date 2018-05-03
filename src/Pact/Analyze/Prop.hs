@@ -356,7 +356,7 @@ data Prop a where
   PVar             :: Text ->                 Prop a
 
   -- Object ops
-  --PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
+  PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
 
   -- String ops
   PStrConcat       :: Prop String -> Prop String -> Prop String

@@ -8,6 +8,7 @@
 import           Control.Lens
 import           Control.Monad.State.Strict (runStateT)
 import qualified Data.HashMap.Strict        as HM
+import qualified Data.Map                   as Map
 import           Data.Maybe                 (catMaybes, mapMaybe)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
@@ -23,7 +24,7 @@ import           Pact.Compile               (expToInvariant)
 import           Pact.Repl
 import           Pact.Typechecker
 import           Pact.Types.Runtime         hiding (RowKey)
-import           Pact.Types.Typecheck
+import           Pact.Types.Typecheck       hiding (Schema)
 
 wrap :: Text -> Text
 wrap code =
@@ -391,7 +392,7 @@ suite = tests
             |]
       in expectPass code $ Valid $ bnot Abort
 
-  , scope "at.dynamic-key" $
+  , scope "at.dynamic-key" $ do
       let code =
             [text|
               (defschema token-row
@@ -408,7 +409,14 @@ suite = tests
                   )
                 )
             |]
-      in expectPass code $ Valid $ bnot Abort
+      expectPass code $ Valid Success
+
+      let schema = Schema $
+            Map.fromList [("name", EType TStr), ("balance", EType TInt)]
+          ety    = EType TStr
+      expectPass code $ Valid $ PComparison Eq
+        (PAt schema (PLit "name") Result ety)
+        (PLit "stu" :: Prop String)
 
   -- TODO: pending fix for https://github.com/kadena-io/pact/issues/53
   -- , scope "at.object-in-object" $
