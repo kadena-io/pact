@@ -673,12 +673,12 @@ analyzeRead tn fields rowKey = do
     sDirty <- use $ cellWritten tn cn sRk
 
     let constrained :: forall a. S a -> Analyze AVal
-        constrained (S _prov (SBVI.SBV sval)) = do
+        constrained s@(S _prov (SBVI.SBV sval)) = do
           case mInvariant of
             Nothing -> pure ()
             Just invariant -> addConstraint $
               runReader (checkSchemaInvariant invariant) sval
-          pure $ mkAVal' (SBVI.SBV sval)
+          pure $ mkAVal s
 
     x <- case fieldType of
       EType TInt     -> constrained =<< use (intCell     tn cn sRk sDirty)
@@ -686,12 +686,7 @@ analyzeRead tn fields rowKey = do
       EType TStr     -> constrained =<< use (stringCell  tn cn sRk sDirty)
       EType TDecimal -> constrained =<< use (decimalCell tn cn sRk sDirty)
       EType TTime    -> constrained =<< use (timeCell    tn cn sRk sDirty)
-
-      --
-      -- TODO: FIXME: can't use constrained here?
-      --
-      EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
-
+      EType TKeySet  -> constrained =<< use (ksCell      tn cn sRk sDirty)
       EType TAny     -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
@@ -1137,6 +1132,9 @@ checkInvariantsHeld = do
   maintains <- sansProv <$> view (model.maintainsInvariants)
   pure $ success ==> maintains
 
+--
+-- TODO: convert this to use `S a`
+--
 checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
 checkSchemaInvariant = \case
 
