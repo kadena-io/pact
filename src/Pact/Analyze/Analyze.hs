@@ -484,15 +484,6 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
---
--- NOTE: at the moment our `SBV ColumnName`s are actually always concrete. If
--- in the future we want to start using free symbolic column names (and
--- similarly, symbolic table names), we should accumulate constraints that
--- column names must be one of the valid column names for that table (and if we
--- know the type, this helps us constrain even further. also symbolic table
--- names must be one of the statically-known tables.
---
-
 columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
 columnDelta tn cn = latticeState.lasColumnDeltas.singular (ix tn).
   singular (ix cn)
