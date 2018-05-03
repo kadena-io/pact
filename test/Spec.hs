@@ -8,7 +8,7 @@
 import           Control.Lens
 import           Control.Monad.State.Strict (runStateT)
 import qualified Data.HashMap.Strict        as HM
-import           Data.Maybe                 (catMaybes)
+import           Data.Maybe                 (catMaybes, mapMaybe)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable (for)
@@ -19,13 +19,11 @@ import           NeatInterpolation
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
-import           Pact.Compile (expToInvariant)
+import           Pact.Compile               (expToInvariant)
 import           Pact.Repl
 import           Pact.Typechecker
 import           Pact.Types.Runtime         hiding (RowKey)
 import           Pact.Types.Typecheck
-
-import Debug.Trace
 
 wrap :: Text -> Text
 wrap code =
@@ -58,34 +56,42 @@ runTest code check = do
     Left err ->
       pure $ Left $ CodeCompilationFailed err
     Right _t ->
-      case view (rsModuleData "test") replState of
+      case replState ^. rEnv . eeRefStore . rsModules . at "test" of
         Nothing ->
           pure $ Left $ CodeCompilationFailed "expected module 'test'"
         Just (_mod, modRefs) ->
           case HM.lookup "test" modRefs of
             Nothing ->
               pure $ Left $ CodeCompilationFailed "expected function 'test'"
-            Just (testRef, _checks) -> do
-              let tables = flip HM.filter modRefs $ \case
-                    (Ref (TTable {}), _checks) -> True
-                    _                          -> False
+            Just testRef -> do
+              -- All tables defined in this module. We're going to look through these for
+              -- their schemas, which we'll look through for invariants.
+              let tables = flip mapMaybe (HM.toList modRefs) $ \case
+                    (name, Ref (table@TTable {})) -> Just (name, table)
+                    _                             -> Nothing
 
-              let schemas = flip HM.filter modRefs $ \case
-                    (Ref (TSchema {}), _checks) -> True
-                    _                           -> False
+              -- TODO: need mapMaybe for HashMap
+              let schemas = HM.fromList $ flip mapMaybe (HM.toList modRefs) $ \case
+                    (name, Ref (schema@TSchema {})) -> Just (name, schema)
+                    _                               -> Nothing
 
-              tables' <- for (HM.toList tables) $ \(tabName, (ref, _tabMetas)) -> do
+              tables' <- for tables $ \(tabName, tab) -> do
                 (TopTable _info _name (TyUser schema), _tcState)
-                  <- runTC 0 False $ typecheckTopLevel ref
-                let metas :: [(Text, Exp)]
-                    metas = modRefs ^?! ix (unTypeName (_utName schema)) . _2
+                  <- runTC 0 False $ typecheckTopLevel $ Ref tab
+
+                let schemaName = unTypeName $ _utName schema
+
+                    metas :: [(Text, Exp)]
+                    metas = schemas ^@..
+                      ix schemaName . tMeta . _Just . mMetas . itraversed
+
                     invariants :: [(Text, SchemaInvariant Bool)]
                     invariants = catMaybes $ flip fmap metas $
                       \(metaName, meta) -> do
                         "invariant" <- pure metaName
-                        SomeSchemaInvariant expr TBool <- expToInvariant meta
+                        SomeSchemaInvariant expr TBool
+                          <- expToInvariant (_utFields schema) meta
                         [v] <- pure $ Set.toList (invariantVars expr)
-                        traceShowM (v, expr)
                         pure (v, expr)
                 pure (tabName, schema, invariants)
 
@@ -771,9 +777,11 @@ suite = tests
   , scope "schema-invariants" $ do
       let code =
             [text|
-              (@invariant (> pos 0))
-              (@invariant (< neg 0))
               (defschema ints-row
+                ("doc"
+                  (invariant (> pos 0))
+                  ;(invariant (< neg 0))
+                  )
                 pos:integer
                 neg:integer)
               (deftable ints:{ints-row} "Table of positive and negative integers")
@@ -781,7 +789,8 @@ suite = tests
               (defun test:bool ()
                 (with-read ints "any index" { "pos" := pos, "neg" := neg }
                   (enforce (> pos 0) "is positive")
-                  (enforce (< neg 0) "is negative")))
+                  ;(enforce (< neg 0) "is negative")
+                  ))
             |]
 
       expectPass code $ Valid Success
