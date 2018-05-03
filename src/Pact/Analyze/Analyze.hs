@@ -79,12 +79,6 @@ allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
     sDecimal :: String -> Symbolic (SBV Decimal)
     sDecimal = symbolic
 
--- mkAnalyzeEnv :: [(Text, Pact.Type TC.UserType)] -> Symbolic AnalyzeEnv
--- mkAnalyzeEnv argTys = AnalyzeEnv
---   <$> allocateArgs argTys
---   <*> newArray "keySets"
---   <*> newArray "keySetAuths"
-
 newtype Constraints
   = Constraints { runConstraints :: Symbolic () }
 
