@@ -774,6 +774,10 @@ suite = tests
             |]
       in expectPass code $ Valid $ bnot Abort
 
+  --
+  -- TODO: collapse these tests once we can support >1 invariant per schema
+  --
+
   , scope "schema-invariants" $ do
       let code =
             [text|
@@ -788,13 +792,44 @@ suite = tests
 
               (defun test:bool ()
                 (with-read ints "any index" { "pos" := pos, "neg" := neg }
-                  (enforce (> pos 0) "is positive")
-                  ;(enforce (< neg 0) "is negative")
+                  (enforce (> pos 0) "is not positive")
+                  ;(enforce (< neg 0) "is not negative")
                   ))
             |]
 
       expectPass code $ Valid Success
 
+  , scope "schema-invariants.not-equals" $ do
+      let code =
+            [text|
+              (defschema ints-row
+                ("doc"
+                  (invariant (!= nonzero 0)))
+                nonzero:integer)
+              (deftable ints:{ints-row})
+
+              (defun test:bool ()
+                (with-read ints "any index" { "nonzero" := nz }
+                  (enforce (or (> nz 0) (< nz 0)) "is zero")))
+            |]
+
+      expectPass code $ Valid Success
+
+  , scope "schema-invariants.equals" $ do
+      let code =
+            [text|
+              (defschema ints-row
+                ("doc"
+                  (invariant (= zero 0)))
+                zero:integer)
+              (deftable ints:{ints-row})
+
+              (defun test:bool ()
+                (with-read ints "any index" { "zero" := z }
+                  (enforce (= z 0) "is not zero")))
+            |]
+
+      expectPass code $ Valid Success
   ]
 
 main :: IO ()

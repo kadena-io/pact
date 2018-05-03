@@ -233,7 +233,7 @@ expToInvariant schemaTys = \case
     (SomeSchemaInvariant (SchemaIntLiteral i) TInt)
 
   EList' [EAtom' op, a, b]
-    | op `Set.member` Set.fromList [">", "<", ">=", "<=", "==", "/="] -> do
+    | op `Set.member` Set.fromList [">", "<", ">=", "<=", "=", "!="] -> do
     SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a
     SomeSchemaInvariant b' bTy <- expToInvariant schemaTys b
     let op' = case op of
@@ -241,8 +241,8 @@ expToInvariant schemaTys = \case
           "<"  -> Lt
           ">=" -> Gte
           "<=" -> Lte
-          "==" -> Eq
-          "/=" -> Neq
+          "=" -> Eq
+          "!=" -> Neq
     case typeEq aTy bTy of
       Just Refl -> case aTy of
         TDecimal -> Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
