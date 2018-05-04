@@ -751,12 +751,13 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
     firstVal
     relevantFields'
 
+analyzeETerm :: ETerm -> Analyze AVal
+analyzeETerm (ETerm tm _)   = mkAVal <$> analyzeTerm tm
+analyzeETerm (EObject tm _) = AnObj <$> analyzeTermO tm
+
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
-  LiteralObject obj -> Object <$>
-    for obj (\(fieldType, ETerm tm _) -> do
-      val <- analyzeTerm tm
-      pure (fieldType, mkAVal val))
+  LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
 
   Read tn (Schema fields) rowKey -> analyzeRead tn fields rowKey
 

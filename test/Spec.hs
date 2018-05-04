@@ -418,20 +418,17 @@ suite = tests
         (PAt schema (PLit "name") Result ety)
         (PLit "stu" :: Prop String)
 
-  -- TODO: pending fix for https://github.com/kadena-io/pact/issues/53
-  -- , scope "at.object-in-object" $
-  --     let code =
-  --           [text|
-  --             (defschema inner
-  --               name:string)
-  --             (defschema wrapper
-  --               inner:{inner})
+  , scope "at.object-in-object" $
+      let code =
+            [text|
+              (defschema inner   name:string)
+              (defschema wrapper wrapped:object{inner})
 
-  --             (defun test:{inner} ()
-  --               (let ((obj:{wrapper} {"inner": {"name": "pact"}}))
-  --                 (at "inner" obj)))
-  --           |]
-  --     in expectPass code $ Valid $ bnot Abort
+              (defun test:object{inner} ()
+                (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
+                  (at "wrapped" obj)))
+            |]
+      in expectPass code $ Valid $ bnot Abort
 
   , scope "table-read" $ do
       let code =
