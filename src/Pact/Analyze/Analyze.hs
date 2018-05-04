@@ -772,18 +772,12 @@ analyzeTermO = \case
 
   Var name -> lookupObj name
 
-  Let name (ETerm rhs _) body -> do
-    val <- analyzeTerm rhs
-    local (scope.at name ?~ mkAVal val) $
+  Let name eterm body -> do
+    av <- analyzeETerm eterm
+    local (scope.at name ?~ av) $
       analyzeTermO body
 
-  Let name (EObject rhs _) body -> do
-    rhs' <- analyzeTermO rhs
-    local (scope.at name ?~ AnObj rhs') $
-      analyzeTermO body
-
-  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTermO b
-  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTermO b
+  Sequence eterm objT -> analyzeETerm eterm *> analyzeTermO objT
 
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
@@ -1003,8 +997,7 @@ analyzeTerm = \case
     succeeds %= (&&& cond')
     pure true
 
-  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTerm b
-  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTerm b
+  Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT
 
   Literal a -> pure a
 
@@ -1068,14 +1061,9 @@ analyzeTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let name (ETerm rhs _) body -> do
-    val <- analyzeTerm rhs
-    local (scope.at name ?~ mkAVal val) $
-      analyzeTerm body
-
-  Let name (EObject rhs _) body -> do
-    rhs' <- analyzeTermO rhs
-    local (scope.at name ?~ AnObj rhs') $
+  Let name eterm body -> do
+    av <- analyzeETerm eterm
+    local (scope.at name ?~ av) $
       analyzeTerm body
 
   Var name -> lookupVal name
