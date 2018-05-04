@@ -59,7 +59,7 @@ proper signatures to satisfy the keyset named `admins`:
 (defun read-account (id)
   "Read data for account ID"
   (enforce-admin)
-  (read accounts id ['balance 'ccy 'amount]))
+  (read 'accounts id ['balance 'ccy 'amount]))
 ```
 
 Next, we see an example of schema invariants. For any table with the following
@@ -243,7 +243,7 @@ balances can not be negative:
   balance:integer
   ks:keyset)
 
-(deftable accounts:{account})
+(deftable 'accounts:{account})
 ```
 
 The following code to transfer a balance between two accounts may look correct
@@ -254,13 +254,13 @@ eradicate with the help of another property.
 (@property (row-enforced 'accounts 'ks from))
 (defun transfer (from:string to:string amount:integer)
   "Transfer money between accounts"
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
+  (let ((from-bal (at 'balance (read 'accounts from)))
+        (from-ks  (at 'ks      (read 'accounts from)))
+        (to-bal   (at 'balance (read 'accounts to))))
     (enforce-keyset from-ks)
     (enforce (>= from-bal amount) "Insufficient Funds")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+    (update 'accounts from { "balance": (- from-bal amount) })
+    (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
 Let's use `conserves-mass` to ensure that it's not possible for the function to
@@ -271,13 +271,13 @@ be used to create or destroy any money.
 (@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
   "Transfer money between accounts"
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
+  (let ((from-bal (at 'balance (read 'accounts from)))
+        (from-ks  (at 'ks      (read 'accounts from)))
+        (to-bal   (at 'balance (read 'accounts to))))
     (enforce-keyset from-ks)
     (enforce (>= from-bal amount) "Insufficient Funds")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+    (update 'accounts from { "balance": (- from-bal amount) })
+    (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
 Now, when we use `verify` to check all properties in this module, Pact's
@@ -289,14 +289,14 @@ property by passing in an `amount` of `-1`. Let's fix that, and try again:
 (@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
   "Transfer money between accounts"
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
+  (let ((from-bal (at 'balance (read 'accounts from)))
+        (from-ks  (at 'ks      (read 'accounts from)))
+        (to-bal   (at 'balance (read 'accounts to))))
     (enforce-keyset from-ks)
     (enforce (>= from-bal amount) "Insufficient Funds")
     (enforce (> amount 0)         "Non-positive amount")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+    (update 'accounts from { "balance": (- from-bal amount) })
+    (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
 When we run `verify` this time, the property checker is yet again able to find
@@ -310,15 +310,15 @@ At this point we can add another `enforce` to prevent this scenario:
 (@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
   "Transfer money between accounts"
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
+  (let ((from-bal (at 'balance (read 'accounts from)))
+        (from-ks  (at 'ks      (read 'accounts from)))
+        (to-bal   (at 'balance (read 'accounts to))))
     (enforce-keyset from-ks)
     (enforce (>= from-bal amount) "Insufficient Funds")
     (enforce (> amount 0)         "Non-positive amount")
     (enforce (!= from to)         "Sender is the recipient")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+    (update 'accounts from { "balance": (- from-bal amount) })
+    (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
 And now we see that finally the property checker verifies that our function
