@@ -114,9 +114,6 @@ translateType node = go $ _aTy node
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
       TySchema _ ty' -> go ty'
 
-      --
-      -- TODO: dedupe this stuff. we have this in 2 places.
-      --
       TyPrim TyBool    -> pure $ EType TBool
       TyPrim TyDecimal -> pure $ EType TDecimal
       TyPrim TyInteger -> pure $ EType TInt
@@ -459,13 +456,7 @@ translateNode = \case
                  AST_Lit (LString t) -> T.unpack t
                  -- TODO: support non-const keys
                  _ -> undefined
-      let ty = case v ^. aNode . aTy of
-                 TyPrim TyBool    -> EType TBool
-                 TyPrim TyDecimal -> EType TDecimal
-                 TyPrim TyInteger -> EType TInt
-                 TyPrim TyString  -> EType TStr
-                 TyPrim TyTime    -> EType TTime
-                 TyPrim TyKeySet  -> EType TKeySet
+      ty <- translateType $ v ^. aNode
       v' <- translateNode v
       pure (k', (ty, v'))
     schema <- translateSchema node
