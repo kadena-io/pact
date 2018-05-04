@@ -70,6 +70,9 @@ expectFail code check = expectJust =<< io (runTest (wrap code) check)
 intConserves :: TableName -> ColumnName -> Prop Bool
 intConserves tn cn = PComparison Eq 0 $ IntColumnDelta tn cn
 
+decConserves :: TableName -> ColumnName -> Prop Bool
+decConserves tn cn = PComparison Eq 0 $ DecColumnDelta tn cn
+
 suite :: Test ()
 suite = tests
   [ scope "result" $ do
@@ -495,7 +498,7 @@ suite = tests
             |]
       expectPass code $ Valid $ Success ==> bnot (TableWrite "tokens")
 
-  , scope "conserves-mass" $ do
+  , scope "conserves-mass.integer" $ do
       let code =
             [text|
               (defun test:string (from:string to:string amount:integer)
@@ -510,6 +513,24 @@ suite = tests
             |]
 
       expectPass code $ Valid $ Success ==> intConserves "accounts" "balance"
+
+  , scope "conserves-mass.decimal" $ do
+      let code =
+            [text|
+              (defschema account2 balance:decimal)
+              (deftable accounts2:{account2})
+
+              (defun test:string (from:string to:string amount:decimal)
+                (let ((from-bal (at 'balance (read accounts2 from)))
+                      (to-bal   (at 'balance (read accounts2 to))))
+                  (enforce (> amount 0.0)       "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts2 from { "balance": (- from-bal amount) })
+                  (update accounts2 to   { "balance": (+ to-bal amount) })))
+            |]
+
+      expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
 
   , scope "with-read" $ do
       let code =

@@ -202,6 +202,15 @@ textToComparisonOp = \case
   "!=" -> Just Neq
   _    -> Nothing
 
+mkT :: Text -> Prop.TableName
+mkT = Prop.TableName . T.unpack
+
+mkC :: Text -> Prop.ColumnName
+mkC = ColumnName . T.unpack
+
+mkK :: Text -> KeySetName
+mkK = KeySetName
+
 expToPropRowKey :: Exp -> Maybe (Prop RowKey)
 expToPropRowKey = \case
   EAtom' "result" -> Just (PVar "result")
@@ -240,9 +249,6 @@ expToPropInteger = \case
 
   _ -> Nothing
 
-  where mkT = Prop.TableName . T.unpack
-        mkC = ColumnName . T.unpack
-
 expToPropString :: Exp -> Maybe (Prop String)
 expToPropString = \case
   EAtom' "result"        -> Just (PVar "result")
@@ -277,6 +283,10 @@ expToPropDecimal = \case
 
   EList' [EAtom' op, a]
     -> PDecUnaryArithOp <$> textToUnaryArithOp op <*> expToPropDecimal a
+
+  EList' [EAtom' "column-delta", ELitName tab, ELitName col]
+    -> Just (DecColumnDelta (mkT tab) (mkC col))
+
   _ -> Nothing
 
 expToPropTime :: Exp -> Maybe (Prop Time)
@@ -344,6 +354,10 @@ expToPropBool = \case
   EList' [EAtom' "column-increase", ELitName tab, ELitName col]
     -> Just (PComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
 
+  --
+  -- TODO: add support for DecColumnDelta. but we need type info...
+  --
+
   EList' [EAtom' "row-enforced", ELitName tab, ELitName col, body] -> do
     body' <- expToPropRowKey body
     Just (RowEnforced (mkT tab) (mkC col) body')
@@ -371,11 +385,7 @@ expToPropBool = \case
 
   _ -> Nothing
 
-  where mkT = Prop.TableName . T.unpack
-        mkC = ColumnName . T.unpack
-        mkK = KeySetName
-
-        propBindings :: [Exp] -> Maybe [(Text, Ty)]
+  where propBindings :: [Exp] -> Maybe [(Text, Ty)]
         propBindings [] = Just []
         -- we require a type annotation
         propBindings (EAtom _name _qual Nothing _parsed:_exps) = Nothing
