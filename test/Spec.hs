@@ -841,4 +841,4 @@ suite = tests
   ]
 
 main :: IO ()
-main = runOnly "schema-invariants" suite
+main = run suite
