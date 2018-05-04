@@ -387,7 +387,7 @@ data Prop a where
   TableRead        :: TableName  ->                Prop Bool    -- anything in table is read
   ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool    -- particular column is written
   CellIncrease     :: TableName  -> ColumnName  -> Prop Bool    -- any cell at all in col increases
-  ColumnDelta      :: TableName  -> ColumnName  -> Prop Integer -- sum of all changes in col
+  IntColumnDelta   :: TableName  -> ColumnName  -> Prop Integer -- sum of all changes in int col
   RowRead          :: TableName  -> Prop RowKey -> Prop Bool
   RowWrite         :: TableName  -> Prop RowKey -> Prop Bool
   --

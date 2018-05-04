@@ -67,8 +67,8 @@ expectPass code check = expect . isNothing =<< io (runTest (wrap code) check)
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectJust =<< io (runTest (wrap code) check)
 
-conserves :: TableName -> ColumnName -> Prop Bool
-conserves tn cn = PComparison Eq 0 $ ColumnDelta tn cn
+intConserves :: TableName -> ColumnName -> Prop Bool
+intConserves tn cn = PComparison Eq 0 $ IntColumnDelta tn cn
 
 suite :: Test ()
 suite = tests
@@ -509,7 +509,7 @@ suite = tests
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectPass code $ Valid $ Success ==> conserves "accounts" "balance"
+      expectPass code $ Valid $ Success ==> intConserves "accounts" "balance"
 
   , scope "with-read" $ do
       let code =

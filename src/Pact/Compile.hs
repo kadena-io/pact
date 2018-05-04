@@ -236,7 +236,7 @@ expToPropInteger = \case
     <*> expToPropInteger b
 
   EList' [EAtom' "column-delta", ELitName tab, ELitName col]
-    -> Just (ColumnDelta (mkT tab) (mkC col))
+    -> Just (IntColumnDelta (mkT tab) (mkC col))
 
   _ -> Nothing
 
@@ -338,11 +338,11 @@ expToPropBool = \case
   EList' [EAtom' "cell-increase", ELitName tab, ELitName col]
     -> Just (CellIncrease (mkT tab) (mkC col))
 
-  -- TODO: in the future, these should be moved into a stdlib
+  -- TODO: in the future, these should be moved into a stdlib:
   EList' [EAtom' "column-conserve", ELitName tab, ELitName col]
-    -> Just (PComparison Eq 0 $ ColumnDelta (mkT tab) (mkC col))
+    -> Just (PComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
   EList' [EAtom' "column-increase", ELitName tab, ELitName col]
-    -> Just (PComparison Lt 0 $ ColumnDelta (mkT tab) (mkC col))
+    -> Just (PComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
 
   EList' [EAtom' "row-enforced", ELitName tab, ELitName col, body] -> do
     body' <- expToPropRowKey body

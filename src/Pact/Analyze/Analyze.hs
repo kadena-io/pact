@@ -229,7 +229,7 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
         , _lasMaintainsInvariants = true
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
-        , _lasColumnDeltas        = columnDeltas
+        , _lasColumnDeltas        = intColumnDeltas
         , _lasTableCells          = tableCells
         , _lasRowsRead            = mkPerTableSFunArray false
         , _lasRowsWritten         = mkPerTableSFunArray false
@@ -243,7 +243,7 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . fst) tables
 
-    columnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
+    intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
     cellsEnforced
       = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
@@ -484,8 +484,8 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
-columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
-columnDelta tn cn = latticeState.lasColumnDeltas.singular (ix tn).
+intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
+intColumnDelta tn cn = latticeState.lasColumnDeltas.singular (ix tn).
   singular (ix cn)
 
 rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
@@ -1035,7 +1035,7 @@ analyzeTerm = \case
                   next = mkS mProv val'
               prev <- use cell
               cell .= next
-              columnDelta tn cn += next - prev
+              intColumnDelta tn cn += next - prev
 
             EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
             EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
@@ -1238,8 +1238,8 @@ analyzeProp (PLogical op props) = analyzeLogicalOp op props
 analyzeProp (TableRead tn)  = view $ model.tableRead tn
 analyzeProp (TableWrite tn) = view $ model.tableWritten tn
 -- analyzeProp (CellIncrease tableName colName)
-analyzeProp (ColumnDelta tableName colName) = view $
-  model.columnDelta tableName colName
+analyzeProp (IntColumnDelta tableName colName) = view $
+  model.intColumnDelta tableName colName
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   view $ model.rowRead tn sRk
