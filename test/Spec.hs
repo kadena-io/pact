@@ -7,24 +7,19 @@
 
 import           Control.Lens
 import           Control.Monad.State.Strict (runStateT)
-import qualified Data.HashMap.Strict        as HM
+import           Data.Either                (isLeft)
 import qualified Data.Map                   as Map
-import           Data.Maybe                 (catMaybes, mapMaybe)
+import           Data.Maybe                 (isNothing)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.Traversable (for)
 import           Data.SBV                   (Boolean(..))
-import qualified Data.Set                   as Set
 import           EasyTest
 import           NeatInterpolation
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
-import           Pact.Compile               (expToInvariant)
 import           Pact.Repl
-import           Pact.Typechecker
 import           Pact.Types.Runtime         hiding (RowKey, TableName)
-import           Pact.Types.Typecheck       hiding (Schema)
 
 wrap :: Text -> Text
 wrap code =
@@ -49,61 +44,28 @@ wrap code =
 rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
 rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
 
-runTest :: Text -> Check -> IO CheckResult
+runTest :: Text -> Check -> IO (Maybe CheckFailure)
 runTest code check = do
   replState0 <- initReplState StringEval
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
   case eTerm of
-    Left err ->
-      pure $ Left $ CodeCompilationFailed err
+    Left err -> pure $ Just $ CodeCompilationFailed err
     Right _t ->
       case replState ^. rEnv . eeRefStore . rsModules . at "test" of
-        Nothing ->
-          pure $ Left $ CodeCompilationFailed "expected module 'test'"
-        Just (_mod, modRefs) ->
-          case HM.lookup "test" modRefs of
-            Nothing ->
-              pure $ Left $ CodeCompilationFailed "expected function 'test'"
-            Just testRef -> do
-              -- All tables defined in this module. We're going to look through these for
-              -- their schemas, which we'll look through for invariants.
-              let tables = flip mapMaybe (HM.toList modRefs) $ \case
-                    (name, Ref (table@TTable {})) -> Just (name, table)
-                    _                             -> Nothing
-
-              -- TODO: need mapMaybe for HashMap
-              let schemas = HM.fromList $ flip mapMaybe (HM.toList modRefs) $ \case
-                    (name, Ref (schema@TSchema {})) -> Just (name, schema)
-                    _                               -> Nothing
-
-              tables' <- for tables $ \(tabName, tab) -> do
-                (TopTable _info _name (TyUser schema), _tcState)
-                  <- runTC 0 False $ typecheckTopLevel $ Ref tab
-
-                let schemaName = unTypeName $ _utName schema
-
-                    metas :: [(Text, Exp)]
-                    metas = schemas ^@..
-                      ix schemaName . tMeta . _Just . mMetas . itraversed
-
-                    invariants :: [(Text, SchemaInvariant Bool)]
-                    invariants = catMaybes $ flip fmap metas $
-                      \(metaName, meta) -> do
-                        "invariant" <- pure metaName
-                        SomeSchemaInvariant expr TBool
-                          <- expToInvariant (_utFields schema) meta
-                        [v] <- pure $ Set.toList (invariantVars expr)
-                        pure (v, expr)
-                pure (tabName, schema, invariants)
-
-              (fun, tcState) <- runTC 0 False $ typecheckTopLevel testRef
-              failedTcOrAnalyze tables' tcState fun (Just check)
+        Nothing -> pure $ Just $ CodeCompilationFailed "expected module 'test'"
+        Just moduleData -> do
+          results <- verifyModule (Just check) moduleData
+          -- TODO(joel): use `fromLeft` when we're on modern GHC
+          pure $ case findOf (traverse . traverse) isLeft results of
+            Just (Left failure) -> Just failure
+            _                   -> Nothing
 
 expectPass :: Text -> Check -> Test ()
-expectPass code check = expectRight =<< io (runTest (wrap code) check)
+-- TODO(joel): use expectNothing when it's available
+expectPass code check = expect . isNothing =<< io (runTest (wrap code) check)
 
 expectFail :: Text -> Check -> Test ()
-expectFail code check = expectLeft =<< io (runTest (wrap code) check)
+expectFail code check = expectJust =<< io (runTest (wrap code) check)
 
 conserves :: TableName -> ColumnName -> Prop Bool
 conserves tn cn = PComparison Eq 0 $ ColumnDelta tn cn
@@ -813,9 +775,9 @@ suite = tests
             [text|
               (defschema ints-row
                 ("doc"
-                  (invariant (> pos 0))
-                  ;(invariant (< neg 0))
-                  )
+                  (invariants
+                    ((> pos 0)
+                     (< neg 0))))
                 pos:integer
                 neg:integer)
               (deftable ints:{ints-row} "Table of positive and negative integers")
@@ -834,7 +796,7 @@ suite = tests
             [text|
               (defschema ints-row
                 ("doc"
-                  (invariant (!= nonzero 0)))
+                  (invariants ((!= nonzero 0))))
                 nonzero:integer)
               (deftable ints:{ints-row})
 
@@ -850,7 +812,7 @@ suite = tests
             [text|
               (defschema ints-row
                 ("doc"
-                  (invariant (= zero 0)))
+                  (invariants ((= zero 0))))
                 zero:integer)
               (deftable ints:{ints-row})
 
