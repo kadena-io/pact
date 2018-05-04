@@ -458,7 +458,7 @@ class SymbolicTerm term where
   injectS :: S a -> term a
 
 instance SymbolicTerm Term where injectS = Literal
-instance SymbolicTerm Prop where injectS = PSym . _sSbv
+instance SymbolicTerm Prop where injectS = PSym
 
 symArrayAt
   :: forall array k v
@@ -1195,7 +1195,7 @@ analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PSym a) = pure $ sansProv a
+analyzeProp (PSym a) = pure a
 
 analyzeProp Success = view $ model.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success

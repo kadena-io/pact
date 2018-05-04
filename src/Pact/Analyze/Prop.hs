@@ -336,11 +336,8 @@ instance Eq EType where
 
 data Prop a where
   -- Literals
-  PLit             :: SymWord a => a     -> Prop a
-  --
-  -- TODO: change this to `S a`, once we move S into Prop
-  --
-  PSym             ::              SBV a -> Prop a
+  PLit             :: SymWord a => a   -> Prop a
+  PSym             ::              S a -> Prop a
 
   -- TX success/failure
   --
