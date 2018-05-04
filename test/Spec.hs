@@ -23,7 +23,7 @@ import           Pact.Analyze.Prop
 import           Pact.Compile               (expToInvariant)
 import           Pact.Repl
 import           Pact.Typechecker
-import           Pact.Types.Runtime         hiding (RowKey)
+import           Pact.Types.Runtime         hiding (RowKey, TableName)
 import           Pact.Types.Typecheck       hiding (Schema)
 
 wrap :: Text -> Text
@@ -104,6 +104,9 @@ expectPass code check = expectRight =<< io (runTest (wrap code) check)
 
 expectFail :: Text -> Check -> Test ()
 expectFail code check = expectLeft =<< io (runTest (wrap code) check)
+
+conserves :: TableName -> ColumnName -> Prop Bool
+conserves tn cn = PComparison Eq 0 $ ColumnDelta tn cn
 
 suite :: Test ()
 suite = tests
@@ -522,7 +525,7 @@ suite = tests
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectPass code $ Valid $ Success ==> ColumnConserve "accounts" "balance"
+      expectPass code $ Valid $ Success ==> conserves "accounts" "balance"
 
   , scope "with-read" $ do
       let code =

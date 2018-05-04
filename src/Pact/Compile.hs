@@ -189,10 +189,17 @@ expToProp = \case
     -> Just (ColumnWrite (mkT tab) (mkC col))
   EList' [EAtom' "cell-increase", ELitName tab, ELitName col]
     -> Just (CellIncrease (mkT tab) (mkC col))
+
+  -- TODO: once we can support Prop Integer:
+  --
+  -- EList' [EAtom' "column-delta", ELitName tab, ELitName col]
+  --   -> Just (ColumnDelta (mkT tab) (mkC col))
+
+  -- TODO: in the future, these should be moved into a stdlib
   EList' [EAtom' "column-conserve", ELitName tab, ELitName col]
-    -> Just (ColumnConserve (mkT tab) (mkC col))
+    -> Just (PComparison Eq 0 $ ColumnDelta (mkT tab) (mkC col))
   EList' [EAtom' "column-increase", ELitName tab, ELitName col]
-    -> Just (ColumnIncrease (mkT tab) (mkC col))
+    -> Just (PComparison Lt 0 $ ColumnDelta (mkT tab) (mkC col))
 
   EList' [EAtom' "authorized-by", ELitName name]
     -> Just (KsNameAuthorized (mkK name))

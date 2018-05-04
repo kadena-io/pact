@@ -1239,10 +1239,8 @@ analyzeProp (PLogical op props) = analyzeLogicalOp op props
 analyzeProp (TableRead tn)  = view $ model.tableRead tn
 analyzeProp (TableWrite tn) = view $ model.tableWritten tn
 -- analyzeProp (CellIncrease tableName colName)
-analyzeProp (ColumnConserve tableName colName) =
-  sansProv . (0 .==) <$> view (model.columnDelta tableName colName)
-analyzeProp (ColumnIncrease tableName colName) =
-  sansProv . (0 .<) <$> view (model.columnDelta tableName colName)
+analyzeProp (ColumnDelta tableName colName) = view $
+  model.columnDelta tableName colName
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   view $ model.rowRead tn sRk

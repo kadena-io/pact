@@ -382,12 +382,11 @@ data Prop a where
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- DB properties
-  TableWrite       :: TableName  ->                Prop Bool -- anything in table is written
-  TableRead        :: TableName  ->                Prop Bool -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool -- particular column is written
-  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool -- any cell at all in col increases
-  ColumnConserve   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col == 0
-  ColumnIncrease   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col >  0
+  TableWrite       :: TableName  ->                Prop Bool    -- anything in table is written
+  TableRead        :: TableName  ->                Prop Bool    -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool    -- particular column is written
+  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool    -- any cell at all in col increases
+  ColumnDelta      :: TableName  -> ColumnName  -> Prop Integer -- sum of all changes in col
   RowRead          :: TableName  -> Prop RowKey -> Prop Bool
   RowWrite         :: TableName  -> Prop RowKey -> Prop Bool
   --
