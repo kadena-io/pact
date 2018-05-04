@@ -235,7 +235,13 @@ expToPropInteger = \case
     <*> expToPropInteger a
     <*> expToPropInteger b
 
+  EList' [EAtom' "column-delta", ELitName tab, ELitName col]
+    -> Just (ColumnDelta (mkT tab) (mkC col))
+
   _ -> Nothing
+
+  where mkT = Prop.TableName . T.unpack
+        mkC = ColumnName . T.unpack
 
 expToPropString :: Exp -> Maybe (Prop String)
 expToPropString = \case
@@ -331,11 +337,6 @@ expToPropBool = \case
     -> Just (ColumnWrite (mkT tab) (mkC col))
   EList' [EAtom' "cell-increase", ELitName tab, ELitName col]
     -> Just (CellIncrease (mkT tab) (mkC col))
-
-  -- TODO: once we can support Prop Integer:
-  --
-  -- EList' [EAtom' "column-delta", ELitName tab, ELitName col]
-  --   -> Just (ColumnDelta (mkT tab) (mkC col))
 
   -- TODO: in the future, these should be moved into a stdlib
   EList' [EAtom' "column-conserve", ELitName tab, ELitName col]
