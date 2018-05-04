@@ -105,35 +105,17 @@ genFresh baseName = do
 translateType :: Node -> TranslateM EType
 translateType node = go $ _aTy node
   where
+    go :: Pact.Type Pact.UserType -> TranslateM EType
     go = \case
       TyUser (Pact.Schema _ _ fields _) ->
         fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-          \(Arg name ty _info) ->
-            ( T.unpack name
-            , case ty of
-                TyPrim TyBool    -> pure $ EType TBool
-                TyPrim TyDecimal -> pure $ EType TDecimal
-                TyPrim TyInteger -> pure $ EType TInt
-                TyPrim TyString  -> pure $ EType TStr
-                TyPrim TyTime    -> pure $ EType TTime
-                TyPrim TyKeySet  -> pure $ EType TKeySet
-
-                -- Pretend any and var are the same -- we can't analyze either
-                -- of them.
-                TyAny            -> pure $ EType TAny
-                TyVar _          -> pure $ EType TAny
-                --
-                -- TODO: handle these:
-                --
-                TyPrim TyValue  -> throwError $ UnhandledType node ty
-                _               -> throwError $ UnhandledType node ty
-            )
+          \(Arg name ty _info) -> (T.unpack name, go ty)
 
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
       TySchema _ ty' -> go ty'
 
       --
-      -- TODO: dedupe this stuff. we have this in 3 places.
+      -- TODO: dedupe this stuff. we have this in 2 places.
       --
       TyPrim TyBool    -> pure $ EType TBool
       TyPrim TyDecimal -> pure $ EType TDecimal
