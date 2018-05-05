@@ -514,6 +514,24 @@ suite = tests
 
       expectPass code $ Valid $ Success ==> intConserves "accounts" "balance"
 
+  --
+  -- TODO: pending removal of some `undefined` causing CallStack here
+  --
+  -- , scope "conserves-mass.integer.without-uniqueness" $ do
+  --     let code =
+  --           [text|
+  --             (defun test:string (from:string to:string amount:integer)
+  --               "Transfer money between accounts"
+  --               (let ((from-bal (at 'balance (read accounts from)))
+  --                     (to-bal   (at 'balance (read accounts to))))
+  --                 (enforce (> amount 0)         "Non-positive amount")
+  --                 (enforce (>= from-bal amount) "Insufficient Funds")
+  --                 (update accounts from { "balance": (- from-bal amount) })
+  --                 (update accounts to   { "balance": (+ to-bal amount) })))
+  --           |]
+
+  --     expectPass code $ Valid $ bnot $ Success ==> intConserves "accounts" "balance"
+
   , scope "conserves-mass.decimal" $ do
       let code =
             [text|
