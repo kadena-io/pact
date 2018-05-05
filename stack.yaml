@@ -17,9 +17,15 @@ extra-deps:
   - bound-2
   - ed25519-donna-0.1.1
   - hashable-1.2.6.1
-  - hlint-2.0.11
+  - hlint-2.0.14
   - aeson-1.1.2.0
   - haskell-src-exts-util-0.2.2
+  - weeder-1.0.5
+  - extra-1.6.5
+  - foundation-0.0.20
+  - haskell-src-exts-1.20.2
+  - basement-0.0.7
+
 flags: {}
 
 extra-package-dbs: []
