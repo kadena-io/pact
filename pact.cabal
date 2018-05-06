@@ -191,6 +191,7 @@ test-suite hspec
               , ansi-wl-pprint
               , bytestring
               , hlint >= 2.0
+              , weeder >= 1.0.5
   other-modules:
                 Blake2Spec
               , DocgenSpec
@@ -201,3 +202,4 @@ test-suite hspec
               , PersistSpec
               , TypecheckSpec
               , TypesSpec
+              , WeederSpec
