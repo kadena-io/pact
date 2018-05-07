@@ -16,7 +16,7 @@
 
 module Pact.Parse
     (
-     exprsOnly
+     exprs, exprsOnly
     ,parseExprs
     ,number
     ,PactParser(unPactParser)
