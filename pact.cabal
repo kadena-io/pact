@@ -70,8 +70,6 @@ library
       Pact.Types.Server
       Pact.Types.SQLite
 
-
-  -- other-extensions:
   build-depends:       Decimal >= 0.4.2 && < 0.6
                      , aeson >= 0.11.3.0 && < 1.4
                      , ansi-wl-pprint >= 0.6.7.3 && < 0.7
