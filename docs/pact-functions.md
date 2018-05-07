@@ -1218,18 +1218,6 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 ```
 
 
-### env-hash {#env-hash}
-
-*hash*&nbsp;`string` *&rarr;*&nbsp;`string`
-
-
-Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. 
-```lisp
-pact> (env-hash (hash "hello"))
-"Set tx hash to e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"
-```
-
-
 ### env-keys {#env-keys}
 
 *keys*&nbsp;`[string]` *&rarr;*&nbsp;`string`
