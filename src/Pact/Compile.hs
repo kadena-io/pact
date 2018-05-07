@@ -480,11 +480,11 @@ expToInvariant schemaTys = \case
         Just $ SomeSchemaInvariant (SchemaLogicalOp NotOp [a]) TBool
       _ -> Nothing
 
-  ESymbol _ _   -> Nothing
-  EAtom _ _ _ _ -> Nothing
-  EList _ _ _   -> Nothing
-  EObject _ _   -> Nothing
-  EBinding _ _  -> Nothing
+  ESymbol {}  -> Nothing
+  EAtom {}    -> Nothing
+  EList {}    -> Nothing
+  EObject {}  -> Nothing
+  EBinding {} -> Nothing
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =

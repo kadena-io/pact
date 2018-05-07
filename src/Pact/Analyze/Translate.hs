@@ -397,7 +397,7 @@ translateNode astNode = case astNode of
     in mkMod <|> mkArith <|> mkComparison <|> mkLogical <|> mkConcat
 
   AST_NFun _node name [ShortTableName tn, row, obj]
-    | elem name ["insert", "update", "write"] -> do
+    | name `elem` ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' _schema <- translateNode obj
     pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
