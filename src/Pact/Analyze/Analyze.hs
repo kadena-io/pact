@@ -1202,6 +1202,14 @@ analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar name) = lookupObj name
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
+analyzePropO (PLit _) = throwError "We don't support property object literals"
+analyzePropO (PSym _) = throwError "Symbols can't be objects"
+analyzePropO (Forall name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
+analyzePropO (Exists name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1247,7 +1255,10 @@ analyzeProp (PLogical op props) = analyzeLogicalOp op props
 -- DB properties
 analyzeProp (TableRead tn)  = view $ model.tableRead tn
 analyzeProp (TableWrite tn) = view $ model.tableWritten tn
--- analyzeProp (CellIncrease tableName colName)
+analyzeProp (ColumnWrite _tableName _colName)
+  = throwError "column write analysis not yet implemented"
+analyzeProp (CellIncrease _tableName _colName)
+  = throwError "cell increase analysis not yet implemented"
 analyzeProp (IntColumnDelta tableName colName) = view $
   model.intColumnDelta tableName colName
 analyzeProp (DecColumnDelta tableName colName) = view $

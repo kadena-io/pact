@@ -439,6 +439,7 @@ expToInvariant schemaTys = \case
           "<=" -> Lte
           "="  -> Eq
           "!=" -> Neq
+          _    -> error "impossible"
         opEqNeq = case op of
           "="  -> Just Eq'
           "!=" -> Just Neq'
@@ -461,6 +462,8 @@ expToInvariant schemaTys = \case
         TKeySet  -> do
           opEqNeq' <- opEqNeq
           pure (SomeSchemaInvariant (SchemaKeySetEqNeq opEqNeq' a' b') TBool)
+
+        TAny -> Nothing
       Nothing   -> Nothing
 
   EList' (EAtom' op:args)
@@ -476,6 +479,12 @@ expToInvariant schemaTys = \case
       ("not", [a]) ->
         Just $ SomeSchemaInvariant (SchemaLogicalOp NotOp [a]) TBool
       _ -> Nothing
+
+  ESymbol _ _   -> Nothing
+  EAtom _ _ _ _ -> Nothing
+  EList _ _ _   -> Nothing
+  EObject _ _   -> Nothing
+  EBinding _ _  -> Nothing
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
@@ -590,13 +599,13 @@ doSchema es i = case es of
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
-  [EAtom tn Nothing ty _] -> mkT tn ty Nothing
-  [EAtom tn Nothing ty _,ELitString docs] -> mkT tn ty (justDocs docs)
+  [EAtom tn Nothing ty _] -> mkTable tn ty Nothing
+  [EAtom tn Nothing ty _,ELitString docs] -> mkTable tn ty (justDocs docs)
   [EAtom tn Nothing ty _,EList' (ELitString docs:ps)] ->
-    mkMeta docs ps >>= \m -> mkT tn ty m
+    mkMeta docs ps >>= \m -> mkTable tn ty m
   _ -> syntaxError i "Invalid table definition"
   where
-    mkT tn ty docs = do
+    mkTable tn ty docs = do
       cm <- currentModule i
       tty :: Type (Term Name) <- case ty of
         Just ot@TyUser {} -> return $ liftTy i ot

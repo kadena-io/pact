@@ -576,8 +576,13 @@ invariantVars = \case
 
   SchemaDecimalLiteral _        -> Set.empty
   SchemaIntLiteral _            -> Set.empty
+  SchemaStringLiteral _         -> Set.empty
+  SchemaTimeLiteral _           -> Set.empty
+  SchemaBoolLiteral _           -> Set.empty
 
   SchemaVar v                   -> Set.singleton v
+
+  SchemaLogicalOp _ invariants  -> Set.unions (invariantVars <$> invariants)
 
 makeLenses ''S
 makeLenses ''Object

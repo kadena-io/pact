@@ -726,7 +726,6 @@ toAST TStep {..} = do
   ex <- toAST _tStepExec
   assocAST si ex
   Step sn ent ex <$> traverse toAST _tStepRollback
-toAST TMeta {..} = die _tInfo "Metadata not supported"
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do

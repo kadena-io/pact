@@ -49,6 +49,9 @@ data TranslateFailure
   | AlternativeFailures [TranslateFailure]
   | MonadFailure String
   | NonStaticColumns (AST Node)
+  | BadNegationType (AST Node)
+  | BadTimeType (AST Node)
+  | NonConstKey (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving Show
@@ -68,6 +71,9 @@ describeTranslateFailure = \case
   AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
+  BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
+  BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
+  NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   where
     tShow :: Show a => a -> Text
@@ -189,7 +195,7 @@ translateBinding bindingsA schema bodyA rhsT = do
   mapETerm translateLet <$> local (nodeNames <>) (translateBody bodyA)
 
 translateNode :: AST Node -> TranslateM ETerm
-translateNode = \case
+translateNode astNode = case astNode of
   AST_Let _ [] body -> translateBody body
 
   AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
@@ -220,7 +226,7 @@ translateNode = \case
   AST_NegativeLit l -> case l of
     LInteger i -> pure $ ETerm (IntUnaryArithOp Negate (lit i)) TInt
     LDecimal d -> pure $ ETerm (DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
-    _ -> undefined
+    _ -> throwError $ BadNegationType astNode
 
   AST_Lit l -> case l of
     LInteger i -> pure $ ETerm (lit i) TInt
@@ -235,7 +241,7 @@ translateNode = \case
     case ty of
       TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name)) TInt)
       TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
-      _ -> undefined
+      _ -> throwError $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
     ETerm condTerm TBool <- translateNode cond
@@ -262,21 +268,21 @@ translateNode = \case
     case daysTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60 * 24) days') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60 * 24) days') TDecimal
-      _        -> throwError undefined
+      _        -> throwError $ BadTimeType astNode
 
   AST_Hours hours -> do
     ETerm hours' hoursTy <- translateNode hours
     case hoursTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60) hours') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60) hours') TDecimal
-      _        -> throwError undefined
+      _        -> throwError $ BadTimeType astNode
 
   AST_Minutes minutes -> do
     ETerm minutes' minutesTy <- translateNode minutes
     case minutesTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60) minutes') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60) minutes') TDecimal
-      _        -> throwError undefined
+      _        -> throwError $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
@@ -332,6 +338,7 @@ translateNode = \case
                          "/"           -> Div
                          "^"           -> Pow
                          "log"         -> Log
+                         _             -> error "impossible"
                  in case (tyA, tyB) of
                    (TInt, TInt)         -> pure $
                      ETerm (IntArithOp (opFromName fn) a' b') TInt
@@ -452,10 +459,10 @@ translateNode = \case
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
-      let k' = case k of
-                 AST_Lit (LString t) -> T.unpack t
-                 -- TODO: support non-const keys
-                 _ -> undefined
+      k' <- case k of
+        AST_Lit (LString t) -> pure $ T.unpack t
+        -- TODO: support non-const keys
+        _ -> throwError $ NonConstKey k
       ty <- translateType $ v ^. aNode
       v' <- translateNode v
       pure (k', (ty, v'))
