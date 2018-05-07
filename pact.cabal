@@ -29,6 +29,7 @@ library
                      , Pact.Parse
                      , Pact.PersistPactDb
                      , Pact.Persist
+                     , Pact.Persist.MockPersist
                      , Pact.Persist.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
