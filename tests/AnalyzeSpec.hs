@@ -65,12 +65,12 @@ expectPass :: Text -> Check -> Spec
 -- TODO(joel): use expectNothing when it's available
 expectPass code check = do
   res <- runIO $ runTest (wrap code) check
-  it "" $ res `shouldSatisfy` isNothing
+  it (show check) $ res `shouldSatisfy` isNothing
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
   res <- runIO $ runTest (wrap code) check
-  it "" $ res `shouldSatisfy` isJust
+  it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
 intConserves tn cn = PComparison Eq 0 $ IntColumnDelta tn cn
