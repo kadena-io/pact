@@ -29,7 +29,6 @@ library
                      , Pact.Parse
                      , Pact.PersistPactDb
                      , Pact.Persist
-                     , Pact.Persist.MockPersist
                      , Pact.Persist.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
@@ -54,6 +53,7 @@ library
       Pact.Interpreter
       Pact.Main
       Pact.MockDb
+      Pact.Persist.MockPersist
       Pact.Persist.SQLite
       Pact.PersistPactDb.Regression
       Pact.ReplTools
