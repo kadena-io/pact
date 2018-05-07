@@ -169,14 +169,12 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
-              , weeder >= 1.0.5
   if !impl(ghcjs)
     build-depends: hlint >= 2.0
   other-modules:
                 Blake2Spec
               , KeysetSpec
               , TypesSpec
-              , WeederSpec
   if !impl(ghcjs)
     other-modules:
         DocgenSpec

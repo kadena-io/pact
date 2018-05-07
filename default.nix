@@ -58,9 +58,8 @@ in
           };
     packages = {
       pact = ./.;
-
     };
-    
+
     shells = {
       ghc = ["pact"];
       ghcjs = ["pact"];
