@@ -33,7 +33,7 @@ import Data.Char
 import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (exp,print,putStrLn)
+import Prelude hiding (exp)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)

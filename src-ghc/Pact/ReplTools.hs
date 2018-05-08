@@ -9,12 +9,12 @@
 module Pact.ReplTools where
 
 import Control.Applicative
-import Control.Lens hiding (op)
+import Control.Lens
 import Control.Monad.State.Strict
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import Prelude hiding (exp,print,putStrLn)
-import Text.Trifecta as TF hiding (line,err,try,newline)
+import Prelude hiding (print,putStrLn)
+import Text.Trifecta as TF hiding (line)
 import qualified Text.Trifecta.Delta as TF
 import System.IO
 import System.Console.Haskeline

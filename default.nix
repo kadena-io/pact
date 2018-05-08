@@ -13,6 +13,7 @@ in
     overrides = self: super:
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
        in {
+            aeson = self.callHackage "aeson" "1.1.2.0" {};
             blake2 = guardGhcjs super.blake2;
             haskeline = guardGhcjs super.haskeline;
 
@@ -31,6 +32,20 @@ in
               rev = "4064bfa7e48a7f1b79f791560d51dbefed879219";
               sha256 = "1p7rc5m70rkm1ma8gnihfwyxysr0n3wxk8ijhp6qjnqp5zwifhhn";
             }) {});
+
+            # 1.20.2 not available to callHackage yet
+            haskell-src-exts = self.callCabal2nix "haskell-src-exts" (pkgs.fetchFromGitHub {
+              owner = "haskell-suite";
+              repo = "haskell-src-exts";
+              rev = "4954767e371590ba11ef1edccf904afc9b94f78c";
+              sha256 = "1wy7vqk0w4wx12v803w16dbq64gki7i8xvx7d1ibvlwpw4j4pr8f";
+            }) {};
+            # needed to match haskell-src-exts
+            haskell-src-meta = self.callHackage "haskell-src-meta" "0.8.0.2" {};
+            # needed to match haskell-src-exts
+            haskell-src-exts-util = self.callHackage "haskell-src-exts-util" "0.2.2" {};
+            hlint = self.callHackage "hlint" "2.0.14" {};
+            hoogle = self.callHackage "hoogle" "5.0.15" {};
 
             # Most recent github commit.  Might also work with 0.14.0.2
             statistics = pkgs.haskell.lib.dontCheck (self.callCabal2nix "statistics" (pkgs.fetchFromGitHub {
