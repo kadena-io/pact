@@ -129,7 +129,4 @@ instance Num (Term Decimal) where
   negate = DecUnaryArithOp Negate
 
 data UserType = UserType
-  deriving (Eq, Ord, Read, Data, Show)
-
-deriving instance HasKind UserType
-deriving instance SymWord UserType
+  deriving (Eq, Ord, Read, Data, Show, HasKind, SymWord)

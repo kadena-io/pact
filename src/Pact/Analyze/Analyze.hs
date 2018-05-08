@@ -140,7 +140,8 @@ data LatticeAnalyzeState
     , _lasMaintainsInvariants :: SBV Bool
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
-    , _lasColumnDeltas        :: TableMap (ColumnMap (S Integer))
+    , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
+    , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
     , _lasRowsRead            :: TableMap (SFunArray RowKey Bool)
     , _lasRowsWritten         :: TableMap (SFunArray RowKey Bool)
@@ -157,17 +158,18 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsInvariants  tsRead  tsWritten  deltas  cells  rsRead
-      rsWritten  csEnforced  csWritten)
+      success  tsInvariants  tsRead  tsWritten  intDeltas  decDeltas  cells
+      rsRead  rsWritten  csEnforced  csWritten)
     (LatticeAnalyzeState
-      success' tsInvariants' tsRead' tsWritten' deltas' cells' rsRead'
-      rsWritten' csEnforced' csWritten')
+      success' tsInvariants' tsRead' tsWritten' intDeltas' decDeltas' cells'
+      rsRead' rsWritten' csEnforced' csWritten')
         = LatticeAnalyzeState
           (symbolicMerge force test success      success')
           (symbolicMerge force test tsInvariants tsInvariants')
           (symbolicMerge force test tsRead       tsRead')
           (symbolicMerge force test tsWritten    tsWritten')
-          (symbolicMerge force test deltas       deltas')
+          (symbolicMerge force test intDeltas    intDeltas')
+          (symbolicMerge force test decDeltas    decDeltas')
           (symbolicMerge force test cells        cells')
           (symbolicMerge force test rsRead       rsRead')
           (symbolicMerge force test rsWritten    rsWritten')
@@ -229,7 +231,8 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
         , _lasMaintainsInvariants = true
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
-        , _lasColumnDeltas        = columnDeltas
+        , _lasIntColumnDeltas     = intColumnDeltas
+        , _lasDecColumnDeltas     = decColumnDeltas
         , _lasTableCells          = tableCells
         , _lasRowsRead            = mkPerTableSFunArray false
         , _lasRowsWritten         = mkPerTableSFunArray false
@@ -243,7 +246,8 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . fst) tables
 
-    columnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
+    intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
+    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) 0
     cellsEnforced
       = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
@@ -336,6 +340,7 @@ data AnalyzeFailure
   | FailureMessage Text
   | OpaqueValEncountered
   | VarNotInScope Text
+  | UnsupportedObjectInDbCell
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
   | UnhandledTerm Text
@@ -343,31 +348,39 @@ data AnalyzeFailure
 
 describeAnalyzeFailure :: AnalyzeFailure -> Text
 describeAnalyzeFailure = \case
-  -- these are internal errors. not quite as much care is taken on the messaging
-  AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
-  AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
-  AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
-  KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
-  MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
-  ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
-  PossibleRoundoff msg -> msg
-  UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
-  UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
-  UnsupportedUnaryOp op -> "unsupported unary arithmetic op: " <> tShow op
-  UnsupportedRoundingLikeOp1 op -> "unsupported rounding (1) op: " <> tShow op
-  UnsupportedRoundingLikeOp2 op -> "unsupported rounding (2) op: " <> tShow op
+    -- these are internal errors. not quite as much care is taken on the messaging
+    AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
+    AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
+    AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
+    KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
+    MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
+    ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
+    PossibleRoundoff msg -> msg
+    UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
+    UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
+    UnsupportedUnaryOp op -> "unsupported unary arithmetic op: " <> tShow op
+    UnsupportedRoundingLikeOp1 op -> "unsupported rounding (1) op: " <> tShow op
+    UnsupportedRoundingLikeOp2 op -> "unsupported rounding (2) op: " <> tShow op
 
-  -- these are likely user-facing errors
-  FailureMessage msg -> msg
-  UnhandledObject obj -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> tShow obj
-  UnhandledTerm termText -> "You found a term we don't have analysis support for yet. Please report this as a bug at https://github.com/kadena-io/pact/issues\n\n" <> termText
-  VarNotInScope name -> "variable not in scope: " <> name
-  --
-  -- TODO: maybe we should differentiate between opaque values and type
-  -- variables, because the latter would probably mean a problem from type
-  -- inference or the need for a type annotation?
-  --
-  OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
+    -- these are likely user-facing errors
+    FailureMessage msg -> msg
+    UnhandledObject obj -> foundUnsupported $ tShow obj
+    UnhandledTerm termText -> foundUnsupported termText
+    VarNotInScope name -> "variable not in scope: " <> name
+    --
+    -- TODO: maybe we should differentiate between opaque values and type
+    -- variables, because the latter would probably mean a problem from type
+    -- inference or the need for a type annotation?
+    --
+    OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
+    UnsupportedObjectInDbCell -> "We encountered the use of an object in a DB cell, which we don't yet support. " <> pleaseReportThis
+
+  where
+    foundUnsupported :: Text -> Text
+    foundUnsupported termText = "You found a term we don't have analysis support for yet. " <> pleaseReportThis <> "\n\n" <> termText
+
+    pleaseReportThis :: Text
+    pleaseReportThis = "Please report this as a bug at https://github.com/kadena-io/pact/issues"
 
 instance IsString AnalyzeFailure where
   fromString = FailureMessage . T.pack
@@ -458,7 +471,7 @@ class SymbolicTerm term where
   injectS :: S a -> term a
 
 instance SymbolicTerm Term where injectS = Literal
-instance SymbolicTerm Prop where injectS = PSym . _sSbv
+instance SymbolicTerm Prop where injectS = PSym
 
 symArrayAt
   :: forall array k v
@@ -484,8 +497,12 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
-columnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
-columnDelta tn cn = latticeState.lasColumnDeltas.singular (ix tn).
+intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
+intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
+  singular (ix cn)
+
+decColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Decimal)
+decColumnDelta tn cn = latticeState.lasDecColumnDeltas.singular (ix tn).
   singular (ix cn)
 
 rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
@@ -678,6 +695,7 @@ analyzeRead tn fields rowKey = do
       --       the correct provenance into AVals all the way down into
       --       sub-objects.
       --
+      EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
     pure (fieldType, x)
   pure $ Object obj
@@ -751,12 +769,13 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
     firstVal
     relevantFields'
 
+analyzeETerm :: ETerm -> Analyze AVal
+analyzeETerm (ETerm tm _)   = mkAVal <$> analyzeTerm tm
+analyzeETerm (EObject tm _) = AnObj <$> analyzeTermO tm
+
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
-  LiteralObject obj -> Object <$>
-    for obj (\(fieldType, ETerm tm _) -> do
-      val <- analyzeTerm tm
-      pure (fieldType, mkAVal val))
+  LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
 
   Read tn (Schema fields) rowKey -> analyzeRead tn fields rowKey
 
@@ -771,18 +790,12 @@ analyzeTermO = \case
 
   Var name -> lookupObj name
 
-  Let name (ETerm rhs _) body -> do
-    val <- analyzeTerm rhs
-    local (scope.at name ?~ mkAVal val) $
+  Let name eterm body -> do
+    av <- analyzeETerm eterm
+    local (scope.at name ?~ av) $
       analyzeTermO body
 
-  Let name (EObject rhs _) body -> do
-    rhs' <- analyzeTermO rhs
-    local (scope.at name ?~ AnObj rhs') $
-      analyzeTermO body
-
-  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTermO b
-  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTermO b
+  Sequence eterm objT -> analyzeETerm eterm *> analyzeTermO objT
 
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
@@ -1002,8 +1015,7 @@ analyzeTerm = \case
     succeeds %= (&&& cond')
     pure true
 
-  Sequence (ETerm   a _) b -> analyzeTerm  a *> analyzeTerm b
-  Sequence (EObject a _) b -> analyzeTermO a *> analyzeTerm b
+  Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT
 
   Literal a -> pure a
 
@@ -1034,27 +1046,29 @@ analyzeTerm = \case
       case aval' of
         AVal mProv val' -> do
           checkInvariants val'
+
+          let writeDelta :: forall t
+                          . (Num t, SymWord t)
+                         => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
+                         -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
+                         -> Analyze ()
+              writeDelta mkCellL mkDeltaL = do
+                let cell :: Lens' AnalyzeState (S t)
+                    cell = mkCellL tn cn sRk true
+                let next = mkS mProv val'
+                prev <- use cell
+                cell .= next
+                mkDeltaL tn cn += next - prev
+
           case fieldType of
-            EType TInt  -> do
-              let cell :: Lens' AnalyzeState (S Integer)
-                  cell = intCell tn cn sRk true
-                  next = mkS mProv val'
-              prev <- use cell
-              cell .= next
-              columnDelta tn cn += next - prev
-
+            EType TInt     -> writeDelta intCell intColumnDelta
             EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
-            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
-
-            --
-            -- TODO: we should support column delta for decimals
-            --
-            EType TDecimal -> decimalCell tn cn sRk true .= mkS mProv val'
-
+            EType TDecimal -> writeDelta decimalCell decColumnDelta
             EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
+            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
             EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
-
-            -- TODO: what to do with EType TAny here?
+            EType TAny     -> throwError OpaqueValEncountered
+            EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
             -- TODO: handle EObjectTy here
 
@@ -1067,14 +1081,9 @@ analyzeTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let name (ETerm rhs _) body -> do
-    val <- analyzeTerm rhs
-    local (scope.at name ?~ mkAVal val) $
-      analyzeTerm body
-
-  Let name (EObject rhs _) body -> do
-    rhs' <- analyzeTermO rhs
-    local (scope.at name ?~ AnObj rhs') $
+  Let name eterm body -> do
+    av <- analyzeETerm eterm
+    local (scope.at name ?~ av) $
       analyzeTerm body
 
   Var name -> lookupVal name
@@ -1189,7 +1198,7 @@ checkSchemaInvariant = \case
   SchemaTimeLiteral t    -> pure $ literal t
   SchemaBoolLiteral b    -> pure $ literal b
 
-  SchemaVar _            -> SBVI.SBV <$> ask
+  SchemaVar _            -> asks SBVI.SBV
 
   SchemaLogicalOp op args -> do
     args' <- for args checkSchemaInvariant
@@ -1203,10 +1212,18 @@ analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar name) = lookupObj name
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
+analyzePropO (PLit _) = throwError "We don't support property object literals"
+analyzePropO (PSym _) = throwError "Symbols can't be objects"
+analyzePropO (Forall name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
+analyzePropO (Exists name (Ty (Rep :: Rep ty)) p) = do
+  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PSym a) = pure $ sansProv a
+analyzeProp (PSym a) = pure a
 
 analyzeProp Success = view $ model.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success
@@ -1225,7 +1242,6 @@ analyzeProp (PVar name) = lookupVal name
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
 analyzeProp (PStrLength p)     = over s2Sbv SBV.length <$> analyzeProp p
-analyzeProp (PStrEmpty p)      = over s2Sbv SBV.null   <$> analyzeProp p
 
 -- Numeric ops
 analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
@@ -1249,11 +1265,14 @@ analyzeProp (PLogical op props) = analyzeLogicalOp op props
 -- DB properties
 analyzeProp (TableRead tn)  = view $ model.tableRead tn
 analyzeProp (TableWrite tn) = view $ model.tableWritten tn
--- analyzeProp (CellIncrease tableName colName)
-analyzeProp (ColumnConserve tableName colName) =
-  sansProv . (0 .==) <$> view (model.columnDelta tableName colName)
-analyzeProp (ColumnIncrease tableName colName) =
-  sansProv . (0 .<) <$> view (model.columnDelta tableName colName)
+analyzeProp (ColumnWrite _tableName _colName)
+  = throwError "column write analysis not yet implemented"
+analyzeProp (CellIncrease _tableName _colName)
+  = throwError "cell increase analysis not yet implemented"
+analyzeProp (IntColumnDelta tableName colName) = view $
+  model.intColumnDelta tableName colName
+analyzeProp (DecColumnDelta tableName colName) = view $
+  model.decColumnDelta tableName colName
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   view $ model.rowRead tn sRk

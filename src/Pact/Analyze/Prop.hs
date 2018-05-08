@@ -336,11 +336,8 @@ instance Eq EType where
 
 data Prop a where
   -- Literals
-  PLit             :: SymWord a => a     -> Prop a
-  --
-  -- TODO: change this to `S a`, once we move S into Prop
-  --
-  PSym             ::              SBV a -> Prop a
+  PLit             :: SymWord a => a   -> Prop a
+  PSym             ::              S a -> Prop a
 
   -- TX success/failure
   --
@@ -356,12 +353,13 @@ data Prop a where
   PVar             :: Text ->                 Prop a
 
   -- Object ops
+  -- Note: PAt is the one property we can't yet parse because of the EType it
+  -- includes
   PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
 
   -- String ops
   PStrConcat       :: Prop String -> Prop String -> Prop String
   PStrLength       :: Prop String ->                Prop Integer
-  PStrEmpty        :: Prop String ->                Prop Bool
 
   -- Numeric ops
   PDecArithOp      :: ArithOp        -> Prop Decimal -> Prop Decimal -> Prop Decimal
@@ -385,12 +383,12 @@ data Prop a where
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- DB properties
-  TableWrite       :: TableName  ->                Prop Bool -- anything in table is written
-  TableRead        :: TableName  ->                Prop Bool -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool -- particular column is written
-  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool -- any cell at all in col increases
-  ColumnConserve   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col == 0
-  ColumnIncrease   :: TableName  -> ColumnName  -> Prop Bool -- sum of all changes in col >  0
+  TableWrite       :: TableName  ->                Prop Bool    -- anything in table is written
+  TableRead        :: TableName  ->                Prop Bool    -- anything in table is read
+  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool    -- particular column is written
+  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool    -- any cell at all in col increases
+  IntColumnDelta   :: TableName  -> ColumnName  -> Prop Integer -- sum of all changes in int col
+  DecColumnDelta   :: TableName  -> ColumnName  -> Prop Decimal -- sum of all changes in dec col
   RowRead          :: TableName  -> Prop RowKey -> Prop Bool
   RowWrite         :: TableName  -> Prop RowKey -> Prop Bool
   --
@@ -578,8 +576,13 @@ invariantVars = \case
 
   SchemaDecimalLiteral _        -> Set.empty
   SchemaIntLiteral _            -> Set.empty
+  SchemaStringLiteral _         -> Set.empty
+  SchemaTimeLiteral _           -> Set.empty
+  SchemaBoolLiteral _           -> Set.empty
 
   SchemaVar v                   -> Set.singleton v
+
+  SchemaLogicalOp _ invariants  -> Set.unions (invariantVars <$> invariants)
 
 makeLenses ''S
 makeLenses ''Object

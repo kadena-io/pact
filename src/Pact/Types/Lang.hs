@@ -767,11 +767,6 @@ data Term n =
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
-    } |
-    TMeta {
-      _tName :: !Text
-    , _tExp  :: !Exp
-    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
@@ -940,7 +935,6 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
-      TMeta {} -> Left "meta"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -998,7 +992,6 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TMeta {} = "<meta>"
 
 
 

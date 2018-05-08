@@ -269,8 +269,8 @@ failedTcOrAnalyze tables tcState fun check =
   where
     failures = tcState ^. tcFailures
 
-verifyModule :: ModuleData -> IO (HM.HashMap Text [CheckResult])
-verifyModule (_mod, modRefs) = do
+verifyModule :: Maybe Check -> ModuleData -> IO (HM.HashMap Text [CheckResult])
+verifyModule testCheck (_mod, modRefs) = do
 
   -- All tables defined in this module. We're going to look through these for
   -- their schemas, which we'll look through for invariants.
@@ -296,16 +296,17 @@ verifyModule (_mod, modRefs) = do
     let schemaName = unTypeName (_utName schema)
 
     -- look through every meta-property in the schema for invariants
-    let metas :: [(Text, Exp)]
-        metas = schemas ^@.. ix schemaName . tMeta . _Just . mMetas . itraversed
+    let mExp :: Maybe Exp
+        mExp = schemas ^? ix schemaName . tMeta . _Just . mMetas . ix "invariants"
 
     let invariants :: [(Text, SchemaInvariant Bool)]
-        invariants = catMaybes $ flip fmap metas $ \(metaName, meta) -> do
-          "invariant" <- pure metaName
-          SomeSchemaInvariant expr TBool
-            <- expToInvariant (_utFields schema) meta
-          [v] <- pure $ Set.toList (invariantVars expr)
-          pure (v, expr)
+        invariants = case mExp of
+          Just (EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
+            SomeSchemaInvariant expr TBool
+              <- expToInvariant (_utFields schema) meta
+            [v] <- pure $ Set.toList (invariantVars expr)
+            pure (v, expr)
+          _                  -> []
 
     pure (tabName, schema, invariants)
 
@@ -313,18 +314,22 @@ verifyModule (_mod, modRefs) = do
   defnsWithChecks <- for defns $ \ref -> do
     -- look through every meta-property in the definition for invariants
     let Ref defn = ref
-        metas :: [(Text, Exp)]
-        metas = defn ^@.. tMeta . _Just . mMetas . itraversed
+        mExp :: Maybe Exp
+        mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
     let checks :: [Check]
-        checks = catMaybes $ flip fmap metas $ \(metaName, meta) -> do
-          "property" <- pure metaName
-          expToCheck meta
+        checks = case mExp of
+          Just (EList' exps) -> catMaybes $ expToCheck <$> exps
+          _                  -> []
     pure (ref, checks)
+
+  let defnsWithChecks' = case testCheck of
+        Nothing    -> defnsWithChecks
+        Just check -> defnsWithChecks & at "test" . _Just . _2 %~ cons check
 
   -- Now the meat of verification! For each definition in the module we check
   -- 1. that is maintains all invariants
   -- 2. that is passes any properties declared for it
-  for defnsWithChecks $ \(ref, props) -> do
+  for defnsWithChecks' $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
       TopFun (FDefun {}) -> do
