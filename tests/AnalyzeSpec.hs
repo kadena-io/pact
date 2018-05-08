@@ -225,7 +225,7 @@ spec = describe "analyze" $ do
               ks:keyset)
             (deftable tokens:{token-row})
 
-            (defun test:bool (acct:string)
+            (defun test:integer (acct:string)
               (with-read tokens acct { "ks" := ks, "balance" := bal }
                 (enforce-keyset ks)
                 bal))
@@ -253,7 +253,7 @@ spec = describe "analyze" $ do
               ks:keyset)
             (deftable tokens:{token-row})
 
-            (defun test:bool (acct:string)
+            (defun test:integer (acct:string)
               ("test"
                 (property (forall (row:string)
                   (row-enforced "tokens" "ks" row))))
@@ -276,7 +276,7 @@ spec = describe "analyze" $ do
               ks2:keyset)
             (deftable tokens:{token-row})
 
-            (defun test:bool (acct:string)
+            (defun test:integer (acct:string)
               (with-read tokens acct { "ks1" := ks, "balance" := bal }
                 (enforce-keyset ks)
                 bal))
@@ -296,7 +296,7 @@ spec = describe "analyze" $ do
               ks:keyset)
             (deftable tokens:{token-row})
 
-            (defun test:bool (acct:string)
+            (defun test:integer (acct:string)
               (with-read tokens acct { "ks" := ks, "balance" := bal }
                 (let ((new-bal (+ bal 1)))
                   (update tokens acct {"balance": new-bal})
@@ -356,7 +356,7 @@ spec = describe "analyze" $ do
               balance:integer)
             (deftable tokens:{token-row})
 
-            (defun test:string ()
+            (defun test:bool ()
               (insert tokens "stu" {"balance": 5, "name": "stu"})
               (let ((stu-name    (at 'name (read tokens "stu")))
                     (stu-balance (at 'balance (read tokens "stu"))))
@@ -373,7 +373,7 @@ spec = describe "analyze" $ do
               balance:integer)
             (deftable tokens:{token-row})
 
-            (defun test:string ()
+            (defun test:bool ()
               (insert tokens "stu" {"balance": 5, "name": "stu"})
               (let ((stu (read tokens "stu")))
                 (enforce (= (at 'name stu) "stu") "name is stu")
@@ -554,7 +554,7 @@ spec = describe "analyze" $ do
   describe "with-read" $ do
     let code =
           [text|
-            (defun test:integer (acct:string)
+            (defun test:bool (acct:string)
               (update accounts acct { "balance": 10 })
               (with-read accounts acct { "balance" := bal }
                 (enforce (= bal 10) "Read after write failed")))
@@ -565,7 +565,7 @@ spec = describe "analyze" $ do
   describe "with-read.nested" $ do
     let code =
           [text|
-            (defun test:integer (acct:string)
+            (defun test:bool (acct:string)
               (update accounts acct { "balance": 0 })
               (with-read accounts acct { "balance" := bal }
                 (update accounts acct { "balance": 10 })
