@@ -192,6 +192,7 @@ test-suite hspec
               , bytestring
               , hlint >= 2.0
               , weeder >= 1.0.5
+              , text
   other-modules:
                 Blake2Spec
               , DocgenSpec
