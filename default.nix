@@ -57,12 +57,15 @@ in
             }) {};
           };
     packages = {
-      pact = ./.;
+      pact = builtins.filterSource
+        (path: type: !(builtins.elem (baseNameOf path)
+           ["result" "dist" "dist-ghcjs" ".git"]))
+        ./.;
     };
 
     shells = {
       ghc = ["pact"];
-      ghcjs = ["pact"];
+      # ghcjs = ["pact"];
     };
   
   })
