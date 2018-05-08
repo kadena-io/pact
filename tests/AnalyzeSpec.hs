@@ -15,7 +15,6 @@ import qualified Data.Text                  as T
 import           Data.SBV                   (Boolean(..))
 import           NeatInterpolation
 import           Test.Hspec
--- import           Test.Hspec.Core.Spec       (fromSpecList, specGroup, specItem)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
