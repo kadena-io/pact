@@ -365,7 +365,7 @@ describeAnalyzeFailure = \case
     -- these are likely user-facing errors
     FailureMessage msg -> msg
     UnhandledObject obj -> foundUnsupported $ tShow obj
-    UnhandledTerm termText -> foundUnsupported $ termText
+    UnhandledTerm termText -> foundUnsupported termText
     VarNotInScope name -> "variable not in scope: " <> name
     --
     -- TODO: maybe we should differentiate between opaque values and type
@@ -1198,7 +1198,7 @@ checkSchemaInvariant = \case
   SchemaTimeLiteral t    -> pure $ literal t
   SchemaBoolLiteral b    -> pure $ literal b
 
-  SchemaVar _            -> SBVI.SBV <$> ask
+  SchemaVar _            -> asks SBVI.SBV
 
   SchemaLogicalOp op args -> do
     args' <- for args checkSchemaInvariant
