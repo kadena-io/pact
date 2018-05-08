@@ -809,10 +809,6 @@ spec = describe "analyze" $ do
           |]
     in expectPass code $ Valid $ bnot Abort
 
-
-   -- TODO: collapse these tests once we can support >1 invariant per schema
-
-
   describe "schema-invariants" $ do
     let code =
           [text|
@@ -828,7 +824,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (with-read ints "any index" { "pos" := pos, "neg" := neg }
                 (enforce (> pos 0) "is not positive")
-                ;(enforce (< neg 0) "is not negative")
+                (enforce (< neg 0) "is not negative")
                 ))
           |]
 
