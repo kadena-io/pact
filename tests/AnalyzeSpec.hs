@@ -41,9 +41,6 @@ wrap code =
     (commit-tx)
   |]
 
-rsModuleData :: ModuleName -> Lens' ReplState (Maybe ModuleData)
-rsModuleData mn = rEnv . eeRefStore . rsModules . at mn
-
 runTest :: Text -> Check -> IO (Maybe CheckFailure)
 runTest code check = do
   replState0 <- initReplState StringEval
