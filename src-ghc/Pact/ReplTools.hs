@@ -10,42 +10,23 @@ module Pact.ReplTools where
 
 import Control.Applicative
 import Control.Lens hiding (op)
-import Control.Monad.Catch
 import Control.Monad.State.Strict
-import Data.Aeson hiding ((.=))
-import qualified Data.Aeson as A
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.UTF8 as BS
-import Data.Char
-import Data.Default
 import Data.List
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
-import GHC.Word (Word8)
 import Prelude hiding (exp,print,putStrLn)
 import Text.Trifecta as TF hiding (line,err,try,newline)
 import qualified Text.Trifecta.Delta as TF
 import System.IO
-import Text.Trifecta.Delta
-import Control.Concurrent
-import Data.Monoid hiding ((<>))
 import System.Console.Haskeline
   (runInputT, withInterrupt, InputT, getInputLine, handleInterrupt,
    CompletionFunc, completeQuotedWord, completeWord, listFiles,
    filenameWordBreakChars, Settings(Settings), simpleCompletion)
-import System.FilePath
 
-import Pact.Compile
 import Pact.Parse
-import Pact.Eval
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl
-import Pact.Repl.Lib
-import Pact.Types.Logger
 import Pact.Repl.Types
-import Pact.Types.Hash
 
 ------------------------------------------------------------------------------
 -- Moved from Pact.Repl
