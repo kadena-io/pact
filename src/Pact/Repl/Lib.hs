@@ -329,11 +329,12 @@ tc i as = case as of
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
-    mdm <- HM.lookup (ModuleName modName) <$> view (eeRefStore . rsModules)
+    modules <- view (eeRefStore . rsModules)
+    let mdm = HM.lookup (ModuleName modName) modules
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        results <- liftIO $ verifyModule Nothing md
+        results <- liftIO $ verifyModule Nothing modules md
         setop $ Print $ tStr $ ifoldl
           (\defName accum lineResults -> if null lineResults
             then accum

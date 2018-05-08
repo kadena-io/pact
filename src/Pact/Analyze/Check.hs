@@ -15,8 +15,9 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (at, cons, ix, runIdentity, (%~),
-                                             (&), (^.), (^?), _2, _Just)
+import           Control.Lens               (at, cons, itraversed, ix,
+                                             runIdentity, traversed, (%~), (&),
+                                             (^.), (^?), (^@..), _2, _Just)
 import           Control.Monad.Except       (runExcept, runExceptT)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Reader       (runReaderT)
@@ -42,7 +43,8 @@ import           Data.Traversable           (for)
 import           Pact.Compile               (expToCheck, expToInvariant)
 import           Pact.Typechecker           (typecheckTopLevel)
 import           Pact.Types.Lang            (mMetas, tMeta)
-import           Pact.Types.Runtime         (Exp, ModuleData, Ref (Ref),
+import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
+                                             Ref (Ref),
                                              Term (TDef, TSchema, TTable),
                                              Type (TyUser), renderInfo,
                                              unTypeName)
@@ -280,12 +282,18 @@ failedTcOrAnalyze tables tcState fun check =
   where
     failures = tcState ^. tcFailures
 
-verifyModule :: Maybe Check -> ModuleData -> IO (HM.HashMap Text [CheckResult])
-verifyModule testCheck (_mod, modRefs) = do
+verifyModule
+  :: Maybe Check
+  -- ^ all loaded modules
+  -> HM.HashMap ModuleName ModuleData
+  -- ^ the module we're verifying
+  -> ModuleData
+  -> IO (HM.HashMap Text [CheckResult])
+verifyModule testCheck modules (_mod, modRefs) = do
 
-  -- All tables defined in this module. We're going to look through these for
-  -- their schemas, which we'll look through for invariants.
-  let tables = flip mapMaybe (HM.toList modRefs) $ \case
+  -- All tables defined in this module, and imported by it. We're going to look
+  -- through these for their schemas, which we'll look through for invariants.
+  let tables = flip mapMaybe (modules ^@.. traversed . _2 . itraversed) $ \case
         (name, Ref (table@TTable {})) -> Just (name, table)
         _                             -> Nothing
 

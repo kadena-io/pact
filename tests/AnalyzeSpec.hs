@@ -9,6 +9,7 @@ module AnalyzeSpec (spec) where
 import           Control.Lens               (at, findOf, (^.))
 import           Control.Monad.State.Strict (runStateT)
 import           Data.Either                (isLeft)
+import qualified Data.HashMap.Strict        as HM
 import qualified Data.Map                   as Map
 import           Data.Maybe                 (isJust, isNothing)
 import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>)))
@@ -55,7 +56,8 @@ runTest code check = do
       case replState ^. rEnv . eeRefStore . rsModules . at "test" of
         Nothing -> pure $ Just $ CodeCompilationFailed "expected module 'test'"
         Just moduleData -> do
-          results <- verifyModule (Just check) moduleData
+          results <- verifyModule (Just check)
+            (HM.fromList [("test", moduleData)]) moduleData
           -- TODO(joel): use `fromLeft` when we're on modern GHC
           pure $ case findOf (traverse . traverse) isLeft results of
             Just (Left failure) -> Just failure
