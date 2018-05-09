@@ -13,7 +13,7 @@ import           Data.Map.Strict   (Map)
 import           Data.SBV          (HasKind, SymWord)
 import           Data.Text         (Text)
 
-import           Pact.Analyze.Prop
+import           Pact.Analyze.Types
 
 --
 -- TODO: merge this module with Pact.Analyze.Types once we are on GHC 8.2 and

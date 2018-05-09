@@ -55,8 +55,8 @@ import qualified Pact.Types.Runtime        as Pact
 import qualified Pact.Types.Typecheck      as Pact
 import           Pact.Types.Version        (pactVersion)
 
-import           Pact.Analyze.Prop
 import           Pact.Analyze.Term
+import           Pact.Analyze.Types
 
 data AnalyzeEnv = AnalyzeEnv
   { _aeScope    :: Map Text AVal            -- used with 'local' as a stack

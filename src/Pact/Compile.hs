@@ -52,8 +52,8 @@ import Data.Type.Equality
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 
-import Pact.Analyze.Prop hiding (Type, TableName)
-import qualified Pact.Analyze.Prop as Prop
+import Pact.Analyze.Types hiding (Type, TableName)
+import qualified Pact.Analyze.Types as Analyze
 import Pact.Types.Lang hiding (SchemaVar, TKeySet)
 import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
@@ -202,10 +202,10 @@ textToComparisonOp = \case
   "!=" -> Just Neq
   _    -> Nothing
 
-mkT :: Text -> Prop.TableName
-mkT = Prop.TableName . T.unpack
+mkT :: Text -> Analyze.TableName
+mkT = Analyze.TableName . T.unpack
 
-mkC :: Text -> Prop.ColumnName
+mkC :: Text -> Analyze.ColumnName
 mkC = ColumnName . T.unpack
 
 mkK :: Text -> KeySetName
@@ -302,7 +302,7 @@ expToPropTime = \case
       ]
   _ -> Nothing
 
-expToPropKeySet :: Exp -> Maybe (Prop Prop.KeySet)
+expToPropKeySet :: Exp -> Maybe (Prop Analyze.KeySet)
 expToPropKeySet = \case
   EAtom' "result" -> Just (PVar "result")
   EAtom' var      -> Just (PVar var)

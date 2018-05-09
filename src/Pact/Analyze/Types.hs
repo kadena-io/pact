@@ -9,7 +9,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeOperators              #-}
 
-module Pact.Analyze.Prop where
+module Pact.Analyze.Types where
 
 import           Control.Lens       (Iso, Lens', both, from, iso, lens,
                                      makeLenses, over, to, (%~), (&), (^.))

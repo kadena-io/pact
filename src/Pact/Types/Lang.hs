@@ -123,7 +123,7 @@ import qualified Data.Map.Strict as M
 
 import Data.Serialize (Serialize)
 
-import Pact.Analyze.Prop (KeySetName(KeySetName))
+import Pact.Analyze.Types (KeySetName(KeySetName))
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 --import Pact.Types.Crypto (Hash(..))

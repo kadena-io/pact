@@ -23,7 +23,7 @@ import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
 import           Pact.Types.Runtime         (eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Prop
+import           Pact.Analyze.Types
 
 wrap :: Text -> Text
 wrap code =

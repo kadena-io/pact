@@ -36,8 +36,8 @@ import qualified Pact.Types.Typecheck       as Pact
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Analyze.Patterns
-import           Pact.Analyze.Prop
 import           Pact.Analyze.Term
+import           Pact.Analyze.Types
 
 data TranslateFailure
   = BranchesDifferentTypes EType EType
