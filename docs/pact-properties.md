@@ -55,9 +55,9 @@ blockchain runs successfully, it must be the case that the transaction has the
 proper signatures to satisfy the keyset named `admins`:
 
 ```
-(@property (authorized-by 'admins))
 (defun read-account (id)
-  "Read data for account ID"
+  ("Read data for account ID"
+    (property (authorized-by 'admins)))
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
 ```
@@ -68,8 +68,9 @@ will always maintain the invariant that token balances are always greater than
 zero:
 
 ```
-(@invariant (> balance 0))
 (defschema tokens
+  ("token schema"
+    (invariant (> balance 0)))
   username:string
   balance:integer)
 ```
@@ -124,10 +125,16 @@ Schema invariants are formed by the following BNF grammar:
   ::= <column name>
     | <int literal>
     | <dec literal>
+    | <string literal>
+    | <time literal>
+    | <bool literal>
     | ( <comparator> <expr> <expr> )
+    | (and <expr> <expr> )
+    | (or <expr> <expr> )
+    | (not <expr> )
 
 <invariant>
-  ::= ( @invariant <expr> )
+  ::= ( invariant <expr> )
 ```
 
 ## Expressing properties
@@ -138,8 +145,9 @@ In properties, function arguments can be referred to directly by their names,
 and return values can be referred to by the name `result`:
 
 ```
-(@property (= result (* -1 x)))
 (defun negate:integer (x:integer)
+  ("negate a number"
+    (property (= result (* -1 x))))
   (* x -1))
 ```
 
@@ -149,8 +157,9 @@ decimals work as they do in normal Pact code.
 We can also define properties in terms of the standard comparison operators:
 
 ```
-(@property (>= result 0))
 (defun abs:integer (x:integer)
+  ("absolute value"
+    (property (>= result 0)))
   (if (< x 0)
     (negate x)
     x))
@@ -163,25 +172,27 @@ property checking language supports logical implication in the form of `when`,
 where `(when x y)` is equivalent to `(or (not x) y)`:
 
 ```
-(@property (when (< x 0) (> result 0)))
-(@property (when (> x 0) (< result 0)))
-(@property
-  (and
-    (when (< x 0) (> result 0))
-    (when (> x 0) (< result 0))))
 (defun negate:integer (x:integer)
+  ("negate a number"
+    (property (when (< x 0) (> result 0)))
+    (property (when (> x 0) (< result 0)))
+    (property
+      (and
+        (when (< x 0) (> result 0))
+        (when (> x 0) (< result 0)))))
   (* x -1))
 ```
 
 ### Transaction abort and success
 
-By default, every `@property` is predicated on the successful completion of the
+By default, every `property` is predicated on the successful completion of the
 transaction which would contain an invocation of the function under test. This
 means that properties like the following:
 
 ```
-(@property (!= result 0))
 (defun ensured-positive (val:integer)
+  ("halts when passed a non-positive number"
+    (property (!= result 0)))
   (enforce (> val 0) "val is not positive")
   val)
 ```
@@ -189,23 +200,23 @@ means that properties like the following:
 will pass due to the use of `enforce`.
 
 At run-time on the blockchain, if an `enforce` call fails, the containing
-transaction is aborted. Because `@property` is only concerned with transactions
+transaction is aborted. Because `property` is only concerned with transactions
 that succeed, the necessary conditions to pass each `enforce` call are assumed.
 
 <!---
 
 ### Valid, satisfiable, and explicit transaction abort/success
 
-TODO: more. talk about @valid, @satisfiable, and the lack of the default
-success condition of @property.
+TODO: more. talk about valid, satisfiable, and the lack of the default
+success condition of property.
 
 Pact's property language supports the notions of `success` and `abort` to
 describe whether programs will successfully run to completion within a
 transaction on the blockchain:
 
 ```
-(@valid abort)
 (defun failure-guaranteed:bool ()
+  ("always fails" (valid abort))
   (enforce false "cannot pass"))
 ```
 
@@ -238,8 +249,9 @@ of a balance across two accounts for the given table, with the invariant that
 balances can not be negative:
 
 ```
-(@invariant (>= balance 0))
 (defschema account
+  ("user accounts with balances"
+    (invariant (>= balance 0)))
   balance:integer
   ks:keyset)
 
@@ -251,9 +263,9 @@ at first study, but it turns out that there are number of bugs which we can
 eradicate with the help of another property.
 
 ```
-(@property (row-enforced 'accounts 'ks from))
 (defun transfer (from:string to:string amount:integer)
-  "Transfer money between accounts"
+  ("Transfer money between accounts"
+    (property (row-enforced 'accounts 'ks from)))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -267,10 +279,10 @@ Let's use `conserves-mass` to ensure that it's not possible for the function to
 be used to create or destroy any money.
 
 ```
-(@property (row-enforced 'accounts 'ks from))
-(@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
-  "Transfer money between accounts"
+  ("Transfer money between accounts"
+    (property (row-enforced 'accounts 'ks from))
+    (property (conserves-mass 'accounts 'balance)))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -285,10 +297,10 @@ property checker points out that it's able to falsify the mass conservation
 property by passing in an `amount` of `-1`. Let's fix that, and try again:
 
 ```
-(@property (row-enforced 'accounts 'ks from))
-(@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
-  "Transfer money between accounts"
+  ("Transfer money between accounts"
+    (property (row-enforced 'accounts 'ks from))
+    (property (conserves-mass 'accounts 'balance)))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -306,10 +318,10 @@ this is the case, we see that the code actually creates money out of thin air!
 At this point we can add another `enforce` to prevent this scenario:
 
 ```
-(@property (row-enforced 'accounts 'ks from))
-(@property (conserves-mass 'accounts 'balance))
 (defun transfer (from:string to:string amount:integer)
-  "Transfer money between accounts"
+  ("Transfer money between accounts"
+    (property (row-enforced 'accounts 'ks from))
+    (property (conserves-mass 'accounts 'balance)))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
