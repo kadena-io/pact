@@ -134,7 +134,7 @@ Schema invariants are formed by the following BNF grammar:
     | (not <expr> )
 
 <invariant>
-  ::= ( invariant <expr> )
+  ::= ( invariant <expr> ... )
 ```
 
 ## Expressing properties
@@ -169,17 +169,18 @@ We can also define properties in terms of the standard comparison operators:
 
 In addition to the standard boolean operators `and`, `or`, and `not`, Pact's
 property checking language supports logical implication in the form of `when`,
-where `(when x y)` is equivalent to `(or (not x) y)`:
+where `(when x y)` is equivalent to `(or (not x) y)`. Additionally you can see
+how pact supports defining multiple properties (here, three) at once:
 
 ```
 (defun negate:integer (x:integer)
   ("negate a number"
-    (property (when (< x 0) (> result 0)))
-    (property (when (> x 0) (< result 0)))
     (property
+      (when (< x 0) (> result 0))
+      (when (> x 0) (< result 0))
       (and
         (when (< x 0) (> result 0))
-        (when (> x 0) (< result 0)))))
+        (when (> x 0) (< result 0))))
   (* x -1))
 ```
 
@@ -216,7 +217,7 @@ transaction on the blockchain:
 
 ```
 (defun failure-guaranteed:bool ()
-  ("always fails" (valid abort))
+  ("always fails" (property (valid abort)))
   (enforce false "cannot pass"))
 ```
 
@@ -281,8 +282,9 @@ be used to create or destroy any money.
 ```
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property (row-enforced 'accounts 'ks from))
-    (property (conserves-mass 'accounts 'balance)))
+    (property
+      (row-enforced 'accounts 'ks from)
+      (conserves-mass 'accounts 'balance))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -299,8 +301,9 @@ property by passing in an `amount` of `-1`. Let's fix that, and try again:
 ```
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property (row-enforced 'accounts 'ks from))
-    (property (conserves-mass 'accounts 'balance)))
+    (property
+      (row-enforced 'accounts 'ks from)
+      (conserves-mass 'accounts 'balance))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -320,8 +323,9 @@ At this point we can add another `enforce` to prevent this scenario:
 ```
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property (row-enforced 'accounts 'ks from))
-    (property (conserves-mass 'accounts 'balance)))
+    (property
+      (row-enforced 'accounts 'ks from)
+      (conserves-mass 'accounts 'balance))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
