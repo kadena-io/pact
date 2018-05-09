@@ -1,8 +1,8 @@
-{-# language GADTs             #-}
-{-# language LambdaCase        #-}
-{-# language NamedFieldPuns    #-}
-{-# language OverloadedStrings #-}
-{-# language Rank2Types        #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types        #-}
 
 module Pact.Analyze.Check
   ( checkTopFunction
@@ -14,41 +14,52 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import Control.Concurrent.MVar
-import Control.Monad.Except (runExcept, runExceptT)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader
-import Control.Monad.State.Strict (evalStateT)
-import Control.Monad.Trans.RWS.Strict (RWST(..))
-import Control.Lens
-import Data.Maybe (catMaybes, mapMaybe)
-import Data.Text (Text)
-import qualified Data.Set as Set
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import qualified Data.HashMap.Strict as HM
-import Data.Traversable (for)
-import Data.Set (Set)
-import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError, name)
-import qualified Data.SBV as SBV
-import qualified Data.SBV.Internals as SBVI
-import qualified Data.Text as T
-import Pact.Typechecker
-import Pact.Types.Runtime hiding (Term, WriteType(..), TableName, Type, EObject)
-import qualified Pact.Types.Runtime as Pact
-import Pact.Types.Typecheck hiding (Var, UserType, Object, Schema)
-import qualified Pact.Types.Typecheck as TC
+import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
+import           Control.Lens               (at, cons, ix, runIdentity, (%~),
+                                             (&), (^.), (^?), _2, _Just)
+import           Control.Monad.Except       (runExcept, runExceptT)
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Reader       (runReaderT)
+import           Control.Monad.RWS.Strict   (RWST (..))
+import           Control.Monad.State.Strict (evalStateT)
+import qualified Data.HashMap.Strict        as HM
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (catMaybes, mapMaybe)
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (Provable, SatResult (SatResult),
+                                             Symbolic, ThmResult (ThmResult),
+                                             false, proveWith, sat, verbose, z3,
+                                             (&&&))
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
 
-import Pact.Analyze.Analyze (Analyze, AnalyzeFailure, allocateSymbolicCells,
-                             analyzeTerm, analyzeTermO, analyzeProp,
-                             describeAnalyzeFailure, mkAnalyzeEnv,
-                             mkInitialAnalyzeState, mkQueryEnv, runAnalyze,
-                             queryAction, mkInitialAnalyzeState,
-                             checkInvariantsHeld, runConstraints)
-import Pact.Analyze.Prop
-import Pact.Analyze.Translate
-import Pact.Analyze.Types
-import Pact.Compile (expToCheck, expToInvariant)
+import           Pact.Compile               (expToCheck, expToInvariant)
+import           Pact.Typechecker           (typecheckTopLevel)
+import           Pact.Types.Lang            (mMetas, tMeta)
+import           Pact.Types.Runtime         (Exp, ModuleData, Ref (Ref),
+                                             Term (TDef, TSchema, TTable),
+                                             Type (TyUser), renderInfo,
+                                             unTypeName)
+import qualified Pact.Types.Runtime         as Pact
+import           Pact.Types.Typecheck       (AST, Fun (FDefun),
+                                             Named (_nnName, _nnNamed),
+                                             Node (_aTy), TcId (_tiInfo),
+                                             TcState,
+                                             TopLevel (TopFun, TopTable),
+                                             UserType (_utFields, _utName),
+                                             runTC, tcFailures)
+import qualified Pact.Types.Typecheck       as TC
+
+import           Pact.Analyze.Analyze       hiding (invariants, model)
+import           Pact.Analyze.Prop
+import           Pact.Analyze.Translate
+import           Pact.Analyze.Types
 
 data CheckFailure
   = Invalid SBVI.SMTModel
@@ -84,7 +95,7 @@ describeCheckFailure = \case
   TypecheckFailure fails ->
     "The module failed to typecheck:\n" <>
     T.unlines (map
-      (\(Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
+      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
       (Set.toList fails))
   AnalyzeFailure err        -> describeAnalyzeFailure err
   TranslateFailure err      -> describeTranslateFailure err
@@ -242,19 +253,19 @@ runCheck :: Provable a => Check -> a -> IO CheckResult
 runCheck (Satisfiable _prop) provable = do
   (SatResult smtRes) <- sat provable
   pure $ case smtRes of
-    SBV.Unsatisfiable{} -> Left Unsatisfiable
+    SBV.Unsatisfiable{}           -> Left Unsatisfiable
     SBV.Satisfiable _config model -> Right $ SatisfiedProperty model
     SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason -> Left $ Unknown reason
-    SBV.ProofError _config strs -> Left $ ProofError strs
+    SBV.Unknown _config reason    -> Left $ Unknown reason
+    SBV.ProofError _config strs   -> Left $ ProofError strs
 runCheck (Valid _prop) provable = do
   ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
-    SBV.Unsatisfiable{} -> Right ProvedTheorem
+    SBV.Unsatisfiable{}           -> Right ProvedTheorem
     SBV.Satisfiable _config model -> Left $ Invalid model
     SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason -> Left $ Unknown reason
-    SBV.ProofError _config strs -> Left $ ProofError strs
+    SBV.Unknown _config reason    -> Left $ Unknown reason
+    SBV.ProofError _config strs   -> Left $ ProofError strs
 
 failedTcOrAnalyze
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
@@ -301,7 +312,7 @@ verifyModule testCheck (_mod, modRefs) = do
 
     let invariants :: [(Text, SchemaInvariant Bool)]
         invariants = case mExp of
-          Just (EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
+          Just (Pact.EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
             SomeSchemaInvariant expr TBool
               <- expToInvariant (_utFields schema) meta
             [v] <- pure $ Set.toList (invariantVars expr)
@@ -318,8 +329,8 @@ verifyModule testCheck (_mod, modRefs) = do
         mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
     let checks :: [Check]
         checks = case mExp of
-          Just (EList' exps) -> catMaybes $ expToCheck <$> exps
-          _                  -> []
+          Just (Pact.EList' exps) -> catMaybes $ expToCheck <$> exps
+          _                       -> []
     pure (ref, checks)
 
   let defnsWithChecks' = case testCheck of
@@ -334,7 +345,7 @@ verifyModule testCheck (_mod, modRefs) = do
     case fun of
       TopFun (FDefun {}) -> do
         result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
-        results <- forM props $
+        results <- for props $
           failedTcOrAnalyze tablesWithInvariants tcState fun . Just
         pure $ result : results
       _ -> pure []

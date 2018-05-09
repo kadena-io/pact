@@ -1,20 +1,19 @@
-{-# language DeriveAnyClass      #-}
-{-# language DeriveDataTypeable  #-}
-{-# language FlexibleInstances   #-}
-{-# language GADTs               #-}
-{-# language Rank2Types          #-}
-{-# language StandaloneDeriving  #-}
-{-# language TypeOperators       #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE GADTs              #-}
+{-# LANGUAGE Rank2Types         #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators      #-}
 
 module Pact.Analyze.Types where
 
-import Data.Data
-import Data.Map.Strict (Map)
-import Data.SBV hiding (Satisfiable, Unsatisfiable, Unknown, ProofError)
-import Pact.Types.Lang hiding (Term, TableName, Type, TObject, EObject, KeySet,
-                               TKeySet)
+import           Data.Data         (Data)
+import           Data.Map.Strict   (Map)
+import           Data.SBV          (HasKind, SymWord)
+import           Data.Text         (Text)
 
-import Pact.Analyze.Prop
+import           Pact.Analyze.Prop
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)

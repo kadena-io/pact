@@ -1,83 +1,69 @@
-{-# language DeriveFunctor              #-}
-{-# language DeriveDataTypeable         #-}
-{-# language DeriveTraversable          #-}
-{-# language FlexibleContexts           #-}
-{-# language FlexibleInstances          #-}
-{-# language GADTs                      #-}
-{-# language GeneralizedNewtypeDeriving #-}
-{-# language LambdaCase                 #-}
-{-# language MultiParamTypeClasses      #-}
-{-# language OverloadedStrings          #-}
-{-# language Rank2Types                 #-}
-{-# language ScopedTypeVariables        #-}
-{-# language TemplateHaskell            #-}
-{-# language TupleSections              #-}
-{-# language TypeFamilies               #-}
-{-# language TypeApplications           #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Pact.Analyze.Analyze where
 
-import Control.Monad
-import Control.Monad.Except (MonadError, Except, ExceptT(..), runExcept,
-                             throwError)
-import Control.Monad.Reader
-import Control.Monad.State (MonadState)
-import Control.Monad.Trans.RWS.Strict (RWST(..))
-import Control.Monad.Writer (MonadWriter(..))
-import Control.Lens hiding (op, (.>), (...))
-import Data.Foldable (foldrM)
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import Data.Map.Strict.Merge
-import Data.Maybe (catMaybes)
-import qualified Data.Set as Set
-import Data.String (IsString(..))
-import Data.SBV hiding ((.++), Satisfiable, Unsatisfiable, Unknown, ProofError,
-                        name)
-import qualified Data.SBV.String as SBV
-import qualified Data.SBV.Internals as SBVI
-import qualified Data.Text as T
-import Data.Traversable (for)
-import Pact.Types.Runtime hiding (TableName, Term, Type, EObject, RowKey(..),
-                                  WriteType(..), KeySet, TKeySet, SchemaVar)
-import qualified Pact.Types.Runtime as Pact
-import qualified Pact.Types.Typecheck as TC
-import Pact.Types.Version (pactVersion)
+import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
+                                            Lens', ifoldlM, iforM, lens,
+                                            makeLenses, over, singular, use,
+                                            view, (%=), (&), (+=), (.=), (.~),
+                                            (?~), (^.), _2)
+import           Control.Monad             (void)
+import           Control.Monad.Except      (Except, ExceptT (ExceptT),
+                                            MonadError (throwError), runExcept)
+import           Control.Monad.Reader      (MonadReader (local), Reader,
+                                            ReaderT, asks, runReader)
+import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
+import           Control.Monad.State       (MonadState)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Writer      (MonadWriter (tell))
+import           Data.Foldable             (foldrM)
+import           Data.Functor.Identity     (Identity (Identity))
+import           Data.Map.Strict           (Map)
+import qualified Data.Map.Strict           as Map
+import           Data.Map.Strict.Merge     (mapMissing, merge, zipWithMatched)
+import           Data.Maybe                (catMaybes)
+import           Data.Monoid               ((<>))
+import           Data.SBV                  hiding (ProofError, Satisfiable,
+                                            Unknown, Unsatisfiable, name, (.++))
+import qualified Data.SBV.Internals        as SBVI
+import qualified Data.SBV.String           as SBV
+import qualified Data.Set                  as Set
+import           Data.String               (IsString (fromString))
+import           Data.Text                 (Text)
+import qualified Data.Text                 as T
+import           Data.Traversable          (for)
 
-import Pact.Analyze.Prop
-import Pact.Analyze.Types
+import           Pact.Types.Runtime        (Arg (Arg), PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
+                                            Type (TyAny, TyFun, TyList, TyPrim, TySchema, TyUser, TyVar),
+                                            tShow)
+import qualified Pact.Types.Runtime        as Pact
+import qualified Pact.Types.Typecheck      as Pact
+import           Pact.Types.Version        (pactVersion)
+
+import           Pact.Analyze.Prop
+import           Pact.Analyze.Types
 
 data AnalyzeEnv = AnalyzeEnv
-  { _aeScope     :: Map Text AVal            -- used with 'local' as a stack
-  , _aeKeySets   :: SArray KeySetName KeySet -- read-only
-  , _aeKsAuths   :: SArray KeySet Bool       -- read-only
+  { _aeScope    :: Map Text AVal            -- used with 'local' as a stack
+  , _aeKeySets  :: SArray KeySetName KeySet -- read-only
+  , _aeKsAuths  :: SArray KeySet Bool       -- read-only
   , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
   } deriving Show
-
-allocateArgs :: [(Text, Pact.Type TC.UserType)] -> Symbolic (Map Text AVal)
-allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
-    let name' = T.unpack name
-    var <- case ty of
-      TyPrim TyInteger -> mkAVal . sansProv <$> sInteger name'
-      TyPrim TyBool    -> mkAVal . sansProv <$> sBool name'
-      TyPrim TyDecimal -> mkAVal . sansProv <$> sDecimal name'
-      TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
-      TyPrim TyString  -> mkAVal . sansProv <$> sString name'
-      TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
-      TyPrim TyKeySet  -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV KeySet))
-
-      -- TODO
-      TyPrim TyValue   -> error "unimplemented type analysis"
-      TyAny            -> error "unimplemented type analysis"
-      TyVar _v         -> error "unimplemented type analysis"
-      TyList _         -> error "unimplemented type analysis"
-      TySchema _ _     -> error "unimplemented type analysis"
-      TyFun _          -> error "unimplemented type analysis"
-    pure (name, var)
-
-  where
-    sDecimal :: String -> Symbolic (SBV Decimal)
-    sDecimal = symbolic
 
 newtype Constraints
   = Constraints { runConstraints :: Symbolic () }
@@ -222,7 +208,7 @@ instance Mergeable AnalyzeState where
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
 mkInitialAnalyzeState
-  :: [(Text, TC.UserType)]
+  :: [(Text, Pact.UserType)]
   -> TableMap SymbolicCells
   -> AnalyzeState
 mkInitialAnalyzeState tables tableCells = AnalyzeState
@@ -253,10 +239,10 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
-      :: (Pact.Type TC.UserType -> Bool) -> a -> TableMap (ColumnMap a)
+      :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
       flip fmap tables $ \(tabName, userTy) ->
-        let fields = TC._utFields userTy
+        let fields = Pact._utFields userTy
             colMap = ColumnMap $ Map.fromList $ catMaybes $
               flip fmap fields $ \(Arg argName ty _) ->
                 if f ty
@@ -273,10 +259,10 @@ addConstraint :: SBool -> Analyze ()
 addConstraint = tell . Constraints . constrain
 
 allocateSymbolicCells
-  :: [(Text, TC.UserType)]
+  :: [(Text, Pact.UserType)]
   -> Symbolic (TableMap SymbolicCells)
 allocateSymbolicCells tables = do
-  cellsList <- forM tables $ \(tabName, TC.Schema _ _ fields _) -> do
+  cellsList <- for tables $ \(tabName, Pact.Schema _ _ fields _) -> do
     let fields' = Map.fromList $
           map (\(Arg argName ty _i) -> (argName, ty)) fields
 
@@ -286,7 +272,7 @@ allocateSymbolicCells tables = do
 
   where
     mkCells
-      :: Map Text (Pact.Type TC.UserType)
+      :: Map Text (Pact.Type Pact.UserType)
       -> Symbolic SymbolicCells
     mkCells fields =
 
@@ -401,9 +387,34 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
+allocateArgs :: [(Text, Pact.Type Pact.UserType)] -> Symbolic (Map Text AVal)
+allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
+    let name' = T.unpack name
+    var <- case ty of
+      TyPrim TyInteger -> mkAVal . sansProv <$> sInteger name'
+      TyPrim TyBool    -> mkAVal . sansProv <$> sBool name'
+      TyPrim TyDecimal -> mkAVal . sansProv <$> sDecimal name'
+      TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
+      TyPrim TyString  -> mkAVal . sansProv <$> sString name'
+      TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
+      TyPrim TyKeySet  -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV KeySet))
+
+      -- TODO
+      TyPrim TyValue   -> error "unimplemented type analysis"
+      TyAny            -> error "unimplemented type analysis"
+      TyVar _v         -> error "unimplemented type analysis"
+      TyList _         -> error "unimplemented type analysis"
+      TySchema _ _     -> error "unimplemented type analysis"
+      TyFun _          -> error "unimplemented type analysis"
+    pure (name, var)
+
+  where
+    sDecimal :: String -> Symbolic (SBV Decimal)
+    sDecimal = symbolic
+
 mkAnalyzeEnv
-  :: [(Text, Pact.Type TC.UserType)]
-  -> [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
+  :: [(Text, Pact.Type Pact.UserType)]
+  -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
   -> Symbolic AnalyzeEnv
 mkAnalyzeEnv argTys tables = do
   args        <- allocateArgs argTys
@@ -647,10 +658,10 @@ lookupObj
 lookupObj name = do
   mVal <- view (scope . at name)
   case mVal of
-    Nothing -> throwError $ VarNotInScope name
+    Nothing            -> throwError $ VarNotInScope name
     Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
-    Just (AnObj obj) -> pure obj
-    Just (OpaqueVal) -> throwError OpaqueValEncountered
+    Just (AnObj obj)   -> pure obj
+    Just (OpaqueVal)   -> throwError OpaqueValEncountered
 
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
@@ -659,10 +670,10 @@ lookupVal
 lookupVal name = do
   mVal <- view $ scope . at name
   case mVal of
-    Nothing -> throwError $ VarNotInScope name
+    Nothing                -> throwError $ VarNotInScope name
     Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj) -> throwError $ AValUnexpectedlyObj obj
-    Just (OpaqueVal) -> throwError OpaqueValEncountered
+    Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
+    Just (OpaqueVal)       -> throwError OpaqueValEncountered
 
 analyzeRead :: TableName -> Map String EType -> Term String -> Analyze Object
 analyzeRead tn fields rowKey = do
@@ -742,7 +753,7 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
 
   firstName:relevantFields' <- case relevantFields of
     [] -> throwError $ AtHasNoRelevantFields retType schema
-    _ -> pure relevantFields
+    _  -> pure relevantFields
 
   let getObjVal fieldName = case Map.lookup fieldName fields of
         Nothing -> throwError $ KeyNotPresent fieldName obj

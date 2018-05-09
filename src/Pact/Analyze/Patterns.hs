@@ -1,16 +1,22 @@
-{-# language OverloadedStrings   #-}
-{-# language PatternSynonyms     #-}
-{-# language Rank2Types          #-}
-{-# language ViewPatterns        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE Rank2Types        #-}
+{-# LANGUAGE ViewPatterns      #-}
+
 module Pact.Analyze.Patterns where
 
-import Data.Text (Text)
-import qualified Pact.Types.Lang as Lang
-import Pact.Types.Runtime hiding (Term, WriteType(..), TableName)
-import Pact.Types.Typecheck hiding (Var, UserType)
+import           Data.Monoid          ((<>))
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
+import           Data.Text            (Text)
+
+import qualified Pact.Types.Lang      as Lang
+import           Pact.Types.Runtime   (BindType (BindLet, BindSchema),
+                                       Literal (LString))
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Table),
+                                       Fun (FDefun, FNative), Named, Node,
+                                       PrimValue (PrimLit), Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
-import Data.Set (Set)
-import qualified Data.Set as Set
 
 comparisonOperators, logicalOperators, arithOperators :: Set Text
 comparisonOperators = Set.fromList [">", "<", ">=", "<=", "=", "!="]

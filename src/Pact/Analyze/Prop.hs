@@ -1,34 +1,45 @@
-{-# language DeriveDataTypeable         #-}
-{-# language FlexibleInstances          #-}
-{-# language GADTs                      #-}
-{-# language GeneralizedNewtypeDeriving #-}
-{-# language LambdaCase                 #-}
-{-# language Rank2Types                 #-}
-{-# language ScopedTypeVariables        #-}
-{-# language StandaloneDeriving         #-}
-{-# language TemplateHaskell            #-}
-{-# language TypeOperators              #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeOperators              #-}
 
 module Pact.Analyze.Prop where
 
-import Control.Lens (Iso, Lens', (^.), (&), (%~), both, from, iso, lens,
-                     makeLenses, over, to)
-import Data.Aeson (ToJSON, FromJSON)
-import Data.Data (Data)
-import qualified Data.Decimal as Decimal
-import Data.Map.Strict (Map)
-import Data.SBV hiding (Satisfiable)
-import qualified Data.SBV.String as SBV
+import           Control.Lens       (Iso, Lens', both, from, iso, lens,
+                                     makeLenses, over, to, (%~), (&), (^.))
+import           Data.Aeson         (FromJSON, ToJSON)
+import           Data.Data          (Data)
+import qualified Data.Decimal       as Decimal
+import           Data.Map.Strict    (Map)
+import           Data.SBV           (AlgReal,
+                                     Boolean (bnot, false, true, (&&&), (|||)),
+                                     EqSymbolic, HasKind, Int64, Kind (KString),
+                                     Mergeable (symbolicMerge), OrdSymbolic,
+                                     Provable (forAll), SBV,
+                                     SDivisible (sDivMod, sQuotRem), SymWord,
+                                     Symbolic, Word8, forAll_, forSome,
+                                     forSome_, isConcrete, ite, kindOf, literal,
+                                     oneIf, sFromIntegral, sRealToSInteger,
+                                     unliteral, (%), (.<), (.==))
 import qualified Data.SBV.Internals as SBVI
-import Data.Semigroup ((<>))
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.String (IsString(..))
-import Data.Text (Text)
-import Data.Thyme
-import Data.Typeable (Typeable, (:~:)(Refl), eqT)
-import qualified Data.Text as T
-import Pact.Types.Util (AsString)
+import qualified Data.SBV.String    as SBV
+import           Data.Semigroup     ((<>))
+import           Data.Set           (Set)
+import qualified Data.Set           as Set
+import           Data.String        (IsString (..))
+import           Data.Text          (Text)
+import qualified Data.Text          as T
+import           Data.Thyme         (UTCTime, microseconds, toModifiedJulianDay,
+                                     _utctDay, _utctDayTime)
+import           Data.Typeable      ((:~:) (Refl), Typeable, eqT)
+
+import           Pact.Types.Util    (AsString)
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
 wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
@@ -108,7 +119,7 @@ instance Eq Ty where
   Ty (Rep :: Rep a) == Ty (Rep :: Rep b) =
     case eqT :: Maybe (a :~: b) of
       Just Refl -> True
-      _ -> False
+      _         -> False
 deriving instance Show Ty
 
 -- Pact uses Data.Decimal which is arbitrary-precision
@@ -442,10 +453,10 @@ ckProp :: Lens' Check (Prop Bool)
 ckProp = lens getter setter
   where
     getter (Satisfiable p) = p
-    getter (Valid p) = p
+    getter (Valid p)       = p
 
     setter (Satisfiable _) p = Satisfiable p
-    setter (Valid _) p = Valid p
+    setter (Valid _) p       = Valid p
 
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)

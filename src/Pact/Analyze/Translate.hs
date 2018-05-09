@@ -1,39 +1,43 @@
-{-# language GADTs                      #-}
-{-# language GeneralizedNewtypeDeriving #-}
-{-# language LambdaCase                 #-}
-{-# language MultiWayIf                 #-}
-{-# language MonadFailDesugaring        #-}
-{-# language OverloadedStrings          #-}
-{-# language Rank2Types                 #-}
-{-# language ScopedTypeVariables        #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MonadFailDesugaring        #-}
+{-# LANGUAGE MultiWayIf                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Pact.Analyze.Translate where
 
-import Control.Applicative (Alternative, (<|>))
-import Control.Lens hiding (op)
-import Control.Monad.Except (Except, MonadError, throwError)
-import Control.Monad.Fail
-import Control.Monad.Reader
-import Control.Monad.State.Strict (MonadState(..), StateT)
-import Data.Foldable (foldl')
-import qualified Data.Map as Map
-import Data.Map.Strict (Map)
-import Data.Monoid ((<>))
-import qualified Data.Set as Set
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Thyme (parseTime)
-import Data.Traversable (for)
-import Data.Type.Equality
-import Pact.Types.Lang (Literal(..), Type(..), PrimType(..), Arg(..))
-import qualified Pact.Types.Lang as Pact
-import Pact.Types.Typecheck hiding (Var, Schema, Object)
-import qualified Pact.Types.Typecheck as Pact
-import System.Locale (defaultTimeLocale)
+import           Control.Applicative        (Alternative, (<|>))
+import           Control.Lens               (at, ix, view, (%=), (<&>), (?~),
+                                             (^.), (^?), _3)
+import           Control.Monad              (MonadPlus (mzero))
+import           Control.Monad.Except       (Except, MonadError, throwError)
+import           Control.Monad.Fail         (MonadFail (fail))
+import           Control.Monad.Reader       (MonadReader (local), ReaderT)
+import           Control.Monad.State.Strict (MonadState (..), StateT)
+import           Data.Foldable              (foldl')
+import qualified Data.Map                   as Map
+import           Data.Map.Strict            (Map)
+import           Data.Monoid                ((<>))
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Thyme                 (parseTime)
+import           Data.Traversable           (for)
+import           Data.Type.Equality         ((:~:) (Refl))
+import           Pact.Types.Lang            (Arg (..), Literal (..),
+                                             PrimType (..), Type (..))
+import qualified Pact.Types.Lang            as Pact
+import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
+                                             aNode, aTy, tiName, _aTy)
+import qualified Pact.Types.Typecheck       as Pact
+import           System.Locale              (defaultTimeLocale)
 
-import Pact.Analyze.Patterns
-import Pact.Analyze.Prop
-import Pact.Analyze.Types
+import           Pact.Analyze.Patterns
+import           Pact.Analyze.Prop
+import           Pact.Analyze.Types
 
 data TranslateFailure
   = BranchesDifferentTypes EType EType
@@ -241,7 +245,7 @@ translateNode astNode = case astNode of
     case ty of
       TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name)) TInt)
       TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
-      _ -> throwError $ BadNegationType astNode
+      _        -> throwError $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
     ETerm condTerm TBool <- translateNode cond
@@ -302,7 +306,7 @@ translateNode astNode = case astNode of
               "<=" -> pure Lte
               "="  -> pure Eq
               "!=" -> pure Neq
-              _ -> throwError $ MalformedComparison fn args
+              _    -> throwError $ MalformedComparison fn args
             case typeEq ta tb of
               Just Refl -> pure $ ETerm (Comparison op a' b') TBool
               _         -> throwError (TypeMismatch (EType ta) (EType tb))
@@ -321,7 +325,7 @@ translateNode astNode = case astNode of
             case fn of
               "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
               "or"  -> pure $ ETerm (Logical OrOp [a', b']) TBool
-              _ -> throwError $ MalformedLogicalOp fn args
+              _     -> throwError $ MalformedLogicalOp fn args
           _ -> throwError $ MalformedLogicalOp fn args
 
         mkArith :: TranslateM ETerm
@@ -408,7 +412,7 @@ translateNode astNode = case astNode of
     ETerm b tb <- translateNode fBranch
     case typeEq ta tb of
       Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
-      _ -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
+      _         -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
@@ -441,7 +445,7 @@ translateNode astNode = case astNode of
   AST_ReadCols node table key columns -> do
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
-    columns' <- forM columns $ \case
+    columns' <- for columns $ \case
       AST_Lit (LString col) -> pure col
       bad                   -> throwError (NonStaticColumns bad)
 
@@ -462,7 +466,7 @@ translateNode astNode = case astNode of
       k' <- case k of
         AST_Lit (LString t) -> pure $ T.unpack t
         -- TODO: support non-const keys
-        _ -> throwError $ NonConstKey k
+        _                   -> throwError $ NonConstKey k
       ty <- translateType $ v ^. aNode
       v' <- translateNode v
       pure (k', (ty, v'))

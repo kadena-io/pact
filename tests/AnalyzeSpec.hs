@@ -1,25 +1,29 @@
-{-# language GADTs             #-}
-{-# language OverloadedStrings #-}
-{-# language QuasiQuotes       #-}
-{-# language Rank2Types        #-}
-{-# language TypeApplications  #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE Rank2Types        #-}
+{-# LANGUAGE TypeApplications  #-}
+
 module AnalyzeSpec (spec) where
 
-import           Control.Lens
+import           Control.Lens               (at, findOf, (^.))
 import           Control.Monad.State.Strict (runStateT)
 import           Data.Either                (isLeft)
 import qualified Data.Map                   as Map
 import           Data.Maybe                 (isJust, isNothing)
+import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>)))
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
-import           Data.SBV                   (Boolean(..))
-import           NeatInterpolation
-import           Test.Hspec
+import           NeatInterpolation          (text)
+import           Test.Hspec                 (Spec, describe, it, runIO,
+                                             shouldSatisfy)
+
+import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
+                                             initReplState, rEnv)
+import           Pact.Types.Runtime         (eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Prop
-import           Pact.Repl
-import           Pact.Types.Runtime         hiding (RowKey, TableName)
 
 wrap :: Text -> Text
 wrap code =
