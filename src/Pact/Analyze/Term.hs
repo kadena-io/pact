@@ -6,7 +6,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeOperators      #-}
 
-module Pact.Analyze.Types where
+module Pact.Analyze.Term where
 
 import           Data.Data         (Data)
 import           Data.Map.Strict   (Map)
@@ -14,6 +14,11 @@ import           Data.SBV          (HasKind, SymWord)
 import           Data.Text         (Text)
 
 import           Pact.Analyze.Prop
+
+--
+-- TODO: merge this module with Pact.Analyze.Types once we are on GHC 8.2 and
+--       can use DeriveAnyClass and GND in the same file.
+--
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)

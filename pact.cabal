@@ -115,7 +115,7 @@ library
                   , Pact.Analyze.Patterns
                   , Pact.Analyze.Prop
                   , Pact.Analyze.Translate
-                  , Pact.Analyze.Types
+                  , Pact.Analyze.Term
                   , Pact.Bench
                   , Pact.Main
                   , Pact.ApiReq

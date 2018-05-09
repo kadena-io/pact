@@ -59,7 +59,7 @@ import qualified Pact.Types.Typecheck       as TC
 import           Pact.Analyze.Analyze       hiding (invariants, model)
 import           Pact.Analyze.Prop
 import           Pact.Analyze.Translate
-import           Pact.Analyze.Types
+import           Pact.Analyze.Term
 
 data CheckFailure
   = Invalid SBVI.SMTModel
