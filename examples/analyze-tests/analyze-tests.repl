@@ -1,5 +1,0 @@
-(env-keys ["analyze-admin"])
-(env-data { "module-keyset": { "keys": ["analyze-admin"], "pred": "=" } })
-(begin-tx)
-(load "analyze-tests.pact")
-(commit-tx)
