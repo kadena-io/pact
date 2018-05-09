@@ -38,8 +38,17 @@ import qualified Data.Map.Strict           as Map
 import           Data.Map.Strict.Merge     (mapMissing, merge, zipWithMatched)
 import           Data.Maybe                (catMaybes)
 import           Data.Monoid               ((<>))
-import           Data.SBV                  hiding (ProofError, Satisfiable,
-                                            Unknown, Unsatisfiable, name, (.++))
+import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
+                                            EqSymbolic ((./=), (.==)),
+                                            Mergeable (symbolicMerge),
+                                            OrdSymbolic ((.<), (.<=), (.>), (.>=)),
+                                            SArray, SBV, SBool, SFunArray,
+                                            SymArray (newArray, readArray, writeArray),
+                                            SymWord (exists_, forall_, free_, literal),
+                                            Symbolic, constrain, false,
+                                            mkSFunArray, sBool, sDiv, sInt64,
+                                            sInteger, sMod, sString, symbolic,
+                                            (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
@@ -58,12 +67,14 @@ import           Pact.Types.Version        (pactVersion)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types
 
-data AnalyzeEnv = AnalyzeEnv
-  { _aeScope    :: Map Text AVal            -- used with 'local' as a stack
-  , _aeKeySets  :: SArray KeySetName KeySet -- read-only
-  , _aeKsAuths  :: SArray KeySet Bool       -- read-only
-  , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
-  } deriving Show
+data AnalyzeEnv
+  = AnalyzeEnv
+    { _aeScope    :: Map Text AVal            -- used with 'local' as a stack
+    , _aeKeySets  :: SArray KeySetName KeySet -- read-only
+    , _aeKsAuths  :: SArray KeySet Bool       -- read-only
+    , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
+    }
+  deriving Show
 
 newtype Constraints
   = Constraints { runConstraints :: Symbolic () }
@@ -85,7 +96,7 @@ data SymbolicCells
     , _scKsValues      :: ColumnMap (SArray RowKey KeySet)
     -- TODO: opaque blobs
     }
-    deriving (Show)
+  deriving (Show)
 
 -- Implemented by-hand until 8.2, when we have DerivingStrategies
 instance Mergeable SymbolicCells where
@@ -604,9 +615,6 @@ resolveKeySet
   -> m (S KeySet)
 resolveKeySet sKsn = fmap sansProv $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
-
---keySetNamed :: SBV KeySetName -> Lens' AnalyzeEnv (SBV KeySet)
---keySetNamed sKsn = aeKeySets.symArrayAt sKsn
 
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
