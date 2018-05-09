@@ -525,6 +525,8 @@ unifyTypes l r = case (l,r) of
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam a b
   (TySchema sa a,TySchema sb b) | sa == sb -> unifyParam a b
+  (TySchema _ a,b@(TyUser _)) -> unifyParam a b
+  (a@(TyUser _),TySchema _ b) -> unifyParam a b
   _ -> Nothing
   where
     unifyParam a b = fmap (either (const (Left l)) (const (Right r))) (unifyTypes a b)
