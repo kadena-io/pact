@@ -202,6 +202,7 @@ test-suite hspec
               , text
               , sbv
               , neat-interpolation
+              , weeder >= 1.0.5
   other-modules:
                 AnalyzeSpec
               , Blake2Spec
@@ -213,3 +214,4 @@ test-suite hspec
               , PersistSpec
               , TypecheckSpec
               , TypesSpec
+              , WeederSpec

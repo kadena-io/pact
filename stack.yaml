@@ -18,16 +18,20 @@ packages:
   extra-dep: true
 
 extra-deps:
+  - parsers-0.12.5
   - bound-2
   - ed25519-donna-0.1.1
   - hashable-1.2.6.1
-  - easytest-0.2
   - containers-0.5.8.2
   - hlint-2.1.5
   - extra-1.6.6
   - aeson-1.1.2.0
   - haskell-src-exts-1.20.2
   - haskell-src-exts-util-0.2.3
+  - weeder-1.0.5
+  - foundation-0.0.20
+  - basement-0.0.7
+
 flags: {}
 
 extra-package-dbs: []

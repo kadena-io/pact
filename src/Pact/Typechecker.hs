@@ -603,8 +603,11 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
   tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
-  ft' <- traverse toUserType _tFunType
-  return $ FDefun _tInfo fn ft' args tcs _tMeta
+  funType <- traverse toUserType _tFunType
+  funId <- freshId _tInfo fn
+  void $ trackNode (_ftReturn funType) funId
+  assocAST funId (last tcs)
+  return $ FDefun _tInfo fn funType args tcs _tMeta
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
