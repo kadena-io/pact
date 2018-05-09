@@ -28,7 +28,7 @@ module Pact.Compile
 where
 
 import qualified Text.Trifecta as TF
-import {- qualified -} Text.Trifecta.Delta as TF
+import Text.Trifecta.Delta as TF
 import Control.Applicative
 import Data.Foldable (asum)
 import Data.List

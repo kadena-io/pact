@@ -78,7 +78,7 @@ loadModule fp mn = do
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
 loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
-  Just f  -> return f
+  Just f -> return f
 
 
 inferFun :: Bool -> FilePath -> ModuleName -> Text -> IO TCResult

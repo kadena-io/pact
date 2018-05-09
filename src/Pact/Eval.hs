@@ -367,8 +367,7 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 installModule :: ModuleData ->  Eval e ()
-installModule (m,defsProps) = do
-  let defs = defsProps
+installModule (m,defs) = do
   (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ defs)
   (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
 

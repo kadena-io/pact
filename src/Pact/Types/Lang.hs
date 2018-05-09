@@ -156,11 +156,8 @@ data Info = Info { _iInfo :: !(Maybe (Code,Parsed)) } deriving (Generic)
 instance NFData Info
 -- show instance uses Trifecta renderings
 instance Show Info where
-    showsPrec d (Info Nothing) = showParen (d > 10) $ showString "Info Nothing"
-    showsPrec d (Info (Just (r,_d))) = showParen (d > 10) $
-      showString "Info (Just \"" .
-      showString (renderCompactString r) .
-      showString "\")"
+    show (Info Nothing) = ""
+    show (Info (Just (r,_d))) = renderCompactString r
 instance Eq Info where
     Info Nothing == Info Nothing = True
     Info (Just (_,d)) == Info (Just (_,e)) = d == e
