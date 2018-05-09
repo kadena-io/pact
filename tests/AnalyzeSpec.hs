@@ -390,7 +390,7 @@ spec = describe "analyze" $ do
               name:string
               balance:integer)
 
-            (defun test:{token-row} ()
+            (defun test:object{token-row} ()
               (let* ((stu:object{token-row} {"balance": 5, "name": "stu"})
                      (k-start "bal")
                      (k-end "ance")
