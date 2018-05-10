@@ -337,8 +337,8 @@ verifyModule testCheck modules (_mod, modRefs) = do
         mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
     let checks :: [Check]
         checks = case mExp of
-          Just (Pact.EList' exps) -> catMaybes $ expToCheck <$> exps
-          _                       -> []
+          Just (Pact.ELitList exps) -> catMaybes $ expToCheck <$> exps
+          _                         -> []
     pure (ref, checks)
 
   let defnsWithChecks' = case testCheck of
