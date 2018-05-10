@@ -57,9 +57,16 @@ proper signatures to satisfy the keyset named `admins`:
 ```lisp
 (defun read-account (id)
   ("Read data for account ID"
-    (property (authorized-by 'admins)))
+    (properties [(authorized-by 'admins)]))
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
+```
+
+There's a set of square brackets around our property because Pact allows
+multiple properties to be defined simultaneously:
+
+```lisp
+(properties [p1 p2 p3 ...])
 ```
 
 Next, we see an example of schema invariants. For any table with the following
@@ -70,7 +77,7 @@ zero:
 ```lisp
 (defschema tokens
   ("token schema"
-    (invariant (> balance 0)))
+    (invariants [(> balance 0)]))
   username:string
   balance:integer)
 ```
@@ -149,7 +156,7 @@ and return values can be referred to by the name `result`:
 ```lisp
 (defun negate:integer (x:integer)
   ("negate a number"
-    (property (= result (* -1 x))))
+    (properties [(= result (* -1 x))]))
   (* x -1))
 ```
 
@@ -161,7 +168,7 @@ We can also define properties in terms of the standard comparison operators:
 ```lisp
 (defun abs:integer (x:integer)
   ("absolute value"
-    (property (>= result 0)))
+    (properties [(>= result 0)]))
   (if (< x 0)
     (negate x)
     x))
@@ -171,31 +178,31 @@ We can also define properties in terms of the standard comparison operators:
 
 In addition to the standard boolean operators `and`, `or`, and `not`, Pact's
 property checking language supports logical implication in the form of `when`,
-where `(when x y)` is equivalent to `(or (not x) y)`. Additionally you can see
-how pact supports defining multiple properties (here, three) at once:
+where `(when x y)` is equivalent to `(or (not x) y)`. Here we define three
+properties at once:
 
 ```lisp
 (defun negate:integer (x:integer)
   ("negate a number"
-    (property
-      (when (< x 0) (> result 0))
-      (when (> x 0) (< result 0))
-      (and
-        (when (< x 0) (> result 0))
-        (when (> x 0) (< result 0))))
+    (properties
+      [(when (< x 0) (> result 0))
+       (when (> x 0) (< result 0))
+       (and
+         (when (< x 0) (> result 0))
+         (when (> x 0) (< result 0)))])
   (* x -1))
 ```
 
 ### Transaction abort and success
 
-By default, every `property` is predicated on the successful completion of the
+By default, every property is predicated on the successful completion of the
 transaction which would contain an invocation of the function under test. This
 means that properties like the following:
 
 ```lisp
 (defun ensured-positive (val:integer)
   ("halts when passed a non-positive number"
-    (property (!= result 0)))
+    (properties [(!= result 0)]))
   (enforce (> val 0) "val is not positive")
   val)
 ```
@@ -203,8 +210,9 @@ means that properties like the following:
 will pass due to the use of `enforce`.
 
 At run-time on the blockchain, if an `enforce` call fails, the containing
-transaction is aborted. Because `property` is only concerned with transactions
-that succeed, the necessary conditions to pass each `enforce` call are assumed.
+transaction is aborted. Because `properties` are only concerned with
+transactions that succeed, the necessary conditions to pass each `enforce` call
+are assumed.
 
 <!--- *** This second is disabled until we add `valid`/`satisfiable` alternatives to `property`, which currently assumes tx success ***
 
@@ -239,9 +247,9 @@ code path enforces the keyset:
 ```lisp
 (defun admins-only (action:string)
   ("Only admins or super-admins can call this function successfully.
-    (property
-      (or (authorized-by 'admins) (authorized-by 'super-admins))
-      (when (== "create" action) (authorized-by 'super-admins)))
+    (properties
+      [(or (authorized-by 'admins) (authorized-by 'super-admins))
+       (when (== "create" action) (authorized-by 'super-admins))])
     (if (== action "create")
       (create)
       (if (== action "update")
@@ -259,7 +267,7 @@ column in the `accounts` table for the row keyed by the variable `name`, and
 enforce it using `enforce-keyset`:
 
 ```lisp
-(property (row-enforced 'accounts 'ks name))
+(row-enforced 'accounts 'ks name)
 ```
 
 For some examples of `row-enforced` in action, see "A simple balance transfer
@@ -287,7 +295,7 @@ capture this pattern, we have the `conserves-mass` property which takes a table
 and column name:
 
 ```lisp
-(property (conserves-mass 'accounts 'balance))
+(conserves-mass 'accounts 'balance)
 ```
 
 For an example using this property, see "A simple balance transfer example"
@@ -331,10 +339,10 @@ In such a situation we could use universal quantification to talk about any
 such row key:
 
 ```lisp
-(property
-  (forall (key:string)
-    (when (row-write 'accounts key)
-      (row-enforced 'accounts 'ks key))))
+(properties
+  [(forall (key:string)
+     (when (row-write 'accounts key)
+       (row-enforced 'accounts 'ks key)))])
 ```
 
 This property says that for any possible key written by the function, the
@@ -345,9 +353,9 @@ that there-exists a row that is read from during the transaction, we could use
 existential quantification like so:
 
 ```lisp
-(property
-  (exists (key:string)
-    (row-read 'accounts key)))
+(properties
+  [(exists (key:string)
+     (row-read 'accounts key))])
 ```
 
 For both universal and existential quantification, note that a type annotation
@@ -362,7 +370,7 @@ balances can not be negative:
 ```lisp
 (defschema account
   ("user accounts with balances"
-    (invariant (>= balance 0)))
+    (invariants [(>= balance 0)]))
   balance:integer
   ks:keyset)
 
@@ -376,7 +384,7 @@ eradicate with the help of another property.
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property (row-enforced 'accounts 'ks from)))
+    (properties [(row-enforced 'accounts 'ks from)]))
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -392,9 +400,9 @@ be used to create or destroy any money.
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property
-      (row-enforced 'accounts 'ks from)
-      (conserves-mass 'accounts 'balance))
+    (properties
+      [(row-enforced 'accounts 'ks from)
+       (conserves-mass 'accounts 'balance)])
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -411,9 +419,9 @@ property by passing in an `amount` of `-1`. Let's fix that, and try again:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property
-      (row-enforced 'accounts 'ks from)
-      (conserves-mass 'accounts 'balance))
+    (properties
+      [(row-enforced 'accounts 'ks from)
+       (conserves-mass 'accounts 'balance)])
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -433,9 +441,9 @@ At this point we can add another `enforce` to prevent this scenario:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (property
-      (row-enforced 'accounts 'ks from)
-      (conserves-mass 'accounts 'balance))
+    (properties
+      [(row-enforced 'accounts 'ks from)
+       (conserves-mass 'accounts 'balance)])
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
