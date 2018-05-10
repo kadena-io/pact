@@ -168,6 +168,7 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+              , text
   if !impl(ghcjs)
     build-depends: hlint >= 2.0
   other-modules:
