@@ -54,7 +54,7 @@ implemented. Our property states that if the transaction submitted to the
 blockchain runs successfully, it must be the case that the transaction has the
 proper signatures to satisfy the keyset named `admins`:
 
-```
+```lisp
 (defun read-account (id)
   ("Read data for account ID"
     (property (authorized-by 'admins)))
@@ -67,7 +67,7 @@ schema, if our property checker succeeds, we know that all possible code paths
 will always maintain the invariant that token balances are always greater than
 zero:
 
-```
+```lisp
 (defschema tokens
   ("token schema"
     (invariant (> balance 0)))
@@ -103,7 +103,9 @@ invariants for any possible DB modification.
 After supplying any desired invariant and property annotations in your module,
 property checking is run by invoking `verify`:
 
-`(verify 'module-name)`
+```lisp
+(verify 'module-name)
+```
 
 This will typecheck the code and, if that succeeds, check all invariants and
 properties.
@@ -144,7 +146,7 @@ Schema invariants are formed by the following BNF grammar:
 In properties, function arguments can be referred to directly by their names,
 and return values can be referred to by the name `result`:
 
-```
+```lisp
 (defun negate:integer (x:integer)
   ("negate a number"
     (property (= result (* -1 x))))
@@ -156,7 +158,7 @@ decimals work as they do in normal Pact code.
 
 We can also define properties in terms of the standard comparison operators:
 
-```
+```lisp
 (defun abs:integer (x:integer)
   ("absolute value"
     (property (>= result 0)))
@@ -172,7 +174,7 @@ property checking language supports logical implication in the form of `when`,
 where `(when x y)` is equivalent to `(or (not x) y)`. Additionally you can see
 how pact supports defining multiple properties (here, three) at once:
 
-```
+```lisp
 (defun negate:integer (x:integer)
   ("negate a number"
     (property
@@ -190,7 +192,7 @@ By default, every `property` is predicated on the successful completion of the
 transaction which would contain an invocation of the function under test. This
 means that properties like the following:
 
-```
+```lisp
 (defun ensured-positive (val:integer)
   ("halts when passed a non-positive number"
     (property (!= result 0)))
@@ -204,7 +206,7 @@ At run-time on the blockchain, if an `enforce` call fails, the containing
 transaction is aborted. Because `property` is only concerned with transactions
 that succeed, the necessary conditions to pass each `enforce` call are assumed.
 
-<!---
+<!--- *** This second is disabled until we add `valid`/`satisfiable` alternatives to `property`, which currently assumes tx success ***
 
 ### Valid, satisfiable, and explicit transaction abort/success
 
@@ -217,7 +219,7 @@ transaction on the blockchain:
 
 ```
 (defun failure-guaranteed:bool ()
-  ("always fails" (property (valid abort)))
+  ("always fails" (valid abort))
   (enforce false "cannot pass"))
 ```
 
@@ -227,21 +229,129 @@ TODO: more
 
 ### Keyset Authorization
 
-TODO: name-based
+In Pact, keys can be referred to by predefined names (defined by
+`define-keyset`) or passed around as values. The property checking system
+supports both styles of working with keysets.
 
-TODO: value-based
+For named keysets, the property `authorized-by` holds only if every possible
+code path enforces the keyset:
+
+```lisp
+(defun admins-only (action:string)
+  ("Only admins or super-admins can call this function successfully.
+    (property
+      (or (authorized-by 'admins) (authorized-by 'super-admins))
+      (when (== "create" action) (authorized-by 'super-admins)))
+    (if (== action "create")
+      (create)
+      (if (== action "update")
+        (update)
+        (incorrect-action action)))))
+```
+
+For the common pattern of row-level keyset enforcement, wherein a table might
+contain a row for each user, and each user row contains a keyset that is
+authorized when the row is modified, we can ensure this pattern has been
+encoded correctly by using the `row-enforced` property.
+
+In the following property, the code must extract the keyset stored in the `ks`
+column in the `accounts` table for the row keyed by the variable `name`, and
+enforce it using `enforce-keyset`:
+
+```lisp
+(property (row-enforced 'accounts 'ks name))
+```
+
+For some examples of `row-enforced` in action, see "A simple balance transfer
+example" and the section on "universal and existential quantification" below.
 
 ### Database access
 
-TODO
+To describe database table access, the property language has the following
+properties:
 
-### Mass conservation
+- `(table-write 'accounts)` - that any cell of the table `accounts` is written
+- `(table-read 'accounts)` - that any cell of the table `accounts` is read
+- `(row-write 'accounts k)` - that the row keyed by the variable `k` is written
+- `(row-read 'accounts k)` - that the row keyed by the variable `k` is read
 
-TODO
+For more details, see an example in "universal and existential quantification"
+below.
+
+### Mass conservation and column deltas
+
+In some situations, it's desirable that the total sum of the values in a column
+remains the same before and after a transaction. Or to put it another way, that
+the sum of all updates to a column zeroes-out by the end of a transaction. To
+capture this pattern, we have the `conserves-mass` property which takes a table
+and column name:
+
+```lisp
+(property (conserves-mass 'accounts 'balance))
+```
+
+For an example using this property, see "A simple balance transfer example"
+below.
+
+`conserves-mass` is actually just a trivial application of another property called
+`column-delta`, which returns an numeric value of the sum of all changes to the
+column during the transaction. So `(conserves-mass 'accounts 'balance)` is
+actually just the same as:
+
+```lisp
+(= 0 (column-delta 'accounts 'balance))
+```
+
+We can also use `column-delta` to ensure that a column only ever increases
+monotonically:
+
+```lisp
+(>= 0 (column-delta 'accounts 'balance))
+```
+
+or that it increases by a set amount during a transaction:
+
+```lisp
+(= 1 (column-delta 'accounts 'balance))
+```
+
+`column-delta` is defined in terms of the increase of the column from before to
+after the transaction (i.e. `after - before`) -- not an absolute value of
+change. So here `1` means an increase of `1` to the column's total sum.
 
 ### Universal and existential quantification
 
-TODO
+In examples like `(row-enforced 'accounts 'ks key)` or
+`(row-write 'accounts key)` above, we've so far only referred to function
+arguments by the use of the variable here named `key`. But what if we want to
+talk about all possible rows written if function doesn't simply affect one row
+keyed by an input to the function?
+
+In such a situation we could use universal quantification to talk about any
+such row key:
+
+```lisp
+(property
+  (forall (key:string)
+    (when (row-write 'accounts key)
+      (row-enforced 'accounts 'ks key))))
+```
+
+This property says that for any possible key written by the function, the
+keyset in column `ks` must be enforced for any row that is written.
+
+Likewise instead of quantifying over all possible keys, if we wanted to state
+that there-exists a row that is read from during the transaction, we could use
+existential quantification like so:
+
+```lisp
+(property
+  (exists (key:string)
+    (row-read 'accounts key)))
+```
+
+For both universal and existential quantification, note that a type annotation
+is required.
 
 ## A simple balance transfer example
 
@@ -249,7 +359,7 @@ Let's work through an example where we write a function to transfer some amount
 of a balance across two accounts for the given table, with the invariant that
 balances can not be negative:
 
-```
+```lisp
 (defschema account
   ("user accounts with balances"
     (invariant (>= balance 0)))
@@ -263,7 +373,7 @@ The following code to transfer a balance between two accounts may look correct
 at first study, but it turns out that there are number of bugs which we can
 eradicate with the help of another property.
 
-```
+```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
     (property (row-enforced 'accounts 'ks from)))
@@ -279,7 +389,7 @@ eradicate with the help of another property.
 Let's use `conserves-mass` to ensure that it's not possible for the function to
 be used to create or destroy any money.
 
-```
+```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
     (property
@@ -298,7 +408,7 @@ Now, when we use `verify` to check all properties in this module, Pact's
 property checker points out that it's able to falsify the mass conservation
 property by passing in an `amount` of `-1`. Let's fix that, and try again:
 
-```
+```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
     (property
@@ -320,7 +430,7 @@ falsify the property when `from` and `to` are set to the same account. When
 this is the case, we see that the code actually creates money out of thin air!
 At this point we can add another `enforce` to prevent this scenario:
 
-```
+```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
     (property
