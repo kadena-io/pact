@@ -57,7 +57,7 @@ module Pact.Types.Lang
    Meta(..),
    PublicKey(..),
    KeySet(..),
-   KeySetName(..),
+   KeySetName(KeySetName),
    DefType(..),
    defTypeRep,
    NativeDefName(..),
@@ -79,7 +79,8 @@ module Pact.Types.Lang
    typeof,typeof',
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
-   Text,pack,unpack
+   Text,pack,unpack,
+   mDocs,mMetas
    ) where
 
 
@@ -122,6 +123,7 @@ import qualified Data.Map.Strict as M
 
 import Data.Serialize (Serialize)
 
+import Pact.Analyze.Types (KeySetName(KeySetName))
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 --import Pact.Types.Crypto (Hash(..))
@@ -246,7 +248,7 @@ instance ToJSON Literal where
     {-# INLINE toJSON #-}
 
 
-newtype TypeName = TypeName Text
+newtype TypeName = TypeName { unTypeName :: Text }
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
 
@@ -560,11 +562,6 @@ instance FromJSON KeySet where
       where defPred = "keys-all"
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
-
-
-newtype KeySetName = KeySetName Text
-    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
-instance Show KeySetName where show (KeySetName s) = show s
 
 
 data DefType = Defun | Defpact deriving (Eq,Show)
@@ -998,3 +995,4 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 makeLenses ''Term
 makeLenses ''FunApp
+makeLenses ''Meta
