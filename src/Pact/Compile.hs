@@ -311,19 +311,11 @@ expToPropKeySet = \case
 expToPropBool :: Exp -> Maybe (Prop Bool)
 expToPropBool = \case
   EAtom' "result"      -> Just (PVar "result")
-  EAtom' var           -> Just (PVar var)
   ELiteral (LBool b) _ -> Just (PLit b)
 
-  EList' [EAtom' op, a, b] -> do
-    op' <- textToComparisonOp op
-    asum
-      [ PComparison op' <$> expToPropInteger a <*> expToPropInteger b
-      , PComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
-      , PComparison op' <$> expToPropTime a    <*> expToPropTime b
-      , PComparison op' <$> expToPropBool a    <*> expToPropBool b
-      , PComparison op' <$> expToPropString a  <*> expToPropString b
-      , PComparison op' <$> expToPropKeySet a  <*> expToPropKeySet b
-      ]
+  EList' [EAtom' "when", a, b] -> do
+    propNotA <- PLogical NotOp <$> traverse expToPropBool [a]
+    PLogical OrOp . (propNotA:) <$> traverse expToPropBool [b]
 
   EList' [EAtom' "row-read", ELitName tab, rowKey] ->
     RowRead (mkT tab) <$> expToPropRowKey rowKey
@@ -333,10 +325,6 @@ expToPropBool = \case
   EAtom' "abort"   -> Just Abort
   EAtom' "success" -> Just Success
 
-  -- (load "examples/verified-accounts/accounts.repl")
-  EList' [EAtom' "when", a, b] -> do
-    propNotA <- PLogical NotOp <$> traverse expToPropBool [a]
-    PLogical OrOp . (propNotA:) <$> traverse expToPropBool [b]
   EList' [EAtom' "not", a]     -> PLogical NotOp <$> traverse expToPropBool [a]
   EList' [EAtom' "and", a, b]  -> PLogical AndOp <$> traverse expToPropBool [a, b]
   EList' [EAtom' "or", a, b]   -> PLogical OrOp  <$> traverse expToPropBool [a, b]
@@ -382,6 +370,19 @@ expToPropBool = \case
       (\(name, ty) accum -> Exists name ty accum)
       body'
       bindings'
+
+  EList' [EAtom' op, a, b] -> do
+    op' <- textToComparisonOp op
+    asum
+      [ PComparison op' <$> expToPropInteger a <*> expToPropInteger b
+      , PComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
+      , PComparison op' <$> expToPropTime a    <*> expToPropTime b
+      , PComparison op' <$> expToPropBool a    <*> expToPropBool b
+      , PComparison op' <$> expToPropString a  <*> expToPropString b
+      , PComparison op' <$> expToPropKeySet a  <*> expToPropKeySet b
+      ]
+
+  EAtom' var           -> Just (PVar var)
 
   _ -> Nothing
 

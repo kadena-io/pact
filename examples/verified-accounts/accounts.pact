@@ -14,7 +14,7 @@
 
   (defschema account
     ("Row type for accounts table."
-      (invariant (>= balance 0.0)))
+      (invariants [(>= balance 0.0)]))
      balance:decimal
      amount:decimal
      ccy:string
@@ -38,12 +38,11 @@
       }
     ))
 
-  ; TODO: defproperty?
-  ; (@property conserves-mass)
-  ; (defun transfer (src:string dest:decimal amount:decimal)
-  ;   "transfer AMOUNT from SRC to DEST"
-  ;   (debit src amount))
-  ;   (credit dest amount))
+  (defun transfer (src:string dest:string amount:decimal)
+    ("transfer AMOUNT from SRC to DEST"
+      (properties [(column-conserve 'account 'balance)]))
+    (debit src amount)
+    (credit dest amount))
 
   (defun read-account-user (id)
     "Read data for account ID"
@@ -58,10 +57,11 @@
 
   (defun read-account-admin (id)
     ("Read data for account ID, admin version"
-      (property
-        (when
-            (not (authorized-by 'accounts-admin-keyset))
-            abort)))
+      (properties
+        [ (when
+             (not (authorized-by 'accounts-admin-keyset))
+             abort)
+        ]))
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 
@@ -76,10 +76,6 @@
             , "amount": amount }
       ))
 
-  ; ; alternately
-  ; (@property
-  ;   (with-read 'delta accounts acct
-  ;     { "balance" := amount }))
   (defun debit (acct amount)
     "Debit AMOUNT from ACCT balance"
     (with-read accounts acct
