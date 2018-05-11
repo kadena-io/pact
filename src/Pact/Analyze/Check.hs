@@ -217,7 +217,7 @@ checkTopFunction
   -> TopLevel Node
   -> Maybe Check
   -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body' _)) check =
+checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -309,7 +309,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
         _             -> False
 
   tablesWithInvariants <- for tables $ \(tabName, tab) -> do
-    (TopTable _info _name (TyUser schema), _tcState)
+    (TopTable _info _name (TyUser schema) _meta, _tcState)
       <- runTC 0 False $ typecheckTopLevel (Ref tab)
 
     let schemaName = asString (_utName schema)
@@ -351,7 +351,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
   for defnsWithChecks' $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
-      TopFun (FDefun {}) -> do
+      TopFun (FDefun {}) _ -> do
         result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
         results <- for props $
           failedTcOrAnalyze tablesWithInvariants tcState fun . Just
