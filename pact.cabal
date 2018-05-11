@@ -49,8 +49,8 @@ library
                      , Pact.Types.Util
                      , Pact.Types.Version
                      , Crypto.Hash.Blake2Native
-                  , Pact.Types.Typecheck
-                  , Pact.Typechecker
+                     , Pact.Types.Typecheck
+                     , Pact.Typechecker
 
 
   -- other-extensions:
@@ -63,7 +63,7 @@ library
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cereal >=0.5.4.0 && < 0.6
-                     , containers >= 0.5.7.1 && < 0.6
+                     , containers >= 0.5.8 && < 0.6
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
                      , directory >= 1.2.6.2 && < 1.4
@@ -108,8 +108,16 @@ library
                 , blake2
                 , fast-logger
                 , yaml
+                , sbv
     exposed-modules:
-                    Pact.Bench
+                    Pact.Analyze.Analyze
+                  , Pact.Analyze.Check
+                  , Pact.Analyze.Parse
+                  , Pact.Analyze.Patterns
+                  , Pact.Analyze.Term
+                  , Pact.Analyze.Translate
+                  , Pact.Analyze.Types
+                  , Pact.Bench
                   , Pact.Main
                   , Pact.ApiReq
                   , Pact.Docgen
@@ -191,10 +199,14 @@ test-suite hspec
               , ansi-wl-pprint
               , bytestring
               , hlint >= 2.0
-              , weeder >= 1.0.5
+              , mtl
               , text
+              , sbv
+              , neat-interpolation
+              , weeder >= 1.0.5
   other-modules:
-                Blake2Spec
+                AnalyzeSpec
+              , Blake2Spec
               , DocgenSpec
               , KeysetSpec
               , HlintSpec
