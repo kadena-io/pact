@@ -46,13 +46,13 @@ sophisticated properties about their smart contracts over time.
 
 ## What do properties and schema invariants look like?
 
-Here's an example of Pact's properties in action -- we state a property before
-the definition of the function to which it corresponds. Note that the function
-farms out its implementation of keyset enforcement to another function,
-`enforce-admin`, and we don't have to be concerned about how that happens to be
-implemented. Our property states that if the transaction submitted to the
-blockchain runs successfully, it must be the case that the transaction has the
-proper signatures to satisfy the keyset named `admins`:
+Here's an example of Pact's properties in action -- we declare a property
+alongside the docstring of the function to which it corresponds. Note that the
+function farms out its implementation of keyset enforcement to another
+function, `enforce-admin`, and we don't have to be concerned about how that
+happens to be implemented. Our property states that if the transaction
+submitted to the blockchain runs successfully, it must be the case that the
+transaction has the proper signatures to satisfy the keyset named `admins`:
 
 ```lisp
 (defun read-account (id)
@@ -72,8 +72,7 @@ multiple properties to be defined simultaneously:
 
 Next, we see an example of schema invariants. For any table with the following
 schema, if our property checker succeeds, we know that all possible code paths
-will always maintain the invariant that token balances are always greater than
-zero:
+will always maintain the invariant that token balances are greater than zero:
 
 ```lisp
 (defschema tokens
@@ -134,8 +133,8 @@ Schema invariants are formed by the following BNF grammar:
 
 <expr>
   ::= <column name>
-    | <int literal>
-    | <dec literal>
+    | <integer literal>
+    | <decimal literal>
     | <string literal>
     | <time literal>
     | <bool literal>
@@ -144,16 +143,16 @@ Schema invariants are formed by the following BNF grammar:
     | (or <expr> <expr> )
     | (not <expr> )
 
-<invariant>
-  ::= ( invariant <expr> ... )
+<invariants>
+  ::= ( invariants [ <expr> ... ] )
 ```
 
 ## Expressing properties
 
 ### Arguments, return values, and standard arithmetic and comparison operators
 
-In properties, function arguments can be referred to directly by their names,
-and return values can be referred to by the name `result`:
+In properties, we can refer to function arguments directly by their names, and
+return values can be referred to by the name `result`:
 
 ```lisp
 (defun negate:integer (x:integer)
@@ -265,13 +264,13 @@ code path enforces the keyset:
 ```
 
 For the common pattern of row-level keyset enforcement, wherein a table might
-contain a row for each user, and each user row contains a keyset that is
+contain a row for each user, and each user's row contains a keyset that is
 authorized when the row is modified, we can ensure this pattern has been
-encoded correctly by using the `row-enforced` property.
+implemented correctly by using the `row-enforced` property.
 
-In the following property, the code must extract the keyset stored in the `ks`
-column in the `accounts` table for the row keyed by the variable `name`, and
-enforce it using `enforce-keyset`:
+For the following property to pass, the code must extract the keyset stored in
+the `ks` column in the `accounts` table for the row keyed by the variable
+`name`, and enforce it using `enforce-keyset`:
 
 ```lisp
 (row-enforced 'accounts 'ks name)
@@ -308,10 +307,10 @@ and column name:
 For an example using this property, see "A simple balance transfer example"
 below.
 
-`conserves-mass` is actually just a trivial application of another property called
-`column-delta`, which returns an numeric value of the sum of all changes to the
-column during the transaction. So `(conserves-mass 'accounts 'balance)` is
-actually just the same as:
+It turns out that `conserves-mass` is actually just a trivial application of
+another property called `column-delta`, which returns an numeric value of the
+sum of all changes to the column during the transaction. So
+`(conserves-mass 'accounts 'balance)` is actually just the same as:
 
 ```lisp
 (= 0 (column-delta 'accounts 'balance))
@@ -338,12 +337,12 @@ change. So here `1` means an increase of `1` to the column's total sum.
 
 In examples like `(row-enforced 'accounts 'ks key)` or
 `(row-write 'accounts key)` above, we've so far only referred to function
-arguments by the use of the variable here named `key`. But what if we want to
-talk about all possible rows written if function doesn't simply affect one row
-keyed by an input to the function?
+arguments by the use of the variable named `key`. But what if we wanted to
+talk about all possible rows that will be written, if function doesn't simply
+update a single row keyed by an input to the function?
 
-In such a situation we could use universal quantification to talk about any
-such row key:
+In such a situation we could use universal quantification to talk about _any_
+such row:
 
 ```lisp
 (properties
@@ -352,12 +351,12 @@ such row key:
        (row-enforced 'accounts 'ks key)))])
 ```
 
-This property says that for any possible key written by the function, the
-keyset in column `ks` must be enforced for any row that is written.
+This property says that for any possible row written by the function, the
+keyset in column `ks` must be enforced for that row.
 
 Likewise instead of quantifying over all possible keys, if we wanted to state
-that there-exists a row that is read from during the transaction, we could use
-existential quantification like so:
+that there merely exists a row that is read during the transaction, we could
+use existential quantification like so:
 
 ```lisp
 (properties
