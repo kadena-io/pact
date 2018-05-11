@@ -150,6 +150,7 @@ evalUse mn h i = do
                                show mh ++ ", " ++ show _mHash
       installModule m
 
+
 -- | Make table of module definitions for storage in namespace/RefStore.
 --
 -- Definitions are transformed such that all free variables are resolved either to
@@ -160,7 +161,7 @@ evalUse mn h i = do
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info ->
-              Eval e ()
+              Eval e (HM.HashMap Text (Term Name))
 loadModule m bod1 mi = do
   modDefs1 <-
     case instantiate' bod1 of
@@ -177,11 +178,10 @@ loadModule m bod1 mi = do
             _ -> evalError (_tInfo t) "Invalid module member"
           return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
-
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
-    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(defName,defn) ->
+    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
       do
-        defn' <- forM defn $ \(f :: Name) -> do
+        d' <- forM d $ \(f :: Name) -> do
                 dm <- resolveRef f
                 case (dm,f) of
                   (Just t,_) -> return (Right t)
@@ -190,26 +190,22 @@ loadModule m bod1 mi = do
                         Just _ -> return (Left fn)
                         Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
                   (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-        return (defn',defName,mapMaybe (either Just (const Nothing)) $ toList defn')
-
+        return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
               CyclicSCC vs ->
                 evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-
-  -- These defs combine an evaluable reference with the properties that hold of
-  -- it.
-  let defs :: HM.HashMap Text Ref -- (Ref, [(Text, Exp)])
+  let defs :: HM.HashMap Text Ref
       defs = foldl dresolve HM.empty sorted
-
-      dresolve defns (defn,defName,_) =
-        HM.insert defName (Ref (fmap (unify defns) defn)) defns
-      evalConstRef = runPure . evalConsts
+      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
+      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
+      evalConstRef r@Ref {} = runPure $ evalConsts r
+      evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
-  installModule (m, evaluatedDefs)
-  evalRefs.rsNew %= cons (_mName m, (m, evaluatedDefs))
+  installModule (m,evaluatedDefs)
+  (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
+  return modDefs1
 
-  pure ()
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -227,7 +223,7 @@ resolveRef nn@(Name _ _) = do
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right d) = d
-unify m (Left f)  = m HM.! f
+unify m (Left f) = m HM.! f
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
