@@ -40,7 +40,6 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 
-import           Pact.Compile               (expToCheck, expToInvariant)
 import           Pact.Typechecker           (typecheckTopLevel)
 import           Pact.Types.Lang            (mMetas, tMeta)
 import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
@@ -59,6 +58,7 @@ import           Pact.Types.Typecheck       (AST, Fun (FDefun),
 import qualified Pact.Types.Typecheck       as TC
 
 import           Pact.Analyze.Analyze       hiding (invariants, model)
+import           Pact.Analyze.Parse         (expToCheck, expToInvariant)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
