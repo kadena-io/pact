@@ -6,8 +6,9 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens               (at, findOf, (^.))
+import           Control.Lens               (_3, at, findOf, (^.))
 import           Control.Monad.State.Strict (runStateT)
+import           Data.Default               (def)
 import           Data.Either                (isLeft)
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Map                   as Map
@@ -21,7 +22,7 @@ import           Test.Hspec                 (Spec, describe, it, runIO,
 
 import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
                                              initReplState, rEnv)
-import           Pact.Types.Runtime         (eeRefStore, rsModules)
+import           Pact.Types.Runtime         (Parsed, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Types
@@ -46,6 +47,9 @@ wrap code =
     (commit-tx)
   |]
 
+dummyParsed :: Parsed
+dummyParsed = def
+
 runTest :: Text -> Check -> IO (Maybe CheckFailure)
 runTest code check = do
   replState0 <- initReplState StringEval
@@ -56,10 +60,10 @@ runTest code check = do
       case replState ^. rEnv . eeRefStore . rsModules . at "test" of
         Nothing -> pure $ Just $ CodeCompilationFailed "expected module 'test'"
         Just moduleData -> do
-          results <- verifyModule (Just check)
+          results <- verifyModule (Just (dummyParsed, check))
             (HM.fromList [("test", moduleData)]) moduleData
           -- TODO(joel): use `fromLeft` when we're on modern GHC
-          pure $ case findOf (traverse . traverse) isLeft results of
+          pure $ case findOf (traverse . traverse . _3) isLeft results of
             Just (Left failure) -> Just failure
             _                   -> Nothing
 
