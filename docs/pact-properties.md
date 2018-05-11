@@ -371,13 +371,11 @@ is required.
 ## A simple balance transfer example
 
 Let's work through an example where we write a function to transfer some amount
-of a balance across two accounts for the given table, with the invariant that
-balances can not be negative:
+of a balance across two accounts for the given table:
 
 ```lisp
 (defschema account
-  ("user accounts with balances"
-    (invariants [(>= balance 0)]))
+  "user accounts with balances"
 
   balance:integer
   ks:keyset)
@@ -387,7 +385,8 @@ balances can not be negative:
 
 The following code to transfer a balance between two accounts may look correct
 at first study, but it turns out that there are number of bugs which we can
-eradicate with the help of another property.
+eradicate with the help of another property, and by adding an invariant to the
+table.
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -403,31 +402,42 @@ eradicate with the help of another property.
     (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
-Let's add the property `(conserves-mass 'accounts 'balance)` to ensure that
-it's not possible for the function to be used to create or destroy any money.
+Let's start by adding an invariant that balances can never drop below zero:
 
 ```lisp
-(defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties
-      [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)])
+(defschema account
+  ("user accounts with balances"
+    (invariants [(>= balance 0)]))
 
-  (let ((from-bal (at 'balance (read 'accounts from)))
-        (from-ks  (at 'ks      (read 'accounts from)))
-        (to-bal   (at 'balance (read 'accounts to))))
-    (enforce-keyset from-ks)
-    (enforce (>= from-bal amount) "Insufficient Funds")
-    (update 'accounts from { "balance": (- from-bal amount) })
-    (update 'accounts to   { "balance": (+ to-bal amount) })))
+  balance:integer
+  ks:keyset)
 ```
 
 Now, when we use `verify` to check all properties in this module, Pact's
 property checker points out that it's able to falsify the positive balance
 invariant by passing in an `amount` of `-1` (when the balance is `0`). In this
 case it's actually possible for the "sender" to steal money from anyone else by
-tranferring a negative amount. Let's fix that by enforcing `(> amount 0)`, and
+tranferring a negative amount! Let's fix that by enforcing `(> amount 0)`, and
 try again:
+
+```lisp
+(defun transfer (from:string to:string amount:integer)
+  ("Transfer money between accounts"
+    (properties [(row-enforced 'accounts 'ks from)])
+
+  (let ((from-bal (at 'balance (read 'accounts from)))
+        (from-ks  (at 'ks      (read 'accounts from)))
+        (to-bal   (at 'balance (read 'accounts to))))
+    (enforce-keyset from-ks)
+    (enforce (>= from-bal amount) "Insufficient Funds")
+    (enforce (> amount 0)         "Non-positive amount")
+    (update 'accounts from { "balance": (- from-bal amount) })
+    (update 'accounts to   { "balance": (+ to-bal amount) })))
+```
+
+The property checker validates the code at this point, but let's add another
+property `(conserves-mass 'accounts 'balance)` to ensure that it's not possible
+for the function to be used to create or destroy any money:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -446,10 +456,10 @@ try again:
     (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
-When we run `verify` this time, the property checker is yet again able to find
-a combination of inputs that break our mass conservation property! It's able to
-falsify the property when `from` and `to` are set to the same account. When
-this is the case, we see that the code actually creates money out of thin air!
+When we run `verify` this time, the property checker finds a bug again -- it's
+able to falsify the property when `from` and `to` are set to the same account.
+When this is the case, we see that the code actually creates money out of thin
+air!
 
 To see how, let's focus on the two `update` calls, where `from` and `to` are
 set to the same value, and `from-bal` and `to-bal` are also set to what we'll
@@ -460,12 +470,12 @@ call `previous-balance`:
 (update 'accounts "alice" { "balance": (+ previous-balance amount) })
 ```
 
-In this case, we can see that the second `update` call will completely
+In this scenario, we can see that the second `update` call will completely
 overwrite the first one, with the value `(+ previous-balance amount)`. Alice
 has effectively created `amount` tokens for free!
 
 We can fix this add another `enforce` (with `(!= from to)`) to prevent this
-scenario:
+unintended behavior:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
