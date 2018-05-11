@@ -58,6 +58,7 @@ proper signatures to satisfy the keyset named `admins`:
 (defun read-account (id)
   ("Read data for account ID"
     (properties [(authorized-by 'admins)]))
+
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
 ```
@@ -78,6 +79,7 @@ zero:
 (defschema tokens
   ("token schema"
     (invariants [(> balance 0)]))
+
   username:string
   balance:integer)
 ```
@@ -157,6 +159,7 @@ and return values can be referred to by the name `result`:
 (defun negate:integer (x:integer)
   ("negate a number"
     (properties [(= result (* -1 x))]))
+
   (* x -1))
 ```
 
@@ -169,6 +172,7 @@ We can also define properties in terms of the standard comparison operators:
 (defun abs:integer (x:integer)
   ("absolute value"
     (properties [(>= result 0)]))
+
   (if (< x 0)
     (negate x)
     x))
@@ -190,6 +194,7 @@ properties at once:
        (and
          (when (< x 0) (> result 0))
          (when (> x 0) (< result 0)))])
+
   (* x -1))
 ```
 
@@ -203,6 +208,7 @@ means that properties like the following:
 (defun ensured-positive (val:integer)
   ("halts when passed a non-positive number"
     (properties [(!= result 0)]))
+
   (enforce (> val 0) "val is not positive")
   val)
 ```
@@ -250,6 +256,7 @@ code path enforces the keyset:
     (properties
       [(or (authorized-by 'admins) (authorized-by 'super-admins))
        (when (== "create" action) (authorized-by 'super-admins))])
+
     (if (== action "create")
       (create)
       (if (== action "update")
@@ -371,6 +378,7 @@ balances can not be negative:
 (defschema account
   ("user accounts with balances"
     (invariants [(>= balance 0)]))
+
   balance:integer
   ks:keyset)
 
