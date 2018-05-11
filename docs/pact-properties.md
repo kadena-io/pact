@@ -385,6 +385,7 @@ eradicate with the help of another property.
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
     (properties [(row-enforced 'accounts 'ks from)]))
+
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -394,8 +395,8 @@ eradicate with the help of another property.
     (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
-Let's use `conserves-mass` to ensure that it's not possible for the function to
-be used to create or destroy any money.
+Let's add the property `(conserves-mass 'accounts 'balance)` to ensure that
+it's not possible for the function to be used to create or destroy any money.
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -403,6 +404,7 @@ be used to create or destroy any money.
     (properties
       [(row-enforced 'accounts 'ks from)
        (conserves-mass 'accounts 'balance)])
+
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -413,8 +415,11 @@ be used to create or destroy any money.
 ```
 
 Now, when we use `verify` to check all properties in this module, Pact's
-property checker points out that it's able to falsify the mass conservation
-property by passing in an `amount` of `-1`. Let's fix that, and try again:
+property checker points out that it's able to falsify the positive balance
+invariant by passing in an `amount` of `-1` (when the balance is `0`). In this
+case it's actually possible for the "sender" to steal money from anyone else by
+tranferring a negative amount. Let's fix that by enforcing `(> amount 0)`, and
+try again:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -422,6 +427,7 @@ property by passing in an `amount` of `-1`. Let's fix that, and try again:
     (properties
       [(row-enforced 'accounts 'ks from)
        (conserves-mass 'accounts 'balance)])
+
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -436,7 +442,22 @@ When we run `verify` this time, the property checker is yet again able to find
 a combination of inputs that break our mass conservation property! It's able to
 falsify the property when `from` and `to` are set to the same account. When
 this is the case, we see that the code actually creates money out of thin air!
-At this point we can add another `enforce` to prevent this scenario:
+
+To see how, let's focus on the two `update` calls, where `from` and `to` are
+set to the same value, and `from-bal` and `to-bal` are also set to what we'll
+call `previous-balance`:
+
+```lisp
+(update 'accounts "alice" { "balance": (- previous-balance amount) })
+(update 'accounts "alice" { "balance": (+ previous-balance amount) })
+```
+
+In this case, we can see that the second `update` call will completely
+overwrite the first one, with the value `(+ previous-balance amount)`. Alice
+has effectively created `amount` tokens for free!
+
+We can fix this add another `enforce` (with `(!= from to)`) to prevent this
+scenario:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -444,6 +465,7 @@ At this point we can add another `enforce` to prevent this scenario:
     (properties
       [(row-enforced 'accounts 'ks from)
        (conserves-mass 'accounts 'balance)])
+
   (let ((from-bal (at 'balance (read 'accounts from)))
         (from-ks  (at 'ks      (read 'accounts from)))
         (to-bal   (at 'balance (read 'accounts to))))
@@ -455,5 +477,9 @@ At this point we can add another `enforce` to prevent this scenario:
     (update 'accounts to   { "balance": (+ to-bal amount) })))
 ```
 
-And now we see that finally the property checker verifies that our function
-always conserves mass for the balance column.
+And now we see that finally the property checker verifies that all of the
+following are true:
+
+(1) the sender must be authorized to transfer money,
+(2) it's not possible for a balance to drop below zero, and
+(3) it's not possible for money to be created or destroyed.
