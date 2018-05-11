@@ -23,6 +23,7 @@ import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
 import           Control.Monad.State.Strict (evalStateT)
+import           Data.Either                (rights)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -288,7 +289,7 @@ verifyModule
   -> HM.HashMap ModuleName ModuleData
   -- ^ the module we're verifying
   -> ModuleData
-  -> IO (HM.HashMap Text [CheckResult])
+  -> IO (Either String (HM.HashMap Text [CheckResult]))
 verifyModule testCheck modules (_mod, modRefs) = do
 
   -- All tables defined in this module, and imported by it. We're going to look
