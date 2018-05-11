@@ -57,7 +57,7 @@ module Pact.Types.Lang
    Meta(..),
    PublicKey(..),
    KeySet(..),
-   KeySetName(KeySetName),
+   KeySetName(..),
    DefType(..),
    defTypeRep,
    NativeDefName(..),
@@ -123,7 +123,6 @@ import qualified Data.Map.Strict as M
 
 import Data.Serialize (Serialize)
 
-import Pact.Analyze.Types (KeySetName(KeySetName))
 import Pact.Types.Orphans ()
 import Pact.Types.Util
 --import Pact.Types.Crypto (Hash(..))
@@ -248,7 +247,7 @@ instance ToJSON Literal where
     {-# INLINE toJSON #-}
 
 
-newtype TypeName = TypeName { unTypeName :: Text }
+newtype TypeName = TypeName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON,Pretty,Generic,NFData)
 instance Show TypeName where show (TypeName s) = show s
 
@@ -562,6 +561,11 @@ instance FromJSON KeySet where
       where defPred = "keys-all"
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
+
+
+newtype KeySetName = KeySetName Text
+    deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
+instance Show KeySetName where show (KeySetName s) = show s
 
 
 data DefType = Defun | Defpact deriving (Eq,Show)

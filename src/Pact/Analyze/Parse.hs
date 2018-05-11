@@ -16,8 +16,8 @@ import qualified Data.Text            as T
 import           Data.Traversable     (for)
 import           Data.Type.Equality   ((:~:) (Refl))
 
-import           Pact.Types.Lang      hiding (KeySet, SchemaVar, TKeySet,
-                                       TableName)
+import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
+                                       TKeySet, TableName)
 import           Pact.Types.Typecheck (UserType)
 
 import           Pact.Analyze.Types

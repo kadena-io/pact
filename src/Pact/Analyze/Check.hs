@@ -45,8 +45,8 @@ import           Pact.Types.Lang            (mMetas, tMeta)
 import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
                                              Ref (Ref),
                                              Term (TDef, TSchema, TTable),
-                                             Type (TyUser), renderInfo,
-                                             unTypeName)
+                                             Type (TyUser), asString,
+                                             renderInfo)
 import qualified Pact.Types.Runtime         as Pact
 import           Pact.Types.Typecheck       (AST, Fun (FDefun),
                                              Named (_nnName, _nnNamed),
@@ -312,7 +312,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
     (TopTable _info _name (TyUser schema), _tcState)
       <- runTC 0 False $ typecheckTopLevel (Ref tab)
 
-    let schemaName = unTypeName (_utName schema)
+    let schemaName = asString (_utName schema)
 
     -- look through every meta-property in the schema for invariants
     let mExp :: Maybe Exp
