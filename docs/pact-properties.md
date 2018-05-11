@@ -474,8 +474,8 @@ In this scenario, we can see that the second `update` call will completely
 overwrite the first one, with the value `(+ previous-balance amount)`. Alice
 has effectively created `amount` tokens for free!
 
-We can fix this add another `enforce` (with `(!= from to)`) to prevent this
-unintended behavior:
+We can fix this by adding another `enforce` (with `(!= from to)`) to prevent
+this unintended behavior:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -498,6 +498,6 @@ unintended behavior:
 And now we see that finally the property checker verifies that all of the
 following are true:
 
-(1) the sender must be authorized to transfer money,
-(2) it's not possible for a balance to drop below zero, and
-(3) it's not possible for money to be created or destroyed.
+- the sender must be authorized to transfer money,
+- it's not possible for a balance to drop below zero, and
+- it's not possible for money to be created or destroyed.
