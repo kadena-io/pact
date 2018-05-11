@@ -47,9 +47,9 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SymArray (newArray, newArray_, readArray, writeArray),
                                             SymWord (exists_, forall_, free_, literal),
                                             Symbolic, constrain, false,
-                                            mkSFunArray, prove, sBool, sDiv,
+                                            mkSFunArray, proveWith, sBool, sDiv,
                                             sInt64, sInteger, sMod, sString,
-                                            symbolic, (.^))
+                                            symbolic, verbose, z3, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
@@ -1308,7 +1308,7 @@ analyzeProp (RowEnforced tn cn pRk) = do
 
 
 main :: IO ()
-main = print =<< prove predicate
+main = print =<< proveWith (z3 {verbose=True}) predicate
   where
     predicate :: Predicate
     predicate = do
@@ -1356,11 +1356,11 @@ main = print =<< prove predicate
           cells2 = writeArray cells1 x val2
           -- Now to update the delta for that cell. Again we don't have access
           -- to the previous value (i.e., val1) here, so we have to re-read
-          -- cells0 to get it:
+          -- cells1 to get it:
           val1' = readArray cells1 x
           -- Likewise we need to read the array to get the previous diff:
           diff1' = readArray deltas1 x
-          diff2 = val2 - val1' -- <-- NOTE: THIS CAUSES THE ERROR, using val1' instead of val1
+          diff2 = val2 - val1 -- <-- NOTE: THIS CAUSES THE ERROR, using val1' instead of val1
           deltas2 = writeArray deltas1 x (diff1' + diff2)
 
           finalCells = cells2
