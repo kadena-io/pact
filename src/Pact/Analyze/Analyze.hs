@@ -42,13 +42,14 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             EqSymbolic ((./=), (.==)),
                                             Mergeable (symbolicMerge),
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                            SArray, SBV, SBool, SFunArray,
-                                            SymArray (newArray, readArray, writeArray),
+                                            Predicate, SArray, SBV, SBool,
+                                            SFunArray,
+                                            SymArray (newArray, newArray_, readArray, writeArray),
                                             SymWord (exists_, forall_, free_, literal),
                                             Symbolic, constrain, false,
-                                            mkSFunArray, sBool, sDiv, sInt64,
-                                            sInteger, sMod, sString, symbolic,
-                                            (.^))
+                                            mkSFunArray, prove, sBool, sDiv,
+                                            sInt64, sInteger, sMod, sString,
+                                            symbolic, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
@@ -1304,3 +1305,70 @@ analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   view $ model.cellEnforced tn cn sRk
+
+
+main :: IO ()
+main = print =<< prove predicate
+  where
+    predicate :: Predicate
+    predicate = do
+
+      --
+      -- Initial state, for data (cells) and changes to data (deltas)
+      --
+
+      cells0 <- newArray_ :: Symbolic (SArray String Integer)
+      let deltas0 = mkSFunArray (const 0) :: SFunArray String Integer
+
+      --
+      -- Symbolic evaluation of our program
+      --
+
+      -- The free/statically unknown key that the program uses to access the DB:
+      x <- exists_ :: Symbolic (SBV String)
+
+      let -- Read a value from the row keyed by x:
+          val0 = readArray cells0 x
+          -- Calculate a new value we'll write to this cell in the future:
+          val1 = val0 + 5
+
+          --
+          -- WRITE 1:
+          --
+
+          -- We'll write the new value back to cells, and the difference (5) to deltas.
+          cells1 = writeArray cells0 x val1
+          -- We don't have access to val0 here, so we have to re-read cells0:
+          val0' = readArray cells0 x
+          -- Likewise we don't know what the previous diff is; read it:
+          diff0 = readArray deltas0 x
+          diff1 = val1 - val0'
+          deltas1 = writeArray deltas0 x (diff0 + diff1)
+
+          -- Calculate the next value we will write to the cell:
+          val2 = val1 - 2
+
+          --
+          -- WRITE 2:
+          --
+
+          -- Update the cell:
+          cells2 = writeArray cells1 x val2
+          -- Now to update the delta for that cell. Again we don't have access
+          -- to the previous value (i.e., val1) here, so we have to re-read
+          -- cells0 to get it:
+          val1' = readArray cells1 x
+          -- Likewise we need to read the array to get the previous diff:
+          diff1' = readArray deltas1 x
+          diff2 = val2 - val1' -- <-- NOTE: THIS CAUSES THE ERROR, using val1' instead of val1
+          deltas2 = writeArray deltas1 x (diff1' + diff2)
+
+          finalCells = cells2
+          finalDeltas = deltas2
+
+      --
+      -- Querying accumulated state
+      --
+
+      k <- exists_ :: Symbolic (SBV String)
+      pure $ readArray finalDeltas k .== 3
