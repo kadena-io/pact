@@ -187,10 +187,10 @@ expToPropBool = \case
     -> Just (CellIncrease (mkT tab) (mkC col))
 
   -- TODO: in the future, these should be moved into a stdlib:
-  EList' [EAtom' "column-conserve", ELitString tab, ELitString col]
+  EList' [EAtom' "int-column-conserve", ELitString tab, ELitString col]
     -> Just (PComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
-  EList' [EAtom' "column-increase", ELitString tab, ELitString col]
-    -> Just (PComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
+  EList' [EAtom' "dec-column-conserve", ELitString tab, ELitString col]
+    -> Just (PComparison Eq 0 $ DecColumnDelta (mkT tab) (mkC col))
 
   --
   -- TODO: add support for DecColumnDelta. but we need type info...
