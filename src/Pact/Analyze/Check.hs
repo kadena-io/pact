@@ -16,7 +16,7 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (at, cons, itraversed, ix,
+import           Control.Lens               (_Right, at, cons, itraversed, ix,
                                              runIdentity, traversed, (%~), (&),
                                              (^.), (^?), (^@..), _2, _Just)
 import           Control.Monad.Except       (runExcept, runExceptT)
@@ -107,6 +107,7 @@ describeCheckFailure expText parsed failure =
             TranslateFailure err      -> describeTranslateFailure err
             PropertyParseError expr   -> "Couldn't parse property: " <> tShow expr
             CodeCompilationFailed msg -> T.pack msg
+            TypecheckFailure _        -> error "impossible (handled above)"
       in T.pack (renderParsed parsed) <> ":Warning: " <> expText <> " " <> str
 
 data CheckSuccess
@@ -143,6 +144,8 @@ checkFunctionBody
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
   -> IO (Either CheckFailure CheckSuccess)
+
+-- the first case is when we have a property to check
 checkFunctionBody tables (Just check) body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
@@ -187,6 +190,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
         Nothing -> checkResult
         Just cf -> Left (AnalyzeFailure cf)
 
+-- the second case is when we're just verifying invariants
 checkFunctionBody tables Nothing body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
@@ -308,7 +312,7 @@ verifyModule
   -> HM.HashMap ModuleName ModuleData
   -- ^ the module we're verifying
   -> ModuleData
-  -> IO (HM.HashMap Text [CheckResult])
+  -> IO (Either (String, Maybe Parsed) (HM.HashMap Text [CheckResult]))
 verifyModule testCheck modules (_mod, modRefs) = do
 
   -- All tables defined in this module, and imported by it. We're going to look
@@ -350,37 +354,44 @@ verifyModule testCheck modules (_mod, modRefs) = do
     pure (tabName, schema, invariants)
 
   -- convert metas to checks
-  defnsWithChecks <- for defns $ \ref -> do
-    -- look through every meta-property in the definition for invariants
-    let Ref defn = ref
-        mExp :: Maybe Exp
-        mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
-    let checks :: [(Text, Parsed, Check)]
-        checks = case mExp of
-          Just (Pact.ELitList exps) -> catMaybes $ flip fmap exps $ \exp -> case expToCheck exp of
-            Nothing    -> Nothing
-            Just check -> Just (tShow exp, exp ^. eParsed, check)
-          _                         -> []
-    pure (ref, checks)
+  let defnsWithChecks = for defns $ \ref -> do
+        -- look through every meta-property in the definition for invariants
+        let Ref defn = ref
+            mExp :: Maybe Exp
+            mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
+        -- checks :: [(Text, Parsed, Check)]
+        checks <- case mExp of
+          Just (Pact.ELitList exps) -> sequence $ flip fmap exps $
+            \exp -> case expToCheck exp of
+              Nothing    -> Left $
+                ("failed to parse to property: " ++ show exp,
+                 Just (exp ^. eParsed))
+              Just check -> Right (tShow exp, exp ^. eParsed, check)
+          Just _  -> Left ("unrecognized form of properties", Nothing)
+          Nothing -> pure []
+        pure (ref, checks)
 
   let defnsWithChecks' = case testCheck of
         Nothing -> defnsWithChecks
         Just (parsed, check)
-          -> defnsWithChecks & at "test" . _Just . _2 %~ cons ("test check", parsed, check)
+          -> defnsWithChecks & _Right . at "test" . _Just . _2 %~ cons ("test check", parsed, check)
 
-  -- Now the meat of verification! For each definition in the module we check
-  -- 1. that is maintains all invariants
-  -- 2. that is passes any properties declared for it
-  for defnsWithChecks' $ \(ref, props) -> do
-    (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-    case fun of
-      TopFun (FDefun {_fInfo}) _ -> do
-        result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
-        results <- for props $ \(msg, propParsed, prop) ->
-          ("Property " <> msg, propParsed,)
-            <$> failedTcOrAnalyze tablesWithInvariants tcState fun (Just prop)
-        let funParsed = case _iInfo _fInfo of
-              Nothing                  -> def
-              Just (_code, funParsed') -> funParsed'
-        pure $ ("(invariant)", funParsed, result) : results
-      _ -> pure []
+  case defnsWithChecks' of
+    Left err -> pure $ Left err
+    Right defnsWithChecks'' -> fmap Right $
+      -- Now the meat of verification! For each definition in the module we check
+      -- 1. that is maintains all invariants
+      -- 2. that is passes any properties declared for it
+      for defnsWithChecks'' $ \(ref, props) -> do
+        (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+        case fun of
+          TopFun (FDefun {_fInfo}) _ -> do
+            result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
+            results <- for props $ \(msg, propParsed, prop) ->
+              ("Property " <> msg, propParsed,)
+                <$> failedTcOrAnalyze tablesWithInvariants tcState fun (Just prop)
+            let funParsed = case _iInfo _fInfo of
+                  Nothing                  -> def
+                  Just (_code, funParsed') -> funParsed'
+            pure $ ("(invariant)", funParsed, result) : results
+          _ -> pure []
