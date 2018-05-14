@@ -10,6 +10,7 @@ module Pact.Analyze.Parse
 
 import           Control.Lens         ((^.))
 import           Data.Foldable        (asum, find)
+import           Data.SBV             ((==>))
 import qualified Data.Set             as Set
 import           Data.Text            (Text)
 import qualified Data.Text            as T
@@ -250,7 +251,9 @@ expToPropBool = \case
 -- Note: the one property this can't parse yet is PAt because it includes an
 -- EType.
 expToCheck :: Exp -> Maybe Check
-expToCheck body = Valid <$> expToPropBool body
+expToCheck body = do
+  prop <- expToPropBool body
+  pure $ Valid $ Success ==> prop
 
 -- We pass in the type of the variable so we can use it to construct
 -- `SomeSchemaInvariant` when we encounter a var.
