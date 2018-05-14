@@ -1,7 +1,9 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module Pact.Analyze.Parse
   ( expToCheck
@@ -95,7 +97,7 @@ expToPropInteger = \case
     <*> expToPropInteger a
     <*> expToPropInteger b
 
-  EList' [EAtom' "column-delta", ELitString tab, ELitString col]
+  EList' [EAtom' "column-delta", StringLike tab, StringLike col]
     -> Just (IntColumnDelta (mkT tab) (mkC col))
 
   _ -> Nothing
@@ -135,7 +137,7 @@ expToPropDecimal = \case
   EList' [EAtom' op, a]
     -> PDecUnaryArithOp <$> textToUnaryArithOp op <*> expToPropDecimal a
 
-  EList' [EAtom' "column-delta", ELitString tab, ELitString col]
+  EList' [EAtom' "column-delta", StringLike tab, StringLike col]
     -> Just (DecColumnDelta (mkT tab) (mkC col))
 
   _ -> Nothing
@@ -159,6 +161,15 @@ expToPropKeySet = \case
   EAtom' var      -> Just (PVar var)
   _               -> Nothing
 
+pattern StringLike :: Text -> Exp
+pattern StringLike s <- (expToText -> Just s)
+
+expToText :: Exp -> Maybe Text
+expToText = \case
+  ELitString s -> Just s
+  ESymbol s _  -> Just s
+  _            -> Nothing
+
 expToPropBool :: Exp -> Maybe (Prop Bool)
 expToPropBool = \case
   EAtom' "result"      -> Just (PVar "result")
@@ -168,9 +179,9 @@ expToPropBool = \case
     propNotA <- PLogical NotOp <$> traverse expToPropBool [a]
     PLogical OrOp . (propNotA:) <$> traverse expToPropBool [b]
 
-  EList' [EAtom' "row-read", ELitString tab, rowKey] ->
+  EList' [EAtom' "row-read", StringLike tab, rowKey] ->
     RowRead (mkT tab) <$> expToPropRowKey rowKey
-  EList' [EAtom' "row-write", ELitString tab, rowKey] ->
+  EList' [EAtom' "row-write", StringLike tab, rowKey] ->
     RowWrite (mkT tab) <$> expToPropRowKey rowKey
 
   EAtom' "abort"   -> Just Abort
@@ -180,28 +191,28 @@ expToPropBool = \case
   EList' [EAtom' "and", a, b]  -> PLogical AndOp <$> traverse expToPropBool [a, b]
   EList' [EAtom' "or", a, b]   -> PLogical OrOp  <$> traverse expToPropBool [a, b]
 
-  EList' [EAtom' "table-write", ELitString tab] -> Just (TableWrite (mkT tab))
-  EList' [EAtom' "table-read", ELitString tab] -> Just (TableRead (mkT tab))
-  EList' [EAtom' "column-write", ELitString tab, ELitString col]
+  EList' [EAtom' "table-write", StringLike tab] -> Just (TableWrite (mkT tab))
+  EList' [EAtom' "table-read", StringLike tab] -> Just (TableRead (mkT tab))
+  EList' [EAtom' "column-write", StringLike tab, StringLike col]
     -> Just (ColumnWrite (mkT tab) (mkC col))
-  EList' [EAtom' "cell-increase", ELitString tab, ELitString col]
+  EList' [EAtom' "cell-increase", StringLike tab, StringLike col]
     -> Just (CellIncrease (mkT tab) (mkC col))
 
   -- TODO: in the future, these should be moved into a stdlib:
-  EList' [EAtom' "int-column-conserve", ELitString tab, ELitString col]
+  EList' [EAtom' "int-column-conserve", StringLike tab, StringLike col]
     -> Just (PComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
-  EList' [EAtom' "dec-column-conserve", ELitString tab, ELitString col]
+  EList' [EAtom' "dec-column-conserve", StringLike tab, StringLike col]
     -> Just (PComparison Eq 0 $ DecColumnDelta (mkT tab) (mkC col))
 
   --
   -- TODO: add support for DecColumnDelta. but we need type info...
   --
 
-  EList' [EAtom' "row-enforced", ELitString tab, ELitString col, body] -> do
+  EList' [EAtom' "row-enforced", StringLike tab, StringLike col, body] -> do
     body' <- expToPropRowKey body
     Just (RowEnforced (mkT tab) (mkC col) body')
 
-  EList' [EAtom' "authorized-by", ELitString name]
+  EList' [EAtom' "authorized-by", StringLike name]
     -> Just (KsNameAuthorized (mkK name))
 
   EList' [EAtom' "authorized-by", ESymbol name _]
@@ -286,6 +297,7 @@ expToInvariant schemaTys = \case
     | op `Set.member` Set.fromList [">", "<", ">=", "<=", "=", "!="] -> do
     SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a
     SomeSchemaInvariant b' bTy <- expToInvariant schemaTys b
+    -- TODO: use textToComparisonOp
     let op' = case op of
           ">"  -> Gt
           "<"  -> Lt
