@@ -335,12 +335,14 @@ verify i as = case as of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
         results <- liftIO $ verifyModule Nothing modules md
-        setop $ Print $ tStr $ ifoldl
-          (\defName accum lineResults -> if null lineResults
-            then accum
-            else accum <> Text.unlines ("" : defName <> ":" : "" : fmap describeCheckResult lineResults))
-          "verifying properties:"
-          results
+        case results of
+          Left (msg, mParsed) ->
+            let parsed = fromMaybe def mParsed
+                msg' = renderParsed parsed ++ ":Warning: " ++ msg
+            in setop $ TcErrors $ [msg']
+          Right results' ->
+            setop $ TcErrors $ fmap (Text.unpack . describeCheckResult) $
+              results' ^.. traverse . each
 
         return (tStr "")
 

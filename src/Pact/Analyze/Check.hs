@@ -3,6 +3,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Pact.Analyze.Check
   ( checkTopFunction
@@ -15,7 +16,7 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (at, cons, itraversed, ix,
+import           Control.Lens               (_Right, at, cons, itraversed, ix,
                                              runIdentity, traversed, (%~), (&),
                                              (^.), (^?), (^@..), _2, _Just)
 import           Control.Monad.Except       (runExcept, runExceptT)
@@ -23,6 +24,7 @@ import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
 import           Control.Monad.State.Strict (evalStateT)
+import           Data.Default               (def)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -34,21 +36,23 @@ import           Data.SBV                   (Provable, SatResult (SatResult),
                                              (&&&))
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
+import           Data.SBV.Internals         (SMTModel(SMTModel))
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
 import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Lang            (mMetas, tMeta)
+import           Pact.Types.Lang            (Parsed, _iInfo, eParsed, mMetas, tMeta,
+                                             renderInfo, renderParsed, eParsed)
 import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
                                              Ref (Ref),
                                              Term (TDef, TSchema, TTable),
-                                             Type (TyUser), asString,
-                                             renderInfo)
+                                             Type (TyUser), asString, tShow)
 import qualified Pact.Types.Runtime         as Pact
-import           Pact.Types.Typecheck       (AST, Fun (FDefun),
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fInfo),
                                              Named (_nnName, _nnNamed),
                                              Node (_aTy), TcId (_tiInfo),
                                              TcState,
@@ -64,10 +68,10 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckFailure
-  = Invalid SBVI.SMTModel
+  = Invalid [(String, SBVI.CW)]
   | Unsatisfiable
   | Unknown String -- reason
-  | SatExtensionField SBVI.SMTModel
+  | SatExtensionField [(String, SBVI.CW)]
   | ProofError [String]
   | TypecheckFailure (Set TC.Failure)
   | AnalyzeFailure AnalyzeFailure
@@ -79,48 +83,59 @@ data CheckFailure
   | CodeCompilationFailed String
   deriving (Show)
 
-describeCheckFailure :: CheckFailure -> Text
-describeCheckFailure = \case
-  Invalid model ->
-    "Invalidating model found:\n" <>
-    T.pack (show model)
-  Unsatisfiable  -> "This property is unsatisfiable"
-  Unknown reason ->
-    "The solver returned unknown with reason:\n" <>
-    T.pack (show reason)
-  SatExtensionField model ->
-    "The solver return a model, but in an extension field containing infinite / epsilon:\n" <>
-    T.pack (show model)
-  ProofError lines' ->
-    "The prover errored:\n" <>
-    T.unlines (T.pack <$> lines')
-  TypecheckFailure fails ->
-    "The module failed to typecheck:\n" <>
-    T.unlines (map
-      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
-      (Set.toList fails))
-  AnalyzeFailure err        -> describeAnalyzeFailure err
-  TranslateFailure err      -> describeTranslateFailure err
-  PropertyParseError expr   -> "Couldn't parse property: " <> T.pack (show expr)
-  CodeCompilationFailed msg -> T.pack msg
+describeCheckFailure :: Text -> Parsed -> CheckFailure -> Text
+describeCheckFailure expText parsed failure =
+  case failure of
+    TypecheckFailure fails -> T.unlines $ map
+      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ ":Warning: " ++ s))
+      (Set.toList fails)
+
+    _ ->
+      let str = case failure of
+            Invalid assocs -> "Invalidating model found: " <> showAssocs assocs
+            Unsatisfiable  -> "This property is unsatisfiable"
+            Unknown reason ->
+              "The solver returned unknown with reason:\n" <>
+              tShow reason
+            SatExtensionField assocs ->
+              "The solver return a model, but in an extension field containing infinite / epsilon: " <>
+                 showAssocs assocs
+            ProofError lines' ->
+              "The prover errored:\n" <>
+              T.unlines (T.pack <$> lines')
+            AnalyzeFailure err        -> describeAnalyzeFailure err
+            TranslateFailure err      -> describeTranslateFailure err
+            PropertyParseError expr   -> "Couldn't parse property: " <> tShow expr
+            CodeCompilationFailed msg -> T.pack msg
+            TypecheckFailure _        -> error "impossible (handled above)"
+      in T.pack (renderParsed parsed) <> ":Warning: " <> expText <> " " <> str
 
 data CheckSuccess
-  = SatisfiedProperty SBVI.SMTModel
+  = SatisfiedProperty [(String, SBVI.CW)]
   | ProvedTheorem
   deriving (Show)
 
-describeCheckSuccess :: CheckSuccess -> Text
-describeCheckSuccess = \case
-  SatisfiedProperty model ->
-    "Property satisfied with model:\n" <>
-    T.pack (show model)
-  ProvedTheorem           -> "Property proven valid"
+showAssocs :: [(String, SBVI.CW)] -> Text
+showAssocs assocs = T.intercalate ", " $ map
+  (\(name, cw) -> T.pack name <> " = " <> tShow cw)
+  assocs
+
+describeCheckSuccess :: Text -> Parsed -> CheckSuccess -> Text
+describeCheckSuccess expText parsed success =
+  let str = case success of
+        SatisfiedProperty assocs ->
+          "satisfied with model: " <> showAssocs assocs
+        ProvedTheorem           -> "proven valid"
+  in T.pack (renderParsed parsed) <> ":Trace: " <> expText <> " " <> str
 
 type CheckResult
-  = Either CheckFailure CheckSuccess
+  = (Text, Parsed, Either CheckFailure CheckSuccess)
 
 describeCheckResult :: CheckResult -> Text
-describeCheckResult = either describeCheckFailure describeCheckSuccess
+describeCheckResult (expText, parsed, failureSuccess) = either
+  (describeCheckFailure expText parsed)
+  (describeCheckSuccess expText parsed)
+  failureSuccess
 
 checkFunctionBody
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
@@ -128,7 +143,9 @@ checkFunctionBody
   -> [AST Node]
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
-  -> IO CheckResult
+  -> IO (Either CheckFailure CheckSuccess)
+
+-- the first case is when we have a property to check
 checkFunctionBody tables (Just check) body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
@@ -173,6 +190,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
         Nothing -> checkResult
         Just cf -> Left (AnalyzeFailure cf)
 
+-- the second case is when we're just verifying invariants
 checkFunctionBody tables Nothing body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason -> pure $ Left $ TranslateFailure reason
@@ -216,7 +234,7 @@ checkTopFunction
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
   -> TopLevel Node
   -> Maybe Check
-  -> IO CheckResult
+  -> IO (Either CheckFailure CheckSuccess)
 checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
@@ -238,43 +256,49 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
 
 checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
-runProvable :: Provable a => a -> IO CheckResult
+runProvable :: Provable a => a -> IO (Either CheckFailure CheckSuccess)
 runProvable provable = do
   ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
-    SBV.Unsatisfiable{}           -> Right ProvedTheorem
-    SBV.Satisfiable _config model -> Left $ Invalid model
-    SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason    -> Left $ Unknown reason
-    SBV.ProofError _config strs   -> Left $ ProofError strs
+    SBV.Unsatisfiable{}             -> Right ProvedTheorem
+    SBV.Satisfiable _config
+      (SMTModel _objectives assocs) -> Left $ Invalid assocs
+    SBV.SatExtField _config
+      (SMTModel _objectives assocs) -> Left $ SatExtensionField assocs
+    SBV.Unknown _config reason      -> Left $ Unknown reason
+    SBV.ProofError _config strs     -> Left $ ProofError strs
 
 -- This does not use the underlying property -- this merely dispatches to
 -- sat/prove appropriately, and accordingly translates sat/unsat to
 -- semantically-meaningful results.
-runCheck :: Provable a => Check -> a -> IO CheckResult
+runCheck :: Provable a => Check -> a -> IO (Either CheckFailure CheckSuccess)
 runCheck (Satisfiable _prop) provable = do
   (SatResult smtRes) <- sat provable
   pure $ case smtRes of
-    SBV.Unsatisfiable{}           -> Left Unsatisfiable
-    SBV.Satisfiable _config model -> Right $ SatisfiedProperty model
-    SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason    -> Left $ Unknown reason
-    SBV.ProofError _config strs   -> Left $ ProofError strs
+    SBV.Unsatisfiable{}             -> Left Unsatisfiable
+    SBV.Satisfiable _config
+      (SMTModel _objectives assocs) -> Right $ SatisfiedProperty assocs
+    SBV.SatExtField _config
+      (SMTModel _objectives assocs) -> Left $ SatExtensionField assocs
+    SBV.Unknown _config reason      -> Left $ Unknown reason
+    SBV.ProofError _config strs     -> Left $ ProofError strs
 runCheck (Valid _prop) provable = do
   ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
   pure $ case smtRes of
-    SBV.Unsatisfiable{}           -> Right ProvedTheorem
-    SBV.Satisfiable _config model -> Left $ Invalid model
-    SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason    -> Left $ Unknown reason
-    SBV.ProofError _config strs   -> Left $ ProofError strs
+    SBV.Unsatisfiable{}             -> Right ProvedTheorem
+    SBV.Satisfiable _config
+      (SMTModel _objectives assocs) -> Left $ Invalid assocs
+    SBV.SatExtField _config
+      (SMTModel _objectives assocs) -> Left $ SatExtensionField assocs
+    SBV.Unknown _config reason      -> Left $ Unknown reason
+    SBV.ProofError _config strs     -> Left $ ProofError strs
 
 failedTcOrAnalyze
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
   -> TcState
   -> TopLevel Node
   -> Maybe Check
-  -> IO CheckResult
+  -> IO (Either CheckFailure CheckSuccess)
 failedTcOrAnalyze tables tcState fun check =
     if Set.null failures
     then checkTopFunction tables fun check
@@ -283,12 +307,12 @@ failedTcOrAnalyze tables tcState fun check =
     failures = tcState ^. tcFailures
 
 verifyModule
-  :: Maybe Check
+  :: Maybe (Parsed, Check)
   -- ^ all loaded modules
   -> HM.HashMap ModuleName ModuleData
   -- ^ the module we're verifying
   -> ModuleData
-  -> IO (HM.HashMap Text [CheckResult])
+  -> IO (Either (String, Maybe Parsed) (HM.HashMap Text [CheckResult]))
 verifyModule testCheck modules (_mod, modRefs) = do
 
   -- All tables defined in this module, and imported by it. We're going to look
@@ -320,7 +344,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
 
     let invariants :: [(Text, SchemaInvariant Bool)]
         invariants = case mExp of
-          Just (Pact.EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
+          Just (Pact.ELitList exps) -> catMaybes $ flip fmap exps $ \meta -> do
             SomeSchemaInvariant expr TBool
               <- expToInvariant (_utFields schema) meta
             [v] <- pure $ Set.toList (invariantVars expr)
@@ -330,30 +354,44 @@ verifyModule testCheck modules (_mod, modRefs) = do
     pure (tabName, schema, invariants)
 
   -- convert metas to checks
-  defnsWithChecks <- for defns $ \ref -> do
-    -- look through every meta-property in the definition for invariants
-    let Ref defn = ref
-        mExp :: Maybe Exp
-        mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
-    let checks :: [Check]
-        checks = case mExp of
-          Just (Pact.ELitList exps) -> catMaybes $ expToCheck <$> exps
-          _                         -> []
-    pure (ref, checks)
+  let defnsWithChecks = for defns $ \ref -> do
+        -- look through every meta-property in the definition for invariants
+        let Ref defn = ref
+            mExp :: Maybe Exp
+            mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
+        -- checks :: [(Text, Parsed, Check)]
+        checks <- case mExp of
+          Just (Pact.ELitList exps) -> sequence $ flip fmap exps $
+            \exp -> case expToCheck exp of
+              Nothing    -> Left $
+                ("failed to parse to property: " ++ show exp,
+                 Just (exp ^. eParsed))
+              Just check -> Right (tShow exp, exp ^. eParsed, check)
+          Just _  -> Left ("unrecognized form of properties", Nothing)
+          Nothing -> pure []
+        pure (ref, checks)
 
   let defnsWithChecks' = case testCheck of
-        Nothing    -> defnsWithChecks
-        Just check -> defnsWithChecks & at "test" . _Just . _2 %~ cons check
+        Nothing -> defnsWithChecks
+        Just (parsed, check)
+          -> defnsWithChecks & _Right . at "test" . _Just . _2 %~ cons ("test check", parsed, check)
 
-  -- Now the meat of verification! For each definition in the module we check
-  -- 1. that is maintains all invariants
-  -- 2. that is passes any properties declared for it
-  for defnsWithChecks' $ \(ref, props) -> do
-    (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
-    case fun of
-      TopFun (FDefun {}) _ -> do
-        result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
-        results <- for props $
-          failedTcOrAnalyze tablesWithInvariants tcState fun . Just
-        pure $ result : results
-      _ -> pure []
+  case defnsWithChecks' of
+    Left err -> pure $ Left err
+    Right defnsWithChecks'' -> fmap Right $
+      -- Now the meat of verification! For each definition in the module we check
+      -- 1. that is maintains all invariants
+      -- 2. that is passes any properties declared for it
+      for defnsWithChecks'' $ \(ref, props) -> do
+        (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+        case fun of
+          TopFun (FDefun {_fInfo}) _ -> do
+            result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
+            results <- for props $ \(msg, propParsed, prop) ->
+              ("Property " <> msg, propParsed,)
+                <$> failedTcOrAnalyze tablesWithInvariants tcState fun (Just prop)
+            let funParsed = case _iInfo _fInfo of
+                  Nothing                  -> def
+                  Just (_code, funParsed') -> funParsed'
+            pure $ ("(invariant)", funParsed, result) : results
+          _ -> pure []

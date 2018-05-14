@@ -33,6 +33,7 @@ module Pact.Types.Lang
    Code(..),
    Info(..),
    renderInfo,
+   renderParsed,
    ModuleName(..),
    Name(..),
    Literal(..),
@@ -177,11 +178,13 @@ asString' = unpack . asString
 -- renderer for line number output.
 renderInfo :: Info -> String
 renderInfo (Info Nothing) = ""
-renderInfo (Info (Just (_,Parsed d _))) =
-    case d of
-      (Directed f l c _ _) -> asString' f ++ ":" ++ show (succ l) ++ ":" ++ show c
-      (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
-      _ -> "<interactive>:0:0"
+renderInfo (Info (Just (_, parsed))) = renderParsed parsed
+
+renderParsed :: Parsed -> String
+renderParsed (Parsed d _) = case d of
+  (Directed f l c _ _) -> asString' f ++ ":" ++ show (succ l) ++ ":" ++ show c
+  (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
+  _ -> "<interactive>:0:0"
 
 
 newtype ModuleName = ModuleName Text
