@@ -39,11 +39,11 @@ import           Data.Map.Strict.Merge     (mapMissing, merge, zipWithMatched)
 import           Data.Maybe                (catMaybes)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
-                                            EqSymbolic ((./=), (.==)),
+                                            EqSymbolic ((./=), (.==)), HasKind,
                                             Mergeable (symbolicMerge),
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                            SArray, SBV, SBool, SFunArray,
-                                            SymArray (newArray, readArray, writeArray),
+                                            SBV, SBool, SFunArray,
+                                            SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_, free_, literal),
                                             Symbolic, constrain, false,
                                             mkSFunArray, sBool, sDiv, sInt64,
@@ -69,9 +69,9 @@ import           Pact.Analyze.Types
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope    :: Map Text AVal            -- used with 'local' as a stack
-    , _aeKeySets  :: SArray KeySetName KeySet -- read-only
-    , _aeKsAuths  :: SArray KeySet Bool       -- read-only
+    { _aeScope    :: Map Text AVal               -- used as a stack
+    , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
+    , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
     , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
     }
   deriving Show
@@ -274,6 +274,9 @@ mkInitialAnalyzeState tables = AnalyzeState
 addConstraint :: SBool -> Analyze ()
 addConstraint = tell . Constraints . constrain
 
+mkFreeArray :: (SymWord a, HasKind b) => String -> SFunArray a b
+mkFreeArray = mkSFunArray . uninterpret
+
 mkSymbolicCells :: [(Text, Pact.UserType)] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 
@@ -299,22 +302,22 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
           in case ty of
               TyPrim TyInteger ->
                 cells & scIntValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "intCells")
+                  mkFreeArray "intCells"
               TyPrim TyBool    ->
                 cells & scBoolValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "boolCells")
+                  mkFreeArray "boolCells"
               TyPrim TyDecimal ->
                 cells & scDecimalValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "decimalCells")
+                  mkFreeArray "decimalCells"
               TyPrim TyTime    ->
                 cells & scTimeValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "timeCells")
+                  mkFreeArray "timeCells"
               TyPrim TyString  ->
                 cells & scStringValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "stringCells")
+                  mkFreeArray "stringCells"
               TyPrim TyKeySet  ->
                 cells & scKsValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "keysetCells")
+                  mkFreeArray "keysetCells"
               _ -> cells -- error (show ty)
         )
         cells0
@@ -431,11 +434,9 @@ mkAnalyzeEnv
   -> Symbolic AnalyzeEnv
 mkAnalyzeEnv argTys tables = do
   args        <- allocateArgs argTys
-  --
-  -- TODO: probably switch these over to uninterpret+SFunArray as well:
-  --
-  keySets'    <- newArray "keySets'"
-  keySetAuths <- newArray "keySetAuths"
+
+  let keySets'    = mkFreeArray "keySets"
+      keySetAuths = mkFreeArray "keySetAuths"
 
   pure $ foldr
     (\(tableName, _ut, someInvariants) env -> foldr
@@ -473,10 +474,10 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map Text AVal)
   scope = analyzeEnv.aeScope
 
-  keySets :: Lens' a (SArray KeySetName KeySet)
+  keySets :: Lens' a (SFunArray KeySetName KeySet)
   keySets = analyzeEnv.aeKeySets
 
-  ksAuths :: Lens' a (SArray KeySet Bool)
+  ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
