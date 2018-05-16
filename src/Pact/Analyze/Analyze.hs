@@ -137,6 +137,8 @@ data LatticeAnalyzeState
     , _lasMaintainsInvariants :: SBV Bool
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
+    , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
@@ -155,23 +157,25 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsInvariants  tsRead  tsWritten  intDeltas  decDeltas  cells
-      rsRead  rsWritten  csEnforced  csWritten)
+      success  tsInvariants  tsRead  tsWritten  intCellDeltas  decCellDeltas
+      intColDeltas  decColDeltas  cells  rsRead  rsWritten  csEnforced  csWritten)
     (LatticeAnalyzeState
-      success' tsInvariants' tsRead' tsWritten' intDeltas' decDeltas' cells'
-      rsRead' rsWritten' csEnforced' csWritten')
+      success' tsInvariants' tsRead' tsWritten' intCellDeltas' decCellDeltas'
+      intColDeltas' decColDeltas' cells' rsRead' rsWritten' csEnforced' csWritten')
         = LatticeAnalyzeState
-          (symbolicMerge force test success      success')
-          (symbolicMerge force test tsInvariants tsInvariants')
-          (symbolicMerge force test tsRead       tsRead')
-          (symbolicMerge force test tsWritten    tsWritten')
-          (symbolicMerge force test intDeltas    intDeltas')
-          (symbolicMerge force test decDeltas    decDeltas')
-          (symbolicMerge force test cells        cells')
-          (symbolicMerge force test rsRead       rsRead')
-          (symbolicMerge force test rsWritten    rsWritten')
-          (symbolicMerge force test csEnforced   csEnforced')
-          (symbolicMerge force test csWritten    csWritten')
+          (symbolicMerge force test success       success')
+          (symbolicMerge force test tsInvariants  tsInvariants')
+          (symbolicMerge force test tsRead        tsRead')
+          (symbolicMerge force test tsWritten     tsWritten')
+          (symbolicMerge force test intCellDeltas intCellDeltas')
+          (symbolicMerge force test decCellDeltas decCellDeltas')
+          (symbolicMerge force test intColDeltas  intColDeltas')
+          (symbolicMerge force test decColDeltas  decColDeltas')
+          (symbolicMerge force test cells         cells')
+          (symbolicMerge force test rsRead        rsRead')
+          (symbolicMerge force test rsWritten     rsWritten')
+          (symbolicMerge force test csEnforced    csEnforced')
+          (symbolicMerge force test csWritten     csWritten')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -225,6 +229,8 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasMaintainsInvariants = true
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
+        , _lasIntCellDeltas       = intCellDeltas
+        , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
         , _lasDecColumnDeltas     = decColumnDeltas
         , _lasTableCells          = mkSymbolicCells tables
@@ -240,6 +246,8 @@ mkInitialAnalyzeState tables = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . fst) tables
 
+    intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
+    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) 0
     cellsEnforced
@@ -515,6 +523,22 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
 tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
+
+intCellDelta
+  :: TableName
+  -> ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Integer)
+intCellDelta tn cn sRk = latticeState.lasIntCellDeltas.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
+
+decCellDelta
+  :: TableName
+  -> ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Decimal)
+decCellDelta tn cn sRk = latticeState.lasDecCellDeltas.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
 
 intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
 intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
@@ -1066,20 +1090,23 @@ analyzeTerm = \case
           let writeDelta :: forall t
                           . (Num t, SymWord t)
                          => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
+                         -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
                          -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
                          -> Analyze ()
-              writeDelta mkCellL mkDeltaL = do
+              writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv val'
                 prev <- use cell
                 cell .= next
-                mkDeltaL tn cn += next - prev
+                let diff = next - prev
+                mkCellDeltaL tn cn sRk += diff
+                mkColDeltaL  tn cn     += diff
 
           case fieldType of
-            EType TInt     -> writeDelta intCell intColumnDelta
+            EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
             EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
-            EType TDecimal -> writeDelta decimalCell decColumnDelta
+            EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
             EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
             EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
             EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
@@ -1285,6 +1312,15 @@ analyzeProp (ColumnWrite _tableName _colName)
   = throwError "column write analysis not yet implemented"
 analyzeProp (CellIncrease _tableName _colName)
   = throwError "cell increase analysis not yet implemented"
+--
+-- TODO: should we introduce and use CellWrite to subsume other cases?
+--
+analyzeProp (IntCellDelta tableName colName pRk) = do
+  sRk <- analyzeProp pRk
+  view $ model.intCellDelta tableName colName sRk
+analyzeProp (DecCellDelta tableName colName pRk) = do
+  sRk <- analyzeProp pRk
+  view $ model.decCellDelta tableName colName sRk
 analyzeProp (IntColumnDelta tableName colName) = view $
   model.intColumnDelta tableName colName
 analyzeProp (DecColumnDelta tableName colName) = view $
