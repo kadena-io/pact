@@ -18,10 +18,10 @@
 module Pact.Analyze.Analyze where
 
 import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
-                                            Lens', ifoldlM, iforM, lens,
+                                            Lens', ifoldl, iforM, lens,
                                             makeLenses, over, singular, use,
                                             view, (%=), (&), (+=), (.=), (.~),
-                                            (?~), (^.), _2)
+                                            (<&>), (?~), (^.), _2)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
@@ -48,7 +48,7 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             Symbolic, constrain, false,
                                             mkSFunArray, sBool, sDiv, sInt64,
                                             sInteger, sMod, sString, symbolic,
-                                            (.^))
+                                            uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
@@ -88,12 +88,12 @@ instance Mergeable Constraints where
 
 data SymbolicCells
   = SymbolicCells
-    { _scIntValues     :: ColumnMap (SArray RowKey Integer)
-    , _scBoolValues    :: ColumnMap (SArray RowKey Bool)
-    , _scStringValues  :: ColumnMap (SArray RowKey String)
-    , _scDecimalValues :: ColumnMap (SArray RowKey Decimal)
-    , _scTimeValues    :: ColumnMap (SArray RowKey Time)
-    , _scKsValues      :: ColumnMap (SArray RowKey KeySet)
+    { _scIntValues     :: ColumnMap (SFunArray RowKey Integer)
+    , _scBoolValues    :: ColumnMap (SFunArray RowKey Bool)
+    , _scStringValues  :: ColumnMap (SFunArray RowKey String)
+    , _scDecimalValues :: ColumnMap (SFunArray RowKey Decimal)
+    , _scTimeValues    :: ColumnMap (SFunArray RowKey Time)
+    , _scKsValues      :: ColumnMap (SFunArray RowKey KeySet)
     -- TODO: opaque blobs
     }
   deriving (Show)
@@ -137,6 +137,8 @@ data LatticeAnalyzeState
     , _lasMaintainsInvariants :: SBV Bool
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
+    , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
@@ -155,23 +157,25 @@ data LatticeAnalyzeState
 instance Mergeable LatticeAnalyzeState where
   symbolicMerge force test
     (LatticeAnalyzeState
-      success  tsInvariants  tsRead  tsWritten  intDeltas  decDeltas  cells
-      rsRead  rsWritten  csEnforced  csWritten)
+      success  tsInvariants  tsRead  tsWritten  intCellDeltas  decCellDeltas
+      intColDeltas  decColDeltas  cells  rsRead  rsWritten  csEnforced  csWritten)
     (LatticeAnalyzeState
-      success' tsInvariants' tsRead' tsWritten' intDeltas' decDeltas' cells'
-      rsRead' rsWritten' csEnforced' csWritten')
+      success' tsInvariants' tsRead' tsWritten' intCellDeltas' decCellDeltas'
+      intColDeltas' decColDeltas' cells' rsRead' rsWritten' csEnforced' csWritten')
         = LatticeAnalyzeState
-          (symbolicMerge force test success      success')
-          (symbolicMerge force test tsInvariants tsInvariants')
-          (symbolicMerge force test tsRead       tsRead')
-          (symbolicMerge force test tsWritten    tsWritten')
-          (symbolicMerge force test intDeltas    intDeltas')
-          (symbolicMerge force test decDeltas    decDeltas')
-          (symbolicMerge force test cells        cells')
-          (symbolicMerge force test rsRead       rsRead')
-          (symbolicMerge force test rsWritten    rsWritten')
-          (symbolicMerge force test csEnforced   csEnforced')
-          (symbolicMerge force test csWritten    csWritten')
+          (symbolicMerge force test success       success')
+          (symbolicMerge force test tsInvariants  tsInvariants')
+          (symbolicMerge force test tsRead        tsRead')
+          (symbolicMerge force test tsWritten     tsWritten')
+          (symbolicMerge force test intCellDeltas intCellDeltas')
+          (symbolicMerge force test decCellDeltas decCellDeltas')
+          (symbolicMerge force test intColDeltas  intColDeltas')
+          (symbolicMerge force test decColDeltas  decColDeltas')
+          (symbolicMerge force test cells         cells')
+          (symbolicMerge force test rsRead        rsRead')
+          (symbolicMerge force test rsWritten     rsWritten')
+          (symbolicMerge force test csEnforced    csEnforced')
+          (symbolicMerge force test csWritten     csWritten')
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
@@ -218,19 +222,18 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-mkInitialAnalyzeState
-  :: [(Text, Pact.UserType)]
-  -> TableMap SymbolicCells
-  -> AnalyzeState
-mkInitialAnalyzeState tables tableCells = AnalyzeState
+mkInitialAnalyzeState :: [(Text, Pact.UserType)] -> AnalyzeState
+mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
         , _lasMaintainsInvariants = true
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
+        , _lasIntCellDeltas       = intCellDeltas
+        , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
         , _lasDecColumnDeltas     = decColumnDeltas
-        , _lasTableCells          = tableCells
+        , _lasTableCells          = mkSymbolicCells tables
         , _lasRowsRead            = mkPerTableSFunArray false
         , _lasRowsWritten         = mkPerTableSFunArray false
         , _lasCellsEnforced       = cellsEnforced
@@ -243,6 +246,8 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . fst) tables
 
+    intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
+    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) 0
     cellsEnforced
@@ -269,51 +274,48 @@ mkInitialAnalyzeState tables tableCells = AnalyzeState
 addConstraint :: SBool -> Analyze ()
 addConstraint = tell . Constraints . constrain
 
-allocateSymbolicCells
-  :: [(Text, Pact.UserType)]
-  -> Symbolic (TableMap SymbolicCells)
-allocateSymbolicCells tables = do
-  cellsList <- for tables $ \(tabName, Pact.Schema _ _ fields _) -> do
-    let fields' = Map.fromList $
-          map (\(Arg argName ty _i) -> (argName, ty)) fields
-
-    (TableName (T.unpack tabName),) <$> mkCells fields'
-
-  pure $ TableMap $ Map.fromList cellsList
+mkSymbolicCells :: [(Text, Pact.UserType)] -> TableMap SymbolicCells
+mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 
   where
+    cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _) ->
+      let fields' = Map.fromList $
+            map (\(Arg argName ty _i) -> (argName, ty)) fields
+
+      in (TableName (T.unpack tabName), mkCells fields')
+
     mkCells
       :: Map Text (Pact.Type Pact.UserType)
-      -> Symbolic SymbolicCells
+      -> SymbolicCells
     mkCells fields =
 
       let cells0 = SymbolicCells mempty mempty mempty mempty mempty mempty
 
       -- fold over the fields, creating an array with constrained values for
       -- each column
-      in ifoldlM
+      in ifoldl
         (\colName cells ty ->
           let colName' = T.unpack colName
           in case ty of
-              TyPrim TyInteger -> do
-                arr <- newArray $ "int cells (" ++ colName' ++ ")"
-                pure $ cells & scIntValues . at (ColumnName colName') ?~ arr
-              TyPrim TyBool    -> do
-                arr <- newArray $ "bool cells (" ++ colName' ++ ")"
-                pure $ cells & scBoolValues . at (ColumnName colName') ?~ arr
-              TyPrim TyDecimal -> do
-                arr <- newArray $ "decimal cells (" ++ colName' ++ ")"
-                pure $ cells & scDecimalValues . at (ColumnName colName') ?~ arr
-              TyPrim TyTime    -> do
-                arr <- newArray $ "time cells (" ++ colName' ++ ")"
-                pure $ cells & scTimeValues . at (ColumnName colName') ?~ arr
-              TyPrim TyString  -> do
-                arr <- newArray $ "string cells (" ++ colName' ++ ")"
-                pure $ cells & scStringValues . at (ColumnName colName') ?~ arr
-              TyPrim TyKeySet  -> do
-                arr <- newArray $ "keyset cells (" ++ colName' ++ ")"
-                pure $ cells & scKsValues . at (ColumnName colName') ?~ arr
-              _ -> pure cells -- error (show ty)
+              TyPrim TyInteger ->
+                cells & scIntValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "intCells")
+              TyPrim TyBool    ->
+                cells & scBoolValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "boolCells")
+              TyPrim TyDecimal ->
+                cells & scDecimalValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "decimalCells")
+              TyPrim TyTime    ->
+                cells & scTimeValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "timeCells")
+              TyPrim TyString  ->
+                cells & scStringValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "stringCells")
+              TyPrim TyKeySet  ->
+                cells & scKsValues . at (ColumnName colName') ?~
+                  mkSFunArray (uninterpret "keysetCells")
+              _ -> cells -- error (show ty)
         )
         cells0
         fields
@@ -429,6 +431,9 @@ mkAnalyzeEnv
   -> Symbolic AnalyzeEnv
 mkAnalyzeEnv argTys tables = do
   args        <- allocateArgs argTys
+  --
+  -- TODO: probably switch these over to uninterpret+SFunArray as well:
+  --
   keySets'    <- newArray "keySets'"
   keySetAuths <- newArray "keySetAuths"
 
@@ -518,6 +523,22 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
 tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
+
+intCellDelta
+  :: TableName
+  -> ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Integer)
+intCellDelta tn cn sRk = latticeState.lasIntCellDeltas.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
+
+decCellDelta
+  :: TableName
+  -> ColumnName
+  -> S RowKey
+  -> Lens' AnalyzeState (S Decimal)
+decCellDelta tn cn sRk = latticeState.lasDecCellDeltas.singular (ix tn).
+  singular (ix cn).symArrayAt sRk.sbv2S
 
 intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
 intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
@@ -1069,20 +1090,23 @@ analyzeTerm = \case
           let writeDelta :: forall t
                           . (Num t, SymWord t)
                          => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
+                         -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
                          -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
                          -> Analyze ()
-              writeDelta mkCellL mkDeltaL = do
+              writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv val'
                 prev <- use cell
                 cell .= next
-                mkDeltaL tn cn += next - prev
+                let diff = next - prev
+                mkCellDeltaL tn cn sRk += diff
+                mkColDeltaL  tn cn     += diff
 
           case fieldType of
-            EType TInt     -> writeDelta intCell intColumnDelta
+            EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
             EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
-            EType TDecimal -> writeDelta decimalCell decColumnDelta
+            EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
             EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
             EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
             EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
@@ -1288,6 +1312,15 @@ analyzeProp (ColumnWrite _tableName _colName)
   = throwError "column write analysis not yet implemented"
 analyzeProp (CellIncrease _tableName _colName)
   = throwError "cell increase analysis not yet implemented"
+--
+-- TODO: should we introduce and use CellWrite to subsume other cases?
+--
+analyzeProp (IntCellDelta tableName colName pRk) = do
+  sRk <- analyzeProp pRk
+  view $ model.intCellDelta tableName colName sRk
+analyzeProp (DecCellDelta tableName colName pRk) = do
+  sRk <- analyzeProp pRk
+  view $ model.decCellDelta tableName colName sRk
 analyzeProp (IntColumnDelta tableName colName) = view $
   model.intColumnDelta tableName colName
 analyzeProp (DecColumnDelta tableName colName) = view $

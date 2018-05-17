@@ -557,6 +557,24 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
 
+  describe "cell-delta.integer" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              (with-read accounts "bob" { "balance" := old-bob }
+                (update accounts "bob" { "balance": (+ old-bob 2) })
+
+                ; This overwrites the previous value:
+                (update accounts "bob" { "balance": (+ old-bob 3) })
+                ))
+          |]
+
+    expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
+      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 2
+
+    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
+      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 3
+
   describe "with-read" $ do
     let code =
           [text|
