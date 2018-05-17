@@ -23,10 +23,10 @@ import           Data.SBV           (AlgReal,
                                      Mergeable (symbolicMerge), OrdSymbolic,
                                      Provable (forAll), SBV,
                                      SDivisible (sDivMod, sQuotRem), SymWord,
-                                     Symbolic, Word8, forAll_, forSome,
-                                     forSome_, isConcrete, ite, kindOf, literal,
-                                     oneIf, sFromIntegral, sRealToSInteger,
-                                     unliteral, (%), (.<), (.==))
+                                     Symbolic, forAll_, forSome, forSome_,
+                                     isConcrete, ite, kindOf, literal, oneIf,
+                                     sFromIntegral, sRealToSInteger, unliteral,
+                                     (%), (.<), (.==))
 import qualified Data.SBV.Internals as SBVI
 import qualified Data.SBV.String    as SBV
 import           Data.Semigroup     ((<>))
@@ -468,10 +468,8 @@ data Any = Any
 instance HasKind Any
 instance SymWord Any
 
--- KeySets are completely opaque to pact programs -- 256 should be enough for
--- symbolic analysis?
 newtype KeySet
-  = KeySet Word8
+  = KeySet Integer
   deriving (Eq, Ord, Data, Show, Read)
 
 -- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
