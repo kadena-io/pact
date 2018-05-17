@@ -530,6 +530,7 @@ spec = describe "analyze" $ do
                     (to-bal   (at 'balance (read accounts to))))
                 (enforce (> amount 0)         "Non-positive amount")
                 (enforce (>= from-bal amount) "Insufficient Funds")
+                ;; << NOTE: no (!= from to) here. >>
                 (update accounts from { "balance": (- from-bal amount) })
                 (update accounts to   { "balance": (+ to-bal amount) })))
           |]
@@ -567,11 +568,15 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
-      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 2
+    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+      PComparison Neq (PVar "row" :: Prop RowKey) (PLit "bob") ==>
+        PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 0
 
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
       PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 3
+
+    expectPass code $ Valid $
+      PComparison Eq (IntCellDelta "accounts" "balance" (PLit "bob")) 3
 
   describe "with-read" $ do
     let code =
