@@ -653,7 +653,7 @@ spec = describe "analyze" $ do
                 (defun test:bool (x:integer)
                   (let ((y x)
                         (z (+ 10 x)))
-                    (enforce (> z y) "z > y")
+                    (enforce (> z y) "z <= y")
                     true))
               |]
         in expectPass code $ Valid $ bnot Abort
@@ -664,7 +664,7 @@ spec = describe "analyze" $ do
                 (defun test:bool (x:integer)
                   (let ((y x)
                         (z (+ 10 x)))
-                    (enforce (< z y) "z > y")
+                    (enforce (< z y) "z >= y")
                     true))
               |]
         in expectPass code $ Valid Abort
@@ -674,8 +674,8 @@ spec = describe "analyze" $ do
               [text|
                 (defun test:bool (x:integer)
                   (let* ((x 2)
-                        (y (* x 10)))
-                   (enforce (= 22 (+ x y)) "x + y = 22")))
+                         (y (* x 10)))
+                   (enforce (= 22 (+ x y)) "x + y != 22")))
               |]
         in expectPass code $ Valid $ bnot Abort
 
@@ -686,7 +686,7 @@ spec = describe "analyze" $ do
                   (let ((x (let ((y 2)) y))
                         (y (let ((x 3)) x)))
                    (let ((z (let ((w 1)) (+ (+ x y) w))))
-                     (enforce (= 6 z) "2 + 3 + 1 = 6"))))
+                     (enforce (= 6 z) "2 + 3 + 1 != 6"))))
               |]
         in expectPass code $ Valid $ bnot Abort
 
