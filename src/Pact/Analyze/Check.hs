@@ -168,8 +168,8 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                       Right symAction -> pure symAction
 
           case tm of
-            ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-            EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+            ETerm   body'' _ -> go . fmap mkAVal . analyzeTerm $ body''
+            EObject body'' _ -> go . fmap AnObj . analyzeTermO $ body''
 
         mVarVal <- tryTakeMVar compileFailureVar
         pure $ case mVarVal of
@@ -211,8 +211,8 @@ checkFunctionBody tables Nothing body argTys nodeNames =
                       Right symAction -> pure symAction
 
           case tm of
-            ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-            EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+            ETerm   body'' _ -> go . fmap mkAVal . analyzeTerm $ body''
+            EObject body'' _ -> go . fmap AnObj . analyzeTermO $ body''
 
         mVarVal <- tryTakeMVar compileFailureVar
         pure $ case mVarVal of
