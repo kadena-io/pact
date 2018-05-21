@@ -286,41 +286,26 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 
       in (TableName (T.unpack tabName), mkCells fields')
 
-    mkCells
-      :: Map Text (Pact.Type Pact.UserType)
-      -> SymbolicCells
-    mkCells fields =
+    mkCells :: Map Text (Pact.Type Pact.UserType) -> SymbolicCells
+    mkCells fields = ifoldl
+      (\colName cells ty ->
+        let colName' = T.unpack colName
+            col      = ColumnName colName'
 
-      let cells0 = SymbolicCells mempty mempty mempty mempty mempty mempty
+            mkArray :: forall a. HasKind a => SFunArray RowKey a
+            mkArray  = mkFreeArray colName'
 
-      -- fold over the fields, creating an array with constrained values for
-      -- each column
-      in ifoldl
-        (\colName cells ty ->
-          let colName' = T.unpack colName
-          in case ty of
-              TyPrim TyInteger ->
-                cells & scIntValues . at (ColumnName colName') ?~
-                  mkFreeArray "intCells"
-              TyPrim TyBool    ->
-                cells & scBoolValues . at (ColumnName colName') ?~
-                  mkFreeArray "boolCells"
-              TyPrim TyDecimal ->
-                cells & scDecimalValues . at (ColumnName colName') ?~
-                  mkFreeArray "decimalCells"
-              TyPrim TyTime    ->
-                cells & scTimeValues . at (ColumnName colName') ?~
-                  mkFreeArray "timeCells"
-              TyPrim TyString  ->
-                cells & scStringValues . at (ColumnName colName') ?~
-                  mkFreeArray "stringCells"
-              TyPrim TyKeySet  ->
-                cells & scKsValues . at (ColumnName colName') ?~
-                  mkFreeArray "keysetCells"
-              _ -> cells -- error (show ty)
-        )
-        cells0
-        fields
+        in cells & case ty of
+             TyPrim TyInteger -> scIntValues.at col     ?~ mkArray
+             TyPrim TyBool    -> scBoolValues.at col    ?~ mkArray
+             TyPrim TyDecimal -> scDecimalValues.at col ?~ mkArray
+             TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
+             TyPrim TyString  -> scStringValues.at col  ?~ mkArray
+             TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
+             _ -> id -- error (show ty)
+      )
+      (SymbolicCells mempty mempty mempty mempty mempty mempty)
+      fields
 
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
