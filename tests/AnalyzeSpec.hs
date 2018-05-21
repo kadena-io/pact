@@ -18,9 +18,8 @@ import qualified Data.Text                  as T
 import           NeatInterpolation          (text)
 import           Test.Hspec                 (Spec, describe, it, runIO,
                                              shouldSatisfy)
-
-import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
-                                             initReplState, rEnv)
+import           Pact.Repl
+import           Pact.Repl.Types
 import           Pact.Types.Runtime         (eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
