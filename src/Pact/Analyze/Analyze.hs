@@ -402,34 +402,37 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-mkArgs :: [(Text, Pact.Type Pact.UserType)] -> Map Text AVal
-mkArgs argTys = Map.fromList $ argTys <&> \(name, ty) ->
+-- Returns problematic argument name, or arg map
+mkArgs :: [(Text, Pact.Type Pact.UserType)] -> Either Text (Map Text AVal)
+mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) ->
   let name' = T.unpack name
-      var = case ty of
-              TyPrim TyInteger -> mkAVal . sansProv $ (uninterpret name' :: (SBV Integer))
-              TyPrim TyBool    -> mkAVal . sansProv $ (uninterpret name' :: (SBV Bool))
-              TyPrim TyDecimal -> mkAVal . sansProv $ (uninterpret name' :: (SBV Decimal))
-              TyPrim TyTime    -> mkAVal . sansProv $ (uninterpret name' :: (SBV Int64))
-              TyPrim TyString  -> mkAVal . sansProv $ (uninterpret name' :: (SBV String))
-              TyUser _         -> mkAVal . sansProv $ (uninterpret name' :: (SBV UserType))
-              TyPrim TyKeySet  -> mkAVal . sansProv $ (uninterpret name' :: (SBV KeySet))
 
-              -- TODO
-              TyPrim TyValue   -> error "unimplemented type analysis"
-              TyAny            -> error "unimplemented type analysis"
-              TyVar _v         -> error "unimplemented type analysis"
-              TyList _         -> error "unimplemented type analysis"
-              TySchema _ _     -> error "unimplemented type analysis"
-              TyFun _          -> error "unimplemented type analysis"
-  in (name, var)
+      wrap :: SBV a -> Either e AVal
+      wrap = Right . mkAVal . sansProv
+
+      eVar = case ty of
+               TyPrim TyInteger -> wrap (uninterpret name' :: (SBV Integer))
+               TyPrim TyBool    -> wrap (uninterpret name' :: (SBV Bool))
+               TyPrim TyDecimal -> wrap (uninterpret name' :: (SBV Decimal))
+               TyPrim TyTime    -> wrap (uninterpret name' :: (SBV Int64))
+               TyPrim TyString  -> wrap (uninterpret name' :: (SBV String))
+               TyUser _         -> wrap (uninterpret name' :: (SBV UserType))
+               TyPrim TyKeySet  -> wrap (uninterpret name' :: (SBV KeySet))
+
+               TyPrim TyValue   -> Left name
+               TyAny            -> Left name
+               TyVar _v         -> Left name
+               TyList _         -> Left name
+               TySchema _ _     -> Left name
+               TyFun _          -> Left name
+  in (name,) <$> eVar
 
 mkAnalyzeEnv
-  :: [(Text, Pact.Type Pact.UserType)]
+  :: Map Text AVal
   -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
   -> AnalyzeEnv
-mkAnalyzeEnv argTys tables =
-  let args        = mkArgs argTys
-      keySets'    = mkFreeArray "keySets"
+mkAnalyzeEnv args tables =
+  let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
   in foldr

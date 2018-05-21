@@ -131,83 +131,93 @@ checkFunctionBody
   -> IO CheckResult
 checkFunctionBody tables (Just check) body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
-    Left reason -> pure $ Left $ TranslateFailure reason
+    Left reason ->
+      pure $ Left $ TranslateFailure reason
 
-    Right tm -> do
-      compileFailureVar <- newEmptyMVar
+    Right tm -> case mkArgs argTys of
+      Left unsupportedArg ->
+        pure $ Left $ AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg
 
-      checkResult <- runCheck check $ do
-        let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
-            aEnv    = mkAnalyzeEnv argTys tables
-            state0  = mkInitialAnalyzeState tables'
-            prop    = check ^. ckProp
+      Right args -> do
+        compileFailureVar <- newEmptyMVar
 
-            go :: Analyze AVal -> Symbolic (S Bool)
-            go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
-              case eAnalysis of
-                Left cf -> do
-                  liftIO $ putMVar compileFailureVar cf
-                  pure false
-                Right (propResult, state1, constraints) -> do
-                  let qEnv = mkQueryEnv aEnv state1 propResult
-                      qAction = (&&&)
-                        <$> analyzeProp prop
-                        <*> checkInvariantsHeld
-                  runConstraints constraints
-                  eQuery <- runExceptT $ runReaderT (queryAction qAction) qEnv
-                  case eQuery of
-                    Left cf' -> do
-                      liftIO $ putMVar compileFailureVar cf'
-                      pure false
-                    Right symAction -> pure symAction
+        checkResult <- runCheck check $ do
+          let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
+              aEnv    = mkAnalyzeEnv args tables
+              state0  = mkInitialAnalyzeState tables'
+              prop    = check ^. ckProp
 
-        case tm of
-          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+              go :: Analyze AVal -> Symbolic (S Bool)
+              go act = do
+                let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
+                case eAnalysis of
+                  Left cf -> do
+                    liftIO $ putMVar compileFailureVar cf
+                    pure false
+                  Right (propResult, state1, constraints) -> do
+                    let qEnv = mkQueryEnv aEnv state1 propResult
+                        qAction = (&&&)
+                          <$> analyzeProp prop
+                          <*> checkInvariantsHeld
+                    runConstraints constraints
+                    eQuery <- runExceptT $ runReaderT (queryAction qAction) qEnv
+                    case eQuery of
+                      Left cf' -> do
+                        liftIO $ putMVar compileFailureVar cf'
+                        pure false
+                      Right symAction -> pure symAction
 
-      mVarVal <- tryTakeMVar compileFailureVar
-      pure $ case mVarVal of
-        Nothing -> checkResult
-        Just cf -> Left (AnalyzeFailure cf)
+          case tm of
+            ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
+            EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+
+        mVarVal <- tryTakeMVar compileFailureVar
+        pure $ case mVarVal of
+          Nothing -> checkResult
+          Just cf -> Left (AnalyzeFailure cf)
 
 checkFunctionBody tables Nothing body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
-    Left reason -> pure $ Left $ TranslateFailure reason
+    Left reason ->
+      pure $ Left $ TranslateFailure reason
 
-    Right tm -> do
-      compileFailureVar <- newEmptyMVar
+    Right tm -> case mkArgs argTys of
+      Left unsupportedArg ->
+        pure $ Left $ AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg
 
-      checkResult <- runProvable $ do
-        let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
-            aEnv    = mkAnalyzeEnv argTys tables
-            state0  = mkInitialAnalyzeState tables'
+      Right args -> do
+        compileFailureVar <- newEmptyMVar
 
-            go :: Analyze AVal -> Symbolic (S Bool)
-            go act = do
-              let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
-              case eAnalysis of
-                Left cf -> do
-                  liftIO $ putMVar compileFailureVar cf
-                  pure false
-                Right (propResult, state1, constraints) -> do
-                  let qEnv = mkQueryEnv aEnv state1 propResult
-                  runConstraints constraints
-                  eQuery <- runExceptT $ runReaderT (queryAction checkInvariantsHeld) qEnv
-                  case eQuery of
-                    Left cf' -> do
-                      liftIO $ putMVar compileFailureVar cf'
-                      pure false
-                    Right symAction -> pure symAction
+        checkResult <- runProvable $ do
+          let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
+              aEnv    = mkAnalyzeEnv args tables
+              state0  = mkInitialAnalyzeState tables'
 
-        case tm of
-          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+              go :: Analyze AVal -> Symbolic (S Bool)
+              go act = do
+                let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
+                case eAnalysis of
+                  Left cf -> do
+                    liftIO $ putMVar compileFailureVar cf
+                    pure false
+                  Right (propResult, state1, constraints) -> do
+                    let qEnv = mkQueryEnv aEnv state1 propResult
+                    runConstraints constraints
+                    eQuery <- runExceptT $ runReaderT (queryAction checkInvariantsHeld) qEnv
+                    case eQuery of
+                      Left cf' -> do
+                        liftIO $ putMVar compileFailureVar cf'
+                        pure false
+                      Right symAction -> pure symAction
 
-      mVarVal <- tryTakeMVar compileFailureVar
-      pure $ case mVarVal of
-        Nothing -> checkResult
-        Just cf -> Left (AnalyzeFailure cf)
+          case tm of
+            ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
+            EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+
+        mVarVal <- tryTakeMVar compileFailureVar
+        pure $ case mVarVal of
+          Nothing -> checkResult
+          Just cf -> Left (AnalyzeFailure cf)
 
 checkTopFunction
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
