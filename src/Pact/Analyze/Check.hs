@@ -139,10 +139,8 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
       checkResult <- runCheck check $ do
         let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
         aEnv <- mkAnalyzeEnv argTys tables
-        state0
-          <- mkInitialAnalyzeState tables' <$> allocateSymbolicCells tables'
-
-        let prop = check ^. ckProp
+        let state0 = mkInitialAnalyzeState tables'
+            prop = check ^. ckProp
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
@@ -183,10 +181,9 @@ checkFunctionBody tables Nothing body argTys nodeNames =
       checkResult <- runProvable $ do
         let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
         aEnv <- mkAnalyzeEnv argTys tables
-        state0
-          <- mkInitialAnalyzeState tables' <$> allocateSymbolicCells tables'
+        let state0 = mkInitialAnalyzeState tables'
 
-        let go :: Analyze AVal -> Symbolic (S Bool)
+            go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
               let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
               case eAnalysis of
@@ -217,7 +214,7 @@ checkTopFunction
   -> TopLevel Node
   -> Maybe Check
   -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body' _)) check =
+checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -309,7 +306,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
         _             -> False
 
   tablesWithInvariants <- for tables $ \(tabName, tab) -> do
-    (TopTable _info _name (TyUser schema), _tcState)
+    (TopTable _info _name (TyUser schema) _meta, _tcState)
       <- runTC 0 False $ typecheckTopLevel (Ref tab)
 
     let schemaName = asString (_utName schema)
@@ -351,7 +348,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
   for defnsWithChecks' $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
-      TopFun (FDefun {}) -> do
+      TopFun (FDefun {}) _ -> do
         result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
         results <- for props $
           failedTcOrAnalyze tablesWithInvariants tcState fun . Just

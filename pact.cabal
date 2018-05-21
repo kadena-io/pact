@@ -198,21 +198,17 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
-              , hlint >= 2.0
               , mtl
               , text
               , sbv
               , neat-interpolation
-              , weeder >= 1.0.5
   other-modules:
                 AnalyzeSpec
               , Blake2Spec
               , DocgenSpec
               , KeysetSpec
-              , HlintSpec
               , PactTestsSpec
               , ParserSpec
               , PersistSpec
               , TypecheckSpec
               , TypesSpec
-              , WeederSpec
