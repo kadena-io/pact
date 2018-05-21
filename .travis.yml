@@ -148,8 +148,23 @@ matrix:
 before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*ubuntu.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
+    echo "Linux Z3 $Z3";
+  fi
 # https://github.com/travis-ci/travis-ci/issues/6307
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; command curl -sSL https://rvm.io/mpapis.asc | gpg --import -; then rvm get stable; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+    curl -sSL https://rvm.io/mpapis.asc | gpg --import -;
+    rvm get stable;
+    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*osx.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
+    echo "OS X Z3 $Z3";
+  fi
+- export Z3Base=`basename $Z3 .zip`
+- wget --quiet -L -O z3.zip http://github.com/Z3Prover/bin/raw/master/nightly/`basename $Z3`
+- unzip -q z3.zip -d z3_downloaded
+- /bin/rm z3.zip
+- export PATH=$PATH:$PWD/z3_downloaded/$Z3Base/bin
+- z3 --version
 
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""

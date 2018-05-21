@@ -79,7 +79,8 @@ module Pact.Types.Lang
    typeof,typeof',
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
-   Text,pack,unpack
+   Text,pack,unpack,
+   mDocs,mMetas
    ) where
 
 
@@ -998,3 +999,4 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 makeLenses ''Term
 makeLenses ''FunApp
+makeLenses ''Meta

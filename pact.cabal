@@ -42,11 +42,18 @@ library
                      , Pact.Types.Util
                      , Pact.Types.Version
                      , Crypto.Hash.Blake2Native
-                  , Pact.Types.Typecheck
-                  , Pact.Typechecker
+                     , Pact.Types.Typecheck
+                     , Pact.Typechecker
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
+      Pact.Analyze.Analyze
+      Pact.Analyze.Check
+      Pact.Analyze.Parse
+      Pact.Analyze.Patterns
+      Pact.Analyze.Term
+      Pact.Analyze.Translate
+      Pact.Analyze.Types
       Pact.ApiReq
       Pact.Bench
       Pact.Docgen
@@ -79,7 +86,7 @@ library
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cereal >=0.5.4.0 && < 0.6
-                     , containers >= 0.5.7.1 && < 0.6
+                     , containers >= 0.5.8 && < 0.6
                      , data-default >= 0.7.1.1 && < 0.8
                      , deepseq >= 1.4.2.0 && < 1.5
                      , directory >= 1.2.6.2 && < 1.4
@@ -118,6 +125,7 @@ library
       , fast-logger
       , haskeline >= 0.7.3 && < 0.8
       , safe-exceptions >= 0.1.5.0 && < 0.2
+      , sbv
       , snap-core
       , snap-server
       , statistics >= 0.13.3 && < 0.15
@@ -168,17 +176,20 @@ test-suite hspec
               , unordered-containers
               , ansi-wl-pprint
               , bytestring
+              , mtl
               , text
   if !impl(ghcjs)
-    build-depends: hlint >= 2.0
+    build-depends:
+        neat-interpolation
+      , sbv
   other-modules:
+                AnalyzeSpec
                 Blake2Spec
-              , KeysetSpec
-              , TypesSpec
+                KeysetSpec
+                TypesSpec
   if !impl(ghcjs)
     other-modules:
         DocgenSpec
-      , HlintSpec
       , PactTestsSpec
       , ParserSpec
       , PersistSpec

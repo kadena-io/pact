@@ -18,8 +18,9 @@
 
 module Pact.Repl.Lib where
 
-import Data.Default
 import Control.Arrow ((&&&))
+import Data.Default
+import Data.Semigroup
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map as M
 import Control.Monad.Reader
@@ -30,6 +31,7 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
+import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
@@ -39,6 +41,7 @@ import Criterion.Types
 import Statistics.Types (Estimate(..))
 #else
 import Statistics.Resampling.Bootstrap
+import Pact.Analyze.Check
 #endif
 #endif
 import Pact.Typechecker
@@ -49,10 +52,8 @@ import Pact.Types.Runtime
 import Pact.Eval
 import Pact.Persist.Pure
 import Pact.PersistPactDb
-import Data.Semigroup
 import Pact.Types.Logger
 import Pact.Repl.Types
-
 
 
 initLibState :: Loggers -> IO LibState
@@ -106,6 +107,10 @@ replDefs = ("Repl",
      ,defRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
+
+#if !defined(ghcjs_HOST_OS)
+     ,defRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
+#endif
 
      ,defRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
@@ -320,6 +325,27 @@ tc i as = case as of
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
+#if !defined(ghcjs_HOST_OS)
+verify :: RNativeFun LibState
+verify i as = case as of
+  [TLitString modName] -> do
+    modules <- view (eeRefStore . rsModules)
+    let mdm = HM.lookup (ModuleName modName) modules
+    case mdm of
+      Nothing -> evalError' i $ "No such module: " ++ show modName
+      Just md -> do
+        results <- liftIO $ verifyModule Nothing modules md
+        setop $ Print $ tStr $ ifoldl
+          (\defName accum lineResults -> if null lineResults
+            then accum
+            else accum <> Text.unlines ("" : defName <> ":" : "" : fmap describeCheckResult lineResults))
+          "verifying properties:"
+          results
+
+        return (tStr "")
+
+  _ -> argsError i as
+#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def

@@ -29,9 +29,9 @@ module Pact.Types.Typecheck
     TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
-    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,
+    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,
     Special (..),
-    Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,fMeta,
+    Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
     Named (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,aTableName,
@@ -166,32 +166,36 @@ instance Pretty PrimValue where
 -- | A top-level module production.
 data TopLevel t =
   TopFun {
-    _tlFun :: Fun t
+    _tlFun :: Fun t,
+    _tlMeta :: Maybe Meta
     } |
   TopConst {
     _tlInfo :: Info,
     _tlName :: Text,
     _tlType :: Type UserType,
-    _tlConstVal :: AST t
+    _tlConstVal :: AST t,
+    _tlMeta :: Maybe Meta
     } |
   TopTable {
     _tlInfo :: Info,
     _tlName :: Text,
-    _tlType :: Type UserType
+    _tlType :: Type UserType,
+    _tlMeta :: Maybe Meta
   } |
   TopUserType {
     _tlInfo :: Info,
-    _tlUserType :: UserType
+    _tlUserType :: UserType,
+    _tlMeta :: Maybe Meta
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 instance Pretty t => Pretty (TopLevel t) where
-  pretty (TopFun f) = "Fun" <$$> pretty f
-  pretty (TopConst _i n t v) =
+  pretty (TopFun f _m) = "Fun" <$$> pretty f
+  pretty (TopConst _i n t v _m) =
     "Const" <+> pretty n <> colon <> pretty t <$$>
     indent 2 (pretty v)
-  pretty (TopTable _i n t) =
+  pretty (TopTable _i n t _m) =
     "Table" <+> pretty n <> colon <> pretty t
-  pretty (TopUserType _i t) = "UserType" <+> pretty t
+  pretty (TopUserType _i t _m) = "UserType" <+> pretty t
 
 -- | Special-form handling (with-read, map etc)
 data Special t =
@@ -213,8 +217,7 @@ data Fun t =
     _fName :: Text,
     _fType :: FunType UserType,
     _fArgs :: [Named t],
-    _fBody :: [AST t],
-    _fMeta :: Maybe Meta
+    _fBody :: [AST t]
     }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 

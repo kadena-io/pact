@@ -607,7 +607,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
-  return $ FDefun _tInfo fn funType args tcs _tMeta
+  return $ FDefun _tInfo fn funType args tcs
 toFun t = die (_tInfo t) "Non-var in fun position"
 
 
@@ -760,21 +760,21 @@ bindArgs i args b =
 
 -- | Convert a top-level Term to a TopLevel.
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
-mkTop t@TDef {} = do
+mkTop t@TDef {..} = do
   debug $ "===== Fun: " ++ abbrev t
-  TopFun <$> toFun t
+  TopFun <$> toFun t <*> pure _tMeta
 mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrev t
   TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
     traverse toUserType (_aType _tConstArg) <*>
-    toAST (_cvRaw _tConstVal)
+    toAST (_cvRaw _tConstVal) <*> pure _tMeta
 mkTop t@TTable {..} = do
   debug $ "===== Table: " ++ abbrev t
   TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
-    traverse toUserType _tTableType
+    traverse toUserType _tTableType <*> pure _tMeta
 mkTop t@TSchema {..} = do
   debug $ "===== Schema: " ++ abbrev t
-  TopUserType _tInfo <$> toUserType' t
+  TopUserType _tInfo <$> toUserType' t <*> pure _tMeta
 mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
@@ -845,7 +845,7 @@ singLens = iso pure head
 
 -- | Typecheck a top-level production.
 typecheck :: TopLevel Node -> TC (TopLevel Node)
-typecheck f@(TopFun FDefun {}) = typecheckBody f (tlFun . fBody)
+typecheck f@(TopFun FDefun {} _) = typecheckBody f (tlFun . fBody)
 typecheck c@TopConst {..} = do
   assocAstTy (_aNode _tlConstVal) _tlType
   typecheckBody c (tlConstVal . singLens)
