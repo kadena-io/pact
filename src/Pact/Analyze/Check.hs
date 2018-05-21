@@ -138,9 +138,9 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
 
       checkResult <- runCheck check $ do
         let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
-        aEnv <- mkAnalyzeEnv argTys tables
-        let state0 = mkInitialAnalyzeState tables'
-            prop = check ^. ckProp
+            aEnv    = mkAnalyzeEnv argTys tables
+            state0  = mkInitialAnalyzeState tables'
+            prop    = check ^. ckProp
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do
@@ -180,8 +180,8 @@ checkFunctionBody tables Nothing body argTys nodeNames =
 
       checkResult <- runProvable $ do
         let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
-        aEnv <- mkAnalyzeEnv argTys tables
-        let state0 = mkInitialAnalyzeState tables'
+            aEnv    = mkAnalyzeEnv argTys tables
+            state0  = mkInitialAnalyzeState tables'
 
             go :: Analyze AVal -> Symbolic (S Bool)
             go act = do

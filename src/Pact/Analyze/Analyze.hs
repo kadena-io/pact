@@ -40,14 +40,13 @@ import           Data.Maybe                (catMaybes)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
                                             EqSymbolic ((./=), (.==)), HasKind,
-                                            Mergeable (symbolicMerge),
+                                            Int64, Mergeable (symbolicMerge),
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
-                                            SymWord (exists_, forall_, free_, literal),
+                                            SymWord (exists_, forall_, literal),
                                             Symbolic, constrain, false,
-                                            mkSFunArray, sBool, sDiv, sInt64,
-                                            sInteger, sMod, sString, symbolic,
+                                            mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
@@ -403,53 +402,48 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-allocateArgs :: [(Text, Pact.Type Pact.UserType)] -> Symbolic (Map Text AVal)
-allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
-    let name' = T.unpack name
-    var <- case ty of
-      TyPrim TyInteger -> mkAVal . sansProv <$> sInteger name'
-      TyPrim TyBool    -> mkAVal . sansProv <$> sBool name'
-      TyPrim TyDecimal -> mkAVal . sansProv <$> sDecimal name'
-      TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
-      TyPrim TyString  -> mkAVal . sansProv <$> sString name'
-      TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
-      TyPrim TyKeySet  -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV KeySet))
+mkArgs :: [(Text, Pact.Type Pact.UserType)] -> Map Text AVal
+mkArgs argTys = Map.fromList $ argTys <&> \(name, ty) ->
+  let name' = T.unpack name
+      var = case ty of
+              TyPrim TyInteger -> mkAVal . sansProv $ (uninterpret name' :: (SBV Integer))
+              TyPrim TyBool    -> mkAVal . sansProv $ (uninterpret name' :: (SBV Bool))
+              TyPrim TyDecimal -> mkAVal . sansProv $ (uninterpret name' :: (SBV Decimal))
+              TyPrim TyTime    -> mkAVal . sansProv $ (uninterpret name' :: (SBV Int64))
+              TyPrim TyString  -> mkAVal . sansProv $ (uninterpret name' :: (SBV String))
+              TyUser _         -> mkAVal . sansProv $ (uninterpret name' :: (SBV UserType))
+              TyPrim TyKeySet  -> mkAVal . sansProv $ (uninterpret name' :: (SBV KeySet))
 
-      -- TODO
-      TyPrim TyValue   -> error "unimplemented type analysis"
-      TyAny            -> error "unimplemented type analysis"
-      TyVar _v         -> error "unimplemented type analysis"
-      TyList _         -> error "unimplemented type analysis"
-      TySchema _ _     -> error "unimplemented type analysis"
-      TyFun _          -> error "unimplemented type analysis"
-    pure (name, var)
-
-  where
-    sDecimal :: String -> Symbolic (SBV Decimal)
-    sDecimal = symbolic
+              -- TODO
+              TyPrim TyValue   -> error "unimplemented type analysis"
+              TyAny            -> error "unimplemented type analysis"
+              TyVar _v         -> error "unimplemented type analysis"
+              TyList _         -> error "unimplemented type analysis"
+              TySchema _ _     -> error "unimplemented type analysis"
+              TyFun _          -> error "unimplemented type analysis"
+  in (name, var)
 
 mkAnalyzeEnv
   :: [(Text, Pact.Type Pact.UserType)]
   -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
-  -> Symbolic AnalyzeEnv
-mkAnalyzeEnv argTys tables = do
-  args        <- allocateArgs argTys
-
-  let keySets'    = mkFreeArray "keySets"
+  -> AnalyzeEnv
+mkAnalyzeEnv argTys tables =
+  let args        = mkArgs argTys
+      keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
-  pure $ foldr
-    (\(tableName, _ut, someInvariants) env -> foldr
-      (\(colName, invariant) env' ->
-        let tableName' = TableName (T.unpack tableName)
-            colName'   = ColumnName (T.unpack colName)
-        in env' & invariants . at (tableName', colName') ?~ invariant
-      )
-      env
-      someInvariants
-    )
-    (AnalyzeEnv args keySets' keySetAuths Map.empty)
-    tables
+  in foldr
+       (\(tableName, _ut, someInvariants) env -> foldr
+         (\(colName, invariant) env' ->
+           let tableName' = TableName (T.unpack tableName)
+               colName'   = ColumnName (T.unpack colName)
+           in env' & invariants . at (tableName', colName') ?~ invariant
+         )
+         env
+         someInvariants
+       )
+       (AnalyzeEnv args keySets' keySetAuths Map.empty)
+       tables
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
