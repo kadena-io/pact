@@ -85,7 +85,9 @@ in
            ["result" "dist" "dist-ghcjs" ".git"]))
         ./.;
     };
-
+    tools = ghc: [
+      pkgs.z3
+    ];
     shells = {
       ghc = ["pact"];
       # ghcjs = ["pact"];
