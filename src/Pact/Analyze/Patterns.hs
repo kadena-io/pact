@@ -89,6 +89,24 @@ pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
 
+pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
+pattern AST_Format str vars <-
+  App _node (NativeFunc "format") [str, List _ vars]
+
+pattern AST_FormatTime :: forall a. AST a -> AST a -> AST a
+pattern AST_FormatTime str time <-
+  App _node (NativeFunc "format-time") [str, time]
+
+pattern AST_Time :: forall a. AST a -> AST a
+pattern AST_Time timeStr <- App _node (NativeFunc "time") [timeStr]
+
+pattern AST_ParseTime :: forall a. AST a -> AST a -> AST a
+pattern AST_ParseTime formatStr timeStr <-
+  App _node (NativeFunc "parse-time") [formatStr, timeStr]
+
+pattern AST_Hash :: forall a. AST a -> AST a
+pattern AST_Hash val <- App _node (NativeFunc "hash") [val]
+
 pattern AST_AddTime :: forall a. AST a -> AST a -> AST a
 pattern AST_AddTime time seconds <- App _ (NativeFunc "add-time") [time, seconds]
 

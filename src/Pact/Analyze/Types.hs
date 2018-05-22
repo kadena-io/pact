@@ -11,9 +11,10 @@
 
 module Pact.Analyze.Types where
 
-import           Control.Lens       (Iso, Lens', both, from, iso, lens,
-                                     makeLenses, over, to, (%~), (&), (^.))
+import           Control.Lens       (Iso, Iso', Lens', both, from, iso, lens,
+                                     makeLenses, over, view, (%~), (&))
 import           Data.Aeson         (FromJSON, ToJSON)
+import           Data.AffineSpace   ((.-.), (.+^))
 import           Data.Data          (Data)
 import qualified Data.Decimal       as Decimal
 import           Data.Map.Strict    (Map)
@@ -35,8 +36,7 @@ import qualified Data.Set           as Set
 import           Data.String        (IsString (..))
 import           Data.Text          (Text)
 import qualified Data.Text          as T
-import           Data.Thyme         (UTCTime, microseconds, toModifiedJulianDay,
-                                     _utctDay, _utctDayTime)
+import           Data.Thyme         (UTCTime, microseconds)
 import           Data.Typeable      ((:~:) (Refl), Typeable, eqT)
 
 import           Pact.Types.Util    (AsString)
@@ -128,10 +128,13 @@ type Decimal = AlgReal
 type Time = Int64
 
 mkTime :: UTCTime -> Time
-mkTime utct
-  = ((utct ^. _utctDay . to toModifiedJulianDay . to fromIntegral)
-    * (1000000 * 60 * 60 * 24))
-  + (utct ^. _utctDayTime . microseconds)
+mkTime utct = view microseconds (utct .-. toEnum 0)
+
+unMkTime :: Time -> UTCTime
+unMkTime time = toEnum 0 .+^ view (from microseconds) time
+
+timeIso :: Iso' UTCTime Time
+timeIso = iso mkTime unMkTime
 
 data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)

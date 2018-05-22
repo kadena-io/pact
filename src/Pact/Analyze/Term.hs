@@ -110,6 +110,11 @@ data Term ret where
 
   PactVersion     :: Term String
 
+  Format          :: Term String         -> [ETerm]     -> Term String
+  FormatTime      :: Term String         -> Term Time   -> Term String
+  ParseTime       :: Maybe (Term String) -> Term String -> Term Time
+  Hash            :: ETerm                              -> Term String
+
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
 
