@@ -251,6 +251,29 @@ translateNode astNode = case astNode of
     ETerm condTerm TBool <- translateNode cond
     pure $ ETerm (Enforce condTerm) TBool
 
+  AST_Format formatStr vars -> do
+    ETerm formatStr' TStr <- translateNode formatStr
+    vars' <- for vars translateNode
+    pure $ ETerm (Format formatStr' vars') TStr
+
+  AST_FormatTime formatStr time -> do
+    ETerm formatStr' TStr <- translateNode formatStr
+    ETerm time' TTime     <- translateNode time
+    pure $ ETerm (FormatTime formatStr' time') TStr
+
+  AST_ParseTime formatStr timeStr -> do
+    ETerm formatStr' TStr <- translateNode formatStr
+    ETerm timeStr' TStr   <- translateNode timeStr
+    pure $ ETerm (ParseTime (Just formatStr') timeStr') TTime
+
+  AST_Time timeStr -> do
+    ETerm timeStr' TStr <- translateNode timeStr
+    pure $ ETerm (ParseTime Nothing timeStr') TTime
+
+  AST_Hash val -> do
+    val' <- translateNode val
+    pure $ ETerm (Hash val') TStr
+
   AST_ReadKeyset nameA -> do
     ETerm nameT TStr <- translateNode nameA
     return $ ETerm (ReadKeySet nameT) TKeySet

@@ -31,7 +31,9 @@ import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
 import           Control.Monad.State       (MonadState)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Writer      (MonadWriter (tell))
-import           Data.Foldable             (foldrM)
+import qualified Data.Aeson                as Aeson
+import           Data.ByteString.Lazy      (toStrict)
+import           Data.Foldable             (foldl', foldrM)
 import           Data.Functor.Identity     (Identity (Identity))
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
@@ -45,17 +47,21 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_, literal),
-                                            Symbolic, constrain, false,
+                                            Symbolic, constrain, false, ite,
                                             mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
 import           Data.String               (IsString (fromString))
-import           Data.Text                 (Text)
+import           Data.Text                 (Text, pack)
 import qualified Data.Text                 as T
+import           Data.Text.Encoding        (encodeUtf8)
+import           Data.Thyme                (formatTime, parseTime)
 import           Data.Traversable          (for)
+import           System.Locale
 
+import qualified Pact.Types.Hash           as Pact
 import           Pact.Types.Runtime        (Arg (Arg), PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
                                             Type (TyAny, TyFun, TyList, TyPrim, TySchema, TyUser, TyVar),
                                             tShow)
@@ -1152,11 +1158,98 @@ analyzeTerm = \case
 
   PactVersion -> pure $ literalS $ T.unpack pactVersion
 
+  Format formatStr args -> do
+    formatStr' <- analyze formatStr
+    args' <- for args $ \case
+      ETerm str TStr   -> Left          <$> analyze str
+      ETerm int TInt   -> Right . Left  <$> analyze int
+      ETerm bool TBool -> Right . Right <$> analyze bool
+      _                -> throwError "We can only analyze calls to `format` formatting {string,integer,bool}"
+    case unliteralS formatStr' of
+      Nothing -> throwError ""
+      Just concreteStr -> case format concreteStr args' of
+        Left err -> throwError err
+        Right tm -> pure tm
+
+  FormatTime formatStr time -> do
+    formatStr' <- analyze formatStr
+    time'      <- analyze time
+    case (unliteralS formatStr', unliteralS time') of
+      (Just formatStr'', Just time'') -> pure $ literalS $
+        formatTime defaultTimeLocale formatStr'' (unMkTime time'')
+      _ -> throwError "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
+
+  ParseTime mFormatStr timeStr -> do
+    formatStr' <- case mFormatStr of
+      Just formatStr -> analyze formatStr
+      Nothing        -> pure $ literalS Pact.simpleISO8601
+    timeStr'   <- analyze timeStr
+    case (unliteralS formatStr', unliteralS timeStr') of
+      (Just formatStr'', Just timeStr'') ->
+        case parseTime defaultTimeLocale formatStr'' timeStr'' of
+          Nothing   -> succeeds .= false >> pure 0
+          Just time -> pure $ literalS $ mkTime time
+      _ -> throwError "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
+
+  Hash value -> do
+    let sHash = literalS . T.unpack . Pact.asString . Pact.hash
+        notStaticErr :: AnalyzeFailure
+        notStaticErr = "We can only analyze calls to `hash` with statically determined contents"
+    case value of
+      -- Note that strings are hashed in a different way from the other types
+      ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
+        Nothing  -> throwError notStaticErr
+        Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
+
+      -- Everything else is hashed by first converting it to JSON:
+      ETerm tm TInt -> analyze tm <&> unliteralS >>= \case
+        Nothing  -> throwError notStaticErr
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode int
+      ETerm tm TBool -> analyze tm <&> unliteralS >>= \case
+        Nothing   -> throwError notStaticErr
+        Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
+
+      -- In theory we should be able to analyze decimals -- we just need to be
+      -- able to convert them back into Decimal.Decimal decimals (from SBV's
+      -- Real representation). This is probably possible if we think about it
+      -- hard enough.
+      ETerm _ TDecimal -> throwError "We can't yet analyze calls to `hash` on decimals"
+
+      ETerm _ _        -> throwError "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      EObject _ _      -> throwError "We can't yet analyze calls to `hash on objects"
+
   n -> throwError $ UnhandledTerm $ tShow n
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
+-- For now we only allow these three types to be formatted.
+--
+-- Formatting behavior is not well specified. Its behavior on these types is
+-- easy to infer from examples in the docs. We would also like to be able to
+-- format decimals, but that's a little harder (we could still make it work).
+-- Behavior on structured data is not specified.
+type Formattable = Either (S String) (Either (S Integer) (S Bool))
+
+-- This definition was taken from Pact.Native, then modified to be symbolic
+format :: String -> [Formattable] -> Either AnalyzeFailure (S String)
+format s tms = do
+  -- TODO: don't convert to Text and back. splitOn is provided by both the
+  -- split and MissingH packages.
+  let parts = literalS . T.unpack <$> T.splitOn "{}" (pack s)
+      plen = length parts
+      rep = \case
+        Left  str          -> str
+        Right (Right bool) -> ite (_sSbv bool) "true" "false"
+        Right (Left int)   -> sansProv (SBV.natToStr (_sSbv int))
+  if plen == 1
+  then Right (literalS s)
+  else if plen - length tms > 1
+       then Left "format: not enough arguments for template"
+       else Right $ foldl'
+              (\r (e, t) -> r .++ rep e .++ t)
+              (head parts)
+              (zip tms (tail parts))
 
 checkInvariantsHeld :: Query (S Bool)
 checkInvariantsHeld = do

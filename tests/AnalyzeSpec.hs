@@ -886,3 +886,77 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid Success
 
+  describe "format-time / parse-time" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (let* ((time1in  "2016-09-12")
+                     (time1    (parse-time "%F" time1in))
+                     (time1out (format-time "%F" time1))
+                     (time2in  "2016-07-22T11:26:35Z")
+                     (time2    (time time2in))
+                     (time2out (format-time "%Y-%m-%dT%H:%M:%SZ" time2)))
+                (enforce (= time1in time1out))
+                (enforce (= time2in time2out)))
+
+                (enforce
+                  (= (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+                     "2016-07-23T13:30:45+00:00"))
+                (enforce
+                  (= (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+                     "Sat, 23 Jul 2016 13:30:45 UTC"))
+                ; XXX we somehow lose the subseconds here
+                (enforce
+                  (= (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+                     "2016-07-23 13:30:45.001002"))
+                     )
+          |]
+    expectPass code $ Valid Success
+
+  describe "format" $ do
+    let code =
+          [text|
+            (defun test:bool (str:string)
+              (enforce (= (format "{}-{}" ["a" "z"]) "a-z"))
+              (enforce (= (format "{}/{}" [11 26]) "11/26"))
+              (enforce (= (format "{} or {}" [true false]) "true or false"))
+
+              (enforce (= (format "{}" [str]) str))
+            )
+          |]
+    expectPass code $ Valid Success
+
+  describe "hash" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce (=
+                (hash "hello")
+                "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"))
+
+              (enforce (=
+                (hash (- 2 1))
+                "1ced8f5be2db23a6513eba4d819c73806424748a7bc6fa0d792cc1c7d1775a9778e894aa91413f6eb79ad5ae2f871eafcc78797e4c82af6d1cbfb1a294a10d10"))
+
+              (enforce (=
+                (hash (or true false))
+                "5c07e85b3afb949077f2fa42181bb0498f5945f2086d37df5676ebf424ec137d0c21292c943098e22914cdca350e9140d185ca1b2b2bf0522acfcdde09b395dd"))
+
+              (enforce (=
+                (hash (and true false))
+                "625ad9c6965af1a145e3c7514065eab913702c615a8fc9f4699767684f9e97e65dd50f715eae7fdbceee39a03cecf29d5f6a7e79e6a802244b65f6f915283491"))
+
+
+              ; TODO:
+              ; (enforce (=
+              ;   (hash 3.14)
+              ;   "dee8179a1755a745174f334ddc81ade0cf3e2d0bdfd1170cc42c1a1d1d0b16f9bfab86592e9ad31123ce9d470f6aa9388cc2a4f9cda1eb7328ae0a7e26cd450e"))
+
+              ; TODO:
+              ; (enforce (=
+              ;   (hash { 'foo: 1 })
+              ;   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"))
+            )
+          |]
+    expectPass code $ Valid Success
+
