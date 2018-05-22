@@ -787,7 +787,7 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
   foldrM
     (\fieldName rest -> do
       val <- getObjVal fieldName
-      pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
+      pure $ ite (colName .== literalS fieldName) val rest
     )
     firstVal
     relevantFields'
