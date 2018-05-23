@@ -720,6 +720,10 @@ spec = describe "analyze" $ do
                   (= (add-time (time "2016-07-22T12:00:00Z") (minutes 1.5))
                      (time "2016-07-22T12:01:30Z"))
                   "1.5 minutes later")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.001002 seconds later")
               ))
           |]
     in expectPass code $ Valid $ bnot Abort
@@ -905,7 +909,6 @@ spec = describe "analyze" $ do
                 (enforce
                   (= (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
                      "Sat, 23 Jul 2016 13:30:45 UTC"))
-                ; XXX we somehow lose the subseconds here
                 (enforce
                   (= (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
                      "2016-07-23 13:30:45.001002"))
