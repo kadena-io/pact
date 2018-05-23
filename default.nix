@@ -1,7 +1,8 @@
-{ rpRef ? "ea3c9a1536a987916502701fb6d319a880fdec96", rpSha ?  "0339ds5xa4ymc7xs8nzpa4mvm09lzscisdgpdfc6rykwhbgw9w2a" }:
+{ rpRef ? "80236ad3769602813d1c963e2bd90edd3147734b", rpSha ?  "13l46z12i1bdwl9w76vl0cw860syvjkm8a4zgc0610f98h18dqh1" }:
 
 let rp = (import <nixpkgs> {}).fetchFromGitHub {
-           owner = "mightybyte";
+           # This repo gives us toolOverrides
+           owner = "adetokunbo";
            repo = "reflex-platform";
            rev = rpRef;
            sha256 = rpSha;
@@ -13,6 +14,7 @@ in
     overrides = self: super:
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
        in {
+            pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
             aeson = self.callHackage "aeson" "1.1.2.0" {};
             blake2 = guardGhcjs super.blake2;
             haskeline = guardGhcjs super.haskeline;
@@ -85,9 +87,9 @@ in
            ["result" "dist" "dist-ghcjs" ".git"]))
         ./.;
     };
-    tools = ghc: [
-      pkgs.z3
-    ];
+    toolOverrides = ghc: super: {
+      z3 = pkgs.z3;
+    };
     shells = {
       ghc = ["pact"];
       # ghcjs = ["pact"];
