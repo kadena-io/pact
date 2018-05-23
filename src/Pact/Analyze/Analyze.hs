@@ -45,7 +45,7 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_, literal),
-                                            Symbolic, constrain, false,
+                                            Symbolic, constrain, false, ite,
                                             mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
@@ -278,22 +278,22 @@ mkFreeArray = mkSFunArray . uninterpret
 
 mkSymbolicCells :: [(Text, Pact.UserType)] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
-
   where
     cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _) ->
-      let fields' = Map.fromList $
+      let fields'  = Map.fromList $
             map (\(Arg argName ty _i) -> (argName, ty)) fields
+          tabName' = T.unpack tabName
 
-      in (TableName (T.unpack tabName), mkCells fields')
+      in (TableName tabName', mkCells tabName' fields')
 
-    mkCells :: Map Text (Pact.Type Pact.UserType) -> SymbolicCells
-    mkCells fields = ifoldl
+    mkCells :: String -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
+    mkCells tableName fields = ifoldl
       (\colName cells ty ->
         let colName' = T.unpack colName
             col      = ColumnName colName'
 
             mkArray :: forall a. HasKind a => SFunArray RowKey a
-            mkArray  = mkFreeArray colName'
+            mkArray  = mkFreeArray $ "cells_" ++ tableName ++ "_" ++ colName'
 
         in cells & case ty of
              TyPrim TyInteger -> scIntValues.at col     ?~ mkArray
@@ -390,19 +390,19 @@ newtype Query a
 -- Returns problematic argument name, or arg map
 mkArgs :: [(Text, Pact.Type Pact.UserType)] -> Either Text (Map Text AVal)
 mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) ->
-  let name' = T.unpack name
+  let symName = "arg_" ++ T.unpack name
 
       wrap :: SBV a -> Either e AVal
       wrap = Right . mkAVal . sansProv
 
       eVar = case ty of
-               TyPrim TyInteger -> wrap (uninterpret name' :: (SBV Integer))
-               TyPrim TyBool    -> wrap (uninterpret name' :: (SBV Bool))
-               TyPrim TyDecimal -> wrap (uninterpret name' :: (SBV Decimal))
-               TyPrim TyTime    -> wrap (uninterpret name' :: (SBV Int64))
-               TyPrim TyString  -> wrap (uninterpret name' :: (SBV String))
-               TyUser _         -> wrap (uninterpret name' :: (SBV UserType))
-               TyPrim TyKeySet  -> wrap (uninterpret name' :: (SBV KeySet))
+               TyPrim TyInteger -> wrap (uninterpret symName :: (SBV Integer))
+               TyPrim TyBool    -> wrap (uninterpret symName :: (SBV Bool))
+               TyPrim TyDecimal -> wrap (uninterpret symName :: (SBV Decimal))
+               TyPrim TyTime    -> wrap (uninterpret symName :: (SBV Int64))
+               TyPrim TyString  -> wrap (uninterpret symName :: (SBV String))
+               TyUser _         -> wrap (uninterpret symName :: (SBV UserType))
+               TyPrim TyKeySet  -> wrap (uninterpret symName :: (SBV KeySet))
 
                TyPrim TyValue   -> Left name
                TyAny            -> Left name
