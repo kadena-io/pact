@@ -50,12 +50,26 @@ matrix:
   # - env: BUILD=cabal GHCVER=7.8.4 CABALVER=1.18 HAPPYVER=1.19.5 ALEXVER=3.1.7
   #   compiler: ": #GHC 7.8.4"
   #   addons: {apt: {packages: [cabal-install-1.18,ghc-7.8.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=7.10.3 CABALVER=1.22 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 7.10.3"
-  #   addons: {apt: {packages: [cabal-install-1.22,ghc-7.10.3,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=8.0.1 CABALVER=1.24 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 8.0.1"
-  #   addons: {apt: {packages: [cabal-install-1.24,ghc-8.0.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+  - env: BUILD=cabal GHCVER=8.0.1 CABALVER=1.24 HAPPYVER=1.19.5 ALEXVER=3.1.7 FLAGS=-fthyme
+    compiler: ": #GHC 8.0.1"
+    addons: {apt: {packages: [cabal-install-1.24,ghc-8.0.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+  - env: BUILD=cabal GHCVER=8.0.1 CABALVER=1.24 HAPPYVER=1.19.5 ALEXVER=3.1.7 FLAGS=-f-thyme
+    compiler: ": #GHC 8.0.1"
+    addons: {apt: {packages: [cabal-install-1.24,ghc-8.0.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+
+  - env: BUILD=cabal GHCVER=8.2.2 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.17 FLAGS=-fthyme
+    compiler: ": #GHC 8.2.2"
+    addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+  - env: BUILD=cabal GHCVER=8.2.2 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.17 FLAGS=-f-thyme
+    compiler: ": #GHC 8.2.2"
+    addons: {apt: {packages: [cabal-install-2.0,ghc-8.2.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+
+  - env: BUILD=cabal GHCVER=8.4.2 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7 FLAGS=-fthyme
+    compiler: ": #GHC 8.4.2"
+    addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+  - env: BUILD=cabal GHCVER=8.4.2 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7 FLAGS=-f-thyme
+    compiler: ": #GHC 8.4.2"
+    addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
 
   # Build with the newest GHC and cabal-install. This is an accepted failure,
   # see below.
@@ -205,9 +219,9 @@ install:
       travis_retry cabal update
 
       # Get the list of packages from the stack.yaml file
-      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
+      # PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
-      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $FLAGS
       ;;
   esac
   set +ex
@@ -221,7 +235,7 @@ script:
       stack exec -- bench +RTS -K1k
       ;;
     cabal)
-      cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $FLAGS
 
       ORIGDIR=$(pwd)
       for dir in $PACKAGES

@@ -18,14 +18,13 @@ module Pact.Native.Time
 
 import Control.Monad
 import Prelude
-import Data.Thyme
 import Data.Decimal
-import System.Locale
 import Data.AffineSpace
 import Data.Semigroup
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
+import Pact.Types.Time
 
 
 timedoc :: Text

@@ -36,7 +36,6 @@ import qualified Data.Yaml as Y
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Text (Text,pack)
 import Data.Text.Encoding
-import Data.Thyme.Clock
 import qualified Data.Set as S
 
 import Crypto.Ed25519.Pure
@@ -47,6 +46,7 @@ import Pact.Types.Command
 import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.API
+import Pact.Types.Time
 
 
 data KeyPair = KeyPair {
