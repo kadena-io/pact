@@ -948,7 +948,7 @@ analyzeRoundingLikeOp1 op x = do
   x' <- analyze x
   pure $ case op of
     -- The only SReal -> SInteger conversion function that sbv provides is
-    -- sRealToSInteger, which computes the floor.
+    -- sRealToSInteger (which realToIntegerS wraps), which computes the floor.
     Floor   -> realToIntegerS x'
 
     -- For ceiling we use the identity:
@@ -992,6 +992,25 @@ analyzeRoundingLikeOp2 op x precision = do
   x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: term Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
 
+-- Note [Time Representation]
+--
+-- Pact uses the Thyme library (UTCTime) to represent times. Thyme internally
+-- uses a 64-bit count of microseconds since the MJD epoch. So, our symbolic
+-- representation is naturally a 64-bit integer.
+--
+-- The effect from a Pact-user's point of view is that we stores 6 digits to
+-- the right of the decimal point in times (even though we don't print
+-- sub-second precision by default...).
+--
+-- pact> (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+-- "2016-07-23T13:30:45Z"
+-- pact> (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+--          (add-time (time "2016-07-23T13:30:45Z") 0.0010021))
+-- true
+-- pact> (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+--          (add-time (time "2016-07-23T13:30:45Z") 0.001003))
+-- false
+
 analyzeIntAddTime
   :: Analyzer m term
   => term Time
@@ -1000,7 +1019,9 @@ analyzeIntAddTime
 analyzeIntAddTime timeT secsT = do
   time <- analyze timeT
   secs <- analyze secsT
-  pure $ time + fromIntegralS secs
+  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- [Time Representation]).
+  pure $ time + fromIntegralS (secs * 1000000)
 
 analyzeDecAddTime
   :: Analyzer m term
@@ -1011,7 +1032,12 @@ analyzeDecAddTime timeT secsT = do
   time <- analyze timeT
   secs <- analyze secsT
   if isConcreteS secs
-  then pure $ time + fromIntegralS (realToIntegerS secs)
+  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- [Time Representation]).
+  --
+  -- TODO(joel): This is really a `floor`. Are there cases where Pact rounds
+  -- up?
+  then pure $ time + fromIntegralS (realToIntegerS (secs * 1000000))
   else throwError $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 

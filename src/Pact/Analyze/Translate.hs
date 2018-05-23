@@ -293,22 +293,22 @@ translateNode astNode = case astNode of
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
     case daysTy of
-      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60 * 24) days') TInt
-      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60 * 24) days') TDecimal
+      TInt     -> pure $ ETerm (IntArithOp Mul (60 * 60 * 24) days') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul (60 * 60 * 24) days') TDecimal
       _        -> throwError $ BadTimeType astNode
 
   AST_Hours hours -> do
     ETerm hours' hoursTy <- translateNode hours
     case hoursTy of
-      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60 * 60) hours') TInt
-      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60 * 60) hours') TDecimal
+      TInt     -> pure $ ETerm (IntArithOp Mul (60 * 60) hours') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul (60 * 60) hours') TDecimal
       _        -> throwError $ BadTimeType astNode
 
   AST_Minutes minutes -> do
     ETerm minutes' minutesTy <- translateNode minutes
     case minutesTy of
-      TInt     -> pure $ ETerm (IntArithOp Mul (1000000 * 60) minutes') TInt
-      TDecimal -> pure $ ETerm (DecArithOp Mul (1000000 * 60) minutes') TDecimal
+      TInt     -> pure $ ETerm (IntArithOp Mul 60 minutes') TInt
+      TDecimal -> pure $ ETerm (DecArithOp Mul 60 minutes') TDecimal
       _        -> throwError $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
