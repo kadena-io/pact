@@ -71,16 +71,18 @@ data ContMsg = ContMsg
   , _cmStep :: !Int
   , _cmRollback :: !Bool
   , _cmResume :: !(Maybe Value)
+  , _cmData :: !(Maybe Value)
   } deriving (Eq,Show,Generic)
 
 instance NFData ContMsg
 instance FromJSON ContMsg where
     parseJSON =
         withObject "ContMsg" $ \o ->
-            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback" <*> o .:? "resume"
+            ContMsg <$> o .: "txid" <*> o .: "step" <*> o .: "rollback" <*> o .:? "resume" <*> o .:? "data"
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
     toJSON ContMsg{..} = object $
       [ "txid" .= _cmTxId, "step" .= _cmStep, "rollback" .= _cmRollback] ++
-      maybe [] (\c -> ["resume" .= c]) _cmResume
+      (maybe [] (\c -> ["resume" .= c]) _cmResume) ++
+      (maybe [] (\d -> ["data" .= d]) _cmData)
