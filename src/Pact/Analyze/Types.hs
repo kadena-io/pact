@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -364,7 +365,7 @@ data Prop a where
   -- Abstraction
   Forall           :: Text -> Ty -> Prop a -> Prop a
   Exists           :: Text -> Ty -> Prop a -> Prop a
-  PVar             :: Text ->                 Prop a
+  PVar             :: Maybe Int  -> Text   -> Prop a
 
   -- Object ops
   -- Note: PAt is the one property we can't yet parse because of the EType it
@@ -391,7 +392,12 @@ data Prop a where
   PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
 
   -- Comparison
-  PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
+  PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
+  PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
+  PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
+  PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
+  PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
+  PKeySetComparison  :: ComparisonOp -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -417,19 +423,28 @@ data Prop a where
   KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
+pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
+pattern PAnd a b = PLogical AndOp [a, b]
+
+pattern POr :: Prop Bool -> Prop Bool -> Prop Bool
+pattern POr a b = PLogical OrOp [a, b]
+
+pattern PNot :: Prop Bool -> Prop Bool
+pattern PNot a = PLogical NotOp [a]
+
 -- NOTE: PComparison's existential currently prevents this:
---deriving instance Eq a => Eq (Prop a)
+deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
 instance IsString (Prop a) where
-  fromString = PVar . fromString
+  fromString = PVar Nothing . fromString
 
 instance Boolean (Prop Bool) where
   true   = PLit True
   false  = PLit False
   bnot p = PLogical NotOp [p]
-  p1 &&& p2 = PLogical AndOp [p1, p2]
-  p1 ||| p2 = PLogical OrOp [p1, p2]
+  p1 &&& p2 = PAnd p1 p2
+  p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop Integer) where
   fromInteger = PLit . fromInteger

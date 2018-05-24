@@ -6,10 +6,13 @@
 module Pact.Analyze.Parse
   ( expToCheck
   , expToInvariant
+  , prenexConvert
   ) where
 
 import           Control.Lens         ((^.))
+import           Control.Monad.Gen    -- (Gen)
 import           Data.Foldable        (asum, find)
+import           Data.Semigroup       ((<>))
 import qualified Data.Set             as Set
 import           Data.Text            (Text)
 import qualified Data.Text            as T
@@ -19,6 +22,7 @@ import           Data.Type.Equality   ((:~:) (Refl))
 import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
                                        TKeySet, TableName)
 import           Pact.Types.Typecheck (UserType)
+import           Pact.Types.Util      (tShow)
 
 import           Pact.Analyze.Types
 
@@ -63,14 +67,14 @@ mkK = KeySetName
 
 expToPropRowKey :: Exp -> Maybe (Prop RowKey)
 expToPropRowKey = \case
-  EAtom' "result" -> Just (PVar "result")
-  EAtom' var      -> Just (PVar var)
+  EAtom' "result" -> Just (PVar Nothing "result")
+  EAtom' var      -> Just (PVar Nothing var)
   _               -> Nothing
 
 expToPropInteger :: Exp -> Maybe (Prop Integer)
 expToPropInteger = \case
-  EAtom' "result"                    -> Just (PVar "result")
-  EAtom' var                         -> Just (PVar var)
+  EAtom' "result"                    -> Just (PVar Nothing "result")
+  EAtom' var                         -> Just (PVar Nothing var)
   ELiteral (LInteger i) _            -> Just (PLit i)
   EList' [EAtom' "string-length", a] -> PStrLength <$> expToPropString a
 
@@ -101,8 +105,8 @@ expToPropInteger = \case
 
 expToPropString :: Exp -> Maybe (Prop String)
 expToPropString = \case
-  EAtom' "result"        -> Just (PVar "result")
-  EAtom' var             -> Just (PVar var)
+  EAtom' "result"        -> Just (PVar Nothing "result")
+  EAtom' var             -> Just (PVar Nothing var)
   ELiteral (LString s) _ -> Just (PLit (T.unpack s))
   EList' [EAtom' "+", a, b]
     -> PStrConcat <$> expToPropString a <*> expToPropString b
@@ -110,8 +114,8 @@ expToPropString = \case
 
 expToPropDecimal :: Exp -> Maybe (Prop Decimal)
 expToPropDecimal = \case
-  EAtom' "result"         -> Just (PVar "result")
-  EAtom' var              -> Just (PVar var)
+  EAtom' "result"         -> Just (PVar Nothing "result")
+  EAtom' var              -> Just (PVar Nothing var)
   ELiteral (LDecimal d) _ -> Just (PLit (mkDecimal d))
   EList' [EAtom' op, a, b]
     | op `Set.member` Set.fromList [ "round", "ceiling", "floor" ] -> do
@@ -141,8 +145,8 @@ expToPropDecimal = \case
 
 expToPropTime :: Exp -> Maybe (Prop Time)
 expToPropTime = \case
-  EAtom' "result"      -> Just (PVar "result")
-  EAtom' var           -> Just (PVar var)
+  EAtom' "result"      -> Just (PVar Nothing "result")
+  EAtom' var           -> Just (PVar Nothing var)
   ELiteral (LTime t) _ -> Just (PLit (mkTime t))
   EList' [EAtom' "add-time", a, b] -> do
     a' <- expToPropTime a
@@ -154,13 +158,13 @@ expToPropTime = \case
 
 expToPropKeySet :: Exp -> Maybe (Prop KeySet)
 expToPropKeySet = \case
-  EAtom' "result" -> Just (PVar "result")
-  EAtom' var      -> Just (PVar var)
+  EAtom' "result" -> Just (PVar Nothing "result")
+  EAtom' var      -> Just (PVar Nothing var)
   _               -> Nothing
 
 expToPropBool :: Exp -> Maybe (Prop Bool)
 expToPropBool = \case
-  EAtom' "result"      -> Just (PVar "result")
+  EAtom' "result"      -> Just (PVar Nothing "result")
   ELiteral (LBool b) _ -> Just (PLit b)
 
   EList' [EAtom' "when", a, b] -> do
@@ -188,9 +192,9 @@ expToPropBool = \case
 
   -- TODO: in the future, these should be moved into a stdlib:
   EList' [EAtom' "column-conserve", ELitString tab, ELitString col]
-    -> Just (PComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
+    -> Just (PIntegerComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
   EList' [EAtom' "column-increase", ELitString tab, ELitString col]
-    -> Just (PComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
+    -> Just (PIntegerComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
 
   --
   -- TODO: add support for DecColumnDelta. but we need type info...
@@ -224,15 +228,15 @@ expToPropBool = \case
   EList' [EAtom' op, a, b] -> do
     op' <- textToComparisonOp op
     asum
-      [ PComparison op' <$> expToPropInteger a <*> expToPropInteger b
-      , PComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
-      , PComparison op' <$> expToPropTime a    <*> expToPropTime b
-      , PComparison op' <$> expToPropBool a    <*> expToPropBool b
-      , PComparison op' <$> expToPropString a  <*> expToPropString b
-      , PComparison op' <$> expToPropKeySet a  <*> expToPropKeySet b
+      [ PIntegerComparison op' <$> expToPropInteger a <*> expToPropInteger b
+      , PDecimalComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
+      , PTimeComparison op'    <$> expToPropTime a    <*> expToPropTime b
+      , PBoolComparison op'    <$> expToPropBool a    <*> expToPropBool b
+      , PStringComparison op'  <$> expToPropString a  <*> expToPropString b
+      , PKeySetComparison op'  <$> expToPropKeySet a  <*> expToPropKeySet b
       ]
 
-  EAtom' var           -> Just (PVar var)
+  EAtom' var           -> Just (PVar Nothing var)
 
   _ -> Nothing
 
@@ -247,10 +251,72 @@ expToPropBool = \case
           (nameTy:) <$> propBindings exps
         propBindings _ = Nothing
 
+type UniqueId = Int
+
+data ForallExists
+  = Forall' Text UniqueId Ty
+  | Exists' Text UniqueId Ty
+
+flipQuantifier :: ForallExists -> ForallExists
+flipQuantifier = \case
+  Forall' name uid ty -> Exists' name uid ty
+  Exists' name uid ty -> Forall' name uid ty
+
+rename :: Maybe UniqueId -> Text -> Prop Bool -> Prop Bool
+
+floatQuantifiers :: Prop Bool -> Gen UniqueId ([ForallExists], Prop Bool)
+floatQuantifiers p = case p of
+  Forall name ty prop -> do
+    (qs, prop') <- floatQuantifiers prop
+    uid <- gen
+    pure (Forall' name uid ty:qs, prop')
+  Exists name ty prop -> do
+    (qs, prop') <- floatQuantifiers prop
+    uid <- gen
+    pure (Exists' name uid ty:qs, prop')
+  PAnd a b -> do
+    (aQs, a') <- floatQuantifiers a
+    (bQs, b') <- floatQuantifiers b
+    pure (aQs ++ bQs, PAnd a' b')
+  POr a b -> do
+    (aQs, a') <- floatQuantifiers a
+    (bQs, b') <- floatQuantifiers b
+    pure (aQs ++ bQs, POr a' b')
+  PNot a -> do
+    (qs, a') <- floatQuantifiers a
+    pure $ (flipQuantifier <$> qs, PNot a')
+  PVar _ v -> pure ([], p)
+
+reassembleFloated :: [ForallExists] -> Prop Bool -> Prop Bool
+reassembleFloated qs prop =
+  let getName = \case
+        Forall' name _ _ -> name
+        Exists' name _ _ -> name
+      getUid = \case
+        Forall' _ uid _ -> uid
+        Exists' _ uid _ -> uid
+      quantifiedNames = getName <$> qs
+      nameIsUnique name
+        = length (filter (== name) quantifiedNames) == 1
+      getUniqueName quantifier =
+        let name = getName quantifier
+        in if nameIsUnique name
+           then name
+           else name <> tShow (getUid quantifier)
+      mkQuantifiedProp q acc = case q of
+        Forall' name uid ty -> Forall (getUniqueName q) ty acc
+        Exists' name uid ty -> Exists (getUniqueName q) ty acc
+  in foldr mkQuantifiedProp prop qs
+
+prenexConvert :: Prop Bool -> Prop Bool
+prenexConvert prop =
+  let (quantifiers, prop') = runGen $ floatQuantifiers prop
+  in reassembleFloated quantifiers prop'
+
 -- Note: the one property this can't parse yet is PAt because it includes an
 -- EType.
 expToCheck :: Exp -> Maybe Check
-expToCheck body = Valid <$> expToPropBool body
+expToCheck body = Valid . prenexConvert <$> expToPropBool body
 
 -- We pass in the type of the variable so we can use it to construct
 -- `SomeSchemaInvariant` when we encounter a var.

@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TypeApplications  #-}
@@ -17,14 +18,18 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           NeatInterpolation          (text)
 import           Test.Hspec                 (Spec, describe, it, runIO,
-                                             shouldSatisfy)
+                                             shouldBe, shouldSatisfy)
 
 import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
                                              initReplState, rEnv)
 import           Pact.Types.Runtime         (eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Parse         (prenexConvert)
 import           Pact.Analyze.Types
+
+pattern PVar' :: Text -> Prop t
+pattern PVar' a = PVar Nothing a
 
 wrap :: Text -> Text
 wrap code =
@@ -75,10 +80,10 @@ expectFail code check = do
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = PComparison Eq 0 $ IntColumnDelta tn cn
+intConserves tn cn = PIntegerComparison Eq 0 $ IntColumnDelta tn cn
 
 decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = PComparison Eq 0 $ DecColumnDelta tn cn
+decConserves tn cn = PDecimalComparison Eq 0 $ DecColumnDelta tn cn
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -88,7 +93,7 @@ spec = describe "analyze" $ do
             (defun test:integer (x:integer)
               (* x -1))
           |]
-    expectPass code $ Valid $ PComparison Eq
+    expectPass code $ Valid $ PIntegerComparison Eq
       (PIntArithOp Mul (-1) "x")
       (Result :: Prop Integer)
 
@@ -103,7 +108,7 @@ spec = describe "analyze" $ do
             (defun test:integer (a:integer)
               (helper a))
           |]
-    expectPass code $ Valid $ PComparison Gte (Result :: Prop Integer) 10
+    expectPass code $ Valid $ PIntegerComparison Gte (Result :: Prop Integer) 10
 
   describe "success" $ do
     let code =
@@ -174,10 +179,10 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ (PComparison Gt "x" (0 :: Prop Integer)) ==>
+    expectPass code $ Valid $ (PIntegerComparison Gt "x" (0 :: Prop Integer)) ==>
       Success
-    expectPass code $ Valid $ (PComparison Eq "x" (5 :: Prop Integer)) ==>
-      Success &&& (PComparison Eq (Result :: Prop Bool) true)
+    expectPass code $ Valid $ (PIntegerComparison Eq "x" (5 :: Prop Integer)) ==>
+      Success &&& (PBoolComparison Eq (Result :: Prop Bool) true)
 
   describe "read-keyset.equality" $ do
     let code =
@@ -239,15 +244,15 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row")
+      RowWrite "tokens" (PVar' "row")
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row")
+      RowRead "tokens" (PVar' "row")
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowEnforced "tokens" "ks" (PVar "row")
+      RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-      bnot $ RowEnforced "tokens" "ks" (PVar "row")
+      bnot $ RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      RowRead "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" "acct"
 
   describe "enforce-keyset.row-level.read.syntax" $ do
@@ -288,10 +293,10 @@ spec = describe "analyze" $ do
                 bal))
           |]
     expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks1" (PVar "row")
+      RowRead "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks1" (PVar' "row")
     -- Using the other keyset:
     expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks2" (PVar "row")
+      RowRead "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks2" (PVar' "row")
 
   describe "enforce-keyset.row-level.write" $ do
     let code =
@@ -312,19 +317,19 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row")
+      RowWrite "tokens" (PVar' "row")
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row")
+      RowRead "tokens" (PVar' "row")
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowEnforced "tokens" "ks" (PVar "row")
+      RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-      bnot $ RowEnforced "tokens" "ks" (PVar "row")
+      bnot $ RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      RowRead "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks" (PVar' "row")
     expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ RowWrite "tokens" (PVar "acct")
-                          ==> RowEnforced "tokens" "ks" (PVar "acct")
+      RowWrite "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks" (PVar' "row")
+    expectPass code $ Valid $ RowWrite "tokens" (PVar' "acct")
+                          ==> RowEnforced "tokens" "ks" (PVar' "acct")
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
@@ -350,9 +355,9 @@ spec = describe "analyze" $ do
     -- invalidation:
     --
     expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      RowRead "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks" (PVar' "row")
     expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+      RowWrite "tokens" (PVar' "row") ==> RowEnforced "tokens" "ks" (PVar' "row")
 
   describe "table-read.multiple-read" $
     let code =
@@ -411,7 +416,7 @@ spec = describe "analyze" $ do
     let schema = Schema $
           Map.fromList [("name", EType TStr), ("balance", EType TInt)]
         ety    = EType TStr
-    expectPass code $ Valid $ PComparison Eq
+    expectPass code $ Valid $ PStringComparison Eq
       (PAt schema (PLit "name") Result ety)
       (PLit "stu" :: Prop String)
 
@@ -560,6 +565,10 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defun test:string ()
+              (""
+                (properties [
+                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balanc row) 3)))
+                ]))
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
 
@@ -568,15 +577,15 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      PComparison Neq (PVar "row" :: Prop RowKey) (PLit "bob") ==>
-        PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 0
+    -- expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
+    --   PStringComparison Neq (PVar' "row" :: Prop RowKey) (PLit "bob") ==>
+    --     PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar' "row")) 0
 
     expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 3
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar' "row")) 3
 
     expectPass code $ Valid $
-      PComparison Eq (IntCellDelta "accounts" "balance" (PLit "bob")) 3
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PLit "bob")) 3
 
   describe "with-read" $ do
     let code =
@@ -980,3 +989,56 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success
 
+  -- Right now this test is not super useful because we'd like to inspect the
+  -- invariants individually. Unfortunately we can't do that without a refactor
+  -- of the testing system. As-is, this at leasts tests that we're allowd to
+  -- relate two columns.
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema central-bank-schema
+              ("central bank"
+                (invariants
+                  [ (= 1000000 (+ reserve circulation))
+                    (>= reserve 0)
+                    (>= circulation 0)
+                  ]))
+              reserve:integer
+              circulation:integer)
+            (deftable central-bank-table:{central-bank-schema})
+
+            (defun issue (amt:integer)
+              "Issue some amount of currency"
+
+              (let*
+                ((before (read central-bank-table "singleton"))
+                 (new-reserve     (- (at 'reserve before)     amt))
+                 (new-circulation (+ (at 'circulation before) amt))
+                )
+
+                (enforce (> amt 0) "")
+                (enforce (>= new-reserve 0) "")
+
+                (update central-bank-table "singleton" {
+                  'reserve: new-reserve,
+                  'circulation: new-circulation
+                })))
+          |]
+
+    expectPass code $ Satisfiable Abort
+    expectPass code $ Satisfiable Success
+
+  describe "prenex conversion" $ do
+    let a = PVar' "a"
+        b = PVar' "b"
+
+    it "1" $
+      prenexConvert (bnot (Forall "a" (Ty (Rep @RowKey)) a))
+      `shouldBe`
+      Exists "a" (Ty (Rep @RowKey)) (bnot a)
+
+    -- XXX need to point variables at unique ids
+    it "2" $
+      prenexConvert (POr (Forall "a" (Ty (Rep @RowKey)) a) (Forall "a" (Ty (Rep @RowKey)) a))
+      `shouldBe`
+      Forall "a0" (Ty (Rep @RowKey)) (Forall "a1" (Ty (Rep @RowKey)) (POr a a))

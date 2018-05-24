@@ -1356,7 +1356,7 @@ checkSchemaInvariant = \case
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar name) = lookupObj name
+analyzePropO (PVar _uid name) = lookupObj name -- XXX is this okay?
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
@@ -1383,7 +1383,7 @@ analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
 analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (PVar name) = lookupVal name
+analyzeProp (PVar _uid name) = lookupVal name -- XXX is this okay?
 
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
@@ -1403,7 +1403,12 @@ analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 analyzeProp (PIntAddTime time secs) = analyzeIntAddTime time secs
 analyzeProp (PDecAddTime time secs) = analyzeDecAddTime time secs
 
-analyzeProp (PComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PIntegerComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PKeySetComparison op x y)  = analyzeComparisonOp op x y
 
 -- Boolean ops
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
