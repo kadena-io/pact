@@ -980,3 +980,41 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success
 
+  -- Right now this test is not super useful because we'd like to inspect the
+  -- invariants individually. Unfortunately we can't do that without a refactor
+  -- of the testing system. As-is, this at leasts tests that we're allowd to
+  -- relate two columns.
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema central-bank-schema
+              ("central bank"
+                (invariants
+                  [ (= 1000000 (+ reserve circulation))
+                    (>= reserve 0)
+                    (>= circulation 0)
+                  ]))
+              reserve:integer
+              circulation:integer)
+            (deftable central-bank-table:{central-bank-schema})
+
+            (defun issue (amt:integer)
+              "Issue some amount of currency"
+
+              (let*
+                ((before (read central-bank-table "singleton"))
+                 (new-reserve     (- (at 'reserve before)     amt))
+                 (new-circulation (+ (at 'circulation before) amt))
+                )
+
+                (enforce (> amt 0) "")
+                (enforce (>= new-reserve 0) "")
+
+                (update central-bank-table "singleton" {
+                  'reserve: new-reserve,
+                  'circulation: new-circulation
+                })))
+          |]
+
+    expectPass code $ Satisfiable Abort
+    expectPass code $ Satisfiable Success
