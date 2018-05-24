@@ -26,12 +26,12 @@ import           Control.Monad.State.Strict (evalStateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (catMaybes, mapMaybe)
+import           Data.Maybe                 (catMaybes, fromMaybe, mapMaybe)
 import           Data.Monoid                ((<>))
 import           Data.SBV                   (Provable, SatResult (SatResult),
                                              Symbolic, ThmResult (ThmResult),
-                                             false, proveWith, sat, verbose, z3,
-                                             (&&&))
+                                             false, proveWith, sat, true,
+                                             verbose, z3, (&&&))
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
 import           Data.Set                   (Set)
@@ -129,7 +129,7 @@ checkFunctionBody
   -> [(Text, Pact.Type TC.UserType)]
   -> Map Node Text
   -> IO CheckResult
-checkFunctionBody tables (Just check) body argTys nodeNames =
+checkFunctionBody tables mCheck body argTys nodeNames =
   case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
     Left reason ->
       pure $ Left $ TranslateFailure reason
@@ -141,6 +141,7 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
       Right args -> do
         compileFailureVar <- newEmptyMVar
 
+        let check = fromMaybe (Valid true) mCheck
         checkResult <- runCheck check $ do
           let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
               aEnv    = mkAnalyzeEnv args tables
@@ -161,49 +162,6 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                           <*> checkInvariantsHeld
                     runConstraints constraints
                     eQuery <- runExceptT $ runReaderT (queryAction qAction) qEnv
-                    case eQuery of
-                      Left cf' -> do
-                        liftIO $ putMVar compileFailureVar cf'
-                        pure false
-                      Right symAction -> pure symAction
-
-          case tm of
-            ETerm   body'' _ -> go . fmap mkAVal . analyzeTerm $ body''
-            EObject body'' _ -> go . fmap AnObj . analyzeTermO $ body''
-
-        mVarVal <- tryTakeMVar compileFailureVar
-        pure $ case mVarVal of
-          Nothing -> checkResult
-          Just cf -> Left (AnalyzeFailure cf)
-
-checkFunctionBody tables Nothing body argTys nodeNames =
-  case runExcept (evalStateT (runReaderT (unTranslateM (translateBody body)) nodeNames) 0) of
-    Left reason ->
-      pure $ Left $ TranslateFailure reason
-
-    Right tm -> case mkArgs argTys of
-      Left unsupportedArg ->
-        pure $ Left $ AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg
-
-      Right args -> do
-        compileFailureVar <- newEmptyMVar
-
-        checkResult <- runProvable $ do
-          let tables' = tables & traverse %~ (\(a, b, _c) -> (a, b))
-              aEnv    = mkAnalyzeEnv args tables
-              state0  = mkInitialAnalyzeState tables'
-
-              go :: Analyze AVal -> Symbolic (S Bool)
-              go act = do
-                let eAnalysis = runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0
-                case eAnalysis of
-                  Left cf -> do
-                    liftIO $ putMVar compileFailureVar cf
-                    pure false
-                  Right (propResult, state1, constraints) -> do
-                    let qEnv = mkQueryEnv aEnv state1 propResult
-                    runConstraints constraints
-                    eQuery <- runExceptT $ runReaderT (queryAction checkInvariantsHeld) qEnv
                     case eQuery of
                       Left cf' -> do
                         liftIO $ putMVar compileFailureVar cf'
@@ -245,16 +203,6 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
 
 checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
-runProvable :: Provable a => a -> IO CheckResult
-runProvable provable = do
-  ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
-  pure $ case smtRes of
-    SBV.Unsatisfiable{}           -> Right ProvedTheorem
-    SBV.Satisfiable _config model -> Left $ Invalid model
-    SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason    -> Left $ Unknown reason
-    SBV.ProofError _config strs   -> Left $ ProofError strs
-
 -- This does not use the underlying property -- this merely dispatches to
 -- sat/prove appropriately, and accordingly translates sat/unsat to
 -- semantically-meaningful results.
@@ -267,7 +215,14 @@ runCheck (Satisfiable _prop) provable = do
     SBV.SatExtField _config model -> Left $ SatExtensionField model
     SBV.Unknown _config reason    -> Left $ Unknown reason
     SBV.ProofError _config strs   -> Left $ ProofError strs
-runCheck (Valid _prop) provable = runProvable provable
+runCheck (Valid _prop) provable = do
+  ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
+  pure $ case smtRes of
+    SBV.Unsatisfiable{}           -> Right ProvedTheorem
+    SBV.Satisfiable _config model -> Left $ Invalid model
+    SBV.SatExtField _config model -> Left $ SatExtensionField model
+    SBV.Unknown _config reason    -> Left $ Unknown reason
+    SBV.ProofError _config strs   -> Left $ ProofError strs
 
 failedTcOrAnalyze
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
