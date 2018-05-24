@@ -267,14 +267,7 @@ runCheck (Satisfiable _prop) provable = do
     SBV.SatExtField _config model -> Left $ SatExtensionField model
     SBV.Unknown _config reason    -> Left $ Unknown reason
     SBV.ProofError _config strs   -> Left $ ProofError strs
-runCheck (Valid _prop) provable = do
-  ThmResult smtRes <- proveWith (z3 {verbose=False}) provable
-  pure $ case smtRes of
-    SBV.Unsatisfiable{}           -> Right ProvedTheorem
-    SBV.Satisfiable _config model -> Left $ Invalid model
-    SBV.SatExtField _config model -> Left $ SatExtensionField model
-    SBV.Unknown _config reason    -> Left $ Unknown reason
-    SBV.ProofError _config strs   -> Left $ ProofError strs
+runCheck (Valid _prop) provable = runProvable provable
 
 failedTcOrAnalyze
   :: [(Text, TC.UserType, [(Text, SchemaInvariant Bool)])]
