@@ -946,16 +946,20 @@ analyzeRoundingLikeOp1 op x = do
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
     -- nearest even.
-    Round   ->
-      let wholePart      = realToIntegerS x'
-          wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-          isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x'
+    Round   -> banker'sMethod x'
 
-      in iteS isExactlyHalf
-        -- nearest even number!
-        (wholePart + oneIfS wholePartIsOdd)
-        -- otherwise we take the floor of `x + 0.5`
-        (realToIntegerS (x' + 0.5))
+-- Round a real exactly between two integers (_.5) to the nearest even
+banker'sMethod :: S Decimal -> S Integer
+banker'sMethod x =
+  let wholePart      = realToIntegerS x
+      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
+
+  in iteS isExactlyHalf
+    -- nearest even number!
+    (wholePart + oneIfS wholePartIsOdd)
+    -- otherwise we take the floor of `x + 0.5`
+    (realToIntegerS (x + 0.5))
 
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.
@@ -1022,10 +1026,7 @@ analyzeDecAddTime timeT secsT = do
   if isConcreteS secs
   -- Convert seconds to milliseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
-  --
-  -- TODO(joel): This is really a `floor`. Are there cases where Pact rounds
-  -- up?
-  then pure $ time + fromIntegralS (realToIntegerS (secs * 1000000))
+  then pure $ time + fromIntegralS (banker'sMethod (secs * 1000000))
   else throwError $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 

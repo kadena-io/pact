@@ -724,6 +724,23 @@ spec = describe "analyze" $ do
                   (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
                      (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
                   "0.001002 seconds later")
+
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010023)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010023 s = 0.001002 s")
+
+                ; Pact rounds tenths of milliseconds using the banker's method
+                ; (same as its treatment of decimals). ie it rounds to the
+                ; nearest even.
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010025)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010025 s = 0.001002 s")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010035)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001004"))
+                  "0.0010035 s = 0.001004 s")
               ))
           |]
     in expectPass code $ Valid $ bnot Abort
