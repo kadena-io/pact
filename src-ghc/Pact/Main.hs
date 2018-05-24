@@ -47,6 +47,8 @@ import Pact.Server.Server
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.IO (stdInput)
 #endif
+import Pact.ReplTools
+import Pact.Repl.Types
 import Pact.Types.Version
 import Pact.ApiReq
 
