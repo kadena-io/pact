@@ -57,6 +57,11 @@ instance ToJSON KeyPair where toJSON = lensyToJSON 3
 instance FromJSON KeyPair where parseJSON = lensyParseJSON 3
 
 data ApiReq = ApiReq {
+  _ylType :: Maybe String,
+  _ylTxId :: Maybe TxId,
+  _ylStep :: Maybe Int,
+  _ylRollback :: Maybe Bool,
+  _ylResume :: Maybe Value,
   _ylData :: Maybe Value,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
@@ -71,17 +76,26 @@ instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 apiReq :: FilePath -> Bool -> IO ()
 apiReq fp local = do
-  (_,exec) <- mkApiReqExec fp
+  (_,exec) <- mkApiReq fp
   if local then
     BSL.putStrLn $ encode exec
     else
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReqExec :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
-mkApiReqExec fp = do
+mkApiReq :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReq fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
+  case _ylType of
+    Just "exec" -> mkApiReqExec ar fp
+    Just "cont" -> mkApiReqCont ar fp
+    Nothing     -> dieAR "Expected a 'type' entry"
+    _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
+
+
+mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqExec ar@ApiReq{..} fp = do
   oldCwd <- getCurrentDirectory
   liftIO $ setCurrentDirectory (takeDirectory fp)
   (code,cdata) <- (`finally` liftIO (setCurrentDirectory oldCwd)) $ do
@@ -96,13 +110,12 @@ mkApiReqExec fp = do
                           eitherDecode
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-    return (code,cdata)
+    return (code,cdata)  
   addy <- case (_ylTo,_ylFrom) of
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
   ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
-
 
 mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy kps ridm = do
@@ -113,6 +126,9 @@ mkExec code mdata addy kps ridm = do
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
+
+mkApiReqCont :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqCont ar@ApiReq{..} fp = undefined
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
