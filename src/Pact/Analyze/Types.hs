@@ -349,6 +349,8 @@ instance Eq EType where
   EObjectTy a == EObjectTy b = a == b
   _ == _ = False
 
+type UniqueId = Int
+
 data Prop a where
   -- Literals
   PLit             :: SymWord a => a   -> Prop a
@@ -363,9 +365,9 @@ data Prop a where
   Result           :: Prop a
 
   -- Abstraction
-  Forall           :: Text -> Ty -> Prop a -> Prop a
-  Exists           :: Text -> Ty -> Prop a -> Prop a
-  PVar             :: Maybe Int  -> Text   -> Prop a
+  Forall           :: Int  -> Text -> Ty -> Prop a -> Prop a
+  Exists           :: Int  -> Text -> Ty -> Prop a -> Prop a
+  PVar             :: Int  -> Text                 -> Prop a
 
   -- Object ops
   -- Note: PAt is the one property we can't yet parse because of the EType it
@@ -435,9 +437,6 @@ pattern PNot a = PLogical NotOp [a]
 -- NOTE: PComparison's existential currently prevents this:
 deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
-
-instance IsString (Prop a) where
-  fromString = PVar Nothing . fromString
 
 instance Boolean (Prop Bool) where
   true   = PLit True

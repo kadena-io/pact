@@ -1356,16 +1356,16 @@ checkSchemaInvariant = \case
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar _uid name) = lookupObj name -- XXX is this okay?
+analyzePropO (PVar uid name) = lookupObj name -- XXX is this okay?
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
-analyzePropO (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzePropO (Forall uid name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p -- XXX use uid
+analyzePropO (Exists uid name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
+  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p -- XXX use uid
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1377,13 +1377,13 @@ analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
 
 -- Abstraction
-analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzeProp (Forall uid name (Ty (Rep :: Rep ty)) p) = do -- XXX use uid
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
+analyzeProp (Exists uid name (Ty (Rep :: Rep ty)) p) = do -- XXX use uid
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (PVar _uid name) = lookupVal name -- XXX is this okay?
+analyzeProp (PVar uid name) = lookupVal name -- XXX is this okay?
 
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
