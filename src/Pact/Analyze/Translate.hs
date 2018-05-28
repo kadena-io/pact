@@ -10,13 +10,13 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, ix, view, (%=), (<&>), (?~),
-                                             (^.), (^?), _3)
+import           Control.Lens               (at, view, (<&>), (?~), (^.),
+                                             (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
+import           Control.Monad.Gen          (GenT, MonadGen(gen))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Control.Monad.State.Strict (MonadState (..), StateT)
 import           Data.Foldable              (foldl')
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
@@ -56,6 +56,7 @@ data TranslateFailure
   | BadNegationType (AST Node)
   | BadTimeType (AST Node)
   | NonConstKey (AST Node)
+  | FailedVarLookup Text
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving Show
@@ -78,6 +79,7 @@ describeTranslateFailure = \case
   BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
   BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
+  FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   where
     tShow :: Show a => a -> Text
@@ -90,27 +92,22 @@ instance Monoid TranslateFailure where
   mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
   mappend x y = AlternativeFailures [x, y]
 
--- next fresh variable ID
-newtype FreshId
-  = FreshId Int
-  deriving (Enum, Num)
-
 newtype TranslateM a
-  = TranslateM { unTranslateM :: ReaderT (Map Node Text) (StateT FreshId (Except TranslateFailure)) a }
+  = TranslateM { unTranslateM :: ReaderT (Map Node (Text, UniqueId)) (GenT UniqueId (Except TranslateFailure)) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node Text), MonadState FreshId,
-    MonadError TranslateFailure)
+    MonadReader (Map Node (Text, UniqueId)), MonadError TranslateFailure, MonadGen UniqueId)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
 
-genFresh :: Text -> TranslateM (Text, Term a)
-genFresh baseName = do
-  varId <- get
-  id %= succ
-  -- similar to how let-bound variables are named e.g. "let4_x":
-  let varName = "fresh" <> T.pack (show (fromEnum varId)) <> "_" <> baseName
-  return (varName, Var varName)
+genUid :: Node -> Text -> (UniqueId -> TranslateM a) -> TranslateM a
+genUid varNode varName action = do
+  uid <- gen
+  local (at varNode ?~ (varName, uid)) (action uid)
+
+-- Map.union is left-biased. The more explicit name makes this extra clear.
+unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
+unionPreferring = Map.union
 
 translateType :: Node -> TranslateM EType
 translateType node = go $ _aTy node
@@ -166,25 +163,27 @@ translateBinding
   -> ETerm
   -> TranslateM ETerm
 translateBinding bindingsA schema bodyA rhsT = do
-  (bindings :: [(String, EType, (Node, Text))]) <- for bindingsA $
+  (bindings :: [(String, EType, (Node, Text, UniqueId))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
       varType <- translateType varNode
+      uid     <- gen
       case colAst of
         AST_StringLit colName ->
-          pure (T.unpack colName, varType, (varNode, varName))
+          pure (T.unpack colName, varType, (varNode, varName, uid))
         _ ->
           throwError $ NonStringLitInBinding colAst
 
-  (freshName, freshVar :: Term Object) <- genFresh "binding"
+  bindingId <- gen
+  let freshVar = Var "binding" bindingId
 
   let translateLet :: Term a -> Term a
-      translateLet innerBody = Let freshName rhsT $
+      translateLet innerBody = Let "binding" bindingId rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
-          (\body (colName, varType, (_varNode, varName)) ->
+          (\body (colName, varType, (_varNode, varName, uid)) ->
             let colTerm = lit colName
-            in Let varName
+            in Let varName uid
               (case varType of
                  EType ty ->
                    ETerm   (At schema colTerm freshVar varType) ty
@@ -194,9 +193,11 @@ translateBinding bindingsA schema bodyA rhsT = do
           innerBody
           bindings
 
-      nodeNames = Map.fromList $ view _3 <$> bindings
+      nodeToNameUid = Map.fromList $
+        (\(_, _, (node, name, uid)) -> (node, (name, uid))) <$> bindings
 
-  mapETerm translateLet <$> local (nodeNames <>) (translateBody bodyA)
+  mapETerm translateLet <$>
+    local (unionPreferring nodeToNameUid) (translateBody bodyA)
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = case astNode of
@@ -205,7 +206,7 @@ translateNode astNode = case astNode of
   AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
     let varName = varNode ^. aId.tiName
-    local (at varNode ?~ varName) $ do
+    genUid varNode varName $ \uid -> do
       --
       -- TODO: do we only want to allow subsequent bindings to reference
       --       earlier ones if we know it's let* rather than let? or has this
@@ -214,17 +215,17 @@ translateNode astNode = case astNode of
       -- XXX allow objects here
       body' <- translateNode $ AST_Let node bindingsRest body
       pure $ case body' of
-        ETerm   bodyTm bodyTy -> ETerm   (Let varName rhsETerm bodyTm) bodyTy
-        EObject bodyTm bodyTy -> EObject (Let varName rhsETerm bodyTm) bodyTy
+        ETerm   bodyTm bodyTy -> ETerm   (Let varName uid rhsETerm bodyTm) bodyTy
+        EObject bodyTm bodyTy -> EObject (Let varName uid rhsETerm bodyTm) bodyTy
 
   AST_InlinedApp body -> translateBody body
 
   AST_Var node -> do
-    varName <- view (ix node)
-    ty <- translateType node
+    Just (varName, uid) <- view (at node)
+    ty      <- translateType node
     pure $ case ty of
-      EType ty'        -> ETerm (Var varName) ty'
-      EObjectTy schema -> EObject (Var varName) schema
+      EType ty'        -> ETerm (Var varName uid) ty'
+      EObjectTy schema -> EObject (Var varName uid) schema
 
   -- Int
   AST_NegativeLit l -> case l of
@@ -240,11 +241,11 @@ translateNode astNode = case astNode of
     LTime t    -> pure $ ETerm (lit (mkTime t)) TTime
 
   AST_NegativeVar node -> do
-    name <- view (ix node)
+    Just (name, uid)     <- view (at node)
     EType ty <- translateType node
     case ty of
-      TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name)) TInt)
-      TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name)) TDecimal)
+      TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name uid)) TInt)
+      TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name uid)) TDecimal)
       _        -> throwError $ BadNegationType astNode
 
   AST_Enforce _ cond -> do

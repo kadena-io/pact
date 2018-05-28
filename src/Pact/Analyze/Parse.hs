@@ -77,7 +77,7 @@ mkC = ColumnName . T.unpack
 mkK :: Text -> KeySetName
 mkK = KeySetName
 
-type PropParse = ReaderT (Map Text Int) (GenT Int Maybe)
+type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
 
 noParse :: PropParse a
 noParse = lift (lift Nothing)

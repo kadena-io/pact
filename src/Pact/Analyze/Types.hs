@@ -349,7 +349,27 @@ instance Eq EType where
   EObjectTy a == EObjectTy b = a == b
   _ == _ = False
 
-type UniqueId = Int
+-- | Unique variable IDs
+--
+-- Unique IDs are used to represent variables in both the term and property
+-- languages. (They should also be used for the schema invariant language).
+--
+-- These IDs were first introduced to cope with the prenex normalization
+-- transform, where we lift quantifiers all the way to the outside of a
+-- property, which can easily lead to name confusion (see commit 1f6201).
+--
+-- But they also serve as a principled connection between the term and property
+-- languages, since properties can refer to term variables.
+--
+-- In translation, unique IDs are generated in three places:
+--
+-- 1) @checkTopFunction@ generates a unique id for each function argument
+-- 2) @genUid@ generates an id for a let-binding
+-- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
+--    var
+newtype UniqueId
+  = UniqueId Int
+  deriving (Show, Eq, Enum, Num, Ord)
 
 data Prop a where
   -- Literals
@@ -365,9 +385,9 @@ data Prop a where
   Result           :: Prop a
 
   -- Abstraction
-  Forall           :: Int  -> Text -> Ty -> Prop a -> Prop a
-  Exists           :: Int  -> Text -> Ty -> Prop a -> Prop a
-  PVar             :: Int  -> Text                 -> Prop a
+  Forall           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  Exists           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  PVar             :: UniqueId -> Text                 -> Prop a
 
   -- Object ops
   -- Note: PAt is the one property we can't yet parse because of the EType it
