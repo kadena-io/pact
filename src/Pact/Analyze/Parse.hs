@@ -259,6 +259,7 @@ expToPropBool = \case
       , PTimeComparison op'    <$> expToPropTime a    <*> expToPropTime b
       , PBoolComparison op'    <$> expToPropBool a    <*> expToPropBool b
       , PStringComparison op'  <$> expToPropString a  <*> expToPropString b
+      -- TODO: how to disambiguate row keys from strings?
       , PKeySetComparison op'  <$> expToPropKeySet a  <*> expToPropKeySet b
       ]
 

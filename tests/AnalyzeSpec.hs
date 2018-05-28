@@ -574,9 +574,12 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    -- expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
-    --   PStringComparison Neq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
-    --     PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
+
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+      PRowKeyComparison Neq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
+        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
 
     expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3

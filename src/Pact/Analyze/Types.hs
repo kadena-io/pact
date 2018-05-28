@@ -419,6 +419,7 @@ data Prop a where
   PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
   PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
   PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
+  PRowKeyComparison  :: ComparisonOp -> Prop RowKey  -> Prop RowKey  -> Prop Bool
   PKeySetComparison  :: ComparisonOp -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
