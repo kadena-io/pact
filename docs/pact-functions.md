@@ -461,15 +461,21 @@ Get metadata for KEYSET
 *module*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', and 'code' fields.
+Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. 
+```lisp
+(describe-module 'my-module)
+```
 
 
 ### describe-table {#describe-table}
 
-*table*&nbsp;`string` *&rarr;*&nbsp;`value`
+*table*&nbsp;`table:<{row}>` *&rarr;*&nbsp;`value`
 
 
-Get metadata for TABLE
+Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. 
+```lisp
+(describe-table accounts)
+```
 
 
 ### insert {#insert}
@@ -539,7 +545,7 @@ Select full rows or COLUMNS from table by applying WHERE to each row to get a bo
 
 Return all txid values greater than or equal to TXID in TABLE. 
 ```lisp
-(txids 'accounts 123849535)
+(txids accounts 123849535)
 ```
 
 
