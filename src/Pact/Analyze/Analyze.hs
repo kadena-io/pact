@@ -314,7 +314,11 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
              TyPrim TyString  -> scStringValues.at col  ?~ mkArray
              TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
-             _                -> id -- error (show ty)
+             --
+             -- TODO: we should Left here. this means that mkSymbolicCells and
+             --       mkInitialAnalyzeState should both return Either.
+             --
+             _                -> id
       )
       (SymbolicCells mempty mempty mempty mempty mempty mempty)
       fields
