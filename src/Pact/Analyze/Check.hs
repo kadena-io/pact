@@ -3,7 +3,6 @@
 {-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE Rank2Types         #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Pact.Analyze.Check
   ( verifyModule
@@ -60,25 +59,23 @@ import           Pact.Analyze.Term
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
-data CheckSuccess where
-  SatisfiedProperty :: SBVI.SMTModel -> CheckSuccess
-  ProvedTheorem     ::                  CheckSuccess
+data CheckSuccess
+  = SatisfiedProperty SBVI.SMTModel
+  | ProvedTheorem
+  deriving Show
 
-deriving instance Show CheckSuccess
+data CheckFailure
+  = Invalid SBVI.SMTModel
+  | Unsatisfiable
+  | Unknown String
 
-data CheckFailure where
-  Invalid       :: SBVI.SMTModel -> CheckFailure
-  Unsatisfiable ::                  CheckFailure
-  Unknown       :: String        -> CheckFailure
+  | TypecheckFailure (Set TC.Failure)
+  | AnalyzeFailure AnalyzeFailure
+  | TranslateFailure TranslateFailure
+  | PropertyParseError Exp
 
-  TypecheckFailure   :: Set TC.Failure   -> CheckFailure
-  AnalyzeFailure     :: AnalyzeFailure   -> CheckFailure
-  TranslateFailure   :: TranslateFailure -> CheckFailure
-  PropertyParseError :: Exp              -> CheckFailure
-
-  CodeCompilationFailed :: String -> CheckFailure
-
-deriving instance Show CheckFailure
+  | CodeCompilationFailed String
+  deriving Show
 
 describeCheckFailure :: CheckFailure -> Text
 describeCheckFailure = \case
