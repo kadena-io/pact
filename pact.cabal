@@ -25,7 +25,8 @@ Flag server
 
 library
 
-  exposed-modules:     Pact.Compile
+  exposed-modules:     Pact.Analyze.PrenexNormalize
+                     , Pact.Compile
                      , Pact.Eval
                      , Pact.Native
                      , Pact.Native.Db

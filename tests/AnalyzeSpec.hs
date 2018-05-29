@@ -20,11 +20,13 @@ import           NeatInterpolation          (text)
 import           Test.Hspec                 (Spec, describe, it, runIO,
                                              shouldBe, shouldSatisfy)
 
+import           Pact.Parse                 (parseExprs)
 import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
                                              initReplState, rEnv)
 import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Parse           (expToProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 
@@ -1124,3 +1126,63 @@ spec = describe "analyze" $ do
       prenexConvert (PAnd (PLit True) (allA0 intTy (PIntegerComparison Gte a0 a0)))
       `shouldBe`
       allA0 intTy (PAnd (PLit True) (PIntegerComparison Gte a0 a0))
+
+  describe "prop parse / typecheck" $ do
+    let textToProp :: Type a -> Text -> Maybe (Prop a)
+        textToProp ty t = case parseExprs t of
+          Right [exp'] -> expToProp ty exp'
+          _            -> Nothing
+
+    it "infers column-delta" $ do
+      textToProp TBool "(> (column-delta 'a 'b) 0)"
+        `shouldBe`
+        Just (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
+
+      textToProp TBool "(> (column-delta 'a 'b) 0.0)"
+        `shouldBe`
+        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+
+      textToProp TBool "(> (column-delta \"a\" \"b\") 0.0)"
+        `shouldBe`
+        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+
+    it "infers +" $ do
+      textToProp TStr "(+ \"a\" \"b\")"
+        `shouldBe`
+        Just (PStrConcat (PLit "a") (PLit "b"))
+
+      textToProp TInt "(+ 0 1)"
+        `shouldBe`
+        Just (PIntArithOp Add 0 1)
+
+      textToProp TDecimal "(+ 0.0 1.0)"
+        `shouldBe`
+        Just (PDecArithOp Add (PLit 0) (PLit 1))
+
+      textToProp TDecimal "(+ 0 1)" `shouldBe` Nothing
+
+    it "infers forall / exists" $ do
+      textToProp TBool "(forall (x:string y:string) (= x y))"
+        `shouldBe`
+        Just
+          (Forall (UniqueId 1) "x" (Ty (Rep @String))
+            (Forall (UniqueId 2) "y" (Ty (Rep @String))
+              (PIntegerComparison Eq
+                (PVar (UniqueId 1) "x")
+                (PVar (UniqueId 2) "y"))))
+
+      textToProp TBool
+        "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
+        `shouldBe`
+        Just (PNot
+          (Exists (UniqueId 1) "row" (Ty (Rep @String))
+            (PIntegerComparison Eq
+              (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
+              2)))
+
+    it "handles special identifiers" $ do
+      textToProp TBool "abort"   `shouldBe` Just Abort
+      textToProp TBool "success" `shouldBe` Just Success
+      textToProp TBool "result"  `shouldBe` Just Result
+      textToProp TInt  "result"  `shouldBe` Just Result
+      textToProp TStr  "result"  `shouldBe` Just Result
