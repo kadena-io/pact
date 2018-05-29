@@ -503,19 +503,18 @@ type Arg
 type Table
   = (Text, TC.UserType, [(Text, SchemaInvariant Bool)])
 
-data Goal where
-  Satisfaction :: Goal -- ^ Find satisfying model
-  Validation   :: Goal -- ^ Prove no invalidating model exists
+data Goal
+  = Satisfaction -- ^ Find satisfying model
+  | Validation   -- ^ Prove no invalidating model exists
 
 deriving instance Eq Goal
 
-data Check where
-  InvariantsHold ::              Check -- valid, assuming success
-  PropertyHolds  :: Prop Bool -> Check -- valid, assuming success
-  Satisfiable    :: Prop Bool -> Check -- sat,   not assuming success
-  Valid          :: Prop Bool -> Check -- valid, not assuming success
-
-deriving instance Show Check
+data Check
+  = InvariantsHold             -- valid, assuming success
+  | PropertyHolds  (Prop Bool) -- valid, assuming success
+  | Satisfiable    (Prop Bool) -- sat,   not assuming success
+  | Valid          (Prop Bool) -- valid, not assuming success
+  deriving Show
 
 checkGoal :: Check -> Goal
 checkGoal InvariantsHold    = Validation
