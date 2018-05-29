@@ -100,20 +100,7 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
-newtype RowKey
-  = RowKey String
-  deriving (Eq, Ord, Show)
-
-instance SymWord RowKey where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (RowKey s) = mkConcreteString s
-  fromCW = wrappedStringFromCW RowKey
-
-instance HasKind RowKey where
-  kindOf _ = KString
-
-instance IsString RowKey where
-  fromString = RowKey
+type RowKey = String
 
 -- We can't use Proxy because deriving Eq doesn't work
 -- We're still 8.0, so we can't use the new TypeRep yet:
@@ -370,11 +357,37 @@ instance Eq EType where
 -- 2) @genUid@ generates an id for a let-binding
 -- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
 --    var
---
--- Additionally, we use id (-1) for the result.
 newtype UniqueId
   = UniqueId Int
   deriving (Show, Eq, Enum, Num, Ord)
+
+-- @PreProp@ stands between @Exp@ and @Prop@.
+--
+-- The conversion from @Exp@ is light, handled in @expToPreProp@.
+data PreProp
+  -- literals
+  = PreIntegerLit Integer
+  | PreStringLit  Text
+  | PreDecimalLit Decimal
+  | PreTimeLit    Time
+  | PreBoolLit    Bool
+
+  -- identifiers
+  | PreAbort
+  | PreSuccess
+  | PreResult
+  | PreVar     UniqueId Text
+
+  -- quantifiers
+  | PreForall UniqueId Text Ty PreProp
+  | PreExists UniqueId Text Ty PreProp
+
+  -- applications
+  | PreApp Text [PreProp]
+
+  -- -- TODO: parse
+  -- | PreAt {- Schema -} PreProp PreProp -- EType
+  deriving (Show, Eq)
 
 data Prop a where
   -- Literals
@@ -460,7 +473,6 @@ pattern POr a b = PLogical OrOp [a, b]
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = PLogical NotOp [a]
 
--- NOTE: PComparison's existential currently prevents this:
 deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 

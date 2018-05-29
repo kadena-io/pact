@@ -53,9 +53,6 @@ instance Float Object where
 instance Float KeySet where
   float p = case p of STANDARD_INSTANCES
 
-instance Float RowKey where
-  float p = case p of STANDARD_INSTANCES
-
 flipQuantifier :: Quantifier -> Quantifier
 flipQuantifier = \case
   Forall' uid name ty -> Exists' uid name ty
