@@ -367,6 +367,8 @@ instance Eq EType where
 -- 2) @genUid@ generates an id for a let-binding
 -- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
 --    var
+--
+-- Additionally, we use id (-1) for the result.
 newtype UniqueId
   = UniqueId Int
   deriving (Show, Eq, Enum, Num, Ord)
