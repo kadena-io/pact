@@ -8,8 +8,13 @@ module Pact.Analyze.Parse
   , expToInvariant
   ) where
 
-import           Control.Lens         ((^.))
+import           Control.Lens         ((^.), at, view)
+import           Control.Monad.Gen    -- (Gen)
+import           Control.Monad.Reader -- ReaderT
+import           Control.Monad.Trans  (lift)
 import           Data.Foldable        (asum, find)
+import           Data.Map             (Map)
+import qualified Data.Map             as Map
 import qualified Data.Set             as Set
 import           Data.Text            (Text)
 import qualified Data.Text            as T
@@ -19,38 +24,49 @@ import           Data.Type.Equality   ((:~:) (Refl))
 import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
                                        TKeySet, TableName)
 import           Pact.Types.Typecheck (UserType)
+-- import           Pact.Types.Util      (tShow)
 
+import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
 
-textToArithOp :: Text -> Maybe ArithOp
-textToArithOp = \case
-  "+"   -> Just Add
-  "-"   -> Just Sub
-  "*"   -> Just Mul
-  "/"   -> Just Div
-  "^"   -> Just Pow
-  "log" -> Just Log
-  _     -> Nothing
+textToArithOp :: Text -> PropParse ArithOp
+textToArithOp = lift . lift . textToArithOp' where
 
-textToUnaryArithOp :: Text -> Maybe UnaryArithOp
-textToUnaryArithOp = \case
-  "-"    -> Just Negate
-  "sqrt" -> Just Sqrt
-  "ln"   -> Just Ln
-  "exp"  -> Just Exp
-  "abs"  -> Just Abs
-  -- explicitly no signum
-  _      -> Nothing
+  textToArithOp' :: Text -> Maybe ArithOp
+  textToArithOp' = \case
+    "+"   -> Just Add
+    "-"   -> Just Sub
+    "*"   -> Just Mul
+    "/"   -> Just Div
+    "^"   -> Just Pow
+    "log" -> Just Log
+    _     -> Nothing
 
-textToComparisonOp :: Text -> Maybe ComparisonOp
-textToComparisonOp = \case
-  ">"  -> Just Gt
-  "<"  -> Just Lt
-  ">=" -> Just Gte
-  "<=" -> Just Lte
-  "="  -> Just Eq
-  "!=" -> Just Neq
-  _    -> Nothing
+textToUnaryArithOp :: Text -> PropParse UnaryArithOp
+textToUnaryArithOp = lift . lift . textToUnaryArithOp' where
+
+  textToUnaryArithOp' :: Text -> Maybe UnaryArithOp
+  textToUnaryArithOp' = \case
+    "-"    -> Just Negate
+    "sqrt" -> Just Sqrt
+    "ln"   -> Just Ln
+    "exp"  -> Just Exp
+    "abs"  -> Just Abs
+    -- explicitly no signum
+    _      -> Nothing
+
+textToComparisonOp :: Text -> PropParse ComparisonOp
+textToComparisonOp = lift . lift . textToComparisonOp' where
+
+  textToComparisonOp' :: Text -> Maybe ComparisonOp
+  textToComparisonOp' = \case
+    ">"  -> Just Gt
+    "<"  -> Just Lt
+    ">=" -> Just Gte
+    "<=" -> Just Lte
+    "="  -> Just Eq
+    "!=" -> Just Neq
+    _    -> Nothing
 
 mkT :: Text -> TableName
 mkT = TableName . T.unpack
@@ -61,17 +77,29 @@ mkC = ColumnName . T.unpack
 mkK :: Text -> KeySetName
 mkK = KeySetName
 
-expToPropRowKey :: Exp -> Maybe (Prop RowKey)
-expToPropRowKey = \case
-  EAtom' "result" -> Just (PVar "result")
-  EAtom' var      -> Just (PVar var)
-  _               -> Nothing
+type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
 
-expToPropInteger :: Exp -> Maybe (Prop Integer)
+noParse :: PropParse a
+noParse = lift (lift Nothing)
+
+mkVar :: Text -> PropParse (Prop a)
+mkVar var = do
+  mUid <- view (at var)
+  case mUid of
+    Nothing  -> noParse
+    Just uid -> pure (PVar uid var)
+
+expToPropRowKey :: Exp -> PropParse (Prop RowKey)
+expToPropRowKey = \case
+  EAtom' "result" -> pure (PVar (-1) "result")
+  EAtom' var      -> mkVar var
+  _               -> noParse
+
+expToPropInteger :: Exp -> PropParse (Prop Integer)
 expToPropInteger = \case
-  EAtom' "result"                    -> Just (PVar "result")
-  EAtom' var                         -> Just (PVar var)
-  ELiteral (LInteger i) _            -> Just (PLit i)
+  EAtom' "result"                    -> pure (PVar (-1) "result")
+  EAtom' var                         -> mkVar var
+  ELiteral (LInteger i) _            -> pure (PLit i)
   EList' [EAtom' "string-length", a] -> PStrLength <$> expToPropString a
 
   EList' [EAtom' "mod", a, b]
@@ -95,24 +123,24 @@ expToPropInteger = \case
     <*> expToPropInteger b
 
   EList' [EAtom' "column-delta", ELitString tab, ELitString col]
-    -> Just (IntColumnDelta (mkT tab) (mkC col))
+    -> pure (IntColumnDelta (mkT tab) (mkC col))
 
-  _ -> Nothing
+  _ -> noParse
 
-expToPropString :: Exp -> Maybe (Prop String)
+expToPropString :: Exp -> PropParse (Prop String)
 expToPropString = \case
-  EAtom' "result"        -> Just (PVar "result")
-  EAtom' var             -> Just (PVar var)
-  ELiteral (LString s) _ -> Just (PLit (T.unpack s))
+  EAtom' "result"        -> pure (PVar (-1) "result")
+  EAtom' var             -> mkVar var
+  ELiteral (LString s) _ -> pure (PLit (T.unpack s))
   EList' [EAtom' "+", a, b]
     -> PStrConcat <$> expToPropString a <*> expToPropString b
-  _ -> Nothing
+  _ -> noParse
 
-expToPropDecimal :: Exp -> Maybe (Prop Decimal)
+expToPropDecimal :: Exp -> PropParse (Prop Decimal)
 expToPropDecimal = \case
-  EAtom' "result"         -> Just (PVar "result")
-  EAtom' var              -> Just (PVar var)
-  ELiteral (LDecimal d) _ -> Just (PLit (mkDecimal d))
+  EAtom' "result"         -> pure (PVar (-1) "result")
+  EAtom' var              -> mkVar var
+  ELiteral (LDecimal d) _ -> pure (PLit (mkDecimal d))
   EList' [EAtom' op, a, b]
     | op `Set.member` Set.fromList [ "round", "ceiling", "floor" ] -> do
     let op' = case op of
@@ -135,33 +163,33 @@ expToPropDecimal = \case
     -> PDecUnaryArithOp <$> textToUnaryArithOp op <*> expToPropDecimal a
 
   EList' [EAtom' "column-delta", ELitString tab, ELitString col]
-    -> Just (DecColumnDelta (mkT tab) (mkC col))
+    -> pure (DecColumnDelta (mkT tab) (mkC col))
 
-  _ -> Nothing
+  _ -> noParse
 
-expToPropTime :: Exp -> Maybe (Prop Time)
+expToPropTime :: Exp -> PropParse (Prop Time)
 expToPropTime = \case
-  EAtom' "result"      -> Just (PVar "result")
-  EAtom' var           -> Just (PVar var)
-  ELiteral (LTime t) _ -> Just (PLit (mkTime t))
+  EAtom' "result"      -> pure (PVar (-1) "result")
+  EAtom' var           -> mkVar var
+  ELiteral (LTime t) _ -> pure (PLit (mkTime t))
   EList' [EAtom' "add-time", a, b] -> do
     a' <- expToPropTime a
     asum
       [ PIntAddTime a' <$> expToPropInteger b
       , PDecAddTime a' <$> expToPropDecimal b
       ]
-  _ -> Nothing
+  _ -> noParse
 
-expToPropKeySet :: Exp -> Maybe (Prop KeySet)
+expToPropKeySet :: Exp -> PropParse (Prop KeySet)
 expToPropKeySet = \case
-  EAtom' "result" -> Just (PVar "result")
-  EAtom' var      -> Just (PVar var)
-  _               -> Nothing
+  EAtom' "result" -> pure (PVar (-1) "result")
+  EAtom' var      -> mkVar var
+  _               -> noParse
 
-expToPropBool :: Exp -> Maybe (Prop Bool)
+expToPropBool :: Exp -> PropParse (Prop Bool)
 expToPropBool = \case
-  EAtom' "result"      -> Just (PVar "result")
-  ELiteral (LBool b) _ -> Just (PLit b)
+  EAtom' "result"      -> pure (PVar (-1) "result")
+  ELiteral (LBool b) _ -> pure (PLit b)
 
   EList' [EAtom' "when", a, b] -> do
     propNotA <- PLogical NotOp <$> traverse expToPropBool [a]
@@ -172,25 +200,25 @@ expToPropBool = \case
   EList' [EAtom' "row-write", ELitString tab, rowKey] ->
     RowWrite (mkT tab) <$> expToPropRowKey rowKey
 
-  EAtom' "abort"   -> Just Abort
-  EAtom' "success" -> Just Success
+  EAtom' "abort"   -> pure Abort
+  EAtom' "success" -> pure Success
 
   EList' [EAtom' "not", a]     -> PLogical NotOp <$> traverse expToPropBool [a]
   EList' [EAtom' "and", a, b]  -> PLogical AndOp <$> traverse expToPropBool [a, b]
   EList' [EAtom' "or", a, b]   -> PLogical OrOp  <$> traverse expToPropBool [a, b]
 
-  EList' [EAtom' "table-write", ELitString tab] -> Just (TableWrite (mkT tab))
-  EList' [EAtom' "table-read", ELitString tab] -> Just (TableRead (mkT tab))
+  EList' [EAtom' "table-write", ELitString tab] -> pure (TableWrite (mkT tab))
+  EList' [EAtom' "table-read", ELitString tab] -> pure (TableRead (mkT tab))
   EList' [EAtom' "column-write", ELitString tab, ELitString col]
-    -> Just (ColumnWrite (mkT tab) (mkC col))
+    -> pure (ColumnWrite (mkT tab) (mkC col))
   EList' [EAtom' "cell-increase", ELitString tab, ELitString col]
-    -> Just (CellIncrease (mkT tab) (mkC col))
+    -> pure (CellIncrease (mkT tab) (mkC col))
 
   -- TODO: in the future, these should be moved into a stdlib:
   EList' [EAtom' "column-conserve", ELitString tab, ELitString col]
-    -> Just (PComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
+    -> pure (PIntegerComparison Eq 0 $ IntColumnDelta (mkT tab) (mkC col))
   EList' [EAtom' "column-increase", ELitString tab, ELitString col]
-    -> Just (PComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
+    -> pure (PIntegerComparison Lt 0 $ IntColumnDelta (mkT tab) (mkC col))
 
   --
   -- TODO: add support for DecColumnDelta. but we need type info...
@@ -198,59 +226,67 @@ expToPropBool = \case
 
   EList' [EAtom' "row-enforced", ELitString tab, ELitString col, body] -> do
     body' <- expToPropRowKey body
-    Just (RowEnforced (mkT tab) (mkC col) body')
+    pure (RowEnforced (mkT tab) (mkC col) body')
 
   EList' [EAtom' "authorized-by", ELitString name]
-    -> Just (KsNameAuthorized (mkK name))
+    -> pure (KsNameAuthorized (mkK name))
 
   EList' [EAtom' "authorized-by", ESymbol name _]
-    -> Just (KsNameAuthorized (mkK name))
+    -> pure (KsNameAuthorized (mkK name))
 
   EList' [EAtom' "forall", EList' bindings, body] -> do
     bindings' <- propBindings bindings
-    body'     <- expToPropBool body
+    let theseBindingsMap = Map.fromList $ fmap (\(uid, name, _ty) -> (name, uid)) bindings'
+    body'     <- local (Map.union theseBindingsMap) (expToPropBool body)
     pure $ foldr
-      (\(name, ty) accum -> Forall name ty accum)
+      (\(uid, name, ty) accum -> Forall uid name ty accum)
       body'
       bindings'
   EList' [EAtom' "exists", EList' bindings, body] -> do
     bindings' <- propBindings bindings
-    body'     <- expToPropBool body
+    let theseBindingsMap = Map.fromList $ fmap (\(uid, name, _ty) -> (name, uid)) bindings'
+    body'     <- local (Map.union theseBindingsMap) (expToPropBool body)
     pure $ foldr
-      (\(name, ty) accum -> Exists name ty accum)
+      (\(uid, name, ty) accum -> Exists uid name ty accum)
       body'
       bindings'
 
   EList' [EAtom' op, a, b] -> do
     op' <- textToComparisonOp op
     asum
-      [ PComparison op' <$> expToPropInteger a <*> expToPropInteger b
-      , PComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
-      , PComparison op' <$> expToPropTime a    <*> expToPropTime b
-      , PComparison op' <$> expToPropBool a    <*> expToPropBool b
-      , PComparison op' <$> expToPropString a  <*> expToPropString b
-      , PComparison op' <$> expToPropKeySet a  <*> expToPropKeySet b
+      [ PIntegerComparison op' <$> expToPropInteger a <*> expToPropInteger b
+      , PDecimalComparison op' <$> expToPropDecimal a <*> expToPropDecimal b
+      , PTimeComparison op'    <$> expToPropTime a    <*> expToPropTime b
+      , PBoolComparison op'    <$> expToPropBool a    <*> expToPropBool b
+      , PStringComparison op'  <$> expToPropString a  <*> expToPropString b
+      -- TODO: how to disambiguate row keys from strings?
+      , PKeySetComparison op'  <$> expToPropKeySet a  <*> expToPropKeySet b
       ]
 
-  EAtom' var           -> Just (PVar var)
+  EAtom' var           -> mkVar var
 
-  _ -> Nothing
+  _ -> noParse
 
-  where propBindings :: [Exp] -> Maybe [(Text, Ty)]
-        propBindings [] = Just []
+  where propBindings :: [Exp] -> PropParse [(UniqueId, Text, Ty)]
+        propBindings [] = pure []
         -- we require a type annotation
-        propBindings (EAtom _name _qual Nothing _parsed:_exps) = Nothing
+        propBindings (EAtom _name _qual Nothing _parsed:_exps) = noParse
         propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
           nameTy <- case ty of
-            TyPrim TyString -> Just (name, Ty (Rep @RowKey))
-            _               -> Nothing
+            TyPrim TyString -> do
+              uid <- gen
+              pure (uid, name, Ty (Rep @RowKey))
+            _               -> noParse
           (nameTy:) <$> propBindings exps
-        propBindings _ = Nothing
+        propBindings _ = noParse
+
 
 -- Note: the one property this can't parse yet is PAt because it includes an
 -- EType.
 expToCheck :: Exp -> Maybe Check
-expToCheck body = Valid <$> expToPropBool body
+expToCheck body =
+  let body' = runGenT (runReaderT (expToPropBool body) Map.empty)
+  in Valid . prenexConvert <$> body'
 
 -- We pass in the type of the variable so we can use it to construct
 -- `SomeSchemaInvariant` when we encounter a var.

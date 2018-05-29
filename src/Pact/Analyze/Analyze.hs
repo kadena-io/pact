@@ -74,7 +74,7 @@ import           Pact.Analyze.Types
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope    :: Map Text AVal               -- used as a stack
+    { _aeScope    :: Map UniqueId AVal           -- used as a stack
     , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
     , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
@@ -331,7 +331,7 @@ data AnalyzeFailure
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
   | FailureMessage Text
   | OpaqueValEncountered
-  | VarNotInScope Text
+  | VarNotInScope Text UniqueId
   | UnsupportedObjectInDbCell
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
@@ -358,7 +358,7 @@ describeAnalyzeFailure = \case
     FailureMessage msg -> msg
     UnhandledObject obj -> foundUnsupported $ tShow obj
     UnhandledTerm termText -> foundUnsupported termText
-    VarNotInScope name -> "variable not in scope: " <> name
+    VarNotInScope name uid -> "variable not in scope: " <> name <> " (uid " <> tShow uid <> ")"
     --
     -- TODO: maybe we should differentiate between opaque values and type
     -- variables, because the latter would probably mean a problem from type
@@ -394,8 +394,8 @@ newtype Query a
             MonadError AnalyzeFailure)
 
 -- Returns problematic argument name, or arg map
-mkArgs :: [(Text, Pact.Type Pact.UserType)] -> Either Text (Map Text AVal)
-mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) ->
+mkArgs :: [(Text, UniqueId, Pact.Type Pact.UserType)] -> Either Text (Map UniqueId AVal)
+mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
   let symName = "arg_" ++ T.unpack name
 
       wrap :: SBV a -> Either e AVal
@@ -416,10 +416,10 @@ mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) ->
                TyList _         -> Left name
                TySchema _ _     -> Left name
                TyFun _          -> Left name
-  in (name,) <$> eVar
+  in (uid,) <$> eVar
 
 mkAnalyzeEnv
-  :: Map Text AVal
+  :: Map UniqueId AVal
   -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
   -> AnalyzeEnv
 mkAnalyzeEnv args tables =
@@ -459,7 +459,7 @@ class HasAnalyzeEnv a where
   {-# MINIMAL analyzeEnv #-}
   analyzeEnv :: Lens' a AnalyzeEnv
 
-  scope :: Lens' a (Map Text AVal)
+  scope :: Lens' a (Map UniqueId AVal)
   scope = analyzeEnv.aeScope
 
   keySets :: Lens' a (SFunArray KeySetName KeySet)
@@ -672,11 +672,12 @@ expectObj = aval ((throwError . AValUnexpectedlySVal) ... getSVal) pure
 lookupObj
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
+  -> UniqueId
   -> m Object
-lookupObj name = do
-  mVal <- view (scope . at name)
+lookupObj name uid = do
+  mVal <- view (scope . at uid)
   case mVal of
-    Nothing            -> throwError $ VarNotInScope name
+    Nothing            -> throwError $ VarNotInScope name uid
     Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
     Just (AnObj obj)   -> pure obj
     Just (OpaqueVal)   -> throwError OpaqueValEncountered
@@ -684,11 +685,12 @@ lookupObj name = do
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
+  -> UniqueId
   -> m (S a)
-lookupVal name = do
-  mVal <- view $ scope . at name
+lookupVal name uid = do
+  mVal <- view $ scope . at uid
   case mVal of
-    Nothing                -> throwError $ VarNotInScope name
+    Nothing                -> throwError $ VarNotInScope name uid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal)       -> throwError OpaqueValEncountered
@@ -817,11 +819,11 @@ analyzeTermO = \case
 
     analyzeRead tn relevantFields rowKey
 
-  Var name -> lookupObj name
+  Var name uid -> lookupObj name uid
 
-  Let name eterm body -> do
+  Let _name uid eterm body -> do
     av <- analyzeETerm eterm
-    local (scope.at name ?~ av) $
+    local (scope.at uid ?~ av) $
       analyzeTermO body
 
   Sequence eterm objT -> analyzeETerm eterm *> analyzeTermO objT
@@ -1140,12 +1142,12 @@ analyzeTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let name eterm body -> do
+  Let _name uid eterm body -> do
     av <- analyzeETerm eterm
-    local (scope.at name ?~ av) $
+    local (scope.at uid ?~ av) $
       analyzeTerm body
 
-  Var name -> lookupVal name
+  Var name uid -> lookupVal name uid
 
   DecArithOp op x y         -> analyzeDecArithOp op x y
   IntArithOp op x y         -> analyzeIntArithOp op x y
@@ -1356,16 +1358,16 @@ checkSchemaInvariant = \case
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar name) = lookupObj name
+analyzePropO (PVar uid name) = lookupObj name uid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
-analyzePropO (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzePropO (Forall uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzePropO p
+analyzePropO (Exists uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzePropO p
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1377,13 +1379,13 @@ analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
 
 -- Abstraction
-analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzeProp (Forall uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (Exists uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (PVar name) = lookupVal name
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (PVar uid name) = lookupVal name uid
 
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
@@ -1403,7 +1405,13 @@ analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 analyzeProp (PIntAddTime time secs) = analyzeIntAddTime time secs
 analyzeProp (PDecAddTime time secs) = analyzeDecAddTime time secs
 
-analyzeProp (PComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PIntegerComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PRowKeyComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PKeySetComparison op x y)  = analyzeComparisonOp op x y
 
 -- Boolean ops
 analyzeProp (PLogical op props) = analyzeLogicalOp op props

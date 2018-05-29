@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -348,6 +349,30 @@ instance Eq EType where
   EObjectTy a == EObjectTy b = a == b
   _ == _ = False
 
+-- | Unique variable IDs
+--
+-- Unique IDs are used to represent variables in both the term and property
+-- languages. (They should also be used for the schema invariant language).
+--
+-- These IDs were first introduced to cope with the prenex normalization
+-- transform, where we lift quantifiers all the way to the outside of a
+-- property, which can easily lead to name confusion (see commit 1f6201).
+--
+-- But they also serve as a principled connection between the term and property
+-- languages, since properties can refer to term variables.
+--
+-- In translation, unique IDs are generated in three places:
+--
+-- 1) @checkTopFunction@ generates a unique id for each function argument
+-- 2) @genUid@ generates an id for a let-binding
+-- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
+--    var
+--
+-- Additionally, we use id (-1) for the result.
+newtype UniqueId
+  = UniqueId Int
+  deriving (Show, Eq, Enum, Num, Ord)
+
 data Prop a where
   -- Literals
   PLit             :: SymWord a => a   -> Prop a
@@ -362,9 +387,9 @@ data Prop a where
   Result           :: Prop a
 
   -- Abstraction
-  Forall           :: Text -> Ty -> Prop a -> Prop a
-  Exists           :: Text -> Ty -> Prop a -> Prop a
-  PVar             :: Text ->                 Prop a
+  Forall           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  Exists           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  PVar             :: UniqueId -> Text                 -> Prop a
 
   -- Object ops
   -- Note: PAt is the one property we can't yet parse because of the EType it
@@ -391,7 +416,13 @@ data Prop a where
   PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
 
   -- Comparison
-  PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
+  PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
+  PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
+  PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
+  PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
+  PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
+  PRowKeyComparison  :: ComparisonOp -> Prop RowKey  -> Prop RowKey  -> Prop Bool
+  PKeySetComparison  :: ComparisonOp -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -417,19 +448,25 @@ data Prop a where
   KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
--- NOTE: PComparison's existential currently prevents this:
---deriving instance Eq a => Eq (Prop a)
-deriving instance Show a => Show (Prop a)
+pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
+pattern PAnd a b = PLogical AndOp [a, b]
 
-instance IsString (Prop a) where
-  fromString = PVar . fromString
+pattern POr :: Prop Bool -> Prop Bool -> Prop Bool
+pattern POr a b = PLogical OrOp [a, b]
+
+pattern PNot :: Prop Bool -> Prop Bool
+pattern PNot a = PLogical NotOp [a]
+
+-- NOTE: PComparison's existential currently prevents this:
+deriving instance Eq a => Eq (Prop a)
+deriving instance Show a => Show (Prop a)
 
 instance Boolean (Prop Bool) where
   true   = PLit True
   false  = PLit False
   bnot p = PLogical NotOp [p]
-  p1 &&& p2 = PLogical AndOp [p1, p2]
-  p1 ||| p2 = PLogical OrOp [p1, p2]
+  p1 &&& p2 = PAnd p1 p2
+  p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop Integer) where
   fromInteger = PLit . fromInteger
