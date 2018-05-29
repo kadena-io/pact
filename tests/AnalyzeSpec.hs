@@ -22,7 +22,7 @@ import           Test.Hspec                 (Spec, describe, it, runIO,
 
 import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
                                              initReplState, rEnv)
-import           Pact.Types.Runtime         (eeRefStore, rsModules)
+import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
@@ -48,32 +48,54 @@ wrap code =
     (commit-tx)
   |]
 
-runTest :: Text -> Check -> IO (Maybe CheckFailure)
-runTest code check = do
+compile :: Text -> IO (Either CheckFailure ModuleData)
+compile code = do
   replState0 <- initReplState StringEval
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  case eTerm of
-    Left err -> pure $ Just $ CodeCompilationFailed err
+  pure $ case eTerm of
+    Left err -> Left $ CodeCompilationFailed err
     Right _t ->
       case replState ^. rEnv . eeRefStore . rsModules . at "test" of
-        Nothing -> pure $ Just $ CodeCompilationFailed "expected module 'test'"
-        Just moduleData -> do
-          results <- verifyModule (Just check)
-            (HM.fromList [("test", moduleData)]) moduleData
-          -- TODO(joel): use `fromLeft` when we're on modern GHC
-          pure $ case findOf (traverse . traverse) isLeft results of
-            Just (Left failure) -> Just failure
-            _                   -> Nothing
+        Nothing -> Left $ CodeCompilationFailed "expected module 'test'"
+        Just moduleData -> Right moduleData
+
+runVerification :: Text -> IO (Maybe CheckFailure)
+runVerification code = do
+  eModuleData <- compile code
+  case eModuleData of
+    Left cf -> pure $ Just cf
+    Right moduleData -> do
+      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      -- TODO(joel): use `fromLeft` when we're on modern GHC
+      pure $ case findOf (traverse . traverse) isLeft results of
+        Just (Left failure) -> Just failure
+        _                   -> Nothing
+
+runCheck :: Text -> Check -> IO (Maybe CheckFailure)
+runCheck code check = do
+  eModuleData <- compile code
+  case eModuleData of
+    Left cf -> pure $ Just cf
+    Right moduleData -> do
+      result <- verifyCheck moduleData "test" check
+      pure $ case result of
+        Left cf -> Just cf
+        Right _ -> Nothing
+
+expectVerified :: Text -> Spec
+expectVerified code = do
+  res <- runIO $ runVerification $ wrap code
+  it "passes in-code checks" $ res `shouldSatisfy` isNothing
 
 expectPass :: Text -> Check -> Spec
 -- TODO(joel): use expectNothing when it's available
 expectPass code check = do
-  res <- runIO $ runTest (wrap code) check
+  res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isNothing
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
-  res <- runIO $ runTest (wrap code) check
+  res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
@@ -242,14 +264,14 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
       RowWrite "tokens" (PVar 0 "row")
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar 0 "row")
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @RowKey)) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
       RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ Success ==> (Forall 0 "row" (Ty (Rep @RowKey)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
   describe "enforce-keyset.row-level.read.syntax" $ do
@@ -313,12 +335,12 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar 0 "row")
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar 0 "row")
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
-      RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @RowKey)) (RowWrite "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @RowKey)) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @RowKey)) (RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
@@ -564,7 +586,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (""
                 (properties [
-                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balanc row) 3)))
+                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balance row) 3)))
                 ]))
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
@@ -574,12 +596,18 @@ spec = describe "analyze" $ do
                 ))
           |]
 
+    -- TODO: add `expectVerified code` and make sure it works
+
     expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
 
     expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
       PRowKeyComparison Neq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
+
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+      PRowKeyComparison Eq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
+        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
     expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
@@ -1007,7 +1035,7 @@ spec = describe "analyze" $ do
               circulation:integer)
             (deftable central-bank-table:{central-bank-schema})
 
-            (defun issue (amt:integer)
+            (defun test (amt:integer)
               "Issue some amount of currency"
 
               (let*
@@ -1024,6 +1052,11 @@ spec = describe "analyze" $ do
                   'circulation: new-circulation
                 })))
           |]
+
+    -- TODO: invariants actually seem to be broken currently, but
+    -- expectVerified itself seems like it should work fine:
+
+    expectVerified code
 
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
