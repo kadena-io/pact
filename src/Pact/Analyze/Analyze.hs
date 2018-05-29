@@ -1107,7 +1107,13 @@ analyzeTerm = \case
 
       let checkInvariants :: SBVI.SVal -> Analyze ()
           checkInvariants val = do
+
+            --
+            -- TODO: this is wrong in the presence of invariants that affect
+            --       multiple columns:
+            --
             mInvariant <- view (invariants . at (tn, cn))
+
             case mInvariant of
               Nothing -> pure ()
               Just invariant -> do
