@@ -12,35 +12,38 @@
 
 module Pact.Analyze.Types where
 
-import           Control.Lens       (Iso, Iso', Lens', both, from, iso, lens,
-                                     makeLenses, over, view, (%~), (&))
-import           Data.Aeson         (FromJSON, ToJSON)
-import           Data.AffineSpace   ((.-.), (.+^))
-import           Data.Data          (Data)
-import qualified Data.Decimal       as Decimal
-import           Data.Map.Strict    (Map)
-import           Data.SBV           (AlgReal,
-                                     Boolean (bnot, false, true, (&&&), (|||)),
-                                     EqSymbolic, HasKind, Int64, Kind (KString),
-                                     Mergeable (symbolicMerge), OrdSymbolic,
-                                     Provable (forAll), SBV,
-                                     SDivisible (sDivMod, sQuotRem), SymWord,
-                                     Symbolic, forAll_, forSome, forSome_,
-                                     isConcrete, ite, kindOf, literal, oneIf,
-                                     sFromIntegral, sRealToSInteger, unliteral,
-                                     (%), (.<), (.==))
-import qualified Data.SBV.Internals as SBVI
-import qualified Data.SBV.String    as SBV
-import           Data.Semigroup     ((<>))
-import           Data.Set           (Set)
-import qualified Data.Set           as Set
-import           Data.String        (IsString (..))
-import           Data.Text          (Text)
-import qualified Data.Text          as T
-import           Data.Thyme         (UTCTime, microseconds)
-import           Data.Typeable      ((:~:) (Refl), Typeable, eqT)
+import           Control.Lens         (Iso, Iso', both, from, iso, makeLenses,
+                                       over, view, (%~), (&))
+import           Data.Aeson           (FromJSON, ToJSON)
+import           Data.AffineSpace     ((.+^), (.-.))
+import           Data.Data            (Data)
+import qualified Data.Decimal         as Decimal
+import           Data.Map.Strict      (Map)
+import           Data.SBV             (AlgReal,
+                                       Boolean (bnot, false, true, (&&&), (|||)),
+                                       EqSymbolic, HasKind, Int64,
+                                       Kind (KString),
+                                       Mergeable (symbolicMerge), OrdSymbolic,
+                                       Provable (forAll), SBV,
+                                       SDivisible (sDivMod, sQuotRem), SymWord,
+                                       Symbolic, forAll_, forSome, forSome_,
+                                       isConcrete, ite, kindOf, literal, oneIf,
+                                       sFromIntegral, sRealToSInteger,
+                                       unliteral, (%), (.<), (.==))
+import qualified Data.SBV.Internals   as SBVI
+import qualified Data.SBV.String      as SBV
+import           Data.Semigroup       ((<>))
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
+import           Data.String          (IsString (..))
+import           Data.Text            (Text)
+import qualified Data.Text            as T
+import           Data.Thyme           (UTCTime, microseconds)
+import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
 
-import           Pact.Types.Util    (AsString)
+import qualified Pact.Types.Runtime   as Pact
+import qualified Pact.Types.Typecheck as TC
+import           Pact.Types.Util      (AsString)
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
 wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
@@ -488,19 +491,37 @@ instance Num (Prop Decimal) where
   signum = PDecUnaryArithOp Signum
   negate = PDecUnaryArithOp Negate
 
+--
+-- TODO: extract data type
+--
+type Arg
+  = (Text, UniqueId, Pact.Type TC.UserType)
+
+--
+-- TODO: extract data type
+--
+type Table
+  = (Text, TC.UserType, [(Text, SchemaInvariant Bool)])
+
+data Goal where
+  Satisfaction :: Goal -- ^ Find satisfying model
+  Validation   :: Goal -- ^ Prove no invalidating model exists
+
+deriving instance Eq Goal
+
 data Check where
-  Satisfiable :: Prop Bool -> Check
-  Valid       :: Prop Bool -> Check
-  deriving (Show)
+  InvariantsHold ::              Check -- valid, assuming success
+  PropertyHolds  :: Prop Bool -> Check -- valid, assuming success
+  Satisfiable    :: Prop Bool -> Check -- sat,   not assuming success
+  Valid          :: Prop Bool -> Check -- valid, not assuming success
 
-ckProp :: Lens' Check (Prop Bool)
-ckProp = lens getter setter
-  where
-    getter (Satisfiable p) = p
-    getter (Valid p)       = p
+deriving instance Show Check
 
-    setter (Satisfiable _) p = Satisfiable p
-    setter (Valid _) p       = Valid p
+checkGoal :: Check -> Goal
+checkGoal InvariantsHold    = Validation
+checkGoal (PropertyHolds _) = Validation
+checkGoal (Satisfiable _)   = Satisfaction
+checkGoal (Valid _)         = Validation
 
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)

@@ -23,6 +23,7 @@ import           Data.Type.Equality   ((:~:) (Refl))
 
 import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
                                        TKeySet, TableName)
+import qualified Pact.Types.Lang      as Pact
 import           Pact.Types.Typecheck (UserType)
 -- import           Pact.Types.Util      (tShow)
 
@@ -281,20 +282,22 @@ expToPropBool = \case
         propBindings _ = noParse
 
 
--- Note: the one property this can't parse yet is PAt because it includes an
+--
+-- TODO: the one property this can't parse yet is PAt because it includes an
 -- EType.
+--
 expToCheck :: Exp -> Maybe Check
 expToCheck body =
   let body' = runGenT (runReaderT (expToPropBool body) Map.empty)
-  in Valid . prenexConvert <$> body'
+  in PropertyHolds . prenexConvert <$> body'
 
 -- We pass in the type of the variable so we can use it to construct
 -- `SomeSchemaInvariant` when we encounter a var.
 -- TODO(joel): finish these!
-expToInvariant :: [Arg UserType] -> Exp -> Maybe SomeSchemaInvariant
+expToInvariant :: [Pact.Arg UserType] -> Exp -> Maybe SomeSchemaInvariant
 expToInvariant schemaTys = \case
   EAtom' var -> case find (\arg -> arg ^. aName == var) schemaTys of
-    Just (Arg _name (TyPrim primTy) _info) -> case primTy of
+    Just (Pact.Arg _name (TyPrim primTy) _info) -> case primTy of
       TyInteger -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
       TyDecimal -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
       TyTime    -> Just (SomeSchemaInvariant (SchemaVar var) TTime)

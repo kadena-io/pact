@@ -334,7 +334,7 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        results <- liftIO $ verifyModule Nothing modules md
+        results <- liftIO $ verifyModule modules md
         setop $ Print $ tStr $ ifoldl
           (\defName accum lineResults -> if null lineResults
             then accum

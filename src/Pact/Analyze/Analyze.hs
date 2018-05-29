@@ -21,7 +21,7 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
                                             Lens', ifoldl, iforM, lens,
                                             makeLenses, over, singular, use,
                                             view, (%=), (&), (+=), (.=), (.~),
-                                            (<&>), (?~), (^.), _2)
+                                            (<&>), (?~), (^.), _1, _2)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
@@ -62,7 +62,7 @@ import           Data.Traversable          (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash           as Pact
-import           Pact.Types.Runtime        (Arg (Arg), PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
+import           Pact.Types.Runtime        (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
                                             Type (TyAny, TyFun, TyList, TyPrim, TySchema, TyUser, TyVar),
                                             tShow)
 import qualified Pact.Types.Runtime        as Pact
@@ -139,6 +139,11 @@ instance Mergeable a => Mergeable (TableMap a) where
 data LatticeAnalyzeState
   = LatticeAnalyzeState
     { _lasSucceeds            :: SBV Bool
+    --
+    -- TODO: instead of having a single boolean here, we should probably use
+    --       finer-grained tracking, so that we can test whether a single
+    --       invariant is being maintained
+    --
     , _lasMaintainsInvariants :: SBV Bool
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
@@ -227,7 +232,7 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-mkInitialAnalyzeState :: [(Text, Pact.UserType)] -> AnalyzeState
+mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
@@ -249,7 +254,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
   where
     tableNames :: [TableName]
-    tableNames = map (TableName . T.unpack . fst) tables
+    tableNames = map (TableName . T.unpack . view _1) $ tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
     decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
@@ -262,10 +267,10 @@ mkInitialAnalyzeState tables = AnalyzeState
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
-      flip fmap tables $ \(tabName, userTy) ->
+      tables <&> \(tabName, userTy, _invariants) ->
         let fields = Pact._utFields userTy
             colMap = ColumnMap $ Map.fromList $ catMaybes $
-              flip fmap fields $ \(Arg argName ty _) ->
+              flip fmap fields $ \(Pact.Arg argName ty _) ->
                 if f ty
                 then Just (ColumnName (T.unpack argName), defValue)
                 else Nothing
@@ -279,27 +284,28 @@ mkInitialAnalyzeState tables = AnalyzeState
 addConstraint :: SBool -> Analyze ()
 addConstraint = tell . Constraints . constrain
 
-mkFreeArray :: (SymWord a, HasKind b) => String -> SFunArray a b
-mkFreeArray = mkSFunArray . uninterpret
+sbvIdentifier :: Text -> Text
+sbvIdentifier = T.replace "-" "_"
 
-mkSymbolicCells :: [(Text, Pact.UserType)] -> TableMap SymbolicCells
+mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
+mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
+
+mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
   where
-    cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _) ->
+    cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _, _invariants) ->
       let fields'  = Map.fromList $
-            map (\(Arg argName ty _i) -> (argName, ty)) fields
-          tabName' = T.unpack tabName
+            map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
 
-      in (TableName tabName', mkCells tabName' fields')
+      in (TableName (T.unpack tabName), mkCells tabName fields')
 
-    mkCells :: String -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
+    mkCells :: Text -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
     mkCells tableName fields = ifoldl
       (\colName cells ty ->
-        let colName' = T.unpack colName
-            col      = ColumnName colName'
+        let col      = ColumnName $ T.unpack colName
 
             mkArray :: forall a. HasKind a => SFunArray RowKey a
-            mkArray  = mkFreeArray $ "cells_" ++ tableName ++ "_" ++ colName'
+            mkArray  = mkFreeArray $ "cells__" <> tableName <> "__" <> colName
 
         in cells & case ty of
              TyPrim TyInteger -> scIntValues.at col     ?~ mkArray
@@ -308,7 +314,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
              TyPrim TyString  -> scStringValues.at col  ?~ mkArray
              TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
-             _ -> id -- error (show ty)
+             _                -> id -- error (show ty)
       )
       (SymbolicCells mempty mempty mempty mempty mempty mempty)
       fields
@@ -393,8 +399,12 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
+--
+-- TODO: convert this back to use Symbolic so we get useful models
+--         rename allocateArgs
+--
 -- Returns problematic argument name, or arg map
-mkArgs :: [(Text, UniqueId, Pact.Type Pact.UserType)] -> Either Text (Map UniqueId AVal)
+mkArgs :: [Arg] -> Either Text (Map UniqueId AVal)
 mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
   let symName = "arg_" ++ T.unpack name
 
@@ -418,10 +428,7 @@ mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
                TyFun _          -> Left name
   in (uid,) <$> eVar
 
-mkAnalyzeEnv
-  :: Map UniqueId AVal
-  -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
-  -> AnalyzeEnv
+mkAnalyzeEnv :: Map UniqueId AVal -> [Table] -> AnalyzeEnv
 mkAnalyzeEnv args tables =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
@@ -702,7 +709,13 @@ analyzeRead tn fields rowKey = do
   rowRead tn sRk .= true
   obj <- iforM fields $ \fieldName fieldType -> do
     let cn = ColumnName fieldName
+
+    --
+    -- TODO: this is wrong in the presence of invariants that affect multiple
+    --       columns:
+    --
     mInvariant <- view (invariants . at (tn, cn))
+
     sDirty <- use $ cellWritten tn cn sRk
 
     let constrained :: forall a. S a -> Analyze AVal
@@ -1268,12 +1281,6 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
-checkInvariantsHeld :: Query (S Bool)
-checkInvariantsHeld = do
-  success   <- view (model.succeeds)
-  maintains <- sansProv <$> view (model.maintainsInvariants)
-  pure $ success ==> maintains
-
 --
 -- TODO: convert this to use `S a`
 --
@@ -1448,3 +1455,19 @@ analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   view $ model.cellEnforced tn cn sRk
+
+analyzeCheck :: Check -> Query (S Bool)
+analyzeCheck = \case
+    InvariantsHold  -> assumingSuccess =<< invariantsHold
+    PropertyHolds p -> assumingSuccess =<< analyzeProp p
+    Valid p         -> analyzeProp p
+    Satisfiable p   -> analyzeProp p
+
+  where
+    assumingSuccess :: S Bool -> Query (S Bool)
+    assumingSuccess p = do
+      success <- view (model.succeeds)
+      pure $ success ==> p
+
+    invariantsHold :: Query (S Bool)
+    invariantsHold = sansProv <$> view (model.maintainsInvariants)
