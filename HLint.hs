@@ -12,3 +12,4 @@ ignore "Redundant bracket"
 ignore "Use lambda-case"
 ignore "Use $>" -- added temporarily
 ignore "Evaluate"
+ignore "Unnecessary hiding"
