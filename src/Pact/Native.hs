@@ -86,7 +86,7 @@ langDefs =
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
-     (funType a [("app",lam2 b a a),("init",a),("list",TyList b)])
+     (funType a [("app",lam2 a b a),("init",a),("list",TyList b)])
      "Iteratively reduce LIST by applying APP to last result and element, starting with INIT. \
      \`(fold (+) 0 [100 10 5])`"
 
