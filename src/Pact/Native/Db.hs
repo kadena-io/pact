@@ -27,7 +27,7 @@ import qualified Data.Map.Strict as M
 import Data.Default
 import Control.Arrow hiding (app)
 import Control.Lens hiding ((.=))
-import Data.Aeson (toJSON,object,(.=))
+import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
@@ -84,7 +84,7 @@ dbDefs =
 
     ,defRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
-     "Return all txid values greater than or equal to TXID in TABLE. `$(txids 'accounts 123849535)`"
+     "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
      (writeDocs "." "(write 'accounts { \"balance\": 100.0 })")
@@ -103,18 +103,22 @@ dbDefs =
       \indexed by txid. \
       \`$(keylog 'accounts \"Alice\" 123485945)`"
     ,defRNative "describe-table" descTable
-     (funType tTyValue [("table",tTyString)]) "Get metadata for TABLE"
+     (funType tTyValue [("table",tableTy)])
+     "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
+     \`$(describe-table accounts)`"
     ,defRNative "describe-keyset" descKeySet
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
     ,defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
-     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', and 'code' fields."
+     "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
+     \`$(describe-module 'my-module)`"
     ])
 
 descTable :: RNativeFun e
-descTable i [TLitString t] =
-    toTerm . (\(m,k) -> object ["name" .= t, "module" .= m, "keyset" .= k]) <$>
-    getUserTableInfo (_faInfo i) (TableName t)
+descTable _ [TTable {..}] = return $ toTObject TyAny def [
+  (tStr "name",tStr $ asString _tTableName),
+  (tStr "module", tStr $ asString _tModule),
+  (tStr "type", toTerm $ pack $ show _tTableType)]
 descTable i as = argsError i as
 
 descKeySet :: RNativeFun e
@@ -132,6 +136,7 @@ descModule i [TLitString t] = do
     Just (Module{..},_) ->
       return $ TObject [(tStr "name",tStr $ asString _mName),
                         (tStr "hash", tStr $ asString _mHash),
+                        (tStr "keyset", tStr $ asString _mKeySet),
                         (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
                         (tStr "code", tStr $ asString _mCode)] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t

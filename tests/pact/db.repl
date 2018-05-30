@@ -63,3 +63,6 @@
 (expect-failure "txids protected by admin key" (txids persons 0))
 (expect-failure "txlog protected by admin key" (txlog persons 2))
 (expect-failure "keylogs protected by admin key" (keylog persons "" 2))
+
+;; just making sure this doesn't blow up, output is still TBD on better Term output in general
+(describe-table persons)
