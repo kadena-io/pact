@@ -565,7 +565,11 @@ spec = describe "analyze" $ do
   describe "conserves-mass.decimal" $ do
     let code =
           [text|
-            (defschema account2 balance:decimal)
+            (defschema account2
+              ("accounts schema"
+                (invariants
+                  ((>= balance 0.0))))
+              balance:decimal)
             (deftable accounts2:{account2})
 
             (defun test:string (from:string to:string amount:decimal)
@@ -578,6 +582,7 @@ spec = describe "analyze" $ do
                 (update accounts2 to   { "balance": (+ to-bal amount) })))
           |]
 
+    expectVerified code
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
 
   describe "cell-delta.integer" $ do
@@ -586,7 +591,10 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (""
                 (properties [
-                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balance row) 3)))
+                  ;;
+                  ;; TODO: this parse silently fails:
+                  ;;
+                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balance row) 2)))
                 ]))
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
@@ -596,7 +604,10 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    -- TODO: add `expectVerified code` and make sure it works
+    --
+    -- TODO: fix parse problem affecting above.
+    --
+    -- expectVerified code
 
     expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
@@ -910,6 +921,7 @@ spec = describe "analyze" $ do
                 ))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
   describe "schema-invariants.not-equals" $ do
@@ -926,6 +938,7 @@ spec = describe "analyze" $ do
                 (enforce (or (> nz 0) (< nz 0)) "is zero")))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
   describe "schema-invariants.equals" $ do
@@ -942,6 +955,7 @@ spec = describe "analyze" $ do
                 (enforce (= z 0) "is not zero")))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
   describe "format-time / parse-time" $ do
@@ -1017,20 +1031,23 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid Success
 
-  -- Right now this test is not super useful because we'd like to inspect the
-  -- invariants individually. Unfortunately we can't do that without a refactor
-  -- of the testing system. As-is, this at leasts tests that we're allowd to
-  -- relate two columns.
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
             (defschema central-bank-schema
               ("central bank"
                 (invariants
-                  [ (= 1000000 (+ reserve circulation))
-                    (>= reserve 0)
-                    (>= circulation 0)
-                  ]))
+                  (
+                  ;;
+                  ;; TODO: we currently don't support this because Analyze
+                  ;;       assumes every column has either 0 or 1 invariants
+                  ;;       that affect it:
+                  ;;
+                  ;(= 1000000 (+ reserve circulation))
+
+                   (>= reserve 0)
+                   (>= circulation 0)
+                  )))
               reserve:integer
               circulation:integer)
             (deftable central-bank-table:{central-bank-schema})
@@ -1053,11 +1070,10 @@ spec = describe "analyze" $ do
                 })))
           |]
 
-    -- TODO: invariants actually seem to be broken currently, but
-    -- expectVerified itself seems like it should work fine:
+    -- TODO: uncomment (= 1000000 (+ reserve circulation)) above once we add
+    --       support for it in Analyze
 
     expectVerified code
-
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
 
