@@ -231,7 +231,7 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
 
       uids = UniqueId <$> [0..]
 
-      argTys :: [(Text, UniqueId, Pact.Type TC.UserType)]
+      argTys :: [Arg]
       argTys = zip3 names uids (_aTy <$> nodes)
 
       nodeNames :: Map Node (Text, UniqueId)
