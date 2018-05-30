@@ -146,7 +146,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 
 ### fold {#fold}
 
-*app*&nbsp;`(x:<b> y:<a> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
+*app*&nbsp;`(x:<a> y:<b> -> <a>)` *init*&nbsp;`<a>` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`<a>`
 
 
 Iteratively reduce LIST by applying APP to last result and element, starting with INIT. 

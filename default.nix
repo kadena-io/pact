@@ -89,6 +89,7 @@ in
     };
     toolOverrides = ghc: super: {
       z3 = pkgs.z3;
+      stack = pkgs.stack;
     };
     shells = {
       ghc = ["pact"];
