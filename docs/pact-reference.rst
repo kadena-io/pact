@@ -1943,7 +1943,7 @@ inclusion.
 fold
 ~~~~
 
-*app* ``(x:<b> y:<a> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
+*app* ``(x:<a> y:<b> -> <a>)`` *init* ``<a>`` *list* ``[<b>]``
 *→* ``<a>``
 
 Iteratively reduce LIST by applying APP to last result and element,
