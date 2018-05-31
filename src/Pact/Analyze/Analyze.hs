@@ -731,7 +731,7 @@ analyzeRead tn fields rowKey = do
               runReader (checkSchemaInvariant invariant) sval
           pure $ mkAVal s
 
-    x <- case fieldType of
+    constrainedVal <- case fieldType of
       EType TInt     -> constrained =<< use (intCell     tn cn sRk sDirty)
       EType TBool    -> constrained =<< use (boolCell    tn cn sRk sDirty)
       EType TStr     -> constrained =<< use (stringCell  tn cn sRk sDirty)
@@ -746,7 +746,7 @@ analyzeRead tn fields rowKey = do
       --
       EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-    pure (fieldType, x)
+    pure (fieldType, constrainedVal)
   pure $ Object obj
 
 analyzeAtO
