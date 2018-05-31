@@ -14,5 +14,5 @@ ignore "Use <$>"
 ignore "Redundant bracket"
 ignore "Use lambda-case"
 ignore "Use $>" -- added temporarily
-ignore "Unnecessary hiding"
+--ignore "Unnecessary hiding"
 --ignore "Use camelCase"

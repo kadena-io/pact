@@ -26,7 +26,7 @@ import Bound
 import qualified Data.Map.Strict as M
 import Data.Default
 import Control.Arrow hiding (app)
-import Control.Lens hiding ((.=))
+import Control.Lens
 import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
