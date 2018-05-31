@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -1291,6 +1292,28 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
+#define COMPARISON_SCHEMA_CHECK   \
+  do                              \
+    a' <- checkSchemaInvariant a; \
+    b' <- checkSchemaInvariant b; \
+    pure $ case op of {           \
+      Gt  -> a' .>  b';           \
+      Lt  -> a' .<  b';           \
+      Gte -> a' .>= b';           \
+      Lte -> a' .<= b';           \
+      Eq  -> a' .== b';           \
+      Neq -> a' ./= b';           \
+    }
+
+#define EQ_NEQ_SCHEMA_CHECK       \
+  do                              \
+    a' <- checkSchemaInvariant a; \
+    b' <- checkSchemaInvariant b; \
+    pure $ case op of {           \
+      Eq'  -> a' .== b';          \
+      Neq' -> a' ./= b';          \
+      }
+
 --
 -- TODO: convert this to use `S a`
 --
@@ -1298,63 +1321,11 @@ checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
 checkSchemaInvariant = \case
 
   -- comparison
-  SchemaDecimalComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaIntComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaTimeComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaStringComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaBoolEqNeq op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Eq'  -> a' .== b'
-      Neq' -> a' ./= b'
-
-  SchemaKeySetEqNeq op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Eq'  -> a' .== b'
-      Neq' -> a' ./= b'
+  SchemaDecimalComparison op a b -> COMPARISON_SCHEMA_CHECK
+  SchemaIntComparison op a b     -> COMPARISON_SCHEMA_CHECK
+  SchemaStringComparison op a b  -> COMPARISON_SCHEMA_CHECK
+  SchemaBoolEqNeq op a b         -> EQ_NEQ_SCHEMA_CHECK
+  SchemaKeySetEqNeq op a b       -> EQ_NEQ_SCHEMA_CHECK
 
   -- literals
   SchemaDecimalLiteral d -> pure $ literal d
