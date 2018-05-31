@@ -267,16 +267,15 @@ moduleTables modules (_mod, modRefs) = do
     let mExp :: Maybe Exp
         mExp = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
 
-    let invariants :: [(Text, SchemaInvariant Bool)]
+    let invariants :: [SchemaInvariant Bool]
         invariants = case mExp of
           Just (Pact.EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
             SomeSchemaInvariant expr TBool
               <- expToInvariant (_utFields schema) meta
-            [v] <- pure $ Set.toList (invariantVars expr)
-            pure (v, expr)
+            pure expr
           _                  -> []
 
-    pure (tabName, schema, invariants)
+    pure $ Table tabName schema invariants
 
 moduleFunChecks :: ModuleData -> HM.HashMap Text (Ref, [Check])
 moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
