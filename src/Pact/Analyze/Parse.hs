@@ -297,6 +297,11 @@ expToInvariant schemaTys = \case
   ELiteral (LBool b) _ -> Just
     (SomeSchemaInvariant (SchemaBoolLiteral b) TBool)
 
+  EList' [EAtom' "+", a, b] -> do
+    SomeSchemaInvariant a' TInt <- expToInvariant schemaTys a
+    SomeSchemaInvariant b' TInt <- expToInvariant schemaTys b
+    pure (SomeSchemaInvariant (SchemaIntArithOp Add a' b') TInt)
+
   EList' [EAtom' op, a, b]
     | Just op' <- textToComparisonOp op -> do
     SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a

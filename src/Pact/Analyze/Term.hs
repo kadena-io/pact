@@ -36,7 +36,7 @@ data Term ret where
   --
   -- TODO: we need to allow computed keys here
   --
-  LiteralObject  :: Map String (EType, ETerm) -> Term Object
+  LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
 
   -- Variable binding
   Let            :: Text -> UniqueId -> ETerm -> Term a -> Term a

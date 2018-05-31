@@ -116,7 +116,7 @@ translateType node = go $ _aTy node
     go = \case
       TyUser (Pact.Schema _ _ fields _) ->
         fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-          \(Arg name ty _info) -> (T.unpack name, go ty)
+          \(Arg name ty _info) -> (name, go ty)
 
       -- TODO(joel): understand the difference between the TyUser and TySchema cases
       TySchema _ ty' -> go ty'
@@ -488,7 +488,7 @@ translateNode astNode = case astNode of
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
       k' <- case k of
-        AST_Lit (LString t) -> pure $ T.unpack t
+        AST_Lit (LString t) -> pure t
         -- TODO: support non-const keys
         _                   -> throwError $ NonConstKey k
       ty <- translateType $ v ^. aNode

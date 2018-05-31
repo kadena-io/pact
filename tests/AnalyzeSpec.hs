@@ -1039,14 +1039,7 @@ spec = describe "analyze" $ do
             (defschema central-bank-schema
               ("central bank"
                 (invariants
-                  (
-                  ;;
-                  ;; TODO: we currently don't support this because Analyze
-                  ;;       assumes every column has either 0 or 1 invariants
-                  ;;       that affect it:
-                  ;;
-                  ;(= 1000000 (+ reserve circulation))
-
+                  ((= 1000000 (+ reserve circulation))
                    (>= reserve 0)
                    (>= circulation 0)
                   )))
@@ -1071,9 +1064,6 @@ spec = describe "analyze" $ do
                   'circulation: new-circulation
                 })))
           |]
-
-    -- TODO: uncomment (= 1000000 (+ reserve circulation)) above once we add
-    --       support for it in Analyze
 
     expectVerified code
     expectPass code $ Satisfiable Abort

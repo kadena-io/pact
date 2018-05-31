@@ -32,9 +32,6 @@ import           Data.SBV             (AlgReal,
                                        unliteral, (%), (.<), (.==))
 import qualified Data.SBV.Internals   as SBVI
 import qualified Data.SBV.String      as SBV
-import           Data.Semigroup       ((<>))
-import           Data.Set             (Set)
-import qualified Data.Set             as Set
 import           Data.String          (IsString (..))
 import           Data.Text            (Text)
 import qualified Data.Text            as T
@@ -265,11 +262,11 @@ symRowKey :: S String -> S RowKey
 symRowKey = coerceS
 
 data Object
-  = Object (Map String (EType, AVal))
+  = Object (Map Text (EType, AVal))
   deriving (Eq, Show)
 
 newtype Schema
-  = Schema (Map String EType)
+  = Schema (Map Text EType)
   deriving (Show, Eq)
 
 -- | Untyped symbolic value.
@@ -512,8 +509,11 @@ type Arg
 --
 -- TODO: extract data type
 --
-type Table
-  = (Text, TC.UserType, [(Text, SchemaInvariant Bool)])
+data Table = Table
+  { _tableName       :: Text
+  , _tableType       :: TC.UserType
+  , _tableInvariants :: [SchemaInvariant Bool]
+  } deriving (Show)
 
 data Goal
   = Satisfaction -- ^ Find satisfying model
@@ -621,6 +621,12 @@ data SchemaInvariant a where
     -> SchemaInvariant KeySet
     -> SchemaInvariant Bool
 
+  SchemaIntArithOp
+    :: ArithOp
+    -> SchemaInvariant Integer
+    -> SchemaInvariant Integer
+    -> SchemaInvariant Integer
+
   -- literals
   SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
   SchemaIntLiteral     :: Integer -> SchemaInvariant Integer
@@ -650,24 +656,6 @@ instance Eq SomeSchemaInvariant where
     Nothing   -> False
     Just Refl -> a == b
 
-invariantVars :: SchemaInvariant a -> Set Text
-invariantVars = \case
-  SchemaDecimalComparison _ a b -> invariantVars a <> invariantVars b
-  SchemaIntComparison _ a b     -> invariantVars a <> invariantVars b
-  SchemaStringComparison _ a b  -> invariantVars a <> invariantVars b
-  SchemaTimeComparison _ a b    -> invariantVars a <> invariantVars b
-  SchemaBoolEqNeq _ a b         -> invariantVars a <> invariantVars b
-  SchemaKeySetEqNeq _ a b       -> invariantVars a <> invariantVars b
-
-  SchemaDecimalLiteral _        -> Set.empty
-  SchemaIntLiteral _            -> Set.empty
-  SchemaStringLiteral _         -> Set.empty
-  SchemaTimeLiteral _           -> Set.empty
-  SchemaBoolLiteral _           -> Set.empty
-
-  SchemaVar v                   -> Set.singleton v
-
-  SchemaLogicalOp _ invariants  -> Set.unions (invariantVars <$> invariants)
-
 makeLenses ''S
 makeLenses ''Object
+makeLenses ''Table

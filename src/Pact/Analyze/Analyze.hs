@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -22,24 +23,24 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
                                             Lens', ifoldl, iforM, lens,
                                             makeLenses, over, singular, use,
                                             view, (%=), (&), (+=), (.=), (.~),
-                                            (<&>), (?~), (^.), _1, _2)
+                                            (<&>), (?~), (^.), _2)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
-import           Control.Monad.Reader      (MonadReader (local), Reader,
-                                            ReaderT, asks, runReader)
+import           Control.Monad.Reader      (MonadReader (local), ReaderT,
+                                            runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
 import           Control.Monad.State       (MonadState)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Writer      (MonadWriter (tell))
 import qualified Data.Aeson                as Aeson
 import           Data.ByteString.Lazy      (toStrict)
-import           Data.Foldable             (foldl', foldrM)
+import           Data.Foldable             (foldl', foldrM, for_)
 import           Data.Functor.Identity     (Identity (Identity))
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Map.Strict.Merge     (mapMissing, merge, zipWithMatched)
-import           Data.Maybe                (catMaybes)
+import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
                                             EqSymbolic ((./=), (.==)), HasKind,
@@ -71,14 +72,15 @@ import qualified Pact.Types.Typecheck      as Pact
 import           Pact.Types.Version        (pactVersion)
 
 import           Pact.Analyze.Term
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types        hiding (tableName)
+import qualified Pact.Analyze.Types        as Types
 
 data AnalyzeEnv
   = AnalyzeEnv
     { _aeScope    :: Map UniqueId AVal           -- used as a stack
     , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
-    , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
+    , _invariants :: Map TableName [SchemaInvariant Bool]
     }
   deriving Show
 
@@ -255,7 +257,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
   where
     tableNames :: [TableName]
-    tableNames = map (TableName . T.unpack . view _1) $ tables
+    tableNames = map (TableName . T.unpack . view Types.tableName) $ tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
     decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
@@ -268,14 +270,14 @@ mkInitialAnalyzeState tables = AnalyzeState
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
-      tables <&> \(tabName, userTy, _invariants) ->
-        let fields = Pact._utFields userTy
-            colMap = ColumnMap $ Map.fromList $ catMaybes $
-              flip fmap fields $ \(Pact.Arg argName ty _) ->
+      tables <&> \Table { _tableName, _tableType } ->
+        let fields = Pact._utFields _tableType
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+              \(Pact.Arg argName ty _) ->
                 if f ty
                 then Just (ColumnName (T.unpack argName), defValue)
                 else Nothing
-        in (TableName (T.unpack tabName), colMap)
+        in (TableName (T.unpack _tableName), colMap)
 
     mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
@@ -294,11 +296,11 @@ mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
 mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
   where
-    cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _, _invariants) ->
+    cellsList = tables <&> \Table { _tableName, _tableType = Pact.Schema _ _ fields _ } ->
       let fields'  = Map.fromList $
             map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
 
-      in (TableName (T.unpack tabName), mkCells tabName fields')
+      in (TableName (T.unpack _tableName), mkCells _tableName fields')
 
     mkCells :: Text -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
     mkCells tableName fields = ifoldl
@@ -331,9 +333,9 @@ data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
-  | KeyNotPresent String Object
+  | KeyNotPresent Text Object
   | MalformedLogicalOpExec LogicalOp Int
-  | ObjFieldOfWrongType String EType
+  | ObjFieldOfWrongType Text EType
   | PossibleRoundoff Text
   | UnsupportedDecArithOp ArithOp
   | UnsupportedIntArithOp ArithOp
@@ -355,9 +357,9 @@ describeAnalyzeFailure = \case
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
     AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
     AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
-    KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
+    KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
     MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
-    ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
+    ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
     PossibleRoundoff msg -> msg
     UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
     UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
@@ -438,18 +440,10 @@ mkAnalyzeEnv args tables =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
-  in foldr
-       (\(tableName, _ut, someInvariants) env -> foldr
-         (\(colName, invariant) env' ->
-           let tableName' = TableName (T.unpack tableName)
-               colName'   = ColumnName (T.unpack colName)
-           in env' & invariants . at (tableName', colName') ?~ invariant
-         )
-         env
-         someInvariants
-       )
-       (AnalyzeEnv args keySets' keySetAuths Map.empty)
-       tables
+      invariants' = Map.fromList $ tables <&> \(Table tname _ut someInvariants)
+        -> (TableName (T.unpack tname), someInvariants)
+
+  in AnalyzeEnv args keySets' keySetAuths invariants'
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -707,37 +701,23 @@ lookupVal name uid = do
     Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal)       -> throwError OpaqueValEncountered
 
-analyzeRead :: TableName -> Map String EType -> Term String -> Analyze Object
+analyzeRead :: TableName -> Map Text EType -> Term String -> Analyze Object
 analyzeRead tn fields rowKey = do
   sRk <- symRowKey <$> analyzeTerm rowKey
   tableRead tn .= true
   rowRead tn sRk .= true
-  obj <- iforM fields $ \fieldName fieldType -> do
-    let cn = ColumnName fieldName
 
-    --
-    -- TODO: this is wrong in the presence of invariants that affect multiple
-    --       columns:
-    --
-    mInvariant <- view (invariants . at (tn, cn))
-
+  aValFields <- iforM fields $ \fieldName fieldType -> do
+    let cn = ColumnName $ T.unpack fieldName
     sDirty <- use $ cellWritten tn cn sRk
 
-    let constrained :: forall a. S a -> Analyze AVal
-        constrained s@(S _prov (SBVI.SBV sval)) = do
-          case mInvariant of
-            Nothing -> pure ()
-            Just invariant -> addConstraint $
-              runReader (checkSchemaInvariant invariant) sval
-          pure $ mkAVal s
-
-    constrainedVal <- case fieldType of
-      EType TInt     -> constrained =<< use (intCell     tn cn sRk sDirty)
-      EType TBool    -> constrained =<< use (boolCell    tn cn sRk sDirty)
-      EType TStr     -> constrained =<< use (stringCell  tn cn sRk sDirty)
-      EType TDecimal -> constrained =<< use (decimalCell tn cn sRk sDirty)
-      EType TTime    -> constrained =<< use (timeCell    tn cn sRk sDirty)
-      EType TKeySet  -> constrained =<< use (ksCell      tn cn sRk sDirty)
+    aVal <- case fieldType of
+      EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+      EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+      EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+      EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+      EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+      EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
       EType TAny     -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
@@ -746,8 +726,24 @@ analyzeRead tn fields rowKey = do
       --
       EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-    pure (fieldType, constrainedVal)
-  pure $ Object obj
+    pure (fieldType, aVal)
+
+  -- Constraints can only operate over int, bool, etc. All of which appear as
+  -- AVal, so we're safe ignoring the other AVal constructors.
+  let sValFields :: Map Text SBVI.SVal
+      sValFields = flip Map.mapMaybe aValFields $ \case
+        (_etype, AVal _prov sVal) -> Just sVal
+        _                         -> Nothing
+
+  mInvariants <- view (invariants . at tn)
+  _ <- case mInvariants of
+    Nothing -> pure ()
+    Just invariants' -> for_ invariants' $ \invariant ->
+      case runReaderT (checkSchemaInvariant invariant) sValFields of
+        Nothing -> pure ()
+        Just c  -> addConstraint c
+
+  pure $ Object aValFields
 
 analyzeAtO
   :: forall m term
@@ -759,7 +755,7 @@ analyzeAtO colNameT objT = do
     obj@(Object fields) <- analyzeO objT
     sCn <- analyze colNameT
 
-    let getObjVal :: String -> m Object
+    let getObjVal :: Text -> m Object
         getObjVal fieldName = case Map.lookup fieldName fields of
           Nothing -> throwError $ KeyNotPresent fieldName obj
           Just (fieldType, AVal _ _) -> throwError $
@@ -769,7 +765,7 @@ analyzeAtO colNameT objT = do
 
     case unliteralS sCn of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
-      Just concreteColName -> getObjVal concreteColName
+      Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
   :: (Analyzer m term, SymWord a)
@@ -813,7 +809,7 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
   foldrM
     (\fieldName rest -> do
       val <- getObjVal fieldName
-      pure $ ite (colName .== literalS fieldName) val rest
+      pure $ ite (colName .== literalS (T.unpack fieldName)) val rest
     )
     firstVal
     relevantFields'
@@ -833,7 +829,7 @@ analyzeTermO = \case
     -- columns
     let colSet = Set.fromList cols
         relevantFields
-          = Map.filterWithKey (\k _ -> T.pack k `Set.member` colSet) fields
+          = Map.filterWithKey (\k _ -> k `Set.member` colSet) fields
 
     analyzeRead tn relevantFields rowKey
 
@@ -1106,28 +1102,13 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    void $ iforM obj' $ \colName (fieldType, aval') -> do
-      let cn = ColumnName colName
+    mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
+      let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
 
-      let checkInvariants :: SBVI.SVal -> Analyze ()
-          checkInvariants val = do
-
-            --
-            -- TODO: this is wrong in the presence of invariants that affect
-            --       multiple columns:
-            --
-            mInvariant <- view (invariants . at (tn, cn))
-
-            case mInvariant of
-              Nothing -> pure ()
-              Just invariant -> do
-                let inv = runReader (checkSchemaInvariant invariant) val
-                maintainsInvariants %= (&&& inv)
-
       case aval' of
-        AVal mProv val' -> do
-          checkInvariants val'
+        AVal mProv sVal -> do
+          -- checkInvariants sVal
 
           let writeDelta :: forall t
                           . (Num t, SymWord t)
@@ -1138,7 +1119,7 @@ analyzeTerm = \case
               writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
-                let next = mkS mProv val'
+                let next = mkS mProv sVal
                 prev <- use cell
                 cell .= next
                 let diff = next - prev
@@ -1147,19 +1128,33 @@ analyzeTerm = \case
 
           case fieldType of
             EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
+            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv sVal
             EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
-            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
-            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
-            EType TAny     -> throwError OpaqueValEncountered
-            EObjectTy _    -> throwError UnsupportedObjectInDbCell
+            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv sVal
+            EType TAny     -> void $ throwError OpaqueValEncountered
+            EObjectTy _    -> void $ throwError UnsupportedObjectInDbCell
+
+          pure (Just sVal)
 
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
-        AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
+        AnObj obj'' -> throwError $ AValUnexpectedlyObj obj''
         OpaqueVal   -> throwError OpaqueValEncountered
+
+
+    let sValFields :: Map Text SBVI.SVal
+        sValFields = Map.mapMaybe id mValFields
+
+    mInvariants <- view (invariants . at tn)
+    _ <- case mInvariants of
+      Nothing -> pure ()
+      Just invariants' -> for_ invariants' $ \invariant ->
+        case runReaderT (checkSchemaInvariant invariant) sValFields of
+          Nothing  -> pure ()
+          Just inv -> maintainsInvariants %= (&&& inv)
 
     --
     -- TODO: make a constant on the pact side that this uses:
@@ -1312,29 +1307,39 @@ format s tms = do
     pure $ case op of {           \
       Eq'  -> a' .== b';          \
       Neq' -> a' ./= b';          \
-      }
+    }
+
+type InvariantCheck = ReaderT (Map Text SBVI.SVal) Maybe
 
 --
 -- TODO: convert this to use `S a`
 --
-checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
+checkSchemaInvariant :: SchemaInvariant a -> InvariantCheck (SBV a)
 checkSchemaInvariant = \case
 
   -- comparison
   SchemaDecimalComparison op a b -> COMPARISON_SCHEMA_CHECK
-  SchemaIntComparison op a b     -> COMPARISON_SCHEMA_CHECK
-  SchemaStringComparison op a b  -> COMPARISON_SCHEMA_CHECK
-  SchemaBoolEqNeq op a b         -> EQ_NEQ_SCHEMA_CHECK
-  SchemaKeySetEqNeq op a b       -> EQ_NEQ_SCHEMA_CHECK
+  SchemaIntComparison     op a b -> COMPARISON_SCHEMA_CHECK
+  SchemaStringComparison  op a b -> COMPARISON_SCHEMA_CHECK
+  SchemaBoolEqNeq         op a b -> EQ_NEQ_SCHEMA_CHECK
+  SchemaKeySetEqNeq       op a b -> EQ_NEQ_SCHEMA_CHECK
+
+  SchemaIntArithOp Add a b -> do
+    a' <- checkSchemaInvariant a
+    b' <- checkSchemaInvariant b
+    pure $ a' + b'
 
   -- literals
-  SchemaDecimalLiteral d -> pure $ literal d
-  SchemaIntLiteral i     -> pure $ literal i
-  SchemaStringLiteral s  -> pure $ literal (T.unpack s)
-  SchemaTimeLiteral t    -> pure $ literal t
-  SchemaBoolLiteral b    -> pure $ literal b
+  SchemaDecimalLiteral a -> pure $ literal a
+  SchemaIntLiteral     a -> pure $ literal a
+  SchemaStringLiteral  a -> pure $ literal (T.unpack a)
+  SchemaTimeLiteral    a -> pure $ literal a
+  SchemaBoolLiteral    a -> pure $ literal a
 
-  SchemaVar _            -> asks SBVI.SBV
+  SchemaVar name         -> do
+    -- TODO: is this correct?
+    Just it <- view (at name)
+    pure (SBVI.SBV it)
 
   SchemaLogicalOp op args -> do
     args' <- for args checkSchemaInvariant
