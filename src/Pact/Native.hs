@@ -263,7 +263,7 @@ fold' i as = argsError' i as
 
 filter' :: NativeFun e
 filter' i [app@TApp {},l] = reduce l >>= \l' -> case l' of
-           TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
+           TList ls lt _ -> (\b -> TList b lt def) . concat <$>
                          forM ls (\a -> do
                            t <- apply' app [a]
                            case t of
@@ -549,5 +549,5 @@ hash' i as = case as of
   where go = return . tStr . asString . hash
 
 txHash :: RNativeFun e
-txHash _ [] = (tStr . asString) <$> view eeHash
+txHash _ [] = tStr . asString <$> view eeHash
 txHash i as = argsError i as

@@ -316,7 +316,7 @@ enforceBlessedHashes i mn h = do
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
-    Just (Module{..})
+    Just Module{..}
       | h == _mHash -> return () -- current version ok
       | h `HS.member` _mBlessed -> return () -- hash is blessed
       | otherwise -> evalError' i $

@@ -140,7 +140,7 @@ solveOverloads :: TC ()
 solveOverloads = do
 
   overs <- use tcOverloads >>=
-           traverse (traverse (\i -> ((i,) . fst) <$> lookupAst "solveOverloads" (_aId (_aNode i))))
+           traverse (traverse (\i -> (i,) . fst <$> lookupAst "solveOverloads" (_aId (_aNode i))))
 
   let runSolve os = forM os $ \(o@Overload {..}) -> case _oSolved of
         Just {} -> return o

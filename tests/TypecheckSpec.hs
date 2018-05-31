@@ -28,7 +28,7 @@ type TCResultCheck a = TCResult -> ([a] -> [a] -> Expectation) -> Expectation
 checkUnresolvedTys :: TCResultCheck (Type UserType)
 checkUnresolvedTys (tl,_) test = filter isUnresolvedTy (map _aTy (toList tl)) `test` []
 
-checkFailures :: TCResultCheck (Failure)
+checkFailures :: TCResultCheck Failure
 checkFailures (_,s) test = toList (_tcFailures s) `test` []
 
 topLevelTypechecks :: Text -> TCResult -> Spec
@@ -70,7 +70,7 @@ checkFuns = describe "pact typecheck" $ do
 
 loadModule :: FilePath -> ModuleName -> IO ModuleData
 loadModule fp mn = do
-  (r,s) <- execScript' (Quiet) fp
+  (r,s) <- execScript' Quiet fp
   either (die def) (const (return ())) r
   case view (rEnv . eeRefStore . rsModules . at mn) s of
     Just m -> return m

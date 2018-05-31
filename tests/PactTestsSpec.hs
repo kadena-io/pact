@@ -32,7 +32,7 @@ cpTest = describe "cp regression" $ runScript ("examples" </> "cp" </> "cp.repl"
 
 
 findTests :: IO [FilePath]
-findTests = (map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse)) <$> getDirectoryContents tdir
+findTests = map (tdir </>) . filter ((== ".repl") . reverse . take 5 . reverse) <$> getDirectoryContents tdir
             where tdir = "tests" </> "pact"
 
 

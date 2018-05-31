@@ -684,7 +684,7 @@ lookupObj name = do
     Nothing            -> throwError $ VarNotInScope name
     Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
     Just (AnObj obj)   -> pure obj
-    Just (OpaqueVal)   -> throwError OpaqueValEncountered
+    Just OpaqueVal   -> throwError OpaqueValEncountered
 
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
@@ -696,7 +696,7 @@ lookupVal name = do
     Nothing                -> throwError $ VarNotInScope name
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
-    Just (OpaqueVal)       -> throwError OpaqueValEncountered
+    Just OpaqueVal       -> throwError OpaqueValEncountered
 
 analyzeRead :: TableName -> Map String EType -> Term String -> Analyze Object
 analyzeRead tn fields rowKey = do

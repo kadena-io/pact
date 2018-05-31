@@ -138,7 +138,7 @@ typed = colon *> parseType
 
 parseType :: P (Type TypeName)
 parseType =
-  (brackets (parseType >>= \t -> return (TyList t) <?> "typed list")) <|>
+  brackets (parseType >>= \t -> return (TyList t) <?> "typed list") <|>
   parseUserSchema <|>
   tsymbol tyInteger *> return (TyPrim TyInteger) <|>
   tsymbol tyDecimal *> return (TyPrim TyDecimal) <|>

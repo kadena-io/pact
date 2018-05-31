@@ -163,8 +163,8 @@ checkFunctionBody tables (Just check) body argTys nodeNames =
                     Right symAction -> pure symAction
 
         case tm of
-          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+          ETerm   body'' _ -> go . fmap mkAVal . analyzeTerm $ body''
+          EObject body'' _ -> go . fmap AnObj . analyzeTermO $ body''
 
       mVarVal <- tryTakeMVar compileFailureVar
       pure $ case mVarVal of
@@ -201,8 +201,8 @@ checkFunctionBody tables Nothing body argTys nodeNames =
                     Right symAction -> pure symAction
 
         case tm of
-          ETerm   body'' _ -> go . (fmap mkAVal) . analyzeTerm $ body''
-          EObject body'' _ -> go . (fmap AnObj) . analyzeTermO $ body''
+          ETerm   body'' _ -> go . fmap mkAVal . analyzeTerm $ body''
+          EObject body'' _ -> go . fmap AnObj . analyzeTermO $ body''
 
       mVarVal <- tryTakeMVar compileFailureVar
       pure $ case mVarVal of
@@ -302,8 +302,8 @@ verifyModule testCheck modules (_mod, modRefs) = do
   -- All function definitions in this module. We're going to look through these
   -- for properties.
   let defns = flip HM.filter modRefs $ \ref -> case ref of
-        Ref (TDef {}) -> True
-        _             -> False
+        Ref TDef {} -> True
+        _           -> False
 
   tablesWithInvariants <- for tables $ \(tabName, tab) -> do
     (TopTable _info _name (TyUser schema) _meta, _tcState)
@@ -348,7 +348,7 @@ verifyModule testCheck modules (_mod, modRefs) = do
   for defnsWithChecks' $ \(ref, props) -> do
     (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
     case fun of
-      TopFun (FDefun {}) _ -> do
+      TopFun FDefun {} _ -> do
         result  <- failedTcOrAnalyze tablesWithInvariants tcState fun Nothing
         results <- for props $
           failedTcOrAnalyze tablesWithInvariants tcState fun . Just
