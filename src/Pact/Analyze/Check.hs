@@ -189,37 +189,37 @@ checkFunctionBody tables (parsed, check) body argTys nodeNames =
       Right args -> do
         compileFailureVar <- newEmptyMVar
 
-        let goal = checkGoal check
-        checkResult <- runWithQuery (goal == Satisfaction) (resultQuery parsed goal) SBV.z3 $ do
+        --
+        -- TODO: preallocate symbolic DB reads alongside args (Environment)
+        --
+        -- Later, we can accept this (or a slightly more user-friendly
+        -- version of it) from upstream to do "dynamic symbolic evaluation"
+        --
 
-          --
-          -- TODO: preallocate symbolic DB reads alongside args (Environment)
-          --
-          -- Later, we can accept this (or a slightly more user-friendly
-          -- version of it) from upstream to do "dynamic symbolic evaluation"
-          --
+        let aEnv   = mkAnalyzeEnv args tables
+            state0 = mkInitialAnalyzeState tables
 
-          let aEnv    = mkAnalyzeEnv args tables
-              state0  = mkInitialAnalyzeState tables
+            evaluate :: Analyze AVal -> Symbolic (SBV Bool)
+            evaluate act = do
+              case runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0 of
+                Left cf -> do
+                  liftIO $ putMVar compileFailureVar cf
+                  pure false
+                Right (propResult, state1, constraints) -> do
+                  let qEnv  = mkQueryEnv aEnv state1 propResult
+                      query = analyzeCheck check
 
-              evaluate :: Analyze AVal -> Symbolic (SBV Bool)
-              evaluate act = do
-                case runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0 of
-                  Left cf -> do
-                    liftIO $ putMVar compileFailureVar cf
-                    pure false
-                  Right (propResult, state1, constraints) -> do
-                    let qEnv  = mkQueryEnv aEnv state1 propResult
-                        query = analyzeCheck check
+                  runConstraints constraints
+                  eQuery <- runExceptT $ runReaderT (queryAction query) qEnv
+                  case eQuery of
+                    Left cf' -> do
+                      liftIO $ putMVar compileFailureVar cf'
+                      pure false
+                    Right symAction -> pure $ _sSbv symAction
 
-                    runConstraints constraints
-                    eQuery <- runExceptT $ runReaderT (queryAction query) qEnv
-                    case eQuery of
-                      Left cf' -> do
-                        liftIO $ putMVar compileFailureVar cf'
-                        pure false
-                      Right symAction -> pure $ _sSbv symAction
+            goal   = checkGoal check
 
+        checkResult <- runWithQuery (goal == Satisfaction) (resultQuery parsed goal) SBV.z3 $
           evaluate $ case tm of
             ETerm   body'' _ -> fmap mkAVal . analyzeTerm $ body''
             EObject body'' _ -> fmap AnObj . analyzeTermO $ body''
