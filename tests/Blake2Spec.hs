@@ -28,8 +28,8 @@ b2b_md_len :: [Int]; b2b_md_len = [ 20, 32, 48, 64 ];
 b2b_in_len :: [Int]; b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ];
 
 
-selftest_seq :: Int -> Word32 -> ByteString
-selftest_seq len seed =
+selftestSeq :: Int -> Word32 -> ByteString
+selftestSeq len seed =
   let a' = 0xDEAD4BAD * seed
       b' = 1
   in pack $ reverse $ fst $ ffoldl ([],(a',b')) [0..(pred len)] $ \(bs,(a,b)) _ ->
@@ -49,10 +49,10 @@ blake2b_selftest = do
 
       cxr = ffoldl cxinit b2b_md_len $
         \c outlen -> ffoldl c b2b_in_len $ \cx0 inlen ->
-          let inB = selftest_seq inlen (fromIntegral inlen)
+          let inB = selftestSeq inlen (fromIntegral inlen)
               (Right md0) = blake2b outlen mempty inB
               cx1 = blake2b_update md0 cx0
-              key = selftest_seq outlen (fromIntegral outlen)
+              key = selftestSeq outlen (fromIntegral outlen)
               (Right md1) = blake2b outlen key inB
           in blake2b_update md1 cx1
 
@@ -82,10 +82,10 @@ blake2s_selftest = do
 
       cxr = ffoldl cxinit b2s_md_len $
         \c outlen -> ffoldl c b2s_in_len $ \cx0 inlen ->
-          let inB = selftest_seq inlen (fromIntegral inlen)
+          let inB = selftestSeq inlen (fromIntegral inlen)
               (Right md0) = blake2s outlen mempty inB
               cx1 = blake2s_update md0 cx0
-              key = selftest_seq outlen (fromIntegral outlen)
+              key = selftestSeq outlen (fromIntegral outlen)
               (Right md1) = blake2s outlen key inB
           in blake2s_update md1 cx1
 
