@@ -22,10 +22,11 @@ import           Control.Monad.Gen          (runGenTFrom)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
+import           Data.Either                (lefts, rights)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (catMaybes, mapMaybe)
+import           Data.Maybe                 (mapMaybe)
 import           Data.Monoid                ((<>))
 import           Data.SBV                   (SBV, Symbolic, false)
 import qualified Data.SBV                   as SBV
@@ -267,13 +268,19 @@ moduleTables modules (_mod, modRefs) = do
     let mExp :: Maybe Exp
         mExp = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
 
-    let invariants :: [SchemaInvariant Bool]
+    let invariants :: [Invariant Bool]
         invariants = case mExp of
-          Just (Pact.ELitList exps) -> catMaybes $ flip fmap exps $ \meta -> do
-            SomeSchemaInvariant expr TBool
-              <- expToInvariant (_utFields schema) meta
-            pure expr
-          _                  -> []
+          Just (Pact.ELitList exps) ->
+            let parsedList = exps <&> \meta ->
+                  case runReaderT (expToInvariant TBool meta) (_utFields schema) of
+                    Left err   -> Left (meta, err)
+                    Right good -> Right good
+                failures = lefts parsedList
+            in if null failures
+               then rights parsedList
+               -- TODO(joel): don't just throw an error
+               else error ("failed parse of " ++ show failures)
+          _ -> []
 
     pure $ Table tabName schema invariants
 
@@ -285,8 +292,17 @@ moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
 
         checks :: [Check]
         checks = case mExp of
-          Just (Pact.ELitList exps) -> catMaybes $ expToCheck <$> exps
-          _                         -> []
+          Just (Pact.ELitList exps) ->
+            let parsedList = exps <&> \meta -> case expToCheck meta of
+                  Nothing   -> Left meta
+                  Just good -> Right good
+                failures = lefts parsedList
+            in if null failures
+               then rights parsedList
+               -- TODO(joel): don't just throw an error
+               else error ("failed parse of " ++ show failures)
+
+          _ -> []
     in (ref, checks)
 
   where
