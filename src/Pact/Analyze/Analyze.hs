@@ -256,7 +256,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
   where
     tableNames :: [TableName]
-    tableNames = map (TableName . T.unpack . view Types.tableName) $ tables
+    tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
     decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
