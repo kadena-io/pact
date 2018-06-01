@@ -37,6 +37,7 @@ import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
 import           Pact.Typechecker           (typecheckTopLevel)
 import           Pact.Types.Lang            (mMetas, tMeta)
@@ -264,45 +265,57 @@ moduleTables modules (_mod, modRefs) = do
 
     let schemaName = asString (_utName schema)
 
-    -- look through every meta-property in the schema for invariants
-    let mExp :: Maybe Exp
-        mExp = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
+        invariants = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
+        invariant  = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariant"
 
-    let invariants :: [Invariant Bool]
-        invariants = case mExp of
-          Just (Pact.ELitList exps) ->
-            let parsedList = exps <&> \meta ->
-                  case runReaderT (expToInvariant TBool meta) (_utFields schema) of
-                    Left err   -> Left (meta, err)
-                    Right good -> Right good
-                failures = lefts parsedList
-            in if null failures
-               then rights parsedList
-               -- TODO(joel): don't just throw an error
-               else error ("failed parse of " ++ show failures)
-          _ -> []
+        exps :: [Exp]
+        exps = case invariants of
+          Just (Pact.ELitList x) -> x
+          -- TODO(joel): don't just throw an error
+          Just _ -> error "invariants must be a list"
+          Nothing -> case invariant of
+            Just exp -> [exp]
+            Nothing  -> []
 
-    pure $ Table tabName schema invariants
+        parsedList = exps <&> \meta ->
+          case runReaderT (expToInvariant TBool meta) (_utFields schema) of
+            Left err   -> Left (meta, err)
+            Right good -> Right good
+        failures = lefts parsedList
+
+        invariants' :: [Invariant Bool]
+        invariants' = if null failures
+          then rights parsedList
+          -- TODO(joel): don't just throw an error
+          else error ("failed parse of " ++ show failures)
+
+    pure $ Table tabName schema invariants'
 
 moduleFunChecks :: ModuleData -> HM.HashMap Text (Ref, [Check])
 moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
-    -- look through every meta-property in the definition for invariants
-    let mExp :: Maybe Exp
-        mExp = defn ^? tMeta . _Just . mMetas . ix "properties"
+    let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
+        property   = defn ^? tMeta . _Just . mMetas . ix "property"
+
+        exps :: [Exp]
+        exps = case properties of
+          Just (Pact.ELitList x) -> x
+          -- TODO(joel): don't just throw an error
+          Just _ -> error "properties must be a list"
+          Nothing -> case property of
+            Just exp -> [exp]
+            Nothing  -> []
+
+        parsedList = exps <&> \meta -> case expToCheck meta of
+          Nothing   -> Left meta
+          Just good -> Right good
+        failures = lefts parsedList
 
         checks :: [Check]
-        checks = case mExp of
-          Just (Pact.ELitList exps) ->
-            let parsedList = exps <&> \meta -> case expToCheck meta of
-                  Nothing   -> Left meta
-                  Just good -> Right good
-                failures = lefts parsedList
-            in if null failures
-               then rights parsedList
-               -- TODO(joel): don't just throw an error
-               else error ("failed parse of " ++ show failures)
+        checks = if null failures
+          then rights parsedList
+          -- TODO(joel): don't just throw an error
+          else error ("failed parse of " ++ show failures)
 
-          _ -> []
     in (ref, checks)
 
   where

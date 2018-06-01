@@ -569,8 +569,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema account2
               ("accounts schema"
-                (invariants
-                  [(>= balance 0.0)]))
+                (invariant (>= balance 0.0)))
               balance:decimal)
             (deftable accounts2:{account2})
 
@@ -925,7 +924,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               ("doc"
-                (invariants [(!= nonzero 0)]))
+                (invariant (!= nonzero 0)))
               nonzero:integer)
             (deftable ints:{ints-row})
 
@@ -942,7 +941,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               ("doc"
-                (invariants [(= zero 0)]))
+                (invariant (= zero 0)))
               zero:integer)
             (deftable ints:{ints-row})
 
