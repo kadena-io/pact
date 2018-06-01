@@ -404,9 +404,10 @@ newtype Query a
 --         rename allocateArgs
 --
 -- Returns problematic argument name, or arg map
-mkArgs :: [Arg] -> Either Text (Map UniqueId AVal)
-mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
+mkArgMap :: [Arg] -> Either Text (Map UniqueId AVal)
+mkArgMap argTys = fmap Map.fromList $ for argTys $ \(name, uid, node) ->
   let symName = "arg_" ++ T.unpack name
+      ty = Pact._aTy node
 
       wrap :: SBV a -> Either e AVal
       wrap = Right . mkAVal . sansProv

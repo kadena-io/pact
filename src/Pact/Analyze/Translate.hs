@@ -28,8 +28,8 @@ import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           Pact.Types.Lang            (Arg (..), Literal (..),
-                                             PrimType (..), Type (..))
+import           Pact.Types.Lang            (Literal (..), PrimType (..),
+                                             Type (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
@@ -93,6 +93,11 @@ instance Monoid TranslateFailure where
   mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
   mappend x y = AlternativeFailures [x, y]
 
+mkTranslateEnv :: [Arg] -> Map Node (Text, UniqueId)
+mkTranslateEnv = foldl'
+  (\m (nm, uid, node) -> Map.insert node (nm, uid) m)
+  Map.empty
+
 newtype TranslateM a
   = TranslateM { unTranslateM :: ReaderT (Map Node (Text, UniqueId)) (GenT UniqueId (Except TranslateFailure)) a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
@@ -114,7 +119,7 @@ translateType' :: Pact.Type Pact.UserType -> Maybe EType
 translateType' = \case
   TyUser (Pact.Schema _ _ fields _) ->
     fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-      \(Arg name ty _info) -> (name, translateType' ty)
+      \(Pact.Arg name ty _info) -> (name, translateType' ty)
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
   TySchema _ ty'   -> translateType' ty'

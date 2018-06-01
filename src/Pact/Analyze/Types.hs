@@ -38,7 +38,6 @@ import qualified Data.Text            as T
 import           Data.Thyme           (UTCTime, microseconds)
 import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
 
-import qualified Pact.Types.Runtime   as Pact
 import qualified Pact.Types.Typecheck as TC
 import           Pact.Types.Util      (AsString)
 
@@ -503,11 +502,8 @@ instance Num (Prop Decimal) where
 -- TODO: extract data type
 --
 type Arg
-  = (Text, UniqueId, Pact.Type TC.UserType)
+  = (Text, UniqueId, TC.Node)
 
---
--- TODO: extract data type
---
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
