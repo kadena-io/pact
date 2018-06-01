@@ -264,15 +264,15 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
       RowWrite "tokens" (PVar 0 "row")
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @RowKey)) (RowRead "tokens" (PVar 0 "row"))
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
+      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
       RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Success ==> (Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Success ==> (Forall 0 "row" (Ty (Rep @String)) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
@@ -313,10 +313,10 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks1" (PVar 0 "row")
     -- Using the other keyset:
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks2" (PVar 0 "row")
 
   describe "enforce-keyset.row-level.write" $ do
@@ -338,16 +338,16 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @RowKey)) (RowWrite "tokens" (PVar 0 "row"))
+      Exists 0 "row" (Ty (Rep @String)) (RowWrite "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @RowKey)) (RowRead "tokens" (PVar 0 "row"))
+      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @RowKey)) (RowEnforced "tokens" "ks" (PVar 0 "row"))
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @RowKey)) $
+      Exists 0 "row" (Ty (Rep @String)) (RowEnforced "tokens" "ks" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Valid $ RowWrite "tokens" (PVar 0 "acct")
                           ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
@@ -375,9 +375,9 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
   describe "table-read.multiple-read" $
@@ -593,10 +593,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (""
                 (properties [
-                  ;;
-                  ;; TODO: this parse silently fails:
-                  ;;
-                  (not (exists (row:string) (= (int-cell-delta 'accounts 'balance row) 2)))
+                  (not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))
                 ]))
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
@@ -606,23 +603,20 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    --
-    -- TODO: fix parse problem affecting above.
-    --
-    -- expectVerified code
+    expectVerified code
 
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
 
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
-      PRowKeyComparison Neq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      PStringComparison Neq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
 
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @RowKey)) $
-      PRowKeyComparison Eq (PVar 0 "row" :: Prop RowKey) (PLit "bob") ==>
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      PStringComparison Eq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @RowKey)) $
+    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @String)) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
     expectPass code $ Valid $
@@ -1075,7 +1069,7 @@ spec = describe "analyze" $ do
     let a0       = PVar 0 "a"
         a1       = PVar 1 "a"
         -- b        = PVar 0 "b"
-        ty       = Ty (Rep @RowKey)
+        ty       = Ty (Rep @String)
         intTy    = Ty (Rep @Integer)
         allA0    = Forall 0 "a"
         allA1    = Forall 1 "a"

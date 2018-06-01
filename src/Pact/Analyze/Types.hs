@@ -432,10 +432,9 @@ data Prop a where
   PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
   PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
   PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
-  PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
   PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
-  PRowKeyComparison  :: ComparisonOp -> Prop RowKey  -> Prop RowKey  -> Prop Bool
-  PKeySetComparison  :: ComparisonOp -> Prop KeySet  -> Prop KeySet  -> Prop Bool
+  PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
+  PKeySetEqNeq       :: EqNeq        -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -512,7 +511,7 @@ type Arg
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
-  , _tableInvariants :: [SchemaInvariant Bool]
+  , _tableInvariants :: [Invariant Bool]
   } deriving (Show)
 
 data Goal
@@ -582,72 +581,55 @@ typeEq _        _        = Nothing
 --
 -- The language is stateless. Arithmetic could be added if we decide it's
 -- useful.
-data SchemaInvariant a where
-
-  -- comparisons
-  SchemaDecimalComparison
-    :: ComparisonOp
-    -> SchemaInvariant Decimal
-    -> SchemaInvariant Decimal
-    -> SchemaInvariant Bool
-
-  SchemaIntComparison
-    :: ComparisonOp
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Bool
-
-  SchemaStringComparison
-    :: ComparisonOp
-    -> SchemaInvariant String
-    -> SchemaInvariant String
-    -> SchemaInvariant Bool
-
-  SchemaTimeComparison
-    :: ComparisonOp
-    -> SchemaInvariant Time
-    -> SchemaInvariant Time
-    -> SchemaInvariant Bool
-
-  SchemaBoolEqNeq
-    :: EqNeq
-    -> SchemaInvariant Bool
-    -> SchemaInvariant Bool
-    -> SchemaInvariant Bool
-
-  SchemaKeySetEqNeq
-    :: EqNeq
-    -> SchemaInvariant KeySet
-    -> SchemaInvariant KeySet
-    -> SchemaInvariant Bool
-
-  SchemaIntArithOp
-    :: ArithOp
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Integer
+data Invariant a where
 
   -- literals
-  SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
-  SchemaIntLiteral     :: Integer -> SchemaInvariant Integer
-  SchemaStringLiteral  :: Text    -> SchemaInvariant String
-  SchemaTimeLiteral    :: Time    -> SchemaInvariant Time
-  SchemaBoolLiteral    :: Bool    -> SchemaInvariant Bool
+  IDecimalLiteral :: Decimal -> Invariant Decimal
+  IIntLiteral     :: Integer -> Invariant Integer
+  IStringLiteral  :: Text    -> Invariant String
+  ITimeLiteral    :: Time    -> Invariant Time
+  IBoolLiteral    :: Bool    -> Invariant Bool
+
+  ISym :: S a -> Invariant a
 
   -- variables
-  SchemaVar :: Text -> SchemaInvariant a
+  IVar :: Text -> Invariant a
 
-  -- logical operations
-  SchemaLogicalOp
-    :: LogicalOp
-    -> [SchemaInvariant Bool]
-    -> SchemaInvariant Bool
+  -- string ops
+  IStrConcat :: Invariant String -> Invariant String -> Invariant String
+  IStrLength :: Invariant String                     -> Invariant Integer
 
-deriving instance Eq (SchemaInvariant a)
-deriving instance Show (SchemaInvariant a)
+  -- numeric ops
+  IDecArithOp      :: ArithOp             -> Invariant Decimal -> Invariant Decimal -> Invariant Decimal
+  IIntArithOp      :: ArithOp             -> Invariant Integer -> Invariant Integer -> Invariant Integer
+  IDecUnaryArithOp :: UnaryArithOp        -> Invariant Decimal ->                      Invariant Decimal
+  IIntUnaryArithOp :: UnaryArithOp        -> Invariant Integer ->                      Invariant Integer
+  IDecIntArithOp   :: ArithOp             -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
+  IIntDecArithOp   :: ArithOp             -> Invariant Integer -> Invariant Decimal -> Invariant Decimal
+  IModOp           :: Invariant Integer   -> Invariant Integer ->                      Invariant Integer
+  IRoundingLikeOp1 :: RoundingLikeOp      -> Invariant Decimal ->                      Invariant Integer
+  IRoundingLikeOp2 :: RoundingLikeOp      -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
+
+  -- Time
+  IIntAddTime      :: Invariant Time -> Invariant Integer -> Invariant Time
+  IDecAddTime      :: Invariant Time -> Invariant Decimal -> Invariant Time
+
+  -- comparison
+  IDecimalComparison :: ComparisonOp -> Invariant Decimal -> Invariant Decimal -> Invariant Bool
+  IIntComparison     :: ComparisonOp -> Invariant Integer -> Invariant Integer -> Invariant Bool
+  IStringComparison  :: ComparisonOp -> Invariant String  -> Invariant String  -> Invariant Bool
+  ITimeComparison    :: ComparisonOp -> Invariant Time    -> Invariant Time    -> Invariant Bool
+  IBoolComparison    :: ComparisonOp -> Invariant Bool    -> Invariant Bool    -> Invariant Bool
+  IKeySetEqNeq       :: EqNeq        -> Invariant KeySet  -> Invariant KeySet  -> Invariant Bool
+
+  -- boolean ops
+  ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
+
+deriving instance Eq (Invariant a)
+deriving instance Show (Invariant a)
 
 data SomeSchemaInvariant where
-  SomeSchemaInvariant :: SchemaInvariant a -> Type a -> SomeSchemaInvariant
+  SomeSchemaInvariant :: Invariant a -> Type a -> SomeSchemaInvariant
 
 deriving instance Show SomeSchemaInvariant
 

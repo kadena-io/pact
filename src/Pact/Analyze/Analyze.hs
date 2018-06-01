@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -48,7 +47,7 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
-                                            SymWord (exists_, forall_, literal),
+                                            SymWord (exists_, forall_),
                                             Symbolic, constrain, false, ite,
                                             mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
@@ -80,7 +79,7 @@ data AnalyzeEnv
     { _aeScope    :: Map UniqueId AVal           -- used as a stack
     , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
-    , _invariants :: Map TableName [SchemaInvariant Bool]
+    , _invariants :: Map TableName [Invariant Bool]
     }
   deriving Show
 
@@ -284,8 +283,8 @@ mkInitialAnalyzeState tables = AnalyzeState
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
 
-addConstraint :: SBool -> Analyze ()
-addConstraint = tell . Constraints . constrain
+addConstraint :: S Bool -> Analyze ()
+addConstraint = tell . Constraints . constrain . _sSbv
 
 sbvIdentifier :: Text -> Text
 sbvIdentifier = T.replace "-" "_"
@@ -479,21 +478,31 @@ instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 class (MonadError AnalyzeFailure m) => Analyzer m term where
   analyze  :: (Show a, SymWord a) => term a -> m (S a)
+
+class Analyzer m term => ObjectAnalyzer m term where
   analyzeO :: term Object -> m Object
 
 instance Analyzer Analyze Term where
   analyze  = analyzeTerm
+
+instance ObjectAnalyzer Analyze Term where
   analyzeO = analyzeTermO
 
 instance Analyzer Query Prop where
   analyze  = analyzeProp
+
+instance ObjectAnalyzer Query Prop where
   analyzeO = analyzePropO
+
+instance Analyzer InvariantCheck Invariant where
+  analyze = checkInvariant
 
 class SymbolicTerm term where
   injectS :: S a -> term a
 
-instance SymbolicTerm Term where injectS = Literal
-instance SymbolicTerm Prop where injectS = PSym
+instance SymbolicTerm Term      where injectS = Literal
+instance SymbolicTerm Prop      where injectS = PSym
+instance SymbolicTerm Invariant where injectS = ISym
 
 symArrayAt
   :: forall array k v
@@ -747,20 +756,20 @@ applyInvariants
   -- | The function used to apply an invariant in this context. The @SBV Bool@
   --   is an assertion of what it would take for the invariant to be true in
   --   this context.
-  -> (SBV Bool -> Analyze ())
+  -> (S Bool -> Analyze ())
   -> Analyze ()
 applyInvariants tn sValFields addInvariant = do
   mInvariants <- view (invariants . at tn)
   case mInvariants of
     Nothing -> pure ()
     Just invariants' -> for_ invariants' $ \invariant ->
-      case runReaderT (checkSchemaInvariant invariant) sValFields of
-        Nothing  -> pure ()
-        Just inv -> addInvariant inv
+      case runReaderT (checkInvariant invariant) sValFields of
+        Left  err -> throwError err
+        Right inv -> addInvariant inv
 
 analyzeAtO
   :: forall m term
-   . Analyzer m term
+   . ObjectAnalyzer m term
   => term String
   -> term Object
   -> m Object
@@ -781,7 +790,7 @@ analyzeAtO colNameT objT = do
       Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
-  :: (Analyzer m term, SymWord a)
+  :: (ObjectAnalyzer m term, SymWord a)
   => Schema
   -> term String
   -> term Object
@@ -1059,6 +1068,19 @@ analyzeDecAddTime timeT secsT = do
   else throwError $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
+analyzeEqNeq
+  :: (Analyzer m term, SymWord a, Show a)
+  => EqNeq
+  -> term a
+  -> term a
+  -> m (S Bool)
+analyzeEqNeq op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  pure $ sansProv $ case op of
+    Eq'  -> x .== y
+    Neq' -> x ./= y
+
 analyzeComparisonOp
   :: (Analyzer m term, SymWord a, Show a)
   => ComparisonOp
@@ -1121,8 +1143,6 @@ analyzeTerm = \case
 
       case aval' of
         AVal mProv sVal -> do
-          -- checkInvariants sVal
-
           let writeDelta :: forall t
                           . (Num t, SymWord t)
                          => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
@@ -1161,7 +1181,7 @@ analyzeTerm = \case
     let sValFields :: Map Text SBVI.SVal
         sValFields = Map.mapMaybe id mValFields
 
-    applyInvariants tn sValFields (\inv -> maintainsInvariants %= (&&& inv))
+    applyInvariants tn sValFields (\inv -> maintainsInvariants %= (&&& (_sSbv inv)))
 
     --
     -- TODO: make a constant on the pact side that this uses:
@@ -1294,62 +1314,58 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
-#define COMPARISON_SCHEMA_CHECK   \
-  do                              \
-    a' <- checkSchemaInvariant a; \
-    b' <- checkSchemaInvariant b; \
-    pure $ case op of {           \
-      Gt  -> a' .>  b';           \
-      Lt  -> a' .<  b';           \
-      Gte -> a' .>= b';           \
-      Lte -> a' .<= b';           \
-      Eq  -> a' .== b';           \
-      Neq -> a' ./= b';           \
-    }
+type InvariantCheck = ReaderT (Map Text SBVI.SVal) (Either AnalyzeFailure)
 
-#define EQ_NEQ_SCHEMA_CHECK       \
-  do                              \
-    a' <- checkSchemaInvariant a; \
-    b' <- checkSchemaInvariant b; \
-    pure $ case op of {           \
-      Eq'  -> a' .== b';          \
-      Neq' -> a' ./= b';          \
-    }
-
-type InvariantCheck = ReaderT (Map Text SBVI.SVal) Maybe
-
---
--- TODO: convert this to use `S a`
---
-checkSchemaInvariant :: SchemaInvariant a -> InvariantCheck (SBV a)
-checkSchemaInvariant = \case
-
-  -- comparison
-  SchemaDecimalComparison op a b -> COMPARISON_SCHEMA_CHECK
-  SchemaIntComparison     op a b -> COMPARISON_SCHEMA_CHECK
-  SchemaStringComparison  op a b -> COMPARISON_SCHEMA_CHECK
-  SchemaBoolEqNeq         op a b -> EQ_NEQ_SCHEMA_CHECK
-  SchemaKeySetEqNeq       op a b -> EQ_NEQ_SCHEMA_CHECK
-
-  SchemaIntArithOp Add a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ a' + b'
+checkInvariant :: Invariant a -> InvariantCheck (S a)
+checkInvariant = \case
 
   -- literals
-  SchemaDecimalLiteral a -> pure $ literal a
-  SchemaIntLiteral     a -> pure $ literal a
-  SchemaStringLiteral  a -> pure $ literal (T.unpack a)
-  SchemaTimeLiteral    a -> pure $ literal a
-  SchemaBoolLiteral    a -> pure $ literal a
+  IDecimalLiteral a -> pure $ literalS a
+  IIntLiteral     a -> pure $ literalS a
+  IStringLiteral  a -> pure $ literalS (T.unpack a)
+  ITimeLiteral    a -> pure $ literalS a
+  IBoolLiteral    a -> pure $ literalS a
 
-  SchemaVar name         -> do
-    -- TODO: is this correct?
-    Just it <- view (at name)
-    pure (SBVI.SBV it)
+  ISym sym -> pure sym
 
-  SchemaLogicalOp op args -> do
-    args' <- for args checkSchemaInvariant
+  -- variables
+  IVar name         -> do
+    mVal <- view (at name)
+    case mVal of
+      Just val -> pure (sansProv (SBVI.SBV val))
+      Nothing  -> throwError $ fromString $
+        "column name not in scope: " ++ show name
+
+  -- string ops
+  IStrConcat a b -> (.++) <$> checkInvariant a <*> checkInvariant b
+  IStrLength str -> over s2Sbv SBV.length <$> checkInvariant str
+
+  -- numeric ops
+  IDecArithOp op x y      -> analyzeDecArithOp op x y
+  IIntArithOp op x y      -> analyzeIntArithOp op x y
+  IIntDecArithOp op x y   -> analyzeIntDecArithOp op x y
+  IDecIntArithOp op x y   -> analyzeDecIntArithOp op x y
+  IIntUnaryArithOp op x   -> analyzeUnaryArithOp op x
+  IDecUnaryArithOp op x   -> analyzeUnaryArithOp op x
+  IModOp x y              -> analyzeModOp x y
+  IRoundingLikeOp1 op x   -> analyzeRoundingLikeOp1 op x
+  IRoundingLikeOp2 op x p -> analyzeRoundingLikeOp2 op x p
+
+  -- time
+  IIntAddTime time secs -> analyzeIntAddTime time secs
+  IDecAddTime time secs -> analyzeDecAddTime time secs
+
+  -- comparison
+  IDecimalComparison op a b -> analyzeComparisonOp op a b
+  IIntComparison     op a b -> analyzeComparisonOp op a b
+  IStringComparison  op a b -> analyzeComparisonOp op a b
+  ITimeComparison    op a b -> analyzeComparisonOp op a b
+  IBoolComparison    op a b -> analyzeComparisonOp op a b
+  IKeySetEqNeq       op a b -> analyzeEqNeq        op a b
+
+  -- boolean ops
+  ILogicalOp op args -> do
+    args' <- for args checkInvariant
     case (op, args') of
       (AndOp, [a, b]) -> pure $ a &&& b
       (OrOp,  [a, b]) -> pure $ a ||| b
@@ -1410,8 +1426,7 @@ analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
 analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
 analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
 analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
-analyzeProp (PRowKeyComparison op x y)  = analyzeComparisonOp op x y
-analyzeProp (PKeySetComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 
 -- Boolean ops
 analyzeProp (PLogical op props) = analyzeLogicalOp op props

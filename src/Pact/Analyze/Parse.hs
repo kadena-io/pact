@@ -11,18 +11,17 @@ module Pact.Analyze.Parse
   , expToInvariant
   ) where
 
-import           Control.Lens         ((^.), at, view)
+import           Control.Lens         (at, view, (^.))
+import           Control.Monad.Except (mzero, throwError)
 import           Control.Monad.Gen    (GenT, gen, runGenT)
-import           Control.Monad.Reader (ReaderT, local, runReaderT)
+import           Control.Monad.Reader (ReaderT, ask, local, runReaderT)
 import           Control.Monad.Trans  (lift)
 import           Data.Foldable        (asum, find)
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
-import qualified Data.Set             as Set
 import           Data.Text            (Text)
 import qualified Data.Text            as T
-import           Data.Traversable     (for)
-import           Data.Type.Equality   ((:~:) (Refl))
+import           Prelude              hiding (exp)
 
 import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
                                        TKeySet, TableName, Type)
@@ -60,6 +59,12 @@ textToComparisonOp = \case
   "<=" -> Just Lte
   "="  -> Just Eq
   "!=" -> Just Neq
+  _    -> Nothing
+
+textToEqNeq :: Text -> Maybe EqNeq
+textToEqNeq = \case
+  "="  -> Just Eq'
+  "!=" -> Just Neq'
   _    -> Nothing
 
 textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
@@ -100,6 +105,8 @@ type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
 
 -- TODO: Maybe -> Either
 type PropCheck = ReaderT (Map UniqueId EType) Maybe
+
+type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
 -- The conversion from @Exp@ to @PreProp@
 --
@@ -214,20 +221,24 @@ checkPreProp ty preProp = case (ty, preProp) of
       , PDecAddTime a' <$> checkPreProp TDecimal b
       ]
 
-  (TBool, PreApp (textToComparisonOp -> Just op) [a, b]) -> asum
+  (TBool, PreApp op'@(textToComparisonOp -> Just op) [a, b]) -> asum
     [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
     , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-    , PTimeComparison op    <$> checkPreProp TTime a    <*> checkPreProp TTime b
-    , PBoolComparison op    <$> checkPreProp TBool a    <*> checkPreProp TBool b
-    , PStringComparison op  <$> checkPreProp TStr a     <*> checkPreProp TStr b
-    , PKeySetComparison op  <$> checkPreProp TKeySet a  <*> checkPreProp TKeySet b
+    , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
+    , PBoolComparison    op <$> checkPreProp TBool a    <*> checkPreProp TBool b
+    , PStringComparison  op <$> checkPreProp TStr a     <*> checkPreProp TStr b
+    , case textToEqNeq op' of
+      Just eqNeq -> PKeySetEqNeq eqNeq
+        <$> checkPreProp TKeySet a
+        <*> checkPreProp TKeySet b
+      Nothing -> mzero
     ]
 
   (TBool, PreApp (textToLogicalOp -> Just op) args) -> case (op, args) of
     (NotOp, [a])    -> PNot <$> checkPreProp TBool a
     (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
     (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
-    _               -> lift Nothing
+    _               -> mzero
 
   (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
   (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
@@ -252,7 +263,7 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk])
     -> RowEnforced tn cn <$> checkPreProp TStr rk
 
-  _ -> lift Nothing
+  _ -> mzero
 
 --
 -- TODO: the one property this can't parse yet is PAt because it includes an
@@ -269,85 +280,73 @@ expToProp ty body = do
   preTypedBody <- runGenT (runReaderT (expToPreProp body) Map.empty)
   runReaderT (checkPreProp ty preTypedBody) Map.empty
 
--- We pass in the type of the variable so we can use it to construct
--- `SomeSchemaInvariant` when we encounter a var.
--- TODO(joel): finish these!
-expToInvariant :: [Pact.Arg UserType] -> Exp -> Maybe SomeSchemaInvariant
-expToInvariant schemaTys = \case
-  EAtom' var -> case find (\arg -> arg ^. aName == var) schemaTys of
-    Just (Pact.Arg _name (TyPrim primTy) _info) -> case primTy of
-      TyInteger -> Just (SomeSchemaInvariant (SchemaVar var) TInt)
-      TyDecimal -> Just (SomeSchemaInvariant (SchemaVar var) TDecimal)
-      TyTime    -> Just (SomeSchemaInvariant (SchemaVar var) TTime)
-      TyString  -> Just (SomeSchemaInvariant (SchemaVar var) TStr)
-      TyBool    -> Just (SomeSchemaInvariant (SchemaVar var) TBool)
-      TyKeySet  -> Just (SomeSchemaInvariant (SchemaVar var) TKeySet)
-      TyValue   -> Nothing
-    _ -> Nothing
+expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
+expToInvariant ty exp = case (ty, exp) of
+  (_, EAtom' var) -> do
+    schemaTys <- ask
+    case find (\arg -> arg ^. aName == var) schemaTys of
+      Just (Pact.Arg _name (TyPrim primTy) _info) -> case (ty, primTy) of
+        (TInt,     TyInteger) -> pure (IVar var)
+        (TDecimal, TyDecimal) -> pure (IVar var)
+        (TTime,    TyTime)    -> pure (IVar var)
+        (TStr,     TyString)  -> pure (IVar var)
+        (TBool,    TyBool)    -> pure (IVar var)
+        (TKeySet,  TyKeySet)  -> pure (IVar var)
+        (_,        TyValue)   -> throwError
+          "Invariants can't constrain opaque values"
+        (_,        _)         -> throwError $
+          "found variable " ++ show var ++ " of type " ++ show primTy ++
+          " where " ++ show ty ++ " was expected"
+      _ -> throwError $ "couldn't find column named " ++ show var
 
-  ELiteral (LDecimal d) _ -> Just
-    (SomeSchemaInvariant (SchemaDecimalLiteral (mkDecimal d)) TDecimal)
-  ELiteral (LInteger i) _ -> Just
-    (SomeSchemaInvariant (SchemaIntLiteral i) TInt)
-  (stringLike -> Just s) -> Just
-    (SomeSchemaInvariant (SchemaStringLiteral s) TStr)
-  ELiteral (LString _) _ -> error "impossible (handled by stringLike)"
-  ELiteral (LTime t) _ -> Just
-    (SomeSchemaInvariant (SchemaTimeLiteral (mkTime t)) TTime)
-  ELiteral (LBool b) _ -> Just
-    (SomeSchemaInvariant (SchemaBoolLiteral b) TBool)
+  (TDecimal, ELiteral (LDecimal d) _) -> pure (IDecimalLiteral (mkDecimal d))
+  (TInt, ELiteral (LInteger i) _)     -> pure (IIntLiteral i)
+  (TStr, stringLike -> Just s)        -> pure (IStringLiteral s)
+  (TStr, ELiteral (LString _) _)      -> error "impossible (handled by stringLike)"
+  (TTime, ELiteral (LTime t) _)       -> pure (ITimeLiteral (mkTime t))
+  (TBool, ELiteral (LBool b) _)       -> pure (IBoolLiteral b)
+  (_, ELiteral _ _)                   -> throwError "literal of unexpected type"
 
-  EList' [EAtom' "+", a, b] -> do
-    SomeSchemaInvariant a' TInt <- expToInvariant schemaTys a
-    SomeSchemaInvariant b' TInt <- expToInvariant schemaTys b
-    pure (SomeSchemaInvariant (SchemaIntArithOp Add a' b') TInt)
+  (TInt, EList' [EAtom' "str-length", str]) -> IStrLength <$> expToInvariant TStr str
+  (TStr, EList' [EAtom' "+", a, b])
+    -> IStrConcat <$> expToInvariant TStr a <*> expToInvariant TStr b
 
-  EList' [EAtom' op, a, b]
-    | Just op' <- textToComparisonOp op -> do
-    SomeSchemaInvariant a' aTy <- expToInvariant schemaTys a
-    SomeSchemaInvariant b' bTy <- expToInvariant schemaTys b
-    let opEqNeq = case op of
-          "="  -> Just Eq'
-          "!=" -> Just Neq'
-          _    -> Nothing
+  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum
+    [ IDecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , IDecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
+    , IIntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
+    ]
+  (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
+    -> IIntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
+  (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
+    -> IDecUnaryArithOp op <$> expToInvariant TDecimal a
+  (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
+    -> IIntUnaryArithOp op <$> expToInvariant TInt a
 
-    case typeEq aTy bTy of
-      Just Refl -> case aTy of
-        TDecimal ->
-          Just (SomeSchemaInvariant (SchemaDecimalComparison op' a' b') TBool)
-        TInt     ->
-          Just (SomeSchemaInvariant (SchemaIntComparison op' a' b') TBool)
-        TStr     ->
-          Just (SomeSchemaInvariant (SchemaStringComparison op' a' b') TBool)
-        TTime    ->
-          Just (SomeSchemaInvariant (SchemaTimeComparison op' a' b') TBool)
+  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum
+    [ IIntComparison op     <$> expToInvariant TInt a     <*> expToInvariant TInt b
+    , IDecimalComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , ITimeComparison op    <$> expToInvariant TTime a    <*> expToInvariant TTime b
+    , IBoolComparison op    <$> expToInvariant TBool a    <*> expToInvariant TBool b
+    , IStringComparison op  <$> expToInvariant TStr a     <*> expToInvariant TStr b
+    , case textToEqNeq op' of
+      Just eqNeq -> IKeySetEqNeq eqNeq
+        <$> expToInvariant TKeySet a
+        <*> expToInvariant TKeySet b
+      Nothing -> mzero
+    ]
 
-        TBool    -> do
-          opEqNeq' <- opEqNeq
-          pure (SomeSchemaInvariant (SchemaBoolEqNeq opEqNeq' a' b') TBool)
-        TKeySet  -> do
-          opEqNeq' <- opEqNeq
-          pure (SomeSchemaInvariant (SchemaKeySetEqNeq opEqNeq' a' b') TBool)
+  (TBool, EList' (EAtom' op:args))
+    | Just op' <- textToLogicalOp op -> do
+    operands' <- traverse (expToInvariant TBool) args
+    case (op', operands') of
+      (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
+      (OrOp, [a, b])  -> pure (ILogicalOp OrOp [a, b])
+      (NotOp, [a])    -> pure (ILogicalOp NotOp [a])
+      _ -> throwError $ "logical op with wrong number of args: " ++ T.unpack op
 
-        TAny -> Nothing
-      Nothing   -> Nothing
-
-  EList' (EAtom' op:args)
-    | op `Set.member` Set.fromList ["and", "or", "not"] -> do
-    operands' <- for args $ \arg -> do
-      SomeSchemaInvariant arg' TBool <- expToInvariant schemaTys arg
-      Just arg'
-    case (op, operands') of
-      ("and", [a, b]) ->
-        Just $ SomeSchemaInvariant (SchemaLogicalOp AndOp [a, b]) TBool
-      ("or", [a, b]) ->
-        Just $ SomeSchemaInvariant (SchemaLogicalOp OrOp [a, b]) TBool
-      ("not", [a]) ->
-        Just $ SomeSchemaInvariant (SchemaLogicalOp NotOp [a]) TBool
-      _ -> Nothing
-
-  ESymbol {}  -> Nothing
-  EAtom {}    -> Nothing
-  EList {}    -> Nothing
-  EObject {}  -> Nothing
-  EBinding {} -> Nothing
+  (_, ESymbol {})  -> throwError $ "illegal invariant form: " ++ show exp
+  (_, EAtom {})    -> throwError $ "illegal invariant form: " ++ show exp
+  (_, EList {})    -> throwError $ "illegal invariant form: " ++ show exp
+  (_, EObject {})  -> throwError $ "illegal invariant form: " ++ show exp
+  (_, EBinding {}) -> throwError $ "illegal invariant form: " ++ show exp
