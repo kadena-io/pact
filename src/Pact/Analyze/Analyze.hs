@@ -735,15 +735,28 @@ analyzeRead tn fields rowKey = do
         (_etype, AVal _prov sVal) -> Just sVal
         _                         -> Nothing
 
+  applyInvariants tn sValFields addConstraint
+
+  pure $ Object aValFields
+
+applyInvariants
+  :: TableName
+  -- | Mapping from the fields in this table to the @SVal@ holding that field
+  --   in this context.
+  -> Map Text SBVI.SVal
+  -- | The function used to apply an invariant in this context. The @SBV Bool@
+  --   is an assertion of what it would take for the invariant to be true in
+  --   this context.
+  -> (SBV Bool -> Analyze ())
+  -> Analyze ()
+applyInvariants tn sValFields addInvariant = do
   mInvariants <- view (invariants . at tn)
-  _ <- case mInvariants of
+  case mInvariants of
     Nothing -> pure ()
     Just invariants' -> for_ invariants' $ \invariant ->
       case runReaderT (checkSchemaInvariant invariant) sValFields of
-        Nothing -> pure ()
-        Just c  -> addConstraint c
-
-  pure $ Object aValFields
+        Nothing  -> pure ()
+        Just inv -> addInvariant inv
 
 analyzeAtO
   :: forall m term
@@ -1148,13 +1161,7 @@ analyzeTerm = \case
     let sValFields :: Map Text SBVI.SVal
         sValFields = Map.mapMaybe id mValFields
 
-    mInvariants <- view (invariants . at tn)
-    _ <- case mInvariants of
-      Nothing -> pure ()
-      Just invariants' -> for_ invariants' $ \invariant ->
-        case runReaderT (checkSchemaInvariant invariant) sValFields of
-          Nothing  -> pure ()
-          Just inv -> maintainsInvariants %= (&&& inv)
+    applyInvariants tn sValFields (\inv -> maintainsInvariants %= (&&& inv))
 
     --
     -- TODO: make a constant on the pact side that this uses:
