@@ -12,3 +12,4 @@ docs/_build
 /web/npm-debug.log
 log/
 /deleteme.sqllite
+/.pact-history

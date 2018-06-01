@@ -1436,7 +1436,3 @@ pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
 > (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
 "2016-07-23 13:30:45.001002"
 ```
-
-
-Built-in Functions {#builtins}
-==================

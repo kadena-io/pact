@@ -1,3 +1,4 @@
+# Built-in Functions {#builtins}
 ## General {#General}
 
 ### at {#at}
@@ -282,7 +283,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.3.8"
+"2.4.0"
 ```
 
 

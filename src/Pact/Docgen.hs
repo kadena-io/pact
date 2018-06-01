@@ -37,6 +37,8 @@ data ExampleType = Exec|ExecErr|Lit
 funDocs :: IO ()
 funDocs = do
   h <- openFile "docs/pact-functions.md" WriteMode
+  hPutStrLn h "# Built-in Functions {#builtins}"
+
   let renderSection ns = forM_ (map snd $ sortBy (compare `on` fst) ns) $ \t -> renderDocs h t
   forM_ natives $ \(sect,ns) -> do
     hPutStrLn h $ "## " ++ unpack (asString sect) ++ " {#" ++ unpack (asString sect) ++ "}"
