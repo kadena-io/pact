@@ -38,7 +38,6 @@ import           Data.Foldable             (foldl', foldrM, for_)
 import           Data.Functor.Identity     (Identity (Identity))
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
-import           Data.Map.Strict.Merge     (mapMissing, merge, zipWithMatched)
 import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
@@ -121,12 +120,7 @@ newtype ColumnMap a
 
 instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
-    merge
-      (mapMissing $ \_ _ -> error "bad column map merge")
-      (mapMissing $ \_ _ -> error "bad column map merge")
-      (zipWithMatched $ \_k l r -> symbolicMerge force test l r)
-      left
-      right
+    Map.intersectionWith (symbolicMerge force test) left right
 
 newtype TableMap a
   = TableMap { _tableMap :: Map TableName a }

@@ -21,8 +21,8 @@ import           Test.Hspec                 (Spec, describe, it, runIO,
                                              shouldBe, shouldSatisfy)
 
 import           Pact.Parse                 (parseExprs)
-import           Pact.Repl                  (ReplMode (StringEval), evalRepl',
-                                             initReplState, rEnv)
+import           Pact.Repl                  (evalRepl', initReplState)
+import           Pact.Repl.Types            (ReplMode (StringEval), rEnv)
 import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check

@@ -27,6 +27,7 @@ import Pact.Types.Util
 import Pact.Native
 import Pact.Repl
 import Pact.Repl.Lib
+import Pact.Repl.Types
 
 main :: IO ()
 main = funDocs

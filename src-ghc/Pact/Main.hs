@@ -40,13 +40,13 @@ import Crypto.Ed25519.Pure
 import Pact.Repl
 import Pact.Parse
 import Pact.Types.Runtime hiding ((<>),PublicKey)
-#if defined(BUILD_SERVER)
 import Pact.Server.Server
-#endif
 #ifndef mingw32_HOST_OS
 import System.Posix.Terminal (queryTerminal)
 import System.Posix.IO (stdInput)
 #endif
+import Pact.ReplTools
+import Pact.Repl.Types
 import Pact.Types.Version
 import Pact.ApiReq
 
@@ -58,9 +58,7 @@ data Option =
   | OLoad { _oFindScript :: Bool, _oDebug :: Bool, _oFile :: String }
   | ORepl
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
-#if defined(BUILD_SERVER)
   | OServer { _oConfigYaml :: FilePath }
-#endif
   deriving (Eq,Show)
 
 replOpts :: O.Parser Option
@@ -68,10 +66,8 @@ replOpts =
     O.flag' OVersion (O.short 'v' <> O.long "version" <> O.help "Display version") <|>
     O.flag' OBuiltins (O.short 'b' <> O.long "builtins" <> O.help "List builtins") <|>
     O.flag' OGenKey (O.short 'g' <> O.long "genkey" <> O.help "Generate ED25519 keypair") <|>
-#if defined(BUILD_SERVER)
     (OServer <$> O.strOption (O.short 's' <> O.long "serve" <> O.metavar "config" <>
                               O.help "Launch REST API server with config file")) <|>
-#endif
     (OLoad
      <$> O.flag False True
          (O.short 'r' <> O.long "findscript" <>
@@ -100,9 +96,7 @@ main = do
       exitEither m (Right t) = m t >> exitSuccess
       exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
   case as of
-#if defined(BUILD_SERVER)
     OServer conf -> serve conf
-#endif
     OVersion -> putStrLn $ "pact version " ++ unpack pactVersion
     OBuiltins -> echoBuiltins
     OLoad findScript dolog fp

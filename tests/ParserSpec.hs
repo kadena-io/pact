@@ -2,6 +2,7 @@ module ParserSpec (spec) where
 
 import Test.Hspec
 import Pact.Repl
+import Pact.Repl.Types
 import Data.Either
 
 spec :: Spec
