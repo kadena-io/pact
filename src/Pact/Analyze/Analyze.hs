@@ -412,6 +412,10 @@ mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
       wrap = Right . mkAVal . sansProv
 
       eVar = case ty of
+               --
+               -- TODO: possibly use Translate's logic to convert to EType,
+               --       and dispatch off of that:
+               --
                TyPrim TyInteger -> wrap (uninterpret symName :: (SBV Integer))
                TyPrim TyBool    -> wrap (uninterpret symName :: (SBV Bool))
                TyPrim TyDecimal -> wrap (uninterpret symName :: (SBV Decimal))

@@ -224,6 +224,20 @@ checkFunctionBody tables (parsed, check) body argTys nodeNames =
             ETerm   body'' _ -> fmap mkAVal . analyzeTerm $ body''
             EObject body'' _ -> fmap AnObj . analyzeTermO $ body''
 
+        --
+        -- TODO: at this point, if our result is Invalid, we should feed our
+        --       resulting Environment back into the symbolic evaluator to
+        --       produce an execution trace (everything should be concrete).
+        --
+        --       during this second run, while producing the trace, we should
+        --       log effects (DB writes) in the order that they occur. for
+        --       writes, we actually don't have to use the tagging technique
+        --       because everything is concrete! Output will be composed of
+        --       Trace and the result AVal; unclear at the moment whether the
+        --       trace should contain intermediate values and effects
+        --       interleaved, or whether these two should be separate.
+        --
+
         mVarVal <- tryTakeMVar compileFailureVar
         pure $ case mVarVal of
           Nothing -> checkResult
