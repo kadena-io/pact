@@ -269,7 +269,7 @@ moduleTables modules (_mod, modRefs) = do
 
     let invariants :: [SchemaInvariant Bool]
         invariants = case mExp of
-          Just (Pact.EList' exps) -> catMaybes $ flip fmap exps $ \meta -> do
+          Just (Pact.ELitList exps) -> catMaybes $ flip fmap exps $ \meta -> do
             SomeSchemaInvariant expr TBool
               <- expToInvariant (_utFields schema) meta
             pure expr
