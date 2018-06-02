@@ -392,13 +392,12 @@ table.
   ("Transfer money between accounts"
     (properties [(row-enforced 'accounts 'ks from)]))
 
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
-    (enforce-keyset from-ks)
-    (enforce (>= from-bal amount) "Insufficient Funds")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+  (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+    (with-read accounts to { 'balance := to-bal }
+      (enforce-keyset from-ks)
+      (enforce (>= from-bal amount) "Insufficient Funds")
+      (update accounts from { "balance": (- from-bal amount) })
+      (update accounts to   { "balance": (+ to-bal amount) }))))
 ```
 
 Let's start by adding an invariant that balances can never drop below zero:
@@ -422,16 +421,15 @@ try again:
 ```lisp
 (defun transfer (from:string to:string amount:integer)
   ("Transfer money between accounts"
-    (properties [(row-enforced 'accounts 'ks from)])
+    (properties [(row-enforced 'accounts 'ks from)]))
 
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
-    (enforce-keyset from-ks)
-    (enforce (>= from-bal amount) "Insufficient Funds")
-    (enforce (> amount 0)         "Non-positive amount")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+  (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+    (with-read accounts to { 'balance := to-bal }
+      (enforce-keyset from-ks)
+      (enforce (>= from-bal amount) "Insufficient Funds")
+      (enforce (> amount 0)         "Non-positive amount")
+      (update accounts from { "balance": (- from-bal amount) })
+      (update accounts to   { "balance": (+ to-bal amount) }))))
 ```
 
 The property checker validates the code at this point, but let's add another
@@ -443,16 +441,15 @@ for the function to be used to create or destroy any money:
   ("Transfer money between accounts"
     (properties
       [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)])
+       (conserves-mass 'accounts 'balance)]))
 
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
-    (enforce-keyset from-ks)
-    (enforce (>= from-bal amount) "Insufficient Funds")
-    (enforce (> amount 0)         "Non-positive amount")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+  (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+    (with-read accounts to { 'balance := to-bal }
+      (enforce-keyset from-ks)
+      (enforce (>= from-bal amount) "Insufficient Funds")
+      (enforce (> amount 0)         "Non-positive amount")
+      (update accounts from { "balance": (- from-bal amount) })
+      (update accounts to   { "balance": (+ to-bal amount) }))))
 ```
 
 When we run `verify` this time, the property checker finds a bug again -- it's
@@ -481,17 +478,16 @@ this unintended behavior:
   ("Transfer money between accounts"
     (properties
       [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)])
+       (conserves-mass 'accounts 'balance)]))
 
-  (let ((from-bal (at 'balance (read accounts from)))
-        (from-ks  (at 'ks      (read accounts from)))
-        (to-bal   (at 'balance (read accounts to))))
-    (enforce-keyset from-ks)
-    (enforce (>= from-bal amount) "Insufficient Funds")
-    (enforce (> amount 0)         "Non-positive amount")
-    (enforce (!= from to)         "Sender is the recipient")
-    (update accounts from { "balance": (- from-bal amount) })
-    (update accounts to   { "balance": (+ to-bal amount) })))
+  (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+    (with-read accounts to { 'balance := to-bal }
+      (enforce-keyset from-ks)
+      (enforce (>= from-bal amount) "Insufficient Funds")
+      (enforce (> amount 0)         "Non-positive amount")
+      (enforce (!= from to)         "Sender is the recipient")
+      (update accounts from { "balance": (- from-bal amount) })
+      (update accounts to   { "balance": (+ to-bal amount) }))))
 ```
 
 And now we see that finally the property checker verifies that all of the
