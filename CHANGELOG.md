@@ -1,3 +1,14 @@
+2.4.0
+---
+* Preview support of of property-based formal verification
+* Fix fold type signature
+* Refactor ghcjs code into external project
+* Various bug fixes in typechecker
+* GHC 8.4 support (semigroup instances, statistics-0.14)
+* "No-Leftpad" dependency management implementation
+* Nested schema support
+
+
 2.3.8
 ---
 * Pact tool improvements: auto-complete, readline support, better multiline

@@ -12,3 +12,7 @@ Contents:
    :maxdepth: 3
 
    pact-reference
+
+   pact-properties
+
+   pact-functions
