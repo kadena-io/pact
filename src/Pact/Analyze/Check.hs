@@ -166,11 +166,11 @@ runWithQuery isSAT q cfg a = fst <$> SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup 
 -- @checkTopFunction@, so we start the name generator at the next index.
 checkFunctionBody
   :: [Table]
-  -> (Parsed, Check)
-  -> [AST Node]
   -> [Arg]
+  -> [AST Node]
+  -> (Parsed, Check)
   -> IO CheckResult
-checkFunctionBody tables (parsed, check) body args =
+checkFunctionBody tables args body (parsed, check) =
   case runExcept
     (runGenTFrom
       (UniqueId (length args))
@@ -245,7 +245,7 @@ checkFunctionBody tables (parsed, check) body args =
 -- TODO: probably inline this function into 'verifyFunction'
 --
 checkTopFunction :: [Table] -> TopLevel Node -> (Parsed, Check) -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) parsedCheck =
+checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) parsedCheck =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -258,10 +258,10 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) parsedCheck =
 
       uids = UniqueId <$> [0..]
 
-      argTys :: [Arg]
-      argTys = zip3 names uids nodes
+      args' :: [Arg]
+      args' = zip3 names uids nodes
 
-  in checkFunctionBody tables parsedCheck body' argTys
+  in checkFunctionBody tables args' body parsedCheck
 
 checkTopFunction _ _ (parsed, _) = pure $ Left (parsed, CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)")
 
