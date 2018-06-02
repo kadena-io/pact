@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TypeApplications  #-}
@@ -17,12 +18,16 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           NeatInterpolation          (text)
 import           Test.Hspec                 (Spec, describe, it, runIO,
-                                             shouldSatisfy)
-import           Pact.Repl
-import           Pact.Repl.Types
-import           Pact.Types.Runtime         (eeRefStore, rsModules)
+                                             shouldBe, shouldSatisfy)
+
+import           Pact.Parse                 (parseExprs)
+import           Pact.Repl                  (evalRepl', initReplState)
+import           Pact.Repl.Types            (ReplMode (StringEval), rEnv)
+import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Parse           (expToProp)
+import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 
 wrap :: Text -> Text
@@ -45,39 +50,61 @@ wrap code =
     (commit-tx)
   |]
 
-runTest :: Text -> Check -> IO (Maybe CheckFailure)
-runTest code check = do
+compile :: Text -> IO (Either CheckFailure ModuleData)
+compile code = do
   replState0 <- initReplState StringEval
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
-  case eTerm of
-    Left err -> pure $ Just $ CodeCompilationFailed err
+  pure $ case eTerm of
+    Left err -> Left $ CodeCompilationFailed err
     Right _t ->
       case replState ^. rEnv . eeRefStore . rsModules . at "test" of
-        Nothing -> pure $ Just $ CodeCompilationFailed "expected module 'test'"
-        Just moduleData -> do
-          results <- verifyModule (Just check)
-            (HM.fromList [("test", moduleData)]) moduleData
-          -- TODO(joel): use `fromLeft` when we're on modern GHC
-          pure $ case findOf (traverse . traverse) isLeft results of
-            Just (Left failure) -> Just failure
-            _                   -> Nothing
+        Nothing -> Left $ CodeCompilationFailed "expected module 'test'"
+        Just moduleData -> Right moduleData
+
+runVerification :: Text -> IO (Maybe CheckFailure)
+runVerification code = do
+  eModuleData <- compile code
+  case eModuleData of
+    Left cf -> pure $ Just cf
+    Right moduleData -> do
+      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      -- TODO(joel): use `fromLeft` when we're on modern GHC
+      pure $ case findOf (traverse . traverse) isLeft results of
+        Just (Left failure) -> Just failure
+        _                   -> Nothing
+
+runCheck :: Text -> Check -> IO (Maybe CheckFailure)
+runCheck code check = do
+  eModuleData <- compile code
+  case eModuleData of
+    Left cf -> pure $ Just cf
+    Right moduleData -> do
+      result <- verifyCheck moduleData "test" check
+      pure $ case result of
+        Left cf -> Just cf
+        Right _ -> Nothing
+
+expectVerified :: Text -> Spec
+expectVerified code = do
+  res <- runIO $ runVerification $ wrap code
+  it "passes in-code checks" $ res `shouldSatisfy` isNothing
 
 expectPass :: Text -> Check -> Spec
 -- TODO(joel): use expectNothing when it's available
 expectPass code check = do
-  res <- runIO $ runTest (wrap code) check
+  res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isNothing
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
-  res <- runIO $ runTest (wrap code) check
+  res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = PComparison Eq 0 $ IntColumnDelta tn cn
+intConserves tn cn = PIntegerComparison Eq 0 $ IntColumnDelta tn cn
 
 decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = PComparison Eq 0 $ DecColumnDelta tn cn
+decConserves tn cn = PDecimalComparison Eq 0 $ DecColumnDelta tn cn
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -87,8 +114,8 @@ spec = describe "analyze" $ do
             (defun test:integer (x:integer)
               (* x -1))
           |]
-    expectPass code $ Valid $ PComparison Eq
-      (PIntArithOp Mul (-1) "x")
+    expectPass code $ Valid $ PIntegerComparison Eq
+      (PIntArithOp Mul (-1) (PVar 0 "x"))
       (Result :: Prop Integer)
 
   describe "inlining" $ do
@@ -102,7 +129,7 @@ spec = describe "analyze" $ do
             (defun test:integer (a:integer)
               (helper a))
           |]
-    expectPass code $ Valid $ PComparison Gte (Result :: Prop Integer) 10
+    expectPass code $ Valid $ PIntegerComparison Gte (Result :: Prop Integer) 10
 
   describe "success" $ do
     let code =
@@ -173,10 +200,10 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ (PComparison Gt "x" (0 :: Prop Integer)) ==>
+    expectPass code $ Valid $ (PIntegerComparison Gt (PVar 0 "x") (0 :: Prop Integer)) ==>
       Success
-    expectPass code $ Valid $ (PComparison Eq "x" (5 :: Prop Integer)) ==>
-      Success &&& (PComparison Eq (Result :: Prop Bool) true)
+    expectPass code $ Valid $ (PIntegerComparison Eq (PVar 0 "x") (5 :: Prop Integer)) ==>
+      Success &&& (PBoolComparison Eq (Result :: Prop Bool) true)
 
   describe "read-keyset.equality" $ do
     let code =
@@ -237,17 +264,17 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row")
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row")
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-      bnot $ RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" "acct"
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
+      RowWrite "tokens" (PVar 0 "row")
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+      RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+      bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ Success ==> (Forall 0 "row" (Ty (Rep @String)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
   describe "enforce-keyset.row-level.read.syntax" $ do
     let code =
@@ -286,11 +313,11 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks1" (PVar "row")
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks1" (PVar 0 "row")
     -- Using the other keyset:
-    expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks2" (PVar "row")
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks2" (PVar 0 "row")
 
   describe "enforce-keyset.row-level.write" $ do
     let code =
@@ -310,20 +337,20 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row")
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row")
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Satisfiable $ Exists "row" (Ty (Rep @RowKey)) $
-      bnot $ RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
-    expectPass code $ Valid $ RowWrite "tokens" (PVar "acct")
-                          ==> RowEnforced "tokens" "ks" (PVar "acct")
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @String)) (RowWrite "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (Ty (Rep @String)) (RowEnforced "tokens" "ks" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+      bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectPass code $ Valid $ RowWrite "tokens" (PVar 0 "acct")
+                          ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
@@ -348,10 +375,10 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowRead "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
-    expectFail code $ Valid $ Forall "row" (Ty (Rep @RowKey)) $
-      RowWrite "tokens" (PVar "row") ==> RowEnforced "tokens" "ks" (PVar "row")
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
+    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
   describe "table-read.multiple-read" $
     let code =
@@ -410,7 +437,7 @@ spec = describe "analyze" $ do
     let schema = Schema $
           Map.fromList [("name", EType TStr), ("balance", EType TInt)]
         ety    = EType TStr
-    expectPass code $ Valid $ PComparison Eq
+    expectPass code $ Valid $ PStringComparison Eq
       (PAt schema (PLit "name") Result ety)
       (PLit "stu" :: Prop String)
 
@@ -520,28 +547,30 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid $ Success ==> intConserves "accounts" "balance"
 
+  describe "conserves-mass.integer.without-uniqueness" $ do
+    let code =
+          [text|
+            (defun test:string (from:string to:string amount:integer)
+              "Transfer money between accounts"
+              (let ((from-bal (at 'balance (read accounts from)))
+                    (to-bal   (at 'balance (read accounts to))))
+                (enforce (> amount 0)         "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                ;; << NOTE: no (!= from to) here. >>
+                (update accounts from { "balance": (- from-bal amount) })
+                (update accounts to   { "balance": (+ to-bal amount) })))
+          |]
 
-   -- TODO: pending removal of some `undefined` causing CallStack here
-
-   -- describe "conserves-mass.integer.without-uniqueness" $ do
-   --     let code =
-   --           [text|
-   --             (defun test:string (from:string to:string amount:integer)
-   --               "Transfer money between accounts"
-   --               (let ((from-bal (at 'balance (read accounts from)))
-   --                     (to-bal   (at 'balance (read accounts to))))
-   --                 (enforce (> amount 0)         "Non-positive amount")
-   --                 (enforce (>= from-bal amount) "Insufficient Funds")
-   --                 (update accounts from { "balance": (- from-bal amount) })
-   --                 (update accounts to   { "balance": (+ to-bal amount) })))
-   --           |]
-
-   --     expectPass code $ Valid $ bnot $ Success ==> intConserves "accounts" "balance"
+    expectPass code $ Satisfiable $ Success &&& intConserves "accounts" "balance"
+    expectPass code $ Satisfiable $ Success &&& bnot (intConserves "accounts" "balance")
 
   describe "conserves-mass.decimal" $ do
     let code =
           [text|
-            (defschema account2 balance:decimal)
+            (defschema account2
+              ("accounts schema"
+                (invariant (>= balance 0.0)))
+              balance:decimal)
             (deftable accounts2:{account2})
 
             (defun test:string (from:string to:string amount:decimal)
@@ -554,12 +583,17 @@ spec = describe "analyze" $ do
                 (update accounts2 to   { "balance": (+ to-bal amount) })))
           |]
 
+    expectVerified code
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
 
   describe "cell-delta.integer" $ do
     let code =
           [text|
             (defun test:string ()
+              (""
+                (properties [
+                  (not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))
+                ]))
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
 
@@ -568,11 +602,24 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    expectPass code $ Valid $ bnot $ Exists "row" (Ty (Rep @RowKey)) $
-      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 2
+    expectVerified code
 
-    expectPass code $ Valid $ Exists "row" (Ty (Rep @RowKey)) $
-      PComparison Eq (IntCellDelta "accounts" "balance" (PVar "row")) 3
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
+
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      PStringComparison Neq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
+        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
+
+    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+      PStringComparison Eq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
+        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
+
+    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @String)) $
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
+
+    expectPass code $ Valid $
+      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PLit "bob")) 3
 
   describe "with-read" $ do
     let code =
@@ -649,7 +696,7 @@ spec = describe "analyze" $ do
                 (defun test:bool (x:integer)
                   (let ((y x)
                         (z (+ 10 x)))
-                    (enforce (> z y) "z > y")
+                    (enforce (> z y) "z <= y")
                     true))
               |]
         in expectPass code $ Valid $ bnot Abort
@@ -660,7 +707,7 @@ spec = describe "analyze" $ do
                 (defun test:bool (x:integer)
                   (let ((y x)
                         (z (+ 10 x)))
-                    (enforce (< z y) "z > y")
+                    (enforce (< z y) "z >= y")
                     true))
               |]
         in expectPass code $ Valid Abort
@@ -670,8 +717,8 @@ spec = describe "analyze" $ do
               [text|
                 (defun test:bool (x:integer)
                   (let* ((x 2)
-                        (y (* x 10)))
-                   (enforce (= 22 (+ x y)) "x + y = 22")))
+                         (y (* x 10)))
+                   (enforce (= 22 (+ x y)) "x + y != 22")))
               |]
         in expectPass code $ Valid $ bnot Abort
 
@@ -682,7 +729,7 @@ spec = describe "analyze" $ do
                   (let ((x (let ((y 2)) y))
                         (y (let ((x 3)) x)))
                    (let ((z (let ((w 1)) (+ (+ x y) w))))
-                     (enforce (= 6 z) "2 + 3 + 1 = 6"))))
+                     (enforce (= 6 z) "2 + 3 + 1 != 6"))))
               |]
         in expectPass code $ Valid $ bnot Abort
 
@@ -716,6 +763,27 @@ spec = describe "analyze" $ do
                   (= (add-time (time "2016-07-22T12:00:00Z") (minutes 1.5))
                      (time "2016-07-22T12:01:30Z"))
                   "1.5 minutes later")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.001002 seconds later")
+
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010023)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010023 s = 0.001002 s")
+
+                ; Pact rounds tenths of milliseconds using the banker's method
+                ; (same as its treatment of decimals). ie it rounds to the
+                ; nearest even.
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010025)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001002"))
+                  "0.0010025 s = 0.001002 s")
+                (enforce
+                  (= (add-time (time "2016-07-23T13:30:45Z") 0.0010035)
+                     (parse-time "%Y-%m-%d %H:%M:%S.%v" "2016-07-23 13:30:45.001004"))
+                  "0.0010035 s = 0.001004 s")
               ))
           |]
     in expectPass code $ Valid $ bnot Abort
@@ -835,8 +903,8 @@ spec = describe "analyze" $ do
             (defschema ints-row
               ("doc"
                 (invariants
-                  ((> pos 0)
-                   (< neg 0))))
+                  [(> pos 0)
+                   (< neg 0)]))
               pos:integer
               neg:integer)
             (deftable ints:{ints-row} "Table of positive and negative integers")
@@ -848,6 +916,7 @@ spec = describe "analyze" $ do
                 ))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
   describe "schema-invariants.not-equals" $ do
@@ -855,7 +924,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               ("doc"
-                (invariants ((!= nonzero 0))))
+                (invariant (!= nonzero 0)))
               nonzero:integer)
             (deftable ints:{ints-row})
 
@@ -864,6 +933,7 @@ spec = describe "analyze" $ do
                 (enforce (or (> nz 0) (< nz 0)) "is zero")))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
   describe "schema-invariants.equals" $ do
@@ -871,7 +941,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               ("doc"
-                (invariants ((= zero 0))))
+                (invariant (= zero 0)))
               zero:integer)
             (deftable ints:{ints-row})
 
@@ -880,5 +950,222 @@ spec = describe "analyze" $ do
                 (enforce (= z 0) "is not zero")))
           |]
 
+    expectVerified code
     expectPass code $ Valid Success
 
+  describe "format-time / parse-time" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (let* ((time1in  "2016-09-12")
+                     (time1    (parse-time "%F" time1in))
+                     (time1out (format-time "%F" time1))
+                     (time2in  "2016-07-22T11:26:35Z")
+                     (time2    (time time2in))
+                     (time2out (format-time "%Y-%m-%dT%H:%M:%SZ" time2)))
+                (enforce (= time1in time1out))
+                (enforce (= time2in time2out)))
+
+                (enforce
+                  (= (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+                     "2016-07-23T13:30:45+00:00"))
+                (enforce
+                  (= (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+                     "Sat, 23 Jul 2016 13:30:45 UTC"))
+                (enforce
+                  (= (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+                     "2016-07-23 13:30:45.001002"))
+                     )
+          |]
+    expectPass code $ Valid Success
+
+  describe "format" $ do
+    let code =
+          [text|
+            (defun test:bool (str:string)
+              (enforce (= (format "{}-{}" ["a" "z"]) "a-z"))
+              (enforce (= (format "{}/{}" [11 26]) "11/26"))
+              (enforce (= (format "{} or {}" [true false]) "true or false"))
+
+              (enforce (= (format "{}" [str]) str))
+            )
+          |]
+    expectPass code $ Valid Success
+
+  describe "hash" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce (=
+                (hash "hello")
+                "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94"))
+
+              (enforce (=
+                (hash (- 2 1))
+                "1ced8f5be2db23a6513eba4d819c73806424748a7bc6fa0d792cc1c7d1775a9778e894aa91413f6eb79ad5ae2f871eafcc78797e4c82af6d1cbfb1a294a10d10"))
+
+              (enforce (=
+                (hash (or true false))
+                "5c07e85b3afb949077f2fa42181bb0498f5945f2086d37df5676ebf424ec137d0c21292c943098e22914cdca350e9140d185ca1b2b2bf0522acfcdde09b395dd"))
+
+              (enforce (=
+                (hash (and true false))
+                "625ad9c6965af1a145e3c7514065eab913702c615a8fc9f4699767684f9e97e65dd50f715eae7fdbceee39a03cecf29d5f6a7e79e6a802244b65f6f915283491"))
+
+
+              ; TODO:
+              ; (enforce (=
+              ;   (hash 3.14)
+              ;   "dee8179a1755a745174f334ddc81ade0cf3e2d0bdfd1170cc42c1a1d1d0b16f9bfab86592e9ad31123ce9d470f6aa9388cc2a4f9cda1eb7328ae0a7e26cd450e"))
+
+              ; TODO:
+              ; (enforce (=
+              ;   (hash { 'foo: 1 })
+              ;   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"))
+            )
+          |]
+    expectPass code $ Valid Success
+
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema central-bank-schema
+              ("central bank"
+                (invariants
+                  [(= 1000000 (+ reserve circulation))
+                   (>= reserve 0)
+                   (>= circulation 0)
+                  ]))
+              reserve:integer
+              circulation:integer)
+            (deftable central-bank-table:{central-bank-schema})
+
+            (defun test (amt:integer)
+              "Issue some amount of currency"
+
+              (let*
+                ((before (read central-bank-table "singleton"))
+                 (new-reserve     (- (at 'reserve before)     amt))
+                 (new-circulation (+ (at 'circulation before) amt))
+                )
+
+                (enforce (> amt 0) "")
+                (enforce (>= new-reserve 0) "")
+
+                (update central-bank-table "singleton" {
+                  'reserve: new-reserve,
+                  'circulation: new-circulation
+                })))
+          |]
+
+    expectVerified code
+    expectPass code $ Satisfiable Abort
+    expectPass code $ Satisfiable Success
+
+  describe "prenex conversion" $ do
+    -- These test a somewhat irrelevant implementation detail -- the specific
+    -- unique id, which is not ideal, but will do for now.
+    let a0       = PVar 0 "a"
+        a1       = PVar 1 "a"
+        -- b        = PVar 0 "b"
+        ty       = Ty (Rep @String)
+        intTy    = Ty (Rep @Integer)
+        allA0    = Forall 0 "a"
+        allA1    = Forall 1 "a"
+        existsA0 = Exists 0 "a"
+        existsA1 = Exists 1 "a"
+
+    it "lifts all over not (becomes exists)" $
+      prenexConvert (PNot (allA0 ty a0))
+      `shouldBe`
+      existsA0 ty (PNot a0)
+
+    it "lifts exists over not (becomes all)" $
+      prenexConvert (PNot (existsA0 ty a0))
+      `shouldBe`
+      allA0 ty (PNot a0)
+
+    it "lifts all over or" $
+      prenexConvert (POr (allA0 ty a0) (allA1 ty a1))
+      `shouldBe`
+      allA0 ty (allA1 ty (POr a0 a1))
+
+    it "lifts all over and" $
+      prenexConvert (PAnd (allA0 ty a0) (allA1 ty a1))
+      `shouldBe`
+      allA0 ty (allA1 ty (PAnd a0 a1))
+
+    it "lifts exists over or" $
+      prenexConvert (POr (existsA0 ty a0) (existsA1 ty a1))
+      `shouldBe`
+      existsA0 ty (existsA1 ty (POr a0 a1))
+
+    it "lifts exists over and" $
+      prenexConvert (PAnd (existsA0 ty a0) (existsA1 ty a1))
+      `shouldBe`
+      existsA0 ty (existsA1 ty (PAnd a0 a1))
+
+    it "lifts forall string" $
+      prenexConvert (PAnd (PLit True) (allA0 intTy (PIntegerComparison Gte a0 a0)))
+      `shouldBe`
+      allA0 intTy (PAnd (PLit True) (PIntegerComparison Gte a0 a0))
+
+  describe "prop parse / typecheck" $ do
+    let textToProp :: Type a -> Text -> Maybe (Prop a)
+        textToProp ty t = case parseExprs t of
+          Right [exp'] -> expToProp ty exp'
+          _            -> Nothing
+
+    it "infers column-delta" $ do
+      textToProp TBool "(> (column-delta 'a 'b) 0)"
+        `shouldBe`
+        Just (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
+
+      textToProp TBool "(> (column-delta 'a 'b) 0.0)"
+        `shouldBe`
+        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+
+      textToProp TBool "(> (column-delta \"a\" \"b\") 0.0)"
+        `shouldBe`
+        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+
+    it "infers +" $ do
+      textToProp TStr "(+ \"a\" \"b\")"
+        `shouldBe`
+        Just (PStrConcat (PLit "a") (PLit "b"))
+
+      textToProp TInt "(+ 0 1)"
+        `shouldBe`
+        Just (PIntArithOp Add 0 1)
+
+      textToProp TDecimal "(+ 0.0 1.0)"
+        `shouldBe`
+        Just (PDecArithOp Add (PLit 0) (PLit 1))
+
+      textToProp TDecimal "(+ 0 1)" `shouldBe` Nothing
+
+    it "infers forall / exists" $ do
+      textToProp TBool "(forall (x:string y:string) (= x y))"
+        `shouldBe`
+        Just
+          (Forall (UniqueId 1) "x" (Ty (Rep @String))
+            (Forall (UniqueId 2) "y" (Ty (Rep @String))
+              (PIntegerComparison Eq
+                (PVar (UniqueId 1) "x")
+                (PVar (UniqueId 2) "y"))))
+
+      textToProp TBool
+        "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
+        `shouldBe`
+        Just (PNot
+          (Exists (UniqueId 1) "row" (Ty (Rep @String))
+            (PIntegerComparison Eq
+              (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
+              2)))
+
+    it "handles special identifiers" $ do
+      textToProp TBool "abort"   `shouldBe` Just Abort
+      textToProp TBool "success" `shouldBe` Just Success
+      textToProp TBool "result"  `shouldBe` Just Result
+      textToProp TInt  "result"  `shouldBe` Just Result
+      textToProp TStr  "result"  `shouldBe` Just Result

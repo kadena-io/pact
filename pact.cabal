@@ -51,6 +51,7 @@ library
       Pact.Analyze.Check
       Pact.Analyze.Parse
       Pact.Analyze.Patterns
+      Pact.Analyze.PrenexNormalize
       Pact.Analyze.Term
       Pact.Analyze.Translate
       Pact.Analyze.Types
@@ -113,6 +114,7 @@ library
                      , utf8-string >= 1.0.1.1 && < 1.1
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
+                     , monad-gen
 
   if !impl(ghcjs)
     build-depends:

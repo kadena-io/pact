@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -11,35 +12,35 @@
 
 module Pact.Analyze.Types where
 
-import           Control.Lens       (Iso, Lens', both, from, iso, lens,
-                                     makeLenses, over, to, (%~), (&), (^.))
-import           Data.Aeson         (FromJSON, ToJSON)
-import           Data.Data          (Data)
-import qualified Data.Decimal       as Decimal
-import           Data.Map.Strict    (Map)
-import           Data.SBV           (AlgReal,
-                                     Boolean (bnot, false, true, (&&&), (|||)),
-                                     EqSymbolic, HasKind, Int64, Kind (KString),
-                                     Mergeable (symbolicMerge), OrdSymbolic,
-                                     Provable (forAll), SBV,
-                                     SDivisible (sDivMod, sQuotRem), SymWord,
-                                     Symbolic, Word8, forAll_, forSome,
-                                     forSome_, isConcrete, ite, kindOf, literal,
-                                     oneIf, sFromIntegral, sRealToSInteger,
-                                     unliteral, (%), (.<), (.==))
-import qualified Data.SBV.Internals as SBVI
-import qualified Data.SBV.String    as SBV
-import           Data.Semigroup     ((<>))
-import           Data.Set           (Set)
-import qualified Data.Set           as Set
-import           Data.String        (IsString (..))
-import           Data.Text          (Text)
-import qualified Data.Text          as T
-import           Data.Thyme         (UTCTime, microseconds, toModifiedJulianDay,
-                                     _utctDay, _utctDayTime)
-import           Data.Typeable      ((:~:) (Refl), Typeable, eqT)
+import           Control.Lens         (Iso, Iso', both, from, iso, makeLenses,
+                                       over, view, (%~), (&))
+import           Data.Aeson           (FromJSON, ToJSON)
+import           Data.AffineSpace     ((.+^), (.-.))
+import           Data.Data            (Data)
+import qualified Data.Decimal         as Decimal
+import           Data.Map.Strict      (Map)
+import           Data.SBV             (AlgReal,
+                                       Boolean (bnot, false, true, (&&&), (|||)),
+                                       EqSymbolic, HasKind, Int64,
+                                       Kind (KString),
+                                       Mergeable (symbolicMerge), OrdSymbolic,
+                                       Provable (forAll), SBV,
+                                       SDivisible (sDivMod, sQuotRem), SymWord,
+                                       Symbolic, forAll_, forSome, forSome_,
+                                       isConcrete, ite, kindOf, literal, oneIf,
+                                       sFromIntegral, sRealToSInteger,
+                                       unliteral, (%), (.<), (.==))
+import qualified Data.SBV.Internals   as SBVI
+import qualified Data.SBV.String      as SBV
+import           Data.String          (IsString (..))
+import           Data.Text            (Text)
+import qualified Data.Text            as T
+import           Data.Thyme           (UTCTime, microseconds)
+import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
 
-import           Pact.Types.Util    (AsString)
+import qualified Pact.Types.Runtime   as Pact
+import qualified Pact.Types.Typecheck as TC
+import           Pact.Types.Util      (AsString)
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
 wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
@@ -96,20 +97,7 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
-newtype RowKey
-  = RowKey String
-  deriving (Eq, Ord, Show)
-
-instance SymWord RowKey where
-  mkSymWord = SBVI.genMkSymVar KString
-  literal (RowKey s) = mkConcreteString s
-  fromCW = wrappedStringFromCW RowKey
-
-instance HasKind RowKey where
-  kindOf _ = KString
-
-instance IsString RowKey where
-  fromString = RowKey
+type RowKey = String
 
 -- We can't use Proxy because deriving Eq doesn't work
 -- We're still 8.0, so we can't use the new TypeRep yet:
@@ -128,10 +116,13 @@ type Decimal = AlgReal
 type Time = Int64
 
 mkTime :: UTCTime -> Time
-mkTime utct
-  = ((utct ^. _utctDay . to toModifiedJulianDay . to fromIntegral)
-    * (1000000 * 60 * 60 * 24))
-  + (utct ^. _utctDayTime . microseconds)
+mkTime utct = view microseconds (utct .-. toEnum 0)
+
+unMkTime :: Time -> UTCTime
+unMkTime time = toEnum 0 .+^ view (from microseconds) time
+
+timeIso :: Iso' UTCTime Time
+timeIso = iso mkTime unMkTime
 
 data LogicalOp = AndOp | OrOp | NotOp
   deriving (Show, Eq)
@@ -271,11 +262,11 @@ symRowKey :: S String -> S RowKey
 symRowKey = coerceS
 
 data Object
-  = Object (Map String (EType, AVal))
+  = Object (Map Text (EType, AVal))
   deriving (Eq, Show)
 
 newtype Schema
-  = Schema (Map String EType)
+  = Schema (Map Text EType)
   deriving (Show, Eq)
 
 -- | Untyped symbolic value.
@@ -345,6 +336,56 @@ instance Eq EType where
   EObjectTy a == EObjectTy b = a == b
   _ == _ = False
 
+-- | Unique variable IDs
+--
+-- Unique IDs are used to represent variables in both the term and property
+-- languages. (They should also be used for the schema invariant language).
+--
+-- These IDs were first introduced to cope with the prenex normalization
+-- transform, where we lift quantifiers all the way to the outside of a
+-- property, which can easily lead to name confusion (see commit 1f6201).
+--
+-- But they also serve as a principled connection between the term and property
+-- languages, since properties can refer to term variables.
+--
+-- In translation, unique IDs are generated in three places:
+--
+-- 1) @checkTopFunction@ generates a unique id for each function argument
+-- 2) @genUid@ generates an id for a let-binding
+-- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
+--    var
+newtype UniqueId
+  = UniqueId Int
+  deriving (Show, Eq, Enum, Num, Ord)
+
+-- @PreProp@ stands between @Exp@ and @Prop@.
+--
+-- The conversion from @Exp@ is light, handled in @expToPreProp@.
+data PreProp
+  -- literals
+  = PreIntegerLit Integer
+  | PreStringLit  Text
+  | PreDecimalLit Decimal
+  | PreTimeLit    Time
+  | PreBoolLit    Bool
+
+  -- identifiers
+  | PreAbort
+  | PreSuccess
+  | PreResult
+  | PreVar     UniqueId Text
+
+  -- quantifiers
+  | PreForall UniqueId Text Ty PreProp
+  | PreExists UniqueId Text Ty PreProp
+
+  -- applications
+  | PreApp Text [PreProp]
+
+  -- -- TODO: parse
+  -- | PreAt {- Schema -} PreProp PreProp -- EType
+  deriving (Show, Eq)
+
 data Prop a where
   -- Literals
   PLit             :: SymWord a => a   -> Prop a
@@ -359,9 +400,9 @@ data Prop a where
   Result           :: Prop a
 
   -- Abstraction
-  Forall           :: Text -> Ty -> Prop a -> Prop a
-  Exists           :: Text -> Ty -> Prop a -> Prop a
-  PVar             :: Text ->                 Prop a
+  Forall           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  Exists           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  PVar             :: UniqueId -> Text                 -> Prop a
 
   -- Object ops
   -- Note: PAt is the one property we can't yet parse because of the EType it
@@ -388,7 +429,12 @@ data Prop a where
   PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
 
   -- Comparison
-  PComparison      :: (Show a, SymWord a) => ComparisonOp -> Prop a -> Prop a -> Prop Bool
+  PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
+  PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
+  PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
+  PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
+  PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
+  PKeySetEqNeq       :: EqNeq        -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
@@ -414,19 +460,24 @@ data Prop a where
   KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
 
--- NOTE: PComparison's existential currently prevents this:
---deriving instance Eq a => Eq (Prop a)
-deriving instance Show a => Show (Prop a)
+pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
+pattern PAnd a b = PLogical AndOp [a, b]
 
-instance IsString (Prop a) where
-  fromString = PVar . fromString
+pattern POr :: Prop Bool -> Prop Bool -> Prop Bool
+pattern POr a b = PLogical OrOp [a, b]
+
+pattern PNot :: Prop Bool -> Prop Bool
+pattern PNot a = PLogical NotOp [a]
+
+deriving instance Eq a => Eq (Prop a)
+deriving instance Show a => Show (Prop a)
 
 instance Boolean (Prop Bool) where
   true   = PLit True
   false  = PLit False
   bnot p = PLogical NotOp [p]
-  p1 &&& p2 = PLogical AndOp [p1, p2]
-  p1 ||| p2 = PLogical OrOp [p1, p2]
+  p1 &&& p2 = PAnd p1 p2
+  p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop Integer) where
   fromInteger = PLit . fromInteger
@@ -448,19 +499,39 @@ instance Num (Prop Decimal) where
   signum = PDecUnaryArithOp Signum
   negate = PDecUnaryArithOp Negate
 
-data Check where
-  Satisfiable :: Prop Bool -> Check
-  Valid       :: Prop Bool -> Check
-  deriving (Show)
+--
+-- TODO: extract data type
+--
+type Arg
+  = (Text, UniqueId, Pact.Type TC.UserType)
 
-ckProp :: Lens' Check (Prop Bool)
-ckProp = lens getter setter
-  where
-    getter (Satisfiable p) = p
-    getter (Valid p)       = p
+--
+-- TODO: extract data type
+--
+data Table = Table
+  { _tableName       :: Text
+  , _tableType       :: TC.UserType
+  , _tableInvariants :: [Invariant Bool]
+  } deriving (Show)
 
-    setter (Satisfiable _) p = Satisfiable p
-    setter (Valid _) p       = Valid p
+data Goal
+  = Satisfaction -- ^ Find satisfying model
+  | Validation   -- ^ Prove no invalidating model exists
+
+deriving instance Eq Goal
+
+data Check
+  = InvariantsHold             -- valid, assuming success
+  | PropertyHolds  (Prop Bool) -- valid, assuming success
+  | Satisfiable    (Prop Bool) -- sat,   not assuming success
+  | Valid          (Prop Bool) -- valid, not assuming success
+  deriving Show
+
+checkGoal :: Check -> Goal
+checkGoal InvariantsHold    = Validation
+checkGoal (PropertyHolds _) = Validation
+checkGoal (Satisfiable _)   = Satisfaction
+checkGoal (Valid _)         = Validation
 
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
@@ -468,10 +539,8 @@ data Any = Any
 instance HasKind Any
 instance SymWord Any
 
--- KeySets are completely opaque to pact programs -- 256 should be enough for
--- symbolic analysis?
 newtype KeySet
-  = KeySet Word8
+  = KeySet Integer
   deriving (Eq, Ord, Data, Show, Read)
 
 -- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
@@ -512,66 +581,55 @@ typeEq _        _        = Nothing
 --
 -- The language is stateless. Arithmetic could be added if we decide it's
 -- useful.
-data SchemaInvariant a where
-
-  -- comparisons
-  SchemaDecimalComparison
-    :: ComparisonOp
-    -> SchemaInvariant Decimal
-    -> SchemaInvariant Decimal
-    -> SchemaInvariant Bool
-
-  SchemaIntComparison
-    :: ComparisonOp
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Integer
-    -> SchemaInvariant Bool
-
-  SchemaStringComparison
-    :: ComparisonOp
-    -> SchemaInvariant String
-    -> SchemaInvariant String
-    -> SchemaInvariant Bool
-
-  SchemaTimeComparison
-    :: ComparisonOp
-    -> SchemaInvariant Time
-    -> SchemaInvariant Time
-    -> SchemaInvariant Bool
-
-  SchemaBoolEqNeq
-    :: EqNeq
-    -> SchemaInvariant Bool
-    -> SchemaInvariant Bool
-    -> SchemaInvariant Bool
-
-  SchemaKeySetEqNeq
-    :: EqNeq
-    -> SchemaInvariant KeySet
-    -> SchemaInvariant KeySet
-    -> SchemaInvariant Bool
+data Invariant a where
 
   -- literals
-  SchemaDecimalLiteral :: Decimal -> SchemaInvariant Decimal
-  SchemaIntLiteral     :: Integer -> SchemaInvariant Integer
-  SchemaStringLiteral  :: Text    -> SchemaInvariant String
-  SchemaTimeLiteral    :: Time    -> SchemaInvariant Time
-  SchemaBoolLiteral    :: Bool    -> SchemaInvariant Bool
+  IDecimalLiteral :: Decimal -> Invariant Decimal
+  IIntLiteral     :: Integer -> Invariant Integer
+  IStringLiteral  :: Text    -> Invariant String
+  ITimeLiteral    :: Time    -> Invariant Time
+  IBoolLiteral    :: Bool    -> Invariant Bool
+
+  ISym :: S a -> Invariant a
 
   -- variables
-  SchemaVar :: Text -> SchemaInvariant a
+  IVar :: Text -> Invariant a
 
-  -- logical operations
-  SchemaLogicalOp
-    :: LogicalOp
-    -> [SchemaInvariant Bool]
-    -> SchemaInvariant Bool
+  -- string ops
+  IStrConcat :: Invariant String -> Invariant String -> Invariant String
+  IStrLength :: Invariant String                     -> Invariant Integer
 
-deriving instance Eq (SchemaInvariant a)
-deriving instance Show (SchemaInvariant a)
+  -- numeric ops
+  IDecArithOp      :: ArithOp             -> Invariant Decimal -> Invariant Decimal -> Invariant Decimal
+  IIntArithOp      :: ArithOp             -> Invariant Integer -> Invariant Integer -> Invariant Integer
+  IDecUnaryArithOp :: UnaryArithOp        -> Invariant Decimal ->                      Invariant Decimal
+  IIntUnaryArithOp :: UnaryArithOp        -> Invariant Integer ->                      Invariant Integer
+  IDecIntArithOp   :: ArithOp             -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
+  IIntDecArithOp   :: ArithOp             -> Invariant Integer -> Invariant Decimal -> Invariant Decimal
+  IModOp           :: Invariant Integer   -> Invariant Integer ->                      Invariant Integer
+  IRoundingLikeOp1 :: RoundingLikeOp      -> Invariant Decimal ->                      Invariant Integer
+  IRoundingLikeOp2 :: RoundingLikeOp      -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
+
+  -- Time
+  IIntAddTime      :: Invariant Time -> Invariant Integer -> Invariant Time
+  IDecAddTime      :: Invariant Time -> Invariant Decimal -> Invariant Time
+
+  -- comparison
+  IDecimalComparison :: ComparisonOp -> Invariant Decimal -> Invariant Decimal -> Invariant Bool
+  IIntComparison     :: ComparisonOp -> Invariant Integer -> Invariant Integer -> Invariant Bool
+  IStringComparison  :: ComparisonOp -> Invariant String  -> Invariant String  -> Invariant Bool
+  ITimeComparison    :: ComparisonOp -> Invariant Time    -> Invariant Time    -> Invariant Bool
+  IBoolComparison    :: ComparisonOp -> Invariant Bool    -> Invariant Bool    -> Invariant Bool
+  IKeySetEqNeq       :: EqNeq        -> Invariant KeySet  -> Invariant KeySet  -> Invariant Bool
+
+  -- boolean ops
+  ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
+
+deriving instance Eq (Invariant a)
+deriving instance Show (Invariant a)
 
 data SomeSchemaInvariant where
-  SomeSchemaInvariant :: SchemaInvariant a -> Type a -> SomeSchemaInvariant
+  SomeSchemaInvariant :: Invariant a -> Type a -> SomeSchemaInvariant
 
 deriving instance Show SomeSchemaInvariant
 
@@ -580,24 +638,6 @@ instance Eq SomeSchemaInvariant where
     Nothing   -> False
     Just Refl -> a == b
 
-invariantVars :: SchemaInvariant a -> Set Text
-invariantVars = \case
-  SchemaDecimalComparison _ a b -> invariantVars a <> invariantVars b
-  SchemaIntComparison _ a b     -> invariantVars a <> invariantVars b
-  SchemaStringComparison _ a b  -> invariantVars a <> invariantVars b
-  SchemaTimeComparison _ a b    -> invariantVars a <> invariantVars b
-  SchemaBoolEqNeq _ a b         -> invariantVars a <> invariantVars b
-  SchemaKeySetEqNeq _ a b       -> invariantVars a <> invariantVars b
-
-  SchemaDecimalLiteral _        -> Set.empty
-  SchemaIntLiteral _            -> Set.empty
-  SchemaStringLiteral _         -> Set.empty
-  SchemaTimeLiteral _           -> Set.empty
-  SchemaBoolLiteral _           -> Set.empty
-
-  SchemaVar v                   -> Set.singleton v
-
-  SchemaLogicalOp _ invariants  -> Set.unions (invariantVars <$> invariants)
-
 makeLenses ''S
 makeLenses ''Object
+makeLenses ''Table

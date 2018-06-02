@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -25,38 +26,43 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
-import           Control.Monad.Reader      (MonadReader (local), Reader,
-                                            ReaderT, asks, runReader)
+import           Control.Monad.Reader      (MonadReader (local), ReaderT,
+                                            runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
 import           Control.Monad.State       (MonadState)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Writer      (MonadWriter (tell))
-import           Data.Foldable             (foldrM)
+import qualified Data.Aeson                as Aeson
+import           Data.ByteString.Lazy      (toStrict)
+import           Data.Foldable             (foldl', foldrM, for_)
 import           Data.Functor.Identity     (Identity (Identity))
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (catMaybes)
+import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
-                                            EqSymbolic ((./=), (.==)),
-                                            Mergeable (symbolicMerge),
+                                            EqSymbolic ((./=), (.==)), HasKind,
+                                            Int64, Mergeable (symbolicMerge),
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                            SArray, SBV, SBool, SFunArray,
-                                            SymArray (newArray, readArray, writeArray),
-                                            SymWord (exists_, forall_, free_, literal),
-                                            Symbolic, constrain, false,
-                                            mkSFunArray, sBool, sDiv, sInt64,
-                                            sInteger, sMod, sString, symbolic,
+                                            SBV, SBool, SFunArray,
+                                            SymArray (readArray, writeArray),
+                                            SymWord (exists_, forall_),
+                                            Symbolic, constrain, false, ite,
+                                            mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
 import           Data.String               (IsString (fromString))
-import           Data.Text                 (Text)
+import           Data.Text                 (Text, pack)
 import qualified Data.Text                 as T
+import           Data.Text.Encoding        (encodeUtf8)
+import           Data.Thyme                (formatTime, parseTime)
 import           Data.Traversable          (for)
+import           System.Locale
 
-import           Pact.Types.Runtime        (Arg (Arg), PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
+import qualified Pact.Types.Hash           as Pact
+import           Pact.Types.Runtime        (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
                                             Type (TyAny, TyFun, TyList, TyPrim, TySchema, TyUser, TyVar),
                                             tShow)
 import qualified Pact.Types.Runtime        as Pact
@@ -64,14 +70,15 @@ import qualified Pact.Types.Typecheck      as Pact
 import           Pact.Types.Version        (pactVersion)
 
 import           Pact.Analyze.Term
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types        hiding (tableName)
+import qualified Pact.Analyze.Types        as Types
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope    :: Map Text AVal            -- used with 'local' as a stack
-    , _aeKeySets  :: SArray KeySetName KeySet -- read-only
-    , _aeKsAuths  :: SArray KeySet Bool       -- read-only
-    , _invariants :: Map (TableName, ColumnName) (SchemaInvariant Bool)
+    { _aeScope    :: Map UniqueId AVal           -- used as a stack
+    , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
+    , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
+    , _invariants :: Map TableName [Invariant Bool]
     }
   deriving Show
 
@@ -128,6 +135,11 @@ instance Mergeable a => Mergeable (TableMap a) where
 data LatticeAnalyzeState
   = LatticeAnalyzeState
     { _lasSucceeds            :: SBV Bool
+    --
+    -- TODO: instead of having a single boolean here, we should probably use
+    --       finer-grained tracking, so that we can test whether a single
+    --       invariant is being maintained
+    --
     , _lasMaintainsInvariants :: SBV Bool
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
@@ -216,7 +228,7 @@ instance Mergeable AnalyzeState where
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
-mkInitialAnalyzeState :: [(Text, Pact.UserType)] -> AnalyzeState
+mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
@@ -238,7 +250,7 @@ mkInitialAnalyzeState tables = AnalyzeState
 
   where
     tableNames :: [TableName]
-    tableNames = map (TableName . T.unpack . fst) tables
+    tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
     decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
@@ -251,68 +263,61 @@ mkInitialAnalyzeState tables = AnalyzeState
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
-      flip fmap tables $ \(tabName, userTy) ->
-        let fields = Pact._utFields userTy
-            colMap = ColumnMap $ Map.fromList $ catMaybes $
-              flip fmap fields $ \(Arg argName ty _) ->
+      tables <&> \Table { _tableName, _tableType } ->
+        let fields = Pact._utFields _tableType
+            colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+              \(Pact.Arg argName ty _) ->
                 if f ty
                 then Just (ColumnName (T.unpack argName), defValue)
                 else Nothing
-        in (TableName (T.unpack tabName), colMap)
+        in (TableName (T.unpack _tableName), colMap)
 
     mkPerTableSFunArray :: SBV v -> TableMap (SFunArray k v)
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
 
-addConstraint :: SBool -> Analyze ()
-addConstraint = tell . Constraints . constrain
+addConstraint :: S Bool -> Analyze ()
+addConstraint = tell . Constraints . constrain . _sSbv
 
-mkSymbolicCells :: [(Text, Pact.UserType)] -> TableMap SymbolicCells
+sbvIdentifier :: Text -> Text
+sbvIdentifier = T.replace "-" "_"
+
+mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
+mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
+
+mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
-
   where
-    cellsList = tables <&> \(tabName, Pact.Schema _ _ fields _) ->
-      let fields' = Map.fromList $
-            map (\(Arg argName ty _i) -> (argName, ty)) fields
+    cellsList = tables <&> \Table { _tableName, _tableType = Pact.Schema _ _ fields _ } ->
+      let fields'  = Map.fromList $
+            map (\(Pact.Arg argName ty _i) -> (argName, ty)) fields
 
-      in (TableName (T.unpack tabName), mkCells fields')
+      in (TableName (T.unpack _tableName), mkCells _tableName fields')
 
-    mkCells
-      :: Map Text (Pact.Type Pact.UserType)
-      -> SymbolicCells
-    mkCells fields =
+    mkCells :: Text -> Map Text (Pact.Type Pact.UserType) -> SymbolicCells
+    mkCells tableName fields = ifoldl
+      (\colName cells ty ->
+        let col      = ColumnName $ T.unpack colName
 
-      let cells0 = SymbolicCells mempty mempty mempty mempty mempty mempty
+            mkArray :: forall a. HasKind a => SFunArray RowKey a
+            mkArray  = mkFreeArray $ "cells__" <> tableName <> "__" <> colName
 
-      -- fold over the fields, creating an array with constrained values for
-      -- each column
-      in ifoldl
-        (\colName cells ty ->
-          let colName' = T.unpack colName
-          in case ty of
-              TyPrim TyInteger ->
-                cells & scIntValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "intCells")
-              TyPrim TyBool    ->
-                cells & scBoolValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "boolCells")
-              TyPrim TyDecimal ->
-                cells & scDecimalValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "decimalCells")
-              TyPrim TyTime    ->
-                cells & scTimeValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "timeCells")
-              TyPrim TyString  ->
-                cells & scStringValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "stringCells")
-              TyPrim TyKeySet  ->
-                cells & scKsValues . at (ColumnName colName') ?~
-                  mkSFunArray (uninterpret "keysetCells")
-              _ -> cells -- error (show ty)
-        )
-        cells0
-        fields
+        in cells & case ty of
+             TyPrim TyInteger -> scIntValues.at col     ?~ mkArray
+             TyPrim TyBool    -> scBoolValues.at col    ?~ mkArray
+             TyPrim TyDecimal -> scDecimalValues.at col ?~ mkArray
+             TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
+             TyPrim TyString  -> scStringValues.at col  ?~ mkArray
+             TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
+             --
+             -- TODO: we should Left here. this means that mkSymbolicCells and
+             --       mkInitialAnalyzeState should both return Either.
+             --
+             _                -> id
+      )
+      (SymbolicCells mempty mempty mempty mempty mempty mempty)
+      fields
 
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
@@ -321,9 +326,9 @@ data AnalyzeFailure
   = AtHasNoRelevantFields EType Schema
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
-  | KeyNotPresent String Object
+  | KeyNotPresent Text Object
   | MalformedLogicalOpExec LogicalOp Int
-  | ObjFieldOfWrongType String EType
+  | ObjFieldOfWrongType Text EType
   | PossibleRoundoff Text
   | UnsupportedDecArithOp ArithOp
   | UnsupportedIntArithOp ArithOp
@@ -332,7 +337,7 @@ data AnalyzeFailure
   | UnsupportedRoundingLikeOp2 RoundingLikeOp
   | FailureMessage Text
   | OpaqueValEncountered
-  | VarNotInScope Text
+  | VarNotInScope Text UniqueId
   | UnsupportedObjectInDbCell
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
@@ -345,9 +350,9 @@ describeAnalyzeFailure = \case
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
     AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
     AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
-    KeyNotPresent key obj -> "key " <> T.pack key <> " unexpectedly not found in object " <> tShow obj
+    KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
     MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
-    ObjFieldOfWrongType fName fType -> "object field " <> T.pack fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
+    ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
     PossibleRoundoff msg -> msg
     UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
     UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
@@ -359,7 +364,7 @@ describeAnalyzeFailure = \case
     FailureMessage msg -> msg
     UnhandledObject obj -> foundUnsupported $ tShow obj
     UnhandledTerm termText -> foundUnsupported termText
-    VarNotInScope name -> "variable not in scope: " <> name
+    VarNotInScope name uid -> "variable not in scope: " <> name <> " (uid " <> tShow uid <> ")"
     --
     -- TODO: maybe we should differentiate between opaque values and type
     -- variables, because the latter would probably mean a problem from type
@@ -394,55 +399,44 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-allocateArgs :: [(Text, Pact.Type Pact.UserType)] -> Symbolic (Map Text AVal)
-allocateArgs argTys = fmap Map.fromList $ for argTys $ \(name, ty) -> do
-    let name' = T.unpack name
-    var <- case ty of
-      TyPrim TyInteger -> mkAVal . sansProv <$> sInteger name'
-      TyPrim TyBool    -> mkAVal . sansProv <$> sBool name'
-      TyPrim TyDecimal -> mkAVal . sansProv <$> sDecimal name'
-      TyPrim TyTime    -> mkAVal . sansProv <$> sInt64 name'
-      TyPrim TyString  -> mkAVal . sansProv <$> sString name'
-      TyUser _         -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV UserType))
-      TyPrim TyKeySet  -> mkAVal . sansProv <$> (free_ :: Symbolic (SBV KeySet))
+--
+-- TODO: convert this back to use Symbolic so we get useful models
+--         rename allocateArgs
+--
+-- Returns problematic argument name, or arg map
+mkArgs :: [Arg] -> Either Text (Map UniqueId AVal)
+mkArgs argTys = fmap Map.fromList $ for argTys $ \(name, uid, ty) ->
+  let symName = "arg_" ++ T.unpack name
 
-      -- TODO
-      TyPrim TyValue   -> error "unimplemented type analysis"
-      TyAny            -> error "unimplemented type analysis"
-      TyVar _v         -> error "unimplemented type analysis"
-      TyList _         -> error "unimplemented type analysis"
-      TySchema _ _     -> error "unimplemented type analysis"
-      TyFun _          -> error "unimplemented type analysis"
-    pure (name, var)
+      wrap :: SBV a -> Either e AVal
+      wrap = Right . mkAVal . sansProv
 
-  where
-    sDecimal :: String -> Symbolic (SBV Decimal)
-    sDecimal = symbolic
+      eVar = case ty of
+               TyPrim TyInteger -> wrap (uninterpret symName :: (SBV Integer))
+               TyPrim TyBool    -> wrap (uninterpret symName :: (SBV Bool))
+               TyPrim TyDecimal -> wrap (uninterpret symName :: (SBV Decimal))
+               TyPrim TyTime    -> wrap (uninterpret symName :: (SBV Int64))
+               TyPrim TyString  -> wrap (uninterpret symName :: (SBV String))
+               TyUser _         -> wrap (uninterpret symName :: (SBV UserType))
+               TyPrim TyKeySet  -> wrap (uninterpret symName :: (SBV KeySet))
 
-mkAnalyzeEnv
-  :: [(Text, Pact.Type Pact.UserType)]
-  -> [(Text, Pact.UserType, [(Text, SchemaInvariant Bool)])]
-  -> Symbolic AnalyzeEnv
-mkAnalyzeEnv argTys tables = do
-  args        <- allocateArgs argTys
-  --
-  -- TODO: probably switch these over to uninterpret+SFunArray as well:
-  --
-  keySets'    <- newArray "keySets'"
-  keySetAuths <- newArray "keySetAuths"
+               TyPrim TyValue   -> Left name
+               TyAny            -> Left name
+               TyVar _v         -> Left name
+               TyList _         -> Left name
+               TySchema _ _     -> Left name
+               TyFun _          -> Left name
+  in (uid,) <$> eVar
 
-  pure $ foldr
-    (\(tableName, _ut, someInvariants) env -> foldr
-      (\(colName, invariant) env' ->
-        let tableName' = TableName (T.unpack tableName)
-            colName'   = ColumnName (T.unpack colName)
-        in env' & invariants . at (tableName', colName') ?~ invariant
-      )
-      env
-      someInvariants
-    )
-    (AnalyzeEnv args keySets' keySetAuths Map.empty)
-    tables
+mkAnalyzeEnv :: Map UniqueId AVal -> [Table] -> AnalyzeEnv
+mkAnalyzeEnv args tables =
+  let keySets'    = mkFreeArray "keySets"
+      keySetAuths = mkFreeArray "keySetAuths"
+
+      invariants' = Map.fromList $ tables <&> \(Table tname _ut someInvariants)
+        -> (TableName (T.unpack tname), someInvariants)
+
+  in AnalyzeEnv args keySets' keySetAuths invariants'
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -464,13 +458,13 @@ class HasAnalyzeEnv a where
   {-# MINIMAL analyzeEnv #-}
   analyzeEnv :: Lens' a AnalyzeEnv
 
-  scope :: Lens' a (Map Text AVal)
+  scope :: Lens' a (Map UniqueId AVal)
   scope = analyzeEnv.aeScope
 
-  keySets :: Lens' a (SArray KeySetName KeySet)
+  keySets :: Lens' a (SFunArray KeySetName KeySet)
   keySets = analyzeEnv.aeKeySets
 
-  ksAuths :: Lens' a (SArray KeySet Bool)
+  ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
@@ -478,21 +472,31 @@ instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 class (MonadError AnalyzeFailure m) => Analyzer m term where
   analyze  :: (Show a, SymWord a) => term a -> m (S a)
+
+class Analyzer m term => ObjectAnalyzer m term where
   analyzeO :: term Object -> m Object
 
 instance Analyzer Analyze Term where
   analyze  = analyzeTerm
+
+instance ObjectAnalyzer Analyze Term where
   analyzeO = analyzeTermO
 
 instance Analyzer Query Prop where
   analyze  = analyzeProp
+
+instance ObjectAnalyzer Query Prop where
   analyzeO = analyzePropO
+
+instance Analyzer InvariantCheck Invariant where
+  analyze = checkInvariant
 
 class SymbolicTerm term where
   injectS :: S a -> term a
 
-instance SymbolicTerm Term where injectS = Literal
-instance SymbolicTerm Prop where injectS = PSym
+instance SymbolicTerm Term      where injectS = Literal
+instance SymbolicTerm Prop      where injectS = PSym
+instance SymbolicTerm Invariant where injectS = ISym
 
 symArrayAt
   :: forall array k v
@@ -677,11 +681,12 @@ expectObj = aval ((throwError . AValUnexpectedlySVal) ... getSVal) pure
 lookupObj
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
+  -> UniqueId
   -> m Object
-lookupObj name = do
-  mVal <- view (scope . at name)
+lookupObj name uid = do
+  mVal <- view (scope . at uid)
   case mVal of
-    Nothing            -> throwError $ VarNotInScope name
+    Nothing            -> throwError $ VarNotInScope name uid
     Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
     Just (AnObj obj)   -> pure obj
     Just (OpaqueVal)   -> throwError OpaqueValEncountered
@@ -689,40 +694,33 @@ lookupObj name = do
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => Text
+  -> UniqueId
   -> m (S a)
-lookupVal name = do
-  mVal <- view $ scope . at name
+lookupVal name uid = do
+  mVal <- view $ scope . at uid
   case mVal of
-    Nothing                -> throwError $ VarNotInScope name
+    Nothing                -> throwError $ VarNotInScope name uid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal)       -> throwError OpaqueValEncountered
 
-analyzeRead :: TableName -> Map String EType -> Term String -> Analyze Object
+analyzeRead :: TableName -> Map Text EType -> Term String -> Analyze Object
 analyzeRead tn fields rowKey = do
   sRk <- symRowKey <$> analyzeTerm rowKey
   tableRead tn .= true
   rowRead tn sRk .= true
-  obj <- iforM fields $ \fieldName fieldType -> do
-    let cn = ColumnName fieldName
-    mInvariant <- view (invariants . at (tn, cn))
+
+  aValFields <- iforM fields $ \fieldName fieldType -> do
+    let cn = ColumnName $ T.unpack fieldName
     sDirty <- use $ cellWritten tn cn sRk
 
-    let constrained :: forall a. S a -> Analyze AVal
-        constrained s@(S _prov (SBVI.SBV sval)) = do
-          case mInvariant of
-            Nothing -> pure ()
-            Just invariant -> addConstraint $
-              runReader (checkSchemaInvariant invariant) sval
-          pure $ mkAVal s
-
-    x <- case fieldType of
-      EType TInt     -> constrained =<< use (intCell     tn cn sRk sDirty)
-      EType TBool    -> constrained =<< use (boolCell    tn cn sRk sDirty)
-      EType TStr     -> constrained =<< use (stringCell  tn cn sRk sDirty)
-      EType TDecimal -> constrained =<< use (decimalCell tn cn sRk sDirty)
-      EType TTime    -> constrained =<< use (timeCell    tn cn sRk sDirty)
-      EType TKeySet  -> constrained =<< use (ksCell      tn cn sRk sDirty)
+    aVal <- case fieldType of
+      EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+      EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+      EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+      EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+      EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+      EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
       EType TAny     -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
@@ -731,12 +729,41 @@ analyzeRead tn fields rowKey = do
       --
       EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-    pure (fieldType, x)
-  pure $ Object obj
+    pure (fieldType, aVal)
+
+  -- Constraints can only operate over int, bool, etc. All of which appear as
+  -- AVal, so we're safe ignoring the other AVal constructors.
+  let sValFields :: Map Text SBVI.SVal
+      sValFields = flip Map.mapMaybe aValFields $ \case
+        (_etype, AVal _prov sVal) -> Just sVal
+        _                         -> Nothing
+
+  applyInvariants tn sValFields addConstraint
+
+  pure $ Object aValFields
+
+applyInvariants
+  :: TableName
+  -- | Mapping from the fields in this table to the @SVal@ holding that field
+  --   in this context.
+  -> Map Text SBVI.SVal
+  -- | The function used to apply an invariant in this context. The @SBV Bool@
+  --   is an assertion of what it would take for the invariant to be true in
+  --   this context.
+  -> (S Bool -> Analyze ())
+  -> Analyze ()
+applyInvariants tn sValFields addInvariant = do
+  mInvariants <- view (invariants . at tn)
+  case mInvariants of
+    Nothing -> pure ()
+    Just invariants' -> for_ invariants' $ \invariant ->
+      case runReaderT (checkInvariant invariant) sValFields of
+        Left  err -> throwError err
+        Right inv -> addInvariant inv
 
 analyzeAtO
   :: forall m term
-   . Analyzer m term
+   . ObjectAnalyzer m term
   => term String
   -> term Object
   -> m Object
@@ -744,7 +771,7 @@ analyzeAtO colNameT objT = do
     obj@(Object fields) <- analyzeO objT
     sCn <- analyze colNameT
 
-    let getObjVal :: String -> m Object
+    let getObjVal :: Text -> m Object
         getObjVal fieldName = case Map.lookup fieldName fields of
           Nothing -> throwError $ KeyNotPresent fieldName obj
           Just (fieldType, AVal _ _) -> throwError $
@@ -754,10 +781,10 @@ analyzeAtO colNameT objT = do
 
     case unliteralS sCn of
       Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
-      Just concreteColName -> getObjVal concreteColName
+      Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
-  :: (Analyzer m term, SymWord a)
+  :: (ObjectAnalyzer m term, SymWord a)
   => Schema
   -> term String
   -> term Object
@@ -798,7 +825,7 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
   foldrM
     (\fieldName rest -> do
       val <- getObjVal fieldName
-      pure $ iteS (sansProv (colName .== literalS fieldName)) val rest
+      pure $ ite (colName .== literalS (T.unpack fieldName)) val rest
     )
     firstVal
     relevantFields'
@@ -818,15 +845,15 @@ analyzeTermO = \case
     -- columns
     let colSet = Set.fromList cols
         relevantFields
-          = Map.filterWithKey (\k _ -> T.pack k `Set.member` colSet) fields
+          = Map.filterWithKey (\k _ -> k `Set.member` colSet) fields
 
     analyzeRead tn relevantFields rowKey
 
-  Var name -> lookupObj name
+  Var name uid -> lookupObj name uid
 
-  Let name eterm body -> do
+  Let _name uid eterm body -> do
     av <- analyzeETerm eterm
-    local (scope.at name ?~ av) $
+    local (scope.at uid ?~ av) $
       analyzeTermO body
 
   Sequence eterm objT -> analyzeETerm eterm *> analyzeTermO objT
@@ -941,7 +968,7 @@ analyzeRoundingLikeOp1 op x = do
   x' <- analyze x
   pure $ case op of
     -- The only SReal -> SInteger conversion function that sbv provides is
-    -- sRealToSInteger, which computes the floor.
+    -- sRealToSInteger (which realToIntegerS wraps), which computes the floor.
     Floor   -> realToIntegerS x'
 
     -- For ceiling we use the identity:
@@ -951,16 +978,20 @@ analyzeRoundingLikeOp1 op x = do
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
     -- nearest even.
-    Round   ->
-      let wholePart      = realToIntegerS x'
-          wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-          isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x'
+    Round   -> banker'sMethod x'
 
-      in iteS isExactlyHalf
-        -- nearest even number!
-        (wholePart + oneIfS wholePartIsOdd)
-        -- otherwise we take the floor of `x + 0.5`
-        (realToIntegerS (x' + 0.5))
+-- Round a real exactly between two integers (_.5) to the nearest even
+banker'sMethod :: S Decimal -> S Integer
+banker'sMethod x =
+  let wholePart      = realToIntegerS x
+      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
+
+  in iteS isExactlyHalf
+    -- nearest even number!
+    (wholePart + oneIfS wholePartIsOdd)
+    -- otherwise we take the floor of `x + 0.5`
+    (realToIntegerS (x + 0.5))
 
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.
@@ -985,6 +1016,25 @@ analyzeRoundingLikeOp2 op x precision = do
   x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: term Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
 
+-- Note [Time Representation]
+--
+-- Pact uses the Thyme library (UTCTime) to represent times. Thyme internally
+-- uses a 64-bit count of microseconds since the MJD epoch. So, our symbolic
+-- representation is naturally a 64-bit integer.
+--
+-- The effect from a Pact-user's point of view is that we stores 6 digits to
+-- the right of the decimal point in times (even though we don't print
+-- sub-second precision by default...).
+--
+-- pact> (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+-- "2016-07-23T13:30:45Z"
+-- pact> (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+--          (add-time (time "2016-07-23T13:30:45Z") 0.0010021))
+-- true
+-- pact> (= (add-time (time "2016-07-23T13:30:45Z") 0.001002)
+--          (add-time (time "2016-07-23T13:30:45Z") 0.001003))
+-- false
+
 analyzeIntAddTime
   :: Analyzer m term
   => term Time
@@ -993,7 +1043,9 @@ analyzeIntAddTime
 analyzeIntAddTime timeT secsT = do
   time <- analyze timeT
   secs <- analyze secsT
-  pure $ time + fromIntegralS secs
+  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- [Time Representation]).
+  pure $ time + fromIntegralS (secs * 1000000)
 
 analyzeDecAddTime
   :: Analyzer m term
@@ -1004,9 +1056,24 @@ analyzeDecAddTime timeT secsT = do
   time <- analyze timeT
   secs <- analyze secsT
   if isConcreteS secs
-  then pure $ time + fromIntegralS (realToIntegerS secs)
+  -- Convert seconds to milliseconds /before/ conversion to Integer (see note
+  -- [Time Representation]).
+  then pure $ time + fromIntegralS (banker'sMethod (secs * 1000000))
   else throwError $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
+
+analyzeEqNeq
+  :: (Analyzer m term, SymWord a, Show a)
+  => EqNeq
+  -> term a
+  -> term a
+  -> m (S Bool)
+analyzeEqNeq op xT yT = do
+  x <- analyze xT
+  y <- analyze yT
+  pure $ sansProv $ case op of
+    Eq'  -> x .== y
+    Neq' -> x ./= y
 
 analyzeComparisonOp
   :: (Analyzer m term, SymWord a, Show a)
@@ -1064,23 +1131,12 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    void $ iforM obj' $ \colName (fieldType, aval') -> do
-      let cn = ColumnName colName
+    mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
+      let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
 
-      let checkInvariants :: SBVI.SVal -> Analyze ()
-          checkInvariants val = do
-            mInvariant <- view (invariants . at (tn, cn))
-            case mInvariant of
-              Nothing -> pure ()
-              Just invariant -> do
-                let inv = runReader (checkSchemaInvariant invariant) val
-                maintainsInvariants %= (&&& inv)
-
       case aval' of
-        AVal mProv val' -> do
-          checkInvariants val'
-
+        AVal mProv sVal -> do
           let writeDelta :: forall t
                           . (Num t, SymWord t)
                          => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
@@ -1090,7 +1146,7 @@ analyzeTerm = \case
               writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
-                let next = mkS mProv val'
+                let next = mkS mProv sVal
                 prev <- use cell
                 cell .= next
                 let diff = next - prev
@@ -1099,31 +1155,39 @@ analyzeTerm = \case
 
           case fieldType of
             EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv val'
+            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv sVal
             EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv val'
-            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv val'
-            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv val'
-            EType TAny     -> throwError OpaqueValEncountered
-            EObjectTy _    -> throwError UnsupportedObjectInDbCell
+            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv sVal
+            EType TAny     -> void $ throwError OpaqueValEncountered
+            EObjectTy _    -> void $ throwError UnsupportedObjectInDbCell
+
+          pure (Just sVal)
 
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
-        AnObj obj'' -> void $ throwError $ AValUnexpectedlyObj obj''
+        AnObj obj'' -> throwError $ AValUnexpectedlyObj obj''
         OpaqueVal   -> throwError OpaqueValEncountered
+
+
+    let sValFields :: Map Text SBVI.SVal
+        sValFields = Map.mapMaybe id mValFields
+
+    applyInvariants tn sValFields (\inv -> maintainsInvariants %= (&&& (_sSbv inv)))
 
     --
     -- TODO: make a constant on the pact side that this uses:
     --
     pure $ literalS "Write succeeded"
 
-  Let name eterm body -> do
+  Let _name uid eterm body -> do
     av <- analyzeETerm eterm
-    local (scope.at name ?~ av) $
+    local (scope.at uid ?~ av) $
       analyzeTerm body
 
-  Var name -> lookupVal name
+  Var name uid -> lookupVal name uid
 
   DecArithOp op x y         -> analyzeDecArithOp op x y
   IntArithOp op x y         -> analyzeIntArithOp op x y
@@ -1151,94 +1215,151 @@ analyzeTerm = \case
 
   PactVersion -> pure $ literalS $ T.unpack pactVersion
 
+  Format formatStr args -> do
+    formatStr' <- analyze formatStr
+    args' <- for args $ \case
+      ETerm str TStr   -> Left          <$> analyze str
+      ETerm int TInt   -> Right . Left  <$> analyze int
+      ETerm bool TBool -> Right . Right <$> analyze bool
+      _                -> throwError "We can only analyze calls to `format` formatting {string,integer,bool}"
+    case unliteralS formatStr' of
+      Nothing -> throwError ""
+      Just concreteStr -> case format concreteStr args' of
+        Left err -> throwError err
+        Right tm -> pure tm
+
+  FormatTime formatStr time -> do
+    formatStr' <- analyze formatStr
+    time'      <- analyze time
+    case (unliteralS formatStr', unliteralS time') of
+      (Just formatStr'', Just time'') -> pure $ literalS $
+        formatTime defaultTimeLocale formatStr'' (unMkTime time'')
+      _ -> throwError "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
+
+  ParseTime mFormatStr timeStr -> do
+    formatStr' <- case mFormatStr of
+      Just formatStr -> analyze formatStr
+      Nothing        -> pure $ literalS Pact.simpleISO8601
+    timeStr'   <- analyze timeStr
+    case (unliteralS formatStr', unliteralS timeStr') of
+      (Just formatStr'', Just timeStr'') ->
+        case parseTime defaultTimeLocale formatStr'' timeStr'' of
+          Nothing   -> succeeds .= false >> pure 0
+          Just time -> pure $ literalS $ mkTime time
+      _ -> throwError "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
+
+  Hash value -> do
+    let sHash = literalS . T.unpack . Pact.asString . Pact.hash
+        notStaticErr :: AnalyzeFailure
+        notStaticErr = "We can only analyze calls to `hash` with statically determined contents"
+    case value of
+      -- Note that strings are hashed in a different way from the other types
+      ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
+        Nothing  -> throwError notStaticErr
+        Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
+
+      -- Everything else is hashed by first converting it to JSON:
+      ETerm tm TInt -> analyze tm <&> unliteralS >>= \case
+        Nothing  -> throwError notStaticErr
+        Just int -> pure $ sHash $ toStrict $ Aeson.encode int
+      ETerm tm TBool -> analyze tm <&> unliteralS >>= \case
+        Nothing   -> throwError notStaticErr
+        Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
+
+      -- In theory we should be able to analyze decimals -- we just need to be
+      -- able to convert them back into Decimal.Decimal decimals (from SBV's
+      -- Real representation). This is probably possible if we think about it
+      -- hard enough.
+      ETerm _ TDecimal -> throwError "We can't yet analyze calls to `hash` on decimals"
+
+      ETerm _ _        -> throwError "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      EObject _ _      -> throwError "We can't yet analyze calls to `hash on objects"
+
   n -> throwError $ UnhandledTerm $ tShow n
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
 
-
-checkInvariantsHeld :: Query (S Bool)
-checkInvariantsHeld = do
-  success   <- view (model.succeeds)
-  maintains <- sansProv <$> view (model.maintainsInvariants)
-  pure $ success ==> maintains
-
+-- For now we only allow these three types to be formatted.
 --
--- TODO: convert this to use `S a`
---
-checkSchemaInvariant :: SchemaInvariant a -> Reader SBVI.SVal (SBV a)
-checkSchemaInvariant = \case
+-- Formatting behavior is not well specified. Its behavior on these types is
+-- easy to infer from examples in the docs. We would also like to be able to
+-- format decimals, but that's a little harder (we could still make it work).
+-- Behavior on structured data is not specified.
+type Formattable = Either (S String) (Either (S Integer) (S Bool))
 
-  -- comparison
-  SchemaDecimalComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
+-- This definition was taken from Pact.Native, then modified to be symbolic
+format :: String -> [Formattable] -> Either AnalyzeFailure (S String)
+format s tms = do
+  -- TODO: don't convert to Text and back. splitOn is provided by both the
+  -- split and MissingH packages.
+  let parts = literalS . T.unpack <$> T.splitOn "{}" (pack s)
+      plen = length parts
+      rep = \case
+        Left  str          -> str
+        Right (Right bool) -> ite (_sSbv bool) "true" "false"
+        Right (Left int)   -> sansProv (SBV.natToStr (_sSbv int))
+  if plen == 1
+  then Right (literalS s)
+  else if plen - length tms > 1
+       then Left "format: not enough arguments for template"
+       else Right $ foldl'
+              (\r (e, t) -> r .++ rep e .++ t)
+              (head parts)
+              (zip tms (tail parts))
 
-  SchemaIntComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
+type InvariantCheck = ReaderT (Map Text SBVI.SVal) (Either AnalyzeFailure)
 
-  SchemaTimeComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaStringComparison op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Gt  -> a' .>  b'
-      Lt  -> a' .<  b'
-      Gte -> a' .>= b'
-      Lte -> a' .<= b'
-      Eq  -> a' .== b'
-      Neq -> a' ./= b'
-
-  SchemaBoolEqNeq op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Eq'  -> a' .== b'
-      Neq' -> a' ./= b'
-
-  SchemaKeySetEqNeq op a b -> do
-    a' <- checkSchemaInvariant a
-    b' <- checkSchemaInvariant b
-    pure $ case op of
-      Eq'  -> a' .== b'
-      Neq' -> a' ./= b'
+checkInvariant :: Invariant a -> InvariantCheck (S a)
+checkInvariant = \case
 
   -- literals
-  SchemaDecimalLiteral d -> pure $ literal d
-  SchemaIntLiteral i     -> pure $ literal i
-  SchemaStringLiteral s  -> pure $ literal (T.unpack s)
-  SchemaTimeLiteral t    -> pure $ literal t
-  SchemaBoolLiteral b    -> pure $ literal b
+  IDecimalLiteral a -> pure $ literalS a
+  IIntLiteral     a -> pure $ literalS a
+  IStringLiteral  a -> pure $ literalS (T.unpack a)
+  ITimeLiteral    a -> pure $ literalS a
+  IBoolLiteral    a -> pure $ literalS a
 
-  SchemaVar _            -> asks SBVI.SBV
+  ISym sym -> pure sym
 
-  SchemaLogicalOp op args -> do
-    args' <- for args checkSchemaInvariant
+  -- variables
+  IVar name         -> do
+    mVal <- view (at name)
+    case mVal of
+      Just val -> pure (sansProv (SBVI.SBV val))
+      Nothing  -> throwError $ fromString $
+        "column name not in scope: " ++ show name
+
+  -- string ops
+  IStrConcat a b -> (.++) <$> checkInvariant a <*> checkInvariant b
+  IStrLength str -> over s2Sbv SBV.length <$> checkInvariant str
+
+  -- numeric ops
+  IDecArithOp op x y      -> analyzeDecArithOp op x y
+  IIntArithOp op x y      -> analyzeIntArithOp op x y
+  IIntDecArithOp op x y   -> analyzeIntDecArithOp op x y
+  IDecIntArithOp op x y   -> analyzeDecIntArithOp op x y
+  IIntUnaryArithOp op x   -> analyzeUnaryArithOp op x
+  IDecUnaryArithOp op x   -> analyzeUnaryArithOp op x
+  IModOp x y              -> analyzeModOp x y
+  IRoundingLikeOp1 op x   -> analyzeRoundingLikeOp1 op x
+  IRoundingLikeOp2 op x p -> analyzeRoundingLikeOp2 op x p
+
+  -- time
+  IIntAddTime time secs -> analyzeIntAddTime time secs
+  IDecAddTime time secs -> analyzeDecAddTime time secs
+
+  -- comparison
+  IDecimalComparison op a b -> analyzeComparisonOp op a b
+  IIntComparison     op a b -> analyzeComparisonOp op a b
+  IStringComparison  op a b -> analyzeComparisonOp op a b
+  ITimeComparison    op a b -> analyzeComparisonOp op a b
+  IBoolComparison    op a b -> analyzeComparisonOp op a b
+  IKeySetEqNeq       op a b -> analyzeEqNeq        op a b
+
+  -- boolean ops
+  ILogicalOp op args -> do
+    args' <- for args checkInvariant
     case (op, args') of
       (AndOp, [a, b]) -> pure $ a &&& b
       (OrOp,  [a, b]) -> pure $ a ||| b
@@ -1247,16 +1368,16 @@ checkSchemaInvariant = \case
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar name) = lookupObj name
+analyzePropO (PVar uid name) = lookupObj name uid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
-analyzePropO (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzePropO (Forall uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzePropO p
+analyzePropO (Exists uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzePropO p
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzePropO p
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1268,13 +1389,13 @@ analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
 
 -- Abstraction
-analyzeProp (Forall name (Ty (Rep :: Rep ty)) p) = do
+analyzeProp (Forall uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Exists name (Ty (Rep :: Rep ty)) p) = do
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (Exists uid _name (Ty (Rep :: Rep ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at name ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (PVar name) = lookupVal name
+  local (scope.at uid ?~ mkAVal' sbv) $ analyzeProp p
+analyzeProp (PVar uid name) = lookupVal name uid
 
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
@@ -1294,7 +1415,12 @@ analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 analyzeProp (PIntAddTime time secs) = analyzeIntAddTime time secs
 analyzeProp (PDecAddTime time secs) = analyzeDecAddTime time secs
 
-analyzeProp (PComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PIntegerComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
+analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
+analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 
 -- Boolean ops
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
@@ -1331,3 +1457,19 @@ analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   view $ model.cellEnforced tn cn sRk
+
+analyzeCheck :: Check -> Query (S Bool)
+analyzeCheck = \case
+    InvariantsHold  -> assumingSuccess =<< invariantsHold
+    PropertyHolds p -> assumingSuccess =<< analyzeProp p
+    Valid p         -> analyzeProp p
+    Satisfiable p   -> analyzeProp p
+
+  where
+    assumingSuccess :: S Bool -> Query (S Bool)
+    assumingSuccess p = do
+      success <- view (model.succeeds)
+      pure $ success ==> p
+
+    invariantsHold :: Query (S Bool)
+    invariantsHold = sansProv <$> view (model.maintainsInvariants)

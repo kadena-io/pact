@@ -36,11 +36,11 @@ data Term ret where
   --
   -- TODO: we need to allow computed keys here
   --
-  LiteralObject  :: Map String (EType, ETerm) -> Term Object
+  LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
 
   -- Variable binding
-  Let            :: Text -> ETerm -> Term a  -> Term a
-  Var            :: Text ->                     Term a
+  Let            :: Text -> UniqueId -> ETerm -> Term a -> Term a
+  Var            :: Text -> UniqueId                    -> Term a
 
   -- Control flow
   IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
@@ -109,6 +109,11 @@ data Term ret where
   Concat          :: Term String -> Term String -> Term String
 
   PactVersion     :: Term String
+
+  Format          :: Term String         -> [ETerm]     -> Term String
+  FormatTime      :: Term String         -> Term Time   -> Term String
+  ParseTime       :: Maybe (Term String) -> Term String -> Term Time
+  Hash            :: ETerm                              -> Term String
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm

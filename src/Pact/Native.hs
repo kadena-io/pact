@@ -257,7 +257,7 @@ fold' :: NativeFun e
 fold' i [app@TApp {},initv,l] = reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a -> apply' app [r,a]) initv' ls
-           t -> evalError' i $ "map: expecting list: " ++ abbrev t
+           t -> evalError' i $ "fold: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
 
