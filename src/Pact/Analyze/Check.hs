@@ -3,6 +3,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
+{-# LANGUAGE TupleSections     #-}
 
 module Pact.Analyze.Check
   ( verifyModule
@@ -14,15 +15,17 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (cons, itraversed, ix, runIdentity,
+import           Control.Lens               (itraversed, ix, runIdentity,
                                              traversed, (<&>), (^.), (^?),
-                                             (^@..), _2, _Just)
+                                             (%~), (&), (^@..), _2, _Just,
+                                             _Left)
 import           Control.Monad.Except       (runExcept, runExceptT)
 import           Control.Monad.Gen          (runGenTFrom)
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
 import           Data.Either                (lefts, rights)
+import qualified Data.Default               as Default
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -40,14 +43,16 @@ import           Data.Traversable           (for)
 import           Prelude                    hiding (exp)
 
 import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Lang            (mMetas, tMeta)
+import           Pact.Types.Lang            (Parsed, eParsed, mMetas,
+                                             renderInfo, renderParsed, tMeta,
+                                             _iInfo)
 import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
                                              Ref (Ref),
                                              Term (TDef, TSchema, TTable),
-                                             Type (TyUser), asString,
-                                             renderInfo)
+                                             Type (TyUser), asString, tInfo,
+                                             tShow)
 import qualified Pact.Types.Runtime         as Pact
-import           Pact.Types.Typecheck       (AST, Fun (FDefun),
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fInfo),
                                              Named (_nnName, _nnNamed),
                                              Node (_aTy), TcId (_tiInfo),
                                              TopLevel (TopFun, TopTable),
@@ -62,12 +67,12 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckSuccess
-  = SatisfiedProperty SBVI.SMTModel
+  = SatisfiedProperty [(String, SBVI.CW)]
   | ProvedTheorem
-  deriving Show
+  deriving (Show)
 
 data CheckFailure
-  = Invalid SBVI.SMTModel
+  = Invalid [(String, SBVI.CW)]
   | Unsatisfiable
   | Unknown String
 
@@ -79,60 +84,71 @@ data CheckFailure
   | CodeCompilationFailed String
   deriving Show
 
-describeCheckFailure :: CheckFailure -> Text
-describeCheckFailure = \case
-  Invalid model ->
-    "Invalidating model found:\n" <>
-    T.pack (show model)
-  Unsatisfiable  -> "This property is unsatisfiable"
-  Unknown reason ->
-    "The solver returned unknown with reason:\n" <>
-    T.pack (show reason)
-  TypecheckFailure fails ->
-    "The module failed to typecheck:\n" <>
-    T.unlines (map
-      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ " error: " ++ s))
-      (Set.toList fails))
-  AnalyzeFailure err        -> describeAnalyzeFailure err
-  TranslateFailure err      -> describeTranslateFailure err
-  PropertyParseError expr   -> "Couldn't parse property: " <> T.pack (show expr)
-  CodeCompilationFailed msg -> T.pack msg
+describeCheckFailure :: Parsed -> CheckFailure -> Text
+describeCheckFailure parsed failure =
+  case failure of
+    TypecheckFailure fails -> T.unlines $ map
+      (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ ":Warning: " ++ s))
+      (Set.toList fails)
+
+    _ ->
+      let str = case failure of
+            Invalid assocs -> "Invalidating model found: " <> showAssocs assocs
+            Unsatisfiable  -> "This property is unsatisfiable"
+            Unknown reason ->
+              "The solver returned unknown with reason:\n" <>
+              tShow reason
+            AnalyzeFailure err        -> describeAnalyzeFailure err
+            TranslateFailure err      -> describeTranslateFailure err
+            PropertyParseError expr   -> "Couldn't parse property: " <> tShow expr
+            CodeCompilationFailed msg -> T.pack msg
+            TypecheckFailure _        -> error "impossible (handled above)"
+      in T.pack (renderParsed parsed) <> ":Warning: " <> str
+
+showAssocs :: [(String, SBVI.CW)] -> Text
+showAssocs assocs = T.intercalate ", " $ map
+  (\(name, cw) -> T.pack name <> " = " <> tShow cw)
+  assocs
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
-  SatisfiedProperty model ->
-    "Property satisfied with model:\n" <>
-    T.pack (show model)
-  ProvedTheorem           -> "Property proven valid"
+  SatisfiedProperty assocs -> "Property satisfied with model: " <> showAssocs assocs
+  ProvedTheorem            -> "Property proven valid"
 
-type CheckResult
-  = Either CheckFailure CheckSuccess
+type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
 
 describeCheckResult :: CheckResult -> Text
-describeCheckResult = either describeCheckFailure describeCheckSuccess
+describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 
 --
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
+
+dummyParsed :: Parsed
+dummyParsed = Default.def
 
 --
 -- TODO: - instead of producing an SMTModel, this should produce (Environment, Output)
 --       - could also call Output "Result" or "*Result"
 --       - we need a name for this tuple.
 --
-resultQuery :: Goal -> SBV.Query CheckResult
+-- Note(joel): We no longer produce an SMTModel but rather a list of
+-- associations
+--
+resultQuery :: Goal -> SBV.Query (Either CheckFailure CheckSuccess)
 resultQuery goal = do
   satResult <- SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> Left . Invalid <$> SBV.getModel
+        SBV.Sat   -> Left . Invalid . SBVI.modelAssocs <$> SBV.getModel
         SBV.Unsat -> pure $ Right ProvedTheorem
         SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> Right . SatisfiedProperty <$> SBV.getModel
+        SBV.Sat   ->
+          Right . SatisfiedProperty . SBVI.modelAssocs <$> SBV.getModel
         SBV.Unsat -> pure $ Left Unsatisfiable
         SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
 
@@ -154,12 +170,12 @@ runWithQuery isSAT q cfg a = fst <$> SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup 
 -- @checkTopFunction@, so we start the name generator at the next index.
 checkFunctionBody
   :: [Table]
-  -> Check
+  -> (Parsed, Check)
   -> [AST Node]
   -> [Arg]
   -> Map Node (Text, UniqueId)
   -> IO CheckResult
-checkFunctionBody tables check body argTys nodeNames =
+checkFunctionBody tables (parsed, check) body argTys nodeNames =
   case runExcept
     (runGenTFrom
       (UniqueId (length argTys))
@@ -167,11 +183,11 @@ checkFunctionBody tables check body argTys nodeNames =
         (unTranslateM (translateBody body))
         nodeNames)) of
     Left reason ->
-      pure $ Left $ TranslateFailure reason
+      pure $ Left (parsed, TranslateFailure reason)
 
     Right tm -> case mkArgs argTys of
       Left unsupportedArg ->
-        pure $ Left $ AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg
+        pure $ Left (parsed, AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg)
 
       Right args -> do
         compileFailureVar <- newEmptyMVar
@@ -213,14 +229,14 @@ checkFunctionBody tables check body argTys nodeNames =
 
         mVarVal <- tryTakeMVar compileFailureVar
         pure $ case mVarVal of
-          Nothing -> checkResult
-          Just cf -> Left (AnalyzeFailure cf)
+          Nothing -> checkResult & _Left %~ (parsed,)
+          Just cf -> Left (parsed, AnalyzeFailure cf)
 
 --
 -- TODO: probably inline this function into 'verifyFunction'
 --
-checkTopFunction :: [Table] -> TopLevel Node -> Check -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
+checkTopFunction :: [Table] -> TopLevel Node -> (Parsed, Check) -> IO CheckResult
+checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) parsedCheck =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -239,9 +255,9 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) check =
       nodeNames :: Map Node (Text, UniqueId)
       nodeNames = Map.fromList $ zip nodes (zip names uids)
 
-  in checkFunctionBody tables check body' argTys nodeNames
+  in checkFunctionBody tables parsedCheck body' argTys nodeNames
 
-checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
+checkTopFunction _ _ (parsed, _) = pure $ Left (parsed, CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)")
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -291,10 +307,16 @@ moduleTables modules (_mod, modRefs) = do
 
     pure $ Table tabName schema invariants'
 
-moduleFunChecks :: ModuleData -> HM.HashMap Text (Ref, [Check])
+getInfoParsed :: Pact.Info -> Parsed
+getInfoParsed info = case _iInfo info of
+  Nothing               -> dummyParsed
+  Just (_code, parsed') -> parsed'
+
+moduleFunChecks :: ModuleData -> HM.HashMap Text (Ref, [(Parsed, Check)])
 moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
     let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
         property   = defn ^? tMeta . _Just . mMetas . ix "property"
+        parsed     = getInfoParsed (defn ^. tInfo)
 
         exps :: [Exp]
         exps = case properties of
@@ -305,14 +327,15 @@ moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
             Just exp -> [exp]
             Nothing  -> []
 
+        parsedList :: [Either Exp (Parsed, Check)]
         parsedList = exps <&> \meta -> case expToCheck meta of
           Nothing   -> Left meta
-          Just good -> Right good
+          Just good -> Right (meta ^. eParsed, good)
         failures = lefts parsedList
 
-        checks :: [Check]
+        checks :: [(Parsed, Check)]
         checks = if null failures
-          then rights parsedList
+          then (parsed, InvariantsHold) : rights parsedList
           -- TODO(joel): don't just throw an error
           else error ("failed parse of " ++ show failures)
 
@@ -325,16 +348,17 @@ moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
       Ref (TDef {}) -> True
       _             -> False
 
-verifyFunction :: [Table] -> Ref -> [Check] -> IO [CheckResult]
+verifyFunction :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
 verifyFunction tables ref props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
-  if Set.null failures
-  then case fun of
-         TopFun (FDefun {}) _ -> traverse (checkTopFunction tables fun) props
-         _                    -> pure []
-  else pure [Left $ TypecheckFailure failures]
+  case fun of
+    TopFun (FDefun {_fInfo}) _ ->
+      if Set.null failures
+      then traverse (checkTopFunction tables fun) props
+      else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
+    _ -> pure []
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -346,7 +370,8 @@ verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
   let verifyFun = uncurry $ verifyFunction tables
-      funChecks = fmap (cons InvariantsHold) <$> moduleFunChecks moduleData
+      funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
+      funChecks = moduleFunChecks moduleData
 
   traverse verifyFun funChecks
 
@@ -355,14 +380,17 @@ moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: ModuleData                       -- ^ the module we're verifying
-  -> Text                             -- ^ the name of the function
-  -> Check                            -- ^ the check we're running
+  :: ModuleData -- ^ the module we're verifying
+  -> Text       -- ^ the name of the function
+  -> Check      -- ^ the check we're running
   -> IO CheckResult
 verifyCheck moduleData funName check = do
-  let modules = HM.fromList [("test", moduleData)]
+  let parsed = dummyParsed
+      modules = HM.fromList [("test", moduleData)]
   tables <- moduleTables modules moduleData
   case moduleFun moduleData funName of
-    Just funRef -> head <$> verifyFunction tables funRef [check]
-    Nothing     -> pure $ Left $ CodeCompilationFailed $
-      "function not found: " ++ T.unpack funName
+    Just funRef -> head <$> verifyFunction tables funRef [(parsed, check)]
+    Nothing     -> pure $ Left
+      ( parsed
+      , CodeCompilationFailed ("function not found: " ++ T.unpack funName)
+      )
