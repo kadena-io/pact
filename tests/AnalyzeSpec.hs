@@ -70,8 +70,8 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
       pure $ case findOf (traverse . traverse) isLeft results of
-        Just (Left failure) -> Just failure
-        _                   -> Nothing
+        Just (Left (_parsed, failure)) -> Just failure
+        _                              -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe CheckFailure)
 runCheck code check = do
@@ -81,8 +81,8 @@ runCheck code check = do
     Right moduleData -> do
       result <- verifyCheck moduleData "test" check
       pure $ case result of
-        Left cf -> Just cf
-        Right _ -> Nothing
+        Left (_parsed, cf) -> Just cf
+        Right _            -> Nothing
 
 expectVerified :: Text -> Spec
 expectVerified code = do
