@@ -11,9 +11,9 @@ module Pact.Analyze.Parse
   , expToInvariant
   ) where
 
-import           Control.Lens         (at, view, (^.))
+import           Control.Lens         (at, ifoldrM, view, (^.))
 import           Control.Monad.Except (mzero, throwError)
-import           Control.Monad.Gen    (GenT, gen, runGenT)
+import           Control.Monad.Gen    (GenT, gen, runGen, runGenTFrom)
 import           Control.Monad.Reader (ReaderT, ask, local, runReaderT)
 import           Control.Monad.Trans  (lift)
 import           Data.Foldable        (asum, find)
@@ -265,20 +265,57 @@ checkPreProp ty preProp = case (ty, preProp) of
 
   _ -> mzero
 
+envToEnvs :: Map Text EType -> (Map Text UniqueId, Map UniqueId EType)
+envToEnvs env = runGen $ ifoldrM
+  (\name ty (nameEnv, idEnv) -> do
+    id' <- gen
+    pure $ (Map.insert name id' nameEnv, Map.insert id' ty idEnv))
+  (Map.empty, Map.empty)
+  env
+
+-- Convert an @Exp@ to a @Check@ in an environment where the variables have
+-- types.
+expToCheck :: Map Text EType -> Exp -> Maybe Check
+expToCheck env =
+  let (nameEnv, idEnv) = envToEnvs env
+  in expToCheck' (UniqueId (Map.size env)) nameEnv idEnv
+
+-- Helper for @expToCheck@. Useful for testing when you want unique ids to be
+-- predictable.
 --
 -- TODO: the one property this can't parse yet is PAt because it includes an
 -- EType.
 --
-expToCheck :: Exp -> Maybe Check
-expToCheck body = do
-  preTypedBody <- runGenT (runReaderT (expToPreProp body) Map.empty)
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) Map.empty
+expToCheck'
+  :: UniqueId
+  -- ^ ID to start issuing from
+  -> Map Text UniqueId
+  -- ^ Environment mapping names to unique IDs
+  -> Map UniqueId EType
+  -- ^ Environment mapping unique IDs to their types
+  -> Exp
+  -- ^ Exp to convert
+  -> Maybe Check
+expToCheck' genStart nameEnv idEnv body = do
+  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
+  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
   pure $ PropertyHolds $ prenexConvert typedBody
 
-expToProp :: Type a -> Exp -> Maybe (Prop a)
-expToProp ty body = do
-  preTypedBody <- runGenT (runReaderT (expToPreProp body) Map.empty)
-  runReaderT (checkPreProp ty preTypedBody) Map.empty
+expToProp
+  :: UniqueId
+  -- ^ ID to start issuing from
+  -> Map Text UniqueId
+  -- ^ Environment mapping names to unique IDs
+  -> Map UniqueId EType
+  -- ^ Environment mapping unique IDs to their types
+  -> Type a
+  -- ^ Expected prop type
+  -> Exp
+  -- ^ Exp to convert
+  -> Maybe (Prop a)
+expToProp genStart nameEnv idEnv ty body = do
+  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
+  runReaderT (checkPreProp ty preTypedBody) idEnv
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of

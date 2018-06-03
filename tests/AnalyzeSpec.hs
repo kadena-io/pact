@@ -11,6 +11,7 @@ import           Control.Lens               (at, findOf, (^.))
 import           Control.Monad.State.Strict (runStateT)
 import           Data.Either                (isLeft)
 import qualified Data.HashMap.Strict        as HM
+import           Data.Map                   (Map)
 import qualified Data.Map                   as Map
 import           Data.Maybe                 (isJust, isNothing)
 import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>)))
@@ -1111,10 +1112,18 @@ spec = describe "analyze" $ do
       allA0 intTy (PAnd (PLit True) (PIntegerComparison Gte a0 a0))
 
   describe "prop parse / typecheck" $ do
-    let textToProp :: Type a -> Text -> Maybe (Prop a)
-        textToProp ty t = case parseExprs t of
-          Right [exp'] -> expToProp ty exp'
+    let textToProp'
+          :: Map Text UniqueId
+          -> Map UniqueId EType
+          -> Type a
+          -> Text
+          -> Maybe (Prop a)
+        textToProp' env1 env2 ty t = case parseExprs t of
+          Right [exp'] -> expToProp (UniqueId (Map.size env1)) env1 env2 ty exp'
           _            -> Nothing
+
+        textToProp :: Type a -> Text -> Maybe (Prop a)
+        textToProp = textToProp' Map.empty Map.empty
 
     it "infers column-delta" $ do
       textToProp TBool "(> (column-delta 'a 'b) 0)"
@@ -1162,6 +1171,18 @@ spec = describe "analyze" $ do
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
               2)))
+
+    it "parses row-enforced / vars" $ do
+      let env1 = Map.singleton "from" (UniqueId 1)
+          env2 = Map.singleton (UniqueId 1) (EType TStr)
+      textToProp' env1 env2 TBool "(row-enforced 'accounts 'ks from)"
+      `shouldBe`
+      Just (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (UniqueId 1) "from"))
+
+    it "parses column properties" $
+      textToProp TBool "(= (column-delta 'accounts 'balance) 0)"
+      `shouldBe`
+      Just (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
 
     it "handles special identifiers" $ do
       textToProp TBool "abort"   `shouldBe` Just Abort

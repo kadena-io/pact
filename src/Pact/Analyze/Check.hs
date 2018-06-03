@@ -15,9 +15,10 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (itraversed, ix, runIdentity,
-                                             traversed, (<&>), (^.), (^?),
-                                             (^@..), _2, _Just)
+import           Control.Lens               (ifoldrM, itraversed, ix,
+                                             runIdentity, traversed,
+                                             (<&>), (^.), (^?), (^@..),
+                                             _2, _Just)
 import           Control.Monad.Except       (runExcept, runExceptT)
 import           Control.Monad.Gen          (runGenTFrom)
 import           Control.Monad.IO.Class     (liftIO)
@@ -307,41 +308,53 @@ getInfoParsed info = case _iInfo info of
   Nothing               -> dummyParsed
   Just (_code, parsed') -> parsed'
 
-moduleFunChecks :: ModuleData -> HM.HashMap Text (Ref, [(Parsed, Check)])
-moduleFunChecks (_mod, modRefs) = moduleFunDefns <&> \(ref@(Ref defn)) ->
-    let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
-        property   = defn ^? tMeta . _Just . mMetas . ix "property"
-        parsed     = getInfoParsed (defn ^. tInfo)
+-- Get the set (HashMap) of refs to functions in this module.
+moduleFunRefs :: ModuleData -> HM.HashMap Text Ref
+moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
+  Ref (TDef {}) -> True
+  _             -> False
 
-        exps :: [Exp]
-        exps = case properties of
-          Just (Pact.ELitList x) -> x
-          -- TODO(joel): don't just throw an error
-          Just _ -> error "properties must be a list"
-          Nothing -> case property of
-            Just exp -> [exp]
-            Nothing  -> []
+moduleFunChecks
+  :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text (Ref, [(Parsed, Check)])
+moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
+  -- TODO(joel): right now we can get away with ignoring the result type but we
+  -- should use it for type checking
 
-        parsedList :: [Either Exp (Parsed, Check)]
-        parsedList = exps <&> \meta -> case expToCheck meta of
-          Nothing   -> Left meta
-          Just good -> Right (meta ^. eParsed, good)
-        failures = lefts parsedList
+  let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
+      property   = defn ^? tMeta . _Just . mMetas . ix "property"
+      parsed     = getInfoParsed (defn ^. tInfo)
 
-        checks :: [(Parsed, Check)]
-        checks = if null failures
-          then (parsed, InvariantsHold) : rights parsedList
-          -- TODO(joel): don't just throw an error
-          else error ("failed parse of " ++ show failures)
+      -- TODO(joel): we probably don't want mapMaybe here and instead should
+      -- fail harder if we can't make sense of a type
+      env :: Map Text EType
+      env = Map.fromList $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
+        case translateType' ty of
+          Just ety -> Just (name, ety)
+          Nothing  -> Nothing
 
-    in (ref, checks)
+      exps :: [Exp]
+      exps = case properties of
+        Just (Pact.ELitList exps') -> exps'
+        -- TODO(joel): don't just throw an error
+        Just _ -> error "properties must be a list"
+        Nothing -> case property of
+          Just exp -> [exp]
+          Nothing  -> []
 
-  where
-    -- All function definitions in this module. We're going to look through these
-    -- for properties.
-    moduleFunDefns = flip HM.filter modRefs $ \case
-      Ref (TDef {}) -> True
-      _             -> False
+      parsedList :: [Either Exp (Parsed, Check)]
+      parsedList = exps <&> \meta -> case expToCheck env meta of
+        Nothing   -> Left meta
+        Just good -> Right (meta ^. eParsed, good)
+      failures = lefts parsedList
+
+      checks :: [(Parsed, Check)]
+      checks = if null failures
+        then (parsed, InvariantsHold) : rights parsedList
+        -- TODO(joel): don't just throw an error
+        else error ("failed parse of " ++ show failures)
+
+  in (ref, checks)
 
 verifyFunction :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
 verifyFunction tables ref props = do
@@ -364,9 +377,27 @@ verifyModule
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
-  let verifyFun = uncurry $ verifyFunction tables
-      funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
-      funChecks = moduleFunChecks moduleData
+  let funRefs :: HM.HashMap Text Ref
+      funRefs = moduleFunRefs moduleData
+
+  -- For each ref, if it typechecks as a function (which it should), keep its
+  -- signature.
+  --
+  -- funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  funTypes <- ifoldrM
+    (\name ref accum -> do
+      maybeFun <- runTC 0 False $ typecheckTopLevel ref
+      pure $ case maybeFun of
+        (TopFun (FDefun _info _name funType _args _body) _meta, _tcState)
+          -> HM.insert name (ref, funType) accum
+        _ -> accum
+    )
+    HM.empty
+    funRefs
+
+  let funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
+      funChecks = moduleFunChecks funTypes
+      verifyFun = uncurry (verifyFunction tables)
 
   traverse verifyFun funChecks
 
