@@ -67,12 +67,12 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckSuccess
-  = SatisfiedProperty [(String, SBVI.CW)]
+  = SatisfiedProperty SBVI.SMTModel
   | ProvedTheorem
-  deriving (Show)
+  deriving Show
 
 data CheckFailure
-  = Invalid [(String, SBVI.CW)]
+  = Invalid SBVI.SMTModel
   | Unsatisfiable
   | Unknown String
 
@@ -93,7 +93,7 @@ describeCheckFailure parsed failure =
 
     _ ->
       let str = case failure of
-            Invalid assocs -> "Invalidating model found: " <> showAssocs assocs
+            Invalid model -> "Invalidating model found: " <> showModel model
             Unsatisfiable  -> "This property is unsatisfiable"
             Unknown reason ->
               "The solver returned unknown with reason:\n" <>
@@ -105,15 +105,15 @@ describeCheckFailure parsed failure =
             TypecheckFailure _        -> error "impossible (handled above)"
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
-showAssocs :: [(String, SBVI.CW)] -> Text
-showAssocs assocs = T.intercalate ", " $ map
+showModel :: SBVI.SMTModel -> Text
+showModel model = T.intercalate ", " $ map
   (\(name, cw) -> T.pack name <> " = " <> tShow cw)
-  assocs
+  (SBVI.modelAssocs model)
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
-  SatisfiedProperty assocs -> "Property satisfied with model: " <> showAssocs assocs
-  ProvedTheorem            -> "Property proven valid"
+  SatisfiedProperty model -> "Property satisfied with model: " <> showModel model
+  ProvedTheorem           -> "Property proven valid"
 
 type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
 
@@ -132,23 +132,19 @@ dummyParsed = Default.def
 --       - could also call Output "Result" or "*Result"
 --       - we need a name for this tuple.
 --
--- Note(joel): We no longer produce an SMTModel but rather a list of
--- associations
---
 resultQuery :: Goal -> SBV.Query (Either CheckFailure CheckSuccess)
 resultQuery goal = do
   satResult <- SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> Left . Invalid . SBVI.modelAssocs <$> SBV.getModel
+        SBV.Sat   -> Left . Invalid <$> SBV.getModel
         SBV.Unsat -> pure $ Right ProvedTheorem
         SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   ->
-          Right . SatisfiedProperty . SBVI.modelAssocs <$> SBV.getModel
+        SBV.Sat   -> Right . SatisfiedProperty <$> SBV.getModel
         SBV.Unsat -> pure $ Left Unsatisfiable
         SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
 
@@ -380,9 +376,9 @@ moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: ModuleData -- ^ the module we're verifying
-  -> Text       -- ^ the name of the function
-  -> Check      -- ^ the check we're running
+  :: ModuleData                       -- ^ the module we're verifying
+  -> Text                             -- ^ the name of the function
+  -> Check                            -- ^ the check we're running
   -> IO CheckResult
 verifyCheck moduleData funName check = do
   let parsed = dummyParsed

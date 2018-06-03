@@ -61,7 +61,6 @@ textToComparisonOp = \case
   "!=" -> Just Neq
   _    -> Nothing
 
-
 textToEqNeq :: Text -> Maybe EqNeq
 textToEqNeq = \case
   "="  -> Just Eq'
