@@ -336,7 +336,7 @@ verify i as = case as of
       Just md -> do
         results <- liftIO $ verifyModule modules md
         setop $ TcErrors $ fmap (Text.unpack . describeCheckResult) $
-          results ^.. traverse . each
+          toListOf (traverse . each) results
 
         return (tStr "")
 
