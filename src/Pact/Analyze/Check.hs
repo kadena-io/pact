@@ -17,8 +17,7 @@ module Pact.Analyze.Check
 import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
 import           Control.Lens               (itraversed, ix, runIdentity,
                                              traversed, (<&>), (^.), (^?),
-                                             (%~), (&), (^@..), _2, _Just,
-                                             _Left)
+                                             (^@..), _2, _Just)
 import           Control.Monad.Except       (runExcept, runExceptT)
 import           Control.Monad.Gen          (runGenTFrom)
 import           Control.Monad.IO.Class     (liftIO)
@@ -132,21 +131,21 @@ dummyParsed = Default.def
 --       - could also call Output "Result" or "*Result"
 --       - we need a name for this tuple.
 --
-resultQuery :: Goal -> SBV.Query (Either CheckFailure CheckSuccess)
-resultQuery goal = do
+resultQuery :: Parsed -> Goal -> SBV.Query CheckResult
+resultQuery parsed goal = do
   satResult <- SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> Left . Invalid <$> SBV.getModel
+        SBV.Sat   -> Left . (parsed,) . Invalid <$> SBV.getModel
         SBV.Unsat -> pure $ Right ProvedTheorem
-        SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
+        SBV.Unk   -> Left . (parsed,) . Unknown <$> SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
         SBV.Sat   -> Right . SatisfiedProperty <$> SBV.getModel
-        SBV.Unsat -> pure $ Left Unsatisfiable
-        SBV.Unk   -> Left . Unknown <$> SBV.getUnknownReason
+        SBV.Unsat -> pure $ Left (parsed, Unsatisfiable)
+        SBV.Unk   -> Left . (parsed,) . Unknown <$> SBV.getUnknownReason
 
 --
 -- TODO: this was copy-pasted from SBV. it's currently not exposed. send a PR
@@ -189,7 +188,7 @@ checkFunctionBody tables (parsed, check) body argTys nodeNames =
         compileFailureVar <- newEmptyMVar
 
         let goal = checkGoal check
-        checkResult <- runWithQuery (goal == Satisfaction) (resultQuery goal) SBV.z3 $ do
+        checkResult <- runWithQuery (goal == Satisfaction) (resultQuery parsed goal) SBV.z3 $ do
 
           --
           -- TODO: preallocate symbolic DB reads alongside args (Environment)
@@ -225,7 +224,7 @@ checkFunctionBody tables (parsed, check) body argTys nodeNames =
 
         mVarVal <- tryTakeMVar compileFailureVar
         pure $ case mVarVal of
-          Nothing -> checkResult & _Left %~ (parsed,)
+          Nothing -> checkResult
           Just cf -> Left (parsed, AnalyzeFailure cf)
 
 --
