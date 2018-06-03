@@ -744,13 +744,13 @@ analyzeRead tn fields rowKey = do
 
 applyInvariants
   :: TableName
-  -- | Mapping from the fields in this table to the @SVal@ holding that field
-  --   in this context.
   -> Map Text SBVI.SVal
-  -- | The function used to apply an invariant in this context. The @SBV Bool@
+  -- ^ Mapping from the fields in this table to the @SVal@ holding that field
+  --   in this context.
+  -> (S Bool -> Analyze ())
+  -- ^ The function used to apply an invariant in this context. The @SBV Bool@
   --   is an assertion of what it would take for the invariant to be true in
   --   this context.
-  -> (S Bool -> Analyze ())
   -> Analyze ()
 applyInvariants tn sValFields addInvariant = do
   mInvariants <- view (invariants . at tn)
