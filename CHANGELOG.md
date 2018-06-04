@@ -1,3 +1,7 @@
+2.4.1
+---
+* Fix support for property checker in Atom
+
 2.4.0
 ---
 * Preview support of of property-based formal verification
