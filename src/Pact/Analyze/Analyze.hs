@@ -47,8 +47,8 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_),
-                                            Symbolic, constrain, false, ite,
-                                            mkSFunArray, sDiv, sMod,
+                                            Symbolic, constrain, false, free_,
+                                            ite, mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
@@ -399,38 +399,33 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
---
--- TODO: convert this back to use Symbolic so we get useful models
---         rename allocateArgs
---
 -- Returns problematic argument name, or arg map
-mkArgMap :: [Arg] -> Either Text (Map UniqueId AVal)
-mkArgMap argTys = fmap Map.fromList $ for argTys $ \(name, uid, node) ->
-  let symName = "arg_" ++ T.unpack name
-      ty = Pact._aTy node
+allocateArgMap :: [Arg] -> ExceptT AnalyzeFailure Symbolic (Map UniqueId AVal)
+allocateArgMap args = fmap Map.fromList $ for args $ \(name, uid, node) ->
+  let ty = Pact._aTy node
+      wrap = lift . fmap (mkAVal . sansProv)
+      reportBadArg = throwError . UnhandledTerm . ("argument: " <>)
 
-      wrap :: SBV a -> Either e AVal
-      wrap = Right . mkAVal . sansProv
-
+      eVar :: ExceptT AnalyzeFailure Symbolic AVal
       eVar = case ty of
                --
                -- TODO: possibly use Translate's logic to convert to EType,
                --       and dispatch off of that:
                --
-               TyPrim TyInteger -> wrap (uninterpret symName :: (SBV Integer))
-               TyPrim TyBool    -> wrap (uninterpret symName :: (SBV Bool))
-               TyPrim TyDecimal -> wrap (uninterpret symName :: (SBV Decimal))
-               TyPrim TyTime    -> wrap (uninterpret symName :: (SBV Int64))
-               TyPrim TyString  -> wrap (uninterpret symName :: (SBV String))
-               TyUser _         -> wrap (uninterpret symName :: (SBV UserType))
-               TyPrim TyKeySet  -> wrap (uninterpret symName :: (SBV KeySet))
+               TyPrim TyInteger -> wrap (free_ :: Symbolic (SBV Integer))
+               TyPrim TyBool    -> wrap (free_ :: Symbolic (SBV Bool))
+               TyPrim TyDecimal -> wrap (free_ :: Symbolic (SBV Decimal))
+               TyPrim TyTime    -> wrap (free_ :: Symbolic (SBV Int64))
+               TyPrim TyString  -> wrap (free_ :: Symbolic (SBV String))
+               TyUser _         -> wrap (free_ :: Symbolic (SBV UserType))
+               TyPrim TyKeySet  -> wrap (free_ :: Symbolic (SBV KeySet))
 
-               TyPrim TyValue   -> Left name
-               TyAny            -> Left name
-               TyVar _v         -> Left name
-               TyList _         -> Left name
-               TySchema _ _     -> Left name
-               TyFun _          -> Left name
+               TyPrim TyValue   -> reportBadArg name
+               TyAny            -> reportBadArg name
+               TyVar _v         -> reportBadArg name
+               TyList _         -> reportBadArg name
+               TySchema _ _     -> reportBadArg name
+               TyFun _          -> reportBadArg name
   in (uid,) <$> eVar
 
 mkAnalyzeEnv :: Map UniqueId AVal -> [Table] -> AnalyzeEnv
