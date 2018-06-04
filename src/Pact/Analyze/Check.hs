@@ -19,8 +19,7 @@ import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
                                             (<&>), (^.), (^?), (^@..), _2,
                                             _Just)
 import           Control.Monad             (void)
-import           Control.Monad.Except      (ExceptT, runExcept, runExceptT,
-                                            throwError)
+import           Control.Monad.Except      (ExceptT, runExcept, runExceptT)
 import           Control.Monad.Gen         (runGenTFrom)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
@@ -203,10 +202,7 @@ checkFunctionBody tables args body (parsed, check) =
                 query = analyzeCheck check
 
             lift $ runConstraints constraints
-            eQuery <- lift $ runExceptT $ runReaderT (queryAction query) qEnv
-            case eQuery of
-              Left cf'        -> throwError cf'
-              Right symAction -> pure $ _sSbv symAction
+            _sSbv <$> runReaderT (queryAction query) qEnv
 
           goal :: Goal
           goal = checkGoal check
