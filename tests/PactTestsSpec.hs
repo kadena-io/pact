@@ -17,6 +17,7 @@ spec = do
   pactTests
   accountsTest
   cpTest
+  verifiedAccountsTest
 
 
 pactTests :: Spec
@@ -29,6 +30,10 @@ accountsTest = describe "accounts regression" $ runScript ("examples" </> "accou
 
 cpTest :: Spec
 cpTest = describe "cp regression" $ runScript ("examples" </> "cp" </> "cp.repl")
+
+verifiedAccountsTest :: Spec
+verifiedAccountsTest = describe "verified accounts regression" $
+  runScript ("examples" </> "verified-accounts" </> "accounts.repl")
 
 
 findTests :: IO [FilePath]
