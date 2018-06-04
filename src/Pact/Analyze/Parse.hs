@@ -240,6 +240,10 @@ checkPreProp ty preProp = case (ty, preProp) of
     (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
     _               -> mzero
 
+  (TBool, PreApp "when" [a, b]) -> do
+    propNotA <- PNot <$> checkPreProp TBool a
+    POr propNotA <$> checkPreProp TBool b
+
   (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
   (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
   (TBool, PreApp "column-write" [TableLit tn, ColumnLit cn])
