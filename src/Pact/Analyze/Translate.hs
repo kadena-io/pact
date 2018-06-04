@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Translate where
 
@@ -109,35 +110,37 @@ genUid varNode varName action = do
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
+translateType' :: Pact.Type Pact.UserType -> Maybe EType
+translateType' = \case
+  TyUser (Pact.Schema _ _ fields _) ->
+    fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
+      \(Arg name ty _info) -> (name, translateType' ty)
+
+  -- TODO(joel): understand the difference between the TyUser and TySchema cases
+  TySchema _ ty'   -> translateType' ty'
+
+  TyPrim TyBool    -> Just $ EType TBool
+  TyPrim TyDecimal -> Just $ EType TDecimal
+  TyPrim TyInteger -> Just $ EType TInt
+  TyPrim TyString  -> Just $ EType TStr
+  TyPrim TyTime    -> Just $ EType TTime
+  TyPrim TyKeySet  -> Just $ EType TKeySet
+
+  -- Pretend any and var are the same -- we can't analyze either of them.
+  TyAny            -> Just $ EType TAny
+  TyVar _          -> Just $ EType TAny
+
+  --
+  -- TODO: handle these:
+  --
+  TyPrim TyValue   -> Nothing
+  TyList _         -> Nothing
+  TyFun _          -> Nothing
+
 translateType :: Node -> TranslateM EType
-translateType node = go $ _aTy node
-  where
-    go :: Pact.Type Pact.UserType -> TranslateM EType
-    go = \case
-      TyUser (Pact.Schema _ _ fields _) ->
-        fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-          \(Arg name ty _info) -> (name, go ty)
-
-      -- TODO(joel): understand the difference between the TyUser and TySchema cases
-      TySchema _ ty' -> go ty'
-
-      TyPrim TyBool    -> pure $ EType TBool
-      TyPrim TyDecimal -> pure $ EType TDecimal
-      TyPrim TyInteger -> pure $ EType TInt
-      TyPrim TyString  -> pure $ EType TStr
-      TyPrim TyTime    -> pure $ EType TTime
-      TyPrim TyKeySet  -> pure $ EType TKeySet
-
-      -- Pretend any and var are the same -- we can't analyze either of them.
-      TyAny            -> pure $ EType TAny
-      TyVar _          -> pure $ EType TAny
-
-      --
-      -- TODO: handle these:
-      --
-      ty@(TyPrim TyValue)  -> throwError $ UnhandledType node ty
-      ty@(TyList _)        -> throwError $ UnhandledType node ty
-      ty@(TyFun _)         -> throwError $ UnhandledType node ty
+translateType node = case _aTy node of
+  (translateType' -> Just ety) -> pure ety
+  ty                           -> throwError $ UnhandledType node ty
 
 translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
