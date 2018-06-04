@@ -1,9 +1,10 @@
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Pact.Analyze.Check
   ( verifyModule
@@ -383,8 +384,7 @@ verifyModule modules moduleData = do
   -- For each ref, if it typechecks as a function (which it should), keep its
   -- signature.
   --
-  -- funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  funTypes <- ifoldrM
+  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
       maybeFun <- runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
