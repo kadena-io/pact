@@ -15,13 +15,14 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Lens              (ifoldrM, itraversed, ix,
-                                            runIdentity, traversed, (<&>), (^.),
-                                            (^?), (^@..), _2, _Just)
+import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
+                                            (<&>), (^.), (^?), (^@..), _2,
+                                            _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (ExceptT, runExcept, runExceptT,
                                             throwError)
 import           Control.Monad.Gen         (runGenTFrom)
+import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (..))
 import           Control.Monad.Trans.Class (lift)
@@ -195,17 +196,17 @@ checkFunctionBody tables args body (parsed, check) =
             let aEnv   = mkAnalyzeEnv argMap tables
                 state0 = mkInitialAnalyzeState tables
 
-            case runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0 of
-              Left af -> throwError af
-              Right (propResult, state1, constraints) -> do
-                let qEnv  = mkQueryEnv aEnv state1 propResult
-                    query = analyzeCheck check
+            (propResult, state1, constraints) <- hoist generalize $
+              runRWST (runAnalyze act) aEnv state0
 
-                lift $ runConstraints constraints
-                eQuery <- lift $ runExceptT $ runReaderT (queryAction query) qEnv
-                case eQuery of
-                  Left cf'        -> throwError cf'
-                  Right symAction -> pure $ _sSbv symAction
+            let qEnv  = mkQueryEnv aEnv state1 propResult
+                query = analyzeCheck check
+
+            lift $ runConstraints constraints
+            eQuery <- lift $ runExceptT $ runReaderT (queryAction query) qEnv
+            case eQuery of
+              Left cf'        -> throwError cf'
+              Right symAction -> pure $ _sSbv symAction
 
           goal :: Goal
           goal = checkGoal check
