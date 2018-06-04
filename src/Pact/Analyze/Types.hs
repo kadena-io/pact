@@ -383,7 +383,7 @@ data PreProp
   | PreApp Text [PreProp]
 
   -- -- TODO: parse
-  -- | PreAt {- Schema -} PreProp PreProp -- EType
+  -- -- | PreAt {- Schema -} PreProp PreProp -- EType
   deriving (Show, Eq)
 
 data Prop a where

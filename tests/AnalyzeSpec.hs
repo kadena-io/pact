@@ -1184,6 +1184,16 @@ spec = describe "analyze" $ do
       `shouldBe`
       Just (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
 
+    it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
+      textToProp TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
+      `shouldBe`
+      Just (PLogical OrOp
+        [ PLogical NotOp [
+            PLogical NotOp [KsNameAuthorized "accounts-admin-keyset"]
+          ]
+        , Abort
+        ])
+
     it "handles special identifiers" $ do
       textToProp TBool "abort"   `shouldBe` Just Abort
       textToProp TBool "success" `shouldBe` Just Success
