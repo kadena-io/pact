@@ -326,13 +326,28 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
       parsed     = getInfoParsed (defn ^. tInfo)
 
+      uids = UniqueId <$> [0..]
+
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
-      env :: Map Text EType
-      env = Map.fromList $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
-        case translateType' ty of
-          Just ety -> Just (name, ety)
-          Nothing  -> Nothing
+      --
+      -- TODO(joel): this relies on generating the same unique ids as
+      -- @checkTopFunction@. We need to more carefully enforce this is true!
+      env :: [(Text, UniqueId, EType)]
+      env = fmap (\(uid, (text, ty)) -> (text, uid, ty))
+        $ zip uids
+        $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
+            case translateType' ty of
+              Just ety -> Just (name, ety)
+              Nothing  -> Nothing
+
+      nameEnv :: Map Text UniqueId
+      nameEnv = Map.fromList $ fmap (\(name, uid, _) -> (name, uid)) env
+
+      idEnv :: Map UniqueId EType
+      idEnv = Map.fromList $ fmap (\(_, uid, ty) -> (uid, ty)) env
+
+      uidStart = UniqueId (length env)
 
       exps :: [Exp]
       exps = case properties of
@@ -344,9 +359,10 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
           Nothing  -> []
 
       parsedList :: [Either Exp (Parsed, Check)]
-      parsedList = exps <&> \meta -> case expToCheck env meta of
-        Nothing   -> Left meta
-        Just good -> Right (meta ^. eParsed, good)
+      parsedList = exps <&> \meta ->
+        case expToCheck uidStart nameEnv idEnv meta of
+          Nothing   -> Left meta
+          Just good -> Right (meta ^. eParsed, good)
       failures = lefts parsedList
 
       checks :: [(Parsed, Check)]
