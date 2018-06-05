@@ -115,6 +115,7 @@ library
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
                      , monad-gen
+                     , mmorph >= 1.0 && < 1.1
 
   if !impl(ghcjs)
     build-depends:

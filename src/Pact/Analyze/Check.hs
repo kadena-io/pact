@@ -15,54 +15,52 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Concurrent.MVar    (newEmptyMVar, putMVar, tryTakeMVar)
-import           Control.Lens               (ifoldrM, itraversed, ix,
-                                             runIdentity, traversed,
-                                             (<&>), (^.), (^?), (^@..),
-                                             _2, _Just)
-import           Control.Monad.Except       (runExcept, runExceptT)
-import           Control.Monad.Gen          (runGenTFrom)
-import           Control.Monad.IO.Class     (liftIO)
-import           Control.Monad.Reader       (runReaderT)
-import           Control.Monad.RWS.Strict   (RWST (..))
-import           Data.Either                (lefts, rights)
-import qualified Data.Default               as Default
-import qualified Data.HashMap.Strict        as HM
-import           Data.Map.Strict            (Map)
-import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (mapMaybe)
-import           Data.Monoid                ((<>))
-import           Data.SBV                   (SBV, Symbolic, false)
-import qualified Data.SBV                   as SBV
-import qualified Data.SBV.Control           as SBV
-import qualified Data.SBV.Internals         as SBVI
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Traversable           (for)
-import           Prelude                    hiding (exp)
+import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
+                                            (<&>), (^.), (^?), (^@..), _2,
+                                            _Just)
+import           Control.Monad             (void)
+import           Control.Monad.Except      (ExceptT, runExcept, runExceptT)
+import           Control.Monad.Gen         (runGenTFrom)
+import           Control.Monad.Morph       (generalize, hoist)
+import           Control.Monad.Reader      (runReaderT)
+import           Control.Monad.RWS.Strict  (RWST (..))
+import           Control.Monad.Trans.Class (lift)
+import qualified Data.Default              as Default
+import           Data.Either               (lefts, rights)
+import qualified Data.HashMap.Strict       as HM
+import           Data.Map.Strict           (Map)
+import qualified Data.Map.Strict           as Map
+import           Data.Maybe                (mapMaybe)
+import           Data.Monoid               ((<>))
+import           Data.SBV                  (SBV, Symbolic)
+import qualified Data.SBV                  as SBV
+import qualified Data.SBV.Control          as SBV
+import qualified Data.SBV.Internals        as SBVI
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
+import           Data.Text                 (Text)
+import qualified Data.Text                 as T
+import           Data.Traversable          (for)
+import           Prelude                   hiding (exp)
 
-import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Lang            (Parsed, eParsed, mMetas,
-                                             renderInfo, renderParsed, tMeta,
-                                             _iInfo)
-import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
-                                             Ref (Ref),
-                                             Term (TDef, TSchema, TTable),
-                                             Type (TyUser), asString, tInfo,
-                                             tShow)
-import qualified Pact.Types.Runtime         as Pact
-import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fInfo),
-                                             Named (_nnName, _nnNamed),
-                                             Node (_aTy), TcId (_tiInfo),
-                                             TopLevel (TopFun, TopTable),
-                                             UserType (_utFields, _utName),
-                                             runTC, tcFailures)
-import qualified Pact.Types.Typecheck       as TC
+import           Pact.Typechecker          (typecheckTopLevel)
+import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
+                                            renderParsed, tMeta, _iInfo)
+import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
+                                            Ref (Ref),
+                                            Term (TDef, TSchema, TTable),
+                                            asString, tInfo, tShow)
+import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
+                                            Named (_nnName, _nnNamed), Node,
+                                            TcId (_tiInfo),
+                                            TopLevel (TopFun, TopTable),
+                                            UserType (_utFields, _utName),
+                                            runTC, tcFailures)
+import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Analyze       hiding (invariants, model)
-import           Pact.Analyze.Parse         (expToCheck, expToInvariant)
+import           Pact.Analyze.Analyze      hiding (invariants, model)
+import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
@@ -128,13 +126,12 @@ describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 dummyParsed :: Parsed
 dummyParsed = Default.def
 
---
--- TODO: - instead of producing an SMTModel, this should produce (Environment, Output)
---       - could also call Output "Result" or "*Result"
---       - we need a name for this tuple.
---
-resultQuery :: Parsed -> Goal -> SBV.Query CheckResult
-resultQuery parsed goal = do
+resultQuery
+  :: Parsed                -- ^ parse information for error context
+  -> Goal                  -- ^ are we in sat or valid mode?
+  -> Map UniqueId AVal     -- ^ args map
+  -> SBV.Query CheckResult
+resultQuery parsed goal _argsMap = do
   satResult <- SBV.checkSat
   case goal of
     Validation ->
@@ -149,91 +146,101 @@ resultQuery parsed goal = do
         SBV.Unsat -> pure $ Left (parsed, Unsatisfiable)
         SBV.Unk   -> Left . (parsed,) . Unknown <$> SBV.getUnknownReason
 
---
--- TODO: this was copy-pasted from SBV. it's currently not exposed. send a PR
---
-runWithQuery
-  :: SBV.Provable a
-  => Bool
-  -> SBV.Query b
-  -> SBV.SMTConfig
-  -> a
-  -> IO b
-runWithQuery isSAT q cfg a = fst <$> SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup isSAT cfg) comp
-  where comp =  do _ <- (if isSAT then SBV.forSome_ else SBV.forAll_) a >>= SBVI.output
-                   SBV.query q
+-- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
+--       flexible for our needs.
+runAndQuery
+  :: forall env r
+   . Goal                                                -- ^ are we using sat or valid?
+  -> ExceptT AnalyzeFailure Symbolic env                 -- ^ initial setup in Symbolic
+  -> (env -> ExceptT AnalyzeFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
+  -> (env -> SBV.Query r)                                -- ^ produces the Query to be run
+  -> IO (Either AnalyzeFailure r)
+runAndQuery goal mkEnv mkProvable mkQuery = fst <$>
+    SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) comp
 
--- Note: @length argTys@ unique names are already generated by
+  where
+    cfg :: SBV.SMTConfig
+    cfg = SBV.z3
+
+    comp :: Symbolic (Either AnalyzeFailure r)
+    comp = runExceptT $ do
+      env <- mkEnv
+      void $ lift . SBVI.output =<< mkProvable env
+      lift $ SBV.query $ mkQuery env
+
+-- Note: @length args@ unique names are already generated by
 -- @checkTopFunction@, so we start the name generator at the next index.
 checkFunctionBody
   :: [Table]
-  -> (Parsed, Check)
-  -> [AST Node]
   -> [Arg]
-  -> Map Node (Text, UniqueId)
+  -> [AST Node]
+  -> (Parsed, Check)
   -> IO CheckResult
-checkFunctionBody tables (parsed, check) body argTys nodeNames =
+checkFunctionBody tables args body (parsed, check) =
   case runExcept
     (runGenTFrom
-      (UniqueId (length argTys))
+      (UniqueId (length args))
       (runReaderT
         (unTranslateM (translateBody body))
-        nodeNames)) of
+        (mkTranslateEnv args))) of
     Left reason ->
       pure $ Left (parsed, TranslateFailure reason)
 
-    Right tm -> case mkArgs argTys of
-      Left unsupportedArg ->
-        pure $ Left (parsed, AnalyzeFailure $ UnhandledTerm $ "argument: " <> unsupportedArg)
+    Right tm -> do
+      let runAnalysis
+            :: Analyze AVal
+            -> Map UniqueId AVal
+            -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
+          runAnalysis act argMap = do
+            let aEnv   = mkAnalyzeEnv argMap tables
+                state0 = mkInitialAnalyzeState tables
 
-      Right args -> do
-        compileFailureVar <- newEmptyMVar
+            (propResult, state1, constraints) <- hoist generalize $
+              runRWST (runAnalyze act) aEnv state0
 
-        let goal = checkGoal check
-        checkResult <- runWithQuery (goal == Satisfaction) (resultQuery parsed goal) SBV.z3 $ do
+            let qEnv  = mkQueryEnv aEnv state1 propResult
+                query = analyzeCheck check
 
-          --
-          -- TODO: preallocate symbolic DB reads alongside args (Environment)
-          --
-          -- Later, we can accept this (or a slightly more user-friendly
-          -- version of it) from upstream to do "dynamic symbolic evaluation"
-          --
+            lift $ runConstraints constraints
+            _sSbv <$> runReaderT (queryAction query) qEnv
 
-          let aEnv    = mkAnalyzeEnv args tables
-              state0  = mkInitialAnalyzeState tables
+          goal :: Goal
+          goal = checkGoal check
 
-              evaluate :: Analyze AVal -> Symbolic (SBV Bool)
-              evaluate act = do
-                case runIdentity $ runExceptT $ runRWST (runAnalyze act) aEnv state0 of
-                  Left cf -> do
-                    liftIO $ putMVar compileFailureVar cf
-                    pure false
-                  Right (propResult, state1, constraints) -> do
-                    let qEnv  = mkQueryEnv aEnv state1 propResult
-                        query = analyzeCheck check
+          analysis :: Analyze AVal
+          analysis = case tm of
+            ETerm   body' _ -> mkAVal <$> analyzeTerm  body'
+            EObject body' _ -> AnObj  <$> analyzeTermO body'
 
-                    runConstraints constraints
-                    eQuery <- runExceptT $ runReaderT (queryAction query) qEnv
-                    case eQuery of
-                      Left cf' -> do
-                        liftIO $ putMVar compileFailureVar cf'
-                        pure false
-                      Right symAction -> pure $ _sSbv symAction
+      checkResult <- runAndQuery
+        goal
+        (allocateArgMap args)
+        (runAnalysis analysis)
+        (resultQuery parsed goal)
 
-          evaluate $ case tm of
-            ETerm   body'' _ -> fmap mkAVal . analyzeTerm $ body''
-            EObject body'' _ -> fmap AnObj . analyzeTermO $ body''
+      --
+      -- TODO: at this point, if our result is Invalid, we should feed our
+      --       resulting Model back into the symbolic evaluator to produce an
+      --       execution trace (everything should be concrete).
+      --
+      --       during this second run, while producing the trace, we should
+      --       log effects (DB writes) in the order that they occur. for
+      --       writes, we actually don't have to use the tagging technique
+      --       because everything is concrete! Output will be composed of
+      --       Trace and the result AVal; unclear at the moment whether the
+      --       trace should contain intermediate values and effects
+      --       interleaved, or whether these two should be separate.
+      --
 
-        mVarVal <- tryTakeMVar compileFailureVar
-        pure $ case mVarVal of
-          Nothing -> checkResult
-          Just cf -> Left (parsed, AnalyzeFailure cf)
+      pure $ case checkResult of
+        Left af -> Left (parsed, AnalyzeFailure af)
+        Right r -> r
 
 --
 -- TODO: probably inline this function into 'verifyFunction'
 --
 checkTopFunction :: [Table] -> TopLevel Node -> (Parsed, Check) -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) parsedCheck =
+checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) parsedCheck =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -246,13 +253,10 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body') _) parsedCheck =
 
       uids = UniqueId <$> [0..]
 
-      argTys :: [Arg]
-      argTys = zip3 names uids (_aTy <$> nodes)
+      args' :: [Arg]
+      args' = zip3 names uids nodes
 
-      nodeNames :: Map Node (Text, UniqueId)
-      nodeNames = Map.fromList $ zip nodes (zip names uids)
-
-  in checkFunctionBody tables parsedCheck body' argTys nodeNames
+  in checkFunctionBody tables args' body parsedCheck
 
 checkTopFunction _ _ (parsed, _) = pure $ Left (parsed, CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)")
 
@@ -273,7 +277,7 @@ moduleTables modules (_mod, modRefs) = do
         _                               -> Nothing
 
   for tables $ \(tabName, tab) -> do
-    (TopTable _info _name (TyUser schema) _meta, _tcState)
+    (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
       <- runTC 0 False $ typecheckTopLevel (Ref tab)
 
     let schemaName = asString (_utName schema)
