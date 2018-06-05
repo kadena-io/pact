@@ -179,33 +179,37 @@ checkFunctionBody
   -> [AST Node]
   -> (Parsed, Check)
   -> IO CheckResult
-checkFunctionBody tables args body (parsed, check) = runExceptT $ do
-  tm <- hoist generalize $ withExcept ((parsed,) . TranslateFailure) $
-    runGenTFrom
-      (UniqueId (length args))
-      (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
+checkFunctionBody tables args body (parsed, check) = runExceptT $
+    withExceptT (parsed,) $ do
+      tm <- hoist generalize $ withExcept TranslateFailure $
+        runGenTFrom
+          (UniqueId (length args))
+          (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
 
-  --
-  -- TODO: use 'catchError' around the following and, if our result is
-  --       Invalid, feed our resulting Model back into the symbolic evaluator
-  --       to produce an execution trace (everything should be concrete).
-  --
-  --       during this second run, while producing the trace, we should
-  --       log effects (DB writes) in the order that they occur. for
-  --       writes, we actually don't have to use the tagging technique
-  --       because everything is concrete! Output will be composed of
-  --       Trace and the result AVal; unclear at the moment whether the
-  --       trace should contain intermediate values and effects
-  --       interleaved, or whether these two should be separate.
-  --
+      --
+      -- TODO: use 'catchError' around the following and, if our result is
+      --       Invalid, feed our resulting Model back into the symbolic evaluator
+      --       to produce an execution trace (everything should be concrete).
+      --
+      --       during this second run, while producing the trace, we should
+      --       log effects (DB writes) in the order that they occur. for
+      --       writes, we actually don't have to use the tagging technique
+      --       because everything is concrete! Output will be composed of
+      --       Trace and the result AVal; unclear at the moment whether the
+      --       trace should contain intermediate values and effects
+      --       interleaved, or whether these two should be separate.
+      --
 
-  withExceptT (parsed,) $ runAndQuery
-    goal
-    (withExceptT AnalyzeFailure $ allocateArgMap args)
-    (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
-    (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
+      runAndQuery
+        goal
+        (withExceptT AnalyzeFailure $ allocateArgMap args)
+        (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
+        (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
 
   where
+    goal :: Goal
+    goal = checkGoal check
+
     mkAnalysis :: ETerm -> Analyze AVal
     mkAnalysis = \case
       ETerm   body' _ -> mkAVal <$> analyzeTerm  body'
@@ -227,9 +231,6 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $ do
 
       lift $ runConstraints constraints
       _sSbv <$> runReaderT (queryAction query) qEnv
-
-    goal :: Goal
-    goal = checkGoal check
 
 --
 -- TODO: probably inline this function into 'verifyFunction'
