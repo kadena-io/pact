@@ -185,39 +185,8 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $ do
       (UniqueId (length args))
       (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
 
-  let runAnalysis
-        :: Analyze AVal
-        -> Map UniqueId AVal
-        -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
-      runAnalysis act argMap = do
-        let aEnv   = mkAnalyzeEnv argMap tables
-            state0 = mkInitialAnalyzeState tables
-
-        (propResult, state1, constraints) <- hoist generalize $
-          runRWST (runAnalyze act) aEnv state0
-
-        let qEnv  = mkQueryEnv aEnv state1 propResult
-            query = analyzeCheck check
-
-        lift $ runConstraints constraints
-        _sSbv <$> runReaderT (queryAction query) qEnv
-
-      goal :: Goal
-      goal = checkGoal check
-
-      analysis :: Analyze AVal
-      analysis = case tm of
-        ETerm   body' _ -> mkAVal <$> analyzeTerm  body'
-        EObject body' _ -> AnObj  <$> analyzeTermO body'
-
-  success <- withExceptT (parsed,) $ runAndQuery
-    goal
-    (withExceptT AnalyzeFailure $ allocateArgMap args)
-    (withExceptT AnalyzeFailure . runAnalysis analysis)
-    (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
-
   --
-  -- TODO: at this point, we can use 'catchError' and, if our result is
+  -- TODO: use 'catchError' around the following and, if our result is
   --       Invalid, feed our resulting Model back into the symbolic evaluator
   --       to produce an execution trace (everything should be concrete).
   --
@@ -230,7 +199,37 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $ do
   --       interleaved, or whether these two should be separate.
   --
 
-  pure success
+  withExceptT (parsed,) $ runAndQuery
+    goal
+    (withExceptT AnalyzeFailure $ allocateArgMap args)
+    (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
+    (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
+
+  where
+    mkAnalysis :: ETerm -> Analyze AVal
+    mkAnalysis = \case
+      ETerm   body' _ -> mkAVal <$> analyzeTerm  body'
+      EObject body' _ -> AnObj  <$> analyzeTermO body'
+
+    runAnalysis
+      :: Analyze AVal
+      -> Map UniqueId AVal
+      -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
+    runAnalysis act argMap = do
+      let aEnv   = mkAnalyzeEnv argMap tables
+          state0 = mkInitialAnalyzeState tables
+
+      (propResult, state1, constraints) <- hoist generalize $
+        runRWST (runAnalyze act) aEnv state0
+
+      let qEnv  = mkQueryEnv aEnv state1 propResult
+          query = analyzeCheck check
+
+      lift $ runConstraints constraints
+      _sSbv <$> runReaderT (queryAction query) qEnv
+
+    goal :: Goal
+    goal = checkGoal check
 
 --
 -- TODO: probably inline this function into 'verifyFunction'
