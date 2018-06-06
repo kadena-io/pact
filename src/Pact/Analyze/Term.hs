@@ -11,6 +11,7 @@ module Pact.Analyze.Term where
 import           Data.Data         (Data)
 import           Data.Map.Strict   (Map)
 import           Data.SBV          (HasKind, SymWord)
+import           Data.SBV.Control  (SMTValue)
 import           Data.Text         (Text)
 
 import           Pact.Analyze.Types
@@ -22,8 +23,8 @@ import           Pact.Analyze.Types
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
-  ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
-  EObject ::                        Term Object -> Schema -> ETerm
+  ETerm   :: (Show a, SymWord a, SMTValue a) => Term a      -> Type a -> ETerm
+  EObject ::                                    Term Object -> Schema -> ETerm
 
 mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
 mapETerm f term = case term of

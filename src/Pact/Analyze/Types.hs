@@ -30,6 +30,7 @@ import           Data.SBV             (AlgReal,
                                        isConcrete, ite, kindOf, literal, oneIf,
                                        sFromIntegral, sRealToSInteger,
                                        unliteral, (%), (.<), (.==))
+import           Data.SBV.Control     (SMTValue)
 import qualified Data.SBV.Internals   as SBVI
 import qualified Data.SBV.String      as SBV
 import           Data.String          (IsString (..))
@@ -323,8 +324,8 @@ isConcreteS = isConcrete . _sSbv
 
 data EType where
   -- TODO: parametrize over constraint
-  EType :: (Show a, SymWord a) => Type a -> EType
-  EObjectTy :: Schema -> EType
+  EType     :: (Show a, SymWord a, SMTValue a) => Type a -> EType
+  EObjectTy ::                                    Schema -> EType
 
 deriving instance Show EType
 
@@ -529,11 +530,26 @@ checkGoal (PropertyHolds _) = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
 
+data Model
+  = Model
+    { _modelArgs  :: [(EType, AVal)]
+    -- ^ one per input to the function
+    , _modelReads :: Map UniqueId Object
+    -- ^ one per each read, in traversal order
+    , _modelAuths :: Map UniqueId (SBV Bool)
+    -- ^ one per each enforce/auth check, in traversal order. note that for
+    -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls
+    -- equally, and in the future we can try to connect keysets with their
+    -- names for better tooling / reporting.
+    }
+  deriving Show
+
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
 instance HasKind Any
 instance SymWord Any
+instance SMTValue Any
 
 newtype KeySet
   = KeySet Integer
@@ -542,6 +558,7 @@ newtype KeySet
 -- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
 instance SymWord KeySet
 instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
+instance SMTValue KeySet
 
 -- The type of a simple type
 data Type a where

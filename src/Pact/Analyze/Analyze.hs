@@ -42,12 +42,12 @@ import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
                                             EqSymbolic ((./=), (.==)), HasKind,
-                                            Int64, Mergeable (symbolicMerge),
+                                            Mergeable (symbolicMerge),
                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_),
-                                            Symbolic, constrain, false, free_,
+                                            Symbolic, constrain, false,
                                             ite, mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
@@ -62,9 +62,8 @@ import           Data.Traversable          (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash           as Pact
-import           Pact.Types.Runtime        (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime, TyValue),
-                                            Type (TyAny, TyFun, TyList, TyPrim, TySchema, TyUser, TyVar),
-                                            tShow)
+import           Pact.Types.Runtime        (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
+                                            Type (TyPrim), tShow)
 import qualified Pact.Types.Runtime        as Pact
 import qualified Pact.Types.Typecheck      as Pact
 import           Pact.Types.Version        (pactVersion)
@@ -402,44 +401,19 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
--- Returns problematic argument name, or arg map
-allocateArgMap :: [Arg] -> ExceptT AnalyzeFailure Symbolic (Map UniqueId AVal)
-allocateArgMap args = fmap Map.fromList $ for args $ \(name, uid, node) ->
-  let ty = Pact._aTy node
-      wrap = lift . fmap (mkAVal . sansProv)
-      reportBadArg = throwError . UnhandledTerm . ("argument: " <>)
-
-      eVar :: ExceptT AnalyzeFailure Symbolic AVal
-      eVar = case ty of
-               --
-               -- TODO: possibly use Translate's logic to convert to EType,
-               --       and dispatch off of that:
-               --
-               TyPrim TyInteger -> wrap (free_ :: Symbolic (SBV Integer))
-               TyPrim TyBool    -> wrap (free_ :: Symbolic (SBV Bool))
-               TyPrim TyDecimal -> wrap (free_ :: Symbolic (SBV Decimal))
-               TyPrim TyTime    -> wrap (free_ :: Symbolic (SBV Int64))
-               TyPrim TyString  -> wrap (free_ :: Symbolic (SBV String))
-               TyUser _         -> wrap (free_ :: Symbolic (SBV UserType))
-               TyPrim TyKeySet  -> wrap (free_ :: Symbolic (SBV KeySet))
-
-               TyPrim TyValue   -> reportBadArg name
-               TyAny            -> reportBadArg name
-               TyVar _v         -> reportBadArg name
-               TyList _         -> reportBadArg name
-               TySchema _ _     -> reportBadArg name
-               TyFun _          -> reportBadArg name
-  in (uid,) <$> eVar
-
-mkAnalyzeEnv :: Map UniqueId AVal -> [Table] -> AnalyzeEnv
-mkAnalyzeEnv args tables =
+mkAnalyzeEnv :: [Table] -> [Arg] -> Model -> AnalyzeEnv
+mkAnalyzeEnv tables args model =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
       invariants' = Map.fromList $ tables <&> \(Table tname _ut someInvariants)
         -> (TableName (T.unpack tname), someInvariants)
 
-  in AnalyzeEnv args keySets' keySetAuths invariants'
+      argMap :: Map UniqueId AVal
+      argMap = Map.fromList $ zip args (_modelArgs model) <&>
+        \((_, uid, _), (_ety, av)) -> (uid, av)
+
+  in AnalyzeEnv argMap keySets' keySetAuths invariants'
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $

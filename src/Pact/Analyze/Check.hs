@@ -15,7 +15,7 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
+import           Control.Lens              (ifoldr, ifoldrM, itraversed, ix, traversed,
                                             (<&>), (^.), (^?), (^@..), _2,
                                             _Just)
 import           Control.Monad             (void)
@@ -31,7 +31,7 @@ import           Data.Either               (lefts, rights)
 import qualified Data.HashMap.Strict       as HM
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (mapMaybe)
+import           Data.Maybe                (fromMaybe, mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (SBV, Symbolic)
 import qualified Data.SBV                  as SBV
@@ -60,14 +60,14 @@ import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
                                             runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Analyze      hiding (invariants, model)
+import           Pact.Analyze.Analyze      hiding (invariants)
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckSuccess
-  = SatisfiedProperty SBVI.SMTModel
+  = SatisfiedProperty Model
   | ProvedTheorem
   deriving Show
 
@@ -75,7 +75,7 @@ data CheckFailure
   --
   -- TODO: possibly nest these 3 under a new "SmtFailure"
   --
-  = Invalid SBVI.SMTModel
+  = Invalid Model
   | Unsatisfiable
   | Unknown String
 
@@ -96,7 +96,7 @@ describeCheckFailure parsed failure =
 
     _ ->
       let str = case failure of
-            Invalid model -> "Invalidating model found: " <> showModel model
+            Invalid model -> "Invalidating model found:\n" <> showModel model
             Unsatisfiable  -> "This property is unsatisfiable"
             Unknown reason ->
               "The solver returned unknown with reason:\n" <>
@@ -108,14 +108,44 @@ describeCheckFailure parsed failure =
             TypecheckFailure _        -> error "impossible (handled above)"
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
-showModel :: SBVI.SMTModel -> Text
-showModel model = T.intercalate ", " $ map
-  (\(name, cw) -> T.pack name <> " = " <> tShow cw)
-  (SBVI.modelAssocs model)
+showModel :: Model -> Text
+showModel (Model args readObjs auths) = T.intercalate "\n"
+    [ "Arguments:"
+    , foldMap (\val -> "  " <> showVal val <> "\n") args
+    , ""
+    , "Reads:"
+    , foldMap (\obj -> "  " <> showObject obj <> "\n") readObjs
+    , ""
+    , "Authorizations:"
+    , foldMap (\auth -> "  " <> showAuth auth <> "\n") auths
+    ]
+
+  where
+    showVal :: (EType, AVal) -> Text
+    showVal (ety, av) = case av of
+      OpaqueVal   -> "[opaque]"
+      AnObj obj   -> showObject obj
+      AVal _ sval -> case ety of
+        EObjectTy _ -> error "showModel: impossible object type for AVal"
+        EType (_ :: Type t) -> fromMaybe "[symbolic]" $
+          tShow <$> SBV.unliteral (SBVI.SBV sval :: SBV t)
+
+    showObject :: Object -> Text
+    showObject (Object m) = "{ "
+      <> T.intercalate ", "
+           (ifoldr (\key val acc -> showObjMapping key val : acc) [] m)
+      <> " }"
+
+    showObjMapping :: Text -> (EType, AVal) -> Text
+    showObjMapping key val = key <> ": " <> showVal val
+
+    showAuth :: SBV Bool -> Text
+    showAuth sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
-  SatisfiedProperty model -> "Property satisfied with model: " <> showModel model
+  SatisfiedProperty model -> "Property satisfied with model:\n"
+                          <> showModel model
   ProvedTheorem           -> "Property proven valid"
 
 type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
@@ -132,22 +162,47 @@ dummyParsed = Default.def
 
 resultQuery
   :: Goal                                        -- ^ are we in sat or valid mode?
-  -> Map UniqueId AVal                           -- ^ args map
+  -> Model                                       -- ^ initial model
   -> ExceptT CheckFailure SBV.Query CheckSuccess
-resultQuery goal _argsMap = do
+resultQuery goal model0 = do
   satResult <- lift $ SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift SBV.getModel
+        SBV.Sat   -> throwError . Invalid =<< lift buildEnv
         SBV.Unsat -> pure ProvedTheorem
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift SBV.getModel
+        SBV.Sat   -> SatisfiedProperty <$> lift buildEnv
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+
+  where
+    -- | Builds a new 'Model' by querying the SMT model to concretize the
+    -- initial 'Model'.
+    buildEnv :: SBV.Query Model
+    buildEnv = Model
+      <$> traverse fetch       (_modelArgs model0)
+      <*> traverse fetchObject (_modelReads model0)
+      <*> traverse fetchSBool  (_modelAuths model0)
+
+    fetch :: (EType, AVal) -> SBVI.Query (EType, AVal)
+    fetch (ety, av) = (ety,) <$> go ety av
+      where
+        go :: EType -> AVal -> SBVI.Query AVal
+        go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
+          SBV.getValue (SBVI.SBV sval :: SBV t)
+        go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
+        go _ _ = error "fetch: impossible"
+
+    fetchObject :: Object -> SBVI.Query Object
+    fetchObject (Object fields) = Object <$> traverse fetch fields
+
+    -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
+    fetchSBool :: SBV Bool -> SBVI.Query (SBV Bool)
+    fetchSBool = fmap SBV.literal . SBV.getValue
 
 -- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
 --       flexible for our needs.
@@ -172,6 +227,37 @@ runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
       env <- mkEnv
       void $ lift . SBVI.output =<< mkProvable env
       hoist SBV.query $ mkQuery env
+
+-- | Creates an initial, free, 'Model' for use when the client does not have a
+-- provided 'Model' from a previous run.
+mkEmptyModel :: [Arg] -> ETerm -> ExceptT CheckFailure Symbolic Model
+mkEmptyModel args _tm = Model
+    <$> allocateArgs
+    --
+    -- TODO: instead of using ETerm here, use Writer output from translation.
+    --
+    -- TODO: implement these:
+    --
+    <*> pure Map.empty
+    <*> pure Map.empty
+
+  where
+    alloc :: EType -> Symbolic AVal
+    alloc = \case
+      EObjectTy (Schema fieldTys) -> AnObj . Object <$>
+        for fieldTys (\ety -> (ety,) <$> alloc ety)
+      EType (_ :: Type t) -> mkAVal . sansProv <$>
+        (SBV.free_ :: Symbolic (SBV t))
+
+    --
+    -- TODO: consider whether we should possibly get the translated args from
+    --       Writer output or the translation step generally, too. this would
+    --       allow us to change this function to simply return @Symbolic Model@
+    --
+    allocateArgs :: ExceptT CheckFailure Symbolic [(EType, AVal)]
+    allocateArgs = for args $ \(_nm, _uid, node) -> do
+      (ety :: EType) <- withExceptT TranslateFailure $ translateType node
+      lift $ (ety,) <$> alloc ety
 
 -- Note: @length args@ unique names are already generated by
 -- @checkTopFunction@, so we start the name generator at the next index.
@@ -204,7 +290,7 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $
 
       runAndQuery
         goal
-        (withExceptT AnalyzeFailure $ allocateArgMap args)
+        (mkEmptyModel args tm)
         (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
         (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
 
@@ -219,10 +305,10 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $
 
     runAnalysis
       :: Analyze AVal
-      -> Map UniqueId AVal
+      -> Model
       -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
-    runAnalysis act argMap = do
-      let aEnv   = mkAnalyzeEnv argMap tables
+    runAnalysis act model = do
+      let aEnv   = mkAnalyzeEnv tables args model
           state0 = mkInitialAnalyzeState tables
 
       (propResult, state1, constraints) <- hoist generalize $

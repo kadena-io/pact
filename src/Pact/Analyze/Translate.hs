@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -99,9 +100,14 @@ mkTranslateEnv = foldl'
   Map.empty
 
 newtype TranslateM a
-  = TranslateM { unTranslateM :: ReaderT (Map Node (Text, UniqueId)) (GenT UniqueId (Except TranslateFailure)) a }
+  = TranslateM
+    { unTranslateM :: ReaderT
+                       (Map Node (Text, UniqueId))
+                       (GenT UniqueId (Except TranslateFailure))
+                       a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node (Text, UniqueId)), MonadError TranslateFailure, MonadGen UniqueId)
+    MonadReader (Map Node (Text, UniqueId)), MonadError TranslateFailure,
+    MonadGen UniqueId)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
@@ -142,7 +148,7 @@ translateType' = \case
   TyList _         -> Nothing
   TyFun _          -> Nothing
 
-translateType :: Node -> TranslateM EType
+translateType :: MonadError TranslateFailure m => Node -> m EType
 translateType node = case _aTy node of
   (translateType' -> Just ety) -> pure ety
   ty                           -> throwError $ UnhandledType node ty
