@@ -26,6 +26,7 @@ import           Control.Monad.Morph       (MFunctor, generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (..))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
+import           Data.Bifunctor            (first)
 import qualified Data.Default              as Default
 import           Data.Either               (lefts, rights)
 import qualified Data.HashMap.Strict       as HM
@@ -275,34 +276,33 @@ checkFunctionBody
   :: [Table]
   -> [Arg]
   -> [AST Node]
-  -> (Parsed, Check)
-  -> IO CheckResult
-checkFunctionBody tables args body (parsed, check) = runExceptT $
-    withExceptT (parsed,) $ do
-      tm <- hoist generalize $ withExcept TranslateFailure $
-        runGenTFrom
-          (UniqueId (length args))
-          (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
+  -> Check
+  -> IO (Either CheckFailure CheckSuccess)
+checkFunctionBody tables args body check = runExceptT $ do
+    tm <- hoist generalize $ withExcept TranslateFailure $
+      runGenTFrom
+        (UniqueId (length args))
+        (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
 
-      --
-      -- TODO: use 'catchError' around the following and, if our result is
-      --       Invalid, feed our resulting Model back into the symbolic evaluator
-      --       to produce an execution trace (everything should be concrete).
-      --
-      --       during this second run, while producing the trace, we should
-      --       log effects (DB writes) in the order that they occur. for
-      --       writes, we actually don't have to use the tagging technique
-      --       because everything is concrete! Output will be composed of
-      --       Trace and the result AVal; unclear at the moment whether the
-      --       trace should contain intermediate values and effects
-      --       interleaved, or whether these two should be separate.
-      --
+    --
+    -- TODO: use 'catchError' around the following and, if our result is
+    --       Invalid, feed our resulting Model back into the symbolic evaluator
+    --       to produce an execution trace (everything should be concrete).
+    --
+    --       during this second run, while producing the trace, we should
+    --       log effects (DB writes) in the order that they occur. for
+    --       writes, we actually don't have to use the tagging technique
+    --       because everything is concrete! Output will be composed of
+    --       Trace and the result AVal; unclear at the moment whether the
+    --       trace should contain intermediate values and effects
+    --       interleaved, or whether these two should be separate.
+    --
 
-      runAndQuery
-        goal
-        (mkEmptyModel args tm)
-        (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
-        (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
+    runAndQuery
+      goal
+      (mkEmptyModel args tm)
+      (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
+      (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
 
   where
     goal :: Goal
@@ -333,8 +333,12 @@ checkFunctionBody tables args body (parsed, check) = runExceptT $
 --
 -- TODO: probably inline this function into 'verifyFunction'
 --
-checkTopFunction :: [Table] -> TopLevel Node -> (Parsed, Check) -> IO CheckResult
-checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) parsedCheck =
+checkTopFunction
+  :: [Table]
+  -> TopLevel Node
+  -> Check
+  -> IO (Either CheckFailure CheckSuccess)
+checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) check =
   let nodes :: [Node]
       nodes = _nnNamed <$> args
 
@@ -350,9 +354,9 @@ checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) parsedCheck =
       args' :: [Arg]
       args' = zip3 names uids nodes
 
-  in checkFunctionBody tables args' body parsedCheck
+  in checkFunctionBody tables args' body check
 
-checkTopFunction _ _ (parsed, _) = pure $ Left (parsed, CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)")
+checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -479,7 +483,8 @@ verifyFunction tables ref props = do
   case fun of
     TopFun (FDefun {_fInfo}) _ ->
       if Set.null failures
-      then traverse (checkTopFunction tables fun) props
+      then for props $ \(parsed, check) ->
+        first (parsed,) <$> checkTopFunction tables fun check
       else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
     _ -> pure []
 
@@ -526,6 +531,9 @@ verifyCheck
   -> IO CheckResult
 verifyCheck moduleData funName check = do
   let parsed = dummyParsed
+      --
+      -- TODO: move this "test" knowledge into the test suite:
+      --
       modules = HM.fromList [("test", moduleData)]
   tables <- moduleTables modules moduleData
   case moduleFun moduleData funName of
