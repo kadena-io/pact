@@ -393,6 +393,9 @@ newtype Analyze a
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
 mkQueryEnv = QueryEnv
 
+--
+-- TODO: rename this. @Query@ is already taken by sbv.
+--
 newtype Query a
   = Query
     { queryAction :: ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic) a }
