@@ -198,7 +198,7 @@ data AnalyzeState
 data QueryEnv
   = QueryEnv
     { _qeAnalyzeEnv    :: AnalyzeEnv
-    , _model           :: AnalyzeState
+    , _qeAnalyzeState  :: AnalyzeState
     , _qeAnalyzeResult :: AVal
     }
 
@@ -1383,7 +1383,7 @@ analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
 analyzeProp (PSym a) = pure a
 
-analyzeProp Success = view $ model.succeeds
+analyzeProp Success = view $ qeAnalyzeState.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success
 analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
@@ -1426,8 +1426,8 @@ analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
-analyzeProp (TableRead tn)  = view $ model.tableRead tn
-analyzeProp (TableWrite tn) = view $ model.tableWritten tn
+analyzeProp (TableRead tn)  = view $ qeAnalyzeState.tableRead tn
+analyzeProp (TableWrite tn) = view $ qeAnalyzeState.tableWritten tn
 analyzeProp (ColumnWrite _tableName _colName)
   = throwError "column write analysis not yet implemented"
 analyzeProp (CellIncrease _tableName _colName)
@@ -1437,26 +1437,26 @@ analyzeProp (CellIncrease _tableName _colName)
 --
 analyzeProp (IntCellDelta tableName colName pRk) = do
   sRk <- analyzeProp pRk
-  view $ model.intCellDelta tableName colName sRk
+  view $ qeAnalyzeState.intCellDelta tableName colName sRk
 analyzeProp (DecCellDelta tableName colName pRk) = do
   sRk <- analyzeProp pRk
-  view $ model.decCellDelta tableName colName sRk
+  view $ qeAnalyzeState.decCellDelta tableName colName sRk
 analyzeProp (IntColumnDelta tableName colName) = view $
-  model.intColumnDelta tableName colName
+  qeAnalyzeState.intColumnDelta tableName colName
 analyzeProp (DecColumnDelta tableName colName) = view $
-  model.decColumnDelta tableName colName
+  qeAnalyzeState.decColumnDelta tableName colName
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
-  view $ model.rowRead tn sRk
+  view $ qeAnalyzeState.rowRead tn sRk
 analyzeProp (RowWrite tn pRk) = do
   sRk <- analyzeProp pRk
-  view $ model.rowWritten tn sRk
+  view $ qeAnalyzeState.rowWritten tn sRk
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
-  view $ model.cellEnforced tn cn sRk
+  view $ qeAnalyzeState.cellEnforced tn cn sRk
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
@@ -1468,8 +1468,8 @@ analyzeCheck = \case
   where
     assumingSuccess :: S Bool -> Query (S Bool)
     assumingSuccess p = do
-      success <- view (model.succeeds)
+      success <- view (qeAnalyzeState.succeeds)
       pure $ success ==> p
 
     invariantsHold :: Query (S Bool)
-    invariantsHold = sansProv <$> view (model.maintainsInvariants)
+    invariantsHold = sansProv <$> view (qeAnalyzeState.maintainsInvariants)
