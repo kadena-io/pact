@@ -22,10 +22,10 @@ import           Control.Monad             (void)
 import           Control.Monad.Except      (ExceptT, runExceptT, throwError,
                                             withExcept, withExceptT)
 import           Control.Monad.Gen         (runGenTFrom)
-import           Control.Monad.Morph       (generalize, hoist)
+import           Control.Monad.Morph       (MFunctor, generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (..))
-import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Class (MonadTrans (lift))
 import qualified Data.Default              as Default
 import           Data.Either               (lefts, rights)
 import qualified Data.HashMap.Strict       as HM
@@ -206,13 +206,23 @@ resultQuery goal model0 = do
 
 -- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
 --       flexible for our needs.
+--
+-- We need to do 'MonadTrans'/'MFunctor'/'hoist' footwork here because sbv does
+-- not have something like @MonadSymbolic@ -- 'Symbolic' is a concrete
+-- datatype, and methods on the 'SymWord' typeclass produce these concrete
+-- 'Symbolic' computations.
+--
 runAndQuery
-  :: forall env r
-   . Goal                                              -- ^ are we using sat or valid?
-  -> ExceptT CheckFailure Symbolic env                 -- ^ initial setup in Symbolic
-  -> (env -> ExceptT CheckFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
-  -> (env -> ExceptT CheckFailure SBV.Query r)         -- ^ produces the Query to be run
-  -> ExceptT CheckFailure IO r
+  :: forall env r t.
+   ( MonadTrans t
+   , MFunctor t
+   , Monad (t Symbolic)
+   )
+  => Goal                           -- ^ are we using sat or valid?
+  -> t Symbolic env                 -- ^ initial setup in Symbolic
+  -> (env -> t Symbolic (SBV Bool)) -- ^ produces the Provable to be run
+  -> (env -> t SBV.Query r)         -- ^ produces the Query to be run
+  -> t IO r
 runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
   where
     cfg :: SBV.SMTConfig
@@ -222,7 +232,7 @@ runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
     runSymbolic s = fst <$>
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) s
 
-    comp :: ExceptT CheckFailure Symbolic r
+    comp :: t Symbolic r
     comp = do
       env <- mkEnv
       void $ lift . SBVI.output =<< mkProvable env
