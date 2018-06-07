@@ -9,7 +9,7 @@ ignore "Evaluate"
 
 -- Temporary ignores
 ignore "Use newtype instead of data"
-ignore "Reduce duplication"
+--ignore "Reduce duplication"
 ignore "Use <$>"
 --ignore "Redundant bracket"
 ignore "Use lambda-case"

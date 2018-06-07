@@ -1163,6 +1163,18 @@ checkInvariantsHeld = do
   maintains <- sansProv <$> view (model.maintainsInvariants)
   pure $ success ==> maintains
 
+comparisonFunc :: ComparisonOp -> SchemaInvariant a -> SchemaInvariant a -> Reader SBVI.SVal (SBV a)
+comparisonFunc op a b = do
+  a' <- checkSchemaInvariant a
+  b' <- checkSchemaInvariant b
+  pure $ case op of
+    Gt  -> a' .>  b'
+    Lt  -> a' .<  b'
+    Gte -> a' .>= b'
+    Lte -> a' .<= b'
+    Eq  -> a' .== b'
+    Neq -> a' ./= b'
+
 --
 -- TODO: convert this to use `S a`
 --

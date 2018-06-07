@@ -293,13 +293,17 @@ blake2s_update bs ctx
           _c = B.length s + _c cx
           }
 
+getBlake2Fields :: (Num w, Ord w) => (Blake2Ctx w) -> (w, w)
+getBlake2Fields cx = (t0,t1) where
+  c = fromIntegral $ _c cx
+  t0 = _t0 cx + c
+  t1 = _t1 cx + (if t0 < c then 1 else 0)
+
 -- | Generate the message digest (size given in init), 64bit version.
 blake2b_final :: Blake2Ctx Word64 -> ByteString
 blake2b_final ctx = finalCompress ctx & conv where
   finalCompress cx =
-    let c = fromIntegral $ _c cx
-        t0 = _t0 cx + c
-        t1 = _t1 cx + (if t0 < c then 1 else 0)
+    let (t0,t1) = getBlake2Fields cx
         b = B.take (_c cx) (_b cx) <> B.replicate (128 - _c cx) 0
     in blake2b_compress (cx { _t0 = t0, _t1 = t1, _b = b }) True
   conv cx = B.pack $ (`map` [0 .. pred (_outlen cx)]) $ \i ->
@@ -310,9 +314,7 @@ blake2b_final ctx = finalCompress ctx & conv where
 blake2s_final :: Blake2Ctx Word32 -> ByteString
 blake2s_final ctx = finalCompress ctx & conv where
   finalCompress cx =
-    let c = fromIntegral $ _c cx
-        t0 = _t0 cx + c
-        t1 = _t1 cx + (if t0 < c then 1 else 0)
+    let (t0,t1) = getBlake2Fields cx
         b = B.take (_c cx) (_b cx) <> B.replicate (64 - _c cx) 0
     in blake2s_compress (cx { _t0 = t0, _t1 = t1, _b = b }) True
   conv cx = B.pack $ (`map` [0 .. pred (_outlen cx)]) $ \i ->

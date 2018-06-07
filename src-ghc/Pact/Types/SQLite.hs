@@ -114,19 +114,21 @@ qrys :: Statement -> [SType] -> [RType] -> IO [[SType]]
 qrys stmt as rts = do
   clearBindings stmt
   bindParams stmt as
-  rows <- stepStmt stmt rts
-  void $ reset stmt
-  return (reverse rows)
+  qrysExec stmt rts
 {-# INLINE qrys #-}
 
 -- | Execute query statement with no params
 qrys_ :: Statement -> [RType] -> IO [[SType]]
 qrys_ stmt rts = do
   clearBindings stmt
+  qrysExec stmt rts
+{-# INLINE qrys_ #-}
+
+qrysExec :: Statement -> [RType] -> IO [[SType]]
+qrysExec stmt rts = do
   rows <- stepStmt stmt rts
   void $ reset stmt
   return (reverse rows)
-{-# INLINE qrys_ #-}
 
 stepStmt :: Statement -> [RType] -> IO [[SType]]
 stepStmt stmt rts = do
