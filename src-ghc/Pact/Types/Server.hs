@@ -24,7 +24,8 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity
-  , CommandState(..), csRefStore
+  , CommandPact(..), pmTxId, pmContinuation, pmSigs, pmStepCount
+  , CommandState(..), csRefStore, csPacts
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState
   , CommandM, runCommand, throwCmdEx
   , History(..)
@@ -47,6 +48,7 @@ import Control.Concurrent.Chan
 import Data.Maybe
 import Data.String
 import Data.ByteString (ByteString)
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text.Encoding
 import Data.Aeson
@@ -75,9 +77,19 @@ data CommandConfig = CommandConfig {
     }
 $(makeLenses ''CommandConfig)
 
+
+data CommandPact = CommandPact
+  { _pmTxId :: PactId
+  , _pmContinuation :: Term Name
+  , _pmSigs :: S.Set PublicKey
+  , _pmStepCount :: Int
+  } deriving Show
+$(makeLenses ''CommandPact)
+
 data CommandState = CommandState {
-     _csRefStore :: RefStore
-    }
+       _csRefStore :: RefStore
+     , _csPacts :: M.Map PactId CommandPact -- comment copied from Kadena code: TODO need hashable for TxId mebbe
+     } deriving Show
 $(makeLenses ''CommandState)
 
 data CommandEnv p = CommandEnv {

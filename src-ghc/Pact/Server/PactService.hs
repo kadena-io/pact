@@ -19,6 +19,7 @@ import Control.Concurrent
 import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Reader
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Control.Lens (view)
 
@@ -32,13 +33,12 @@ import Pact.Types.Logger
 
 import Pact.Interpreter
 
-
 initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC ParsedCode))
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
       mkCEI p@PactDbEnv {..} = do
-        cmdVar <- newMVar (CommandState initRefStore)
+        cmdVar <- newMVar (CommandState initRefStore M.empty)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
@@ -53,8 +53,6 @@ initPactService CommandConfig {..} loggers = do
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
 
 
-
-
 applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
@@ -63,6 +61,9 @@ applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
+      s <- liftIO $ readMVar cv
+      let pactState = (_csPacts s)
+      logLog logger "DEBUG" $ "testing that commandstate saved: " ++ show pactState
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
@@ -91,18 +92,23 @@ runPayload c@Command{..} = do
         _ -> return $ jsonResult mode (cmdToRequestKey c) $ CommandError "Private" Nothing
     Nothing -> runRpc _pPayload
 
-
-
 applyExec :: RequestKey -> ExecMsg ParsedCode -> Command a -> CommandM p CommandResult
 applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   CommandEnv {..} <- ask
   when (null (_pcExps parsedCode)) $ throwCmdEx "No expressions found"
-  (CommandState refStore) <- liftIO $ readMVar _ceState
-  let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData (userSigsToPactKeySet _cmdSigs) edata Nothing _cmdHash) refStore
-  pr <- liftIO $ evalExec evalEnv parsedCode
-  void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
-  return $ jsonResult _ceMode rk $ CommandSuccess (last (erOutput pr))
+  CommandState {..} <- liftIO $ readMVar _ceState
+  let sigs = userSigsToPactKeySet _cmdSigs
+      evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
+                (MsgData sigs edata Nothing _cmdHash) _csRefStore
+  pr@EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
+  let newPact = case erExec of
+        Nothing -> Nothing
+        Just (pexec@PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount)
+  let newState = CommandState erRefStore $ case newPact of
+        Nothing -> _csPacts
+        Just (p@CommandPact{..}) -> M.insert _pmTxId p _csPacts
+  void $ liftIO $ swapMVar _ceState newState
+  return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"
