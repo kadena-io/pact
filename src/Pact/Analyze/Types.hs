@@ -263,8 +263,10 @@ mkProv tn cn sRk sDirty = Provenance tn cn sRk sDirty
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
 
+type TVal = (EType, AVal)
+
 data Object
-  = Object (Map Text (EType, AVal))
+  = Object (Map Text TVal)
   deriving (Eq, Show)
 
 newtype Schema
@@ -543,7 +545,7 @@ deriving instance Show a => Show (Located a)
 
 data Model
   = Model
-    { _modelArgs  :: Map UniqueId (Located (Text, (EType, AVal)))
+    { _modelArgs  :: Map UniqueId (Located (Text, TVal))
     -- ^ one per input to the function
     , _modelReads :: Map UniqueId (Located Object)
     -- ^ one per each read, in traversal order

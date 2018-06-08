@@ -129,7 +129,7 @@ showModel (Model args readObjs auths) = T.intercalate "\n"
     showUid :: UniqueId -> Text
     showUid (UniqueId i) = "(" <> tShow i <> ")"
 
-    showTVal :: (EType, AVal) -> Text
+    showTVal :: TVal -> Text
     showTVal (ety, av) = case av of
       OpaqueVal   -> "[opaque]"
       AnObj obj   -> showObject obj
@@ -144,10 +144,10 @@ showModel (Model args readObjs auths) = T.intercalate "\n"
            (ifoldr (\key val acc -> showObjMapping key val : acc) [] m)
       <> " }"
 
-    showObjMapping :: Text -> (EType, AVal) -> Text
+    showObjMapping :: Text -> TVal -> Text
     showObjMapping key val = key <> ": " <> showTVal val
 
-    showArg :: Located (Text, (EType, AVal)) -> Text
+    showArg :: Located (Text, TVal) -> Text
     showArg (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
 
     showRead :: Located Object -> Text
@@ -198,21 +198,21 @@ resultQuery goal model0 = do
     -- initial 'Model'.
     buildEnv :: SBV.Query Model
     buildEnv = model0
-      &      traverseOf (modelArgs.traversed.located._2) fetch
+      &      traverseOf (modelArgs.traversed.located._2) fetchTVal
       & (>>= traverseOf (modelReads.traversed.located)   fetchObject)
       & (>>= traverseOf (modelAuths.traversed.located)   fetchSBool)
 
-    fetch :: (EType, AVal) -> SBVI.Query (EType, AVal)
-    fetch (ety, av) = (ety,) <$> go ety av
+    fetchTVal :: TVal -> SBVI.Query TVal
+    fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBVI.Query AVal
         go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
           SBV.getValue (SBVI.SBV sval :: SBV t)
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
-        go _ _ = error "fetch: impossible"
+        go _ _ = error "fetchTVal: impossible"
 
     fetchObject :: Object -> SBVI.Query Object
-    fetchObject (Object fields) = Object <$> traverse fetch fields
+    fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
     fetchSBool :: SBV Bool -> SBVI.Query (SBV Bool)
@@ -273,7 +273,7 @@ mkEmptyModel args = Model
       EType (_ :: Type t) -> mkAVal . sansProv <$>
         (SBV.free_ :: Symbolic (SBV t))
 
-    allocateArgs :: Symbolic (Map UniqueId (Located (Text, (EType, AVal))))
+    allocateArgs :: Symbolic (Map UniqueId (Located (Text, TVal)))
     allocateArgs = fmap Map.fromList $ for args $ \(nm, uid, node, ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
       av <- alloc ety
