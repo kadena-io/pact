@@ -86,7 +86,6 @@ data CheckFailure
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure TranslateFailure
   | AnalyzeFailure AnalyzeFailure
-  | PropertyParseError Exp
   deriving Show
 
 describeCheckFailure :: Parsed -> CheckFailure -> Text
@@ -105,7 +104,6 @@ describeCheckFailure parsed failure =
               tShow reason
             AnalyzeFailure err        -> describeAnalyzeFailure err
             TranslateFailure err      -> describeTranslateFailure err
-            PropertyParseError expr   -> "Couldn't parse property: " <> tShow expr
             NotAFunction name         -> "No function named " <> name
             TypecheckFailure _        -> error "impossible (handled above)"
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
