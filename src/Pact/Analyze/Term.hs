@@ -60,9 +60,8 @@ data Term ret where
   At             :: Schema -> Term String -> Term Object -> EType -> Term a
 
   -- Table access
-  Read           :: TableName -> Schema      -> Term String ->           Term Object
-  ReadCols       :: TableName -> Schema      -> Term String -> [Text] -> Term Object
-  Write          :: TableName -> Term String -> Term Object ->           Term String
+  Read           :: TableName -> Schema      -> Term String -> Term Object
+  Write          :: TableName -> Term String -> Term Object -> Term String
 
   -- Arithmetic ops
   --

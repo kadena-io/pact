@@ -489,14 +489,16 @@ translateNode astNode = case astNode of
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
     ETerm key' TStr <- translateNode key
-    schema <- translateSchema node
-    columns' <- for columns $ \case
+    (Schema fields) <- translateSchema node
+    columns' <- fmap Set.fromList $ for columns $ \case
       AST_Lit (LString col) -> pure col
       bad                   -> throwError (NonStaticColumns bad)
+    let schema = Schema $
+          Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
-    pure (EObject
-      (ReadCols (TableName (T.unpack table)) schema key' columns')
-      schema)
+    pure $ EObject
+      (Read (TableName (T.unpack table)) schema key')
+      schema
 
   AST_At node colName obj -> do
     EObject obj' schema <- translateNode obj

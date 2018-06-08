@@ -52,7 +52,6 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
-import qualified Data.Set                  as Set
 import           Data.String               (IsString (fromString))
 import           Data.Text                 (Text, pack)
 import qualified Data.Text                 as T
@@ -815,15 +814,6 @@ analyzeTermO = \case
   LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
 
   Read tn (Schema fields) rowKey -> analyzeRead tn fields rowKey
-
-  ReadCols tn (Schema fields) rowKey cols -> do
-    -- Intersect both the returned object and its type with the requested
-    -- columns
-    let colSet = Set.fromList cols
-        relevantFields
-          = Map.filterWithKey (\k _ -> k `Set.member` colSet) fields
-
-    analyzeRead tn relevantFields rowKey
 
   Var name uid -> lookupObj name uid
 
