@@ -74,19 +74,25 @@ data CheckSuccess
   | ProvedTheorem
   deriving Show
 
-data CheckFailure
-  --
-  -- TODO: possibly nest these 3 under a new "SmtFailure"
-  --
+data SmtFailure
   = Invalid Model
   | Unsatisfiable
   | Unknown String
+  deriving Show
 
-  | NotAFunction Text
+data CheckFailure
+  = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure TranslateFailure
   | AnalyzeFailure AnalyzeFailure
+  | SmtFailure SmtFailure
   deriving Show
+
+describeSmtFailure :: SmtFailure -> Text
+describeSmtFailure = \case
+  Invalid model -> "Invalidating model found:\n" <> showModel model
+  Unsatisfiable  -> "This property is unsatisfiable"
+  Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
 
 describeCheckFailure :: Parsed -> CheckFailure -> Text
 describeCheckFailure parsed failure =
@@ -97,15 +103,11 @@ describeCheckFailure parsed failure =
 
     _ ->
       let str = case failure of
-            Invalid model -> "Invalidating model found:\n" <> showModel model
-            Unsatisfiable  -> "This property is unsatisfiable"
-            Unknown reason ->
-              "The solver returned unknown with reason:\n" <>
-              tShow reason
-            AnalyzeFailure err        -> describeAnalyzeFailure err
-            TranslateFailure err      -> describeTranslateFailure err
-            NotAFunction name         -> "No function named " <> name
-            TypecheckFailure _        -> error "impossible (handled above)"
+            NotAFunction name    -> "No function named " <> name
+            TypecheckFailure _   -> error "impossible (handled above)"
+            TranslateFailure err -> describeTranslateFailure err
+            AnalyzeFailure err   -> describeAnalyzeFailure err
+            SmtFailure err       -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 showModel :: Model -> Text
@@ -173,9 +175,9 @@ dummyParsed :: Parsed
 dummyParsed = Default.def
 
 resultQuery
-  :: Goal                                        -- ^ are we in sat or valid mode?
-  -> Model                                       -- ^ initial model
-  -> ExceptT CheckFailure SBV.Query CheckSuccess
+  :: Goal                                      -- ^ are we in sat or valid mode?
+  -> Model                                     -- ^ initial model
+  -> ExceptT SmtFailure SBV.Query CheckSuccess
 resultQuery goal model0 = do
   satResult <- lift $ SBV.checkSat
   case goal of
@@ -309,7 +311,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
       goal
       (lift $ mkEmptyModel args)
       (runAnalysis (analyzeETerm tm))
-      (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
+      (withExceptT SmtFailure . resultQuery goal)
 
   where
     goal :: Goal
