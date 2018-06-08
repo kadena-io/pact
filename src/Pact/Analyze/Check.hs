@@ -16,7 +16,7 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Lens              (ifoldr, ifoldrM, itraversed, ix, traversed,
-                                            (<&>), (^.), (^?), (^@..), _2,
+                                            (<&>), (^.), (^?), (^@..), _1, _2,
                                             _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (ExceptT, runExceptT, throwError,
@@ -47,7 +47,7 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
-                                            renderParsed, tMeta, _iInfo)
+                                            renderParsed, tMeta, _iInfo, mName)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TDef, TSchema, TTable),
@@ -525,16 +525,14 @@ moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
-  :: ModuleData                       -- ^ the module we're verifying
-  -> Text                             -- ^ the name of the function
-  -> Check                            -- ^ the check we're running
+  :: ModuleData     -- ^ the module we're verifying
+  -> Text           -- ^ the name of the function
+  -> Check          -- ^ the check we're running
   -> IO CheckResult
 verifyCheck moduleData funName check = do
   let parsed = dummyParsed
-      --
-      -- TODO: move this "test" knowledge into the test suite:
-      --
-      modules = HM.fromList [("test", moduleData)]
+      moduleName = moduleData ^. _1.mName
+      modules = HM.fromList [(moduleName, moduleData)]
   tables <- moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> head <$> verifyFunction tables funRef [(parsed, check)]
