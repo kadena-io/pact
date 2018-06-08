@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -39,6 +40,7 @@ import qualified Data.Text            as T
 import           Data.Thyme           (UTCTime, microseconds)
 import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
 
+import qualified Pact.Types.Lang      as Pact
 import qualified Pact.Types.Typecheck as TC
 import           Pact.Types.Util      (AsString)
 
@@ -503,7 +505,7 @@ instance Num (Prop Decimal) where
 -- TODO: extract data type
 --
 type Arg
-  = (Text, UniqueId, TC.Node)
+  = (Text, UniqueId, TC.Node, EType)
 
 data Table = Table
   { _tableName       :: Text
@@ -530,13 +532,22 @@ checkGoal (PropertyHolds _) = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
 
+data Located a
+  = Located
+    { _location :: Pact.Info
+    , _located  :: a
+    }
+  deriving Functor
+
+deriving instance Show a => Show (Located a)
+
 data Model
   = Model
-    { _modelArgs  :: [(EType, AVal)]
+    { _modelArgs  :: Map UniqueId (Located (Text, (EType, AVal)))
     -- ^ one per input to the function
-    , _modelReads :: Map UniqueId Object
+    , _modelReads :: Map UniqueId (Located Object)
     -- ^ one per each read, in traversal order
-    , _modelAuths :: Map UniqueId (SBV Bool)
+    , _modelAuths :: Map UniqueId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that for
     -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls
     -- equally, and in the future we can try to connect keysets with their
@@ -654,3 +665,5 @@ instance Eq SomeSchemaInvariant where
 makeLenses ''S
 makeLenses ''Object
 makeLenses ''Table
+makeLenses ''Model
+makeLenses ''Located

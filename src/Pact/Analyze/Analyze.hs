@@ -47,8 +47,8 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_),
-                                            Symbolic, constrain, false,
-                                            ite, mkSFunArray, sDiv, sMod,
+                                            Symbolic, constrain, false, ite,
+                                            mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
@@ -401,8 +401,8 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-mkAnalyzeEnv :: [Table] -> [Arg] -> Model -> AnalyzeEnv
-mkAnalyzeEnv tables args model =
+mkAnalyzeEnv :: [Table] -> Model -> AnalyzeEnv
+mkAnalyzeEnv tables model =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
@@ -410,8 +410,7 @@ mkAnalyzeEnv tables args model =
         -> (TableName (T.unpack tname), someInvariants)
 
       argMap :: Map UniqueId AVal
-      argMap = Map.fromList $ zip args (_modelArgs model) <&>
-        \((_, uid, _), (_ety, av)) -> (uid, av)
+      argMap = view (located._2._2) <$> _modelArgs model
 
   in AnalyzeEnv argMap keySets' keySetAuths invariants'
 

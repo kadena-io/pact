@@ -15,13 +15,14 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Lens              (ifoldr, ifoldrM, itraversed, ix, traversed,
-                                            (<&>), (^.), (^?), (^@..), _1, _2,
-                                            _Just)
+import           Control.Lens              (ifoldMap, ifoldr, ifoldrM,
+                                            itraversed, ix, traverseOf,
+                                            traversed, (&), (<&>), (^.), (^?),
+                                            (^@..), _1, _2, _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (ExceptT, runExceptT, throwError,
                                             withExcept, withExceptT)
-import           Control.Monad.Gen         (runGenTFrom)
+import           Control.Monad.Gen         (runGenT, runGenTFrom)
 import           Control.Monad.Morph       (MFunctor, generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (..))
@@ -46,16 +47,17 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
-                                            renderParsed, tMeta, _iInfo, mName)
+import           Pact.Types.Lang           (Parsed, eParsed, mMetas, mName,
+                                            renderInfo, renderParsed, tMeta,
+                                            _iInfo)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TDef, TSchema, TTable),
                                             asString, tInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
-                                            Named (_nnName, _nnNamed), Node,
-                                            TcId (_tiInfo),
+import           Pact.Types.Typecheck      (AST,
+                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                            Named, Node, TcId (_tiInfo),
                                             TopLevel (TopFun, TopTable),
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures)
@@ -80,12 +82,11 @@ data CheckFailure
   | Unsatisfiable
   | Unknown String
 
+  | NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure TranslateFailure
   | AnalyzeFailure AnalyzeFailure
   | PropertyParseError Exp
-
-  | CodeCompilationFailed String
   deriving Show
 
 describeCheckFailure :: Parsed -> CheckFailure -> Text
@@ -105,25 +106,31 @@ describeCheckFailure parsed failure =
             AnalyzeFailure err        -> describeAnalyzeFailure err
             TranslateFailure err      -> describeTranslateFailure err
             PropertyParseError expr   -> "Couldn't parse property: " <> tShow expr
-            CodeCompilationFailed msg -> T.pack msg
+            NotAFunction name         -> "No function named " <> name
             TypecheckFailure _        -> error "impossible (handled above)"
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 showModel :: Model -> Text
 showModel (Model args readObjs auths) = T.intercalate "\n"
+    --
+    -- TODO: extract indent+uid helper.
+    --
     [ "Arguments:"
-    , foldMap (\val -> "  " <> showVal val <> "\n") args
+    , ifoldMap (\uid arg -> "  " <> showUid uid <> " " <> showArg arg <> "\n") args
     , ""
     , "Reads:"
-    , foldMap (\obj -> "  " <> showObject obj <> "\n") readObjs
+    , ifoldMap (\uid read' -> "  " <> showUid uid <> " " <> showRead read' <> "\n") readObjs
     , ""
     , "Authorizations:"
-    , foldMap (\auth -> "  " <> showAuth auth <> "\n") auths
+    , ifoldMap (\uid auth -> "  " <> showUid uid <> " " <> showAuth auth <> "\n") auths
     ]
 
   where
-    showVal :: (EType, AVal) -> Text
-    showVal (ety, av) = case av of
+    showUid :: UniqueId -> Text
+    showUid (UniqueId i) = "(" <> tShow i <> ")"
+
+    showTVal :: (EType, AVal) -> Text
+    showTVal (ety, av) = case av of
       OpaqueVal   -> "[opaque]"
       AnObj obj   -> showObject obj
       AVal _ sval -> case ety of
@@ -138,10 +145,16 @@ showModel (Model args readObjs auths) = T.intercalate "\n"
       <> " }"
 
     showObjMapping :: Text -> (EType, AVal) -> Text
-    showObjMapping key val = key <> ": " <> showVal val
+    showObjMapping key val = key <> ": " <> showTVal val
 
-    showAuth :: SBV Bool -> Text
-    showAuth sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
+    showArg :: Located (Text, (EType, AVal)) -> Text
+    showArg (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
+
+    showRead :: Located Object -> Text
+    showRead = showObject . _located
+
+    showAuth :: Located (SBV Bool) -> Text
+    showAuth (Located _ sbv) = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
@@ -184,10 +197,10 @@ resultQuery goal model0 = do
     -- | Builds a new 'Model' by querying the SMT model to concretize the
     -- initial 'Model'.
     buildEnv :: SBV.Query Model
-    buildEnv = Model
-      <$> traverse fetch       (_modelArgs model0)
-      <*> traverse fetchObject (_modelReads model0)
-      <*> traverse fetchSBool  (_modelAuths model0)
+    buildEnv = model0
+      &      traverseOf (modelArgs.traversed.located._2) fetch
+      & (>>= traverseOf (modelReads.traversed.located)   fetchObject)
+      & (>>= traverseOf (modelAuths.traversed.located)   fetchSBool)
 
     fetch :: (EType, AVal) -> SBVI.Query (EType, AVal)
     fetch (ety, av) = (ety,) <$> go ety av
@@ -241,11 +254,11 @@ runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
 
 -- | Creates an initial, free, 'Model' for use when the client does not have a
 -- provided 'Model' from a previous run.
-mkEmptyModel :: [Arg] -> ETerm -> ExceptT CheckFailure Symbolic Model
-mkEmptyModel args _tm = Model
+mkEmptyModel :: [Arg] -> Symbolic Model
+mkEmptyModel args = Model
     <$> allocateArgs
     --
-    -- TODO: instead of using ETerm here, use Writer output from translation.
+    -- TODO: use Writer output from translation.
     --
     -- TODO: implement these:
     --
@@ -260,29 +273,25 @@ mkEmptyModel args _tm = Model
       EType (_ :: Type t) -> mkAVal . sansProv <$>
         (SBV.free_ :: Symbolic (SBV t))
 
-    --
-    -- TODO: consider whether we should possibly get the translated args from
-    --       Writer output or the translation step generally, too. this would
-    --       allow us to change this function to simply return @Symbolic Model@
-    --
-    allocateArgs :: ExceptT CheckFailure Symbolic [(EType, AVal)]
-    allocateArgs = for args $ \(_nm, _uid, node) -> do
-      (ety :: EType) <- withExceptT TranslateFailure $ translateType node
-      lift $ (ety,) <$> alloc ety
+    allocateArgs :: Symbolic (Map UniqueId (Located (Text, (EType, AVal))))
+    allocateArgs = fmap Map.fromList $ for args $ \(nm, uid, node, ety) -> do
+      let info = node ^. TC.aId . TC.tiInfo
+      av <- alloc ety
+      pure (uid, Located info (nm, (ety, av)))
 
--- Note: @length args@ unique names are already generated by
--- @checkTopFunction@, so we start the name generator at the next index.
-checkFunctionBody
+checkFunction
   :: [Table]
-  -> [Arg]
+  -> [Named Node]
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-checkFunctionBody tables args body check = runExceptT $ do
-    tm <- hoist generalize $ withExcept TranslateFailure $
-      runGenTFrom
-        (UniqueId (length args))
-        (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
+checkFunction tables pactArgs body check = runExceptT $ do
+    args <- runArgsTranslation
+
+    --
+    -- TODO: use writer to produce uids for reads & auths for mkEmptyModel
+    --
+    tm <- runBodyTranslation args
 
     --
     -- TODO: use 'catchError' around the following and, if our result is
@@ -300,25 +309,30 @@ checkFunctionBody tables args body check = runExceptT $ do
 
     runAndQuery
       goal
-      (mkEmptyModel args tm)
-      (withExceptT AnalyzeFailure . runAnalysis (mkAnalysis tm))
+      (lift $ mkEmptyModel args)
+      (runAnalysis (analyzeETerm tm))
       (resultQuery goal) -- TODO: possibly nest under new error using withExceptT
 
   where
     goal :: Goal
     goal = checkGoal check
 
-    mkAnalysis :: ETerm -> Analyze AVal
-    mkAnalysis = \case
-      ETerm   body' _ -> mkAVal <$> analyzeTerm  body'
-      EObject body' _ -> AnObj  <$> analyzeTermO body'
+    runArgsTranslation :: ExceptT CheckFailure IO [Arg]
+    runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
+      runGenT $ traverse translateArg pactArgs
+
+    runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO ETerm
+    runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
+      runGenTFrom
+        (UniqueId (length args))
+        (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
 
     runAnalysis
       :: Analyze AVal
       -> Model
-      -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
-    runAnalysis act model = do
-      let aEnv   = mkAnalyzeEnv tables args model
+      -> ExceptT CheckFailure Symbolic (SBV Bool)
+    runAnalysis act model = withExceptT AnalyzeFailure $ do
+      let aEnv   = mkAnalyzeEnv tables model
           state0 = mkInitialAnalyzeState tables
 
       (propResult, state1, constraints) <- hoist generalize $
@@ -329,34 +343,6 @@ checkFunctionBody tables args body check = runExceptT $ do
 
       lift $ runConstraints constraints
       _sSbv <$> runReaderT (queryAction query) qEnv
-
---
--- TODO: probably inline this function into 'verifyFunction'
---
-checkTopFunction
-  :: [Table]
-  -> TopLevel Node
-  -> Check
-  -> IO (Either CheckFailure CheckSuccess)
-checkTopFunction tables (TopFun (FDefun _ _ _ args body) _) check =
-  let nodes :: [Node]
-      nodes = _nnNamed <$> args
-
-      -- Extract the plain/unmunged names from the source code. We use the
-      -- munged names for let/bind/with-read/etc -bound variables, but plain
-      -- names for the args for usability. Because let/bind/etc can't shadow
-      -- these unmunged names, we retain our SSA property.
-      names :: [Text]
-      names = _nnName <$> args
-
-      uids = UniqueId <$> [0..]
-
-      args' :: [Arg]
-      args' = zip3 names uids nodes
-
-  in checkFunctionBody tables args' body check
-
-checkTopFunction _ _ _ = pure $ Left $ CodeCompilationFailed "Top-Level Function analysis can only work on User defined functions (i.e. FDefun)"
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -428,13 +414,19 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
       parsed     = getInfoParsed (defn ^. tInfo)
 
-      uids = UniqueId <$> [0..]
+      -- NOTE: we're using MonadGen for our args in checkFunction now, so we
+      -- start from 1. MonadGen starts not from the seed you provide, but with
+      -- the successor of the seed.
+      --
+      -- Ideally we wouldn't have any UID generation outside of MonadGen, but
+      -- we're not there yet.
+      uids = UniqueId <$> [1..]
 
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
       --
       -- TODO(joel): this relies on generating the same unique ids as
-      -- @checkTopFunction@. We need to more carefully enforce this is true!
+      -- @checkFunction@. We need to more carefully enforce this is true!
       env :: [(Text, UniqueId, EType)]
       env = fmap (\(uid, (text, ty)) -> (text, uid, ty))
         $ zip uids
@@ -481,10 +473,10 @@ verifyFunction tables ref props = do
   let failures = tcState ^. tcFailures
 
   case fun of
-    TopFun (FDefun {_fInfo}) _ ->
+    TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-        first (parsed,) <$> checkTopFunction tables fun check
+        first (parsed,) <$> checkFunction tables _fArgs _fBody check
       else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
     _ -> pure []
 
@@ -520,9 +512,6 @@ verifyModule modules moduleData = do
 
   traverse verifyFun funChecks
 
-moduleFun :: ModuleData -> Text -> Maybe Ref
-moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
-
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
   :: ModuleData     -- ^ the module we're verifying
@@ -536,7 +525,8 @@ verifyCheck moduleData funName check = do
   tables <- moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> head <$> verifyFunction tables funRef [(parsed, check)]
-    Nothing     -> pure $ Left
-      ( parsed
-      , CodeCompilationFailed ("function not found: " ++ T.unpack funName)
-      )
+    Nothing     -> pure $ Left (parsed, NotAFunction funName)
+
+  where
+    moduleFun :: ModuleData -> Text -> Maybe Ref
+    moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs

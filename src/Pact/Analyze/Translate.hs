@@ -11,31 +11,29 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, view, (<&>), (?~), (^.),
-                                             (^?))
-import           Control.Monad              (MonadPlus (mzero))
-import           Control.Monad.Except       (Except, MonadError, throwError)
-import           Control.Monad.Fail         (MonadFail (fail))
-import           Control.Monad.Gen          (GenT, MonadGen(gen))
-import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Data.Foldable              (foldl')
-import qualified Data.Map                   as Map
-import           Data.Map.Strict            (Map)
-import           Data.Monoid                ((<>))
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Thyme                 (parseTime)
-import           Data.Traversable           (for)
-import           Data.Type.Equality         ((:~:) (Refl))
-import           Pact.Types.Lang            (Literal (..), PrimType (..),
-                                             Type (..))
-import qualified Pact.Types.Lang            as Pact
-import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
-                                             aNode, aTy, tiName, _aTy)
-import qualified Pact.Types.Typecheck       as Pact
-import           System.Locale              (defaultTimeLocale)
+import           Control.Applicative   (Alternative, (<|>))
+import           Control.Lens          (at, view, (<&>), (?~), (^.), (^?))
+import           Control.Monad         (MonadPlus (mzero))
+import           Control.Monad.Except  (Except, MonadError, throwError)
+import           Control.Monad.Fail    (MonadFail (fail))
+import           Control.Monad.Gen     (GenT, MonadGen (gen))
+import           Control.Monad.Reader  (MonadReader (local), ReaderT)
+import           Data.Foldable         (foldl')
+import qualified Data.Map              as Map
+import           Data.Map.Strict       (Map)
+import           Data.Monoid           ((<>))
+import qualified Data.Set              as Set
+import           Data.Text             (Text)
+import qualified Data.Text             as T
+import           Data.Thyme            (parseTime)
+import           Data.Traversable      (for)
+import           Data.Type.Equality    ((:~:) (Refl))
+import           Pact.Types.Lang       (Literal (..), PrimType (..), Type (..))
+import qualified Pact.Types.Lang       as Pact
+import           Pact.Types.Typecheck  (AST, Named (Named), Node, aId, aNode,
+                                        aTy, tiName, _aTy)
+import qualified Pact.Types.Typecheck  as Pact
+import           System.Locale         (defaultTimeLocale)
 
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Term
@@ -96,7 +94,7 @@ instance Monoid TranslateFailure where
 
 mkTranslateEnv :: [Arg] -> Map Node (Text, UniqueId)
 mkTranslateEnv = foldl'
-  (\m (nm, uid, node) -> Map.insert node (nm, uid) m)
+  (\m (nm, uid, node, _ety) -> Map.insert node (nm, uid) m)
   Map.empty
 
 newtype TranslateM a
@@ -152,6 +150,15 @@ translateType :: MonadError TranslateFailure m => Node -> m EType
 translateType node = case _aTy node of
   (translateType' -> Just ety) -> pure ety
   ty                           -> throwError $ UnhandledType node ty
+
+translateArg
+  :: (MonadGen UniqueId m, MonadError TranslateFailure m)
+  => Named Node
+  -> m Arg
+translateArg (Named nm node _) = do
+  uid <- gen
+  ety <- translateType node
+  pure (nm, uid, node, ety)
 
 translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
