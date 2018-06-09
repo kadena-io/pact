@@ -15,15 +15,17 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
+import           Control.Exception         as E
 import           Control.Lens              (ifoldMap, ifoldr, ifoldrM,
                                             itraversed, ix, traverseOf,
                                             traversed, (&), (<&>), (^.), (^?),
                                             (^@..), _1, _2, _Just)
 import           Control.Monad             (void)
-import           Control.Monad.Except      (ExceptT, runExceptT, throwError,
-                                            withExcept, withExceptT)
+import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
+                                            throwError, withExcept,
+                                            withExceptT)
 import           Control.Monad.Gen         (runGenT, runGenTFrom)
-import           Control.Monad.Morph       (MFunctor, generalize, hoist)
+import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (..))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
@@ -78,6 +80,7 @@ data SmtFailure
   = Invalid Model
   | Unsatisfiable
   | Unknown String
+  | UnexpectedFailure SBV.SMTException
   deriving Show
 
 data CheckFailure
@@ -93,6 +96,7 @@ describeSmtFailure = \case
   Invalid model -> "Invalidating model found:\n" <> showModel model
   Unsatisfiable  -> "This property is unsatisfiable"
   Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
+  UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeCheckFailure :: Parsed -> CheckFailure -> Text
 describeCheckFailure parsed failure =
@@ -227,17 +231,16 @@ resultQuery goal model0 = do
 -- 'Symbolic' computations.
 --
 runAndQuery
-  :: forall env r t.
-   ( MonadTrans t
-   , MFunctor t
-   , Monad (t Symbolic)
-   )
-  => Goal                           -- ^ are we using sat or valid?
-  -> t Symbolic env                 -- ^ initial setup in Symbolic
-  -> (env -> t Symbolic (SBV Bool)) -- ^ produces the Provable to be run
-  -> (env -> t SBV.Query r)         -- ^ produces the Query to be run
-  -> t IO r
-runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
+  :: forall env r
+   . Goal                                              -- ^ are we using sat or valid?
+  -> ExceptT CheckFailure Symbolic env                 -- ^ initial setup in Symbolic
+  -> (env -> ExceptT CheckFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
+  -> (env -> ExceptT CheckFailure SBV.Query r)         -- ^ produces the Query to be run
+  -> ExceptT CheckFailure IO r
+runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
+    runSymbolic comp `E.catch` \(e :: SBV.SMTException) ->
+      pure $ Left $ SmtFailure $ UnexpectedFailure e
+
   where
     cfg :: SBV.SMTConfig
     cfg = SBV.z3
@@ -246,8 +249,8 @@ runAndQuery goal mkEnv mkProvable mkQuery = hoist runSymbolic comp
     runSymbolic s = fst <$>
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) s
 
-    comp :: t Symbolic r
-    comp = do
+    comp :: Symbolic (Either CheckFailure r)
+    comp = runExceptT $ do
       env <- mkEnv
       void $ lift . SBVI.output =<< mkProvable env
       hoist SBV.query $ mkQuery env
