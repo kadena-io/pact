@@ -116,20 +116,18 @@ describeCheckFailure parsed failure =
 
 showModel :: Model -> Text
 showModel (Model args readObjs auths) = T.intercalate "\n"
-    --
-    -- TODO: extract indent+uid helper.
-    --
     [ "Arguments:"
-    , ifoldMap (\uid arg -> "  " <> showUid uid <> " " <> showArg arg <> "\n") args
-    , ""
+    , ifoldMap (showItem showArg) args
     , "Reads:"
-    , ifoldMap (\uid read' -> "  " <> showUid uid <> " " <> showRead read' <> "\n") readObjs
-    , ""
+    , ifoldMap (showItem showRead) readObjs
     , "Authorizations:"
-    , ifoldMap (\uid auth -> "  " <> showUid uid <> " " <> showAuth auth <> "\n") auths
+    , ifoldMap (showItem showAuth) auths
     ]
 
   where
+    showItem :: (a -> Text) -> UniqueId -> a -> Text
+    showItem show' uid arg = "  " <> showUid uid <> " " <> show' arg <> "\n"
+
     showUid :: UniqueId -> Text
     showUid (UniqueId i) = "(" <> tShow i <> ")"
 
