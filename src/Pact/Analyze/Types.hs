@@ -23,7 +23,7 @@ import           Data.Map.Strict      (Map)
 import           Data.SBV             (AlgReal,
                                        Boolean (bnot, false, true, (&&&), (|||)),
                                        EqSymbolic, HasKind, Int64,
-                                       Kind (KString),
+                                       Kind (KString, KUnbounded),
                                        Mergeable (symbolicMerge), OrdSymbolic,
                                        Provable (forAll), SBV,
                                        SDivisible (sDivMod, sQuotRem), SymWord,
@@ -44,9 +44,15 @@ import qualified Pact.Types.Lang      as Pact
 import qualified Pact.Types.Typecheck as TC
 import           Pact.Types.Util      (AsString)
 
+-- TODO: could implement this stuff generically or add newtype-awareness
+
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
 wrappedStringFromCW construct (SBVI.CW _ (SBVI.CWString s)) = construct s
 wrappedStringFromCW _ c = error $ "SymWord: Unexpected non-string value: " ++ show c
+
+wrappedIntegerFromCW :: (Integer -> a) -> SBVI.CW -> a
+wrappedIntegerFromCW construct (SBVI.CW _ (SBVI.CWInteger i)) = construct i
+wrappedIntegerFromCW _ c = error $ "SymWord: Unexpected non-integer value: " ++ show c
 
 mkConcreteString :: String -> SBV a
 mkConcreteString = SBVI.SBV
@@ -54,6 +60,13 @@ mkConcreteString = SBVI.SBV
                  . Left
                  . SBVI.CW KString
                  . SBVI.CWString
+
+mkConcreteInteger :: Integer -> SBV a
+mkConcreteInteger = SBVI.SBV
+                  . SBVI.SVal KUnbounded
+                  . Left
+                  . SBVI.CW KUnbounded
+                  . SBVI.CWInteger
 
 newtype KeySetName
   = KeySetName Text
@@ -568,10 +581,16 @@ newtype KeySet
   = KeySet Integer
   deriving (Eq, Ord, Data, Show, Read)
 
--- "Giving no instances is ok when defining an uninterpreted/enumerated sort"
-instance SymWord KeySet
-instance HasKind KeySet where kindOf (KeySet rep) = kindOf rep
-instance SMTValue KeySet
+instance SymWord KeySet where
+  mkSymWord = SBVI.genMkSymVar KUnbounded
+  literal (KeySet s) = mkConcreteInteger s
+  fromCW = wrappedIntegerFromCW KeySet
+
+instance HasKind KeySet where
+  kindOf _ = KUnbounded
+
+instance SMTValue KeySet where
+  sexprToVal = fmap KeySet . sexprToVal
 
 -- The type of a simple type
 data Type a where
