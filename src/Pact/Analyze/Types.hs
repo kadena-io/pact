@@ -13,13 +13,14 @@
 
 module Pact.Analyze.Types where
 
-import           Control.Lens         (Iso, Iso', both, from, iso, makeLenses,
-                                       over, view, (%~), (&))
+import           Control.Lens         (Iso, Iso', Lens', both, from, iso, lens,
+                                       makeLenses, over, view, (%~), (&))
 import           Data.Aeson           (FromJSON, ToJSON)
 import           Data.AffineSpace     ((.+^), (.-.))
 import           Data.Data            (Data)
 import qualified Data.Decimal         as Decimal
 import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
 import           Data.SBV             (AlgReal,
                                        Boolean (bnot, false, true, (&&&), (|||)),
                                        EqSymbolic, HasKind, Int64,
@@ -28,12 +29,14 @@ import           Data.SBV             (AlgReal,
                                        Provable (forAll), SBV,
                                        SDivisible (sDivMod, sQuotRem), SymWord,
                                        Symbolic, forAll_, forSome, forSome_,
-                                       isConcrete, ite, kindOf, literal, oneIf,
-                                       sFromIntegral, sRealToSInteger,
-                                       unliteral, (%), (.<), (.==))
-import           Data.SBV.Control     (SMTValue)
+                                       fromBool, isConcrete, ite, kindOf,
+                                       literal, oneIf, sFromIntegral,
+                                       sRealToSInteger, unliteral, (%), (.<),
+                                       (.==))
+import           Data.SBV.Control     (SMTValue (..))
 import qualified Data.SBV.Internals   as SBVI
 import qualified Data.SBV.String      as SBV
+import qualified Data.Set             as Set
 import           Data.String          (IsString (..))
 import           Data.Text            (Text)
 import qualified Data.Text            as T
@@ -278,9 +281,15 @@ symRowKey = coerceS
 
 type TVal = (EType, AVal)
 
-data Object
+newtype Object
   = Object (Map Text TVal)
   deriving (Eq, Show)
+
+objFields :: Lens' Object (Map Text TVal)
+objFields = lens getter setter
+  where
+    getter (Object fs) = fs
+    setter (Object _) fs' = Object fs'
 
 newtype Schema
   = Schema (Map Text EType)
@@ -292,6 +301,30 @@ data AVal
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
+
+instance EqSymbolic Object where
+  Object fields .== Object fields' =
+    let ks  = Map.keysSet fields
+        ks' = Map.keysSet fields'
+    in if ks == ks'
+       then Set.foldl'
+              (\acc key -> acc &&&
+                ((fields Map.! key) .== (fields' Map.! key)))
+              true
+              ks
+       else false
+
+instance EqSymbolic AVal where
+  AVal mProv sv .== AVal mProv' sv' = mkS mProv sv .== mkS mProv' sv'
+
+  AnObj o .== AnObj o' = o .== o'
+
+  -- Not perfect; this would be better if we could easily produce an
+  -- uninterpreted bool here. We can't though, because 'uninterpret' takes a
+  -- String that must be unique for each allocation.
+  OpaqueVal .== OpaqueVal = false
+
+  _ .== _ = false
 
 mkS :: Maybe Provenance -> SBVI.SVal -> S a
 mkS mProv sval = S mProv (SBVI.SBV sval)
@@ -352,6 +385,9 @@ instance Eq EType where
     Nothing    -> False
   EObjectTy a == EObjectTy b = a == b
   _ == _ = False
+
+instance EqSymbolic EType where
+  ety .== ety' = fromBool $ ety == ety'
 
 -- | Unique variable IDs
 --

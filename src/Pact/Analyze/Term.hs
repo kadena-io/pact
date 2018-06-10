@@ -8,11 +8,11 @@
 
 module Pact.Analyze.Term where
 
-import           Data.Data         (Data)
-import           Data.Map.Strict   (Map)
-import           Data.SBV          (HasKind, SymWord)
-import           Data.SBV.Control  (SMTValue)
-import           Data.Text         (Text)
+import           Data.Data          (Data)
+import           Data.Map.Strict    (Map)
+import           Data.SBV           (HasKind, SymWord)
+import           Data.SBV.Control   (SMTValue)
+import           Data.Text          (Text)
 
 import           Pact.Analyze.Types
 
@@ -52,16 +52,16 @@ data Term ret where
 
   -- Keyset access
   ReadKeySet      :: Term String -> Term KeySet
-  KsAuthorized    :: Term KeySet -> Term Bool
-  NameAuthorized  :: Term String -> Term Bool
+  KsAuthorized    :: UniqueId -> Term KeySet -> Term Bool
+  NameAuthorized  :: UniqueId -> Term String -> Term Bool
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
   At             :: Schema -> Term String -> Term Object -> EType -> Term a
 
   -- Table access
-  Read           :: TableName -> Schema      -> Term String -> Term Object
-  Write          :: TableName -> Term String -> Term Object -> Term String
+  Read           :: UniqueId -> TableName -> Schema      -> Term String -> Term Object
+  Write          ::             TableName -> Term String -> Term Object -> Term String
 
   -- Arithmetic ops
   --

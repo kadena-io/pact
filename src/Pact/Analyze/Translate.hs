@@ -11,29 +11,31 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative   (Alternative, (<|>))
-import           Control.Lens          (at, view, (<&>), (?~), (^.), (^?))
-import           Control.Monad         (MonadPlus (mzero))
-import           Control.Monad.Except  (Except, MonadError, throwError)
-import           Control.Monad.Fail    (MonadFail (fail))
-import           Control.Monad.Gen     (GenT, MonadGen (gen))
-import           Control.Monad.Reader  (MonadReader (local), ReaderT)
-import           Data.Foldable         (foldl')
-import qualified Data.Map              as Map
-import           Data.Map.Strict       (Map)
-import           Data.Monoid           ((<>))
-import qualified Data.Set              as Set
-import           Data.Text             (Text)
-import qualified Data.Text             as T
-import           Data.Thyme            (parseTime)
-import           Data.Traversable      (for)
-import           Data.Type.Equality    ((:~:) (Refl))
-import           Pact.Types.Lang       (Literal (..), PrimType (..), Type (..))
-import qualified Pact.Types.Lang       as Pact
-import           Pact.Types.Typecheck  (AST, Named (Named), Node, aId, aNode,
-                                        aTy, tiName, _aTy)
-import qualified Pact.Types.Typecheck  as Pact
-import           System.Locale         (defaultTimeLocale)
+import           Control.Applicative        (Alternative, (<|>))
+import           Control.Lens               (at, view, (<&>), (?~), (^.), (^?))
+import           Control.Monad              (MonadPlus (mzero))
+import           Control.Monad.Except       (Except, MonadError, throwError)
+import           Control.Monad.Fail         (MonadFail (fail))
+import           Control.Monad.Gen          (GenT, MonadGen (gen))
+import           Control.Monad.Reader       (MonadReader (local), ReaderT)
+import           Control.Monad.State.Strict (MonadState, StateT, modify')
+import           Data.Foldable              (foldl')
+import qualified Data.Map                   as Map
+import           Data.Map.Strict            (Map)
+import           Data.Monoid                ((<>))
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Thyme                 (parseTime)
+import           Data.Traversable           (for)
+import           Data.Type.Equality         ((:~:) (Refl))
+import           Pact.Types.Lang            (Literal (..), PrimType (..),
+                                             Type (..))
+import qualified Pact.Types.Lang            as Pact
+import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
+                                             aNode, aTy, tiName, _aTy)
+import qualified Pact.Types.Typecheck       as Pact
+import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Term
@@ -97,18 +99,41 @@ mkTranslateEnv = foldl'
   (\m (nm, uid, node, _ety) -> Map.insert node (nm, uid) m)
   Map.empty
 
+data TagAllocation
+  = AllocRead (Located (UniqueId, Schema))
+  | AllocAuth (Located UniqueId)
+  deriving Show
+
 newtype TranslateM a
   = TranslateM
-    { unTranslateM :: ReaderT
-                       (Map Node (Text, UniqueId))
-                       (GenT UniqueId (Except TranslateFailure))
-                       a }
+    { unTranslateM :: ReaderT (Map Node (Text, UniqueId))
+                       (StateT [TagAllocation] -- "Strict" WriterT isn't strict
+                         (GenT UniqueId (Except TranslateFailure)))
+                       a
+    }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node (Text, UniqueId)), MonadError TranslateFailure,
-    MonadGen UniqueId)
+    MonadReader (Map Node (Text, UniqueId)), MonadState [TagAllocation],
+    MonadError TranslateFailure, MonadGen UniqueId)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
+
+allocTag :: TagAllocation -> TranslateM ()
+allocTag alloc = modify' (alloc :) -- modify' is strict
+
+allocRead :: Node -> Schema -> TranslateM UniqueId
+allocRead node schema = do
+  uid <- gen
+  let info = node ^. aId . Pact.tiInfo
+  allocTag $ AllocRead $ Located info (uid, schema)
+  pure uid
+
+allocAuth :: Node -> TranslateM UniqueId
+allocAuth node = do
+  uid <- gen
+  let info = node ^. aId . Pact.tiInfo
+  allocTag $ AllocAuth $ Located info uid
+  pure uid
 
 genUid :: Node -> Text -> (UniqueId -> TranslateM a) -> TranslateM a
 genUid varNode varName action = do
@@ -304,13 +329,15 @@ translateNode astNode = case astNode of
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
       ETerm ksnT TStr <- translateNode ksA
-      return $ ETerm (Enforce (NameAuthorized ksnT)) TBool
+      uid <- allocAuth $ ksA ^. aNode
+      return $ ETerm (Enforce (NameAuthorized uid ksnT)) TBool
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
       ETerm ksT TKeySet <- translateNode ksA
-      return $ ETerm (Enforce (KsAuthorized ksT)) TBool
+      uid <- allocAuth $ ksA ^. aNode
+      return $ ETerm (Enforce (KsAuthorized uid ksT)) TBool
 
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
@@ -461,10 +488,11 @@ translateNode astNode = case astNode of
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
-  AST_WithRead _ table key bindings schemaNode body -> do
+  AST_WithRead node table key bindings schemaNode body -> do
     schema <- translateSchema schemaNode
     ETerm key' TStr <- translateNode key
-    let readT = EObject (Read (TableName (T.unpack table)) schema key') schema
+    uid <- allocRead node schema
+    let readT = EObject (Read uid (TableName (T.unpack table)) schema key') schema
     translateBinding bindings schema body readT
 
   AST_Bind _ objectA bindings schemaNode body -> do
@@ -484,7 +512,8 @@ translateNode astNode = case astNode of
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
-    pure (EObject (Read (TableName (T.unpack table)) schema key') schema)
+    uid <- allocRead node schema
+    pure (EObject (Read uid (TableName (T.unpack table)) schema key') schema)
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -496,8 +525,9 @@ translateNode astNode = case astNode of
     let schema = Schema $
           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
+    uid <- allocRead node schema
     pure $ EObject
-      (Read (TableName (T.unpack table)) schema key')
+      (Read uid (TableName (T.unpack table)) schema key')
       schema
 
   AST_At node colName obj -> do

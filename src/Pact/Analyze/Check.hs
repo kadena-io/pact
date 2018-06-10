@@ -15,58 +15,58 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Exception         as E
-import           Control.Lens              (ifoldMap, ifoldr, ifoldrM,
-                                            itraversed, ix, traverseOf,
-                                            traversed, (&), (<&>), (^.), (^?),
-                                            (^@..), _1, _2, _Just)
-import           Control.Monad             (void)
-import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
-                                            throwError, withExcept,
-                                            withExceptT)
-import           Control.Monad.Gen         (runGenT, runGenTFrom)
-import           Control.Monad.Morph       (generalize, hoist)
-import           Control.Monad.Reader      (runReaderT)
-import           Control.Monad.RWS.Strict  (RWST (..))
-import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Bifunctor            (first)
-import qualified Data.Default              as Default
-import           Data.Either               (lefts, rights)
-import qualified Data.HashMap.Strict       as HM
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (fromMaybe, mapMaybe)
-import           Data.Monoid               ((<>))
-import           Data.SBV                  (SBV, Symbolic)
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Control          as SBV
-import qualified Data.SBV.Internals        as SBVI
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
-import           Prelude                   hiding (exp)
+import           Control.Exception          as E
+import           Control.Lens               (ifoldMap, ifoldr, ifoldrM,
+                                             itraversed, ix, traverseOf,
+                                             traversed, (&), (<&>), (^.), (^?),
+                                             (^@..), _1, _2, _Just)
+import           Control.Monad              (void)
+import           Control.Monad.Except       (ExceptT (ExceptT), runExceptT,
+                                             throwError, withExcept,
+                                             withExceptT)
+import           Control.Monad.Gen          (runGenT, runGenTFrom)
+import           Control.Monad.Morph        (generalize, hoist)
+import           Control.Monad.Reader       (runReaderT)
+import           Control.Monad.RWS.Strict   (RWST (..))
+import           Control.Monad.State.Strict (runStateT)
+import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import           Data.Bifunctor             (first)
+import qualified Data.Default               as Default
+import           Data.Either                (lefts, rights)
+import qualified Data.HashMap.Strict        as HM
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (fromMaybe, mapMaybe)
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (SBV, Symbolic)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Control           as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
-import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Parsed, eParsed, mMetas, mName,
-                                            renderInfo, renderParsed, tMeta,
-                                            _iInfo)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
-                                            Term (TDef, TSchema, TTable),
-                                            asString, tInfo, tShow)
-import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Typecheck      (AST,
-                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                            Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Typechecker           (typecheckTopLevel)
+import           Pact.Types.Lang            (Parsed, eParsed, mMetas, mName,
+                                             renderInfo, renderParsed, tMeta,
+                                             _iInfo)
+import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
+                                             Ref (Ref),
+                                             Term (TDef, TSchema, TTable),
+                                             asString, tInfo, tShow)
+import qualified Pact.Types.Runtime         as Pact
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                             Named, Node, TcId (_tiInfo),
+                                             TopLevel (TopFun, TopTable),
+                                             UserType (_utFields, _utName),
+                                             runTC, tcFailures)
+import qualified Pact.Types.Typecheck       as TC
 
-import           Pact.Analyze.Analyze      hiding (invariants)
-import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
+import           Pact.Analyze.Analyze       hiding (invariants)
+import           Pact.Analyze.Parse         (expToCheck, expToInvariant)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
@@ -257,22 +257,20 @@ runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
 
 -- | Creates an initial, free, 'Model' for use when the client does not have a
 -- provided 'Model' from a previous run.
-mkEmptyModel :: [Arg] -> Symbolic Model
-mkEmptyModel args = Model
+mkEmptyModel :: [Arg] -> [TagAllocation] -> Symbolic Model
+mkEmptyModel args tagAllocs = Model
     <$> allocateArgs
-    --
-    -- TODO: use Writer output from translation.
-    --
-    -- TODO: implement these:
-    --
-    <*> pure Map.empty
-    <*> pure Map.empty
+    <*> allocateReads
+    <*> allocateAuths
 
   where
+    allocSchema :: Schema -> Symbolic Object
+    allocSchema (Schema fieldTys) = Object <$>
+      for fieldTys (\ety -> (ety,) <$> alloc ety)
+
     alloc :: EType -> Symbolic AVal
     alloc = \case
-      EObjectTy (Schema fieldTys) -> AnObj . Object <$>
-        for fieldTys (\ety -> (ety,) <$> alloc ety)
+      EObjectTy schema -> AnObj <$> allocSchema schema
       EType (_ :: Type t) -> mkAVal . sansProv <$>
         (SBV.free_ :: Symbolic (SBV t))
 
@@ -282,6 +280,20 @@ mkEmptyModel args = Model
       av <- alloc ety
       pure (uid, Located info (nm, (ety, av)))
 
+    allocateReads :: Symbolic (Map UniqueId (Located Object))
+    allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
+      \case
+        AllocAuth _ -> Nothing
+        AllocRead (Located info (uid, schema)) -> Just $
+          (uid,) . Located info <$> allocSchema schema
+
+    allocateAuths :: Symbolic (Map UniqueId (Located (SBV Bool)))
+    allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
+      \case
+        AllocRead _ -> Nothing
+        AllocAuth (Located info uid) -> Just $
+          (uid,) . Located info <$> SBV.free_
+
 checkFunction
   :: [Table]
   -> [Named Node]
@@ -289,12 +301,11 @@ checkFunction
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables pactArgs body check = runExceptT $ do
+    --
+    -- TODO: this should return the explicit next-uid we can send to body trans
+    --
     args <- runArgsTranslation
-
-    --
-    -- TODO: use writer to produce uids for reads & auths for mkEmptyModel
-    --
-    tm <- runBodyTranslation args
+    (tm, tagAllocs) <- runBodyTranslation args
 
     --
     -- TODO: use 'catchError' around the following and, if our result is
@@ -312,7 +323,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
 
     runAndQuery
       goal
-      (lift $ mkEmptyModel args)
+      (lift $ mkEmptyModel args tagAllocs)
       (runAnalysis (analyzeETerm tm))
       (withExceptT SmtFailure . resultQuery goal)
 
@@ -324,11 +335,17 @@ checkFunction tables pactArgs body check = runExceptT $ do
     runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
       runGenT $ traverse translateArg pactArgs
 
-    runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO ETerm
+    --
+    -- TODO: ideally this would take the seed where arg translation left off:
+    --
+    runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
       runGenTFrom
         (UniqueId (length args))
-        (runReaderT (unTranslateM (translateBody body)) (mkTranslateEnv args))
+        (flip runStateT [] $
+          (runReaderT
+            (unTranslateM (translateBody body))
+            (mkTranslateEnv args)))
 
     runAnalysis
       :: Analyze AVal

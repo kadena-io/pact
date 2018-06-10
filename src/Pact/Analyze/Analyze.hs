@@ -20,9 +20,9 @@ module Pact.Analyze.Analyze where
 
 import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
                                             Lens', ifoldl, iforM, lens,
-                                            makeLenses, over, singular, use,
-                                            view, (%=), (&), (+=), (.=), (.~),
-                                            (<&>), (?~), (^.), _2)
+                                            makeLenses, over, preview, singular,
+                                            use, view, (%=), (&), (+=), (.=),
+                                            (.~), (<&>), (?~), (^.), _2, _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
@@ -77,6 +77,7 @@ data AnalyzeEnv
     , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
     , _invariants :: Map TableName [Invariant Bool]
+    , _aeModel    :: Model
     }
   deriving Show
 
@@ -411,7 +412,7 @@ mkAnalyzeEnv tables model =
       argMap :: Map UniqueId AVal
       argMap = view (located._2._2) <$> _modelArgs model
 
-  in AnalyzeEnv argMap keySets' keySetAuths invariants'
+  in AnalyzeEnv argMap keySets' keySetAuths invariants' model
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -484,6 +485,29 @@ symArrayAt (S _ symKey) = lens getter setter
 
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
+
+-- | "Tag" an uninterpreted read value with value from our Model that was
+-- allocated in Symbolic.
+tagRead :: UniqueId -> Text -> AVal -> Analyze ()
+tagRead uid fieldName av = do
+  mTag <- preview $
+    aeModel.modelReads.at uid._Just.located.objFields.at fieldName._Just._2
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+
+-- | "Tag" an uninterpreted auth value with value from our Model that was
+-- allocated in Symbolic.
+tagAuth :: UniqueId -> S Bool -> Analyze ()
+tagAuth uid sb = do
+  mTag <- preview $ aeModel.modelAuths.at uid._Just.located
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing  -> pure ()
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
@@ -679,44 +703,6 @@ lookupVal name uid = do
     Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
     Just (OpaqueVal)       -> throwError OpaqueValEncountered
 
-analyzeRead :: TableName -> Map Text EType -> Term String -> Analyze Object
-analyzeRead tn fields rowKey = do
-  sRk <- symRowKey <$> analyzeTerm rowKey
-  tableRead tn .= true
-  rowRead tn sRk .= true
-
-  aValFields <- iforM fields $ \fieldName fieldType -> do
-    let cn = ColumnName $ T.unpack fieldName
-    sDirty <- use $ cellWritten tn cn sRk
-
-    aVal <- case fieldType of
-      EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-      EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-      EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-      EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
-      EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
-      EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
-      EType TAny     -> pure OpaqueVal
-      --
-      -- TODO: if we add nested object support here, we need to install
-      --       the correct provenance into AVals all the way down into
-      --       sub-objects.
-      --
-      EObjectTy _    -> throwError UnsupportedObjectInDbCell
-
-    pure (fieldType, aVal)
-
-  -- Constraints can only operate over int, bool, etc. All of which appear as
-  -- AVal, so we're safe ignoring the other AVal constructors.
-  let sValFields :: Map Text SBVI.SVal
-      sValFields = flip Map.mapMaybe aValFields $ \case
-        (_etype, AVal _prov sVal) -> Just sVal
-        _                         -> Nothing
-
-  applyInvariants tn sValFields addConstraint
-
-  pure $ Object aValFields
-
 applyInvariants
   :: TableName
   -> Map Text SBVI.SVal
@@ -813,7 +799,44 @@ analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
 
-  Read tn (Schema fields) rowKey -> analyzeRead tn fields rowKey
+  Read uid tn (Schema fields) rowKey -> do
+    sRk <- symRowKey <$> analyzeTerm rowKey
+    tableRead tn .= true
+    rowRead tn sRk .= true
+
+    aValFields <- iforM fields $ \fieldName fieldType -> do
+      let cn = ColumnName $ T.unpack fieldName
+      sDirty <- use $ cellWritten tn cn sRk
+
+      av <- case fieldType of
+        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
+        EType TAny     -> pure OpaqueVal
+        --
+        -- TODO: if we add nested object support here, we need to install
+        --       the correct provenance into AVals all the way down into
+        --       sub-objects.
+        --
+        EObjectTy _    -> throwError UnsupportedObjectInDbCell
+
+      tagRead uid fieldName av
+
+      pure (fieldType, av)
+
+    -- Constraints can only operate over int, bool, etc. All of which appear as
+    -- AVal, so we're safe ignoring the other AVal constructors.
+    let sValFields :: Map Text SBVI.SVal
+        sValFields = flip Map.mapMaybe aValFields $ \case
+          (_etype, AVal _prov sVal) -> Just sVal
+          _                         -> Nothing
+
+    applyInvariants tn sValFields addConstraint
+
+    pure $ Object aValFields
 
   Var name uid -> lookupObj name uid
 
@@ -1174,8 +1197,15 @@ analyzeTerm = \case
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
-  KsAuthorized ks -> ksAuthorized =<< analyzeTerm ks
-  NameAuthorized str -> nameAuthorized =<< symKsName <$> analyzeTerm str
+  KsAuthorized uid ks -> do
+    authorized <- ksAuthorized =<< analyzeTerm ks
+    tagAuth uid authorized
+    pure authorized
+
+  NameAuthorized uid str -> do
+    authorized <- nameAuthorized =<< symKsName <$> analyzeTerm str
+    tagAuth uid authorized
+    pure authorized
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
