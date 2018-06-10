@@ -51,10 +51,10 @@ in
 
             # sbv >= 7.6
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "LeventErkok";
+              owner = "bts"; # "LeventErkok";
               repo = "sbv";
-              rev = "dbbdd396d069dc8235f5c8cf58209886318f6525";
-              sha256 = "0s607qbgiykgqv2b5sxcvzqpj1alxzqw6szcjzhs4hxcbbwkd60y";
+              rev = "8abfc6ead4ee42d331265544cb6acc508249776f";
+              sha256 = "1k4gsw4i754l84s45ygj96r2wgy46ml6njacf0qn0pjvyps6q8hy";
             }) {});
 
             # Most recent github commit.  Might also work with 0.14.0.2

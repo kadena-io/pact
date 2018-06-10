@@ -128,7 +128,7 @@ library
       , fast-logger
       , haskeline >= 0.7.3 && < 0.8
       , safe-exceptions >= 0.1.5.0 && < 0.2
-      , sbv >= 7.6.5 && < 7.7
+      , sbv >= 7.8 && < 7.9
       , snap-core
       , snap-server
       , statistics >= 0.13.3 && < 0.15

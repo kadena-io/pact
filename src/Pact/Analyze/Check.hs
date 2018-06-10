@@ -79,7 +79,7 @@ data CheckSuccess
 data SmtFailure
   = Invalid Model
   | Unsatisfiable
-  | Unknown String
+  | Unknown SBV.SMTReasonUnknown
   | UnexpectedFailure SBV.SMTException
   deriving Show
 
