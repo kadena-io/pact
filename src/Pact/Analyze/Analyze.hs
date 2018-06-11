@@ -76,7 +76,7 @@ data AnalyzeEnv
     { _aeScope    :: Map UniqueId AVal           -- used as a stack
     , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
-    , _invariants :: Map TableName [Invariant Bool]
+    , _invariants :: TableMap [Invariant Bool]
     , _aeModel    :: Model
     }
   deriving Show
@@ -406,8 +406,9 @@ mkAnalyzeEnv tables model =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
-      invariants' = Map.fromList $ tables <&> \(Table tname _ut someInvariants)
-        -> (TableName (T.unpack tname), someInvariants)
+      invariants' = TableMap $ Map.fromList $ tables <&>
+        \(Table tname _ut someInvariants) ->
+          (TableName (T.unpack tname), someInvariants)
 
       argMap :: Map UniqueId AVal
       argMap = view (located._2._2) <$> _modelArgs model
