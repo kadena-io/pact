@@ -1427,8 +1427,6 @@ analyzeProp (TableRead tn)  = view $ qeAnalyzeState.tableRead tn
 analyzeProp (TableWrite tn) = view $ qeAnalyzeState.tableWritten tn
 analyzeProp (ColumnWrite _tableName _colName)
   = throwError "column write analysis not yet implemented"
-analyzeProp (CellIncrease _tableName _colName)
-  = throwError "cell increase analysis not yet implemented"
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --

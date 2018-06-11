@@ -102,7 +102,6 @@ floatBoolQuantifiers p = case p of
   TableWrite{}       -> ([], p)
   TableRead{}        -> ([], p)
   ColumnWrite{}      -> ([], p)
-  CellIncrease{}     -> ([], p)
   KsNameAuthorized{} -> ([], p)
   RowEnforced{}      -> ([], p)
 

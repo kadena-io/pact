@@ -496,7 +496,6 @@ data Prop a where
   TableWrite       :: TableName  ->                Prop Bool    -- anything in table is written
   TableRead        :: TableName  ->                Prop Bool    -- anything in table is read
   ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool    -- particular column is written
-  CellIncrease     :: TableName  -> ColumnName  -> Prop Bool    -- any cell at all in col increases
 
   IntCellDelta     :: TableName  -> ColumnName  -> Prop RowKey -> Prop Integer
   DecCellDelta     :: TableName  -> ColumnName  -> Prop RowKey -> Prop Decimal
