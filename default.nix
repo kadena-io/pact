@@ -51,9 +51,9 @@ in
 
             # sbv >= 7.6
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "bts"; # "LeventErkok";
+              owner = "LeventErkok";
               repo = "sbv";
-              rev = "8abfc6ead4ee42d331265544cb6acc508249776f";
+              rev = "17a962cd096bbf699fdc576e7bc3c1ad0cd0f723";
               sha256 = "1k4gsw4i754l84s45ygj96r2wgy46ml6njacf0qn0pjvyps6q8hy";
             }) {});
 

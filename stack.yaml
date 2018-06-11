@@ -13,8 +13,8 @@ packages:
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   extra-dep: true
 - location:
-    git: https://github.com/bts/sbv.git
-    commit: 8abfc6ead4ee42d331265544cb6acc508249776f # with exposed SMTValue methods
+    git: https://github.com/LeventErkok/sbv.git
+    commit: 17a962cd096bbf699fdc576e7bc3c1ad0cd0f723 # with exposed SMTValue methods
   extra-dep: true
 
 extra-deps:
