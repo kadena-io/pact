@@ -88,8 +88,8 @@ expr = do
    (EList <$> parens (many expr) <*> pure Nothing <*> inf <?> "sexp")
    <|>
    do
-     is <- (TF.try (brackets (many expr) <?> "space-delimited list literal") <|>
-                   (brackets ((`sepBy` comma) expr) <?> "comma-delimited list literal"))
+     is <- TF.try (brackets (many expr) <?> "space-delimited list literal") <|>
+                  (brackets (expr `sepBy` comma) <?> "comma-delimited list literal")
      let lty = case nub (map expPrimTy is) of
                  [Just ty] -> ty
                  _ -> TyAny
