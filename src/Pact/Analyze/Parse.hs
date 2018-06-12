@@ -244,13 +244,18 @@ checkPreProp ty preProp = case (ty, preProp) of
     propNotA <- PNot <$> checkPreProp TBool a
     POr propNotA <$> checkPreProp TBool b
 
+  --
+  -- TODO: should be "table-written"
+  --
   (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
   (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
   --
   -- NOTE: disabled until implemented on the backend:
   --
-  -- (TBool, PreApp "column-write" [TableLit tn, ColumnLit cn])
+  -- (TBool, PreApp "column-written" [TableLit tn, ColumnLit cn])
   --   -> pure (ColumnWrite tn cn)
+  -- (TBool, PreApp "column-read" [TableLit tn, ColumnLit cn])
+  --   -> pure (ColumnRead tn cn)
   (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
     -> IntCellDelta tn cn <$> checkPreProp TStr rk
   (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
@@ -261,6 +266,9 @@ checkPreProp ty preProp = case (ty, preProp) of
     -> pure (DecColumnDelta tn cn)
   (TBool, PreApp "row-read" [TableLit tn, rk])
     -> RowRead tn <$> checkPreProp TStr rk
+  --
+  -- TODO: should be "row-written"
+  --
   (TBool, PreApp "row-write" [TableLit tn, rk])
     -> RowWrite tn <$> checkPreProp TStr rk
   (TBool, PreApp "authorized-by" [PreStringLit ks])
