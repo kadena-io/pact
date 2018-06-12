@@ -441,32 +441,52 @@ data PreProp
 
 data Prop a where
   -- Literals
+
   PLit             :: SymWord a => a   -> Prop a
+  -- ^ Injects a literal into the property language
   PSym             ::              S a -> Prop a
+  -- ^ Injects a symbolic value into the property language
 
   -- TX success/failure
+
   --
-  -- TODO: remove one of these.
+  -- TODO: remove either Success Or Abort.
   --
+
   Abort            :: Prop Bool
+  -- ^ Whether a transaction aborts (does not succeed)
   Success          :: Prop Bool
+  -- ^ Whether a transaction succeeds (does not abort)
   Result           :: Prop a
+  -- ^ The return value of the function under examination
 
   -- Abstraction
+
   Forall           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  -- ^ Introduces a universally-quantified variable over another property
   Exists           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  -- ^ Introduces an existentially-quantified variable over another property
   PVar             :: UniqueId -> Text                 -> Prop a
+  -- ^ Refers to a function argument or universally/existentially-quantified variable
 
   -- Object ops
+
+  --
   -- Note: PAt is the one property we can't yet parse because of the EType it
   -- includes
+  --
   PAt              :: Schema -> Prop String -> Prop Object -> EType -> Prop a
+  -- ^ Projects from an object at a key
 
   -- String ops
+
   PStrConcat       :: Prop String -> Prop String -> Prop String
+  -- ^ Concatenates two strings
   PStrLength       :: Prop String ->                Prop Integer
+  -- ^ Produces the length of a string
 
   -- Numeric ops
+
   PDecArithOp      :: ArithOp        -> Prop Decimal -> Prop Decimal -> Prop Decimal
   PIntArithOp      :: ArithOp        -> Prop Integer -> Prop Integer -> Prop Integer
   PDecUnaryArithOp :: UnaryArithOp   -> Prop Decimal ->                 Prop Decimal
@@ -478,10 +498,14 @@ data Prop a where
   PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal
 
   -- Time
+
   PIntAddTime      :: Prop Time -> Prop Integer -> Prop Time
+  -- ^ Adds an integer value to a 'Time'
   PDecAddTime      :: Prop Time -> Prop Decimal -> Prop Time
+  -- ^ Adds a decimal value to a 'Time'
 
   -- Comparison
+
   PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
   PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
   PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
@@ -490,28 +514,53 @@ data Prop a where
   PKeySetEqNeq       :: EqNeq        -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 
   -- Boolean ops
+
   PLogical         :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- DB properties
-  TableWrite       :: TableName  ->                Prop Bool    -- anything in table is written
-  TableRead        :: TableName  ->                Prop Bool    -- anything in table is read
-  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool    -- particular column is written
-  ColumnRead       :: TableName  -> ColumnName  -> Prop Bool    -- particular column is read
 
+  TableWrite       :: TableName  ->                Prop Bool
+  -- ^ True when anything in the table is written
+  TableRead        :: TableName  ->                Prop Bool
+  -- ^ True when anything in the table is read
+
+  --
+  -- NOTE: it's possible that in a standard library we could implement these in
+  --       terms of "CellRead"/"CellWrite" and existential quantification.
+  --
+  ColumnWrite      :: TableName  -> ColumnName  -> Prop Bool
+  -- ^ Whether a column is written
+  ColumnRead       :: TableName  -> ColumnName  -> Prop Bool -- particular column is read
+  -- ^ Whether a column is read
+
+  --
+  -- TODO: rewrite these in terms of CellBefore, CellAfter, ColumnSumBefore,
+  --       ColumnSumAfter:
+  --
   IntCellDelta     :: TableName  -> ColumnName  -> Prop RowKey -> Prop Integer
+  -- ^ The difference (@after-before@) in a cell's integer value across a transaction
   DecCellDelta     :: TableName  -> ColumnName  -> Prop RowKey -> Prop Decimal
+  -- ^ The difference (@after-before@) in a cell's decimal value across a transaction
   IntColumnDelta   :: TableName  -> ColumnName                 -> Prop Integer
+  -- ^ The difference (@after-before@) in a column's integer sum across a transaction
   DecColumnDelta   :: TableName  -> ColumnName                 -> Prop Decimal
+  -- ^ The difference (@after-before@) in a column's decimal sum across a transaction
 
   RowRead          :: TableName  -> Prop RowKey -> Prop Bool
+  -- ^ Whether a row is read
   RowWrite         :: TableName  -> Prop RowKey -> Prop Bool
+  -- ^ Whether a row is written
+
   --
   -- TODO: StaleRead?
   --
 
   -- Authorization
-  KsNameAuthorized :: KeySetName ->                              Prop Bool -- keyset authorized by name
+
+  KsNameAuthorized :: KeySetName ->                              Prop Bool
+  -- ^ Whether a transaction contains a signature that satisfied the named key set
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
+  -- ^ Whether a row has its keyset @enforce@d in a transaction
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = PLogical AndOp [a, b]
