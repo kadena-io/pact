@@ -246,8 +246,11 @@ checkPreProp ty preProp = case (ty, preProp) of
 
   (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
   (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
-  (TBool, PreApp "column-write" [TableLit tn, ColumnLit cn])
-    -> pure (ColumnWrite tn cn)
+  --
+  -- NOTE: disabled until implemented on the backend:
+  --
+  -- (TBool, PreApp "column-write" [TableLit tn, ColumnLit cn])
+  --   -> pure (ColumnWrite tn cn)
   (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
     -> IntCellDelta tn cn <$> checkPreProp TStr rk
   (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
