@@ -210,6 +210,9 @@ updateForOp a = do
     Load fp reset -> do
                   when reset (initReplState mode >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
+    Export fp tbs -> do
+      outStrLn HOut "in updateForOp"
+      return (Right a)
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)
     Print t -> do
       let rep = case t of TLitString s -> unpack s
@@ -236,7 +239,6 @@ doTx i t n = do
     useReplLib
     tid <- use $ rEnv . eeTxId
     return $ tStr $ tShow t <> " Tx " <> tShow tid <> maybe "" (": " <>) n
-
 
 -- | load and evaluate a Pact file.
 -- Track file and use current file to mangle directory as necessary.

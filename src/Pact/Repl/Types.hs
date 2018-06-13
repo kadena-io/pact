@@ -51,6 +51,7 @@ data LibOp =
     Noop |
     UpdateEnv (Endo (EvalEnv LibState)) |
     Load FilePath Bool |
+    Export FilePath [Term Name] |
     Tx Info Tx (Maybe Text) |
     Print (Term Name) |
     TcErrors [String]

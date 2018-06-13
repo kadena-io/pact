@@ -65,12 +65,18 @@ initLibState loggers = do
   return (LibState m Noop def def)
 
 replDefs :: NativeModule
-replDefs = ("Repl",
+replDefs =
+  let rt = mkSchemaVar "row"
+      tableTy = TySchema TyObject rt
+  in ("Repl",
      [
       defRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
       "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " <>
       "`$(load \"accounts.repl\")`"
+     ,defRNative "export" export (funType tTyString [("tables",TyList tableTy)]) $
+      "Export user-defined tables to Excel FILE." <>
+      "`$(export [\"accounts\" \"customers\"])`"
      ,defRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
      ,defRNative "env-data" setmsg (funType tTyString [("json",json)]) $
@@ -169,6 +175,15 @@ setop v = setLibState $ set rlsOp v
 setenv :: Show a => Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
+export :: RNativeFun LibState
+export i [TList tn _ _] =  do
+  let fn = "log/pact.xlsx"
+  tbs <- forM tn $ \t -> case t of
+         (TTable _ _ _ _ _ _) -> return t
+         _ -> argsError i tn
+  setop $ Export (unpack fn) tbs
+  return (tStr $ "Exporting table(s) to " <> fn)
+export i as = argsError i as
 
 setsigs :: RNativeFun LibState
 setsigs i [TList ts _ _] = do
