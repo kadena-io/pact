@@ -281,15 +281,15 @@ mkEmptyModel args tagAllocs = Model
     allocateReads :: Symbolic (Map UniqueId (Located Object))
     allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
-        AllocAuth _ -> Nothing
-        AllocRead (Located info (uid, schema)) -> Just $
+        AllocAuthTag _ -> Nothing
+        AllocReadTag (Located info (uid, schema)) -> Just $
           (uid,) . Located info <$> allocSchema schema
 
     allocateAuths :: Symbolic (Map UniqueId (Located (SBV Bool)))
     allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
-        AllocRead _ -> Nothing
-        AllocAuth (Located info uid) -> Just $
+        AllocReadTag _ -> Nothing
+        AllocAuthTag (Located info uid) -> Just $
           (uid,) . Located info <$> SBV.free_
 
 checkFunction

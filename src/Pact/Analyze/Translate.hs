@@ -100,8 +100,8 @@ mkTranslateEnv = foldl'
   Map.empty
 
 data TagAllocation
-  = AllocRead (Located (UniqueId, Schema))
-  | AllocAuth (Located UniqueId)
+  = AllocReadTag (Located (UniqueId, Schema))
+  | AllocAuthTag (Located UniqueId)
   deriving Show
 
 newtype TranslateM a
@@ -118,21 +118,21 @@ newtype TranslateM a
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
 
-allocTag :: TagAllocation -> TranslateM ()
-allocTag alloc = modify' (alloc :) -- modify' is strict
+writeTagAlloc :: TagAllocation -> TranslateM ()
+writeTagAlloc tagAlloc = modify' (tagAlloc :) -- modify' is strict
 
 allocRead :: Node -> Schema -> TranslateM UniqueId
 allocRead node schema = do
   uid <- gen
   let info = node ^. aId . Pact.tiInfo
-  allocTag $ AllocRead $ Located info (uid, schema)
+  writeTagAlloc $ AllocReadTag $ Located info (uid, schema)
   pure uid
 
 allocAuth :: Node -> TranslateM UniqueId
 allocAuth node = do
   uid <- gen
   let info = node ^. aId . Pact.tiInfo
-  allocTag $ AllocAuth $ Located info uid
+  writeTagAlloc $ AllocAuthTag $ Located info uid
   pure uid
 
 genUid :: Node -> Text -> (UniqueId -> TranslateM a) -> TranslateM a
