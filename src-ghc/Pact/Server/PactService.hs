@@ -61,6 +61,7 @@ applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
+      -- FOR TESTING
       s <- liftIO $ readMVar cv
       let pactState = (_csPacts s)
       logLog logger "DEBUG" $ "testing that commandstate saved: " ++ show pactState
@@ -103,7 +104,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   pr@EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   let newPact = case erExec of
         Nothing -> Nothing
-        Just (pexec@PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount)
+        Just (pexec@PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount _peStep)
   let newState = CommandState erRefStore $ case newPact of
         Nothing -> _csPacts
         Just (p@CommandPact{..}) -> M.insert _pmTxId p _csPacts
