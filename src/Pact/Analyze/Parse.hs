@@ -13,8 +13,8 @@ module Pact.Analyze.Parse
 
 import           Control.Lens                 (at, view, (^.))
 import           Control.Monad.Except         (mzero, throwError)
-import           Control.Monad.Gen            (GenT, gen, runGenTFrom)
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT)
+import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Control.Monad.Trans          (lift)
 import           Data.Foldable                (asum, find)
 import           Data.Map                     (Map)
@@ -102,7 +102,7 @@ pattern ColumnLit :: ColumnName -> PreProp
 pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 
 -- TODO: Maybe -> Either
-type PropParse = ReaderT (Map Text VarId) (GenT VarId Maybe)
+type PropParse = ReaderT (Map Text VarId) (StateT VarId Maybe)
 
 -- TODO: Maybe -> Either
 type PropCheck = ReaderT (Map VarId EType) Maybe
@@ -155,7 +155,7 @@ expToPreProp = \case
         propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
           nameTy <- case ty of
             TyPrim TyString -> do
-              vid <- gen
+              vid <- genVarId
               pure (vid, name, Ty (Rep @String))
             _               -> noParse
           (nameTy:) <$> propBindings exps
@@ -296,7 +296,7 @@ expToCheck
   -- ^ Exp to convert
   -> Maybe Check
 expToCheck genStart nameEnv idEnv body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) (succ genStart)
   typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
   pure $ PropertyHolds $ prenexConvert typedBody
 
@@ -313,7 +313,7 @@ expToProp
   -- ^ Exp to convert
   -> Maybe (Prop a)
 expToProp genStart nameEnv idEnv ty body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) (succ genStart)
   runReaderT (checkPreProp ty preTypedBody) idEnv
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)

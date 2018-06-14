@@ -13,9 +13,8 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (Lens', at, cons, makeLenses, use,
-                                             view, (%~), (+=), (<&>), (?~),
-                                             (^.), (^?))
+import           Control.Lens               (at, cons, makeLenses, view, (%~),
+                                             (<&>), (?~), (^.), (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -115,6 +114,9 @@ data TranslateState
 
 makeLenses ''TranslateState
 
+instance HasVarId TranslateState where
+  varId = tsNextVarId
+
 newtype TranslateM a
   = TranslateM
     { unTranslateM :: ReaderT (Map Node (Text, VarId))
@@ -132,26 +134,8 @@ instance MonadFail TranslateM where
 writeTagAlloc :: TagAllocation -> TranslateM ()
 writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 
-genId :: (MonadState s m, Num i) => Lens' s i -> m i
-genId l = do
-  i <- use l
-  l += 1
-  pure i
-
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
-
-class HasVarId s where
-  varId :: Lens' s VarId
-
-instance HasVarId TranslateState where
-  varId = tsNextVarId
-
-instance HasVarId VarId where
-  varId = id
-
-genVarId :: (MonadState s m, HasVarId s) => m VarId
-genVarId = genId varId
 
 allocRead :: Node -> Schema -> TranslateM TagId
 allocRead node schema = do

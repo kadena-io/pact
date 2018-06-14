@@ -7,24 +7,25 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens               (at, findOf, (^.))
-import           Control.Monad.State.Strict (runStateT)
-import           Data.Either                (isLeft)
-import qualified Data.HashMap.Strict        as HM
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
-import           Data.Maybe                 (isJust, isNothing)
-import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>)))
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           NeatInterpolation          (text)
-import           Test.Hspec                 (Spec, describe, it, runIO,
-                                             shouldBe, shouldSatisfy)
+import           Control.Lens                 (at, findOf, (^.))
+import           Control.Monad.State.Strict   (runStateT)
+import           Data.Either                  (isLeft)
+import qualified Data.HashMap.Strict          as HM
+import           Data.Map                     (Map)
+import qualified Data.Map                     as Map
+import           Data.Maybe                   (isJust, isNothing)
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)))
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
+import           NeatInterpolation            (text)
+import           Test.Hspec                   (Spec, describe, it, runIO,
+                                               shouldBe, shouldSatisfy)
 
-import           Pact.Parse                 (parseExprs)
-import           Pact.Repl                  (evalRepl', initReplState)
-import           Pact.Repl.Types            (ReplMode (StringEval), rEnv)
-import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
+import           Pact.Parse                   (parseExprs)
+import           Pact.Repl                    (evalRepl', initReplState)
+import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
+import           Pact.Types.Runtime           (ModuleData, eeRefStore,
+                                               rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Parse           (expToProp)

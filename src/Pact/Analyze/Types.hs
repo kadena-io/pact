@@ -13,40 +13,43 @@
 
 module Pact.Analyze.Types where
 
-import           Control.Lens         (Iso, Iso', Lens', both, from, iso, lens,
-                                       makeLenses, over, view, (%~), (&))
-import           Data.Aeson           (FromJSON, ToJSON)
-import           Data.AffineSpace     ((.+^), (.-.))
-import           Data.Data            (Data)
-import qualified Data.Decimal         as Decimal
-import           Data.Map.Strict      (Map)
-import qualified Data.Map.Strict      as Map
-import           Data.SBV             (AlgReal,
-                                       Boolean (bnot, false, true, (&&&), (|||)),
-                                       EqSymbolic, HasKind, Int64,
-                                       Kind (KString, KUnbounded),
-                                       Mergeable (symbolicMerge), OrdSymbolic,
-                                       Provable (forAll), SBV,
-                                       SDivisible (sDivMod, sQuotRem), SymWord,
-                                       Symbolic, forAll_, forSome, forSome_,
-                                       fromBool, isConcrete, ite, kindOf,
-                                       literal, oneIf, sFromIntegral,
-                                       sRealToSInteger, unliteral, (%), (.<),
-                                       (.==))
-import           Data.SBV.Control     (SMTValue (..))
-import qualified Data.SBV.Internals   as SBVI
-import qualified Data.SBV.String      as SBV
-import qualified Data.Set             as Set
-import           Data.String          (IsString (..))
-import           Data.Text            (Text)
-import qualified Data.Text            as T
-import           Data.Thyme           (UTCTime, microseconds)
-import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
-import           GHC.Natural          (Natural)
+import           Control.Lens               (Iso, Iso', Lens', both, from, iso,
+                                             lens, makeLenses, over, use, view,
+                                             (%~), (&), (+=))
+import           Control.Monad.State.Strict (MonadState)
+import           Data.Aeson                 (FromJSON, ToJSON)
+import           Data.AffineSpace           ((.+^), (.-.))
+import           Data.Data                  (Data)
+import qualified Data.Decimal               as Decimal
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.SBV                   (AlgReal, Boolean (bnot, false, true, (&&&), (|||)),
+                                             EqSymbolic, HasKind, Int64,
+                                             Kind (KString, KUnbounded),
+                                             Mergeable (symbolicMerge),
+                                             OrdSymbolic, Provable (forAll),
+                                             SBV,
+                                             SDivisible (sDivMod, sQuotRem),
+                                             SymWord, Symbolic, forAll_,
+                                             forSome, forSome_, fromBool,
+                                             isConcrete, ite, kindOf, literal,
+                                             oneIf, sFromIntegral,
+                                             sRealToSInteger, unliteral, (%),
+                                             (.<), (.==))
+import           Data.SBV.Control           (SMTValue (..))
+import qualified Data.SBV.Internals         as SBVI
+import qualified Data.SBV.String            as SBV
+import qualified Data.Set                   as Set
+import           Data.String                (IsString (..))
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Thyme                 (UTCTime, microseconds)
+import           Data.Typeable              ((:~:) (Refl), Typeable, eqT)
+import           GHC.Natural                (Natural)
 
-import qualified Pact.Types.Lang      as Pact
-import qualified Pact.Types.Typecheck as TC
-import           Pact.Types.Util      (AsString)
+import qualified Pact.Types.Lang            as Pact
+import qualified Pact.Types.Typecheck       as TC
+import           Pact.Types.Util            (AsString)
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -772,6 +775,21 @@ instance Eq SomeSchemaInvariant where
   SomeSchemaInvariant a ta == SomeSchemaInvariant b tb = case typeEq ta tb of
     Nothing   -> False
     Just Refl -> a == b
+
+genId :: (MonadState s m, Num i) => Lens' s i -> m i
+genId l = do
+  i <- use l
+  l += 1
+  pure i
+
+class HasVarId s where
+  varId :: Lens' s VarId
+
+instance HasVarId VarId where
+  varId = id
+
+genVarId :: (MonadState s m, HasVarId s) => m VarId
+genVarId = genId varId
 
 makeLenses ''S
 makeLenses ''Object
