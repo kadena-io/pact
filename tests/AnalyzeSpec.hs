@@ -1123,13 +1123,13 @@ spec = describe "analyze" $ do
 
   describe "prop parse / typecheck" $ do
     let textToProp'
-          :: Map Text UniqueId
-          -> Map UniqueId EType
+          :: Map Text VarId
+          -> Map VarId EType
           -> Type a
           -> Text
           -> Maybe (Prop a)
         textToProp' env1 env2 ty t = case parseExprs t of
-          Right [exp'] -> expToProp (UniqueId (Map.size env1)) env1 env2 ty exp'
+          Right [exp'] -> expToProp (VarId (Map.size env1)) env1 env2 ty exp'
           _            -> Nothing
 
         textToProp :: Type a -> Text -> Maybe (Prop a)
@@ -1167,27 +1167,27 @@ spec = describe "analyze" $ do
       textToProp TBool "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Just
-          (Forall (UniqueId 1) "x" (Ty (Rep @String))
-            (Forall (UniqueId 2) "y" (Ty (Rep @String))
+          (Forall (VarId 1) "x" (Ty (Rep @String))
+            (Forall (VarId 2) "y" (Ty (Rep @String))
               (PIntegerComparison Eq
-                (PVar (UniqueId 1) "x")
-                (PVar (UniqueId 2) "y"))))
+                (PVar (VarId 1) "x")
+                (PVar (VarId 2) "y"))))
 
       textToProp TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
         Just (PNot
-          (Exists (UniqueId 1) "row" (Ty (Rep @String))
+          (Exists (VarId 1) "row" (Ty (Rep @String))
             (PIntegerComparison Eq
-              (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
+              (IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
               2)))
 
     it "parses row-enforced / vars" $ do
-      let env1 = Map.singleton "from" (UniqueId 1)
-          env2 = Map.singleton (UniqueId 1) (EType TStr)
+      let env1 = Map.singleton "from" (VarId 1)
+          env2 = Map.singleton (VarId 1) (EType TStr)
       textToProp' env1 env2 TBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
-      Just (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (UniqueId 1) "from"))
+      Just (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (VarId 1) "from"))
 
     it "parses column properties" $
       textToProp TBool "(= (column-delta 'accounts 'balance) 0)"

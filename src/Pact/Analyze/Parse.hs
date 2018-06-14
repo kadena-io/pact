@@ -11,22 +11,23 @@ module Pact.Analyze.Parse
   , expToInvariant
   ) where
 
-import           Control.Lens         (at, view, (^.))
-import           Control.Monad.Except (mzero, throwError)
-import           Control.Monad.Gen    (GenT, gen, runGenTFrom)
-import           Control.Monad.Reader (ReaderT, ask, local, runReaderT)
-import           Control.Monad.Trans  (lift)
-import           Data.Foldable        (asum, find)
-import           Data.Map             (Map)
-import qualified Data.Map             as Map
-import           Data.Text            (Text)
-import qualified Data.Text            as T
-import           Prelude              hiding (exp)
+import           Control.Lens                 (at, view, (^.))
+import           Control.Monad.Except         (mzero, throwError)
+import           Control.Monad.Gen            (GenT, gen, runGenTFrom)
+import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT)
+import           Control.Monad.Trans          (lift)
+import           Data.Foldable                (asum, find)
+import           Data.Map                     (Map)
+import qualified Data.Map                     as Map
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
+import           Prelude                      hiding (exp)
 
-import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
-                                       TKeySet, TableName, Type)
-import qualified Pact.Types.Lang      as Pact
-import           Pact.Types.Typecheck (UserType)
+import           Pact.Types.Lang              hiding (KeySet, KeySetName,
+                                               SchemaVar, TKeySet, TableName,
+                                               Type)
+import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Typecheck         (UserType)
 
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
@@ -82,7 +83,7 @@ textToLogicalOp = \case
   _     -> Nothing
 
 textToQuantifier
-  :: Text -> Maybe (UniqueId -> Text -> Ty -> PreProp -> PreProp)
+  :: Text -> Maybe (VarId -> Text -> Ty -> PreProp -> PreProp)
 textToQuantifier = \case
   "forall" -> Just PreForall
   "exists" -> Just PreExists
@@ -101,10 +102,10 @@ pattern ColumnLit :: ColumnName -> PreProp
 pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 
 -- TODO: Maybe -> Either
-type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
+type PropParse = ReaderT (Map Text VarId) (GenT VarId Maybe)
 
 -- TODO: Maybe -> Either
-type PropCheck = ReaderT (Map UniqueId EType) Maybe
+type PropCheck = ReaderT (Map VarId EType) Maybe
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
@@ -131,10 +132,10 @@ expToPreProp = \case
   EList' [EAtom' (textToQuantifier -> Just q), EList' bindings, body] -> do
     bindings' <- propBindings bindings
     let theseBindingsMap = Map.fromList $
-          fmap (\(uid, name, _ty) -> (name, uid)) bindings'
+          fmap (\(vid, name, _ty) -> (name, vid)) bindings'
     body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
     pure $ foldr
-      (\(uid, name, ty) accum -> q uid name ty accum)
+      (\(vid, name, ty) accum -> q vid name ty accum)
       body'
       bindings'
 
@@ -147,15 +148,15 @@ expToPreProp = \case
 
   _ -> noParse
 
-  where propBindings :: [Exp] -> PropParse [(UniqueId, Text, Ty)]
+  where propBindings :: [Exp] -> PropParse [(VarId, Text, Ty)]
         propBindings [] = pure []
         -- we require a type annotation
         propBindings (EAtom _name _qual Nothing _parsed:_exps) = noParse
         propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
           nameTy <- case ty of
             TyPrim TyString -> do
-              uid <- gen
-              pure (uid, name, Ty (Rep @String))
+              vid <- gen
+              pure (vid, name, Ty (Rep @String))
             _               -> noParse
           (nameTy:) <$> propBindings exps
         propBindings _ = noParse
@@ -165,10 +166,10 @@ expToPreProp = \case
 
         mkVar :: Text -> PropParse PreProp
         mkVar var = do
-          mUid <- view (at var)
-          case mUid of
+          mVid <- view (at var)
+          case mVid of
             Nothing  -> noParse
-            Just uid -> pure (PreVar uid var)
+            Just vid -> pure (PreVar vid var)
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp = case (ty, preProp) of
@@ -183,11 +184,11 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TBool, PreAbort)    -> pure Abort
   (TBool, PreSuccess)  -> pure Success
   (_, PreResult)       -> pure Result
-  (_, PreVar uid name) -> pure (PVar uid name)
+  (_, PreVar vid name) -> pure (PVar vid name)
 
   -- quantifiers
-  (a, PreForall uid name ty' p) -> Forall uid name ty' <$> checkPreProp a p
-  (a, PreExists uid name ty' p) -> Exists uid name ty' <$> checkPreProp a p
+  (a, PreForall vid name ty' p) -> Forall vid name ty' <$> checkPreProp a p
+  (a, PreExists vid name ty' p) -> Exists vid name ty' <$> checkPreProp a p
 
   -- TODO: PreAt / PAt
 
@@ -285,12 +286,12 @@ checkPreProp ty preProp = case (ty, preProp) of
 -- EType.
 --
 expToCheck
-  :: UniqueId
+  :: VarId
   -- ^ ID to start issuing from
-  -> Map Text UniqueId
-  -- ^ Environment mapping names to unique IDs
-  -> Map UniqueId EType
-  -- ^ Environment mapping unique IDs to their types
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
   -> Exp
   -- ^ Exp to convert
   -> Maybe Check
@@ -300,12 +301,12 @@ expToCheck genStart nameEnv idEnv body = do
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
-  :: UniqueId
+  :: VarId
   -- ^ ID to start issuing from
-  -> Map Text UniqueId
-  -- ^ Environment mapping names to unique IDs
-  -> Map UniqueId EType
-  -- ^ Environment mapping unique IDs to their types
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
   -> Type a
   -- ^ Expected prop type
   -> Exp

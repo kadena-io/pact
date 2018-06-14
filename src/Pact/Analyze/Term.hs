@@ -40,8 +40,8 @@ data Term ret where
   LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
 
   -- Variable binding
-  Let            :: Text -> UniqueId -> ETerm -> Term a -> Term a
-  Var            :: Text -> UniqueId                    -> Term a
+  Let            :: Text -> VarId -> ETerm -> Term a -> Term a
+  Var            :: Text -> VarId                    -> Term a
 
   -- Control flow
   IfThenElse     :: Term Bool -> Term a -> Term a -> Term a

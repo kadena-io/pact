@@ -6,15 +6,15 @@
 
 module Pact.Analyze.PrenexNormalize (prenexConvert) where
 
-import           Data.Bifunctor       (bimap)
-import           Prelude              hiding (Float)
-import           Pact.Types.Lang      hiding (KeySet)
+import           Data.Bifunctor     (bimap)
+import           Prelude            hiding (Float)
+import           Pact.Types.Lang    hiding (KeySet)
 
 import           Pact.Analyze.Types
 
 data Quantifier
-  = Forall' UniqueId Text Ty
-  | Exists' UniqueId Text Ty
+  = Forall' VarId Text Ty
+  | Exists' VarId Text Ty
 
 class Float a where
   float :: Prop a -> ([Quantifier], Prop a)

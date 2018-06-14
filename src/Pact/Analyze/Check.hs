@@ -125,8 +125,8 @@ showModel (Model args readObjs auths) = T.intercalate "\n"
     ]
 
   where
-    showArgItem :: (a -> Text) -> UniqueId -> a -> Text
-    showArgItem show' (UniqueId i) arg = "  (" <> tShow i <> ") " <> show' arg <> "\n"
+    showArgItem :: (a -> Text) -> VarId -> a -> Text
+    showArgItem show' (VarId i) arg = "  (" <> tShow i <> ") " <> show' arg <> "\n"
 
     showTaggedItem :: (a -> Text) -> TagId -> a -> Text
     showTaggedItem show' (TagId i) arg = "  [" <> tShow i <> "] " <> show' arg <> "\n"
@@ -272,11 +272,11 @@ mkEmptyModel args tagAllocs = Model
       EType (_ :: Type t) -> mkAVal . sansProv <$>
         (SBV.free_ :: Symbolic (SBV t))
 
-    allocateArgs :: Symbolic (Map UniqueId (Located (Text, TVal)))
-    allocateArgs = fmap Map.fromList $ for args $ \(nm, uid, node, ety) -> do
+    allocateArgs :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocateArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
       av <- alloc ety
-      pure (uid, Located info (nm, (ety, av)))
+      pure (vid, Located info (nm, (ety, av)))
 
     allocateReads :: Symbolic (Map TagId (Located Object))
     allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
@@ -300,7 +300,7 @@ checkFunction
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables pactArgs body check = runExceptT $ do
     --
-    -- TODO: this should return the explicit next-uid we can send to body trans
+    -- TODO: this should return the explicit next-vid we can send to body trans
     --
     args <- runArgsTranslation
     (tm, tagAllocs) <- runBodyTranslation args
@@ -325,7 +325,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
     runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
       fmap (fmap _tsTagAllocs) $ runGenTFrom
-        (UniqueId (length args))
+        (VarId (length args))
         (flip runStateT (TranslateState [] 0) $
           (runReaderT
             (unTranslateM (translateBody body))
@@ -422,30 +422,30 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       -- start from 1. MonadGen starts not from the seed you provide, but with
       -- the successor of the seed.
       --
-      -- Ideally we wouldn't have any UID generation outside of MonadGen, but
-      -- we're not there yet.
-      uids = UniqueId <$> [1..]
+      -- Ideally we wouldn't have any ad-hoc VID generation, but we're not
+      -- there yet:
+      vids = VarId <$> [1..]
 
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
       --
       -- TODO(joel): this relies on generating the same unique ids as
       -- @checkFunction@. We need to more carefully enforce this is true!
-      env :: [(Text, UniqueId, EType)]
-      env = fmap (\(uid, (text, ty)) -> (text, uid, ty))
-        $ zip uids
+      env :: [(Text, VarId, EType)]
+      env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
+        $ zip vids
         $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
             case translateType' ty of
               Just ety -> Just (name, ety)
               Nothing  -> Nothing
 
-      nameEnv :: Map Text UniqueId
-      nameEnv = Map.fromList $ fmap (\(name, uid, _) -> (name, uid)) env
+      nameEnv :: Map Text VarId
+      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env
 
-      idEnv :: Map UniqueId EType
-      idEnv = Map.fromList $ fmap (\(_, uid, ty) -> (uid, ty)) env
+      idEnv :: Map VarId EType
+      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env
 
-      uidStart = UniqueId (length env)
+      vidStart = VarId (length env)
 
       exps :: [Exp]
       exps = case properties of
@@ -458,7 +458,7 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
 
       parsedList :: [Either Exp (Parsed, Check)]
       parsedList = exps <&> \meta ->
-        case expToCheck uidStart nameEnv idEnv meta of
+        case expToCheck vidStart nameEnv idEnv meta of
           Nothing   -> Left meta
           Just good -> Right (meta ^. eParsed, good)
       failures = lefts parsedList

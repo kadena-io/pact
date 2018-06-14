@@ -97,9 +97,9 @@ instance Monoid TranslateFailure where
   mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
   mappend x y = AlternativeFailures [x, y]
 
-mkTranslateEnv :: [Arg] -> Map Node (Text, UniqueId)
+mkTranslateEnv :: [Arg] -> Map Node (Text, VarId)
 mkTranslateEnv = foldl'
-  (\m (nm, uid, node, _ety) -> Map.insert node (nm, uid) m)
+  (\m (nm, vid, node, _ety) -> Map.insert node (nm, vid) m)
   Map.empty
 
 data TagAllocation
@@ -117,14 +117,14 @@ makeLenses ''TranslateState
 
 newtype TranslateM a
   = TranslateM
-    { unTranslateM :: ReaderT (Map Node (Text, UniqueId))
+    { unTranslateM :: ReaderT (Map Node (Text, VarId))
                        (StateT TranslateState
-                         (GenT UniqueId (Except TranslateFailure)))
+                         (GenT VarId (Except TranslateFailure)))
                        a
     }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node (Text, UniqueId)), MonadState TranslateState,
-    MonadError TranslateFailure, MonadGen UniqueId)
+    MonadReader (Map Node (Text, VarId)), MonadState TranslateState,
+    MonadError TranslateFailure, MonadGen VarId)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
@@ -152,10 +152,10 @@ allocAuth node = do
   writeTagAlloc $ AllocAuthTag $ Located info tid
   pure tid
 
-genUid :: Node -> Text -> (UniqueId -> TranslateM a) -> TranslateM a
-genUid varNode varName action = do
-  uid <- gen
-  local (at varNode ?~ (varName, uid)) (action uid)
+genVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
+genVarId varNode varName action = do
+  vid <- gen
+  local (at varNode ?~ (varName, vid)) (action vid)
 
 -- Map.union is left-biased. The more explicit name makes this extra clear.
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
@@ -194,13 +194,13 @@ translateType node = case _aTy node of
   ty                           -> throwError $ UnhandledType node ty
 
 translateArg
-  :: (MonadGen UniqueId m, MonadError TranslateFailure m)
+  :: (MonadGen VarId m, MonadError TranslateFailure m)
   => Named Node
   -> m Arg
 translateArg (Named nm node _) = do
-  uid <- gen
+  vid <- gen
   ety <- translateType node
-  pure (nm, uid, node, ety)
+  pure (nm, vid, node, ety)
 
 translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
@@ -226,14 +226,14 @@ translateBinding
   -> ETerm
   -> TranslateM ETerm
 translateBinding bindingsA schema bodyA rhsT = do
-  (bindings :: [(String, EType, (Node, Text, UniqueId))]) <- for bindingsA $
+  (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
       varType <- translateType varNode
-      uid     <- gen
+      vid     <- gen
       case colAst of
         AST_StringLit colName ->
-          pure (T.unpack colName, varType, (varNode, varName, uid))
+          pure (T.unpack colName, varType, (varNode, varName, vid))
         _ ->
           throwError $ NonStringLitInBinding colAst
 
@@ -244,9 +244,9 @@ translateBinding bindingsA schema bodyA rhsT = do
       translateLet innerBody = Let "binding" bindingId rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
-          (\body (colName, varType, (_varNode, varName, uid)) ->
+          (\body (colName, varType, (_varNode, varName, vid)) ->
             let colTerm = lit colName
-            in Let varName uid
+            in Let varName vid
               (case varType of
                  EType ty ->
                    ETerm   (At schema colTerm freshVar varType) ty
@@ -256,11 +256,11 @@ translateBinding bindingsA schema bodyA rhsT = do
           innerBody
           bindings
 
-      nodeToNameUid = Map.fromList $
-        (\(_, _, (node, name, uid)) -> (node, (name, uid))) <$> bindings
+      nodeToNameVid = Map.fromList $
+        (\(_, _, (node, name, vid)) -> (node, (name, vid))) <$> bindings
 
   mapETerm translateLet <$>
-    local (unionPreferring nodeToNameUid) (translateBody bodyA)
+    local (unionPreferring nodeToNameVid) (translateBody bodyA)
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = case astNode of
@@ -269,7 +269,7 @@ translateNode astNode = case astNode of
   AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
     let varName = varNode ^. aId.tiName
-    genUid varNode varName $ \uid -> do
+    genVarId varNode varName $ \vid -> do
       --
       -- TODO: do we only want to allow subsequent bindings to reference
       --       earlier ones if we know it's let* rather than let? or has this
@@ -278,17 +278,17 @@ translateNode astNode = case astNode of
       -- XXX allow objects here
       body' <- translateNode $ AST_Let node bindingsRest body
       pure $ case body' of
-        ETerm   bodyTm bodyTy -> ETerm   (Let varName uid rhsETerm bodyTm) bodyTy
-        EObject bodyTm bodyTy -> EObject (Let varName uid rhsETerm bodyTm) bodyTy
+        ETerm   bodyTm bodyTy -> ETerm   (Let varName vid rhsETerm bodyTm) bodyTy
+        EObject bodyTm bodyTy -> EObject (Let varName vid rhsETerm bodyTm) bodyTy
 
   AST_InlinedApp body -> translateBody body
 
   AST_Var node -> do
-    Just (varName, uid) <- view (at node)
+    Just (varName, vid) <- view (at node)
     ty      <- translateType node
     pure $ case ty of
-      EType ty'        -> ETerm (Var varName uid) ty'
-      EObjectTy schema -> EObject (Var varName uid) schema
+      EType ty'        -> ETerm (Var varName vid) ty'
+      EObjectTy schema -> EObject (Var varName vid) schema
 
   -- Int
   AST_NegativeLit l -> case l of
@@ -304,11 +304,11 @@ translateNode astNode = case astNode of
     LTime t    -> pure $ ETerm (lit (mkTime t)) TTime
 
   AST_NegativeVar node -> do
-    Just (name, uid)     <- view (at node)
+    Just (name, vid) <- view (at node)
     EType ty <- translateType node
     case ty of
-      TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name uid)) TInt)
-      TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name uid)) TDecimal)
+      TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name vid)) TInt)
+      TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name vid)) TDecimal)
       _        -> throwError $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
@@ -542,9 +542,9 @@ translateNode astNode = case astNode of
     let schema = Schema $
           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
-    uid <- allocRead node schema
+    tid <- allocRead node schema
     pure $ EObject
-      (Read uid (TableName (T.unpack table)) schema key')
+      (Read tid (TableName (T.unpack table)) schema key')
       schema
 
   AST_At node colName obj -> do

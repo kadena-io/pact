@@ -392,7 +392,7 @@ instance EqSymbolic EType where
 
 -- | Unique variable IDs
 --
--- Unique IDs are used to represent variables in both the term and property
+-- 'VarId's are used to represent variables in both the term and property
 -- languages. (They should also be used for the schema invariant language).
 --
 -- These IDs were first introduced to cope with the prenex normalization
@@ -408,8 +408,8 @@ instance EqSymbolic EType where
 -- 2) @genUid@ generates an id for a let-binding
 -- 3) @translateBinding@ generates a fresh variable for its synthetic "binding"
 --    var
-newtype UniqueId
-  = UniqueId Int
+newtype VarId
+  = VarId Int
   deriving (Show, Eq, Enum, Num, Ord)
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
@@ -427,11 +427,11 @@ data PreProp
   | PreAbort
   | PreSuccess
   | PreResult
-  | PreVar     UniqueId Text
+  | PreVar     VarId Text
 
   -- quantifiers
-  | PreForall UniqueId Text Ty PreProp
-  | PreExists UniqueId Text Ty PreProp
+  | PreForall VarId Text Ty PreProp
+  | PreExists VarId Text Ty PreProp
 
   -- applications
   | PreApp Text [PreProp]
@@ -463,11 +463,11 @@ data Prop a where
 
   -- Abstraction
 
-  Forall           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  Forall           :: VarId -> Text -> Ty -> Prop a -> Prop a
   -- ^ Introduces a universally-quantified variable over another property
-  Exists           :: UniqueId -> Text -> Ty -> Prop a -> Prop a
+  Exists           :: VarId -> Text -> Ty -> Prop a -> Prop a
   -- ^ Introduces an existentially-quantified variable over another property
-  PVar             :: UniqueId -> Text                 -> Prop a
+  PVar             :: VarId -> Text                 -> Prop a
   -- ^ Refers to a function argument or universally/existentially-quantified variable
 
   -- Object ops
@@ -606,7 +606,7 @@ instance Num (Prop Decimal) where
 -- TODO: extract data type
 --
 type Arg
-  = (Text, UniqueId, TC.Node, EType)
+  = (Text, VarId, TC.Node, EType)
 
 data Table = Table
   { _tableName       :: Text
@@ -648,7 +648,7 @@ newtype TagId
 
 data Model
   = Model
-    { _modelArgs  :: Map UniqueId (Located (Text, TVal))
+    { _modelArgs  :: Map VarId (Located (Text, TVal))
     -- ^ one per input to the function
     , _modelReads :: Map TagId (Located Object)
     -- ^ one per each read, in traversal order
