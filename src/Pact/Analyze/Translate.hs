@@ -13,13 +13,12 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, cons, makeLenses, use, view,
-                                             (%~), (+=), (<&>), (?~), (^.),
-                                             (^?))
+import           Control.Lens               (Lens', at, cons, makeLenses, use,
+                                             view, (%~), (+=), (<&>), (?~),
+                                             (^.), (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
-import           Control.Monad.Gen          (GenT, MonadGen (gen))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT, modify')
 import           Data.Foldable              (foldl')
@@ -111,6 +110,7 @@ data TranslateState
   = TranslateState
     { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
     , _tsNextTagId :: TagId
+    , _tsNextVarId :: VarId
     }
 
 makeLenses ''TranslateState
@@ -118,13 +118,13 @@ makeLenses ''TranslateState
 newtype TranslateM a
   = TranslateM
     { unTranslateM :: ReaderT (Map Node (Text, VarId))
-                       (StateT TranslateState
-                         (GenT VarId (Except TranslateFailure)))
-                       a
+                        (StateT TranslateState
+                          (Except TranslateFailure))
+                        a
     }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
     MonadReader (Map Node (Text, VarId)), MonadState TranslateState,
-    MonadError TranslateFailure, MonadGen VarId)
+    MonadError TranslateFailure)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
@@ -132,11 +132,26 @@ instance MonadFail TranslateM where
 writeTagAlloc :: TagAllocation -> TranslateM ()
 writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 
+genId :: (MonadState s m, Num i) => Lens' s i -> m i
+genId l = do
+  i <- use l
+  l += 1
+  pure i
+
 genTagId :: TranslateM TagId
-genTagId = do
-  tid <- use tsNextTagId
-  tsNextTagId += 1
-  pure tid
+genTagId = genId tsNextTagId
+
+class HasVarId s where
+  varId :: Lens' s VarId
+
+instance HasVarId TranslateState where
+  varId = tsNextVarId
+
+instance HasVarId VarId where
+  varId = id
+
+genVarId :: (MonadState s m, HasVarId s) => m VarId
+genVarId = genId varId
 
 allocRead :: Node -> Schema -> TranslateM TagId
 allocRead node schema = do
@@ -152,9 +167,9 @@ allocAuth node = do
   writeTagAlloc $ AllocAuthTag $ Located info tid
   pure tid
 
-genVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
-genVarId varNode varName action = do
-  vid <- gen
+withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
+withNewVarId varNode varName action = do
+  vid <- genVarId
   local (at varNode ?~ (varName, vid)) (action vid)
 
 -- Map.union is left-biased. The more explicit name makes this extra clear.
@@ -194,11 +209,11 @@ translateType node = case _aTy node of
   ty                           -> throwError $ UnhandledType node ty
 
 translateArg
-  :: (MonadGen VarId m, MonadError TranslateFailure m)
+  :: (MonadState s m, HasVarId s, MonadError TranslateFailure m)
   => Named Node
   -> m Arg
 translateArg (Named nm node _) = do
-  vid <- gen
+  vid <- genVarId
   ety <- translateType node
   pure (nm, vid, node, ety)
 
@@ -230,14 +245,14 @@ translateBinding bindingsA schema bodyA rhsT = do
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
       varType <- translateType varNode
-      vid     <- gen
+      vid <- genVarId
       case colAst of
         AST_StringLit colName ->
           pure (T.unpack colName, varType, (varNode, varName, vid))
         _ ->
           throwError $ NonStringLitInBinding colAst
 
-  bindingId <- gen
+  bindingId <- genVarId
   let freshVar = Var "binding" bindingId
 
   let translateLet :: Term a -> Term a
@@ -269,7 +284,7 @@ translateNode astNode = case astNode of
   AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
     let varName = varNode ^. aId.tiName
-    genVarId varNode varName $ \vid -> do
+    withNewVarId varNode varName $ \vid -> do
       --
       -- TODO: do we only want to allow subsequent bindings to reference
       --       earlier ones if we know it's let* rather than let? or has this

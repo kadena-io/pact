@@ -24,11 +24,10 @@ import           Control.Monad              (void)
 import           Control.Monad.Except       (ExceptT (ExceptT), runExceptT,
                                              throwError, withExcept,
                                              withExceptT)
-import           Control.Monad.Gen          (runGenT, runGenTFrom)
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
-import           Control.Monad.State.Strict (runStateT)
+import           Control.Monad.State.Strict (evalStateT, runStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import qualified Data.Default               as Default
@@ -315,18 +314,26 @@ checkFunction tables pactArgs body check = runExceptT $ do
     goal :: Goal
     goal = checkGoal check
 
+    --
+    -- TODO: return next-varid
+    --
     runArgsTranslation :: ExceptT CheckFailure IO [Arg]
     runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
-      runGenT $ traverse translateArg pactArgs
+      --
+      -- TODO: make this 0
+      --
+      evalStateT (traverse translateArg pactArgs) (VarId 1)
 
     --
     -- TODO: ideally this would take the seed where arg translation left off:
     --
     runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
-      fmap (fmap _tsTagAllocs) $ runGenTFrom
-        (VarId (length args))
-        (flip runStateT (TranslateState [] 0) $
+      fmap (fmap _tsTagAllocs) $
+        --
+        -- TODO: get rid of this +1
+        --
+        (flip runStateT (TranslateState [] 0 (VarId (length args + 1))) $
           (runReaderT
             (unTranslateM (translateBody body))
             (mkTranslateEnv args)))
@@ -418,9 +425,8 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
       parsed     = getInfoParsed (defn ^. tInfo)
 
-      -- NOTE: we're using MonadGen for our args in checkFunction now, so we
-      -- start from 1. MonadGen starts not from the seed you provide, but with
-      -- the successor of the seed.
+      -- TODO: make this start from 0; we are temporarily still generating from
+      --       1 as we transition away from MonadGen.
       --
       -- Ideally we wouldn't have any ad-hoc VID generation, but we're not
       -- there yet:
