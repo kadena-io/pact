@@ -489,10 +489,10 @@ symArrayAt (S _ symKey) = lens getter setter
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
-tagRead :: UniqueId -> Text -> AVal -> Analyze ()
-tagRead uid fieldName av = do
+tagRead :: TagId -> Text -> AVal -> Analyze ()
+tagRead tid fieldName av = do
   mTag <- preview $
-    aeModel.modelReads.at uid._Just.located.objFields.at fieldName._Just._2
+    aeModel.modelReads.at tid._Just.located.objFields.at fieldName._Just._2
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -501,9 +501,9 @@ tagRead uid fieldName av = do
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
-tagAuth :: UniqueId -> S Bool -> Analyze ()
-tagAuth uid sb = do
-  mTag <- preview $ aeModel.modelAuths.at uid._Just.located
+tagAuth :: TagId -> S Bool -> Analyze ()
+tagAuth tid sb = do
+  mTag <- preview $ aeModel.modelAuths.at tid._Just.located
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -800,7 +800,7 @@ analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
   LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
 
-  Read uid tn (Schema fields) rowKey -> do
+  Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     rowRead tn sRk .= true
@@ -824,7 +824,7 @@ analyzeTermO = \case
         --
         EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-      tagRead uid fieldName av
+      tagRead tid fieldName av
 
       pure (fieldType, av)
 

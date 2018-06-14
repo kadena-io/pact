@@ -117,19 +117,19 @@ describeCheckFailure parsed failure =
 showModel :: Model -> Text
 showModel (Model args readObjs auths) = T.intercalate "\n"
     [ "Arguments:"
-    , ifoldMap (showItem showArg) args
+    , ifoldMap (showArgItem showArg) args
     , "Reads:"
-    , ifoldMap (showItem showRead) readObjs
+    , ifoldMap (showTaggedItem showRead) readObjs
     , "Authorizations:"
-    , ifoldMap (showItem showAuth) auths
+    , ifoldMap (showTaggedItem showAuth) auths
     ]
 
   where
-    showItem :: (a -> Text) -> UniqueId -> a -> Text
-    showItem show' uid arg = "  " <> showUid uid <> " " <> show' arg <> "\n"
+    showArgItem :: (a -> Text) -> UniqueId -> a -> Text
+    showArgItem show' (UniqueId i) arg = "  (" <> tShow i <> ") " <> show' arg <> "\n"
 
-    showUid :: UniqueId -> Text
-    showUid (UniqueId i) = "(" <> tShow i <> ")"
+    showTaggedItem :: (a -> Text) -> TagId -> a -> Text
+    showTaggedItem show' (TagId i) arg = "  [" <> tShow i <> "] " <> show' arg <> "\n"
 
     showTVal :: TVal -> Text
     showTVal (ety, av) = case av of
@@ -278,19 +278,19 @@ mkEmptyModel args tagAllocs = Model
       av <- alloc ety
       pure (uid, Located info (nm, (ety, av)))
 
-    allocateReads :: Symbolic (Map UniqueId (Located Object))
+    allocateReads :: Symbolic (Map TagId (Located Object))
     allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
         AllocAuthTag _ -> Nothing
-        AllocReadTag (Located info (uid, schema)) -> Just $
-          (uid,) . Located info <$> allocSchema schema
+        AllocReadTag (Located info (tid, schema)) -> Just $
+          (tid,) . Located info <$> allocSchema schema
 
-    allocateAuths :: Symbolic (Map UniqueId (Located (SBV Bool)))
+    allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
         AllocReadTag _ -> Nothing
-        AllocAuthTag (Located info uid) -> Just $
-          (uid,) . Located info <$> SBV.free_
+        AllocAuthTag (Located info tid) -> Just $
+          (tid,) . Located info <$> SBV.free_
 
 checkFunction
   :: [Table]
@@ -326,7 +326,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
       fmap (fmap _tsTagAllocs) $ runGenTFrom
         (UniqueId (length args))
-        (flip runStateT (TranslateState []) $
+        (flip runStateT (TranslateState [] 0) $
           (runReaderT
             (unTranslateM (translateBody body))
             (mkTranslateEnv args)))

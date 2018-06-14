@@ -42,6 +42,7 @@ import           Data.Text            (Text)
 import qualified Data.Text            as T
 import           Data.Thyme           (UTCTime, microseconds)
 import           Data.Typeable        ((:~:) (Refl), Typeable, eqT)
+import           GHC.Natural          (Natural)
 
 import qualified Pact.Types.Lang      as Pact
 import qualified Pact.Types.Typecheck as TC
@@ -641,13 +642,17 @@ data Located a
 
 deriving instance Show a => Show (Located a)
 
+newtype TagId
+  = TagId Natural
+  deriving (Num, Show, Ord, Eq)
+
 data Model
   = Model
     { _modelArgs  :: Map UniqueId (Located (Text, TVal))
     -- ^ one per input to the function
-    , _modelReads :: Map UniqueId (Located Object)
+    , _modelReads :: Map TagId (Located Object)
     -- ^ one per each read, in traversal order
-    , _modelAuths :: Map UniqueId (Located (SBV Bool))
+    , _modelAuths :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that for
     -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls
     -- equally, and in the future we can try to connect keysets with their

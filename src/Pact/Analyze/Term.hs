@@ -52,16 +52,16 @@ data Term ret where
 
   -- Keyset access
   ReadKeySet      :: Term String -> Term KeySet
-  KsAuthorized    :: UniqueId -> Term KeySet -> Term Bool
-  NameAuthorized  :: UniqueId -> Term String -> Term Bool
+  KsAuthorized    :: TagId -> Term KeySet -> Term Bool
+  NameAuthorized  :: TagId -> Term String -> Term Bool
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
   At             :: Schema -> Term String -> Term Object -> EType -> Term a
 
   -- Table access
-  Read           :: UniqueId -> TableName -> Schema      -> Term String -> Term Object
-  Write          ::             TableName -> Term String -> Term Object -> Term String
+  Read           :: TagId -> TableName -> Schema      -> Term String -> Term Object
+  Write          ::          TableName -> Term String -> Term Object -> Term String
 
   -- Arithmetic ops
   --

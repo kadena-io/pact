@@ -13,8 +13,9 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, cons, makeLenses, view, (%~),
-                                             (<&>), (?~), (^.), (^?))
+import           Control.Lens               (at, cons, makeLenses, use, view,
+                                             (%~), (+=), (<&>), (?~), (^.),
+                                             (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -102,13 +103,14 @@ mkTranslateEnv = foldl'
   Map.empty
 
 data TagAllocation
-  = AllocReadTag (Located (UniqueId, Schema))
-  | AllocAuthTag (Located UniqueId)
+  = AllocReadTag (Located (TagId, Schema))
+  | AllocAuthTag (Located TagId)
   deriving Show
 
 data TranslateState
   = TranslateState
     { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
+    , _tsNextTagId :: TagId
     }
 
 makeLenses ''TranslateState
@@ -130,19 +132,25 @@ instance MonadFail TranslateM where
 writeTagAlloc :: TagAllocation -> TranslateM ()
 writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 
-allocRead :: Node -> Schema -> TranslateM UniqueId
-allocRead node schema = do
-  uid <- gen
-  let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocReadTag $ Located info (uid, schema)
-  pure uid
+genTagId :: TranslateM TagId
+genTagId = do
+  tid <- use tsNextTagId
+  tsNextTagId += 1
+  pure tid
 
-allocAuth :: Node -> TranslateM UniqueId
-allocAuth node = do
-  uid <- gen
+allocRead :: Node -> Schema -> TranslateM TagId
+allocRead node schema = do
+  tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocAuthTag $ Located info uid
-  pure uid
+  writeTagAlloc $ AllocReadTag $ Located info (tid, schema)
+  pure tid
+
+allocAuth :: Node -> TranslateM TagId
+allocAuth node = do
+  tid <- genTagId
+  let info = node ^. aId . Pact.tiInfo
+  writeTagAlloc $ AllocAuthTag $ Located info tid
+  pure tid
 
 genUid :: Node -> Text -> (UniqueId -> TranslateM a) -> TranslateM a
 genUid varNode varName action = do
@@ -338,15 +346,15 @@ translateNode astNode = case astNode of
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
       ETerm ksnT TStr <- translateNode ksA
-      uid <- allocAuth $ ksA ^. aNode
-      return $ ETerm (Enforce (NameAuthorized uid ksnT)) TBool
+      tid <- allocAuth $ ksA ^. aNode
+      return $ ETerm (Enforce (NameAuthorized tid ksnT)) TBool
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
       ETerm ksT TKeySet <- translateNode ksA
-      uid <- allocAuth $ ksA ^. aNode
-      return $ ETerm (Enforce (KsAuthorized uid ksT)) TBool
+      tid <- allocAuth $ ksA ^. aNode
+      return $ ETerm (Enforce (KsAuthorized tid ksT)) TBool
 
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
@@ -500,8 +508,8 @@ translateNode astNode = case astNode of
   AST_WithRead node table key bindings schemaNode body -> do
     schema <- translateSchema schemaNode
     ETerm key' TStr <- translateNode key
-    uid <- allocRead node schema
-    let readT = EObject (Read uid (TableName (T.unpack table)) schema key') schema
+    tid <- allocRead node schema
+    let readT = EObject (Read tid (TableName (T.unpack table)) schema key') schema
     translateBinding bindings schema body readT
 
   AST_Bind _ objectA bindings schemaNode body -> do
@@ -521,8 +529,8 @@ translateNode astNode = case astNode of
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
-    uid <- allocRead node schema
-    pure (EObject (Read uid (TableName (T.unpack table)) schema key') schema)
+    tid <- allocRead node schema
+    pure (EObject (Read tid (TableName (T.unpack table)) schema key') schema)
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
