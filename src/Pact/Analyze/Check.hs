@@ -305,20 +305,6 @@ checkFunction tables pactArgs body check = runExceptT $ do
     args <- runArgsTranslation
     (tm, tagAllocs) <- runBodyTranslation args
 
-    --
-    -- TODO: use 'catchError' around the following and, if our result is
-    --       Invalid, feed our resulting Model back into the symbolic evaluator
-    --       to produce an execution trace (everything should be concrete).
-    --
-    --       during this second run, while producing the trace, we should
-    --       log effects (DB writes) in the order that they occur. for
-    --       writes, we actually don't have to use the tagging technique
-    --       because everything is concrete! Output will be composed of
-    --       Trace and the result AVal; unclear at the moment whether the
-    --       trace should contain intermediate values and effects
-    --       interleaved, or whether these two should be separate.
-    --
-
     runAndQuery
       goal
       (lift $ mkEmptyModel args tagAllocs)
