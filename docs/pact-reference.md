@@ -949,10 +949,12 @@ false
 
 ### Lists {#lists}
 
-List literals are created with brackets. Uniform literal lists
-are given a type in parsing.
+List literals are created with brackets, and optionally separated with commas.
+Uniform literal lists are given a type in parsing.
 ```
 pact> [1 2 3]
+[1 2 3]
+pact> [1,2,3]
 [1 2 3]
 pact> (typeof [1 2 3])
 "[integer]"

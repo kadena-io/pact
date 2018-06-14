@@ -18,3 +18,6 @@
   ; This is fine
   2
   )
+
+(expect "parse list with commas or no" [1 "2" true (+ 3 4)]
+        [1, "2", true, (+ 3 4)])
