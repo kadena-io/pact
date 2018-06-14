@@ -101,15 +101,34 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs edata Nothing _cmdHash) _csRefStore
-  pr@EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
-  let newPact = case erExec of
+  EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
+  newPact <- join <$> mapM (handleYield erInput _cmdSigs) erExec
+  {-let newPact = case erExec of
         Nothing -> Nothing
-        Just (pexec@PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount _peStep)
+        Just (PactExec{..}) -> do
+          r <- join (handleYield erInput _cmSigs erExec)
+          return r
+        --Just (PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount _peStep) -}
   let newState = CommandState erRefStore $ case newPact of
         Nothing -> _csPacts
-        Just (p@CommandPact{..}) -> M.insert _pmTxId p _csPacts
+        Just (pm@CommandPact{..}) -> M.insert _pmTxId pm _csPacts
   void $ liftIO $ swapMVar _ceState newState
   return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
+
+-- Better name?
+handleYield :: [Term Name] -> [UserSig] -> PactExec -> CommandM p (Maybe CommandPact)
+handleYield em cmdSigs PactExec{..} = do
+  CommandEnv{..} <- ask
+  --TODO: handle entity?
+  unless (length em == 1) $
+    throwCmdEx $ "handleYield: defpact execution must occur as a single command: " ++ show em
+  case _ceMode of
+    Local -> return Nothing
+    Transactional tid -> do
+      --TODO: handle yielded objects
+      let sigs = userSigsToPactKeySet cmdSigs
+      return $ Just $ CommandPact tid (head em) sigs _peStepCount _peStep
+
 
 applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
 applyContinuation _ _ = throwCmdEx "Continuation not supported"

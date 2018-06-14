@@ -79,7 +79,7 @@ $(makeLenses ''CommandConfig)
 
 
 data CommandPact = CommandPact
-  { _pmTxId :: PactId
+  { _pmTxId :: TxId
   , _pmContinuation :: Term Name
   , _pmSigs :: S.Set PublicKey
   , _pmStepCount :: Int
@@ -89,7 +89,7 @@ $(makeLenses ''CommandPact)
 
 data CommandState = CommandState {
        _csRefStore :: RefStore
-     , _csPacts :: M.Map PactId CommandPact -- comment copied from Kadena code: TODO need hashable for TxId mebbe
+     , _csPacts :: M.Map TxId CommandPact -- comment copied from Kadena code: TODO need hashable for TxId mebbe
      } deriving Show
 $(makeLenses ''CommandState)
 
