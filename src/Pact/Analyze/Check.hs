@@ -324,9 +324,9 @@ checkFunction tables pactArgs body check = runExceptT $ do
     --
     runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
-      runGenTFrom
+      fmap (fmap _tsTagAllocs) $ runGenTFrom
         (UniqueId (length args))
-        (flip runStateT [] $
+        (flip runStateT (TranslateState []) $
           (runReaderT
             (unTranslateM (translateBody body))
             (mkTranslateEnv args)))

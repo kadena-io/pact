@@ -7,12 +7,14 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, view, (<&>), (?~), (^.), (^?))
+import           Control.Lens               (at, cons, makeLenses, view, (%~),
+                                             (<&>), (?~), (^.), (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -104,22 +106,29 @@ data TagAllocation
   | AllocAuthTag (Located UniqueId)
   deriving Show
 
+data TranslateState
+  = TranslateState
+    { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
+    }
+
+makeLenses ''TranslateState
+
 newtype TranslateM a
   = TranslateM
     { unTranslateM :: ReaderT (Map Node (Text, UniqueId))
-                       (StateT [TagAllocation] -- "Strict" WriterT isn't strict
+                       (StateT TranslateState
                          (GenT UniqueId (Except TranslateFailure)))
                        a
     }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
-    MonadReader (Map Node (Text, UniqueId)), MonadState [TagAllocation],
+    MonadReader (Map Node (Text, UniqueId)), MonadState TranslateState,
     MonadError TranslateFailure, MonadGen UniqueId)
 
 instance MonadFail TranslateM where
   fail s = throwError (MonadFailure s)
 
 writeTagAlloc :: TagAllocation -> TranslateM ()
-writeTagAlloc tagAlloc = modify' (tagAlloc :) -- modify' is strict
+writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 
 allocRead :: Node -> Schema -> TranslateM UniqueId
 allocRead node schema = do
