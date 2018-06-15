@@ -1,5 +1,4 @@
 # Provides mock system module for 'accounts'
-type: "exec"
 code: |-
   (define-keyset 'k (read-keyset "accounts-admin-keyset"))
   (module system 'k

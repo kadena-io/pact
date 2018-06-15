@@ -1,5 +1,4 @@
 # Provides mock system module for 'accounts'
-type: "exec"
 code: |-
   (use 'accounts)
   (use 'system)
