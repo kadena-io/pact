@@ -296,7 +296,7 @@ expToCheck
   -- ^ Exp to convert
   -> Maybe Check
 expToCheck genStart nameEnv idEnv body = do
-  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) (succ genStart)
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
   pure $ PropertyHolds $ prenexConvert typedBody
 
@@ -313,7 +313,7 @@ expToProp
   -- ^ Exp to convert
   -> Maybe (Prop a)
 expToProp genStart nameEnv idEnv ty body = do
-  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) (succ genStart)
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   runReaderT (checkPreProp ty preTypedBody) idEnv
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)

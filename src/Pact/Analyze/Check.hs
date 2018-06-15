@@ -319,10 +319,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
     --
     runArgsTranslation :: ExceptT CheckFailure IO [Arg]
     runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
-      --
-      -- TODO: make this 0
-      --
-      evalStateT (traverse translateArg pactArgs) (VarId 1)
+      evalStateT (traverse translateArg pactArgs) (VarId 0)
 
     --
     -- TODO: ideally this would take the seed where arg translation left off:
@@ -330,10 +327,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
     runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
     runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
       fmap (fmap _tsTagAllocs) $
-        --
-        -- TODO: get rid of this +1
-        --
-        (flip runStateT (TranslateState [] 0 (VarId (length args + 1))) $
+        (flip runStateT (TranslateState [] 0 (VarId (length args))) $
           (runReaderT
             (unTranslateM (translateBody body))
             (mkTranslateEnv args)))
@@ -425,12 +419,9 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
       parsed     = getInfoParsed (defn ^. tInfo)
 
-      -- TODO: make this start from 0; we are temporarily still generating from
-      --       1 as we transition away from MonadGen.
-      --
-      -- Ideally we wouldn't have any ad-hoc VID generation, but we're not
-      -- there yet:
-      vids = VarId <$> [1..]
+      -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
+      --       not there yet:
+      vids = VarId <$> [0..]
 
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
