@@ -27,7 +27,7 @@ import           Control.Monad.Except       (ExceptT (ExceptT), runExceptT,
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.RWS.Strict   (RWST (..))
-import           Control.Monad.State.Strict (evalStateT, runStateT)
+import           Control.Monad.State.Strict (runStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Data.Bifunctor             (first)
 import qualified Data.Default               as Default
@@ -298,11 +298,8 @@ checkFunction
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables pactArgs body check = runExceptT $ do
-    --
-    -- TODO: this should return the explicit next-vid we can send to body trans
-    --
-    args <- runArgsTranslation
-    (tm, tagAllocs) <- runBodyTranslation args
+    (args, translationVid) <- runArgsTranslation
+    (tm, tagAllocs) <- runBodyTranslation args translationVid
 
     runAndQuery
       goal
@@ -314,20 +311,14 @@ checkFunction tables pactArgs body check = runExceptT $ do
     goal :: Goal
     goal = checkGoal check
 
-    --
-    -- TODO: return next-varid
-    --
-    runArgsTranslation :: ExceptT CheckFailure IO [Arg]
+    runArgsTranslation :: ExceptT CheckFailure IO ([Arg], VarId)
     runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
-      evalStateT (traverse translateArg pactArgs) (VarId 0)
+      runStateT (traverse translateArg pactArgs) (VarId 0)
 
-    --
-    -- TODO: ideally this would take the seed where arg translation left off:
-    --
-    runBodyTranslation :: [Arg] -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
-    runBodyTranslation args = hoist generalize $ withExcept TranslateFailure $
+    runBodyTranslation :: [Arg] -> VarId -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
+    runBodyTranslation args nextVarId = hoist generalize $ withExcept TranslateFailure $
       fmap (fmap _tsTagAllocs) $
-        (flip runStateT (TranslateState [] 0 (VarId (length args))) $
+        (flip runStateT (TranslateState [] 0 nextVarId) $
           (runReaderT
             (unTranslateM (translateBody body))
             (mkTranslateEnv args)))
