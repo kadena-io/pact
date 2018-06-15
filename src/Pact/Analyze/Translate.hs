@@ -18,7 +18,9 @@ import           Control.Lens               (at, cons, makeLenses, view, (%~),
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
+import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
+import           Control.Monad.State.Strict (runStateT)
 import           Control.Monad.State.Strict (MonadState, StateT, modify')
 import           Data.Foldable              (foldl')
 import qualified Data.Map                   as Map
@@ -571,3 +573,24 @@ translateNode astNode = case astNode of
   --
 
   ast -> throwError $ UnexpectedNode ast
+
+runTranslation
+  :: [Named Node]
+  -> [AST Node]
+  -> Except TranslateFailure ([Arg], ETerm, [TagAllocation])
+runTranslation pactArgs body = do
+    (args, translationVid) <- runArgsTranslation
+    (tm, tagAllocs) <- runBodyTranslation args translationVid
+    pure (args, tm, tagAllocs)
+
+  where
+    runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
+    runArgsTranslation =
+      runStateT (traverse translateArg pactArgs) (VarId 0)
+
+    runBodyTranslation :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
+    runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $
+      (flip runStateT (TranslateState [] 0 nextVarId) $
+        (runReaderT
+          (unTranslateM (translateBody body))
+          (mkTranslateEnv args)))

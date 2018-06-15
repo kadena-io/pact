@@ -15,58 +15,56 @@ module Pact.Analyze.Check
   , CheckResult
   ) where
 
-import           Control.Exception          as E
-import           Control.Lens               (ifoldMap, ifoldr, ifoldrM,
-                                             itraversed, ix, traverseOf,
-                                             traversed, (&), (<&>), (^.), (^?),
-                                             (^@..), _1, _2, _Just)
-import           Control.Monad              (void)
-import           Control.Monad.Except       (ExceptT (ExceptT), runExceptT,
-                                             throwError, withExcept,
-                                             withExceptT)
-import           Control.Monad.Morph        (generalize, hoist)
-import           Control.Monad.Reader       (runReaderT)
-import           Control.Monad.RWS.Strict   (RWST (..))
-import           Control.Monad.State.Strict (runStateT)
-import           Control.Monad.Trans.Class  (MonadTrans (lift))
-import           Data.Bifunctor             (first)
-import qualified Data.Default               as Default
-import           Data.Either                (lefts, rights)
-import qualified Data.HashMap.Strict        as HM
-import           Data.Map.Strict            (Map)
-import qualified Data.Map.Strict            as Map
-import           Data.Maybe                 (fromMaybe, mapMaybe)
-import           Data.Monoid                ((<>))
-import           Data.SBV                   (SBV, Symbolic)
-import qualified Data.SBV                   as SBV
-import qualified Data.SBV.Control           as SBV
-import qualified Data.SBV.Internals         as SBVI
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Traversable           (for)
-import           Prelude                    hiding (exp)
+import           Control.Exception         as E
+import           Control.Lens              (ifoldMap, ifoldr, ifoldrM,
+                                            itraversed, ix, traverseOf,
+                                            traversed, (&), (<&>), (^.), (^?),
+                                            (^@..), _1, _2, _Just)
+import           Control.Monad             (void)
+import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
+                                            throwError, withExcept, withExceptT)
+import           Control.Monad.Morph       (generalize, hoist)
+import           Control.Monad.Reader      (runReaderT)
+import           Control.Monad.RWS.Strict  (RWST (..))
+import           Control.Monad.Trans.Class (MonadTrans (lift))
+import           Data.Bifunctor            (first)
+import qualified Data.Default              as Default
+import           Data.Either               (lefts, rights)
+import qualified Data.HashMap.Strict       as HM
+import           Data.Map.Strict           (Map)
+import qualified Data.Map.Strict           as Map
+import           Data.Maybe                (fromMaybe, mapMaybe)
+import           Data.Monoid               ((<>))
+import           Data.SBV                  (SBV, Symbolic)
+import qualified Data.SBV                  as SBV
+import qualified Data.SBV.Control          as SBV
+import qualified Data.SBV.Internals        as SBVI
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
+import           Data.Text                 (Text)
+import qualified Data.Text                 as T
+import           Data.Traversable          (for)
+import           Prelude                   hiding (exp)
 
-import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Lang            (Parsed, eParsed, mMetas, mName,
-                                             renderInfo, renderParsed, tMeta,
-                                             _iInfo)
-import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
-                                             Ref (Ref),
-                                             Term (TDef, TSchema, TTable),
-                                             asString, tInfo, tShow)
-import qualified Pact.Types.Runtime         as Pact
-import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                             Named, Node, TcId (_tiInfo),
-                                             TopLevel (TopFun, TopTable),
-                                             UserType (_utFields, _utName),
-                                             runTC, tcFailures)
-import qualified Pact.Types.Typecheck       as TC
+import           Pact.Typechecker          (typecheckTopLevel)
+import           Pact.Types.Lang           (Parsed, eParsed, mMetas, mName,
+                                            renderInfo, renderParsed, tMeta,
+                                            _iInfo)
+import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
+                                            Ref (Ref),
+                                            Term (TDef, TSchema, TTable),
+                                            asString, tInfo, tShow)
+import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Typecheck      (AST,
+                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                            Named, Node, TcId (_tiInfo),
+                                            TopLevel (TopFun, TopTable),
+                                            UserType (_utFields, _utName),
+                                            runTC, tcFailures)
+import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Analyze       hiding (invariants)
-import           Pact.Analyze.Parse         (expToCheck, expToInvariant)
-import           Pact.Analyze.Term
+import           Pact.Analyze.Analyze      hiding (invariants)
+import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
@@ -298,8 +296,8 @@ checkFunction
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables pactArgs body check = runExceptT $ do
-    (args, translationVid) <- runArgsTranslation
-    (tm, tagAllocs) <- runBodyTranslation args translationVid
+    (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
+      runTranslation pactArgs body
 
     runAndQuery
       goal
@@ -310,18 +308,6 @@ checkFunction tables pactArgs body check = runExceptT $ do
   where
     goal :: Goal
     goal = checkGoal check
-
-    runArgsTranslation :: ExceptT CheckFailure IO ([Arg], VarId)
-    runArgsTranslation = hoist generalize $ withExcept TranslateFailure $
-      runStateT (traverse translateArg pactArgs) (VarId 0)
-
-    runBodyTranslation :: [Arg] -> VarId -> ExceptT CheckFailure IO (ETerm, [TagAllocation])
-    runBodyTranslation args nextVarId = hoist generalize $ withExcept TranslateFailure $
-      fmap (fmap _tsTagAllocs) $
-        (flip runStateT (TranslateState [] 0 nextVarId) $
-          (runReaderT
-            (unTranslateM (translateBody body))
-            (mkTranslateEnv args)))
 
     runAnalysis
       :: Analyze AVal
