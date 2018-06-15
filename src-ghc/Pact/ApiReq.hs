@@ -90,7 +90,7 @@ mkApiReq fp = do
   case _ylType of
     Just "exec" -> mkApiReqExec ar fp
     Just "cont" -> mkApiReqCont ar fp
-    Nothing     -> dieAR "Expected a 'type' entry"
+    Nothing     -> mkApiReqExec ar fp -- Default
     _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
 
 

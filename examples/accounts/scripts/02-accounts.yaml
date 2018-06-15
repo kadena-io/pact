@@ -3,7 +3,6 @@
 # $ pact -a examples/accounts/mock-system.yaml | curl -d @- http://localhost:8080/api/v1/send
 # $ pact -a examples/accounts/accounts.yaml | curl -d @- http://localhost:8080/api/v1/send
 
-type: "exec"
 codeFile: ../accounts.pact
 data:
   accounts-admin-keyset: ["ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"]
