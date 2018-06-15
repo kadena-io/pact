@@ -141,6 +141,11 @@ applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs Null pactStep cmdHash) _csRefStore   -- TODO data from msg
           EvalResult{..} <- liftIO $ evalContinuation evalEnv _cpContinuation
+          let updatePact nextstep = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount nextstep
+              newState = CommandState erRefStore $ case erExec of
+                Nothing -> _csPacts --TODO does this ever occur?
+                Just PactExec{..} ->  M.insert _cpTxId (updatePact _peStep) _csPacts
+          void $ liftIO $ swapMVar _ceState newState
           return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 --applyContinuation _ _ _ _ = throwCmdEx "Continuation not supported"
