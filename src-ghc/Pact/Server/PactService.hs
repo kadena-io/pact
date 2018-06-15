@@ -81,7 +81,7 @@ exToTx Local = Nothing
 runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
 runPayload c@Command{..} = do
   let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm c
-      runRpc (Continuation ym) = applyContinuation ym _cmdSigs
+      runRpc (Continuation ym) = applyContinuation (cmdToRequestKey c) ym _cmdSigs _cmdHash
       Payload{..} = _cmdPayload
   case _pAddress of
     Just Address{..} -> do
@@ -103,15 +103,9 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
                 (MsgData sigs edata Nothing _cmdHash) _csRefStore
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
   newPact <- join <$> mapM (handleYield erInput _cmdSigs) erExec
-  {-let newPact = case erExec of
-        Nothing -> Nothing
-        Just (PactExec{..}) -> do
-          r <- join (handleYield erInput _cmSigs erExec)
-          return r
-        --Just (PactExec{..}) -> Just (CommandPact _pePactId (head erInput) sigs _peStepCount _peStep) -}
   let newState = CommandState erRefStore $ case newPact of
         Nothing -> _csPacts
-        Just (pm@CommandPact{..}) -> M.insert _pmTxId pm _csPacts
+        Just (cp@CommandPact{..}) -> M.insert _cpTxId cp _csPacts
   void $ liftIO $ swapMVar _ceState newState
   return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
@@ -130,5 +124,23 @@ handleYield em cmdSigs PactExec{..} = do
       return $ Just $ CommandPact tid (head em) sigs _peStepCount _peStep
 
 
-applyContinuation :: ContMsg -> [UserSig] -> CommandM p CommandResult
-applyContinuation _ _ = throwCmdEx "Continuation not supported"
+applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
+applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
+  CommandEnv{..} <- ask
+  case _ceMode of
+    Local -> throwCmdEx "Local continuation exec not supported"
+    Transactional _ -> do
+      CommandState{..} <- liftIO $ readMVar _ceState
+      case M.lookup _cmTxId _csPacts of
+        Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
+        Just CommandPact{..} -> do
+          let newStep = _cpStep + 1
+          when (_cmStep /= newStep || _cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+          let sigs = userSigsToPactKeySet cmdSigs
+              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
+                (MsgData sigs Null pactStep cmdHash) _csRefStore   -- TODO data from msg
+          EvalResult{..} <- liftIO $ evalContinuation evalEnv _cpContinuation
+          return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
+
+--applyContinuation _ _ _ _ = throwCmdEx "Continuation not supported"
