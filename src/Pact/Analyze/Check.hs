@@ -25,7 +25,6 @@ import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
-import           Control.Monad.RWS.Strict  (RWST (..))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Bifunctor            (first)
 import qualified Data.Default              as Default
@@ -302,29 +301,12 @@ checkFunction tables pactArgs body check = runExceptT $ do
     runAndQuery
       goal
       (lift $ mkEmptyModel args tagAllocs)
-      (runAnalysis (analyzeETerm tm))
+      (withExceptT AnalyzeFailure . runAnalysis tables tm check)
       (withExceptT SmtFailure . resultQuery goal)
 
   where
     goal :: Goal
     goal = checkGoal check
-
-    runAnalysis
-      :: Analyze AVal
-      -> Model
-      -> ExceptT CheckFailure Symbolic (SBV Bool)
-    runAnalysis act model = withExceptT AnalyzeFailure $ do
-      let aEnv   = mkAnalyzeEnv tables model
-          state0 = mkInitialAnalyzeState tables
-
-      (propResult, state1, constraints) <- hoist generalize $
-        runRWST (runAnalyze act) aEnv state0
-
-      let qEnv  = mkQueryEnv aEnv state1 propResult
-          query = analyzeCheck check
-
-      lift $ runConstraints constraints
-      _sSbv <$> runReaderT (queryAction query) qEnv
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules

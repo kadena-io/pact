@@ -26,6 +26,7 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
+import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (MonadReader (local), ReaderT,
                                             runReaderT)
 import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
@@ -1470,3 +1471,23 @@ analyzeCheck = \case
 
     invariantsHold :: Query (S Bool)
     invariantsHold = sansProv <$> view (qeAnalyzeState.maintainsInvariants)
+
+runAnalysis
+  :: [Table]
+  -> ETerm
+  -> Check
+  -> Model
+  -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
+runAnalysis tables tm check model = do
+  let act    = analyzeETerm tm
+      aEnv   = mkAnalyzeEnv tables model
+      state0 = mkInitialAnalyzeState tables
+
+  (propResult, state1, constraints) <- hoist generalize $
+    runRWST (runAnalyze act) aEnv state0
+
+  let qEnv  = mkQueryEnv aEnv state1 propResult
+      query = analyzeCheck check
+
+  lift $ runConstraints constraints
+  _sSbv <$> runReaderT (queryAction query) qEnv
