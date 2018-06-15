@@ -295,18 +295,16 @@ checkFunction
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables pactArgs body check = runExceptT $ do
-    (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
-      runTranslation pactArgs body
+  (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
+    runTranslation pactArgs body
 
-    runAndQuery
-      goal
-      (lift $ mkEmptyModel args tagAllocs)
-      (withExceptT AnalyzeFailure . runAnalysis tables tm check)
-      (withExceptT SmtFailure . resultQuery goal)
+  let goal = checkGoal check
 
-  where
-    goal :: Goal
-    goal = checkGoal check
+  runAndQuery
+    goal
+    (lift $ mkEmptyModel args tagAllocs)
+    (withExceptT AnalyzeFailure . runAnalysis tables tm check)
+    (withExceptT SmtFailure . resultQuery goal)
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
