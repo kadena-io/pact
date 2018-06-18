@@ -135,19 +135,25 @@ applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
         Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
         Just CommandPact{..} -> do
           let nextStep = _cpStep + 1
+              isLast = nextStep >= _cpStepCount
+              
+          when (isLast) $ throwCmdEx $ "applyContinuation: reaping pact [disabled]: " ++ show _cmTxId
           when (_cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
           when (_cmStep /= nextStep) $ throwCmdEx $ "Invalid step value: Received " ++ show _cmStep ++ " but expected " ++ show nextStep
           
           let sigs = userSigsToPactKeySet cmdSigs
-              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+              pactStep = Just $ PactStep nextStep _cmRollback (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs Null pactStep cmdHash) _csRefStore   -- TODO data from msg
+          
           EvalResult{..} <- liftIO $ evalContinuation evalEnv _cpContinuation
-          let updatePact nextstep = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount nextstep
+          
+          let updatePactState stepNum = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount stepNum
               newState = CommandState erRefStore $ case erExec of
                 Nothing -> _csPacts --TODO does this ever occur?
-                Just PactExec{..} ->  M.insert _cpTxId (updatePact _peStep) _csPacts
+                Just PactExec{..} ->  M.insert _cpTxId (updatePactState _peStep) _csPacts
           void $ liftIO $ swapMVar _ceState newState
+          
           return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 --applyContinuation _ _ _ _ = throwCmdEx "Continuation not supported"
