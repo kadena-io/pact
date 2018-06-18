@@ -134,8 +134,10 @@ applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
       case M.lookup _cmTxId _csPacts of
         Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
         Just CommandPact{..} -> do
-          let newStep = _cpStep + 1
-          when (_cmStep /= newStep || _cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+          let nextStep = _cpStep + 1
+          when (_cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+          when (_cmStep /= nextStep) $ throwCmdEx $ "Invalid step value: Received " ++ show _cmStep ++ " but expected " ++ show nextStep
+          
           let sigs = userSigsToPactKeySet cmdSigs
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
