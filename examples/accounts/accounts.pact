@@ -217,6 +217,14 @@
       )
       a))
 
+  (defpact dummy-pact (x:integer y:integer)
+    (step
+      (+ x y))
+    (step
+      (+ x 25))
+    (step
+      (+ y 4))
+  )
 
 )
 
