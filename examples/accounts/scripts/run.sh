@@ -1,23 +1,50 @@
 #!/bin/sh
 
 set -e
+PACT_EXEC=".stack-work/install/x86_64-osx/lts-8.15/8.0.2/bin/pact"
 
 echo ""; echo "Step 1"; echo ""
-pact -a examples/accounts/scripts/01-system.yaml | curl -d @- http://localhost:8080/api/v1/send
+"$PACT_EXEC" -a examples/accounts/scripts/01-system.yaml | curl -d @- http://localhost:8080/api/v1/send
 curl -d '{"requestKeys":["221b1ea8687ca43da7eacdedfffe5a590215c334482b1148d5166e9847ead25e4d3a9c711c85c0b5ab9b739f151b562f37e1e21f2c8bc1004a5765575069cd91"]}' -X POST http://localhost:8080/api/v1/poll
 
 echo ""; echo "Step 2"; echo ""
-pact -a examples/accounts/scripts/02-accounts.yaml | curl -d @- http://localhost:8080/api/v1/send
-curl -d '{"requestKeys":["1d1d4043dc194c616573895a5ebec0d1ea9898a719651d30e6be5bff386b94e4703afaf998c295a5181ef2eee844a79bdd3466072c30eb4004adf5108addaeee"]}' -X POST http://localhost:8080/api/v1/poll
+"$PACT_EXEC" -a examples/accounts/scripts/02-accounts.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["efdeea220e8583c91550226efdca6746eeb45e2d7e9fe120b09d2c7686d9d43dc2c80b151b702ac80223d5adf7745e8a475faf72a750503414cbc167c54b4bc5"]}' -X POST http://localhost:8080/api/v1/poll
 
 echo ""; echo "Step 3"; echo ""
-pact -a examples/accounts/scripts/03-create.yaml | curl -d @- http://localhost:8080/api/v1/send
+"$PACT_EXEC" -a examples/accounts/scripts/03-create.yaml | curl -d @- http://localhost:8080/api/v1/send
 curl -d '{"requestKeys":["5f8f4c71413d1b112892c0ae45a72f47d87c0811b97acf244e61b1ee667e85d0a599506db5774364c6e7577e5f48faa2ae323d38749a650bf4f59e8222eaf83e"]}' -X POST http://localhost:8080/api/v1/poll
 
 echo ""; echo "Step 4"; echo ""
-pact -a examples/accounts/scripts/04-alice.yaml | curl -d @- http://localhost:8080/api/v1/send
-curl -d '{"requestKeys":["e0e26fb33bb20ff48f2c7378ed1f22cbe775f16e67de5f4b6e91de9ce83d13010f1d1da6633d8c0dd7050d4960b2d04dc11f9375ece36f6e66c60f9af5c69ed5"]}' -X POST http://localhost:8080/api/v1/poll
+"$PACT_EXEC" -a examples/accounts/scripts/04-alice.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["8a384a6dd457e4bfcc59d795df1be442faeae4097600b4d0d71083940c8033a9c3db6d8db3af256842525dfe7e4e949ae82058f143b4b61ea15a5af3cf030fcf"]}' -X POST http://localhost:8080/api/v1/poll
 
 echo ""; echo "Step 5"; echo ""
-pact -l -a examples/accounts/scripts/05-bob.yaml | curl -d @- http://localhost:8080/api/v1/local
+"$PACT_EXEC" -a examples/accounts/scripts/05-bob.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["6c7916b948ebfd86bdfe9e1187cb9ce08d50cb4b0fe7699160367d9c7f6f188b622fd61eecc80418f09d6c6b91310e85a137e0324af8a5169ff1c81092988c1f"]}' -X POST http://localhost:8080/api/v1/poll
+echo ""
+
+echo ""; echo "Step 6"; echo ""
+"$PACT_EXEC" -a examples/accounts/scripts/06-bob-dummy-pact.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["dcf3ff36cfd5b7c5cc8e5895755bd52761c0928166370482961e5a59ee83515e4e88a3b418d127b161d3aa45bd1314f2facc8402c2825600844e5f0d6e919f5f"]}' -X POST http://localhost:8080/api/v1/poll
+echo ""
+
+echo ""; echo "Step 7"; echo ""
+"$PACT_EXEC" -a examples/accounts/scripts/07-alice.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["15061ef4067a47f0a09fd2057e038b7380edd440b888379b1c65f0ceaef90ff6c1e3296c1117bca283db2a93ab198bc021684ff1abbdc5b1b9e26b489e305a66"]}' -X POST http://localhost:8080/api/v1/poll
+echo ""
+
+echo ""; echo "Step 8"; echo ""
+"$PACT_EXEC" -a examples/accounts/scripts/08-bob-cont.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["c956eacf83ebadeff874af7049137acba04a4f4ac75aa2b4697e7924a27066ff21ea23925d6382422aed80b07bd0649f8372800bc290268cb1ea62e06ee2e28c"]}' -X POST http://localhost:8080/api/v1/poll
+echo ""
+
+echo ""; echo "Step 9"; echo ""
+"$PACT_EXEC" -a examples/accounts/scripts/09-bob-cont.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["2d6a93752241720025066f051b6d1d93aa50663ce923058882521bdf65215f66eaf85f1b5a30f7ec1d52e47cd6d7596711bef0411a2c835d0e25243e3d8e1b7e"]}' -X POST http://localhost:8080/api/v1/poll
+echo ""
+
+echo ""; echo "Step 10"; echo ""
+"$PACT_EXEC" -a examples/accounts/scripts/10-bob-cont.yaml | curl -d @- http://localhost:8080/api/v1/send
+curl -d '{"requestKeys":["ddf6452312e0c86cd03c3dc16b4e8cedd265101dfa6a64f5da680e3840f4406ad4107a85fc61b4a1142b3023609ef659e259058b390be4af880fed5437f2fe14"]}' -X POST http://localhost:8080/api/v1/poll
 echo ""
