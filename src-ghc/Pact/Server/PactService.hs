@@ -125,7 +125,7 @@ handleYield em cmdSigs PactExec{..} = do
 
 
 applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
-applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
+applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
   CommandEnv{..} <- ask
   case _ceMode of
     Local -> throwCmdEx "Local continuation exec not supported"
@@ -133,16 +133,14 @@ applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
       CommandState{..} <- liftIO $ readMVar _ceState
       case M.lookup _cmTxId _csPacts of
         Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
-        Just CommandPact{..} -> do
-          let nextStep = _cpStep + 1
-              isLast = nextStep >= _cpStepCount
-              
-          when (isLast) $ throwCmdEx $ "applyContinuation: reaping pact [disabled]: " ++ show _cmTxId
-          when (_cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
-          when (_cmStep /= nextStep) $ throwCmdEx $ "Invalid step value: Received " ++ show _cmStep ++ " but expected " ++ show nextStep
-          
-          let sigs = userSigsToPactKeySet cmdSigs
-              pactStep = Just $ PactStep nextStep _cmRollback (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+        Just cp@CommandPact{..} -> do
+          let setupStep = if _cmRollback
+                          then (setupNextStep msg (_cpStep + 1) _cpStepCount)
+                          else (setupRollbackStep msg _cpStep _cpStepCount)
+              pactStep = case setupStep of
+                Left str            -> throwCmdEx $ str
+                Right ps@PactStep{} -> Just ps
+              sigs = userSigsToPactKeySet cmdSigs
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs Null pactStep cmdHash) _csRefStore   -- TODO data from msg
           
@@ -155,5 +153,39 @@ applyContinuation rk ContMsg{..} cmdSigs cmdHash = do
           void $ liftIO $ swapMVar _ceState newState
           
           return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
+          
 
---applyContinuation _ _ _ _ = throwCmdEx "Continuation not supported"
+setupNextStep :: ContMsg -> Int -> Int -> Either String PactStep
+setupNextStep ContMsg{..} nextStep stepCount
+  | nextStep >= stepCount     = Left $ "applyContinuation: reaping pact [disabled]: " ++ show _cmTxId  -- last step already executed
+  | (_cmStep < 0 ||
+     _cmStep >= stepCount)    = Left $ "Invalid step value: " ++ show _cmStep
+  | _cmStep /= nextStep       = Left $ "Invalid continuation step value: Received " ++ show _cmStep
+                                ++ " but expected " ++ show nextStep
+  | otherwise                 = Right $ PactStep nextStep False (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+
+setupRollbackStep :: ContMsg -> Int -> Int -> Either String PactStep
+setupRollbackStep ContMsg{..} currStep stepCount
+  | (_cmStep < 0 ||
+     _cmStep >= stepCount)    = Left $ "Invalid step value: " ++ show _cmStep
+  | _cmStep /= currStep       = Left $ "Invalid rollback step value: Received " ++ show _cmStep
+                                ++ " but expected " ++ show currStep
+  | otherwise                 = Right $ PactStep currStep True (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+
+
+setupNextState :: CommandPact -> M.Map TxId CommandPact -> EvalResult -> CommandState
+setupNextState CommandPact{..} prevState EvalResult{..} = newState
+  where updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
+        newState = CommandState erRefStore $ case erExec of
+          Nothing -> prevState -- TODO does this ever occur?
+          Just PactExec{..} -> M.insert _cpTxId (updatePact _peStep) prevState
+
+setupRollbackState :: CommandPact -> M.Map TxId CommandPact -> EvalResult -> CommandState
+setupRollbackState CommandPact{..} prevState EvalResult{..} = newState
+  where updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
+        newState = CommandState erRefStore $ case erExec of
+          Nothing -> prevState -- TODO does this ever occur?
+          Just PactExec{..} -> let prevStep = _peStep - 1 in
+                               let done = prevStep < 0 in 
+                               if done then M.delete _cpTxId prevState
+                                       else M.insert _cpTxId (updatePact prevStep) prevState
