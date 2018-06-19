@@ -133,59 +133,58 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
       CommandState{..} <- liftIO $ readMVar _ceState
       case M.lookup _cmTxId _csPacts of
         Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
-        Just cp@CommandPact{..} -> do
-          let setupStep = if _cmRollback
-                          then (setupNextStep msg (_cpStep + 1) _cpStepCount)
-                          else (setupRollbackStep msg _cpStep _cpStepCount)
-              pactStep = case setupStep of
-                Left str            -> throwCmdEx $ str
-                Right ps@PactStep{} -> Just ps
-              sigs = userSigsToPactKeySet cmdSigs
-              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs Null pactStep cmdHash) _csRefStore   -- TODO data from msg
+        Just pact@CommandPact{..} -> do
+          let hasErr = if _cmRollback
+                       then checkRollbackStepErr msg _cpStep _cpStepCount
+                       else checkNextStepErr msg (_cpStep + 1) _cpStepCount
+          maybe (return ()) throwCmdEx hasErr
           
-          EvalResult{..} <- liftIO $ evalContinuation evalEnv _cpContinuation
-          
-          let updatePactState stepNum = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount stepNum
-              newState = CommandState erRefStore $ case erExec of
-                Nothing -> _csPacts --TODO does this ever occur?
-                Just PactExec{..} ->  M.insert _cpTxId (updatePactState _peStep) _csPacts
-          void $ liftIO $ swapMVar _ceState newState
-          
-          return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
-          
+          let sigs = userSigsToPactKeySet cmdSigs
+              msgData = Null -- TODO data from msg
+              resume = Nothing -- TODO decode yielded object
+              setupStep step = Just $ PactStep step _cmRollback (PactId $ pack $ show $ _cmTxId) resume
+              pactStep = setupStep (if _cmRollback then _cpStep else (_cpStep + 1))
+              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs msgData pactStep cmdHash) _csRefStore
+          res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
+          case res of
+            Left (SomeException ex)   -> throwM ex
+            Right EvalResult{..} -> do
+              PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
+                                   return erExec -- TODO better err msg?
+              let newPactState = updatePactState _cmRollback _peStep pact _csPacts
+                  newState = CommandState erRefStore newPactState
 
-setupNextStep :: ContMsg -> Int -> Int -> Either String PactStep
-setupNextStep ContMsg{..} nextStep stepCount
-  | nextStep >= stepCount     = Left $ "applyContinuation: reaping pact [disabled]: " ++ show _cmTxId  -- last step already executed
+              void $ liftIO $ swapMVar _ceState newState
+              return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
+
+
+checkNextStepErr :: ContMsg -> Int -> Int -> Maybe String
+checkNextStepErr ContMsg{..} nextStep stepCount
+  | nextStep >= stepCount     = Just $ "applyContinuation: pact continuation [disabled]: "
+                                ++ show _cmTxId  -- is last step
   | (_cmStep < 0 ||
-     _cmStep >= stepCount)    = Left $ "Invalid step value: " ++ show _cmStep
-  | _cmStep /= nextStep       = Left $ "Invalid continuation step value: Received " ++ show _cmStep
+     _cmStep >= stepCount)    = Just $ "Invalid step value: " ++ show _cmStep
+  | _cmStep /= nextStep       = Just $ "Invalid continuation step value: Received " ++ show _cmStep
                                 ++ " but expected " ++ show nextStep
-  | otherwise                 = Right $ PactStep nextStep False (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+  | otherwise                 = Nothing
 
-setupRollbackStep :: ContMsg -> Int -> Int -> Either String PactStep
-setupRollbackStep ContMsg{..} currStep stepCount
+checkRollbackStepErr :: ContMsg -> Int -> Int -> Maybe String
+checkRollbackStepErr ContMsg{..} currStep stepCount
   | (_cmStep < 0 ||
-     _cmStep >= stepCount)    = Left $ "Invalid step value: " ++ show _cmStep
-  | _cmStep /= currStep       = Left $ "Invalid rollback step value: Received " ++ show _cmStep
+     _cmStep >= stepCount)    = Just $ "Invalid step value: " ++ show _cmStep
+  | _cmStep /= currStep       = Just $ "Invalid rollback step value: Received " ++ show _cmStep
                                 ++ " but expected " ++ show currStep
-  | otherwise                 = Right $ PactStep currStep True (PactId $ pack $ show $ _cmTxId) Nothing -- TODO Resume
+  | otherwise                 = Nothing
 
 
-setupNextState :: CommandPact -> M.Map TxId CommandPact -> EvalResult -> CommandState
-setupNextState CommandPact{..} prevState EvalResult{..} = newState
-  where updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
-        newState = CommandState erRefStore $ case erExec of
-          Nothing -> prevState -- TODO does this ever occur?
-          Just PactExec{..} -> M.insert _cpTxId (updatePact _peStep) prevState
+updatePactState :: Bool -> Int -> CommandPact -> M.Map TxId CommandPact -> M.Map TxId CommandPact
+updatePactState isRollback currStep CommandPact{..} oldPacts  = do
+  let updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
+      prevStep = currStep - 1
+      done = prevStep < 0
+      -- TODO encode yielded object
 
-setupRollbackState :: CommandPact -> M.Map TxId CommandPact -> EvalResult -> CommandState
-setupRollbackState CommandPact{..} prevState EvalResult{..} = newState
-  where updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
-        newState = CommandState erRefStore $ case erExec of
-          Nothing -> prevState -- TODO does this ever occur?
-          Just PactExec{..} -> let prevStep = _peStep - 1 in
-                               let done = prevStep < 0 in 
-                               if done then M.delete _cpTxId prevState
-                                       else M.insert _cpTxId (updatePact prevStep) prevState
+  case (isRollback, done) of
+    (True, True)  -> M.delete _cpTxId oldPacts
+    (True, False) -> M.insert _cpTxId (updatePact prevStep) oldPacts
+    (False, _)    -> M.insert _cpTxId (updatePact currStep) oldPacts
