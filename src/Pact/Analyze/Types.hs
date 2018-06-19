@@ -660,6 +660,8 @@ data Model
     -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls
     -- equally, and in the future we can try to connect keysets with their
     -- names for better tooling / reporting.
+    , _modelResult :: Located TVal
+    -- ^ return value of the function being checked
     }
   deriving Show
 

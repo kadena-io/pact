@@ -65,6 +65,7 @@ import qualified Pact.Types.Typecheck      as TC
 import           Pact.Analyze.Analyze      hiding (invariants)
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Translate
+import           Pact.Analyze.Term         (ETerm (ETerm, EObject))
 import           Pact.Analyze.Types
 
 data CheckSuccess
@@ -111,13 +112,15 @@ describeCheckFailure parsed failure =
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 showModel :: Model -> Text
-showModel (Model args readObjs auths) = T.intercalate "\n"
+showModel (Model args readObjs auths res) = T.intercalate "\n"
     [ "Arguments:"
     , ifoldMap (showArgItem showArg) args
     , "Reads:"
     , ifoldMap (showTaggedItem showRead) readObjs
     , "Authorizations:"
     , ifoldMap (showTaggedItem showAuth) auths
+    , "Result:"
+    , "  " <> showResult
     ]
 
   where
@@ -153,6 +156,9 @@ showModel (Model args readObjs auths) = T.intercalate "\n"
 
     showAuth :: Located (SBV Bool) -> Text
     showAuth (Located _ sbv) = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
+
+    showResult :: Text
+    showResult = showTVal $ _located res
 
 describeCheckSuccess :: CheckSuccess -> Text
 describeCheckSuccess = \case
@@ -199,6 +205,7 @@ resultQuery goal model0 = do
       &      traverseOf (modelArgs.traversed.located._2) fetchTVal
       & (>>= traverseOf (modelReads.traversed.located)   fetchObject)
       & (>>= traverseOf (modelAuths.traversed.located)   fetchSBool)
+      & (>>= traverseOf (modelResult.located)            fetchTVal)
 
     fetchTVal :: TVal -> SBVI.Query TVal
     fetchTVal (ety, av) = (ety,) <$> go ety av
@@ -249,13 +256,12 @@ runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
       void $ lift . SBVI.output =<< mkProvable env
       hoist SBV.query $ mkQuery env
 
--- | Creates an initial, free, 'Model' for use when the client does not have a
--- provided 'Model' from a previous run.
-mkEmptyModel :: [Arg] -> [TagAllocation] -> Symbolic Model
-mkEmptyModel args tagAllocs = Model
+mkEmptyModel :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic Model
+mkEmptyModel funInfo args tm tagAllocs = Model
     <$> allocateArgs
     <*> allocateReads
     <*> allocateAuths
+    <*> allocateResult
 
   where
     allocSchema :: Schema -> Symbolic Object
@@ -288,13 +294,22 @@ mkEmptyModel args tagAllocs = Model
         AllocAuthTag (Located info tid) -> Just $
           (tid,) . Located info <$> SBV.free_
 
+    allocateResult :: Symbolic (Located TVal)
+    allocateResult = Located funInfo <$> case tm of
+      ETerm _ ty ->
+        let ety = EType ty
+        in (ety,) <$> alloc ety
+      EObject _ sch ->
+        (EObjectTy sch,) . AnObj <$> allocSchema sch
+
 checkFunction
   :: [Table]
+  -> Pact.Info
   -> [Named Node]
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-checkFunction tables pactArgs body check = runExceptT $ do
+checkFunction tables info pactArgs body check = runExceptT $ do
   (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
     runTranslation pactArgs body
 
@@ -302,7 +317,7 @@ checkFunction tables pactArgs body check = runExceptT $ do
 
   runAndQuery
     goal
-    (lift $ mkEmptyModel args tagAllocs)
+    (lift $ mkEmptyModel info args tm tagAllocs)
     (withExceptT AnalyzeFailure . runAnalysis tables tm check)
     (withExceptT SmtFailure . resultQuery goal)
 
@@ -434,7 +449,7 @@ verifyFunction tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-        first (parsed,) <$> checkFunction tables _fArgs _fBody check
+        first (parsed,) <$> checkFunction tables _fInfo _fArgs _fBody check
       else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
     _ -> pure []
 

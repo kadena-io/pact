@@ -511,6 +511,11 @@ tagAuth tid sb = do
     Nothing  -> pure ()
     Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
+tagResult :: AVal -> Analyze ()
+tagResult av = do
+  tag <- view $ aeModel.modelResult.located._2
+  addConstraint $ sansProv $ tag .== av
+
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
 
@@ -1479,14 +1484,14 @@ runAnalysis
   -> Model
   -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
 runAnalysis tables tm check model = do
-  let act    = analyzeETerm tm
+  let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
       aEnv   = mkAnalyzeEnv tables model
       state0 = mkInitialAnalyzeState tables
 
-  (propResult, state1, constraints) <- hoist generalize $
+  (funResult, state1, constraints) <- hoist generalize $
     runRWST (runAnalyze act) aEnv state0
 
-  let qEnv  = mkQueryEnv aEnv state1 propResult
+  let qEnv  = mkQueryEnv aEnv state1 funResult
       query = analyzeCheck check
 
   lift $ runConstraints constraints
