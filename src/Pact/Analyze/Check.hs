@@ -34,7 +34,7 @@ import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe, mapMaybe)
 import           Data.Monoid               ((<>))
-import           Data.SBV                  (SBV, Symbolic, SymWord)
+import           Data.SBV                  (SBV, SymWord, Symbolic)
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
@@ -64,8 +64,8 @@ import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Analyze      hiding (invariants)
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
+import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
 import           Pact.Analyze.Translate
-import           Pact.Analyze.Term         (ETerm (ETerm, EObject))
 import           Pact.Analyze.Types
 
 data CheckSuccess
