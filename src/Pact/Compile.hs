@@ -146,7 +146,7 @@ doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   case es of
     MetaBodyExp meta body -> mkModule body =<< meta
-    [] -> syntaxError ai "Empty module"
+    _ -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
         TDef {} -> return d
