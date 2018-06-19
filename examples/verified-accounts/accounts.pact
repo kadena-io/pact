@@ -13,7 +13,7 @@
 
 
   (defschema account
-    ("Row type for accounts table."
+    (meta "Row type for accounts table."
       (invariant (>= balance 0.0)))
      balance:decimal
      amount:decimal
@@ -39,7 +39,7 @@
     ))
 
   (defun transfer (src:string dest:string amount:decimal)
-    ("transfer AMOUNT from SRC to DEST"
+    (meta "transfer AMOUNT from SRC to DEST"
       (property (= (column-delta 'accounts 'balance) 0.0)))
     (debit src amount)
     (credit dest amount))
@@ -56,7 +56,7 @@
       ))
 
   (defun read-account-admin (id)
-    ("Read data for account ID, admin version"
+    (meta "Read data for account ID, admin version"
       (property
         (when
           (not (authorized-by 'accounts-admin-keyset))

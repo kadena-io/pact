@@ -1,18 +1,28 @@
 (define-keyset 'k (sig-keyset))
 
 (module mod 'k
-  ("this defines mod"
+  (meta "this defines mod"
    (property (do (crazy stuff))))
 
   (defun foo ()
-    ("foo the town"
+    (meta "foo the town"
      (example (foo)))
     1)
 
-  (defconst BAR 1 ("barring disbelief" (anything 1)))
+  (defun foobar ()
+    "docstrings work without meta"
+    2)
+
+  (defconst BAR 1 (meta "barring disbelief" (anything 1)))
+
+  (defconst BAZ 2 "docstrings work without meta")
 
   (defschema schema
-    ("a schema" (property stuff)))
+    (meta "a schema" (property stuff)))
 
-  (deftable tbl ("a table" (baz quux)))
+  (defschema schema2
+    "a schema")
+
+  (deftable tbl (meta "a table" (baz quux)))
+  (deftable tbl2 "a table")
 )
