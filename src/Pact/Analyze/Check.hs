@@ -34,7 +34,7 @@ import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe, mapMaybe)
 import           Data.Monoid               ((<>))
-import           Data.SBV                  (SBV, Symbolic)
+import           Data.SBV                  (SBV, Symbolic, SymWord)
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
@@ -130,14 +130,19 @@ showModel (Model args readObjs auths res) = T.intercalate "\n"
     showTaggedItem :: (a -> Text) -> TagId -> a -> Text
     showTaggedItem show' (TagId i) arg = "  [" <> tShow i <> "] " <> show' arg <> "\n"
 
+    showSbv :: (Show a, SymWord a) => SBV a -> Text
+    showSbv sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
+
+    showS :: (Show a, SymWord a) => S a -> Text
+    showS = showSbv . _sSbv
+
     showTVal :: TVal -> Text
     showTVal (ety, av) = case av of
       OpaqueVal   -> "[opaque]"
       AnObj obj   -> showObject obj
       AVal _ sval -> case ety of
         EObjectTy _ -> error "showModel: impossible object type for AVal"
-        EType (_ :: Type t) -> fromMaybe "[symbolic]" $
-          tShow <$> SBV.unliteral (SBVI.SBV sval :: SBV t)
+        EType (_ :: Type t) -> showSbv (SBVI.SBV sval :: SBV t)
 
     showObject :: Object -> Text
     showObject (Object m) = "{ "
@@ -151,11 +156,11 @@ showModel (Model args readObjs auths res) = T.intercalate "\n"
     showArg :: Located (Text, TVal) -> Text
     showArg (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
 
-    showRead :: Located Object -> Text
-    showRead = showObject . _located
+    showRead :: Located (S RowKey, Object) -> Text
+    showRead (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
 
     showAuth :: Located (SBV Bool) -> Text
-    showAuth (Located _ sbv) = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
+    showAuth = showSbv . _located
 
     showResult :: Text
     showResult = showTVal $ _located res
@@ -183,7 +188,7 @@ resultQuery
   -> Model                                     -- ^ initial model
   -> ExceptT SmtFailure SBV.Query CheckSuccess
 resultQuery goal model0 = do
-  satResult <- lift $ SBV.checkSat
+  satResult <- lift SBV.checkSat
   case goal of
     Validation ->
       case satResult of
@@ -203,8 +208,8 @@ resultQuery goal model0 = do
     buildEnv :: SBV.Query Model
     buildEnv = model0
       &      traverseOf (modelArgs.traversed.located._2) fetchTVal
-      & (>>= traverseOf (modelReads.traversed.located)   fetchObject)
-      & (>>= traverseOf (modelAuths.traversed.located)   fetchSBool)
+      & (>>= traverseOf (modelReads.traversed.located)   fetchAccess)
+      & (>>= traverseOf (modelAuths.traversed.located)   fetchSbv)
       & (>>= traverseOf (modelResult.located)            fetchTVal)
 
     fetchTVal :: TVal -> SBVI.Query TVal
@@ -216,12 +221,21 @@ resultQuery goal model0 = do
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"
 
+    -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
+    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBVI.Query (SBV a)
+    fetchSbv = fmap SBV.literal . SBV.getValue
+
+    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBVI.Query (S a)
+    fetchS = traverseOf s2Sbv fetchSbv
+
     fetchObject :: Object -> SBVI.Query Object
     fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
-    -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
-    fetchSBool :: SBV Bool -> SBVI.Query (SBV Bool)
-    fetchSBool = fmap SBV.literal . SBV.getValue
+    fetchAccess :: (S RowKey, Object) -> SBVI.Query (S RowKey, Object)
+    fetchAccess (sRk, obj) = do
+      sRk' <- fetchS sRk
+      obj' <- fetchObject obj
+      pure (sRk', obj')
 
 -- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
 --       flexible for our needs.
@@ -280,12 +294,17 @@ mkEmptyModel funInfo args tm tagAllocs = Model
       av <- alloc ety
       pure (vid, Located info (nm, (ety, av)))
 
-    allocateReads :: Symbolic (Map TagId (Located Object))
+    allocRowKey :: Symbolic (S RowKey)
+    allocRowKey = sansProv <$> SBV.free_
+
+    allocateReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
     allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
         AllocAuthTag _ -> Nothing
-        AllocReadTag (Located info (tid, schema)) -> Just $
-          (tid,) . Located info <$> allocSchema schema
+        AllocReadTag (Located info (tid, schema)) -> Just $ do
+          srk <- allocRowKey
+          obj <- allocSchema schema
+          pure (tid, Located info (srk, obj))
 
     allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $

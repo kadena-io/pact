@@ -490,15 +490,18 @@ symArrayAt (S _ symKey) = lens getter setter
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
-tagRead :: TagId -> Text -> AVal -> Analyze ()
-tagRead tid fieldName av = do
-  mTag <- preview $
-    aeModel.modelReads.at tid._Just.located.objFields.at fieldName._Just._2
-  case mTag of
+tagRead :: TagId -> Text -> S RowKey -> AVal -> Analyze ()
+tagRead tid fieldName srk av = do
+  mTup <- preview $
+    aeModel.modelReads.at tid._Just.located
+  case mTup of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
-    Nothing    -> pure ()
-    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+    Nothing -> pure ()
+    Just (tagSrk, tagObj) -> do
+      let tagAv = tagObj ^. objFields.at fieldName.singular _Just._2
+      addConstraint $ sansProv $ srk .== tagSrk
+      addConstraint $ sansProv $ av .== tagAv
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
@@ -830,7 +833,7 @@ analyzeTermO = \case
         --
         EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-      tagRead tid fieldName av
+      tagRead tid fieldName sRk av
 
       pure (fieldType, av)
 

@@ -653,7 +653,7 @@ data Model
   = Model
     { _modelArgs  :: Map VarId (Located (Text, TVal))
     -- ^ one per input to the function
-    , _modelReads :: Map TagId (Located Object)
+    , _modelReads :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
     , _modelAuths :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that for
