@@ -26,7 +26,7 @@ module Pact.Types.Server
   , CommandConfig(..), ccSqlite, ccEntity
   , CommandPact(..), cpTxId, cpContinuation, cpSigs, cpStepCount, cpStep
   , CommandState(..), csRefStore, csPacts
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -62,6 +62,7 @@ import Pact.Types.Runtime as Pact
 import Pact.Types.Orphans ()
 import Pact.Types.SQLite
 import Pact.Types.Command
+import Pact.Types.Logger
 import Pact.Interpreter
 
 userSigToPactPubKey :: UserSig -> Pact.PublicKey
@@ -98,6 +99,7 @@ data CommandEnv p = CommandEnv {
     , _ceMode :: ExecutionMode
     , _ceDbEnv :: PactDbEnv p
     , _ceState :: MVar CommandState
+    , _ceLogger :: Logger
     }
 $(makeLenses ''CommandEnv)
 
