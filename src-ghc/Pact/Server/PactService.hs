@@ -61,7 +61,6 @@ applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
-      --logLog logger "DEBUG" $ "testing that commandstate saved: " ++ show pactState
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
