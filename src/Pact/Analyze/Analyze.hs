@@ -22,7 +22,8 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
                                             Lens', ifoldl, iforM, lens,
                                             makeLenses, over, preview, singular,
                                             use, view, (%=), (&), (+=), (.=),
-                                            (.~), (<&>), (?~), (^.), _2, _Just)
+                                            (.~), (<&>), (?~), (^.), _1, _2,
+                                            _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
@@ -488,20 +489,35 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
--- | "Tag" an uninterpreted read value with value from our Model that was
--- allocated in Symbolic.
-tagRead :: TagId -> Text -> S RowKey -> AVal -> Analyze ()
-tagRead tid fieldName srk av = do
-  mTup <- preview $
-    aeModel.modelReads.at tid._Just.located
+tagAccessKey
+  :: Lens' Model (Map TagId (Located (S RowKey, Object)))
+  -> TagId
+  -> S RowKey
+  -> Analyze ()
+tagAccessKey lens' tid srk = do
+  mTup <- preview $ aeModel.lens'.at tid._Just.located._1
   case mTup of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
-    Nothing -> pure ()
-    Just (tagSrk, tagObj) -> do
-      let tagAv = tagObj ^. objFields.at fieldName.singular _Just._2
-      addConstraint $ sansProv $ srk .== tagSrk
-      addConstraint $ sansProv $ av .== tagAv
+    Nothing     -> pure ()
+    Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
+
+-- | "Tag" an uninterpreted read value with value from our Model that was
+-- allocated in Symbolic.
+tagAccessCell
+  :: Lens' Model (Map TagId (Located (S RowKey, Object)))
+  -> TagId
+  -> Text
+  -> AVal
+  -> Analyze ()
+tagAccessCell lens' tid fieldName av = do
+  mTag <- preview $
+    aeModel.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
@@ -813,6 +829,7 @@ analyzeTermO = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     rowRead tn sRk .= true
+    tagAccessKey modelReads tid sRk
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
@@ -833,7 +850,7 @@ analyzeTermO = \case
         --
         EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-      tagRead tid fieldName sRk av
+      tagAccessCell modelReads tid fieldName av
 
       pure (fieldType, av)
 
