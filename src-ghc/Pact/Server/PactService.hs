@@ -57,14 +57,11 @@ applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> Ex
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
 applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
 applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
-  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv) $ runPayload cmd
+  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger) $ runPayload cmd
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
-      -- FOR TESTING
-      s <- liftIO $ readMVar cv
-      let pactState = (_csPacts s)
-      logLog logger "DEBUG" $ "testing that commandstate saved: " ++ show pactState
+      --logLog logger "DEBUG" $ "testing that commandstate saved: " ++ show pactState
       return cr
     Left e -> do
       logLog logger "ERROR" $ "tx failure for requestKey: " ++ show (cmdToRequestKey cmd) ++ ": " ++ show e
@@ -107,6 +104,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
         Nothing -> _csPacts
         Just (cp@CommandPact{..}) -> M.insert _cpTxId cp _csPacts
   void $ liftIO $ swapMVar _ceState newState
+  mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newPact
   return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 -- Better name?
@@ -142,9 +140,11 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
           let sigs = userSigsToPactKeySet cmdSigs
               msgData = Null -- TODO data from msg
               resume = Nothing -- TODO decode yielded object
-              setupStep step = Just $ PactStep step _cmRollback (PactId $ pack $ show $ _cmTxId) resume
+              setupStep step = Just $ PactStep step _cmRollback
+                               (PactId $ pack $ show $ _cmTxId) resume
               pactStep = setupStep (if _cmRollback then _cpStep else (_cpStep + 1))
-              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode (MsgData sigs msgData pactStep cmdHash) _csRefStore
+              evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
+                        (MsgData sigs msgData pactStep cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
           case res of
             Left (SomeException ex)   -> throwM ex
@@ -153,8 +153,11 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
                                    return erExec -- TODO better err msg?
               let newPactState = updatePactState _cmRollback _peStep pact _csPacts
                   newState = CommandState erRefStore newPactState
-
               void $ liftIO $ swapMVar _ceState newState
+              
+              liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
+                ++ show _cpTxId ++ ": " ++ show (M.lookup _cpTxId newPactState)
+
               return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 
