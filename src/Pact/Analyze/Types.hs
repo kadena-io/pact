@@ -655,6 +655,8 @@ data Model
     -- ^ one per input to the function
     , _modelReads  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
+    , _modelWrites :: Map TagId (Located (S RowKey, Object))
+    -- ^ one per each write, in traversal order
     , _modelAuths  :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that for
     -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls

@@ -61,7 +61,7 @@ data Term ret where
 
   -- Table access
   Read           :: TagId -> TableName -> Schema      -> Term String -> Term Object
-  Write          ::          TableName -> Term String -> Term Object -> Term String
+  Write          :: TagId -> TableName -> Term String -> Term Object -> Term String
 
   -- Arithmetic ops
   --

@@ -1142,14 +1142,17 @@ analyzeTerm = \case
   -- TODO: we might want to eventually support checking each of the semantics
   -- of Pact.Types.Runtime's WriteType.
   --
-  Write tn rowKey obj -> do
+  Write tid tn rowKey obj -> do
     Object obj' <- analyzeTermO obj
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
+    tagAccessKey modelWrites tid sRk
+
     mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
+      tagAccessCell modelWrites tid colName aval'
 
       case aval' of
         AVal mProv sVal -> do

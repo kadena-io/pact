@@ -112,11 +112,13 @@ describeCheckFailure parsed failure =
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 showModel :: Model -> Text
-showModel (Model args readObjs auths res) = T.intercalate "\n"
+showModel (Model args reads' writes auths res) = T.intercalate "\n"
     [ "Arguments:"
     , ifoldMap (showArgItem showArg) args
     , "Reads:"
-    , ifoldMap (showTaggedItem showRead) readObjs
+    , ifoldMap (showTaggedItem showAccess) reads'
+    , "Writes:"
+    , ifoldMap (showTaggedItem showAccess) writes
     , "Authorizations:"
     , ifoldMap (showTaggedItem showAuth) auths
     , "Result:"
@@ -156,8 +158,8 @@ showModel (Model args readObjs auths res) = T.intercalate "\n"
     showArg :: Located (Text, TVal) -> Text
     showArg (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
 
-    showRead :: Located (S RowKey, Object) -> Text
-    showRead (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
+    showAccess :: Located (S RowKey, Object) -> Text
+    showAccess (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
 
     showAuth :: Located (SBV Bool) -> Text
     showAuth = showSbv . _located
@@ -209,6 +211,7 @@ resultQuery goal model0 = do
     buildEnv = model0
       &      traverseOf (modelArgs.traversed.located._2) fetchTVal
       & (>>= traverseOf (modelReads.traversed.located)   fetchAccess)
+      & (>>= traverseOf (modelWrites.traversed.located)  fetchAccess)
       & (>>= traverseOf (modelAuths.traversed.located)   fetchSbv)
       & (>>= traverseOf (modelResult.located)            fetchTVal)
 
@@ -274,6 +277,7 @@ mkEmptyModel :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic Model
 mkEmptyModel funInfo args tm tagAllocs = Model
     <$> allocateArgs
     <*> allocateReads
+    <*> allocateWrites
     <*> allocateAuths
     <*> allocateResult
 
@@ -297,19 +301,33 @@ mkEmptyModel funInfo args tm tagAllocs = Model
     allocRowKey :: Symbolic (S RowKey)
     allocRowKey = sansProv <$> SBV.free_
 
+    allocAccess
+      :: Located (TagId, Schema)
+      -> Maybe (Symbolic (TagId, Located (S RowKey, Object)))
+    allocAccess (Located info (tid, schema)) = Just $ do
+      srk <- allocRowKey
+      obj <- allocSchema schema
+      pure (tid, Located info (srk, obj))
+
     allocateReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
     allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
         AllocAuthTag _ -> Nothing
-        AllocReadTag (Located info (tid, schema)) -> Just $ do
-          srk <- allocRowKey
-          obj <- allocSchema schema
-          pure (tid, Located info (srk, obj))
+        AllocWriteTag _ -> Nothing
+        AllocReadTag acc -> allocAccess acc
+
+    allocateWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocateWrites = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
+      \case
+        AllocAuthTag _ -> Nothing
+        AllocReadTag _ -> Nothing
+        AllocWriteTag acc -> allocAccess acc
 
     allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
       \case
         AllocReadTag _ -> Nothing
+        AllocWriteTag _ -> Nothing
         AllocAuthTag (Located info tid) -> Just $
           (tid,) . Located info <$> SBV.free_
 

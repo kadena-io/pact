@@ -104,6 +104,7 @@ mkTranslateEnv = foldl'
 
 data TagAllocation
   = AllocReadTag (Located (TagId, Schema))
+  | AllocWriteTag (Located (TagId, Schema))
   | AllocAuthTag (Located TagId)
   deriving Show
 
@@ -144,6 +145,13 @@ allocRead node schema = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
   writeTagAlloc $ AllocReadTag $ Located info (tid, schema)
+  pure tid
+
+allocWrite :: Node -> Schema -> TranslateM TagId
+allocWrite node schema = do
+  tid <- genTagId
+  let info = node ^. aId . Pact.tiInfo
+  writeTagAlloc $ AllocWriteTag $ Located info (tid, schema)
   pure tid
 
 allocAuth :: Node -> TranslateM TagId
@@ -490,11 +498,12 @@ translateNode astNode = case astNode of
 
     in mkMod <|> mkArith <|> mkComparison <|> mkLogical <|> mkConcat
 
-  AST_NFun _node name [ShortTableName tn, row, obj]
+  AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
-    EObject obj' _schema <- translateNode obj
-    pure $ ETerm (Write (TableName (T.unpack tn)) row' obj') TStr
+    EObject obj' schema <- translateNode obj
+    tid <- allocWrite node schema
+    pure $ ETerm (Write tid (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
     ETerm cond' TBool <- translateNode cond
