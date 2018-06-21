@@ -28,7 +28,7 @@ import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Parse           (expToProp)
-import           Pact.Analyze.PrenexNormalize (prenexConvert)
+import           Pact.Analyze.PrenexNormalize as Prenex (Float, prenexConvert)
 import           Pact.Analyze.Types
 
 wrap :: Text -> Text
@@ -1113,7 +1113,8 @@ spec = describe "analyze" $ do
 
   describe "prop parse / typecheck" $ do
     let textToProp'
-          :: Map Text UniqueId
+          :: Prenex.Float a
+          => Map Text UniqueId
           -> Map UniqueId EType
           -> Type a
           -> Text
@@ -1122,7 +1123,7 @@ spec = describe "analyze" $ do
           Right [exp'] -> expToProp (UniqueId (Map.size env1)) env1 env2 ty exp'
           _            -> Nothing
 
-        textToProp :: Type a -> Text -> Maybe (Prop a)
+        textToProp :: Prenex.Float a => Type a -> Text -> Maybe (Prop a)
         textToProp = textToProp' Map.empty Map.empty
 
     it "infers column-delta" $ do

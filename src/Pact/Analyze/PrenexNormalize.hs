@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Pact.Analyze.PrenexNormalize (prenexConvert) where
+module Pact.Analyze.PrenexNormalize (Float, prenexConvert) where
 
 import           Data.Bifunctor       (bimap)
 import           Prelude              hiding (Float)
@@ -121,7 +121,7 @@ floatBoolQuantifiers p = case p of
   RowRead tn pRk     -> RowRead tn <$> float pRk
   RowWrite tn pRk    -> RowWrite tn <$> float pRk
 
-reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
+reassembleFloated :: [Quantifier] -> Prop a -> Prop a
 reassembleFloated qs prop =
   let mkQuantifiedProp q acc = case q of
         Forall' uid name ty -> Forall uid name ty acc
@@ -136,5 +136,5 @@ reassembleFloated qs prop =
 -- the first two cases, we capture the quantifier to float it up. In the @PNot@
 -- case, we flip all the quantifiers found inside the @PNot@ as we lift them
 -- over it.
-prenexConvert :: Prop Bool -> Prop Bool
-prenexConvert = uncurry reassembleFloated . floatBoolQuantifiers
+prenexConvert :: Float a => Prop a -> Prop a
+prenexConvert = uncurry reassembleFloated . float

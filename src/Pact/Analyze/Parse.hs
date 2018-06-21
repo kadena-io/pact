@@ -28,7 +28,7 @@ import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
 import qualified Pact.Types.Lang      as Pact
 import           Pact.Types.Typecheck (UserType)
 
-import           Pact.Analyze.PrenexNormalize
+import           Pact.Analyze.PrenexNormalize as Prenex
 import           Pact.Analyze.Types
 
 textToArithOp :: Text -> Maybe ArithOp
@@ -285,13 +285,12 @@ expToCheck
   -> Exp
   -- ^ Exp to convert
   -> Maybe Check
-expToCheck genStart nameEnv idEnv body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
-  pure $ PropertyHolds $ prenexConvert typedBody
+expToCheck genStart nameEnv idEnv body
+  = PropertyHolds <$> expToProp genStart nameEnv idEnv TBool body
 
 expToProp
-  :: UniqueId
+  :: Prenex.Float a
+  => UniqueId
   -- ^ ID to start issuing from
   -> Map Text UniqueId
   -- ^ Environment mapping names to unique IDs
@@ -304,7 +303,8 @@ expToProp
   -> Maybe (Prop a)
 expToProp genStart nameEnv idEnv ty body = do
   preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
-  runReaderT (checkPreProp ty preTypedBody) idEnv
+  typedBody    <- runReaderT (checkPreProp ty preTypedBody) idEnv
+  pure $ prenexConvert typedBody
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
