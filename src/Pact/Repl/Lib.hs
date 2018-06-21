@@ -334,9 +334,11 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        results <- liftIO $ verifyModule modules md
+        (results, warnings) <- liftIO $ verifyModule modules md
         setop $ TcErrors $ fmap (Text.unpack . describeCheckResult) $
           toListOf (traverse . each) results
+        setop $ TcErrors $ pure $ Text.unpack $
+          describeVerificationWarnings warnings
 
         return (tStr "")
 

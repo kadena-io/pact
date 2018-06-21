@@ -68,7 +68,8 @@ runVerification code = do
   case eModuleData of
     Left cf -> pure $ Just cf
     Right moduleData -> do
-      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      (results, _warnings) <-
+        verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
       pure $ case findOf (traverse . traverse) isLeft results of
         Just (Left (_parsed, failure)) -> Just failure
