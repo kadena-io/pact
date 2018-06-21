@@ -31,37 +31,15 @@ import Data.List
 import Control.Monad
 import Prelude
 import Data.String
-import qualified Data.HashSet as HS
-import Text.Parser.Token.Highlight
-import Text.Parser.Token.Style
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
 
 import Pact.Types.Lang
-
-newtype PactParser p a = PactParser { unPactParser :: p a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing, CharParsing, DeltaParsing)
+import Pact.Types.Parser
 
 type P a = forall m. (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => PactParser m a
 
-instance TokenParsing p => TokenParsing (PactParser p) where
-  someSpace   = PactParser $ buildSomeSpaceParser someSpace $ CommentStyle "" "" ";" False
-  nesting     = PactParser . nesting . unPactParser
-  semi        = token $ char ';' <?> ";"
-  highlight h = PactParser . highlight h . unPactParser
-  token p     = p <* whiteSpace
-
-symbols :: CharParsing m => m Char
-symbols = oneOf "%#+-_&$@<>=^?*!|/"
-
-style :: CharParsing m => IdentifierStyle m
-style = IdentifierStyle "atom"
-        (letter <|> symbols)
-        (letter <|> digit <|> symbols)
-        (HS.fromList ["true","false"])
-        Symbol
-        ReservedIdentifier
 
 -- | Main parser for Pact expressions.
 expr :: P Exp
@@ -130,9 +108,6 @@ expPrimTy :: Exp -> Maybe (Type TypeName)
 expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
 expPrimTy ESymbol {} = Just $ TyPrim TyString
 expPrimTy _ = Nothing
-
-qualified :: P Text
-qualified = dot *> ident style
 
 typed :: P (Type TypeName)
 typed = colon *> parseType

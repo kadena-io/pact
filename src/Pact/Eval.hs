@@ -92,7 +92,7 @@ enforceKeySet i ksn KeySet{..} = do
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
     Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
     Nothing -> do
-      let app = TApp (TVar (Name _ksPredFun def) def)
+      let app = TApp (TVar _ksPredFun def)
                 [toTerm count,toTerm matched] i
       app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
       r <- reduce app'
