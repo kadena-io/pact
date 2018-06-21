@@ -140,19 +140,22 @@ writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
 
-allocRead :: Node -> Schema -> TranslateM TagId
-allocRead node schema = do
+allocDbAccess
+  :: (Located (TagId, Schema) -> TagAllocation)
+  -> Node
+  -> Schema
+  -> TranslateM TagId
+allocDbAccess mkTagAlloc node schema = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocReadTag $ Located info (tid, schema)
+  writeTagAlloc $ mkTagAlloc $ Located info (tid, schema)
   pure tid
 
+allocRead :: Node -> Schema -> TranslateM TagId
+allocRead = allocDbAccess AllocReadTag
+
 allocWrite :: Node -> Schema -> TranslateM TagId
-allocWrite node schema = do
-  tid <- genTagId
-  let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocWriteTag $ Located info (tid, schema)
-  pure tid
+allocWrite = allocDbAccess AllocWriteTag
 
 allocAuth :: Node -> TranslateM TagId
 allocAuth node = do
