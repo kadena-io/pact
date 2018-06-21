@@ -1,4 +1,3 @@
-
 code: |-
   (let ((bob-bal (at 'balance (accounts.read-account-user "Bob"))))
     (enforce (= 12.50 bob-bal) "Bob got paid 12.50"))

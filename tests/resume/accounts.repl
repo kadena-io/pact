@@ -1,0 +1,127 @@
+(begin-tx)
+(define-keyset 'k (sig-keyset))
+(module system 'k
+  (defschema sysdata curtime:time)
+  (deftable systbl:{sysdata})
+  (defconst KEY "sys")
+  (defun set-system-time (curtime) (write systbl KEY { 'curtime: curtime }))
+  (defun get-system-time () (at 'curtime (read systbl KEY)))
+)
+(create-table systbl)
+(commit-tx)
+(env-keys ["accountadmin" "user123" "user456"])
+(env-data { "accounts-admin-keyset": ["accountadmin"] })
+(begin-tx)
+(load "accounts.pact")
+(commit-tx)
+(typecheck 'accounts)
+(expect "test const evaluation" "ref" accounts.PACT_REF)
+(env-data { "123-keyset": { "keys" : ["user123"], "pred": "keys-all" },
+             "456-keyset": { "keys": ["user456"], "pred": "keys-any" } })
+(begin-tx)
+(use 'accounts)
+(create-account "123" (read-keyset "123-keyset") "USD" (time "2016-07-22T11:26:35Z"))
+(create-account "456" (read-keyset "456-keyset") "USD" (time "2016-07-22T11:26:35Z"))
+(fund-account "123" 234.0 (time "2016-07-22T11:26:35Z"))
+(commit-tx)
+(begin-tx)
+(use 'accounts)
+(transfer "123" "456" 5.0 (time "2016-07-22T11:26:35Z"))
+(commit-tx)
+(begin-tx)
+(use 'accounts)
+(expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
+(expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
+
+(env-keys ["user123" "user456"])
+(expect-failure "should not allow read" (with-read accounts "123" { "balance" := b } b))
+
+;; test private pact 'payment'
+
+(env-keys ["user123" "accountadmin"])
+(env-entity "us")
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(expect "balance of 123 after debit step" 217.0 (with-read accounts "123" { "balance" := b } b))
+
+(env-step 0 true)
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(expect "balance of 123 after rollback" 229.0 (with-read accounts "123" { "balance" := b } b))
+
+(env-step 1)
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(expect "balance of 456 unchanged" 5.0 (with-read accounts "456" { "balance" := b } b))
+
+(env-entity "them")
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(expect "balance of 456 after credit step" 17.0 (with-read accounts "456" { "balance" := b } b))
+(commit-tx)
+
+;; test public pact escrow
+(begin-tx)
+(module test 'k
+  (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
+  (defun run-escrow () (accounts.two-party-escrow "123" "456" 2.00 TIMEOUT))
+  (defun reset-time () (system.set-system-time (time "2017-01-01T12:00:00Z")))
+  (defun get-balance (acct) (at "balance" (accounts.read-account-user acct)))
+  )
+(commit-tx)
+
+(env-keys ["user123"])
+(env-step 0)
+
+(begin-tx)
+(test.reset-time)
+(test.run-escrow)
+(expect "2.0 escrowed" 227.0 (test.get-balance "123"))
+(commit-tx)
+
+
+;;test cancel
+(begin-tx)
+(env-step 0 true)
+;; debtor cannot cancel
+(expect-failure "creditor cancel pre-timeout" (test.run-escrow))
+(expect "still escrowed" 227.0 (test.get-balance "123"))
+
+(system.set-system-time test.TIMEOUT)
+;; debtor can cancel
+(test.run-escrow)
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+(expect "still escrowed" 227.0 (test.get-balance "123"))
+(begin-tx)
+;; creditor can cancel immediately
+(test.reset-time)
+(env-keys ["user456"])
+(env-step 0 true)
+(test.run-escrow)
+(env-keys ["user123"]) ; for balance check
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+;; creditor cannot finish alone
+(env-step 1)
+(env-keys ["user456"])
+(expect-failure "creditor cannot finish alone" (test.run-escrow))
+;; debtor cannot finish alone
+(env-step 1)
+(env-keys ["user123"])
+(expect-failure "debtor cannot finish alone" (test.run-escrow))
+;; both can, but price cannot be nego'd up
+(env-step 1)
+(env-keys ["user123" "user456"])
+(env-data { "final-price": 2.75 })
+(expect-failure "price cannot nego up" (test.run-escrow))
+
+(env-step 1)
+(env-data { "final-price": 1.75 })
+(test.run-escrow)
+(expect "seller paid 1.75" 18.75 (test.get-balance "456"))
+(expect "buyer refunded .25" 227.25 (test.get-balance "123"))
+
+
+
+
+
+;
