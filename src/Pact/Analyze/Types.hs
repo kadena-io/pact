@@ -653,6 +653,8 @@ data Model
   = Model
     { _modelArgs   :: Map VarId (Located (Text, TVal))
     -- ^ one per input to the function
+    , _modelVars   :: Map VarId (Located (Text, TVal))
+    -- ^ each intermediate variable binding
     , _modelReads  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
     , _modelWrites :: Map TagId (Located (S RowKey, Object))

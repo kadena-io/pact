@@ -13,8 +13,9 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative, (<|>))
-import           Control.Lens               (at, cons, makeLenses, view, (%~),
-                                             (<&>), (?~), (^.), (^?))
+import           Control.Lens               (at, cons, makeLenses, makePrisms,
+                                             view, (%~), (<&>), (?~), (^.),
+                                             (^?))
 import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -106,6 +107,7 @@ data TagAllocation
   = AllocReadTag (Located (TagId, Schema))
   | AllocWriteTag (Located (TagId, Schema))
   | AllocAuthTag (Located TagId)
+  | AllocVarTag (Located (VarId, Text, EType))
   deriving Show
 
 data TranslateState
@@ -115,6 +117,7 @@ data TranslateState
     , _tsNextVarId :: VarId
     }
 
+makePrisms ''TagAllocation
 makeLenses ''TranslateState
 
 instance HasVarId TranslateState where
@@ -163,6 +166,10 @@ tagAuth node = do
   let info = node ^. aId . Pact.tiInfo
   writeTagAlloc $ AllocAuthTag $ Located info tid
   pure tid
+
+tagVarBinding :: Pact.Info -> Text -> EType -> VarId -> TranslateM ()
+tagVarBinding info nm ety vid = writeTagAlloc $
+  AllocVarTag (Located info (vid, nm, ety))
 
 withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
 withNewVarId varNode varName action = do
@@ -239,10 +246,12 @@ translateObjBinding
   -> TranslateM ETerm
 translateObjBinding bindingsA schema bodyA rhsT = do
   (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
-    \(Named _ varNode _, colAst) -> do
+    \(Named unmungedVarName varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
+          varInfo = varNode ^. aId . Pact.tiInfo
       varType <- translateType varNode
       vid <- genVarId
+      tagVarBinding varInfo unmungedVarName varType vid
       case colAst of
         AST_StringLit colName ->
           pure (T.unpack colName, varType, (varNode, varName, vid))
@@ -278,7 +287,7 @@ translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = case astNode of
   AST_Let _ [] body -> translateBody body
 
-  AST_Let node ((Named _ varNode _, rhsNode):bindingsRest) body -> do
+  AST_Let node ((Named unmungedVarName varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
     let varName = varNode ^. aId.tiName
     withNewVarId varNode varName $ \vid -> do
@@ -287,7 +296,12 @@ translateNode astNode = case astNode of
       --       earlier ones if we know it's let* rather than let? or has this
       --       been enforced by earlier stages for us?
       --
-      -- XXX allow objects here
+
+      let varInfo = varNode ^. aId . Pact.tiInfo
+          varType = etermEType rhsETerm
+
+      tagVarBinding varInfo unmungedVarName varType vid
+
       body' <- translateNode $ AST_Let node bindingsRest body
       pure $ case body' of
         ETerm   bodyTm bodyTy -> ETerm   (Let varName vid rhsETerm bodyTm) bodyTy

@@ -535,6 +535,15 @@ tagResult av = do
   tag <- view $ aeModel.modelResult.located._2
   addConstraint $ sansProv $ tag .== av
 
+tagVarBinding :: VarId -> AVal -> Analyze ()
+tagVarBinding vid av = do
+  mTag <- preview $ aeModel.modelVars.at vid._Just.located._2._2
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
 
@@ -869,6 +878,7 @@ analyzeTermO = \case
 
   Let _name vid eterm body -> do
     av <- analyzeETerm eterm
+    tagVarBinding vid av
     local (scope.at vid ?~ av) $
       analyzeTermO body
 
@@ -1203,6 +1213,7 @@ analyzeTerm = \case
 
   Let _name vid eterm body -> do
     av <- analyzeETerm eterm
+    tagVarBinding vid av
     local (scope.at vid ?~ av) $
       analyzeTerm body
 

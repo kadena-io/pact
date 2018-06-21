@@ -16,10 +16,10 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (ifoldMap, ifoldr, ifoldrM,
-                                            itraversed, ix, traverseOf,
-                                            traversed, (&), (<&>), (^.), (^?),
-                                            (^@..), _1, _2, _Just)
+import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
+                                            itraversed, ix, toListOf,
+                                            traverseOf, traversed, (&), (<&>),
+                                            (^.), (^?), (^@..), _1, _2, _Just)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -112,9 +112,11 @@ describeCheckFailure parsed failure =
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 showModel :: Model -> Text
-showModel (Model args reads' writes auths res) = T.intercalate "\n"
+showModel (Model args vars reads' writes auths res) = T.intercalate "\n"
     [ "Arguments:"
-    , ifoldMap (showArgItem showArg) args
+    , ifoldMap (showVarItem showVar) args
+    , "Variables:"
+    , ifoldMap (showVarItem showVar) vars
     , "Reads:"
     , ifoldMap (showTaggedItem showAccess) reads'
     , "Writes:"
@@ -126,11 +128,11 @@ showModel (Model args reads' writes auths res) = T.intercalate "\n"
     ]
 
   where
-    showArgItem :: (a -> Text) -> VarId -> a -> Text
-    showArgItem show' (VarId i) arg = "  (" <> tShow i <> ") " <> show' arg <> "\n"
+    showVarItem :: (a -> Text) -> VarId -> a -> Text
+    showVarItem show' (VarId i) var = "  (" <> tShow i <> ") " <> show' var <> "\n"
 
     showTaggedItem :: (a -> Text) -> TagId -> a -> Text
-    showTaggedItem show' (TagId i) arg = "  [" <> tShow i <> "] " <> show' arg <> "\n"
+    showTaggedItem show' (TagId i) var = "  [" <> tShow i <> "] " <> show' var <> "\n"
 
     showSbv :: (Show a, SymWord a) => SBV a -> Text
     showSbv sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
@@ -155,8 +157,8 @@ showModel (Model args reads' writes auths res) = T.intercalate "\n"
     showObjMapping :: Text -> TVal -> Text
     showObjMapping key val = key <> ": " <> showTVal val
 
-    showArg :: Located (Text, TVal) -> Text
-    showArg (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
+    showVar :: Located (Text, TVal) -> Text
+    showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
 
     showAccess :: Located (S RowKey, Object) -> Text
     showAccess (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
@@ -210,6 +212,7 @@ resultQuery goal model0 = do
     buildEnv :: SBV.Query Model
     buildEnv = model0
       &      traverseOf (modelArgs.traversed.located._2) fetchTVal
+      & (>>= traverseOf (modelVars.traversed.located._2) fetchTVal)
       & (>>= traverseOf (modelReads.traversed.located)   fetchAccess)
       & (>>= traverseOf (modelWrites.traversed.located)  fetchAccess)
       & (>>= traverseOf (modelAuths.traversed.located)   fetchSbv)
@@ -276,6 +279,7 @@ runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
 mkEmptyModel :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic Model
 mkEmptyModel funInfo args tm tagAllocs = Model
     <$> allocateArgs
+    <*> allocateVars
     <*> allocateReads
     <*> allocateWrites
     <*> allocateAuths
@@ -298,38 +302,34 @@ mkEmptyModel funInfo args tm tagAllocs = Model
       av <- alloc ety
       pure (vid, Located info (nm, (ety, av)))
 
+    allocateVars :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocateVars = fmap Map.fromList $
+      for (toListOf (traverse._AllocVarTag) tagAllocs) $
+        \(Located info (vid, nm, ety)) ->
+          alloc ety <&> \av -> (vid, Located info (nm, (ety, av)))
+
     allocRowKey :: Symbolic (S RowKey)
     allocRowKey = sansProv <$> SBV.free_
 
-    allocAccess
-      :: Located (TagId, Schema)
-      -> Maybe (Symbolic (TagId, Located (S RowKey, Object)))
-    allocAccess (Located info (tid, schema)) = Just $ do
-      srk <- allocRowKey
-      obj <- allocSchema schema
-      pure (tid, Located info (srk, obj))
+    allocAccesses
+      :: Prism' TagAllocation (Located (TagId, Schema))
+      -> Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocAccesses p = fmap Map.fromList $
+      for (toListOf (traverse.p) tagAllocs) $ \(Located info (tid, schema)) -> do
+        srk <- allocRowKey
+        obj <- allocSchema schema
+        pure (tid, Located info (srk, obj))
 
     allocateReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocateReads = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
-      \case
-        AllocAuthTag _ -> Nothing
-        AllocWriteTag _ -> Nothing
-        AllocReadTag acc -> allocAccess acc
+    allocateReads = allocAccesses _AllocReadTag
 
     allocateWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocateWrites = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
-      \case
-        AllocAuthTag _ -> Nothing
-        AllocReadTag _ -> Nothing
-        AllocWriteTag acc -> allocAccess acc
+    allocateWrites = allocAccesses _AllocWriteTag
 
     allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
-    allocateAuths = fmap Map.fromList $ sequence $ flip mapMaybe tagAllocs $
-      \case
-        AllocReadTag _ -> Nothing
-        AllocWriteTag _ -> Nothing
-        AllocAuthTag (Located info tid) -> Just $
-          (tid,) . Located info <$> SBV.free_
+    allocateAuths = fmap Map.fromList $
+      for (toListOf (traverse._AllocAuthTag) tagAllocs) $ \(Located info tid) ->
+        (tid,) . Located info <$> SBV.free_
 
     allocateResult :: Symbolic (Located TVal)
     allocateResult = Located funInfo <$> case tm of

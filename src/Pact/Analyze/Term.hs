@@ -31,6 +31,10 @@ mapETerm f term = case term of
   ETerm term' ty    -> ETerm (f term') ty
   EObject term' sch -> EObject (f term') sch
 
+etermEType :: ETerm -> EType
+etermEType (ETerm _ ety)   = EType ety
+etermEType (EObject _ sch) = EObjectTy sch
+
 data Term ret where
   -- Literals
   Literal        :: S a                       -> Term a
