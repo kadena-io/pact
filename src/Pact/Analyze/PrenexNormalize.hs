@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
-module Pact.Analyze.PrenexNormalize (prenexConvert) where
+module Pact.Analyze.PrenexNormalize (Float, prenexConvert) where
 
 import           Data.Bifunctor     (bimap)
 import           Prelude            hiding (Float)
@@ -140,4 +140,4 @@ reassembleFloated qs prop =
 -- case, we flip all the quantifiers found inside the @PNot@ as we lift them
 -- over it.
 prenexConvert :: Prop Bool -> Prop Bool
-prenexConvert = uncurry reassembleFloated . floatBoolQuantifiers
+prenexConvert = uncurry reassembleFloated . float

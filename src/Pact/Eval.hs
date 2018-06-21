@@ -1,12 +1,13 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 -- |
 -- Module      :  Pact.Eval
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -174,7 +175,8 @@ loadModule m bod1 mi = do
             TSchema {..} -> return $ Just $ asString _tSchemaName
             TTable {..} -> return $ Just $ asString _tTableName
             TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
-            TBless {..} -> return Nothing
+            TBless {} -> return Nothing
+            TModel {} -> return Nothing
             _ -> evalError (_tInfo t) "Invalid module member"
           return $ maybe [] (\dn -> [(dn,t)]) dnm
       t -> evalError (_tInfo t) "Malformed module"
@@ -270,6 +272,7 @@ reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce TModel{_tInfo} = evalError _tInfo "model only allowed at top level"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

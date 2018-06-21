@@ -75,13 +75,15 @@ module Pact.Types.Lang
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tPropertyDefs,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
    Text,pack,unpack,
-   mDocs,mMetas
+   mDocs,mMetas,
+   TPropertyDef(..)
    ) where
 
 
@@ -785,8 +787,21 @@ data Term n =
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
+    } |
+    TModel {
+      _tPropertyDefs :: !(HM.HashMap Text (TPropertyDef n))
+    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
+
+data TPropertyDef n = TPropertyDef
+  { _tPropertyArgs :: ![Arg (Term n)]
+  -- This is not the best, but we will eventually parse this Exp into a
+  -- property downstream of here
+  , _tPropertyBody :: !Exp
+  , _tPropertyInfo :: !Info
+  }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance Show n => Show (Term n) where
     show TModule {..} =
@@ -817,6 +832,8 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tMeta ++ ")"
+    show TModel {..} =
+      "(TModel " ++ show _tPropertyDefs ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -858,7 +875,12 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
+  liftEq eq (TModel a b) (TModel m n) = liftEq (liftEq eq) a m && b == n
   liftEq _ _ _ = False
+
+instance Eq1 TPropertyDef where
+  liftEq eq (TPropertyDef a b c) (TPropertyDef m n o) =
+    liftEq (liftEq (liftEq eq)) a m && b == n && c == o
 
 
 instance Applicative Term where
@@ -884,7 +906,9 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
-
+    TModel props i >>= f = TModel (fmap f' props) i
+      where f' (TPropertyDef args body i') =
+              TPropertyDef (fmap (fmap (>>= f)) args) body i'
 
 instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
@@ -953,6 +977,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+      TModel {..} -> Left "model"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -1010,6 +1035,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
+abbrev TModel {..} = "<model ...>"
 
 
 

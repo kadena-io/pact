@@ -10,18 +10,20 @@
 module Pact.Analyze.Parse
   ( expToCheck
   , expToProp
+  , expToProp'
   , expToInvariant
   , TableEnv
   ) where
 
 import           Control.Applicative          (Alternative, (<|>))
 import           Control.Lens                 (at, ix, makeLenses, view,
-                                               (^.), (^..), (&), (?~), (%~))
+                                               (^.), (^..), (&), (?~), (%~), (.~))
 import           Control.Monad                (when)
 import           Control.Monad.Except         (MonadError(throwError))
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Data.Foldable                (asum, find)
+import qualified Data.HashMap.Strict          as HM
 import           Data.Maybe                   (isJust)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -41,7 +43,7 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.PrenexNormalize
+import           Pact.Analyze.PrenexNormalize as Prenex
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
@@ -129,7 +131,15 @@ data PropCheckEnv = PropCheckEnv
   -- , _quantifiedColumns :: Set ColumnName
   }
 
-type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
+data ParseEnv = ParseEnv
+  { _quantifiedVars :: Map Text VarId
+  , _definedVars    :: HM.HashMap Text Exp
+  }
+
+makeLenses ''ParseEnv
+
+type PropParse = ReaderT ParseEnv (StateT VarId (Either String))
+
 type PropCheck = ReaderT PropCheckEnv (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
@@ -176,7 +186,7 @@ expToPreProp = \case
     bindings' <- propBindings bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(vid, name, _ty) -> (name, vid)) bindings'
-    body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
+    body' <- local (& quantifiedVars %~ Map.union theseBindingsMap) (expToPreProp body)
     pure $ foldr
       (\(vid, name, ty) accum -> q vid name ty accum)
       body'
@@ -187,7 +197,7 @@ expToPreProp = \case
   EAtom' "abort"   -> pure PreAbort
   EAtom' "success" -> pure PreSuccess
   EAtom' "result"  -> pure PreResult
-  EAtom' var       -> mkVar var
+  EAtom' var       -> lookupVar var
 
   exp -> throwErrorIn exp $ "expected property"
 
@@ -210,13 +220,25 @@ expToPreProp = \case
         propBindings exp = throwErrorT $
           "in " <> userShowList exp <> ", unexpected binding form"
 
-        mkVar :: Text -> PropParse PreProp
-        mkVar var = do
-          mVid <- view (at var)
-          case mVid of
-            Nothing  -> throwErrorT $
-              "couldn't find property variable " <> var
-            Just vid -> pure (PreVar vid var)
+        lookupVar :: Text -> PropParse PreProp
+        lookupVar var =
+          let fromDefn = do
+                defn <- view (definedVars . at var)
+                case defn of
+                -- Note: we remove this definition from the environment as we
+                -- continue. This has the effect of inlining the definition and
+                -- removing it from the environment. This is a slight layering
+                -- violation but will do for now.
+                  Just exp -> local (& definedVars . at var .~ Nothing)
+                    (expToPreProp exp)
+                  -- TODO: remove duplicate parse errors
+                  Nothing -> throwErrorT $ "couldn't find property variable " <> var
+              fromQuantified = do
+                mUid <- view (quantifiedVars . at var)
+                case mUid of
+                  Just uid -> pure (PreVar uid var)
+                  Nothing  -> throwErrorT $ "couldn't find property variable " <> var
+          in fromDefn <|> fromQuantified
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
@@ -436,14 +458,17 @@ expToCheck
   -> VarId
   -- ^ ID to start issuing from
   -> Map Text VarId
-  -- ^ Environment mapping names to var IDs
+  -- ^ Environment mapping names to unique IDs
   -> Map VarId EType
-  -- ^ Environment mapping var IDs to their types
+  -- ^ Environment mapping unique IDs to their types
+  -> HM.HashMap Text Exp
+  -- ^ Defined props in the environment
   -> Exp
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv' genStart nameEnv idEnv body = do
-  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+expToCheck tableEnv' genStart nameEnv idEnv defprops body = do
+  preTypedBody <- evalStateT
+    (runReaderT (expToPreProp body) (ParseEnv nameEnv defprops)) genStart
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
   typedBody <- runReaderT (checkPreProp TBool preTypedBody) env
   pure $ PropertyHolds $ prenexConvert typedBody
@@ -454,18 +479,39 @@ expToProp
   -> VarId
   -- ^ ID to start issuing from
   -> Map Text VarId
-  -- ^ Environment mapping names to var IDs
+  -- ^ Environment mapping names to unique IDs
   -> Map VarId EType
-  -- ^ Environment mapping var IDs to their types
+  -- ^ Environment mapping unique IDs to their types
+  -> HM.HashMap Text Exp
+  -- ^ Defined props in the environment
+  -> Exp
+  -- ^ Exp to convert
+  -> Either String (Prop Bool)
+expToProp tableEnv' genStart nameEnv idEnv defprops body = prenexConvert <$>
+  expToProp' tableEnv' genStart nameEnv idEnv defprops TBool body
+
+expToProp'
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
+  -- ^ ID to start issuing from
+  -> Map Text VarId
+  -- ^ Environment mapping names to unique IDs
+  -> Map VarId EType
+  -- ^ Environment mapping unique IDs to their types
+  -> HM.HashMap Text Exp
+  -- ^ Defined props in the environment
   -> Type a
   -- ^ Expected prop type
   -> Exp
   -- ^ Exp to convert
   -> Either String (Prop a)
-expToProp tableEnv' genStart nameEnv idEnv ty body = do
-  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+expToProp' tableEnv' genStart nameEnv idEnv defprops ty body = do
+  preTypedBody <- evalStateT
+    (runReaderT (expToPreProp body) (ParseEnv nameEnv defprops)) genStart
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
-  runReaderT (checkPreProp ty preTypedBody) env
+  typedBody    <- runReaderT (checkPreProp ty preTypedBody) env
+  pure typedBody
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of

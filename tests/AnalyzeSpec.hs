@@ -28,7 +28,7 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (TableEnv, expToProp)
+import           Pact.Analyze.Parse           (TableEnv, expToProp, expToProp')
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 
@@ -80,7 +80,8 @@ runVerification code = do
   case eModuleData of
     Left tf -> pure $ Just tf
     Right moduleData -> do
-      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      (results, _warnings) <-
+        verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
       case results of
         Left failures -> pure $ Just $ ParseFailures failures
@@ -1168,33 +1169,39 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 ty exp'
+            expToProp' tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
         textToProp :: Type a -> Text -> Either String (Prop a)
-        textToProp = textToProp' Map.empty Map.empty (TableMap mempty)
+        textToProp = textToProp' Map.empty Map.empty (TableMap Map.empty)
 
-        textToPropTableEnv :: TableEnv -> Type a -> Text -> Either String (Prop a)
-        textToPropTableEnv tableEnv = textToProp' Map.empty Map.empty tableEnv
+        textToPropTableEnv
+          :: TableEnv
+          -> Text
+          -> Either String (Prop Bool)
+        textToPropTableEnv tableEnv t = case parseExprs t of
+          Right [exp'] ->
+            expToProp tableEnv (VarId 0) Map.empty Map.empty HM.empty exp'
+          Left err -> Left err
+          _        -> Left "Error: unexpected result from parseExprs"
 
         singletonTableEnv :: TableName -> ColumnName -> EType -> TableEnv
         singletonTableEnv a b ty = TableMap $ Map.singleton a $
             ColumnMap $ Map.singleton b ty
 
-
     it "infers column-delta" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
-      textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
+      textToPropTableEnv tableEnv "(> (column-delta 'a 'b) 0)"
         `shouldBe`
         Right (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
 
       let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
-      textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
+      textToPropTableEnv tableEnv' "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
         Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
 
-      textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
+      textToPropTableEnv tableEnv' "(> (column-delta \"a\" \"b\") 0.0)"
         `shouldBe`
         Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
 
@@ -1228,14 +1235,12 @@ spec = describe "analyze" $ do
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       textToPropTableEnv
         tableEnv
-        TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
-        Right (PNot
-          (Exists (VarId 0) "row" (EType TStr)
+          (Right (Forall (VarId 0) "row" (EType TStr) (PNot
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (VarId 0) "row"))
-              2)))
+              2))))
 
     it "parses row-enforced / vars" $ do
       let env1 = Map.singleton "from" (VarId 0)
@@ -1247,13 +1252,13 @@ spec = describe "analyze" $ do
 
     it "parses column properties" $
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
-      in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
+      in textToPropTableEnv tableEnv "(= (column-delta 'accounts 'balance) 0)"
            `shouldBe`
            Right (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
       let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType TKeySet
-      in textToPropTableEnv tableEnv TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
+      in textToPropTableEnv tableEnv "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
          `shouldBe`
          Right (PLogical OrOp
            [ PLogical NotOp [

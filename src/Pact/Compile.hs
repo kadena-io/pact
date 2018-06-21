@@ -43,6 +43,7 @@ import Data.Maybe
 import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 
@@ -149,13 +150,14 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
     _ -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
-        TDef {} -> return d
+        TDef {}    -> return d
         TNative {} -> return d
-        TConst {} -> return d
+        TConst {}  -> return d
         TSchema {} -> return d
-        TTable {} -> return d
-        TUse {} -> return d
-        TBless {} -> return d
+        TTable {}  -> return d
+        TUse {}    -> return d
+        TBless {}  -> return d
+        TModel {}  -> return d
         t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, bless allowed in module"
       mkModule body docs = do
         cm <- use csModule
@@ -198,6 +200,25 @@ doDef es defType namei i =
           cm <- currentModule i
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn (fst cm) defType dty db ddocs i
+
+doModel :: [Exp] -> Info -> Info -> Compile (Term Name)
+doModel exps namei i = do
+  defs <- traverse (doDefProperty namei) exps
+  pure $ TModel (HM.fromList defs) i
+
+doDefProperty:: Info -> Exp -> Compile (Text, TPropertyDef Name)
+doDefProperty namei exp = case exp of
+  EList (ea@(EAtom "defproperty" Nothing Nothing _):rest) Nothing _ -> do
+    ai <- mkInfo ea
+    let mkDef name args body = do
+          args' <- mapM atomVar args
+          pure (name, TPropertyDef args' body ai)
+    case rest of
+      [ EAtom' propname, EList' args, body ] -> mkDef propname args body
+      [ EAtom' propname,              body ] -> mkDef propname []   body
+      _ -> syntaxError namei "Invalid property definition"
+  _ -> syntaxError namei "Invalid property definition"
+
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -326,6 +347,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
       ("defschema",Nothing) -> doSchema rest li
       ("deftable",Nothing) -> doTable rest li
       ("bless",Nothing) -> doBless rest li
+      ("model",Nothing) -> doModel rest ai li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
           (preArgs,be@(EBinding bs _):bbody) ->

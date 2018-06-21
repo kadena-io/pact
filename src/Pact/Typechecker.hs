@@ -621,6 +621,7 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
+toAST TModel {..} = die _tInfo "Property def in value position"
 
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)

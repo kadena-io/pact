@@ -11,6 +11,7 @@ module Pact.Analyze.Check
   , verifyCheck
   , describeCheckResult
   , describeParseFailure
+  , describeVerificationWarnings
   , CheckFailure(..)
   , CheckSuccess(..)
   , CheckResult
@@ -18,10 +19,11 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
+import           Control.Lens              (Prism', at, imap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), (?~), _1, _2, _Just)
+                                            traverseOf, traversed, (&), (<&>),
+                                            (^.), (^?), (^@..), (?~), (%~), _1,
+                                            _2, _Just)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -51,10 +53,12 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Parsed, eParsed, mMetas, mName,
                                             renderInfo, renderParsed, tMeta,
-                                            _iInfo)
+                                            _iInfo, _tPropertyBody,
+                                            _tPropertyDefs)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
-                                            Term (TDef, TSchema, TTable),
+                                            Term (TDef, TSchema, TTable,
+                                            TModel),
                                             asString, tInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
@@ -70,6 +74,12 @@ import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
+
+newtype VerificationWarnings = VerificationWarnings [Text]
+
+describeVerificationWarnings :: VerificationWarnings -> Text
+describeVerificationWarnings (VerificationWarnings dups) =
+  "Warning: duplicated property definitions for " <> T.intercalate ", " dups
 
 data CheckSuccess
   = SatisfiedProperty Model
@@ -435,11 +445,18 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   Ref (TDef {}) -> True
   _             -> False
 
+-- Get the set (HashMap) of refs to functions in this module.
+modulePropDefs :: ModuleData -> HM.HashMap Text (Pact.TPropertyDef Ref)
+modulePropDefs (_mod, modRefs) = flip foldMap modRefs $ \case
+  Ref (TModel {_tPropertyDefs}) -> _tPropertyDefs
+  _                             -> HM.empty
+
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text Exp
   -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
+moduleFunChecks tables modTys propDefs = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
 
@@ -460,9 +477,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
       env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
         $ zip vids
         $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
-            case maybeTranslateType ty of
-              Just ety -> Just (name, ety)
-              Nothing  -> Nothing
+            (name,) <$> maybeTranslateType ty
 
       nameEnv :: Map Text VarId
       nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env
@@ -481,7 +496,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
           in (TableName (T.unpack _tableName), colMap)
 
       eitherChecks = runExpParserOver "properties" properties property
-        (expToCheck tableEnv vidStart nameEnv idEnv)
+        (expToCheck tableEnv vidStart nameEnv idEnv propDefs)
 
       checks :: Either [ParseFailure] [(Parsed, Check)]
       checks = ((defnParsed, InvariantsHold):) <$> eitherChecks
@@ -548,12 +563,34 @@ verifyFunction tables ref props = do
 verifyModule
   :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
   -> ModuleData                         -- ^ the module we're verifying
-  -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]))
+  -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]), VerificationWarnings)
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
-  let funRefs :: HM.HashMap Text Ref
+  let -- HM.unions is biased towards the start of the list. This module should
+      -- shadow the others. Note that load / shadow order of imported modules
+      -- is undefined and in particular not the same as their import order.
+      allModules = moduleData : HM.elems modules
+
+      allModulePropDefs :: [HM.HashMap Text (Pact.TPropertyDef Ref)]
+      allModulePropDefs = modulePropDefs <$> allModules
+
+      -- how many times have these names been defined across all in-scope
+      -- modules
+      allModulePropNameDuplicates =
+          HM.keys
+        $ HM.filter (> (1 :: Int))
+        $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
+        $ concatMap HM.keys
+        $ allModulePropDefs
+
+      propDefs :: HM.HashMap Text Exp
+      propDefs = HM.unions (_tPropertyBody <$$> allModulePropDefs)
+
+      funRefs :: HM.HashMap Text Ref
       funRefs = moduleFunRefs moduleData
+
+      warnings = VerificationWarnings allModulePropNameDuplicates
 
   -- For each ref, if it typechecks as a function (which it should), keep its
   -- signature.
@@ -570,11 +607,11 @@ verifyModule modules moduleData = do
     funRefs
 
   case tables of
-    Left errs -> pure (Left errs)
+    Left errs -> pure (Left errs, warnings)
     Right tables' -> do
 
       let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-          funChecks = moduleFunChecks tables' funTypes
+          funChecks = moduleFunChecks tables' funTypes propDefs
 
           funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
           funChecks' = sequence (fmap sequence funChecks)
@@ -583,8 +620,10 @@ verifyModule modules moduleData = do
           verifyFun = uncurry (verifyFunction tables')
 
       case funChecks' of
-        Left errs -> pure (Left errs)
-        Right funChecks'' -> Right <$> traverse verifyFun funChecks''
+        Left errs -> pure (Left errs, warnings)
+        Right funChecks'' -> do
+          results <- traverse verifyFun funChecks''
+          pure (Right results, warnings)
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
