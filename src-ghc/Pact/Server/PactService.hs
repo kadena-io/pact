@@ -140,7 +140,9 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
 
           -- Setup environement and get result
           let sigs = userSigsToPactKeySet cmdSigs
-              msgData = Null -- TODO data from msg
+              msgData = case _cmData of
+                Nothing -> Null
+                Just d -> d
               resume = Nothing -- TODO decode yielded object
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
