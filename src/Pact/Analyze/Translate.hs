@@ -231,13 +231,13 @@ translateBody (ast:asts) = do
     ETerm   astsT ty -> ETerm   (Sequence ast' astsT) ty
     EObject astsO ty -> EObject (Sequence ast' astsO) ty
 
-translateBinding
+translateObjBinding
   :: [(Named Node, AST Node)]
   -> Schema
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateBinding bindingsA schema bodyA rhsT = do
+translateObjBinding bindingsA schema bodyA rhsT = do
   (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
     \(Named _ varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
@@ -523,12 +523,12 @@ translateNode astNode = case astNode of
     ETerm key' TStr <- translateNode key
     tid <- allocRead node schema
     let readT = EObject (Read tid (TableName (T.unpack table)) schema key') schema
-    translateBinding bindings schema body readT
+    translateObjBinding bindings schema body readT
 
   AST_Bind _ objectA bindings schemaNode body -> do
     schema <- translateSchema schemaNode
     objectT <- translateNode objectA
-    translateBinding bindings schema body objectT
+    translateObjBinding bindings schema body objectT
 
   -- Time
   -- Tricky: seconds could be either integer or decimal
