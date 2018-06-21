@@ -406,8 +406,10 @@ verifyModule
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
-  let propDefs :: HM.HashMap Text Exp
-      propDefs = modulePropDefs moduleData
+  let allModules = moduleData : HM.elems modules
+
+      propDefs :: HM.HashMap Text Exp
+      propDefs = HM.unions (modulePropDefs <$> allModules)
 
       funRefs :: HM.HashMap Text Ref
       funRefs = moduleFunRefs moduleData

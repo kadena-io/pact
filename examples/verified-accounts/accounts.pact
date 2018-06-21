@@ -1,25 +1,14 @@
 ;; accounts module, admin keyset, and table
 ; (load "examples/verified-accounts/accounts.repl")
 
-(enforce-pact-version "2.3")
-
-(define-keyset 'accounts-admin-keyset
-  (read-keyset "accounts-admin-keyset"))
+(enforce-pact-version "2.4.1")
 
 (module accounts 'accounts-admin-keyset
   "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
 \  Version: 0.2                                                                \
 \  Author: Stuart Popejoy"
 
-
-  ; TODO: abstract over table / column
-  (defproperty conserves-mass
-    (= (column-delta 'accounts 'balance) 0.0))
-
-  (defproperty auth-required
-    (when
-      (not (authorized-by 'accounts-admin-keyset))
-      abort))
+  (use properties)
 
   (defschema account
     (meta "Row type for accounts table."
