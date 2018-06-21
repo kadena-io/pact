@@ -140,25 +140,25 @@ writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
 
-allocDbAccess
+tagDbAccess
   :: (Located (TagId, Schema) -> TagAllocation)
   -> Node
   -> Schema
   -> TranslateM TagId
-allocDbAccess mkTagAlloc node schema = do
+tagDbAccess mkTagAlloc node schema = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
   writeTagAlloc $ mkTagAlloc $ Located info (tid, schema)
   pure tid
 
-allocRead :: Node -> Schema -> TranslateM TagId
-allocRead = allocDbAccess AllocReadTag
+tagRead :: Node -> Schema -> TranslateM TagId
+tagRead = tagDbAccess AllocReadTag
 
-allocWrite :: Node -> Schema -> TranslateM TagId
-allocWrite = allocDbAccess AllocWriteTag
+tagWrite :: Node -> Schema -> TranslateM TagId
+tagWrite = tagDbAccess AllocWriteTag
 
-allocAuth :: Node -> TranslateM TagId
-allocAuth node = do
+tagAuth :: Node -> TranslateM TagId
+tagAuth node = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
   writeTagAlloc $ AllocAuthTag $ Located info tid
@@ -358,14 +358,14 @@ translateNode astNode = case astNode of
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
       ETerm ksnT TStr <- translateNode ksA
-      tid <- allocAuth $ ksA ^. aNode
+      tid <- tagAuth $ ksA ^. aNode
       return $ ETerm (Enforce (NameAuthorized tid ksnT)) TBool
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
       ETerm ksT TKeySet <- translateNode ksA
-      tid <- allocAuth $ ksA ^. aNode
+      tid <- tagAuth $ ksA ^. aNode
       return $ ETerm (Enforce (KsAuthorized tid ksT)) TBool
 
   AST_Days days -> do
@@ -505,7 +505,7 @@ translateNode astNode = case astNode of
     | name `elem` ["insert", "update", "write"] -> do
     ETerm row' TStr <- translateNode row
     EObject obj' schema <- translateNode obj
-    tid <- allocWrite node schema
+    tid <- tagWrite node schema
     pure $ ETerm (Write tid (TableName (T.unpack tn)) row' obj') TStr
 
   AST_If _ cond tBranch fBranch -> do
@@ -521,7 +521,7 @@ translateNode astNode = case astNode of
   AST_WithRead node table key bindings schemaNode body -> do
     schema <- translateSchema schemaNode
     ETerm key' TStr <- translateNode key
-    tid <- allocRead node schema
+    tid <- tagRead node schema
     let readT = EObject (Read tid (TableName (T.unpack table)) schema key') schema
     translateObjBinding bindings schema body readT
 
@@ -542,7 +542,7 @@ translateNode astNode = case astNode of
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
     schema <- translateSchema node
-    tid <- allocRead node schema
+    tid <- tagRead node schema
     pure (EObject (Read tid (TableName (T.unpack table)) schema key') schema)
 
   -- Note: this won't match if the columns are not a list literal
@@ -555,7 +555,7 @@ translateNode astNode = case astNode of
     let schema = Schema $
           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
-    tid <- allocRead node schema
+    tid <- tagRead node schema
     pure $ EObject
       (Read tid (TableName (T.unpack table)) schema key')
       schema
