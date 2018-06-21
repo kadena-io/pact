@@ -98,7 +98,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs edata Nothing _cmdHash) _csRefStore
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
-  newPact <- join <$> mapM (handleYield erInput _cmdSigs) erExec
+  newPact <- join <$> mapM (handleYield erInput) erExec
   let newState = CommandState erRefStore $ case newPact of
         Nothing -> _csPacts
         Just (cp@CommandPact{..}) -> M.insert _cpTxId cp _csPacts
@@ -107,8 +107,8 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 -- Better name?
-handleYield :: [Term Name] -> [UserSig] -> PactExec -> CommandM p (Maybe CommandPact)
-handleYield em cmdSigs PactExec{..} = do
+handleYield :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
+handleYield em PactExec{..} = do
   CommandEnv{..} <- ask
   --TODO: handle entity?
   unless (length em == 1) $
@@ -117,8 +117,7 @@ handleYield em cmdSigs PactExec{..} = do
     Local -> return Nothing
     Transactional tid -> do
       --TODO: handle yielded objects
-      let sigs = userSigsToPactKeySet cmdSigs
-      return $ Just $ CommandPact tid (head em) sigs _peStepCount _peStep
+      return $ Just $ CommandPact tid (head em) _peStepCount _peStep
 
 
 applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
@@ -170,7 +169,7 @@ continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> 
 continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} = do
   let nextStep = _cmStep + 1
       isLast = nextStep >= _cpStepCount
-      updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
+      updatePact step = CommandPact _cpTxId _cpContinuation _cpStepCount step
       updateState pacts = CommandState _csRefStore pacts
 
   if isLast
