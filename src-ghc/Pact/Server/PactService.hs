@@ -123,70 +123,64 @@ handleYield em cmdSigs PactExec{..} = do
 
 applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
 applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
-  CommandEnv{..} <- ask
+  env@CommandEnv{..} <- ask
   case _ceMode of
     Local -> throwCmdEx "Local continuation exec not supported"
     Transactional _ -> do
-      CommandState{..} <- liftIO $ readMVar _ceState
+      state@CommandState{..} <- liftIO $ readMVar _ceState
       case M.lookup _cmTxId _csPacts of
         Nothing -> throwCmdEx $ "applyContinuation: txid not found: " ++ show _cmTxId
         Just pact@CommandPact{..} -> do
-          let hasErr = if _cmRollback
-                       then checkRollbackStepErr msg _cpStep _cpStepCount
-                       else checkNextStepErr msg (_cpStep + 1) _cpStepCount
-          maybe (return ()) throwCmdEx hasErr
-          
+          -- Verify valid ContMsg Step
+          when (_cmStep < 0 || _cmStep >= _cpStepCount) $ throwCmdEx $ "Invalid step value: " ++ show _cmStep
+          if _cmRollback
+            then when (_cmStep /= _cpStep) $ throwCmdEx $ "Invalid rollback step value: Received "
+                 ++ show _cmStep ++ " but expected " ++ show _cpStep
+            else when (_cmStep /= (_cpStep + 1)) $ throwCmdEx $ "Invalid continuation step value: Received "
+                 ++ show _cmStep ++ " but expected " ++ show (_cpStep + 1)
+
+          -- Setup environement and get result
           let sigs = userSigsToPactKeySet cmdSigs
               msgData = Null -- TODO data from msg
               resume = Nothing -- TODO decode yielded object
-              setupStep step = Just $ PactStep step _cmRollback
-                               (PactId $ pack $ show $ _cmTxId) resume
-              pactStep = setupStep (if _cmRollback then _cpStep else (_cpStep + 1))
+              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) resume
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs msgData pactStep cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
-          case res of
-            Left (SomeException ex)   -> throwM ex
-            Right EvalResult{..} -> do
-              PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
-                                   return erExec -- TODO better err msg?
-              let newPactState = updatePactState _cmRollback _peStep pact _csPacts
-                  newState = CommandState erRefStore newPactState
-              void $ liftIO $ swapMVar _ceState newState
-              
-              liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
-                ++ show _cpTxId ++ ": " ++ show (M.lookup _cpTxId newPactState)
 
+          -- Update pacts state
+          case res of
+            Left (SomeException ex) -> throwM ex
+            Right EvalResult{..}    -> do
+              PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
+                                   return erExec         
+              if _cmRollback
+                then rollbackUpdate env msg state
+                else continuationUpdate env msg state pact
               return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
+rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
+rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
+  let newState = CommandState _csRefStore $ M.delete _cmTxId _csPacts
+  liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
+    ++ show _cmTxId
+  void $ liftIO $ swapMVar _ceState newState
 
-checkNextStepErr :: ContMsg -> Int -> Int -> Maybe String
-checkNextStepErr ContMsg{..} nextStep stepCount
-  | nextStep >= stepCount     = Just $ "applyContinuation: pact continuation [disabled]: "
-                                ++ show _cmTxId  -- is last step
-  | (_cmStep < 0 ||
-     _cmStep >= stepCount)    = Just $ "Invalid step value: " ++ show _cmStep
-  | _cmStep /= nextStep       = Just $ "Invalid continuation step value: Received " ++ show _cmStep
-                                ++ " but expected " ++ show nextStep
-  | otherwise                 = Nothing
+continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> CommandM p ()
+continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} = do
+  let nextStep = _cmStep + 1
+      isLast = nextStep >= _cpStepCount
+      updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
+      updateState pacts = CommandState _csRefStore pacts
 
-checkRollbackStepErr :: ContMsg -> Int -> Int -> Maybe String
-checkRollbackStepErr ContMsg{..} currStep stepCount
-  | (_cmStep < 0 ||
-     _cmStep >= stepCount)    = Just $ "Invalid step value: " ++ show _cmStep
-  | _cmStep /= currStep       = Just $ "Invalid rollback step value: Received " ++ show _cmStep
-                                ++ " but expected " ++ show currStep
-  | otherwise                 = Nothing
-
-
-updatePactState :: Bool -> Int -> CommandPact -> M.Map TxId CommandPact -> M.Map TxId CommandPact
-updatePactState isRollback currStep CommandPact{..} oldPacts  = do
-  let updatePact step = CommandPact _cpTxId _cpContinuation _cpSigs _cpStepCount step
-      prevStep = currStep - 1
-      done = prevStep < 0
-      -- TODO encode yielded object
-
-  case (isRollback, done) of
-    (True, True)  -> M.delete _cpTxId oldPacts
-    (True, False) -> M.insert _cpTxId (updatePact prevStep) oldPacts
-    (False, _)    -> M.insert _cpTxId (updatePact currStep) oldPacts
+  if isLast
+    then do
+      liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: continuationUpdate: reaping pact: "
+        ++ show _cmTxId
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.delete _cmTxId _csPacts
+    else do
+      let newPact = updatePact _cmStep
+      -- TODO get resume from yield
+      liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
+        ++ show _cpTxId ++ ": " ++ show newPact
+      void $ liftIO $ swapMVar _ceState $ CommandState _csRefStore $ M.insert _cmTxId newPact _csPacts 
