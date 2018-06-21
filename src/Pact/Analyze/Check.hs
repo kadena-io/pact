@@ -45,10 +45,12 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
-                                            renderParsed, tMeta, _iInfo)
+                                            renderParsed, tMeta, _iInfo,
+                                            _tPropertyBody)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
-                                            Term (TDef, TSchema, TTable),
+                                            Term (TDef, TSchema, TTable,
+                                            TDefProperty),
                                             asString, tInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
@@ -319,10 +321,18 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   Ref (TDef {}) -> True
   _             -> False
 
+-- Get the set (HashMap) of refs to functions in this module.
+modulePropDefs :: ModuleData -> HM.HashMap Text Exp
+modulePropDefs (_mod, modRefs) = flip HM.mapMaybe modRefs $ \case
+  Ref (TDefProperty {_tPropertyBody}) -> Just _tPropertyBody
+  _                                   -> Nothing
+
 moduleFunChecks
   :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text Exp
   -> HM.HashMap Text (Ref, [(Parsed, Check)])
-moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
+moduleFunChecks modTys propDefs
+  = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
 
@@ -341,9 +351,7 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
       env = fmap (\(uid, (text, ty)) -> (text, uid, ty))
         $ zip uids
         $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
-            case translateType' ty of
-              Just ety -> Just (name, ety)
-              Nothing  -> Nothing
+            (name,) <$> translateType' ty
 
       nameEnv :: Map Text UniqueId
       nameEnv = Map.fromList $ fmap (\(name, uid, _) -> (name, uid)) env
@@ -364,7 +372,7 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
 
       parsedList :: [Either Exp (Parsed, Check)]
       parsedList = exps <&> \meta ->
-        case expToCheck uidStart nameEnv idEnv meta of
+        case expToCheck uidStart nameEnv idEnv propDefs meta of
           Nothing   -> Left meta
           Just good -> Right (meta ^. eParsed, good)
       failures = lefts parsedList
@@ -398,7 +406,10 @@ verifyModule
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
-  let funRefs :: HM.HashMap Text Ref
+  let propDefs :: HM.HashMap Text Exp
+      propDefs = modulePropDefs moduleData
+
+      funRefs :: HM.HashMap Text Ref
       funRefs = moduleFunRefs moduleData
 
   -- For each ref, if it typechecks as a function (which it should), keep its
@@ -416,7 +427,7 @@ verifyModule modules moduleData = do
     funRefs
 
   let funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
-      funChecks = moduleFunChecks funTypes
+      funChecks = moduleFunChecks funTypes propDefs
       verifyFun = uncurry (verifyFunction tables)
 
   traverse verifyFun funChecks

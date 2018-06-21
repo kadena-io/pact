@@ -149,13 +149,14 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
     _ -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
-        TDef {} -> return d
-        TNative {} -> return d
-        TConst {} -> return d
-        TSchema {} -> return d
-        TTable {} -> return d
-        TUse {} -> return d
-        TBless {} -> return d
+        TDef {}         -> return d
+        TNative {}      -> return d
+        TConst {}       -> return d
+        TSchema {}      -> return d
+        TTable {}       -> return d
+        TUse {}         -> return d
+        TBless {}       -> return d
+        TDefProperty {} -> return d
         t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, bless allowed in module"
       mkModule body docs = do
         cm <- use csModule
@@ -198,6 +199,17 @@ doDef es defType namei i =
           cm <- currentModule i
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn (fst cm) defType dty db ddocs i
+
+doDefProperty :: [Exp] -> Info -> Info -> Compile (Term Name)
+doDefProperty exps namei i = case exps of
+  [ EAtom' propname, EList' args, body ] -> mkDef propname args body
+  [ EAtom' propname,              body ] -> mkDef propname []   body
+  _ -> syntaxError namei "Invalid property definition"
+  where
+    mkDef name args body = do
+      (curModule, _) <- currentModule i
+      args'          <- mapM atomVar args
+      pure $ TDefProperty name curModule args' body i
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -326,6 +338,7 @@ run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
       ("defschema",Nothing) -> doSchema rest li
       ("deftable",Nothing) -> doTable rest li
       ("bless",Nothing) -> doBless rest li
+      ("defproperty",Nothing) -> doDefProperty rest ai li
       (_,_) ->
         case break (isJust . firstOf _EBinding) rest of
           (preArgs,be@(EBinding bs _):bbody) ->

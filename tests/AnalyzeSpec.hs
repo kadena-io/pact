@@ -1120,7 +1120,8 @@ spec = describe "analyze" $ do
           -> Text
           -> Maybe (Prop a)
         textToProp' env1 env2 ty t = case parseExprs t of
-          Right [exp'] -> expToProp (UniqueId (Map.size env1)) env1 env2 ty exp'
+          Right [exp'] ->
+            expToProp (UniqueId (Map.size env1)) env1 env2 HM.empty ty exp'
           _            -> Nothing
 
         textToProp :: Prenex.Float a => Type a -> Text -> Maybe (Prop a)

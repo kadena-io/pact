@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 
@@ -11,12 +12,15 @@ module Pact.Analyze.Parse
   , expToInvariant
   ) where
 
-import           Control.Lens         (at, view, (^.))
+import           Control.Applicative  ((<|>))
+import           Control.Lens         (at, makeLenses, view,
+                                       (^.), (&), (%~), (.~))
 import           Control.Monad.Except (mzero, throwError)
 import           Control.Monad.Gen    (GenT, gen, runGenTFrom)
 import           Control.Monad.Reader (ReaderT, ask, local, runReaderT)
 import           Control.Monad.Trans  (lift)
 import           Data.Foldable        (asum, find)
+import qualified Data.HashMap.Strict  as HM
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
 import           Data.Text            (Text)
@@ -100,8 +104,15 @@ pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
 pattern ColumnLit :: ColumnName -> PreProp
 pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 
+data ParseEnv = ParseEnv
+  { _quantifiedVars :: Map Text UniqueId
+  , _definedVars    :: HM.HashMap Text Exp
+  }
+
+makeLenses ''ParseEnv
+
 -- TODO: Maybe -> Either
-type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
+type PropParse = ReaderT ParseEnv (GenT UniqueId Maybe)
 
 -- TODO: Maybe -> Either
 type PropCheck = ReaderT (Map UniqueId EType) Maybe
@@ -132,7 +143,7 @@ expToPreProp = \case
     bindings' <- propBindings bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(uid, name, _ty) -> (name, uid)) bindings'
-    body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
+    body' <- local (& quantifiedVars %~ Map.union theseBindingsMap) (expToPreProp body)
     pure $ foldr
       (\(uid, name, ty) accum -> q uid name ty accum)
       body'
@@ -143,7 +154,7 @@ expToPreProp = \case
   EAtom' "abort"   -> pure PreAbort
   EAtom' "success" -> pure PreSuccess
   EAtom' "result"  -> pure PreResult
-  EAtom' var       -> mkVar var
+  EAtom' var       -> lookupVar var
 
   _ -> noParse
 
@@ -163,12 +174,24 @@ expToPreProp = \case
         noParse :: PropParse a
         noParse = lift (lift Nothing)
 
-        mkVar :: Text -> PropParse PreProp
-        mkVar var = do
-          mUid <- view (at var)
-          case mUid of
-            Nothing  -> noParse
-            Just uid -> pure (PreVar uid var)
+        lookupVar :: Text -> PropParse PreProp
+        lookupVar var =
+          let fromDefn = do
+                defn <- view (definedVars . at var)
+                case defn of
+                -- Note: we remove this definition from the environment as we
+                -- continue. This has the effect of inlining the definition and
+                -- removing it from the environment. This is a slight layering
+                -- violation but will do for now.
+                  Just exp -> local (& definedVars . at var .~ Nothing)
+                    (expToPreProp exp)
+                  Nothing -> noParse
+              fromQuantified = do
+                mUid <- view (quantifiedVars . at var)
+                case mUid of
+                  Just uid -> pure (PreVar uid var)
+                  Nothing  -> noParse
+          in fromDefn <|> fromQuantified
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp = case (ty, preProp) of
@@ -282,11 +305,13 @@ expToCheck
   -- ^ Environment mapping names to unique IDs
   -> Map UniqueId EType
   -- ^ Environment mapping unique IDs to their types
+  -> HM.HashMap Text Exp
+  -- ^ Defined props in the environment
   -> Exp
   -- ^ Exp to convert
   -> Maybe Check
-expToCheck genStart nameEnv idEnv body
-  = PropertyHolds <$> expToProp genStart nameEnv idEnv TBool body
+expToCheck genStart nameEnv idEnv defprops body
+  = PropertyHolds <$> expToProp genStart nameEnv idEnv defprops TBool body
 
 expToProp
   :: Prenex.Float a
@@ -296,13 +321,16 @@ expToProp
   -- ^ Environment mapping names to unique IDs
   -> Map UniqueId EType
   -- ^ Environment mapping unique IDs to their types
+  -> HM.HashMap Text Exp
+  -- ^ Defined props in the environment
   -> Type a
   -- ^ Expected prop type
   -> Exp
   -- ^ Exp to convert
   -> Maybe (Prop a)
-expToProp genStart nameEnv idEnv ty body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
+expToProp genStart nameEnv idEnv defprops ty body = do
+  preTypedBody <- runGenTFrom genStart
+    (runReaderT (expToPreProp body) (ParseEnv nameEnv defprops))
   typedBody    <- runReaderT (checkPreProp ty preTypedBody) idEnv
   pure $ prenexConvert typedBody
 

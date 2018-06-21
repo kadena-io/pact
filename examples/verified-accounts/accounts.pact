@@ -12,6 +12,15 @@
 \  Author: Stuart Popejoy"
 
 
+  ; TODO: abstract over table / column
+  (defproperty conserves-mass
+    (= (column-delta 'accounts 'balance) 0.0))
+
+  (defproperty auth-required
+    (when
+      (not (authorized-by 'accounts-admin-keyset))
+      abort))
+
   (defschema account
     (meta "Row type for accounts table."
       (invariant (>= balance 0.0)))
@@ -40,7 +49,7 @@
 
   (defun transfer (src:string dest:string amount:decimal)
     (meta "transfer AMOUNT from SRC to DEST"
-      (property (= (column-delta 'accounts 'balance) 0.0)))
+      (property conserves-mass))
     (debit src amount)
     (credit dest amount))
 
@@ -57,11 +66,7 @@
 
   (defun read-account-admin (id)
     (meta "Read data for account ID, admin version"
-      (property
-        (when
-          (not (authorized-by 'accounts-admin-keyset))
-          abort)
-        ))
+      (property auth-required))
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 
