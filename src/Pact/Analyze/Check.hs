@@ -10,17 +10,19 @@ module Pact.Analyze.Check
   ( verifyModule
   , verifyCheck
   , describeCheckResult
+  , describeParseFailure
   , CheckFailure(..)
   , CheckSuccess(..)
   , CheckResult
+  , ParseFailure
   ) where
 
 import           Control.Exception         as E
 import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), _1, _2, _Just)
-import           Control.Monad             ((>=>), void)
+                                            traverseOf, traversed, (&), (<&>),
+                                            (^.), (^?), (^@..), _1, _2, _Just)
+import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
@@ -28,7 +30,7 @@ import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Bifunctor            (first)
 import qualified Data.Default              as Default
-import           Data.Either               (lefts, rights)
+import           Data.Either               (lefts, partitionEithers, rights)
 import qualified Data.HashMap.Strict       as HM
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
@@ -72,6 +74,13 @@ data CheckSuccess
   = SatisfiedProperty Model
   | ProvedTheorem
   deriving Show
+
+type ParseFailure = (Exp, String)
+
+describeParseFailure :: ParseFailure -> Text
+describeParseFailure (exp, info)
+  = T.pack (renderParsed (exp ^. eParsed))
+  <> ": could not parse " <> tShow exp <> " " <> T.pack info
 
 data SmtFailure
   = Invalid Model
@@ -344,7 +353,7 @@ checkFunction tables info pactArgs body check = runExceptT $ do
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
-  -> IO [Table]
+  -> IO (Either [ParseFailure] [Table])
 moduleTables modules (_mod, modRefs) = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
@@ -357,37 +366,24 @@ moduleTables modules (_mod, modRefs) = do
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
 
-  for tables $ \(tabName, tab) -> do
-    (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
-      <- runTC 0 False $ typecheckTopLevel (Ref tab)
+  eitherTables <- for tables $ \(tabName, tab) -> do
+      (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
+        <- runTC 0 False $ typecheckTopLevel (Ref tab)
 
-    let schemaName = asString (_utName schema)
+      let TC.Schema{_utName,_utFields} = schema
+          schemaName = asString _utName
 
-        invariants = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
-        invariant  = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariant"
+          invariants = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
+          invariant  = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariant"
 
-        exps :: [Exp]
-        exps = case invariants of
-          Just (Pact.ELitList x) -> x
-          -- TODO(joel): don't just throw an error
-          Just _ -> error "invariants must be a list"
-          Nothing -> case invariant of
-            Just exp -> [exp]
-            Nothing  -> []
+          parsed = runExpParserOver
+            "invariants" invariants invariant $
+            \meta -> runReaderT (expToInvariant TBool meta) _utFields
 
-        parsedList = exps <&> \meta ->
-          case runReaderT (expToInvariant TBool meta) (_utFields schema) of
-            Left err   -> Left (meta, err)
-            Right good -> Right good
-        failures = lefts parsedList
+      pure $ Table tabName schema . fmap snd <$> parsed
 
-        invariants' :: [Invariant Bool]
-        invariants' = if null failures
-          then rights parsedList
-          -- TODO(joel): don't just throw an error
-          else error ("failed parse of " ++ show failures)
-
-    pure $ Table tabName schema invariants'
+  let (failures, tables') = partitionEithers eitherTables
+  pure $ if null failures then Right tables' else Left (concat failures)
 
 getInfoParsed :: Pact.Info -> Parsed
 getInfoParsed info = case _iInfo info of
@@ -402,14 +398,14 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 
 moduleFunChecks
   :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (Ref, [(Parsed, Check)])
+  -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
 moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
 
   let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
-      parsed     = getInfoParsed (defn ^. tInfo)
+      defnParsed = getInfoParsed (defn ^. tInfo)
 
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:
@@ -417,7 +413,7 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
 
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
-      --
+
       -- TODO(joel): this relies on generating the same unique ids as
       -- @checkFunction@. We need to more carefully enforce this is true!
       env :: [(Text, VarId, EType)]
@@ -436,29 +432,56 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
 
       vidStart = VarId (length env)
 
-      exps :: [Exp]
-      exps = case properties of
-        Just (Pact.ELitList exps') -> exps'
-        -- TODO(joel): don't just throw an error
-        Just _ -> error "properties must be a list"
-        Nothing -> case property of
-          Just exp -> [exp]
-          Nothing  -> []
+      eitherChecks = runExpParserOver "properties" properties property
+        (expToCheck vidStart nameEnv idEnv)
 
-      parsedList :: [Either Exp (Parsed, Check)]
-      parsedList = exps <&> \meta ->
-        case expToCheck vidStart nameEnv idEnv meta of
-          Nothing   -> Left meta
-          Just good -> Right (meta ^. eParsed, good)
-      failures = lefts parsedList
-
-      checks :: [(Parsed, Check)]
-      checks = if null failures
-        then (parsed, InvariantsHold) : rights parsedList
-        -- TODO(joel): don't just throw an error
-        else error ("failed parse of " ++ show failures)
+      checks :: Either [ParseFailure] [(Parsed, Check)]
+      checks = ((defnParsed, InvariantsHold):) <$> eitherChecks
 
   in (ref, checks)
+
+(<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
+(<$$>) = fmap . fmap
+
+(<&&>) :: (Functor f, Functor g) => f (g a) -> (a -> b) -> f (g b)
+(<&&>) = flip (<$$>)
+
+-- | For both properties and invariants you're allowed to use either the
+-- singular ("property") or plural ("properties") name. This helper just
+-- collects the properties / invariants in a list.
+collectExps :: String -> Maybe Exp -> Maybe Exp -> Either [(Exp, String)] [Exp]
+collectExps name multiExp singularExp = case multiExp of
+  Just (Pact.ELitList exps') -> Right exps'
+  Just exp -> Left [(exp, name ++ " must be a list")]
+  Nothing -> case singularExp of
+    Just exp -> Right [exp]
+    Nothing  -> Right []
+
+-- | This runs a parser over a collection of 'Exp's, collecting the failures
+-- or successes.
+runExpParserOver
+  :: forall t.
+     String
+  -> Maybe Exp
+  -> Maybe Exp
+  -> (Exp -> Either String t)
+  -> Either [ParseFailure] [(Parsed, t)]
+runExpParserOver name multiExp singularExp parser =
+  let
+      exps = collectExps name multiExp singularExp
+      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Parsed, t)]
+      parsedList = exps <&&> \meta ->
+        case parser meta of
+          Left err   -> Left [(meta, err)]
+          Right good -> Right (meta ^. eParsed, good)
+
+      parsedList' :: [Either [ParseFailure] (Parsed, t)]
+      parsedList' = join <$> sequence parsedList
+
+      failures :: [ParseFailure]
+      failures = join $ lefts parsedList'
+
+  in if null failures then Right (rights parsedList') else Left failures
 
 verifyFunction :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
 verifyFunction tables ref props = do
@@ -478,7 +501,7 @@ verifyFunction tables ref props = do
 verifyModule
   :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
   -> ModuleData                         -- ^ the module we're verifying
-  -> IO (HM.HashMap Text [CheckResult])
+  -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]))
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
@@ -499,27 +522,41 @@ verifyModule modules moduleData = do
     HM.empty
     funRefs
 
-  let funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
-      funChecks = moduleFunChecks funTypes
-      verifyFun = uncurry (verifyFunction tables)
+  case tables of
+    Left errs -> pure (Left errs)
+    Right tables' -> do
 
-  traverse verifyFun funChecks
+      let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
+          funChecks = moduleFunChecks funTypes
+
+          funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
+          funChecks' = sequence (fmap sequence funChecks)
+
+          verifyFun :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
+          verifyFun = uncurry (verifyFunction tables')
+
+      case funChecks' of
+        Left errs -> pure (Left errs)
+        Right funChecks'' -> Right <$> traverse verifyFun funChecks''
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
   :: ModuleData     -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
-  -> IO CheckResult
+  -> IO (Either [ParseFailure] CheckResult)
 verifyCheck moduleData funName check = do
   let parsed = dummyParsed
       moduleName = moduleData ^. _1.mName
       modules = HM.fromList [(moduleName, moduleData)]
-  tables <- moduleTables modules moduleData
-  case moduleFun moduleData funName of
-    Just funRef -> head <$> verifyFunction tables funRef [(parsed, check)]
-    Nothing     -> pure $ Left (parsed, NotAFunction funName)
 
-  where
-    moduleFun :: ModuleData -> Text -> Maybe Ref
-    moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
+  tables <- moduleTables modules moduleData
+  case tables of
+    Left failures -> pure $ Left failures
+    Right tables' -> Right <$> case moduleFun moduleData funName of
+      Just funRef -> head <$> verifyFunction tables' funRef [(parsed, check)]
+      Nothing     -> pure $ Left (parsed, NotAFunction funName)
+
+      where
+        moduleFun :: ModuleData -> Text -> Maybe Ref
+        moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs

@@ -32,6 +32,10 @@ import           Pact.Analyze.Parse           (expToProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 
+-- TODO(joel): maybe just use either package?
+rightToMaybe :: Either a b -> Maybe b
+rightToMaybe = either (const Nothing) Just
+
 wrap :: Text -> Text
 wrap code =
   [text|
@@ -56,6 +60,7 @@ data TestFailure
   = TestCheckFailure CheckFailure
   | NoTestModule
   | ReplError String
+  | ParseFailures [ParseFailure]
   deriving Show
 
 --
@@ -81,9 +86,11 @@ runVerification code = do
     Right moduleData -> do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
-      pure $ case findOf (traverse . traverse) isLeft results of
-        Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
-        _                              -> Nothing
+      case results of
+        Left failures -> pure $ Just $ ParseFailures failures
+        Right results' -> pure $ case findOf (traverse . traverse) isLeft results' of
+          Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
+          _                              -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
 runCheck code check = do
@@ -93,8 +100,9 @@ runCheck code check = do
     Right moduleData -> do
       result <- verifyCheck moduleData "test" check
       pure $ case result of
-        Left (_parsed, cf) -> Just $ TestCheckFailure cf
-        Right _            -> Nothing
+        Left parseFailures         -> Just $ ParseFailures parseFailures
+        Right (Left (_parsed, cf)) -> Just $ TestCheckFailure cf
+        Right (Right _)            -> Nothing
 
 expectVerified :: Text -> Spec
 expectVerified code = do
@@ -1130,7 +1138,8 @@ spec = describe "analyze" $ do
           -> Text
           -> Maybe (Prop a)
         textToProp' env1 env2 ty t = case parseExprs t of
-          Right [exp'] -> expToProp (VarId (Map.size env1)) env1 env2 ty exp'
+          Right [exp'] -> rightToMaybe $
+            expToProp (VarId (Map.size env1)) env1 env2 ty exp'
           _            -> Nothing
 
         textToProp :: Type a -> Text -> Maybe (Prop a)
