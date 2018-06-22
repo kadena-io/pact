@@ -15,7 +15,6 @@ import           Control.Lens                 (at, view, (^.))
 import           Control.Monad.Except         (mzero, throwError)
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
-import           Control.Monad.Trans          (lift)
 import           Data.Foldable                (asum, find)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -101,11 +100,8 @@ pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
 pattern ColumnLit :: ColumnName -> PreProp
 pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 
--- TODO: Maybe -> Either
-type PropParse = ReaderT (Map Text VarId) (StateT VarId Maybe)
-
--- TODO: Maybe -> Either
-type PropCheck = ReaderT (Map VarId EType) Maybe
+type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
+type PropCheck = ReaderT (Map VarId EType) (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
@@ -146,29 +142,26 @@ expToPreProp = \case
   EAtom' "result"  -> pure PreResult
   EAtom' var       -> mkVar var
 
-  _ -> noParse
+  _ -> throwError "expected property"
 
   where propBindings :: [Exp] -> PropParse [(VarId, Text, Ty)]
         propBindings [] = pure []
         -- we require a type annotation
-        propBindings (EAtom _name _qual Nothing _parsed:_exps) = noParse
+        propBindings (EAtom _name _qual Nothing _parsed:_exps) = throwError "type annotation required for all property bindings"
         propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
           nameTy <- case ty of
             TyPrim TyString -> do
               vid <- genVarId
               pure (vid, name, Ty (Rep @String))
-            _               -> noParse
+            _               -> throwError "currently only strings can be quantified in properties"
           (nameTy:) <$> propBindings exps
-        propBindings _ = noParse
-
-        noParse :: PropParse a
-        noParse = lift (lift Nothing)
+        propBindings _ = throwError "unexpected binding form"
 
         mkVar :: Text -> PropParse PreProp
         mkVar var = do
           mVid <- view (at var)
           case mVid of
-            Nothing  -> noParse
+            Nothing  -> throwError "variable not found"
             Just vid -> pure (PreVar vid var)
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
@@ -232,14 +225,14 @@ checkPreProp ty preProp = case (ty, preProp) of
       Just eqNeq -> PKeySetEqNeq eqNeq
         <$> checkPreProp TKeySet a
         <*> checkPreProp TKeySet b
-      Nothing -> mzero
+      Nothing -> throwError $ "found " ++ show op' ++ " where = or != expected"
     ]
 
-  (TBool, PreApp (textToLogicalOp -> Just op) args) -> case (op, args) of
+  (TBool, PreApp op'@(textToLogicalOp -> Just op) args) -> case (op, args) of
     (NotOp, [a])    -> PNot <$> checkPreProp TBool a
     (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
     (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
-    _               -> mzero
+    _               -> throwError $ show op' ++ " applied to wrong number of arguments"
 
   (TBool, PreApp "when" [a, b]) -> do
     propNotA <- PNot <$> checkPreProp TBool a
@@ -294,7 +287,7 @@ expToCheck
   -- ^ Environment mapping var IDs to their types
   -> Exp
   -- ^ Exp to convert
-  -> Maybe Check
+  -> Either String Check
 expToCheck genStart nameEnv idEnv body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
@@ -311,7 +304,7 @@ expToProp
   -- ^ Expected prop type
   -> Exp
   -- ^ Exp to convert
-  -> Maybe (Prop a)
+  -> Either String (Prop a)
 expToProp genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   runReaderT (checkPreProp ty preTypedBody) idEnv
