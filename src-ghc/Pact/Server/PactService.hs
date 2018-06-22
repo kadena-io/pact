@@ -116,8 +116,7 @@ handleYield em PactExec{..} = do
   case _ceMode of
     Local -> return Nothing
     Transactional tid -> do
-      --TODO: handle yielded objects
-      return $ Just $ CommandPact tid (head em) _peStepCount _peStep
+      return $ Just $ CommandPact tid (head em) _peStepCount _peStep _peYield
 
 
 applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
@@ -143,8 +142,7 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
               msgData = case _cmData of
                 Nothing -> Null
                 Just d -> d
-              resume = Nothing -- TODO decode yielded object
-              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) resume
+              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs msgData pactStep cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
@@ -152,12 +150,12 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
           -- Update pacts state
           case res of
             Left (SomeException ex) -> throwM ex
-            Right EvalResult{..}    -> do
-              PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
+            Right EvalResult{..} -> do
+              exec@PactExec{..} <- maybe (throwCmdEx "No pact execution in continuation exec!")
                                    return erExec         
               if _cmRollback
                 then rollbackUpdate env msg state
-                else continuationUpdate env msg state pact
+                else continuationUpdate env msg state pact exec
               return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
@@ -167,11 +165,11 @@ rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
     ++ show _cmTxId
   void $ liftIO $ swapMVar _ceState newState
 
-continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> CommandM p ()
-continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} = do
+continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> PactExec -> CommandM p ()
+continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} PactExec{..} = do
   let nextStep = _cmStep + 1
       isLast = nextStep >= _cpStepCount
-      updatePact step = CommandPact _cpTxId _cpContinuation _cpStepCount step
+      updatePact step = CommandPact _cpTxId _cpContinuation _cpStepCount step _peYield
       updateState pacts = CommandState _csRefStore pacts
 
   if isLast
@@ -183,5 +181,5 @@ continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} =
       let newPact = updatePact _cmStep
       -- TODO get resume from yield
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
-        ++ show _cpTxId ++ ": " ++ show newPact
+        ++ show _cmTxId ++ ": " ++ show newPact
       void $ liftIO $ swapMVar _ceState $ CommandState _csRefStore $ M.insert _cmTxId newPact _csPacts 

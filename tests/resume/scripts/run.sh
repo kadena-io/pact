@@ -54,5 +54,5 @@ run_server_test "10-bob-cont.yaml"
 echo ""
 
 echo ""; echo "Step 10"; echo ""
-run_server_test "11-alice-cont3.yaml"
+run_server_test "11-alice-cont4.yaml"
 echo ""
