@@ -134,8 +134,8 @@ instance AsString KeyPredBuiltins where
   asString KeysAll = "keys-all"
   asString KeysAny = "keys-any"
   asString Keys2 = "keys-2"
-keyPredBuiltins :: M.Map Text KeyPredBuiltins
-keyPredBuiltins = M.fromList $ map (asString &&& id) [minBound .. maxBound]
+keyPredBuiltins :: M.Map Name KeyPredBuiltins
+keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
 
 
@@ -224,7 +224,6 @@ data Persistable =
     PKeySet KeySet |
     PValue Value
     deriving (Eq,Generic)
-instance Serialize Persistable
 instance Show Persistable where
     show (PLiteral l) = show l
     show (PKeySet k) = show k

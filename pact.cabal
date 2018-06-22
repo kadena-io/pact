@@ -37,6 +37,7 @@ library
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
+                     , Pact.Types.Parser
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
                      , Pact.Types.Util

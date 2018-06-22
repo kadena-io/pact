@@ -17,6 +17,7 @@ import Data.Aeson
 import Data.Hashable
 import Pact.Types.Logger
 import qualified Pact.Types.Hash as H
+import Data.Default (def)
 
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
@@ -37,7 +38,7 @@ runRegression p = do
   let row' = Columns $ M.fromList [("gah",toTerm' False),("fh",toTerm' Null)]
   _writeRow pactdb Update usert "key1" (fmap toPersistable row') v
   assertEquals' "user update" (Just row') (fmap (fmap toTerm) <$> _readRow pactdb usert "key1" v)
-  let ks = KeySet [PublicKey "skdjhfskj"] "predfun"
+  let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
   let mod' = Module "mod1" "mod-admin-keyset" Nothing "code" (H.hash "code") mempty

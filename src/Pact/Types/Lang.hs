@@ -126,6 +126,9 @@ import Data.Serialize (Serialize)
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
+import Pact.Types.Parser
+import qualified Data.Attoparsec.Text as AP
+import Text.Trifecta (try,ident,TokenParsing,(<?>))
 --import Pact.Types.Crypto (Hash(..))
 
 -- | Code location, length from parsing.
@@ -200,6 +203,18 @@ instance Show Name where
     show (QName q n _) = asString' q ++ "." ++ unpack n
     show (Name n _) = unpack n
 instance ToJSON Name where toJSON = toJSON . show
+instance FromJSON Name where
+  parseJSON = withText "Name" $ \t -> case AP.parseOnly (parseName def) t of
+    Left s -> fail s
+    Right n -> return n
+
+parseName :: (TokenParsing m, Monad m) => Info -> m Name
+parseName i = do
+  a <- ident style
+  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
+    return (Name a i)
+
+
 instance Hashable Name where
   hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
   hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
@@ -549,9 +564,8 @@ instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
-    , _ksPredFun :: !Text
+    , _ksPredFun :: !Name
     } deriving (Eq,Generic)
-instance Serialize KeySet
 instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
 
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
@@ -561,7 +575,7 @@ instance FromJSON KeySet where
                     KeySet <$> o .: "keys" <*>
                     (fromMaybe defPred <$> o .:? "pred")) v <|>
                   (KeySet <$> parseJSON v <*> pure defPred)
-      where defPred = "keys-all"
+      where defPred = Name "keys-all" def
 instance ToJSON KeySet where
     toJSON (KeySet k f) = object ["keys" .= k, "pred" .= f]
 

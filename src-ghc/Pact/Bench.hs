@@ -87,7 +87,7 @@ runPactExec dbEnv refStore pc = do
   toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore) pc
 
 benchKeySet :: KeySet
-benchKeySet = KeySet [PublicKey "benchadmin"] ">"
+benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 
 acctRow :: Columns Persistable
 acctRow = Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
