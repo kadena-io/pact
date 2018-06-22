@@ -516,7 +516,7 @@ Examples of valid keyset JSON productions:
 
 ### Keyset Predicates {#keyset-predicates}
 
-A keyset predicate references a function by optionally-qualified name which will compare the public keys in the keyset
+A keyset predicate references a function by its (optionally qualified) name which will compare the public keys in the keyset
 to the key or keys used to sign the blockchain message. The function accepts two arguments,
 "count" and "matched", where "count" is the number of keys in the keyset and "matched" is how many
 keys on the message signature matched a keyset key.
