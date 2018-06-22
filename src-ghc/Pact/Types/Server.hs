@@ -24,7 +24,7 @@
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
   , CommandConfig(..), ccSqlite, ccEntity
-  , CommandPact(..), cpTxId, cpContinuation, cpStepCount, cpStep
+  , CommandPact(..), cpTxId, cpContinuation, cpStepCount, cpStep, cpYield
   , CommandState(..), csRefStore, csPacts
   , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger
   , CommandM, runCommand, throwCmdEx
@@ -84,6 +84,7 @@ data CommandPact = CommandPact
   , _cpContinuation :: Term Name
   , _cpStepCount :: Int
   , _cpStep :: Int
+  , _cpYield :: Maybe (Term Name)
   } deriving Show
 $(makeLenses ''CommandPact)
 

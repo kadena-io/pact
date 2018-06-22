@@ -217,13 +217,16 @@
       )
       a))
 
-  (defpact dummy-pact (x:integer y:integer)
+  (defpact dummy-pact (x y)
     (step
-      (+ x y))
+      (let ((sum (+ x y)))
+       (yield { "0-sum": sum})
+       sum))
     (step
-      (+ x 25))
+       (resume { "0-sum" := s }
+             (+ s 1)))
     (step
-      (+ y 4))
+      (+ x 4))
   )
 
 )
