@@ -18,9 +18,9 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just)
-import           Control.Monad             (void)
+                                            traverseOf, traversed, (<&>), (^.),
+                                            (^?), (^@..), _1, _2, _Just)
+import           Control.Monad             ((>=>), void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
@@ -210,13 +210,13 @@ resultQuery goal model0 = do
     -- | Builds a new 'Model' by querying the SMT model to concretize the
     -- initial 'Model'.
     buildEnv :: SBV.Query Model
-    buildEnv = model0
-      &      traverseOf (modelArgs.traversed.located._2) fetchTVal
-      & (>>= traverseOf (modelVars.traversed.located._2) fetchTVal)
-      & (>>= traverseOf (modelReads.traversed.located)   fetchAccess)
-      & (>>= traverseOf (modelWrites.traversed.located)  fetchAccess)
-      & (>>= traverseOf (modelAuths.traversed.located)   fetchSbv)
-      & (>>= traverseOf (modelResult.located)            fetchTVal)
+    buildEnv = traverseOf (modelArgs.traversed.located._2) fetchTVal
+           >=> traverseOf (modelVars.traversed.located._2) fetchTVal
+           >=> traverseOf (modelReads.traversed.located)   fetchAccess
+           >=> traverseOf (modelWrites.traversed.located)  fetchAccess
+           >=> traverseOf (modelAuths.traversed.located)   fetchSbv
+           >=> traverseOf (modelResult.located)            fetchTVal
+             $ model0
 
     fetchTVal :: TVal -> SBVI.Query TVal
     fetchTVal (ety, av) = (ety,) <$> go ety av
