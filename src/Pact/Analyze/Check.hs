@@ -187,37 +187,19 @@ describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 dummyParsed :: Parsed
 dummyParsed = Default.def
 
-resultQuery
-  :: Goal                                      -- ^ are we in sat or valid mode?
-  -> Model                                     -- ^ initial model
-  -> ExceptT SmtFailure SBV.Query CheckSuccess
-resultQuery goal model0 = do
-  satResult <- lift SBV.checkSat
-  case goal of
-    Validation ->
-      case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift buildEnv
-        SBV.Unsat -> pure ProvedTheorem
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
-    Satisfaction ->
-      case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift buildEnv
-        SBV.Unsat -> throwError Unsatisfiable
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+-- | Builds a new 'Model' by querying the SMT model to concretize the initial
+-- 'Model'.
+saturateModel :: Model -> SBV.Query Model
+saturateModel =
+    traverseOf (modelArgs.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelVars.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelReads.traversed.located)   fetchAccess >=>
+    traverseOf (modelWrites.traversed.located)  fetchAccess >=>
+    traverseOf (modelAuths.traversed.located)   fetchSbv    >=>
+    traverseOf (modelResult.located)            fetchTVal
 
   where
-    -- | Builds a new 'Model' by querying the SMT model to concretize the
-    -- initial 'Model'.
-    buildEnv :: SBV.Query Model
-    buildEnv = traverseOf (modelArgs.traversed.located._2) fetchTVal
-           >=> traverseOf (modelVars.traversed.located._2) fetchTVal
-           >=> traverseOf (modelReads.traversed.located)   fetchAccess
-           >=> traverseOf (modelWrites.traversed.located)  fetchAccess
-           >=> traverseOf (modelAuths.traversed.located)   fetchSbv
-           >=> traverseOf (modelResult.located)            fetchTVal
-             $ model0
-
     fetchTVal :: TVal -> SBVI.Query TVal
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
@@ -242,6 +224,25 @@ resultQuery goal model0 = do
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
       pure (sRk', obj')
+
+resultQuery
+  :: Goal                                      -- ^ are we in sat or valid mode?
+  -> Model                                     -- ^ initial model
+  -> ExceptT SmtFailure SBV.Query CheckSuccess
+resultQuery goal model0 = do
+  satResult <- lift SBV.checkSat
+  case goal of
+    Validation ->
+      case satResult of
+        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
+        SBV.Unsat -> pure ProvedTheorem
+        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+
+    Satisfaction ->
+      case satResult of
+        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
+        SBV.Unsat -> throwError Unsatisfiable
+        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
 -- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
 --       flexible for our needs.
