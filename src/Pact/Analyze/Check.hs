@@ -306,32 +306,6 @@ resultQuery goal model0 = do
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
--- Adaptation of SBV's internal @runWithQuery@ for our needs.
-runAndQuery
-  :: forall env r
-   . Goal                                              -- ^ are we using sat or valid?
-  -> ExceptT CheckFailure Symbolic env                 -- ^ initial setup in Symbolic
-  -> (env -> ExceptT CheckFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
-  -> (env -> ExceptT CheckFailure SBV.Query r)         -- ^ produces the Query to be run
-  -> ExceptT CheckFailure IO r
-runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
-    runSymbolic comp `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ SmtFailure $ UnexpectedFailure e
-
-  where
-    cfg :: SBV.SMTConfig
-    cfg = SBV.z3
-
-    runSymbolic :: Symbolic a -> IO a
-    runSymbolic s = fst <$>
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) s
-
-    comp :: Symbolic (Either CheckFailure r)
-    comp = runExceptT $ do
-      env <- mkEnv
-      void $ lift . SBVI.output =<< mkProvable env
-      hoist SBV.query $ mkQuery env
-
 checkFunction
   :: [Table]
   -> Pact.Info
@@ -340,16 +314,32 @@ checkFunction
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables info pactArgs body check = runExceptT $ do
-  (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
-    runTranslation pactArgs body
+    (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
+      runTranslation pactArgs body
 
-  let goal = checkGoal check
+    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+      env <- lift $ mkEmptyModel info args tm tagAllocs
+      p <- withExceptT AnalyzeFailure (runAnalysis tables tm check env)
+      void $ lift $ SBV.output p
+      hoist SBV.query $ withExceptT SmtFailure $ resultQuery goal env
 
-  runAndQuery
-    goal
-    (lift $ mkEmptyModel info args tm tagAllocs)
-    (withExceptT AnalyzeFailure . runAnalysis tables tm check)
-    (withExceptT SmtFailure . resultQuery goal)
+  where
+    goal :: Goal
+    goal = checkGoal check
+
+    config :: SBV.SMTConfig
+    config = SBV.z3
+
+    -- Discharges impure 'SMTException's from sbv.
+    catchingExceptions
+      :: IO (Either CheckFailure b)
+      -> IO (Either CheckFailure b)
+    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
+      pure $ Left $ SmtFailure $ UnexpectedFailure e
+
+    runSymbolic :: Symbolic a -> IO a
+    runSymbolic = fmap fst .
+      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
 
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
