@@ -187,96 +187,6 @@ describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 dummyParsed :: Parsed
 dummyParsed = Default.def
 
-
--- | Builds a new 'Model' by querying the SMT model to concretize the initial
--- 'Model'.
-saturateModel :: Model -> SBV.Query Model
-saturateModel =
-    traverseOf (modelArgs.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelVars.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelReads.traversed.located)   fetchAccess >=>
-    traverseOf (modelWrites.traversed.located)  fetchAccess >=>
-    traverseOf (modelAuths.traversed.located)   fetchSbv    >=>
-    traverseOf (modelResult.located)            fetchTVal
-
-  where
-    fetchTVal :: TVal -> SBVI.Query TVal
-    fetchTVal (ety, av) = (ety,) <$> go ety av
-      where
-        go :: EType -> AVal -> SBVI.Query AVal
-        go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
-          SBV.getValue (SBVI.SBV sval :: SBV t)
-        go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
-        go _ _ = error "fetchTVal: impossible"
-
-    -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
-    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBVI.Query (SBV a)
-    fetchSbv = fmap SBV.literal . SBV.getValue
-
-    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBVI.Query (S a)
-    fetchS = traverseOf s2Sbv fetchSbv
-
-    fetchObject :: Object -> SBVI.Query Object
-    fetchObject (Object fields) = Object <$> traverse fetchTVal fields
-
-    fetchAccess :: (S RowKey, Object) -> SBVI.Query (S RowKey, Object)
-    fetchAccess (sRk, obj) = do
-      sRk' <- fetchS sRk
-      obj' <- fetchObject obj
-      pure (sRk', obj')
-
-resultQuery
-  :: Goal                                      -- ^ are we in sat or valid mode?
-  -> Model                                     -- ^ initial model
-  -> ExceptT SmtFailure SBV.Query CheckSuccess
-resultQuery goal model0 = do
-  satResult <- lift SBV.checkSat
-  case goal of
-    Validation ->
-      case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
-        SBV.Unsat -> pure ProvedTheorem
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
-
-    Satisfaction ->
-      case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
-        SBV.Unsat -> throwError Unsatisfiable
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
-
--- NOTE: this was adapted from SBV's internal @runWithQuery@ to be more
---       flexible for our needs.
---
--- We need to do 'MonadTrans'/'MFunctor'/'hoist' footwork here because sbv does
--- not have something like @MonadSymbolic@ -- 'Symbolic' is a concrete
--- datatype, and methods on the 'SymWord' typeclass produce these concrete
--- 'Symbolic' computations.
---
-runAndQuery
-  :: forall env r
-   . Goal                                              -- ^ are we using sat or valid?
-  -> ExceptT CheckFailure Symbolic env                 -- ^ initial setup in Symbolic
-  -> (env -> ExceptT CheckFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
-  -> (env -> ExceptT CheckFailure SBV.Query r)         -- ^ produces the Query to be run
-  -> ExceptT CheckFailure IO r
-runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
-    runSymbolic comp `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ SmtFailure $ UnexpectedFailure e
-
-  where
-    cfg :: SBV.SMTConfig
-    cfg = SBV.z3
-
-    runSymbolic :: Symbolic a -> IO a
-    runSymbolic s = fst <$>
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) s
-
-    comp :: Symbolic (Either CheckFailure r)
-    comp = runExceptT $ do
-      env <- mkEnv
-      void $ lift . SBVI.output =<< mkProvable env
-      hoist SBV.query $ mkQuery env
-
 mkEmptyModel :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic Model
 mkEmptyModel funInfo args tm tagAllocs = Model
     <$> allocateArgs
@@ -339,6 +249,88 @@ mkEmptyModel funInfo args tm tagAllocs = Model
         in (ety,) <$> alloc ety
       EObject _ sch ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
+
+-- | Builds a new 'Model' by querying the SMT model to concretize the initial
+-- 'Model'.
+saturateModel :: Model -> SBV.Query Model
+saturateModel =
+    traverseOf (modelArgs.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelVars.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelReads.traversed.located)   fetchAccess >=>
+    traverseOf (modelWrites.traversed.located)  fetchAccess >=>
+    traverseOf (modelAuths.traversed.located)   fetchSbv    >=>
+    traverseOf (modelResult.located)            fetchTVal
+
+  where
+    fetchTVal :: TVal -> SBVI.Query TVal
+    fetchTVal (ety, av) = (ety,) <$> go ety av
+      where
+        go :: EType -> AVal -> SBVI.Query AVal
+        go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
+          SBV.getValue (SBVI.SBV sval :: SBV t)
+        go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
+        go _ _ = error "fetchTVal: impossible"
+
+    -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
+    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBVI.Query (SBV a)
+    fetchSbv = fmap SBV.literal . SBV.getValue
+
+    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBVI.Query (S a)
+    fetchS = traverseOf s2Sbv fetchSbv
+
+    fetchObject :: Object -> SBVI.Query Object
+    fetchObject (Object fields) = Object <$> traverse fetchTVal fields
+
+    fetchAccess :: (S RowKey, Object) -> SBVI.Query (S RowKey, Object)
+    fetchAccess (sRk, obj) = do
+      sRk' <- fetchS sRk
+      obj' <- fetchObject obj
+      pure (sRk', obj')
+
+resultQuery
+  :: Goal                                      -- ^ are we in sat or valid mode?
+  -> Model                                     -- ^ initial model
+  -> ExceptT SmtFailure SBV.Query CheckSuccess
+resultQuery goal model0 = do
+  satResult <- lift SBV.checkSat
+  case goal of
+    Validation ->
+      case satResult of
+        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
+        SBV.Unsat -> pure ProvedTheorem
+        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+
+    Satisfaction ->
+      case satResult of
+        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
+        SBV.Unsat -> throwError Unsatisfiable
+        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+
+-- Adaptation of SBV's internal @runWithQuery@ for our needs.
+runAndQuery
+  :: forall env r
+   . Goal                                              -- ^ are we using sat or valid?
+  -> ExceptT CheckFailure Symbolic env                 -- ^ initial setup in Symbolic
+  -> (env -> ExceptT CheckFailure Symbolic (SBV Bool)) -- ^ produces the Provable to be run
+  -> (env -> ExceptT CheckFailure SBV.Query r)         -- ^ produces the Query to be run
+  -> ExceptT CheckFailure IO r
+runAndQuery goal mkEnv mkProvable mkQuery = ExceptT $
+    runSymbolic comp `E.catch` \(e :: SBV.SMTException) ->
+      pure $ Left $ SmtFailure $ UnexpectedFailure e
+
+  where
+    cfg :: SBV.SMTConfig
+    cfg = SBV.z3
+
+    runSymbolic :: Symbolic a -> IO a
+    runSymbolic s = fst <$>
+      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) cfg) s
+
+    comp :: Symbolic (Either CheckFailure r)
+    comp = runExceptT $ do
+      env <- mkEnv
+      void $ lift . SBVI.output =<< mkProvable env
+      hoist SBV.query $ mkQuery env
 
 checkFunction
   :: [Table]
