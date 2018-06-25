@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,10 +11,12 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Pact.Analyze.Types where
 
-import           Control.Lens               (Iso, Iso', Lens', both, from, iso,
+import           Control.Lens               (At (at), Index, IxValue, Ixed (ix),
+                                             Iso, Iso', Lens', both, from, iso,
                                              lens, makeLenses, over, use, view,
                                              (%~), (&), (+=))
 import           Control.Monad.State.Strict (MonadState)
@@ -714,6 +717,16 @@ typeEq TAny     TAny     = Just Refl
 typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
+userShow :: Type a -> String
+userShow = \case
+  TInt     -> "int"
+  TBool    -> "bool"
+  TStr     -> "string"
+  TTime    -> "time"
+  TDecimal -> "decimal"
+  TKeySet  -> "keyset"
+  TAny     -> "*"
+
 -- The schema invariant language consists of:
 --
 -- * comparisons
@@ -797,8 +810,37 @@ instance HasVarId VarId where
 genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
+newtype ColumnMap a
+  = ColumnMap { _columnMap :: Map ColumnName a }
+  deriving (Show, Functor, Foldable, Traversable, Monoid)
+
+instance Mergeable a => Mergeable (ColumnMap a) where
+  symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
+    Map.intersectionWith (symbolicMerge force test) left right
+
+newtype TableMap a
+  = TableMap { _tableMap :: Map TableName a }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Mergeable a => Mergeable (TableMap a) where
+  symbolicMerge force test (TableMap left) (TableMap right) = TableMap $
+    -- intersection is fine here; we know each map has all tables:
+    Map.intersectionWith (symbolicMerge force test) left right
+
 makeLenses ''S
 makeLenses ''Object
 makeLenses ''Table
 makeLenses ''Model
 makeLenses ''Located
+makeLenses ''ColumnMap
+makeLenses ''TableMap
+
+type instance Index (ColumnMap a) = ColumnName
+type instance IxValue (ColumnMap a) = a
+instance Ixed (ColumnMap a) where ix k = columnMap.ix k
+instance At (ColumnMap a) where at k = columnMap.at k
+
+type instance Index (TableMap a) = TableName
+type instance IxValue (TableMap a) = a
+instance Ixed (TableMap a) where ix k = tableMap.ix k
+instance At (TableMap a) where at k = tableMap.at k

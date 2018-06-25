@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE DeriveFunctor              #-}
-{-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -14,12 +11,10 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeFamilies               #-}
 
 module Pact.Analyze.Analyze where
 
-import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
-                                            Lens', ifoldl, iforM, lens,
+import           Control.Lens              (at, ix, Lens', ifoldl, iforM, lens,
                                             makeLenses, over, preview, singular,
                                             use, view, (%=), (&), (+=), (.=),
                                             (.~), (<&>), (?~), (^.), _1, _2,
@@ -115,23 +110,6 @@ instance Mergeable SymbolicCells where
       m :: Mergeable a => ColumnMap a -> ColumnMap a -> ColumnMap a
       m = symbolicMerge force test
 
-newtype ColumnMap a
-  = ColumnMap { _columnMap :: Map ColumnName a }
-  deriving (Show, Functor, Foldable, Traversable, Monoid)
-
-instance Mergeable a => Mergeable (ColumnMap a) where
-  symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
-    Map.intersectionWith (symbolicMerge force test) left right
-
-newtype TableMap a
-  = TableMap { _tableMap :: Map TableName a }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance Mergeable a => Mergeable (TableMap a) where
-  symbolicMerge force test (TableMap left) (TableMap right) = TableMap $
-    -- intersection is fine here; we know each map has all tables:
-    Map.intersectionWith (symbolicMerge force test) left right
-
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
@@ -203,24 +181,12 @@ data QueryEnv
     , _qeAnalyzeResult :: AVal
     }
 
-makeLenses ''ColumnMap
 makeLenses ''AnalyzeEnv
-makeLenses ''TableMap
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''QueryEnv
-
-type instance Index (ColumnMap a) = ColumnName
-type instance IxValue (ColumnMap a) = a
-instance Ixed (ColumnMap a) where ix k = columnMap.ix k
-instance At (ColumnMap a) where at k = columnMap.at k
-
-type instance Index (TableMap a) = TableName
-type instance IxValue (TableMap a) = a
-instance Ixed (TableMap a) where ix k = tableMap.ix k
-instance At (TableMap a) where at k = tableMap.at k
 
 instance Mergeable AnalyzeState where
   -- NOTE: We discard the left global state because this is out-of-date and was
