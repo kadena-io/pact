@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
@@ -42,17 +43,18 @@ import           Data.SBV                   (AlgReal, Boolean (bnot, false, true
 import           Data.SBV.Control           (SMTValue (..))
 import qualified Data.SBV.Internals         as SBVI
 import qualified Data.SBV.String            as SBV
+import           Data.Semigroup             ((<>))
 import qualified Data.Set                   as Set
 import           Data.String                (IsString (..))
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Thyme                 (UTCTime, microseconds)
-import           Data.Typeable              ((:~:) (Refl), Typeable, eqT)
+import           Data.Typeable              ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Lang            as Pact
 import qualified Pact.Types.Typecheck       as TC
-import           Pact.Types.Util            (AsString)
+import           Pact.Types.Util            (AsString, tShow)
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -123,17 +125,6 @@ instance IsString ColumnName where
   fromString = ColumnName
 
 type RowKey = String
-
--- We can't use Proxy because deriving Eq doesn't work
--- We're still 8.0, so we can't use the new TypeRep yet:
-data Rep a = Rep deriving (Eq, Show)
-data Ty where Ty :: (SymWord t, Typeable t) => Rep t -> Ty
-instance Eq Ty where
-  Ty (Rep :: Rep a) == Ty (Rep :: Rep b) =
-    case eqT :: Maybe (a :~: b) of
-      Just Refl -> True
-      _         -> False
-deriving instance Show Ty
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
@@ -448,15 +439,15 @@ data PreProp
   | PreVar     VarId Text
 
   -- quantifiers
-  | PreForall VarId Text Ty PreProp
-  | PreExists VarId Text Ty PreProp
+  | PreForall VarId Text EType PreProp
+  | PreExists VarId Text EType PreProp
 
   -- applications
   | PreApp Text [PreProp]
 
   -- -- TODO: parse
   -- -- | PreAt {- Schema -} PreProp PreProp -- EType
-  deriving (Show, Eq)
+  deriving Eq
 
 data Prop a where
   -- Literals
@@ -481,9 +472,9 @@ data Prop a where
 
   -- Abstraction
 
-  Forall :: VarId -> Text -> Ty -> Prop a -> Prop a
+  Forall :: VarId -> Text -> EType -> Prop a -> Prop a
   -- ^ Introduces a universally-quantified variable over another property
-  Exists :: VarId -> Text -> Ty -> Prop a -> Prop a
+  Exists :: VarId -> Text -> EType -> Prop a -> Prop a
   -- ^ Introduces an existentially-quantified variable over another property
   PVar   :: VarId -> Text                 -> Prop a
   -- ^ Refers to a function argument or universally/existentially-quantified variable
@@ -749,15 +740,61 @@ typeEq TAny     TAny     = Just Refl
 typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
-userShow :: Type a -> String
-userShow = \case
-  TInt     -> "int"
-  TBool    -> "bool"
-  TStr     -> "string"
-  TTime    -> "time"
-  TDecimal -> "decimal"
-  TKeySet  -> "keyset"
-  TAny     -> "*"
+class UserShow a where
+  userShowsPrec :: Int -> a -> Text
+
+  userShowList :: [a] -> Text
+  userShowList as = "[" <> T.intercalate ", " (userShow <$> as) <> "]"
+
+instance UserShow (Type a) where
+  userShowsPrec _ = \case
+    TInt     -> "int"
+    TBool    -> "bool"
+    TStr     -> "string"
+    TTime    -> "time"
+    TDecimal -> "decimal"
+    TKeySet  -> "keyset"
+    TAny     -> "*"
+
+instance UserShow ArithOp where
+  userShowsPrec _d = \case
+    Add -> "+"
+    Sub -> "-"
+    Mul -> "*"
+    Div -> "/"
+    Pow -> "^"
+    Log -> "log"
+
+instance UserShow PreProp where
+  userShowsPrec _d = \case
+    PreIntegerLit i -> tShow i
+    PreStringLit t  -> tShow t
+    PreDecimalLit d -> tShow d
+    PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
+    PreBoolLit b    -> tShow (Pact.LBool b)
+
+    PreAbort        -> "abort"
+    PreSuccess      -> "success"
+    PreResult       -> "result"
+    PreVar _id name -> name
+
+    PreForall _vid name (EType ty) prop ->
+      "(forall (" <> name <> ":" <> userShow ty <> ") " <> userShow prop <> ")"
+    PreExists _vid name (EType ty) prop ->
+      "(exists (" <> name <> ":" <> userShow ty <> ") " <> userShow prop <> ")"
+    PreApp name applicands -> "(" <> name <> " " <> T.unwords
+      ((map userShow) applicands) <> ")"
+
+    PreForall _vid _name (EObjectTy _) _prop ->
+      "ERROR: quantification over an object type is not currently allowed (issue 139)"
+    PreExists _vid _name (EObjectTy _) _prop ->
+      "ERROR: quantification over an object type is not currently allowed (issue 139)"
+
+instance UserShow Pact.Exp where
+  userShowsPrec _ = tShow
+
+userShow :: UserShow a => a -> Text
+userShow = userShowsPrec 0
 
 -- The schema invariant language consists of:
 --

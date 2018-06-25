@@ -421,7 +421,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
       env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
         $ zip vids
         $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
-            case translateType' ty of
+            case maybeTranslateType ty of
               Just ety -> Just (name, ety)
               Nothing  -> Nothing
 
@@ -438,7 +438,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
           let fields = _utFields _tableType
               colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
                 \(Pact.Arg argName ty _) ->
-                  (ColumnName (T.unpack argName),) <$> translateType' ty
+                  (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
       eitherChecks = runExpParserOver "properties" properties property

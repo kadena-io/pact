@@ -12,7 +12,7 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative, (<|>))
+import           Control.Applicative        (Alternative(empty, (<|>)))
 import           Control.Lens               (at, cons, makeLenses, makePrisms,
                                              view, (%~), (<&>), (?~), (^.),
                                              (^?))
@@ -39,6 +39,7 @@ import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
+import           Pact.Types.Util            (tShow)
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Analyze.Patterns
@@ -87,9 +88,6 @@ describeTranslateFailure = \case
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
-  where
-    tShow :: Show a => a -> Text
-    tShow = T.pack . show
 
 instance Monoid TranslateFailure where
   mempty = AlternativeFailures []
@@ -180,36 +178,40 @@ withNewVarId varNode varName action = do
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
-translateType' :: Pact.Type Pact.UserType -> Maybe EType
-translateType' = \case
-  TyUser (Pact.Schema _ _ fields _) ->
-    fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-      \(Pact.Arg name ty _info) -> (name, translateType' ty)
+maybeTranslateType :: Pact.Type Pact.UserType -> Maybe EType
+maybeTranslateType = maybeTranslateType' $ \(Pact.Schema _ _ fields _) ->
+  fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
+    \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
+
+maybeTranslateType' :: Alternative f => (a -> f EType) -> Pact.Type a -> f EType
+maybeTranslateType' f = \case
+  TyUser a -> f a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
-  TySchema _ ty'   -> translateType' ty'
+  TySchema _ ty'   -> maybeTranslateType' f ty'
 
-  TyPrim TyBool    -> Just $ EType TBool
-  TyPrim TyDecimal -> Just $ EType TDecimal
-  TyPrim TyInteger -> Just $ EType TInt
-  TyPrim TyString  -> Just $ EType TStr
-  TyPrim TyTime    -> Just $ EType TTime
-  TyPrim TyKeySet  -> Just $ EType TKeySet
+  TyPrim TyBool    -> pure $ EType TBool
+  TyPrim TyDecimal -> pure $ EType TDecimal
+  TyPrim TyInteger -> pure $ EType TInt
+  TyPrim TyString  -> pure $ EType TStr
+  TyPrim TyTime    -> pure $ EType TTime
+  TyPrim TyKeySet  -> pure $ EType TKeySet
 
   -- Pretend any and var are the same -- we can't analyze either of them.
-  TyAny            -> Just $ EType TAny
-  TyVar _          -> Just $ EType TAny
+  -- TODO(joel): revisit this assumption
+  TyAny            -> pure $ EType TAny
+  TyVar _          -> pure $ EType TAny
 
   --
   -- TODO: handle these:
   --
-  TyPrim TyValue   -> Nothing
-  TyList _         -> Nothing
-  TyFun _          -> Nothing
+  TyPrim TyValue   -> empty
+  TyList _         -> empty
+  TyFun _          -> empty
 
 translateType :: MonadError TranslateFailure m => Node -> m EType
 translateType node = case _aTy node of
-  (translateType' -> Just ety) -> pure ety
+  (maybeTranslateType -> Just ety) -> pure ety
   ty                           -> throwError $ UnhandledType node ty
 
 translateArg
