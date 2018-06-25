@@ -28,13 +28,9 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (expToProp)
+import           Pact.Analyze.Parse           (TableEnv, expToProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
-
--- TODO(joel): maybe just use either package?
-rightToMaybe :: Either a b -> Maybe b
-rightToMaybe = either (const Nothing) Just
 
 wrap :: Text -> Text
 wrap code =
@@ -1134,49 +1130,57 @@ spec = describe "analyze" $ do
     let textToProp'
           :: Map Text VarId
           -> Map VarId EType
+          -> TableEnv
           -> Type a
           -> Text
-          -> Maybe (Prop a)
-        textToProp' env1 env2 ty t = case parseExprs t of
-          Right [exp'] -> rightToMaybe $
-            expToProp (VarId (Map.size env1)) env1 env2 ty exp'
-          _            -> Nothing
+          -> Either String (Prop a)
+        textToProp' env1 env2 tableEnv ty t = case parseExprs t of
+          Right [exp'] ->
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 ty exp'
+          Left err -> Left err
 
-        textToProp :: Type a -> Text -> Maybe (Prop a)
-        textToProp = textToProp' Map.empty Map.empty
+        textToProp :: Type a -> Text -> Either String (Prop a)
+        textToProp = textToProp' Map.empty Map.empty (TableMap mempty)
+
+        textToPropTableEnv :: TableEnv -> Type a -> Text -> Either String (Prop a)
+        textToPropTableEnv tableEnv = textToProp' Map.empty Map.empty tableEnv
 
     it "infers column-delta" $ do
-      textToProp TBool "(> (column-delta 'a 'b) 0)"
+      let tableEnv = TableMap $ Map.singleton "a" $
+            ColumnMap $ Map.singleton "b" $ EType TInt
+      textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
         `shouldBe`
-        Just (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
+        Right (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
 
-      textToProp TBool "(> (column-delta 'a 'b) 0.0)"
+      let tableEnv' = TableMap $ Map.singleton "a" $
+            ColumnMap $ Map.singleton "b" $ EType TDecimal
+      textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
-        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+        Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
 
-      textToProp TBool "(> (column-delta \"a\" \"b\") 0.0)"
+      textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
         `shouldBe`
-        Just (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+        Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
 
     it "infers +" $ do
       textToProp TStr "(+ \"a\" \"b\")"
         `shouldBe`
-        Just (PStrConcat (PLit "a") (PLit "b"))
+        Right (PStrConcat (PLit "a") (PLit "b"))
 
       textToProp TInt "(+ 0 1)"
         `shouldBe`
-        Just (PIntArithOp Add 0 1)
+        Right (PIntArithOp Add 0 1)
 
       textToProp TDecimal "(+ 0.0 1.0)"
         `shouldBe`
-        Just (PDecArithOp Add (PLit 0) (PLit 1))
+        Right (PDecArithOp Add (PLit 0) (PLit 1))
 
-      textToProp TDecimal "(+ 0 1)" `shouldBe` Nothing
+      textToProp TDecimal "(+ 0 1)" `shouldBe` Left ""
 
     it "infers forall / exists" $ do
       textToProp TBool "(forall (x:string y:string) (= x y))"
         `shouldBe`
-        Just
+        Right
           (Forall (VarId 0) "x" (Ty (Rep @String))
             (Forall (VarId 1) "y" (Ty (Rep @String))
               (PIntegerComparison Eq
@@ -1186,7 +1190,7 @@ spec = describe "analyze" $ do
       textToProp TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
-        Just (PNot
+        Right (PNot
           (Exists (VarId 0) "row" (Ty (Rep @String))
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (VarId 0) "row"))
@@ -1195,28 +1199,34 @@ spec = describe "analyze" $ do
     it "parses row-enforced / vars" $ do
       let env1 = Map.singleton "from" (VarId 0)
           env2 = Map.singleton (VarId 0) (EType TStr)
-      textToProp' env1 env2 TBool "(row-enforced 'accounts 'ks from)"
+          tableEnv = TableMap $ Map.singleton "accounts" $
+            ColumnMap $ Map.singleton "ks" $ EType TKeySet
+      textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
-      Just (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (VarId 0) "from"))
+      Right (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (VarId 0) "from"))
 
     it "parses column properties" $
-      textToProp TBool "(= (column-delta 'accounts 'balance) 0)"
-      `shouldBe`
-      Just (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
+      let tableEnv = TableMap $ Map.singleton "accounts" $
+            ColumnMap $ Map.singleton "balance" $ EType TInt
+      in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
+           `shouldBe`
+           Right (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
-      textToProp TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
-      `shouldBe`
-      Just (PLogical OrOp
-        [ PLogical NotOp [
-            PLogical NotOp [KsNameAuthorized "accounts-admin-keyset"]
-          ]
-        , Abort
-        ])
+      let tableEnv = TableMap $ Map.singleton "accounts" $
+            ColumnMap $ Map.singleton "accounts-admin-keyset" $ EType TKeySet
+      in textToPropTableEnv tableEnv TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
+         `shouldBe`
+         Right (PLogical OrOp
+           [ PLogical NotOp [
+               PLogical NotOp [KsNameAuthorized "accounts-admin-keyset"]
+             ]
+           , Abort
+           ])
 
     it "handles special identifiers" $ do
-      textToProp TBool "abort"   `shouldBe` Just Abort
-      textToProp TBool "success" `shouldBe` Just Success
-      textToProp TBool "result"  `shouldBe` Just Result
-      textToProp TInt  "result"  `shouldBe` Just Result
-      textToProp TStr  "result"  `shouldBe` Just Result
+      textToProp TBool "abort"   `shouldBe` Right Abort
+      textToProp TBool "success" `shouldBe` Right Success
+      textToProp TBool "result"  `shouldBe` Right Result
+      textToProp TInt  "result"  `shouldBe` Right Result
+      textToProp TStr  "result"  `shouldBe` Right Result
