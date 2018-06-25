@@ -9,17 +9,19 @@ module Pact.Analyze.Parse
   ( expToCheck
   , expToProp
   , expToInvariant
+  , TableEnv
   ) where
 
-import           Control.Lens                 (at, view, (^.))
-import           Control.Monad.Except         (mzero, throwError)
-import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT)
+import           Control.Lens                 (_1, _2, at, ix, view, (^.), (^..), (&), (.~), (?~))
+import           Control.Monad.Except         (throwError)
+import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Data.Foldable                (asum, find)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           Data.Type.Equality           ((:~:)(Refl))
 import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
@@ -100,8 +102,10 @@ pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
 pattern ColumnLit :: ColumnName -> PreProp
 pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 
+type TableEnv = TableMap (ColumnMap EType)
+
 type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
-type PropCheck = ReaderT (Map VarId EType) (Either String)
+type PropCheck = ReaderT (Map VarId EType, TableEnv) (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
@@ -161,7 +165,7 @@ expToPreProp = \case
         mkVar var = do
           mVid <- view (at var)
           case mVid of
-            Nothing  -> throwError "variable not found"
+            Nothing  -> throwError $ "variable not found: " ++ T.unpack var
             Just vid -> pure (PreVar vid var)
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
@@ -177,11 +181,19 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TBool, PreAbort)    -> pure Abort
   (TBool, PreSuccess)  -> pure Success
   (_, PreResult)       -> pure Result
-  (_, PreVar vid name) -> pure (PVar vid name)
+  (_, PreVar vid name) -> do
+    varTy <- view (_1 . at vid)
+    case varTy of
+      Nothing -> throwError $ "couldn't find property variable " ++ T.unpack name
+      Just (EType varTy') -> case typeEq ty varTy' of
+        Nothing   -> throwError "wrong type"
+        Just Refl -> pure (PVar vid name)
 
   -- quantifiers
-  (a, PreForall vid name ty' p) -> Forall vid name ty' <$> checkPreProp a p
-  (a, PreExists vid name ty' p) -> Exists vid name ty' <$> checkPreProp a p
+  (a, PreForall vid name ty' p) -> Forall vid name ty' <$>
+    (local (& _1 . at vid ?~ EType ty') $ checkPreProp a p)
+  (a, PreExists vid name ty' p) -> Exists vid name ty' <$>
+    checkPreProp a p
 
   -- TODO: PreAt / PAt
 
@@ -241,8 +253,12 @@ checkPreProp ty preProp = case (ty, preProp) of
   --
   -- TODO: should be "table-written"
   --
-  (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
-  (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
+  (TBool, PreApp "table-write" [TableLit tn]) -> do
+    expectTableExists tn
+    pure (TableWrite tn)
+  (TBool, PreApp "table-read" [TableLit tn]) -> do
+    expectTableExists tn
+    pure (TableRead tn)
   --
   -- NOTE: disabled until implemented on the backend:
   --
@@ -250,27 +266,62 @@ checkPreProp ty preProp = case (ty, preProp) of
   --   -> pure (ColumnWrite tn cn)
   -- (TBool, PreApp "column-read" [TableLit tn, ColumnLit cn])
   --   -> pure (ColumnRead tn cn)
-  (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
-    -> IntCellDelta tn cn <$> checkPreProp TStr rk
-  (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
-    -> DecCellDelta tn cn <$> checkPreProp TStr rk
-  (TInt, PreApp "column-delta" [TableLit tn, ColumnLit cn])
-    -> pure (IntColumnDelta tn cn)
-  (TDecimal, PreApp "column-delta" [TableLit tn, ColumnLit cn])
-    -> pure (DecColumnDelta tn cn)
-  (TBool, PreApp "row-read" [TableLit tn, rk])
-    -> RowRead tn <$> checkPreProp TStr rk
+  (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk]) -> do
+    _ <- expectTableExists tn
+    _ <- expectColumnType tn cn TInt
+    IntCellDelta tn cn <$> checkPreProp TStr rk
+  (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk]) -> do
+    _ <- expectTableExists tn
+    _ <- expectColumnType tn cn TDecimal
+    DecCellDelta tn cn <$> checkPreProp TStr rk
+  (TInt, PreApp "column-delta" [TableLit tn, ColumnLit cn]) -> do
+    _ <- expectTableExists tn
+    _ <- expectColumnType tn cn TInt
+    -- TODO: if these weren't *Int*ColumnDelta / *Dec*ColumnDelta these clauses
+    -- could be collapsed
+    pure (IntColumnDelta tn cn)
+  (TDecimal, PreApp "column-delta" [TableLit tn, ColumnLit cn]) -> do
+    _ <- expectTableExists tn
+    _ <- expectColumnType tn cn TDecimal
+    pure (DecColumnDelta tn cn)
+  (TBool, PreApp "row-read" [TableLit tn, rk]) -> do
+    _ <- expectTableExists tn
+    RowRead tn <$> checkPreProp TStr rk
   --
   -- TODO: should be "row-written"
   --
-  (TBool, PreApp "row-write" [TableLit tn, rk])
-    -> RowWrite tn <$> checkPreProp TStr rk
+  (TBool, PreApp "row-write" [TableLit tn, rk]) -> do
+    _ <- expectTableExists tn
+    RowWrite tn <$> checkPreProp TStr rk
   (TBool, PreApp "authorized-by" [PreStringLit ks])
     -> pure (KsNameAuthorized (KeySetName ks))
-  (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk])
-    -> RowEnforced tn cn <$> checkPreProp TStr rk
+  (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk]) -> do
+    _ <- expectTableExists tn
+    _ <- expectColumnType tn cn TStr
+    RowEnforced tn cn <$> checkPreProp TStr rk
 
-  _ -> mzero
+  _ -> throwError $ "type error: " ++ show preProp ++ " does not have type " ++ show ty
+
+expectColumnType :: TableName -> ColumnName -> Type a -> PropCheck ()
+expectColumnType tn@(TableName tnStr) cn@(ColumnName cnStr) expectedTy = do
+  tys <- asks (^.. _2 . ix tn . ix cn)
+  case tys of
+    [EType foundTy] -> case typeEq foundTy expectedTy of
+      Nothing   -> throwError $
+        "expected column " ++ cnStr ++ " in table " ++ tnStr ++
+        " to have type " ++ userShow expectedTy ++ ", instead found " ++
+        userShow foundTy
+      Just Refl -> pure ()
+    _ -> throwError $
+      "didn't find expected column " ++ cnStr ++ " in table " ++ tnStr
+
+expectTableExists :: TableName -> PropCheck ()
+expectTableExists tn@(TableName tnStr) = do
+  tn' <- view $ _2 . at tn
+  case tn' of
+    Nothing -> throwError $
+      "expected table " ++ tnStr ++ "but it isn't in scope"
+    Just _  -> pure ()
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
@@ -279,7 +330,9 @@ checkPreProp ty preProp = case (ty, preProp) of
 -- EType.
 --
 expToCheck
-  :: VarId
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
   -- ^ ID to start issuing from
   -> Map Text VarId
   -- ^ Environment mapping names to var IDs
@@ -288,13 +341,15 @@ expToCheck
   -> Exp
   -- ^ Exp to convert
   -> Either String Check
-expToCheck genStart nameEnv idEnv body = do
+expToCheck tableEnv genStart nameEnv idEnv body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
+  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) (idEnv, tableEnv)
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
-  :: VarId
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
   -- ^ ID to start issuing from
   -> Map Text VarId
   -- ^ Environment mapping names to var IDs
@@ -305,9 +360,9 @@ expToProp
   -> Exp
   -- ^ Exp to convert
   -> Either String (Prop a)
-expToProp genStart nameEnv idEnv ty body = do
+expToProp tableEnv genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  runReaderT (checkPreProp ty preTypedBody) idEnv
+  runReaderT (checkPreProp ty preTypedBody) (idEnv, tableEnv)
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
@@ -362,7 +417,7 @@ expToInvariant ty exp = case (ty, exp) of
       Just eqNeq -> IKeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
-      Nothing -> mzero
+      Nothing -> throwError $ show op' ++ " is an invalid operation for keysets (only = or /= allowed)"
     ]
 
   (TBool, EList' (EAtom' op:args))

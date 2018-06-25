@@ -80,7 +80,7 @@ type ParseFailure = (Exp, String)
 describeParseFailure :: ParseFailure -> Text
 describeParseFailure (exp, info)
   = T.pack (renderParsed (exp ^. eParsed))
-  <> ": could not parse " <> tShow exp <> " " <> T.pack info
+  <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 data SmtFailure
   = Invalid Model
@@ -397,9 +397,10 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   _             -> False
 
 moduleFunChecks
-  :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  :: [Table]
+  -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
   -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
+moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
 
@@ -432,8 +433,16 @@ moduleFunChecks modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
 
       vidStart = VarId (length env)
 
+      tableEnv = TableMap $ Map.fromList $
+        tables <&> \Table { _tableName, _tableType } ->
+          let fields = _utFields _tableType
+              colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+                \(Pact.Arg argName ty _) ->
+                  (ColumnName (T.unpack argName),) <$> translateType' ty
+          in (TableName (T.unpack _tableName), colMap)
+
       eitherChecks = runExpParserOver "properties" properties property
-        (expToCheck vidStart nameEnv idEnv)
+        (expToCheck tableEnv vidStart nameEnv idEnv)
 
       checks :: Either [ParseFailure] [(Parsed, Check)]
       checks = ((defnParsed, InvariantsHold):) <$> eitherChecks
@@ -470,10 +479,9 @@ runExpParserOver name multiExp singularExp parser =
   let
       exps = collectExps name multiExp singularExp
       parsedList :: Either [ParseFailure] [Either [ParseFailure] (Parsed, t)]
-      parsedList = exps <&&> \meta ->
-        case parser meta of
-          Left err   -> Left [(meta, err)]
-          Right good -> Right (meta ^. eParsed, good)
+      parsedList = exps <&&> \meta -> case parser meta of
+        Left err   -> Left [(meta, err)]
+        Right good -> Right (meta ^. eParsed, good)
 
       parsedList' :: [Either [ParseFailure] (Parsed, t)]
       parsedList' = join <$> sequence parsedList
@@ -527,7 +535,7 @@ verifyModule modules moduleData = do
     Right tables' -> do
 
       let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-          funChecks = moduleFunChecks funTypes
+          funChecks = moduleFunChecks tables' funTypes
 
           funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
           funChecks' = sequence (fmap sequence funChecks)
