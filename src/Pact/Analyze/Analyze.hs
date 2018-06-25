@@ -18,60 +18,59 @@
 
 module Pact.Analyze.Analyze where
 
-import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
-                                            Lens', ifoldl, iforM, lens,
-                                            makeLenses, over, preview, singular,
-                                            use, view, (%=), (&), (+=), (.=),
-                                            (.~), (<&>), (?~), (^.), _1, _2,
-                                            _Just)
-import           Control.Monad             (void)
-import           Control.Monad.Except      (Except, ExceptT (ExceptT),
-                                            MonadError (throwError), runExcept)
-import           Control.Monad.Morph       (generalize, hoist)
-import           Control.Monad.Reader      (MonadReader (local), ReaderT,
-                                            runReaderT)
-import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
-import           Control.Monad.State       (MonadState)
-import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Writer      (MonadWriter (tell))
-import qualified Data.Aeson                as Aeson
-import           Data.ByteString.Lazy      (toStrict)
-import           Data.Foldable             (foldl', foldrM, for_)
-import           Data.Functor.Identity     (Identity (Identity))
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Monoid               ((<>))
-import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (|||)),
-                                            EqSymbolic ((./=), (.==)), HasKind,
-                                            Mergeable (symbolicMerge),
-                                            OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                            SBV, SBool, SFunArray,
-                                            SymArray (readArray, writeArray),
-                                            SymWord (exists_, forall_),
-                                            Symbolic, constrain, false, ite,
-                                            mkSFunArray, sDiv, sMod,
-                                            uninterpret, (.^))
-import qualified Data.SBV.Internals        as SBVI
-import qualified Data.SBV.String           as SBV
-import           Data.String               (IsString (fromString))
-import           Data.Text                 (Text, pack)
-import qualified Data.Text                 as T
-import           Data.Text.Encoding        (encodeUtf8)
-import           Data.Thyme                (formatTime, parseTime)
-import           Data.Traversable          (for)
+import           Control.Lens               (At (at), Index, IxValue, Ixed (ix),
+                                             Lens', ifoldl, iforM, lens,
+                                             makeLenses, over, preview,
+                                             singular, use, view, (%=), (%~),
+                                             (&), (+=), (.=), (.~), (<&>), (?~),
+                                             (^.), _1, _2, _Just)
+import           Control.Monad              (void)
+import           Control.Monad.Except       (Except, ExceptT (ExceptT),
+                                             MonadError (throwError), runExcept)
+import           Control.Monad.Morph        (generalize, hoist)
+import           Control.Monad.Reader       (MonadReader (local), ReaderT,
+                                             runReaderT)
+import           Control.Monad.RWS.Strict   (RWST (RWST, runRWST))
+import           Control.Monad.State.Strict (MonadState, modify')
+import           Control.Monad.Trans.Class  (lift)
+import qualified Data.Aeson                 as Aeson
+import           Data.ByteString.Lazy       (toStrict)
+import           Data.Foldable              (foldl', foldrM, for_)
+import           Data.Functor.Identity      (Identity (Identity))
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (mapMaybe)
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>), (|||)),
+                                             EqSymbolic ((./=), (.==)), HasKind,
+                                             Mergeable (symbolicMerge),
+                                             OrdSymbolic ((.<), (.<=), (.>), (.>=)),
+                                             SBV, SBool, SFunArray,
+                                             SymArray (readArray, writeArray),
+                                             SymWord (exists_, forall_),
+                                             Symbolic, constrain, false, ite,
+                                             mkSFunArray, sDiv, sMod,
+                                             uninterpret, (.^))
+import qualified Data.SBV.Internals         as SBVI
+import qualified Data.SBV.String            as SBV
+import           Data.String                (IsString (fromString))
+import           Data.Text                  (Text, pack)
+import qualified Data.Text                  as T
+import           Data.Text.Encoding         (encodeUtf8)
+import           Data.Thyme                 (formatTime, parseTime)
+import           Data.Traversable           (for)
 import           System.Locale
 
-import qualified Pact.Types.Hash           as Pact
-import           Pact.Types.Runtime        (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
-                                            Type (TyPrim), tShow)
-import qualified Pact.Types.Runtime        as Pact
-import qualified Pact.Types.Typecheck      as Pact
-import           Pact.Types.Version        (pactVersion)
+import qualified Pact.Types.Hash            as Pact
+import           Pact.Types.Runtime         (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
+                                             Type (TyPrim), tShow)
+import qualified Pact.Types.Runtime         as Pact
+import qualified Pact.Types.Typecheck       as Pact
+import           Pact.Types.Version         (pactVersion)
 
 import           Pact.Analyze.Term
-import           Pact.Analyze.Types        hiding (tableName)
-import qualified Pact.Analyze.Types        as Types
+import           Pact.Analyze.Types         hiding (tableName)
+import qualified Pact.Analyze.Types         as Types
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -86,12 +85,12 @@ data AnalyzeEnv
 newtype Constraints
   = Constraints { runConstraints :: Symbolic () }
 
+instance Show Constraints where
+  show _ = "<symbolic>"
+
 instance Monoid Constraints where
   mempty = Constraints (pure ())
   mappend (Constraints act1) (Constraints act2) = Constraints $ act1 *> act2
-
-instance Mergeable Constraints where
-  symbolicMerge _f _t = mappend
 
 data SymbolicCells
   = SymbolicCells
@@ -121,6 +120,7 @@ newtype ColumnMap a
 
 instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $
+    -- intersection is fine here; we know each map has all tables:
     Map.intersectionWith (symbolicMerge force test) left right
 
 newtype TableMap a
@@ -186,8 +186,10 @@ instance Mergeable LatticeAnalyzeState where
 
 -- Checking state that is transferred through every computation, in-order.
 newtype GlobalAnalyzeState
-  = GlobalAnalyzeState ()
-  deriving (Show, Eq)
+  = GlobalAnalyzeState
+    { _gasConstraints :: Constraints -- we log these a la writer
+    }
+  deriving (Show)
 
 data AnalyzeState
   = AnalyzeState
@@ -225,7 +227,7 @@ instance At (TableMap a) where at k = tableMap.at k
 instance Mergeable AnalyzeState where
   -- NOTE: We discard the left global state because this is out-of-date and was
   -- already fed to the right computation -- we use the updated right global
-  -- state.
+  -- state. See the 'Mergeable' instance for @Mergeable a => Analyze a@.
   symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
     AnalyzeState (symbolicMerge force test lls rls) rgs
 
@@ -246,7 +248,7 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
         }
-    , _globalState = GlobalAnalyzeState ()
+    , _globalState = GlobalAnalyzeState mempty
     }
 
   where
@@ -279,7 +281,9 @@ mkInitialAnalyzeState tables = AnalyzeState
       (repeat $ mkSFunArray $ const defaultV)
 
 addConstraint :: S Bool -> Analyze ()
-addConstraint = tell . Constraints . constrain . _sSbv
+addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
+  where
+    c = Constraints $ constrain $ _sSbv s
 
 sbvIdentifier :: Text -> Text
 sbvIdentifier = T.replace "-" "_"
@@ -386,10 +390,9 @@ instance IsString AnalyzeFailure where
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv Constraints AnalyzeState (Except AnalyzeFailure) a }
+    { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
-            MonadState AnalyzeState, MonadError AnalyzeFailure,
-            MonadWriter Constraints)
+            MonadState AnalyzeState, MonadError AnalyzeFailure)
 
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
 mkQueryEnv = QueryEnv
@@ -1522,11 +1525,12 @@ runAnalysis tables tm check model = do
       aEnv   = mkAnalyzeEnv tables model
       state0 = mkInitialAnalyzeState tables
 
-  (funResult, state1, constraints) <- hoist generalize $
+  (funResult, state1, ()) <- hoist generalize $
     runRWST (runAnalyze act) aEnv state0
+
+  lift $ runConstraints $ state1 ^. globalState.gasConstraints
 
   let qEnv  = mkQueryEnv aEnv state1 funResult
       query = analyzeCheck check
 
-  lift $ runConstraints constraints
   _sSbv <$> runReaderT (queryAction query) qEnv

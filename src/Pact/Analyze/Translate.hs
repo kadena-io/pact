@@ -21,8 +21,8 @@ import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (runReaderT)
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Control.Monad.State.Strict (runStateT)
-import           Control.Monad.State.Strict (MonadState, StateT, modify')
+import           Control.Monad.State.Strict (MonadState, StateT, modify',
+                                             runStateT)
 import           Data.Foldable              (foldl')
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
