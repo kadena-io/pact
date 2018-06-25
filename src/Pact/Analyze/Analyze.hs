@@ -224,13 +224,6 @@ type instance IxValue (TableMap a) = a
 instance Ixed (TableMap a) where ix k = tableMap.ix k
 instance At (TableMap a) where at k = tableMap.at k
 
-instance Mergeable AnalyzeState where
-  -- NOTE: We discard the left global state because this is out-of-date and was
-  -- already fed to the right computation -- we use the updated right global
-  -- state. See the 'Mergeable' instance for @Mergeable a => Analyze a@.
-  symbolicMerge force test (AnalyzeState lls _) (AnalyzeState rls rgs) =
-    AnalyzeState (symbolicMerge force test lls rls) rgs
-
 mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
@@ -431,12 +424,11 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     let run act = runExcept . runRWST (runAnalyze act) r
     in do
-      (lRes, lState, ()) <- run left s
-      (rRes, rState, ()) <- run right $
-        s & globalState .~ (lState ^. globalState)
+      (lRes, AnalyzeState lls lgs, ()) <- run left s
+      (rRes, AnalyzeState rls rgs, ()) <- run right $ s & globalState .~ lgs
 
-      return ( symbolicMerge force test lRes   rRes
-             , symbolicMerge force test lState rState
+      return ( symbolicMerge force test lRes rRes
+             , AnalyzeState (symbolicMerge force test lls rls) rgs
              , ()
              )
 
