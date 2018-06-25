@@ -431,10 +431,14 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     let run act = runExcept . runRWST (runAnalyze act) r
     in do
-      lTup <- run left s
-      let gs = lTup ^. _2.globalState
-      rTup <- run right $ s & globalState .~ gs
-      return $ symbolicMerge force test lTup rTup
+      (lRes, lState, ()) <- run left s
+      (rRes, rState, ()) <- run right $
+        s & globalState .~ (lState ^. globalState)
+
+      return ( symbolicMerge force test lRes   rRes
+             , symbolicMerge force test lState rState
+             , ()
+             )
 
 class HasAnalyzeEnv a where
   {-# MINIMAL analyzeEnv #-}
