@@ -77,7 +77,7 @@ exToTx Local = Nothing
 runPayload :: Command (Payload (PactRPC ParsedCode)) -> CommandM p CommandResult
 runPayload c@Command{..} = do
   let runRpc (Exec pm) = applyExec (cmdToRequestKey c) pm c
-      runRpc (Continuation ym) = applyContinuation (cmdToRequestKey c) ym _cmdSigs _cmdHash
+      runRpc (Continuation ym) = applyContinuation (cmdToRequestKey c) ym c
       Payload{..} = _cmdPayload
   case _pAddress of
     Just Address{..} -> do
@@ -98,7 +98,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData sigs edata Nothing _cmdHash) _csRefStore
   EvalResult{..} <- liftIO $ evalExec evalEnv parsedCode
-  newPact <- join <$> mapM (handleYield erInput) erExec
+  newPact <- join <$> mapM (handlePactExec erInput) erExec
   let newState = CommandState erRefStore $ case newPact of
         Nothing -> _csPacts
         Just (cp@CommandPact{..}) -> M.insert _cpTxId cp _csPacts
@@ -106,11 +106,9 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   mapM_ (\p -> liftIO $ logLog _ceLogger "DEBUG" $ "applyExec: new pact added: " ++ show p) newPact
   return $ jsonResult _ceMode rk $ CommandSuccess (last erOutput)
 
--- Better name?
-handleYield :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
-handleYield em PactExec{..} = do
+handlePactExec :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
+handlePactExec em PactExec{..} = do
   CommandEnv{..} <- ask
-  --TODO: handle entity?
   unless (length em == 1) $
     throwCmdEx $ "handleYield: defpact execution must occur as a single command: " ++ show em
   case _ceMode of
@@ -119,8 +117,8 @@ handleYield em PactExec{..} = do
       return $ Just $ CommandPact tid (head em) _peStepCount _peStep _peYield
 
 
-applyContinuation :: RequestKey -> ContMsg -> [UserSig] -> Hash -> CommandM p CommandResult
-applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
+applyContinuation :: RequestKey -> ContMsg -> Command a -> CommandM p CommandResult
+applyContinuation rk msg@ContMsg{..} Command{..} = do
   env@CommandEnv{..} <- ask
   case _ceMode of
     Local -> throwCmdEx "Local continuation exec not supported"
@@ -138,13 +136,13 @@ applyContinuation rk msg@ContMsg{..} cmdSigs cmdHash = do
                  ++ show _cmStep ++ " but expected " ++ show (_cpStep + 1)
 
           -- Setup environement and get result
-          let sigs = userSigsToPactKeySet cmdSigs
+          let sigs = userSigsToPactKeySet _cmdSigs
               msgData = case _cmData of
                 Nothing -> Null
                 Just d -> d
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs msgData pactStep cmdHash) _csRefStore
+                        (MsgData sigs msgData pactStep _cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
