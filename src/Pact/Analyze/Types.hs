@@ -11,15 +11,15 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators              #-}
 
 module Pact.Analyze.Types where
 
-import           Control.Lens               (At (at), Index, IxValue, Ixed (ix),
-                                             Iso, Iso', Lens', both, from, iso,
-                                             lens, makeLenses, over, use, view,
-                                             (%~), (&), (+=))
+import           Control.Lens               (At (at), Index, Iso, Iso', IxValue,
+                                             Ixed (ix), Lens', both, from, iso,
+                                             lens, makeLenses, makePrisms, over,
+                                             use, view, (%~), (&), (+=))
 import           Control.Monad.State.Strict (MonadState)
 import           Data.Aeson                 (FromJSON, ToJSON)
 import           Data.AffineSpace           ((.+^), (.-.))
@@ -199,13 +199,20 @@ data ComparisonOp
   | Neq -- ^ Not equal
   deriving (Show, Eq)
 
-data Provenance
-  = Provenance
+-- | Metadata about a database cell from which a symbolic value originates.
+-- This is a separate datatype from 'Provenance' so that we avoid partial field
+-- accessors.
+data OriginatingCell
+  = OriginatingCell
     { _provTableName  :: TableName
     , _provColumnName :: ColumnName
     , _provRowKey     :: S RowKey
     , _provDirty      :: S Bool
     }
+  deriving (Eq, Show)
+
+data Provenance
+  = FromCell OriginatingCell
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -283,8 +290,8 @@ S _ a .++ S _ b = sansProv $ SBV.concat a b
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
 sbv2S = iso sansProv _sSbv
 
-mkProv :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
-mkProv tn cn sRk sDirty = Provenance tn cn sRk sDirty
+fromCell :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
+fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
@@ -935,6 +942,7 @@ makeLenses ''Model
 makeLenses ''Located
 makeLenses ''ColumnMap
 makeLenses ''TableMap
+makePrisms ''Provenance
 
 type instance Index (ColumnMap a) = ColumnName
 type instance IxValue (ColumnMap a) = a

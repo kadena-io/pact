@@ -18,7 +18,7 @@ import           Control.Lens               (At (at), Ixed (ix), Lens', ifoldl,
                                              iforM, lens, makeLenses, over,
                                              preview, singular, use, view, (%=),
                                              (%~), (&), (+=), (.=), (.~), (<&>),
-                                             (?~), (^.), _1, _2, _Just)
+                                             (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Monad              (void)
 import           Control.Monad.Except       (Except, ExceptT (ExceptT),
                                              MonadError (throwError), runExcept)
@@ -575,7 +575,7 @@ intCell
   -> S Bool
   -> Lens' AnalyzeState (S Integer)
 intCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 boolCell
   :: TableName
@@ -584,7 +584,7 @@ boolCell
   -> S Bool
   -> Lens' AnalyzeState (S Bool)
 boolCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 stringCell
   :: TableName
@@ -593,7 +593,7 @@ stringCell
   -> S Bool
   -> Lens' AnalyzeState (S String)
 stringCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 decimalCell
   :: TableName
@@ -602,7 +602,7 @@ decimalCell
   -> S Bool
   -> Lens' AnalyzeState (S Decimal)
 decimalCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 timeCell
   :: TableName
@@ -611,7 +611,7 @@ timeCell
   -> S Bool
   -> Lens' AnalyzeState (S Time)
 timeCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 ksCell
   :: TableName
@@ -620,12 +620,11 @@ ksCell
   -> S Bool
   -> Lens' AnalyzeState (S KeySet)
 ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (mkProv tn cn sRk sDirty)
+  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 symKsName :: S String -> S KeySetName
 symKsName = coerceS
 
--- TODO: switch to lens
 resolveKeySet
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => S KeySetName
@@ -645,8 +644,8 @@ ksAuthorized sKs = do
   -- NOTE: we know that KsAuthorized constructions are only emitted within
   -- Enforced constructions, so we know that this keyset is being enforced
   -- here.
-  case sKs ^. sProv of
-    Just (Provenance tn sCn sRk sDirty) ->
+  case sKs ^? sProv._Just._FromCell of
+    Just (OriginatingCell tn sCn sRk sDirty) ->
       cellEnforced tn sCn sRk %= (||| bnot sDirty)
     Nothing ->
       pure ()
