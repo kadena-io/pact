@@ -280,15 +280,15 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row")
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+      Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Success ==> (Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Success ==> (Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
@@ -329,10 +329,10 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks1" (PVar 0 "row")
     -- Using the other keyset:
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks2" (PVar 0 "row")
 
   describe "enforce-keyset.row-level.write" $ do
@@ -354,16 +354,16 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @String)) (RowWrite "tokens" (PVar 0 "row"))
+      Exists 0 "row" (EType TStr) (RowWrite "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @String)) (RowRead "tokens" (PVar 0 "row"))
+      Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (Ty (Rep @String)) (RowEnforced "tokens" "ks" (PVar 0 "row"))
-    expectPass code $ Satisfiable $ Exists 0 "row" (Ty (Rep @String)) $
+      Exists 0 "row" (EType TStr) (RowEnforced "tokens" "ks" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Valid $ RowWrite "tokens" (PVar 0 "acct")
                           ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
@@ -391,9 +391,9 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
   describe "table-read.multiple-read" $
@@ -620,18 +620,18 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (EType TStr) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
 
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       PStringComparison Neq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
 
-    expectPass code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       PStringComparison Eq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
-    expectPass code $ Valid $ Exists 0 "row" (Ty (Rep @String)) $
+    expectPass code $ Valid $ Exists 0 "row" (EType TStr) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
     expectPass code $ Valid $
@@ -1084,8 +1084,8 @@ spec = describe "analyze" $ do
     let a0       = PVar 0 "a"
         a1       = PVar 1 "a"
         -- b        = PVar 0 "b"
-        ty       = Ty (Rep @String)
-        intTy    = Ty (Rep @Integer)
+        ty       = EType TStr
+        intTy    = EType TInt
         allA0    = Forall 0 "a"
         allA1    = Forall 1 "a"
         existsA0 = Exists 0 "a"
@@ -1138,6 +1138,7 @@ spec = describe "analyze" $ do
           Right [exp'] ->
             expToProp tableEnv (VarId (Map.size env1)) env1 env2 ty exp'
           Left err -> Left err
+          _        -> Left "Error: unexpected result from parseExprs"
 
         textToProp :: Type a -> Text -> Either String (Prop a)
         textToProp = textToProp' Map.empty Map.empty (TableMap mempty)
@@ -1145,15 +1146,18 @@ spec = describe "analyze" $ do
         textToPropTableEnv :: TableEnv -> Type a -> Text -> Either String (Prop a)
         textToPropTableEnv tableEnv = textToProp' Map.empty Map.empty tableEnv
 
+        singletonTableEnv :: TableName -> ColumnName -> EType -> TableEnv
+        singletonTableEnv a b ty = TableMap $ Map.singleton a $
+            ColumnMap $ Map.singleton b ty
+
+
     it "infers column-delta" $ do
-      let tableEnv = TableMap $ Map.singleton "a" $
-            ColumnMap $ Map.singleton "b" $ EType TInt
+      let tableEnv = singletonTableEnv "a" "b" (EType TInt)
       textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
         `shouldBe`
         Right (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
 
-      let tableEnv' = TableMap $ Map.singleton "a" $
-            ColumnMap $ Map.singleton "b" $ EType TDecimal
+      let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
       textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
         Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
@@ -1175,23 +1179,28 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (PDecArithOp Add (PLit 0) (PLit 1))
 
-      textToProp TDecimal "(+ 0 1)" `shouldBe` Left ""
+      textToProp TDecimal "(+ 0 1)"
+        `shouldBe`
+        Left "in (+ 0 1), expected decimal, found (+ 0 1)"
 
     it "infers forall / exists" $ do
       textToProp TBool "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (Forall (VarId 0) "x" (Ty (Rep @String))
-            (Forall (VarId 1) "y" (Ty (Rep @String))
-              (PIntegerComparison Eq
+          (Forall (VarId 0) "x" (EType TStr)
+            (Forall (VarId 1) "y" (EType TStr)
+              (PStringComparison Eq
                 (PVar (VarId 0) "x")
                 (PVar (VarId 1) "y"))))
 
-      textToProp TBool
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
+      textToPropTableEnv
+        tableEnv
+        TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
-          (Exists (VarId 0) "row" (Ty (Rep @String))
+          (Exists (VarId 0) "row" (EType TStr)
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (VarId 0) "row"))
               2)))
@@ -1199,22 +1208,19 @@ spec = describe "analyze" $ do
     it "parses row-enforced / vars" $ do
       let env1 = Map.singleton "from" (VarId 0)
           env2 = Map.singleton (VarId 0) (EType TStr)
-          tableEnv = TableMap $ Map.singleton "accounts" $
-            ColumnMap $ Map.singleton "ks" $ EType TKeySet
+          tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
       textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
       Right (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (VarId 0) "from"))
 
     it "parses column properties" $
-      let tableEnv = TableMap $ Map.singleton "accounts" $
-            ColumnMap $ Map.singleton "balance" $ EType TInt
+      let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
            `shouldBe`
            Right (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
-      let tableEnv = TableMap $ Map.singleton "accounts" $
-            ColumnMap $ Map.singleton "accounts-admin-keyset" $ EType TKeySet
+      let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType TKeySet
       in textToPropTableEnv tableEnv TBool "(when (not (authorized-by 'accounts-admin-keyset)) abort)"
          `shouldBe`
          Right (PLogical OrOp
@@ -1230,3 +1236,21 @@ spec = describe "analyze" $ do
       textToProp TBool "result"  `shouldBe` Right Result
       textToProp TInt  "result"  `shouldBe` Right Result
       textToProp TStr  "result"  `shouldBe` Right Result
+
+  describe "UserShow (PreProp)" $ do
+    it "renders literals how you would expect" $ do
+      userShow (PreIntegerLit 1)    `shouldBe` "1"
+      userShow (PreStringLit "foo") `shouldBe` "\"foo\""
+      userShow (PreDecimalLit 1)    `shouldBe` "1.0"
+      -- TODO: test rendering time literals
+      -- userShow (PreTimeLit _) `shouldBe` _
+      userShow (PreBoolLit True)    `shouldBe` "true"
+      userShow (PreBoolLit False)   `shouldBe` "false"
+
+    it "renders quantifiers how you would expect" $ do
+      userShow (PreForall 0 "foo" (EType TBool) (PreVar 0 "foo"))
+        `shouldBe`
+        "(forall (foo:bool) foo)"
+      userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
+        `shouldBe`
+        "(exists (bar:bool) (not bar))"
