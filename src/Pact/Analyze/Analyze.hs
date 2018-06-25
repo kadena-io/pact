@@ -418,7 +418,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
-    -- global state, is merged (per AnalyzeState's Mergeable instance.)
+    -- global state, is merged.
     --
     -- If either side fails, the entire merged computation fails.
     --
