@@ -96,9 +96,7 @@ mkApiReq fp = do
 
 mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
 mkApiReqExec ar@ApiReq{..} fp = do
-  oldCwd <- getCurrentDirectory
-  liftIO $ setCurrentDirectory (takeDirectory fp)
-  (code,cdata) <- (`finally` liftIO (setCurrentDirectory oldCwd)) $ do
+  (code,cdata) <- (withCurrentDirectory (takeDirectory fp)) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
       (Just f,Nothing) -> liftIO (readFile f)
@@ -141,9 +139,7 @@ mkApiReqCont ar@ApiReq{..} fp = do
     Just r  -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  oldCwd <- getCurrentDirectory
-  liftIO $ setCurrentDirectory (takeDirectory fp)
-  (code,cdata) <- (`finally` liftIO (setCurrentDirectory oldCwd)) $ do
+  (code,cdata) <- (withCurrentDirectory (takeDirectory fp)) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
       (Just f,Nothing) -> liftIO (readFile f)
@@ -163,8 +159,9 @@ mkApiReqCont ar@ApiReq{..} fp = do
 
   ((ar,code,cdata,addy),) <$> mkCont txId step rollback _ylResume code cdata addy _ylKeyPairs _ylNonce
 
-mkCont :: TxId -> Int -> Bool -> Maybe Value -> String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
-mkCont txid step rollback resume code mdata addy kps ridm = do
+mkCont :: TxId -> Int -> Bool -> Maybe Value -> String -> Value -> Maybe Address -> [KeyPair]
+  -> Maybe String -> IO (Command Text)
+mkCont txid step rollback resume _ mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
