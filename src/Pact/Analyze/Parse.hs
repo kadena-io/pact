@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -12,13 +13,16 @@ module Pact.Analyze.Parse
   , TableEnv
   ) where
 
-import           Control.Lens                 (_1, _2, at, ix, view, (^.), (^..), (&), (.~), (?~))
-import           Control.Monad.Except         (throwError)
+import           Control.Applicative          (Alternative, (<|>))
+import           Control.Lens                 (_1, _2, at, ix, view,
+                                               (^.), (^..), (&), (?~))
+import           Control.Monad.Except         (MonadError(throwError))
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Data.Foldable                (asum, find)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
+import           Data.Semigroup               ((<>))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Type.Equality           ((:~:)(Refl))
@@ -29,9 +33,23 @@ import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                Type)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.PrenexNormalize
+import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
+
+throwErrorT :: MonadError String m => Text -> m a
+throwErrorT = throwError . T.unpack
+
+-- TODO(joel): add location info
+throwErrorIn :: (MonadError String m, UserShow a) => a -> Text -> m b
+throwErrorIn exp text = throwError $ T.unpack $
+  "in " <> userShow exp <> ", " <> text
+
+-- | Just 'asum' with a fallback
+asum' :: (Foldable t, Alternative f) => t (f a) -> f a -> f a
+asum' foldable fallback = asum foldable <|> fallback
 
 textToArithOp :: Text -> Maybe ArithOp
 textToArithOp = \case
@@ -84,7 +102,7 @@ textToLogicalOp = \case
   _     -> Nothing
 
 textToQuantifier
-  :: Text -> Maybe (VarId -> Text -> Ty -> PreProp -> PreProp)
+  :: Text -> Maybe (VarId -> Text -> EType -> PreProp -> PreProp)
 textToQuantifier = \case
   "forall" -> Just PreForall
   "exists" -> Just PreExists
@@ -146,26 +164,33 @@ expToPreProp = \case
   EAtom' "result"  -> pure PreResult
   EAtom' var       -> mkVar var
 
-  _ -> throwError "expected property"
+  exp -> throwErrorIn exp $ "expected property"
 
-  where propBindings :: [Exp] -> PropParse [(VarId, Text, Ty)]
+  where propBindings :: [Exp] -> PropParse [(VarId, Text, EType)]
         propBindings [] = pure []
         -- we require a type annotation
-        propBindings (EAtom _name _qual Nothing _parsed:_exps) = throwError "type annotation required for all property bindings"
-        propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
-          nameTy <- case ty of
-            TyPrim TyString -> do
+        propBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
+          = throwErrorIn exp $
+            "type annotation required for all property bindings."
+        propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
+          nameTy <- case maybeTranslateType' (const Nothing) ty of
+            Just ty' -> do
               vid <- genVarId
-              pure (vid, name, Ty (Rep @String))
-            _               -> throwError "currently only strings can be quantified in properties"
+              pure (vid, name, ty')
+            -- This is challenging because `ty : Pact.Type TypeName`, but
+            -- `maybeTranslateType` nadles `Pact.Type UserType`.
+            Nothing -> throwErrorIn exp
+              "currently objects can't be quantified in properties (issue 139)"
           (nameTy:) <$> propBindings exps
-        propBindings _ = throwError "unexpected binding form"
+        propBindings exp = throwErrorT $
+          "in " <> userShowList exp <> ", unexpected binding form"
 
         mkVar :: Text -> PropParse PreProp
         mkVar var = do
           mVid <- view (at var)
           case mVid of
-            Nothing  -> throwError $ "variable not found: " ++ T.unpack var
+            Nothing  -> throwErrorT $
+              "couldn't find property variable " <> var
             Just vid -> pure (PreVar vid var)
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
@@ -184,16 +209,21 @@ checkPreProp ty preProp = case (ty, preProp) of
   (_, PreVar vid name) -> do
     varTy <- view (_1 . at vid)
     case varTy of
-      Nothing -> throwError $ "couldn't find property variable " ++ T.unpack name
+      Nothing -> throwErrorT $
+        "couldn't find property variable " <> name
       Just (EType varTy') -> case typeEq ty varTy' of
-        Nothing   -> throwError "wrong type"
+        Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
+          " has type " <> userShow varTy' <> ", but " <> userShow ty <>
+          " was expected"
         Just Refl -> pure (PVar vid name)
+      Just (EObjectTy _) -> throwErrorIn preProp
+        "ERROR: object types not currently allowed in properties (issue 139)"
 
   -- quantifiers
   (a, PreForall vid name ty' p) -> Forall vid name ty' <$>
-    (local (& _1 . at vid ?~ EType ty') $ checkPreProp a p)
+    (local (& _1 . at vid ?~ ty') $ checkPreProp a p)
   (a, PreExists vid name ty' p) -> Exists vid name ty' <$>
-    checkPreProp a p
+    (local (& _1 . at vid ?~ ty') $ checkPreProp a p)
 
   -- TODO: PreAt / PAt
 
@@ -202,11 +232,11 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
 
-  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> asum
+  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> asum'
     [ PDecArithOp    op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
     , PDecIntArithOp op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
     , PIntDecArithOp op <$> checkPreProp TInt a     <*> checkPreProp TDecimal b
-    ]
+    ] (throwErrorIn preProp $ "expected decimal, found " <> userShow preProp)
   (TInt, PreApp (textToArithOp -> Just op) [a, b])
     -> PIntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
   (TDecimal, PreApp (textToUnaryArithOp -> Just op) [a])
@@ -222,12 +252,12 @@ checkPreProp ty preProp = case (ty, preProp) of
     -> PRoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
   (TTime, PreApp "add-time" [a, b]) -> do
     a' <- checkPreProp TTime a
-    asum
+    asum'
       [ PIntAddTime a' <$> checkPreProp TInt b
       , PDecAddTime a' <$> checkPreProp TDecimal b
-      ]
+      ] (throwErrorIn preProp "invalid argument types")
 
-  (TBool, PreApp op'@(textToComparisonOp -> Just op) [a, b]) -> asum
+  (TBool, PreApp op'@(textToComparisonOp -> Just op) [a, b]) -> asum'
     [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
     , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
     , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
@@ -237,14 +267,16 @@ checkPreProp ty preProp = case (ty, preProp) of
       Just eqNeq -> PKeySetEqNeq eqNeq
         <$> checkPreProp TKeySet a
         <*> checkPreProp TKeySet b
-      Nothing -> throwError $ "found " ++ show op' ++ " where = or != expected"
-    ]
+      Nothing -> throwErrorIn preProp $
+        "found " <> op' <> " where = or != was expected"
+    ] (throwErrorIn preProp $ "expected bool, but found " <> userShow preProp)
 
   (TBool, PreApp op'@(textToLogicalOp -> Just op) args) -> case (op, args) of
     (NotOp, [a])    -> PNot <$> checkPreProp TBool a
     (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
     (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
-    _               -> throwError $ show op' ++ " applied to wrong number of arguments"
+    _               -> throwErrorIn preProp $
+      op' <> " applied to wrong number of arguments"
 
   (TBool, PreApp "when" [a, b]) -> do
     propNotA <- PNot <$> checkPreProp TBool a
@@ -297,19 +329,19 @@ checkPreProp ty preProp = case (ty, preProp) of
     -> pure (KsNameAuthorized (KeySetName ks))
   (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk]) -> do
     _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TStr
+    _ <- expectColumnType tn cn TKeySet
     RowEnforced tn cn <$> checkPreProp TStr rk
 
-  _ -> throwError $ "type error: " ++ show preProp ++ " does not have type " ++ show ty
+  _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
 expectColumnType :: TableName -> ColumnName -> Type a -> PropCheck ()
 expectColumnType tn@(TableName tnStr) cn@(ColumnName cnStr) expectedTy = do
   tys <- asks (^.. _2 . ix tn . ix cn)
   case tys of
     [EType foundTy] -> case typeEq foundTy expectedTy of
-      Nothing   -> throwError $
-        "expected column " ++ cnStr ++ " in table " ++ tnStr ++
-        " to have type " ++ userShow expectedTy ++ ", instead found " ++
+      Nothing   -> throwErrorT $
+        "expected column " <> T.pack cnStr <> " in table " <> T.pack tnStr <>
+        " to have type " <> userShow expectedTy <> ", instead found " <>
         userShow foundTy
       Just Refl -> pure ()
     _ -> throwError $
@@ -376,12 +408,12 @@ expToInvariant ty exp = case (ty, exp) of
         (TStr,     TyString)  -> pure (IVar var)
         (TBool,    TyBool)    -> pure (IVar var)
         (TKeySet,  TyKeySet)  -> pure (IVar var)
-        (_,        TyValue)   -> throwError
+        (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
-        (_,        _)         -> throwError $
-          "found variable " ++ show var ++ " of type " ++ show primTy ++
-          " where " ++ show ty ++ " was expected"
-      _ -> throwError $ "couldn't find column named " ++ show var
+        (_,        _)         -> throwErrorIn exp $
+          "found variable " <> var <> " of type " <> tShow primTy <>
+          " where " <> userShow ty <> " was expected"
+      _ -> throwErrorT $ "couldn't find column named " <> var
 
   (TDecimal, ELiteral (LDecimal d) _) -> pure (IDecimalLiteral (mkDecimal d))
   (TInt, ELiteral (LInteger i) _)     -> pure (IIntLiteral i)
@@ -389,17 +421,18 @@ expToInvariant ty exp = case (ty, exp) of
   (TStr, ELiteral (LString _) _)      -> error "impossible (handled by stringLike)"
   (TTime, ELiteral (LTime t) _)       -> pure (ITimeLiteral (mkTime t))
   (TBool, ELiteral (LBool b) _)       -> pure (IBoolLiteral b)
-  (_, ELiteral _ _)                   -> throwError "literal of unexpected type"
+  (_, ELiteral _ _)                   ->
+    throwErrorIn exp "literal of unexpected type"
 
   (TInt, EList' [EAtom' "str-length", str]) -> IStrLength <$> expToInvariant TStr str
   (TStr, EList' [EAtom' "+", a, b])
     -> IStrConcat <$> expToInvariant TStr a <*> expToInvariant TStr b
 
-  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum
+  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
     [ IDecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
     , IDecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
     , IIntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
-    ]
+    ] (throwErrorIn exp "unexpected argument types")
   (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
     -> IIntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
   (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
@@ -407,7 +440,7 @@ expToInvariant ty exp = case (ty, exp) of
   (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
     -> IIntUnaryArithOp op <$> expToInvariant TInt a
 
-  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum
+  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
     [ IIntComparison op     <$> expToInvariant TInt a     <*> expToInvariant TInt b
     , IDecimalComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
     , ITimeComparison op    <$> expToInvariant TTime a    <*> expToInvariant TTime b
@@ -417,8 +450,9 @@ expToInvariant ty exp = case (ty, exp) of
       Just eqNeq -> IKeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
-      Nothing -> throwError $ show op' ++ " is an invalid operation for keysets (only = or /= allowed)"
-    ]
+      Nothing -> throwErrorIn exp $
+        op' <> " is an invalid operation for keysets (only = or /= allowed)"
+    ] (throwErrorIn exp "unexpected argument types")
 
   (TBool, EList' (EAtom' op:args))
     | Just op' <- textToLogicalOp op -> do
@@ -427,10 +461,10 @@ expToInvariant ty exp = case (ty, exp) of
       (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
       (OrOp, [a, b])  -> pure (ILogicalOp OrOp [a, b])
       (NotOp, [a])    -> pure (ILogicalOp NotOp [a])
-      _ -> throwError $ "logical op with wrong number of args: " ++ T.unpack op
+      _ -> throwErrorIn exp $ "logical op with wrong number of args: " <> op
 
-  (_, ESymbol {})  -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EAtom {})    -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EList {})    -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EObject {})  -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EBinding {}) -> throwError $ "illegal invariant form: " ++ show exp
+  (_, ESymbol {})  -> throwErrorIn exp $ "illegal invariant form"
+  (_, EAtom {})    -> throwErrorIn exp $ "illegal invariant form"
+  (_, EList {})    -> throwErrorIn exp $ "illegal invariant form"
+  (_, EObject {})  -> throwErrorIn exp $ "illegal invariant form"
+  (_, EBinding {}) -> throwErrorIn exp $ "illegal invariant form"
