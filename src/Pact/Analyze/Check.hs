@@ -20,8 +20,8 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just)
+                                            traverseOf, traversed, (<&>), (^.),
+                                            (^?), (^@..), _1, _2, _Just)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -546,17 +546,17 @@ verifyCheck
   -> Check          -- ^ the check we're running
   -> IO (Either [ParseFailure] CheckResult)
 verifyCheck moduleData funName check = do
-  let parsed = dummyParsed
-      moduleName = moduleData ^. _1.mName
-      modules = HM.fromList [(moduleName, moduleData)]
+    let parsed = dummyParsed
+        moduleName = moduleData ^. _1.mName
+        modules = HM.fromList [(moduleName, moduleData)]
 
-  tables <- moduleTables modules moduleData
-  case tables of
-    Left failures -> pure $ Left failures
-    Right tables' -> Right <$> case moduleFun moduleData funName of
-      Just funRef -> head <$> verifyFunction tables' funRef [(parsed, check)]
-      Nothing     -> pure $ Left (parsed, NotAFunction funName)
+    tables <- moduleTables modules moduleData
+    case tables of
+      Left failures -> pure $ Left failures
+      Right tables' -> Right <$> case moduleFun moduleData funName of
+        Just funRef -> head <$> verifyFunction tables' funRef [(parsed, check)]
+        Nothing     -> pure $ Left (parsed, NotAFunction funName)
 
-      where
-        moduleFun :: ModuleData -> Text -> Maybe Ref
-        moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
+  where
+    moduleFun :: ModuleData -> Text -> Maybe Ref
+    moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
