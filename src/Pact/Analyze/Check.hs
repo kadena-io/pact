@@ -71,7 +71,7 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckSuccess
-  = SatisfiedProperty Model
+  = SatisfiedProperty ModelTags
   | ProvedTheorem
   deriving Show
 
@@ -83,7 +83,7 @@ describeParseFailure (exp, info)
   <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 data SmtFailure
-  = Invalid Model
+  = Invalid ModelTags
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | UnexpectedFailure SBV.SMTException
@@ -120,8 +120,8 @@ describeCheckFailure parsed failure =
             SmtFailure err       -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
-showModel :: Model -> Text
-showModel (Model args vars reads' writes auths res) = T.intercalate "\n"
+showModel :: ModelTags -> Text
+showModel (ModelTags args vars reads' writes auths res) = T.intercalate "\n"
     [ "Arguments:"
     , ifoldMap (showVarItem showVar) args
     , "Variables:"
@@ -196,8 +196,8 @@ describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 dummyParsed :: Parsed
 dummyParsed = Default.def
 
-mkEmptyModel :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic Model
-mkEmptyModel funInfo args tm tagAllocs = Model
+allocModelTags :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
+allocModelTags funInfo args tm tagAllocs = ModelTags
     <$> allocateArgs
     <*> allocateVars
     <*> allocateReads
@@ -259,16 +259,16 @@ mkEmptyModel funInfo args tm tagAllocs = Model
       EObject _ sch ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
--- | Builds a new 'Model' by querying the SMT model to concretize the initial
--- 'Model'.
-saturateModel :: Model -> SBV.Query Model
-saturateModel =
-    traverseOf (modelArgs.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelVars.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelReads.traversed.located)   fetchAccess >=>
-    traverseOf (modelWrites.traversed.located)  fetchAccess >=>
-    traverseOf (modelAuths.traversed.located)   fetchSbv    >=>
-    traverseOf (modelResult.located)            fetchTVal
+-- | Builds a new 'ModelTags' by querying the SMT model to concretize the
+-- provided empty 'ModelTags'.
+saturateModelTags :: ModelTags -> SBV.Query ModelTags
+saturateModelTags =
+    traverseOf (mtArgs.traversed.located._2) fetchTVal   >=>
+    traverseOf (mtVars.traversed.located._2) fetchTVal   >=>
+    traverseOf (mtReads.traversed.located)   fetchAccess >=>
+    traverseOf (mtWrites.traversed.located)  fetchAccess >=>
+    traverseOf (mtAuths.traversed.located)   fetchSbv    >=>
+    traverseOf (mtResult.located)            fetchTVal
 
   where
     fetchTVal :: TVal -> SBVI.Query TVal
@@ -298,20 +298,20 @@ saturateModel =
 
 resultQuery
   :: Goal                                      -- ^ are we in sat or valid mode?
-  -> Model                                     -- ^ initial model
+  -> ModelTags                                 -- ^ model tags allocated before evaluation
   -> ExceptT SmtFailure SBV.Query CheckSuccess
-resultQuery goal model0 = do
+resultQuery goal modelTags = do
   satResult <- lift SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
+        SBV.Sat   -> throwError . Invalid =<< lift (saturateModelTags modelTags)
         SBV.Unsat -> pure ProvedTheorem
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
+        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModelTags modelTags)
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
@@ -327,10 +327,10 @@ checkFunction tables info pactArgs body check = runExceptT $ do
       runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      env <- lift $ mkEmptyModel info args tm tagAllocs
-      p <- withExceptT AnalyzeFailure (runAnalysis tables tm check env)
+      model <- lift $ allocModelTags info args tm tagAllocs
+      p <- withExceptT AnalyzeFailure (runAnalysis tables tm check model)
       void $ lift $ SBV.output p
-      hoist SBV.query $ withExceptT SmtFailure $ resultQuery goal env
+      hoist SBV.query $ withExceptT SmtFailure $ resultQuery goal model
 
   where
     goal :: Goal

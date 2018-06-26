@@ -69,11 +69,11 @@ import qualified Pact.Analyze.Types         as Types
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope    :: Map VarId AVal              -- used as a stack
-    , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
-    , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
-    , _invariants :: TableMap [Invariant Bool]
-    , _aeModel    :: Model
+    { _aeScope     :: Map VarId AVal              -- used as a stack
+    , _aeKeySets   :: SFunArray KeySetName KeySet -- read-only
+    , _aeKsAuths   :: SFunArray KeySet Bool       -- read-only
+    , _invariants  :: TableMap [Invariant Bool]
+    , _aeModelTags :: ModelTags
     }
   deriving Show
 
@@ -368,8 +368,8 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-mkAnalyzeEnv :: [Table] -> Model -> AnalyzeEnv
-mkAnalyzeEnv tables model =
+mkAnalyzeEnv :: [Table] -> ModelTags -> AnalyzeEnv
+mkAnalyzeEnv tables modelTags =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
@@ -378,9 +378,9 @@ mkAnalyzeEnv tables model =
           (TableName (T.unpack tname), someInvariants)
 
       argMap :: Map VarId AVal
-      argMap = view (located._2._2) <$> _modelArgs model
+      argMap = view (located._2._2) <$> _mtArgs modelTags
 
-  in AnalyzeEnv argMap keySets' keySetAuths invariants' model
+  in AnalyzeEnv argMap keySets' keySetAuths invariants' modelTags
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -458,12 +458,12 @@ symArrayAt (S _ symKey) = lens getter setter
     setter arr = writeArray arr symKey
 
 tagAccessKey
-  :: Lens' Model (Map TagId (Located (S RowKey, Object)))
+  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> S RowKey
   -> Analyze ()
 tagAccessKey lens' tid srk = do
-  mTup <- preview $ aeModel.lens'.at tid._Just.located._1
+  mTup <- preview $ aeModelTags.lens'.at tid._Just.located._1
   case mTup of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -473,14 +473,14 @@ tagAccessKey lens' tid srk = do
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
 tagAccessCell
-  :: Lens' Model (Map TagId (Located (S RowKey, Object)))
+  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> Text
   -> AVal
   -> Analyze ()
 tagAccessCell lens' tid fieldName av = do
   mTag <- preview $
-    aeModel.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
+    aeModelTags.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -491,7 +491,7 @@ tagAccessCell lens' tid fieldName av = do
 -- allocated in Symbolic.
 tagAuth :: TagId -> Maybe Provenance -> S Bool -> Analyze ()
 tagAuth tid mKsProv sb = do
-  mTag <- preview $ aeModel.modelAuths.at tid._Just.located
+  mTag <- preview $ aeModelTags.mtAuths.at tid._Just.located
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -502,12 +502,12 @@ tagAuth tid mKsProv sb = do
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
-  tag <- view $ aeModel.modelResult.located._2
+  tag <- view $ aeModelTags.mtResult.located._2
   addConstraint $ sansProv $ tag .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
-  mTag <- preview $ aeModel.modelVars.at vid._Just.located._2._2
+  mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
@@ -807,7 +807,7 @@ analyzeTermO = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
     rowRead tn sRk .= true
-    tagAccessKey modelReads tid sRk
+    tagAccessKey mtReads tid sRk
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
@@ -828,7 +828,7 @@ analyzeTermO = \case
         --
         EObjectTy _    -> throwError UnsupportedObjectInDbCell
 
-      tagAccessCell modelReads tid fieldName av
+      tagAccessCell mtReads tid fieldName av
 
       pure (fieldType, av)
 
@@ -1126,12 +1126,12 @@ analyzeTerm = \case
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
     rowWritten tn sRk .= true
-    tagAccessKey modelWrites tid sRk
+    tagAccessKey mtWrites tid sRk
 
     mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
-      tagAccessCell modelWrites tid colName aval'
+      tagAccessCell mtWrites tid colName aval'
 
       case aval' of
         AVal mProv sVal -> do
@@ -1494,11 +1494,11 @@ runAnalysis
   :: [Table]
   -> ETerm
   -> Check
-  -> Model
+  -> ModelTags
   -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
-runAnalysis tables tm check model = do
+runAnalysis tables tm check modelTags = do
   let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables model
+      aEnv   = mkAnalyzeEnv tables modelTags
       state0 = mkInitialAnalyzeState tables
 
   (funResult, state1, ()) <- hoist generalize $

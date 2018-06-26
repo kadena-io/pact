@@ -687,17 +687,17 @@ newtype TagId
   = TagId Natural
   deriving (Num, Show, Ord, Eq)
 
-data Model
-  = Model
-    { _modelArgs   :: Map VarId (Located (Text, TVal))
+data ModelTags
+  = ModelTags
+    { _mtArgs   :: Map VarId (Located (Text, TVal))
     -- ^ one per input to the function
-    , _modelVars   :: Map VarId (Located (Text, TVal))
+    , _mtVars   :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
-    , _modelReads  :: Map TagId (Located (S RowKey, Object))
+    , _mtReads  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
-    , _modelWrites :: Map TagId (Located (S RowKey, Object))
+    , _mtWrites :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each write, in traversal order
-    , _modelAuths  :: Map TagId (Located (SBV Bool))
+    , _mtAuths  :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that this
     -- includes all (enforce ks) and (enforce-keyset "ks") calls.
     , _modelResult :: Located TVal
@@ -941,7 +941,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 makeLenses ''S
 makeLenses ''Object
 makeLenses ''Table
-makeLenses ''Model
+makeLenses ''ModelTags
 makeLenses ''Located
 makeLenses ''ColumnMap
 makeLenses ''TableMap
