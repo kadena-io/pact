@@ -162,9 +162,10 @@ instance Mergeable LatticeAnalyzeState where
           (symbolicMerge force test csWritten     csWritten')
 
 -- Checking state that is transferred through every computation, in-order.
-newtype GlobalAnalyzeState
+data GlobalAnalyzeState
   = GlobalAnalyzeState
-    { _gasConstraints :: Constraints -- we log these a la writer
+    { _gasConstraints   :: Constraints          -- we log these a la writer
+    , _gasKsProvenances :: Map TagId Provenance -- added as we accum ks info
     }
   deriving (Show)
 
@@ -206,7 +207,10 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
         }
-    , _globalState = GlobalAnalyzeState mempty
+    , _globalState = GlobalAnalyzeState
+        { _gasConstraints   = mempty
+        , _gasKsProvenances = mempty
+        }
     }
 
   where
@@ -485,14 +489,16 @@ tagAccessCell lens' tid fieldName av = do
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
-tagAuth :: TagId -> S Bool -> Analyze ()
-tagAuth tid sb = do
+tagAuth :: TagId -> Maybe Provenance -> S Bool -> Analyze ()
+tagAuth tid mKsProv sb = do
   mTag <- preview $ aeModel.modelAuths.at tid._Just.located
   case mTag of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
-    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
+    Just sbv -> do
+      addConstraint $ sansProv $ sbv .== _sSbv sb
+      globalState.gasKsProvenances.at tid .= mKsProv
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -629,7 +635,7 @@ resolveKeySet
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => S KeySetName
   -> m (S KeySet)
-resolveKeySet sKsn = fmap sansProv $
+resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
 nameAuthorized
@@ -1201,14 +1207,16 @@ analyzeTerm = \case
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
-  KsAuthorized tid ks -> do
-    authorized <- ksAuthorized =<< analyzeTerm ks
-    tagAuth tid authorized
+  KsAuthorized tid ksT -> do
+    ks <- analyzeTerm ksT
+    authorized <- ksAuthorized ks
+    tagAuth tid (ks ^. sProv) authorized
     pure authorized
 
   NameAuthorized tid str -> do
-    authorized <- nameAuthorized =<< symKsName <$> analyzeTerm str
-    tagAuth tid authorized
+    ksn <- symKsName <$> analyzeTerm str
+    authorized <- nameAuthorized ksn
+    tagAuth tid (Just $ fromNamedKs ksn) authorized
     pure authorized
 
   Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2

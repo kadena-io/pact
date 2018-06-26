@@ -204,15 +204,17 @@ data ComparisonOp
 -- accessors.
 data OriginatingCell
   = OriginatingCell
-    { _provTableName  :: TableName
-    , _provColumnName :: ColumnName
-    , _provRowKey     :: S RowKey
-    , _provDirty      :: S Bool
+    { _ocTableName  :: TableName
+    , _ocColumnName :: ColumnName
+    , _ocRowKey     :: S RowKey
+    , _ocDirty      :: S Bool
     }
   deriving (Eq, Show)
 
 data Provenance
-  = FromCell OriginatingCell
+  = FromCell    OriginatingCell
+  | FromNamedKs (S KeySetName)
+  | FromInput   Text
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -292,6 +294,9 @@ sbv2S = iso sansProv _sSbv
 
 fromCell :: TableName -> ColumnName -> S RowKey -> S Bool -> Provenance
 fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
+
+fromNamedKs :: S KeySetName -> Provenance
+fromNamedKs = FromNamedKs
 
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
@@ -693,10 +698,8 @@ data Model
     , _modelWrites :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each write, in traversal order
     , _modelAuths  :: Map TagId (Located (SBV Bool))
-    -- ^ one per each enforce/auth check, in traversal order. note that for
-    -- now, we just treat all (enforce ks) and (enforce-keyset "ks") calls
-    -- equally, and in the future we can try to connect keysets with their
-    -- names for better tooling / reporting.
+    -- ^ one per each enforce/auth check, in traversal order. note that this
+    -- includes all (enforce ks) and (enforce-keyset "ks") calls.
     , _modelResult :: Located TVal
     -- ^ return value of the function being checked
     }
@@ -943,6 +946,7 @@ makeLenses ''Located
 makeLenses ''ColumnMap
 makeLenses ''TableMap
 makePrisms ''Provenance
+makePrisms ''AVal
 
 type instance Index (ColumnMap a) = ColumnName
 type instance IxValue (ColumnMap a) = a

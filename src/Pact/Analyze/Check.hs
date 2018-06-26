@@ -21,7 +21,7 @@ import           Control.Exception         as E
 import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
                                             traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), _1, _2, _Just)
+                                            (^?), (^@..), (?~), _1, _2, _Just)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -219,7 +219,7 @@ mkEmptyModel funInfo args tm tagAllocs = Model
     allocateArgs :: Symbolic (Map VarId (Located (Text, TVal)))
     allocateArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
-      av <- alloc ety
+      av <- alloc ety <&> _AVal._1 ?~ FromInput nm
       pure (vid, Located info (nm, (ety, av)))
 
     allocateVars :: Symbolic (Map VarId (Located (Text, TVal)))

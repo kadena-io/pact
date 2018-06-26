@@ -1254,3 +1254,8 @@ spec = describe "analyze" $ do
       userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
+
+  --
+  -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
+  --            named)
+  --
