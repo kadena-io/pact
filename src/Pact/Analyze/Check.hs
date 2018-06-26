@@ -111,28 +111,30 @@ describeCheckFailure parsed failure =
             SmtFailure err       -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
+-- Note: we indent the entire model two spaces so that the atom linter will
+-- treat it as one message.
 showModel :: Model -> Text
-showModel (Model args vars reads' writes auths res) = T.intercalate "\n"
-    [ "Arguments:"
+showModel (Model args vars reads' writes auths res) = T.unlines
+    [ "  Arguments:"
     , ifoldMap (showVarItem showVar) args
-    , "Variables:"
+    , "  Variables:"
     , ifoldMap (showVarItem showVar) vars
-    , "Reads:"
+    , "  Reads:"
     , ifoldMap (showTaggedItem showAccess) reads'
-    , "Writes:"
+    , "  Writes:"
     , ifoldMap (showTaggedItem showAccess) writes
-    , "Authorizations:"
+    , "  Authorizations:"
     , ifoldMap (showTaggedItem showAuth) auths
-    , "Result:"
-    , "  " <> showResult
+    , "  Result:"
+    , "    " <> showResult
     ]
 
   where
     showVarItem :: (a -> Text) -> VarId -> a -> Text
-    showVarItem show' (VarId i) var = "  (" <> tShow i <> ") " <> show' var <> "\n"
+    showVarItem show' (VarId i) var = "    (" <> tShow i <> ") " <> show' var <> "\n"
 
     showTaggedItem :: (a -> Text) -> TagId -> a -> Text
-    showTaggedItem show' (TagId i) var = "  [" <> tShow i <> "] " <> show' var <> "\n"
+    showTaggedItem show' (TagId i) var = "    [" <> tShow i <> "] " <> show' var <> "\n"
 
     showSbv :: (Show a, SymWord a) => SBV a -> Text
     showSbv sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
