@@ -28,7 +28,7 @@ import           Pact.Types.Runtime         (ModuleData, eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Parse           (expToProp)
-import           Pact.Analyze.PrenexNormalize (prenexConvert)
+import           Pact.Analyze.PrenexNormalize as Prenex (Float, prenexConvert)
 import           Pact.Analyze.Types
 
 wrap :: Text -> Text
@@ -68,7 +68,8 @@ runVerification code = do
   case eModuleData of
     Left cf -> pure $ Just cf
     Right moduleData -> do
-      results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
+      (results, _warnings) <-
+        verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
       pure $ case findOf (traverse . traverse) isLeft results of
         Just (Left (_parsed, failure)) -> Just failure
@@ -1113,16 +1114,18 @@ spec = describe "analyze" $ do
 
   describe "prop parse / typecheck" $ do
     let textToProp'
-          :: Map Text UniqueId
+          :: Prenex.Float a
+          => Map Text UniqueId
           -> Map UniqueId EType
           -> Type a
           -> Text
           -> Maybe (Prop a)
         textToProp' env1 env2 ty t = case parseExprs t of
-          Right [exp'] -> expToProp (UniqueId (Map.size env1)) env1 env2 ty exp'
+          Right [exp'] ->
+            expToProp (UniqueId (Map.size env1)) env1 env2 HM.empty ty exp'
           _            -> Nothing
 
-        textToProp :: Type a -> Text -> Maybe (Prop a)
+        textToProp :: Prenex.Float a => Type a -> Text -> Maybe (Prop a)
         textToProp = textToProp' Map.empty Map.empty
 
     it "infers column-delta" $ do
@@ -1166,8 +1169,8 @@ spec = describe "analyze" $ do
       textToProp TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
-        Just (PNot
-          (Exists (UniqueId 1) "row" (Ty (Rep @String))
+        Just (Forall (UniqueId 1) "row" (Ty (Rep @String))
+          (PNot
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
               2)))
