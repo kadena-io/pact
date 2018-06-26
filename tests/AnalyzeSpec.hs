@@ -1169,8 +1169,8 @@ spec = describe "analyze" $ do
       textToProp TBool
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
-        Just (PNot
-          (Exists (UniqueId 1) "row" (Ty (Rep @String))
+        Just (Forall (UniqueId 1) "row" (Ty (Rep @String))
+          (PNot
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (UniqueId 1) "row"))
               2)))
