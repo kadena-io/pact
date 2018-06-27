@@ -3,6 +3,7 @@
 --}
 import Pact.Server.Server
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Monad (when)
 import System.Directory  
 
@@ -17,14 +18,16 @@ _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
 
 main :: IO ()
 main = do
-  threadId <- runServer
-  _ <- threadDelay (20000000)
-  killThread threadId
-  print threadId
-  flushDb
+  withAsync (serve _testConfigFilePath) $ \a -> do
+      _ <- threadDelay (20000000)
+      print (asyncThreadId a)
+      isCancelled <- poll a
+      print isCancelled
 
-runServer :: IO ThreadId
-runServer = forkIO (serve _testConfigFilePath)
+  print "server should be down. check"
+  _ <- threadDelay (10000000)
+  print "time to check ended. Cleaning up now"
+  flushDb
 
 flushDb :: IO ()
 flushDb = mapM_ deleteIfExists _logFiles
@@ -32,11 +35,3 @@ flushDb = mapM_ deleteIfExists _logFiles
           let fp = _testLogDir ++ filename
           isFile <- doesFileExist fp
           when isFile $ removeFile fp
-
-
-{--runPactServer :: String -> IO ProcessHandle
-runPactServer args = do
-  let p = proc "pactserver" $ words args
-  (_,_,_, procHandle) <- createProcess p
-  sleep 1
-  return procHadle--}
