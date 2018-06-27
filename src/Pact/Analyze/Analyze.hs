@@ -126,8 +126,8 @@ data LatticeAnalyzeState
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
-    , _lasRowsRead            :: TableMap (SFunArray RowKey Bool)
-    , _lasRowsWritten         :: TableMap (SFunArray RowKey Bool)
+    , _lasRowsRead            :: TableMap (SFunArray RowKey Integer)
+    , _lasRowsWritten         :: TableMap (SFunArray RowKey Integer)
     , _lasCellsEnforced       :: TableMap (ColumnMap (SFunArray RowKey Bool))
     -- We currently maintain cellsWritten only for deciding whether a cell has
     -- been "invalidated" for the purposes of keyset enforcement. If a keyset
@@ -209,8 +209,8 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasIntColumnDeltas     = intColumnDeltas
         , _lasDecColumnDeltas     = decColumnDeltas
         , _lasTableCells          = mkSymbolicCells tables
-        , _lasRowsRead            = mkPerTableSFunArray false
-        , _lasRowsWritten         = mkPerTableSFunArray false
+        , _lasRowsRead            = mkPerTableSFunArray 0
+        , _lasRowsWritten         = mkPerTableSFunArray 0
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
         }
@@ -557,12 +557,12 @@ decColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Decimal)
 decColumnDelta tn cn = latticeState.lasDecColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-rowRead :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
-rowRead tn sRk = latticeState.lasRowsRead.singular (ix tn).
+rowReadCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
+rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
   symArrayAt sRk.sbv2S
 
-rowWritten :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
-rowWritten tn sRk = latticeState.lasRowsWritten.singular (ix tn).
+rowWriteCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
+rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
 
 cellEnforced
@@ -813,7 +813,7 @@ analyzeTermO = \case
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableRead tn .= true
-    rowRead tn sRk .= true
+    rowReadCount tn sRk += 1
     tagAccessKey mtReads tid sRk
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
@@ -1132,7 +1132,7 @@ analyzeTerm = \case
     Object obj' <- analyzeTermO obj
     sRk <- symRowKey <$> analyzeTerm rowKey
     tableWritten tn .= true
-    rowWritten tn sRk .= true
+    rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk
 
     mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
@@ -1470,10 +1470,18 @@ analyzeProp (DecColumnDelta tableName colName) = view $
   qeAnalyzeState.decColumnDelta tableName colName
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.rowRead tn sRk
+  numReads <- view $ qeAnalyzeState.rowReadCount tn sRk
+  pure $ sansProv $ numReads .== 1
+analyzeProp (RowReadCount tn pRk)  = do
+  sRk <- analyzeProp pRk
+  view $ qeAnalyzeState.rowReadCount tn sRk
 analyzeProp (RowWrite tn pRk) = do
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.rowWritten tn sRk
+  writes <- view $ qeAnalyzeState.rowWriteCount tn sRk
+  pure $ sansProv $ writes .== 1
+analyzeProp (RowWriteCount tn pRk) = do
+  sRk <- analyzeProp pRk
+  view $ qeAnalyzeState.rowWriteCount tn sRk
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn

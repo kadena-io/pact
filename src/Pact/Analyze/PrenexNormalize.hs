@@ -69,7 +69,9 @@ floatIntegerQuantifiers p = case p of
   PModOp a b            -> PModOp              <$> float a <*> float b
   PRoundingLikeOp1 op a -> PRoundingLikeOp1 op <$> float a
   IntCellDelta tn cn a  -> IntCellDelta tn cn  <$> float a
-  IntColumnDelta{} -> ([], p)
+  RowWriteCount tn pRk  -> RowWriteCount tn    <$> float pRk
+  RowReadCount tn pRk   -> RowReadCount tn     <$> float pRk
+  IntColumnDelta{}      -> ([], p)
 
 floatDecimalQuantifiers :: Prop Decimal -> ([Quantifier], Prop Decimal)
 floatDecimalQuantifiers p = case p of
@@ -118,8 +120,8 @@ floatBoolQuantifiers p = case p of
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
   PLogical _ _ -> error ("ill-defined logical op: " ++ show p)
 
-  RowRead tn pRk     -> RowRead tn <$> float pRk
-  RowWrite tn pRk    -> RowWrite tn <$> float pRk
+  RowRead  tn pRk -> RowRead  tn <$> float pRk
+  RowWrite tn pRk -> RowWrite tn <$> float pRk
 
 reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
 reassembleFloated qs prop =
