@@ -94,6 +94,9 @@ instance SymWord KeySetName where
 instance HasKind KeySetName where
   kindOf _ = KString
 
+instance SMTValue KeySetName where
+  sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
+
 newtype TableName
   = TableName String
   deriving (Eq, Ord, Show)
@@ -700,8 +703,15 @@ data ModelTags
     , _mtAuths  :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that this
     -- includes all (enforce ks) and (enforce-keyset "ks") calls.
-    , _modelResult :: Located TVal
+    , _mtResult :: Located TVal
     -- ^ return value of the function being checked
+    }
+  deriving Show
+
+data Model
+  = Model
+    { _modelTags    :: ModelTags
+    , _modelKsProvs :: Map TagId Provenance
     }
   deriving Show
 
@@ -942,9 +952,11 @@ makeLenses ''S
 makeLenses ''Object
 makeLenses ''Table
 makeLenses ''ModelTags
+makeLenses ''Model
 makeLenses ''Located
 makeLenses ''ColumnMap
 makeLenses ''TableMap
+makeLenses ''OriginatingCell
 makePrisms ''Provenance
 makePrisms ''AVal
 

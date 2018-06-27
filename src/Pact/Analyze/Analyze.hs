@@ -183,12 +183,19 @@ data QueryEnv
     , _qeAnalyzeResult :: AVal
     }
 
+data AnalysisResult
+  = AnalysisResult
+    { _arProposition   :: SBV Bool
+    , _arKsProvenances :: Map TagId Provenance
+    }
+
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''QueryEnv
+makeLenses ''AnalysisResult
 
 mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
@@ -369,7 +376,7 @@ newtype Query a
             MonadError AnalyzeFailure)
 
 mkAnalyzeEnv :: [Table] -> ModelTags -> AnalyzeEnv
-mkAnalyzeEnv tables modelTags =
+mkAnalyzeEnv tables tags =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
@@ -378,9 +385,9 @@ mkAnalyzeEnv tables modelTags =
           (TableName (T.unpack tname), someInvariants)
 
       argMap :: Map VarId AVal
-      argMap = view (located._2._2) <$> _mtArgs modelTags
+      argMap = view (located._2._2) <$> _mtArgs tags
 
-  in AnalyzeEnv argMap keySets' keySetAuths invariants' modelTags
+  in AnalyzeEnv argMap keySets' keySetAuths invariants' tags
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -1495,10 +1502,10 @@ runAnalysis
   -> ETerm
   -> Check
   -> ModelTags
-  -> ExceptT AnalyzeFailure Symbolic (SBV Bool)
-runAnalysis tables tm check modelTags = do
+  -> ExceptT AnalyzeFailure Symbolic AnalysisResult
+runAnalysis tables tm check tags = do
   let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables modelTags
+      aEnv   = mkAnalyzeEnv tables tags
       state0 = mkInitialAnalyzeState tables
 
   (funResult, state1, ()) <- hoist generalize $
@@ -1508,5 +1515,8 @@ runAnalysis tables tm check modelTags = do
 
   let qEnv  = mkQueryEnv aEnv state1 funResult
       query = analyzeCheck check
+      ksProvs = state1 ^. globalState.gasKsProvenances
 
-  _sSbv <$> runReaderT (queryAction query) qEnv
+  prop <- _sSbv <$> runReaderT (queryAction query) qEnv
+
+  pure $ AnalysisResult prop ksProvs

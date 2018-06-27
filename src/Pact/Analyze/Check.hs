@@ -18,7 +18,7 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (Prism', ifoldMap, ifoldr, ifoldrM,
+import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
                                             traverseOf, traversed, (<&>), (^.),
                                             (^?), (^@..), (?~), _1, _2, _Just)
@@ -31,6 +31,7 @@ import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Bifunctor            (first)
 import qualified Data.Default              as Default
 import           Data.Either               (lefts, partitionEithers, rights)
+import qualified Data.Foldable             as Foldable
 import qualified Data.HashMap.Strict       as HM
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
@@ -71,7 +72,7 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 
 data CheckSuccess
-  = SatisfiedProperty ModelTags
+  = SatisfiedProperty Model
   | ProvedTheorem
   deriving Show
 
@@ -83,7 +84,7 @@ describeParseFailure (exp, info)
   <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 data SmtFailure
-  = Invalid ModelTags
+  = Invalid Model
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | UnexpectedFailure SBV.SMTException
@@ -120,28 +121,36 @@ describeCheckFailure parsed failure =
             SmtFailure err       -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
-showModel :: ModelTags -> Text
-showModel (ModelTags args vars reads' writes auths res) = T.intercalate "\n"
-    [ "Arguments:"
-    , ifoldMap (showVarItem showVar) args
-    , "Variables:"
-    , ifoldMap (showVarItem showVar) vars
-    , "Reads:"
-    , ifoldMap (showTaggedItem showAccess) reads'
-    , "Writes:"
-    , ifoldMap (showTaggedItem showAccess) writes
-    , "Authorizations:"
-    , ifoldMap (showTaggedItem showAuth) auths
-    , "Result:"
-    , "  " <> showResult
-    ]
+-- NOTE: we indent the entire model two spaces so that the atom linter will
+-- treat it as one message.
+showModel :: Model -> Text
+showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
+    T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
+      [ ["Arguments:"]
+      , indent <$> fmapToList showVar args
+      , []
+      , ["Variables:"]
+      , indent <$> fmapToList showVar vars
+      , []
+      , ["Reads:"]
+      , indent <$> fmapToList showAccess reads'
+      , []
+      , ["Writes:"]
+      , indent <$> fmapToList showAccess writes
+      , []
+      , ["Keysets:"]
+      , indent <$> imapToList showAuth auths
+      , []
+      , ["Result:"]
+      , indent <$> [showResult]
+      ]
 
   where
-    showVarItem :: (a -> Text) -> VarId -> a -> Text
-    showVarItem show' (VarId i) var = "  (" <> tShow i <> ") " <> show' var <> "\n"
+    fmapToList f xs = Foldable.toList $ fmap f xs
+    imapToList f xs = Foldable.toList $ imap f xs
 
-    showTaggedItem :: (a -> Text) -> TagId -> a -> Text
-    showTaggedItem show' (TagId i) var = "  [" <> tShow i <> "] " <> show' var <> "\n"
+    indent :: Text -> Text
+    indent = ("  " <>)
 
     showSbv :: (Show a, SymWord a) => SBV a -> Text
     showSbv sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
@@ -172,8 +181,31 @@ showModel (ModelTags args vars reads' writes auths res) = T.intercalate "\n"
     showAccess :: Located (S RowKey, Object) -> Text
     showAccess (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
 
-    showAuth :: Located (SBV Bool) -> Text
-    showAuth = showSbv . _located
+    showKsn :: S KeySetName -> Text
+    showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
+      Nothing -> "[unknown]"
+      Just (KeySetName ksn) -> "'" <> ksn
+
+    showAuth :: TagId -> Located (SBV Bool) -> Text
+    showAuth tid lsb = status <> ksDescription
+      where
+        status = case SBV.unliteral (_located lsb) of
+          Nothing    -> "unknown:      "
+          Just True  -> "authorized:   "
+          Just False -> "unauthorized: "
+
+        ksDescription = case tid `Map.lookup` ksProvs of
+          Nothing ->
+            "unknown keyset"
+          Just (FromCell (OriginatingCell (TableName tn) (ColumnName cn) sRk _dirty)) ->
+            "database keyset at ("
+              <> T.pack tn <> ", "
+              <> "'" <> T.pack cn <> ", "
+              <> showS sRk <> ")"
+          Just (FromNamedKs sKsn) ->
+            "named keyset " <> showKsn sKsn
+          Just (FromInput arg) ->
+            "argument " <> arg
 
     showResult :: Text
     showResult = showTVal $ _located res
@@ -259,59 +291,64 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
       EObject _ sch ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
--- | Builds a new 'ModelTags' by querying the SMT model to concretize the
--- provided empty 'ModelTags'.
-saturateModelTags :: ModelTags -> SBV.Query ModelTags
-saturateModelTags =
-    traverseOf (mtArgs.traversed.located._2) fetchTVal   >=>
-    traverseOf (mtVars.traversed.located._2) fetchTVal   >=>
-    traverseOf (mtReads.traversed.located)   fetchAccess >=>
-    traverseOf (mtWrites.traversed.located)  fetchAccess >=>
-    traverseOf (mtAuths.traversed.located)   fetchSbv    >=>
-    traverseOf (mtResult.located)            fetchTVal
+-- | Builds a new 'Model' by querying the SMT model to concretize the provided
+-- symbolic 'Model'.
+saturateModel :: Model -> SBV.Query Model
+saturateModel =
+    traverseOf (modelTags.mtArgs.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
+    traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
+    traverseOf (modelTags.mtAuths.traversed.located)   fetchSbv    >=>
+    traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
+    traverseOf (modelKsProvs.traversed)                fetchProv
 
   where
-    fetchTVal :: TVal -> SBVI.Query TVal
+    fetchTVal :: TVal -> SBV.Query TVal
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
-        go :: EType -> AVal -> SBVI.Query AVal
+        go :: EType -> AVal -> SBV.Query AVal
         go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
           SBV.getValue (SBVI.SBV sval :: SBV t)
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
-    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBVI.Query (SBV a)
+    fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)
     fetchSbv = fmap SBV.literal . SBV.getValue
 
-    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBVI.Query (S a)
+    fetchS :: (SymWord a, SBV.SMTValue a) => S a -> SBV.Query (S a)
     fetchS = traverseOf s2Sbv fetchSbv
 
     fetchObject :: Object -> SBVI.Query Object
     fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
-    fetchAccess :: (S RowKey, Object) -> SBVI.Query (S RowKey, Object)
+    fetchAccess :: (S RowKey, Object) -> SBV.Query (S RowKey, Object)
     fetchAccess (sRk, obj) = do
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
       pure (sRk', obj')
 
+    fetchProv :: Provenance -> SBV.Query Provenance
+    fetchProv = traverseOf (_FromCell.ocRowKey) fetchS
+            >=> traverseOf _FromNamedKs         fetchS
+
 resultQuery
   :: Goal                                      -- ^ are we in sat or valid mode?
-  -> ModelTags                                 -- ^ model tags allocated before evaluation
+  -> Model                                     -- ^ unsaturated/symbolic model
   -> ExceptT SmtFailure SBV.Query CheckSuccess
-resultQuery goal modelTags = do
+resultQuery goal model0 = do
   satResult <- lift SBV.checkSat
   case goal of
     Validation ->
       case satResult of
-        SBV.Sat   -> throwError . Invalid =<< lift (saturateModelTags modelTags)
+        SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
         SBV.Unsat -> pure ProvedTheorem
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModelTags modelTags)
+        SBV.Sat   -> pure . SatisfiedProperty =<< lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
@@ -327,10 +364,12 @@ checkFunction tables info pactArgs body check = runExceptT $ do
       runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      model <- lift $ allocModelTags info args tm tagAllocs
-      p <- withExceptT AnalyzeFailure (runAnalysis tables tm check model)
-      void $ lift $ SBV.output p
-      hoist SBV.query $ withExceptT SmtFailure $ resultQuery goal model
+      tags <- lift $ allocModelTags info args tm tagAllocs
+      AnalysisResult prop ksProvs <- withExceptT AnalyzeFailure $
+        runAnalysis tables tm check tags
+      void $ lift $ SBV.output prop
+      hoist SBV.query $ withExceptT SmtFailure $
+        resultQuery goal $ Model tags ksProvs
 
   where
     goal :: Goal
