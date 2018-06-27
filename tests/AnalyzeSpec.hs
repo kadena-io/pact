@@ -117,10 +117,12 @@ expectFail code check = do
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = PIntegerComparison Eq 0 $ IntColumnDelta tn cn
+intConserves tn cn = PIntegerComparison Eq 0 $
+  IntColumnDelta (TableLit tn) (ColumnLit cn)
 
 decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = PDecimalComparison Eq 0 $ DecColumnDelta tn cn
+decConserves tn cn = PDecimalComparison Eq 0 $
+  DecColumnDelta (TableLit tn) (ColumnLit cn)
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -1241,7 +1243,7 @@ spec = describe "analyze" $ do
           tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
       textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
-      Right (RowEnforced (TableName "accounts") (ColumnName "ks") (PVar (VarId 0) "from"))
+      Right (RowEnforced (TableNameLit "accounts") (ColumnNameLit "ks") (PVar (VarId 0) "from"))
 
     it "parses column properties" $
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt

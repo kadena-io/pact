@@ -479,6 +479,18 @@ data PreProp
   -- -- | PreAt {- Schema -} PreProp PreProp -- EType
   deriving Eq
 
+pattern TableNameLit :: String -> Prop TableName
+pattern TableNameLit str = TableLit (TableName str)
+
+pattern ColumnNameLit :: String -> Prop ColumnName
+pattern ColumnNameLit str = ColumnLit (ColumnName str)
+
+instance IsString (Prop TableName) where
+  fromString = TableLit . fromString
+
+instance IsString (Prop ColumnName) where
+  fromString = ColumnLit . fromString
+
 data Prop a where
   -- Literals
 
@@ -486,6 +498,9 @@ data Prop a where
   PLit :: SymWord a => a   -> Prop a
   -- | Injects a symbolic value into the property language
   PSym ::              S a -> Prop a
+
+  TableLit :: TableName -> Prop TableName
+  ColumnLit :: ColumnName -> Prop ColumnName
 
   -- TX success/failure
 
@@ -580,40 +595,40 @@ data Prop a where
   -- DB properties
 
   -- | True when anything in the table is written
-  TableWrite :: TableName  ->                Prop Bool
+  TableWrite :: Prop TableName  ->                Prop Bool
   -- | True when anything in the table is read
-  TableRead  :: TableName  ->                Prop Bool
+  TableRead  :: Prop TableName  ->                Prop Bool
 
   --
   -- NOTE: it's possible that in a standard library we could implement these in
   --       terms of "CellRead"/"CellWrite" and existential quantification.
   --
   -- | Whether a column is written
-  ColumnWrite :: TableName  -> ColumnName  -> Prop Bool
+  ColumnWrite :: Prop TableName  -> Prop ColumnName  -> Prop Bool
   -- | Whether a column is read
-  ColumnRead  :: TableName  -> ColumnName  -> Prop Bool -- particular column is read
+  ColumnRead  :: Prop TableName  -> Prop ColumnName  -> Prop Bool
 
   --
   -- TODO: rewrite these in terms of CellBefore, CellAfter, ColumnSumBefore,
   --       ColumnSumAfter:
   --
   -- | The difference (@after-before@) in a cell's integer value across a transaction
-  IntCellDelta   :: TableName  -> ColumnName  -> Prop RowKey -> Prop Integer
+  IntCellDelta   :: Prop TableName  -> Prop ColumnName  -> Prop RowKey -> Prop Integer
   -- | The difference (@after-before@) in a cell's decimal value across a transaction
-  DecCellDelta   :: TableName  -> ColumnName  -> Prop RowKey -> Prop Decimal
+  DecCellDelta   :: Prop TableName  -> Prop ColumnName  -> Prop RowKey -> Prop Decimal
   -- | The difference (@after-before@) in a column's integer sum across a transaction
-  IntColumnDelta :: TableName  -> ColumnName                 -> Prop Integer
+  IntColumnDelta :: Prop TableName  -> Prop ColumnName                 -> Prop Integer
   -- | The difference (@after-before@) in a column's decimal sum across a transaction
-  DecColumnDelta :: TableName  -> ColumnName                 -> Prop Decimal
+  DecColumnDelta :: Prop TableName  -> Prop ColumnName                 -> Prop Decimal
 
   -- | Whether a row is read
-  RowRead       :: TableName  -> Prop RowKey -> Prop Bool
+  RowRead       :: Prop TableName  -> Prop RowKey -> Prop Bool
   -- | Number of times a row is read
-  RowReadCount  :: TableName  -> Prop RowKey -> Prop Integer
+  RowReadCount  :: Prop TableName  -> Prop RowKey -> Prop Integer
   -- | Whether a row is written
-  RowWrite      :: TableName  -> Prop RowKey -> Prop Bool
+  RowWrite      :: Prop TableName  -> Prop RowKey -> Prop Bool
   -- | Number of times a row is written
-  RowWriteCount :: TableName  -> Prop RowKey -> Prop Integer
+  RowWriteCount :: Prop TableName  -> Prop RowKey -> Prop Integer
 
   --
   -- TODO: StaleRead?
@@ -622,9 +637,9 @@ data Prop a where
   -- Authorization
 
   -- | Whether a transaction contains a signature that satisfied the named key set
-  KsNameAuthorized :: KeySetName ->                              Prop Bool
+  KsNameAuthorized :: KeySetName      ->                                   Prop Bool
   -- | Whether a row has its keyset @enforce@d in a transaction
-  RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
+  RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> Prop Bool
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = PLogical AndOp [a, b]
@@ -836,6 +851,9 @@ instance UserShow (Quantifiable q) where
 
 instance UserShow TableName where
   userShowsPrec _ (TableName tn) = T.pack tn
+
+instance UserShow ColumnName where
+  userShowsPrec _ (ColumnName cn) = T.pack cn
 
 instance UserShow Schema where
   userShowsPrec _ (Schema _) = "TODO userShowsPrec Schema)"

@@ -23,6 +23,7 @@ import           Data.Foldable                (asum, find)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Semigroup               ((<>))
+import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Type.Equality           ((:~:)(Refl))
@@ -114,19 +115,22 @@ stringLike = \case
   ELitString str -> Just str
   _              -> Nothing
 
--- XXX Remove some uses of these lits
-pattern TableLit :: TableName -> PreProp
-pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
-
-pattern ColumnLit :: ColumnName -> PreProp
-pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
-
 type TableEnv = TableMap (ColumnMap EType)
 
 type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
 type PropCheck = ReaderT (Map VarId QType, TableEnv) (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
+
+parseTableName :: PreProp -> PropCheck (Prop TableName)
+parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
+-- parseTableName (PreVar vid name) = do
+--   varTy <- view (_1 . at vid)
+--   case varTy of
+--     Just QTable -> error "TODO"
+
+parseColumnName :: PreProp -> PropCheck (Prop ColumnName)
+parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
 
 -- The conversion from @Exp@ to @PreProp@
 --
@@ -289,12 +293,14 @@ checkPreProp ty preProp = case (ty, preProp) of
   --
   -- TODO: should be "table-written"
   --
-  (TBool, PreApp "table-write" [TableLit tn]) -> do
-    expectTableExists tn
-    pure (TableWrite tn)
-  (TBool, PreApp "table-read" [TableLit tn]) -> do
-    expectTableExists tn
-    pure (TableRead tn)
+  (TBool, PreApp "table-write" [tn]) -> do
+    tn' <- parseTableName tn
+    expectTableExists tn'
+    pure (TableWrite tn')
+  (TBool, PreApp "table-read" [tn]) -> do
+    tn' <- parseTableName tn
+    expectTableExists tn'
+    pure (TableRead tn')
   --
   -- NOTE: disabled until implemented on the backend:
   --
@@ -302,67 +308,82 @@ checkPreProp ty preProp = case (ty, preProp) of
   --   -> pure (ColumnWrite tn cn)
   -- (TBool, PreApp "column-read" [TableLit tn, ColumnLit cn])
   --   -> pure (ColumnRead tn cn)
-  (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk]) -> do
-    _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TInt
-    IntCellDelta tn cn <$> checkPreProp TStr rk
-  (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk]) -> do
-    _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TDecimal
-    DecCellDelta tn cn <$> checkPreProp TStr rk
-  (TInt, PreApp "column-delta" [TableLit tn, ColumnLit cn]) -> do
-    _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TInt
+  (TInt, PreApp "cell-delta" [tn, cn, rk]) -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TInt
+    IntCellDelta tn' cn' <$> checkPreProp TStr rk
+  (TDecimal, PreApp "cell-delta" [tn, cn, rk]) -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TDecimal
+    DecCellDelta tn' cn' <$> checkPreProp TStr rk
+  (TInt, PreApp "column-delta" [tn, cn]) -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TInt
     -- TODO: if these weren't *Int*ColumnDelta / *Dec*ColumnDelta these clauses
     -- could be collapsed
-    pure (IntColumnDelta tn cn)
-  (TDecimal, PreApp "column-delta" [TableLit tn, ColumnLit cn]) -> do
-    _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TDecimal
-    pure (DecColumnDelta tn cn)
-  (TBool, PreApp "row-read" [TableLit tn, rk]) -> do
-    _ <- expectTableExists tn
-    RowRead tn <$> checkPreProp TStr rk
-  (TInt, PreApp "row-read-count" [TableLit tn, rk]) -> do
-    _ <- expectTableExists tn
-    RowReadCount tn <$> checkPreProp TStr rk
+    pure (IntColumnDelta tn' cn')
+  (TDecimal, PreApp "column-delta" [tn, cn]) -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TDecimal
+    pure (DecColumnDelta tn' cn')
+  (TBool, PreApp "row-read" [tn, rk]) -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    RowRead tn' <$> checkPreProp TStr rk
+  (TInt, PreApp "row-read-count" [tn, rk]) -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    RowReadCount tn' <$> checkPreProp TStr rk
   --
   -- TODO: should be "row-written"
   --
-  (TBool, PreApp "row-write" [TableLit tn, rk]) -> do
-    _ <- expectTableExists tn
-    RowWrite tn <$> checkPreProp TStr rk
-  (TInt, PreApp "row-write-count" [TableLit tn, rk]) -> do
-    _ <- expectTableExists tn
-    RowWriteCount tn <$> checkPreProp TStr rk
+  (TBool, PreApp "row-write" [tn, rk]) -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    RowWrite tn' <$> checkPreProp TStr rk
+  (TInt, PreApp "row-write-count" [tn, rk]) -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    RowWriteCount tn' <$> checkPreProp TStr rk
   (TBool, PreApp "authorized-by" [PreStringLit ks])
     -> pure (KsNameAuthorized (KeySetName ks))
-  (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk]) -> do
-    _ <- expectTableExists tn
-    _ <- expectColumnType tn cn TKeySet
-    RowEnforced tn cn <$> checkPreProp TStr rk
+  (TBool, PreApp "row-enforced" [tn, cn, rk]) -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TKeySet
+    RowEnforced tn' cn' <$> checkPreProp TStr rk
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
-expectColumnType :: TableName -> ColumnName -> Type a -> PropCheck ()
-expectColumnType tn@(TableName tnStr) cn@(ColumnName cnStr) expectedTy = do
+expectColumnType
+  :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
+expectColumnType (TableLit tn) (ColumnLit cn) expectedTy = do
   tys <- asks (^.. _2 . ix tn . ix cn)
   case tys of
     [EType foundTy] -> case typeEq foundTy expectedTy of
       Nothing   -> throwErrorT $
-        "expected column " <> T.pack cnStr <> " in table " <> T.pack tnStr <>
+        "expected column " <> userShow cn <> " in table " <> userShow tn <>
         " to have type " <> userShow expectedTy <> ", instead found " <>
         userShow foundTy
       Just Refl -> pure ()
-    _ -> throwError $
-      "didn't find expected column " ++ cnStr ++ " in table " ++ tnStr
+    _ -> throwErrorT $
+      "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
 
-expectTableExists :: TableName -> PropCheck ()
-expectTableExists tn@(TableName tnStr) = do
+expectTableExists :: Prop TableName -> PropCheck ()
+expectTableExists (TableLit tn) = do
   tn' <- view $ _2 . at tn
   case tn' of
-    Nothing -> throwError $
-      "expected table " ++ tnStr ++ "but it isn't in scope"
+    Nothing -> throwErrorT $
+      "expected table " <> userShow tn <> "but it isn't in scope"
     Just _  -> pure ()
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
