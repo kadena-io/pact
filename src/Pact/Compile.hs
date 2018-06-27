@@ -5,6 +5,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -114,13 +116,37 @@ mkMeta docs ps = Just . Meta docs . M.fromList <$> mapM toMetas ps
   where toMetas (EList' [EAtom' k,v]) = return (k,v)
         toMetas bad = mkInfo bad >>= \i -> syntaxError i "mkMeta: malformed meta form, expected (atom expression)"
 
+-- | A meta-annotation, which includes either form:
+--
+-- * `"docstring"`
+-- * `(meta ...)`
+pattern MetaExp :: Compile (Maybe Meta) -> Exp
+pattern MetaExp meta <- (doMeta -> Just meta)
+
+doMeta :: Exp -> Maybe (Compile (Maybe Meta))
+doMeta exp = case exp of
+  EList' (EAtom' "meta" : ELitString docs : ps) -> Just (mkMeta docs ps)
+  ELitString docs                               -> Just (pure (justDocs docs))
+  _                                             -> Nothing
+
+-- | A body with a possible meta-annotation
+pattern MetaBodyExp :: Compile (Maybe Meta) -> [Exp] -> [Exp]
+pattern MetaBodyExp meta body <- (doMetaBody -> Just (meta, body))
+
+-- TODO(joel): uncomment when on modern ghc
+-- {-# complete MetaBodyExp, [] #-}
+
+doMetaBody :: [Exp] -> Maybe (Compile (Maybe Meta), [Exp])
+doMetaBody exp  = case exp of
+  []                -> Nothing
+  MetaExp meta:body -> Just (meta, body)
+  body              -> Just (pure Nothing, body)
+
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   case es of
-    [] -> syntaxError ai "Empty module"
-    (ELitString docs:body) -> mkModule (justDocs docs) body
-    (EList' (ELitString docs:ps):body) -> mkMeta docs ps >>= \m -> mkModule m body
-    body -> mkModule Nothing body
+    MetaBodyExp meta body -> mkModule body =<< meta
+    _ -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
         TDef {} -> return d
@@ -131,7 +157,7 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
         TUse {} -> return d
         TBless {} -> return d
         t -> syntaxError (_tInfo t) "Only defun, defpact, defconst, deftable, use, bless allowed in module"
-      mkModule docs body = do
+      mkModule body docs = do
         cm <- use csModule
         case cm of
           Just _ -> syntaxError li "Invalid nested module"
@@ -161,15 +187,11 @@ currentModule i = use csModule >>= \m -> case m of
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
     case es of
-      (EAtom dn Nothing ty _:EList args Nothing _:ELitString docs:body) ->
-          mkDef dn ty args (justDocs docs) body
-      (EAtom dn Nothing ty _:EList args Nothing _:EList' (ELitString docs:ps):body) ->
-          mkMeta docs ps >>= \m -> mkDef dn ty args m body
-      (EAtom dn Nothing ty _:EList args Nothing _:body) ->
-          mkDef dn ty args Nothing body
+      (EAtom dn Nothing ty _:EList args Nothing _:MetaBodyExp meta body) ->
+          mkDef dn ty args body =<< meta
       _ -> syntaxError namei "Invalid def"
       where
-        mkDef dn ty dargs ddocs body = do
+        mkDef dn ty dargs body ddocs = do
           args <- mapM atomVar dargs
           let argsn = map (\aa -> Name (_aName aa) (_aInfo aa)) args
           dty <- FunType <$> pure args <*> maybeTyVar namei ty
@@ -243,9 +265,7 @@ doLets _ i = syntaxError i "Invalid let declaration"
 doConst :: [Exp] -> Info -> Compile (Term Name)
 doConst es i = case es of
   [EAtom dn Nothing ct _,t] -> mkConst dn ct t Nothing
-  [EAtom dn Nothing ct _,t,ELitString docs] -> mkConst dn ct t (justDocs docs)
-  [EAtom dn Nothing ct _,t,EList' (ELitString docs:ps)] ->
-    mkMeta docs ps >>= \m -> mkConst dn ct t m
+  [EAtom dn Nothing ct _,t,MetaExp meta] -> mkConst dn ct t =<< meta
   _ -> syntaxError i "Invalid defconst"
   where
     mkConst dn ty v docs = do
@@ -256,13 +276,11 @@ doConst es i = case es of
 
 doSchema :: [Exp] -> Info -> Compile (Term Name)
 doSchema es i = case es of
-  (EAtom utn Nothing Nothing _:ELitString docs:as) -> mkUT utn (justDocs docs) as
-  (EAtom utn Nothing Nothing _:EList' (ELitString docs:ps):as) ->
-    mkMeta docs ps >>= \m -> mkUT utn m as
-  (EAtom utn Nothing Nothing _:as) -> mkUT utn Nothing as
+  (EAtom utn Nothing Nothing _:MetaBodyExp meta as) ->
+    mkUT utn as =<< meta
   _ -> syntaxError i "Invalid schema definition"
   where
-    mkUT utn docs as = do
+    mkUT utn as docs = do
       cm <- currentModule i
       fs <- forM as $ \a -> case a of
         EAtom an Nothing ty _ai -> mkInfo a >>= \ai -> Arg an <$> maybeTyVar ai ty <*> pure ai
@@ -272,9 +290,7 @@ doSchema es i = case es of
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
   [EAtom tn Nothing ty _] -> mkT tn ty Nothing
-  [EAtom tn Nothing ty _,ELitString docs] -> mkT tn ty (justDocs docs)
-  [EAtom tn Nothing ty _,EList' (ELitString docs:ps)] ->
-    mkMeta docs ps >>= \m -> mkT tn ty m
+  [EAtom tn Nothing ty _,MetaExp meta] -> mkT tn ty =<< meta
   _ -> syntaxError i "Invalid table definition"
   where
     mkT tn ty docs = do

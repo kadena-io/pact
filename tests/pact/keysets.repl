@@ -1,10 +1,6 @@
-(env-data
- { "kall": ["a" "b" "c"]
- , "kany": { "keys": ["a" "b" "c"], "pred": "keys-any" }
-   , "k2": { "keys": ["a" "b" "c"], "pred": "keys-2" }
-     , "custom": {"keys": ["a" "b" "c" "d"], "pred": "keys-3" }
-     , "impure": {"keys": [], "pred": "impure" }
-     })
+
+(begin-tx)
+(env-data { "kall": ["a" "b" "c"] })
 (define-keyset 'k (sig-keyset))
 (define-keyset 'kall (read-keyset "kall"))
 (module keysets 'k
@@ -17,8 +13,6 @@
     (enforce-keyset (read-keyset "kany")))
   (defun test-2 ()
     (enforce-keyset (read-keyset "k2")))
-  (defun test-custom ()
-    (enforce-keyset (read-keyset "custom")))
   (defun test-impure-pred ()
     (enforce-keyset (read-keyset "impure")))
 
@@ -36,9 +30,24 @@
   (defun test-enforce-one-fail ()
     (enforce-one "Should fail" [(enforce "should pass this" false) (enforce "should fail this" false)]))
 
-)
+  )
+(commit-tx)
 
+(env-data
+ { "kall": ["a" "b" "c"]
+ , "kany": { "keys": ["a" "b" "c"], "pred": "keys-any" }
+   , "k2": { "keys": ["a" "b" "c"], "pred": "keys-2" }
+     , "qualified": {"keys": ["a" "b" "c" "d"], "pred": "keysets.keys-3" }
+     , "impure": {"keys": [], "pred": "impure" }
+       })
 
+(env-keys ["a" "b" "c"])
+(expect "qualified keys-3 succeeds on 3" true
+        (enforce-keyset (read-keyset "qualified")))
+
+(use keysets)
+
+(env-keys [])
 (expect-failure "all fails on none" (test-all))
 (expect-failure "any fails on none" (test-any))
 (expect-failure "2 fails on none" (test-2))
@@ -62,8 +71,6 @@
 (expect "all succeeds on 3" true (test-all))
 (expect "any succeeds on 3" true (test-any))
 (expect "2 succeeds on 3" true (test-2))
-
-(expect "custom succeeds on 3" true (test-custom))
 
 (expect-failure "impure keyset pred should blow up" (test-impure-pred))
 

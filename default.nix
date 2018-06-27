@@ -84,7 +84,7 @@ in
     packages = {
       pact = builtins.filterSource
         (path: type: !(builtins.elem (baseNameOf path)
-           ["result" "dist" "dist-ghcjs" ".git"]))
+           ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
         ./.;
     };
     toolOverrides = ghc: super: {

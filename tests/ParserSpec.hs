@@ -13,5 +13,5 @@ loadBadParens = do
   (r,_s) <- runIO $ execScript' Quiet "tests/pact/bad/bad-parens.repl"
   it "should fail due to extra close-parens" $ r `shouldSatisfy` isLeft
 
-  (r',_s) <- runIO $ execScript' Quiet "tests/pact/comments.repl"
+  (r',_s) <- runIO $ execScript' Quiet "tests/pact/parsing.repl"
   it "should parse correctly" $ r' `shouldSatisfy` isRight
