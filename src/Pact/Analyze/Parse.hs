@@ -304,9 +304,9 @@ checkPreProp ty preProp = case (ty, preProp) of
   --
   -- NOTE: disabled until implemented on the backend:
   --
-  -- (TBool, PreApp "column-written" [TableLit tn, ColumnLit cn])
+  -- (TBool, PreApp "column-written" [PLit tn, PLit cn])
   --   -> pure (ColumnWrite tn cn)
-  -- (TBool, PreApp "column-read" [TableLit tn, ColumnLit cn])
+  -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
   --   -> pure (ColumnRead tn cn)
   (TInt, PreApp "cell-delta" [tn, cn, rk]) -> do
     tn' <- parseTableName tn
@@ -366,7 +366,7 @@ checkPreProp ty preProp = case (ty, preProp) of
 
 expectColumnType
   :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
-expectColumnType (TableLit tn) (ColumnLit cn) expectedTy = do
+expectColumnType (PLit tn) (PLit cn) expectedTy = do
   tys <- asks (^.. _2 . ix tn . ix cn)
   case tys of
     [EType foundTy] -> case typeEq foundTy expectedTy of
@@ -379,7 +379,7 @@ expectColumnType (TableLit tn) (ColumnLit cn) expectedTy = do
       "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
 
 expectTableExists :: Prop TableName -> PropCheck ()
-expectTableExists (TableLit tn) = do
+expectTableExists (PLit tn) = do
   tn' <- view $ _2 . at tn
   case tn' of
     Nothing -> throwErrorT $

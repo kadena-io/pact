@@ -480,16 +480,16 @@ data PreProp
   deriving Eq
 
 pattern TableNameLit :: String -> Prop TableName
-pattern TableNameLit str = TableLit (TableName str)
+pattern TableNameLit str = PLit (TableName str)
 
 pattern ColumnNameLit :: String -> Prop ColumnName
-pattern ColumnNameLit str = ColumnLit (ColumnName str)
+pattern ColumnNameLit str = PLit (ColumnName str)
 
 instance IsString (Prop TableName) where
-  fromString = TableLit . fromString
+  fromString = PLit . fromString
 
 instance IsString (Prop ColumnName) where
-  fromString = ColumnLit . fromString
+  fromString = PLit . fromString
 
 data Prop a where
   -- Literals
@@ -498,9 +498,6 @@ data Prop a where
   PLit :: SymWord a => a   -> Prop a
   -- | Injects a symbolic value into the property language
   PSym ::              S a -> Prop a
-
-  TableLit :: TableName -> Prop TableName
-  ColumnLit :: ColumnName -> Prop ColumnName
 
   -- TX success/failure
 

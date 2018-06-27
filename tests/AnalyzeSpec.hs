@@ -118,11 +118,11 @@ expectFail code check = do
 
 intConserves :: TableName -> ColumnName -> Prop Bool
 intConserves tn cn = PIntegerComparison Eq 0 $
-  IntColumnDelta (TableLit tn) (ColumnLit cn)
+  IntColumnDelta (PLit tn) (PLit cn)
 
 decConserves :: TableName -> ColumnName -> Prop Bool
 decConserves tn cn = PDecimalComparison Eq 0 $
-  DecColumnDelta (TableLit tn) (ColumnLit cn)
+  DecColumnDelta (PLit tn) (PLit cn)
 
 spec :: Spec
 spec = describe "analyze" $ do
