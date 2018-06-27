@@ -13,8 +13,8 @@ import           Pact.Types.Lang    hiding (KeySet)
 import           Pact.Analyze.Types
 
 data Quantifier
-  = Forall' VarId Text EType
-  | Exists' VarId Text EType
+  = Forall' VarId Text QType
+  | Exists' VarId Text QType
 
 class Float a where
   float :: Prop a -> ([Quantifier], Prop a)

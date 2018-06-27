@@ -414,6 +414,21 @@ instance Eq EType where
 instance EqSymbolic EType where
   ety .== ety' = fromBool $ ety == ety'
 
+data QType
+  = QEType' EType
+  | QTable
+  | QColumns TableName
+  deriving (Eq, Show)
+
+pattern QEType :: () => (Show a, SymWord a, SMTValue a) => Type a -> QType
+pattern QEType x = QEType' (EType x)
+
+pattern QEObjectTy :: Schema -> QType
+pattern QEObjectTy x = QEType' (EObjectTy x)
+
+-- TODO: uncomment when on modern ghc
+-- {-# complete QEType, QEObjectTy, QType, QColumns #-}
+
 -- | Unique variable IDs
 --
 -- 'VarId's are used to represent variables in both the term and property
@@ -454,8 +469,8 @@ data PreProp
   | PreVar     VarId Text
 
   -- quantifiers
-  | PreForall VarId Text EType PreProp
-  | PreExists VarId Text EType PreProp
+  | PreForall VarId Text QType PreProp
+  | PreExists VarId Text QType PreProp
 
   -- applications
   | PreApp Text [PreProp]
@@ -488,17 +503,17 @@ data Prop a where
   -- Abstraction
 
   -- | Introduces a universally-quantified variable over another property
-  Forall :: VarId -> Text -> EType -> Prop a -> Prop a
+  Forall :: VarId -> Text -> QType -> Prop a -> Prop a
   -- | Introduces an existentially-quantified variable over another property
-  Exists :: VarId -> Text -> EType -> Prop a -> Prop a
+  Exists :: VarId -> Text -> QType -> Prop a -> Prop a
   -- | Refers to a function argument or universally/existentially-quantified variable
-  PVar   :: VarId -> Text                 -> Prop a
+  PVar   :: VarId -> Text                    -> Prop a
 
   -- Object ops
 
   --
-  -- Note: PAt is the one property we can't yet parse because of the EType it
-  -- includes
+  -- Note: PAt is the one property we can't yet typecheck because of the EType
+  -- it includes
   --
   -- | Projects from an object at a key
   PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop a
@@ -802,20 +817,30 @@ instance UserShow PreProp where
     PreResult       -> "result"
     PreVar _id name -> name
 
-    PreForall _vid name (EType ty) prop ->
-      "(forall (" <> name <> ":" <> userShow ty <> ") " <> userShow prop <> ")"
-    PreExists _vid name (EType ty) prop ->
-      "(exists (" <> name <> ":" <> userShow ty <> ") " <> userShow prop <> ")"
+    PreForall _vid name qty prop ->
+      "(forall (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+    PreExists _vid name qty prop ->
+      "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
     PreApp name applicands -> "(" <> name <> " " <> T.unwords
       ((map userShow) applicands) <> ")"
 
-    PreForall _vid _name (EObjectTy _) _prop ->
-      "ERROR: quantification over an object type is not currently allowed (issue 139)"
-    PreExists _vid _name (EObjectTy _) _prop ->
-      "ERROR: quantification over an object type is not currently allowed (issue 139)"
-
 instance UserShow Pact.Exp where
   userShowsPrec _ = tShow
+
+instance UserShow QType where
+  userShowsPrec d = \case
+    QEType ty     -> userShowsPrec d ty
+    QEObjectTy ty -> userShowsPrec d ty
+    QTable        -> "table"
+    QColumns tn   -> "(columns " <> userShow tn <> ")"
+    _             ->
+      error "pattern match is complete, but using pattern synonyms"
+
+instance UserShow TableName where
+  userShowsPrec _ (TableName tn) = T.pack tn
+
+instance UserShow Schema where
+  userShowsPrec _ (Schema _) = "TODO userShowsPrec Schema)"
 
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
