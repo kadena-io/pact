@@ -102,7 +102,7 @@ textToLogicalOp = \case
   _     -> Nothing
 
 textToQuantifier
-  :: Text -> Maybe (VarId -> Text -> EType -> PreProp -> PreProp)
+  :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
 textToQuantifier = \case
   "forall" -> Just PreForall
   "exists" -> Just PreExists
@@ -123,7 +123,7 @@ pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
 type TableEnv = TableMap (ColumnMap EType)
 
 type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
-type PropCheck = ReaderT (Map VarId EType, TableEnv) (Either String)
+type PropCheck = ReaderT (Map VarId QType, TableEnv) (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
@@ -166,19 +166,20 @@ expToPreProp = \case
 
   exp -> throwErrorIn exp $ "expected property"
 
-  where propBindings :: [Exp] -> PropParse [(VarId, Text, EType)]
+  where propBindings :: [Exp] -> PropParse [(VarId, Text, QType)]
         propBindings [] = pure []
         -- we require a type annotation
         propBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
           = throwErrorIn exp $
             "type annotation required for all property bindings."
         propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
+          -- XXX handle table / columns
           nameTy <- case maybeTranslateType' (const Nothing) ty of
             Just ty' -> do
               vid <- genVarId
-              pure (vid, name, ty')
+              pure (vid, name, QEType' ty')
             -- This is challenging because `ty : Pact.Type TypeName`, but
-            -- `maybeTranslateType` nadles `Pact.Type UserType`.
+            -- `maybeTranslateType` handles `Pact.Type UserType`.
             Nothing -> throwErrorIn exp
               "currently objects can't be quantified in properties (issue 139)"
           (nameTy:) <$> propBindings exps
@@ -211,13 +212,16 @@ checkPreProp ty preProp = case (ty, preProp) of
     case varTy of
       Nothing -> throwErrorT $
         "couldn't find property variable " <> name
-      Just (EType varTy') -> case typeEq ty varTy' of
+      Just (QEType varTy') -> case typeEq ty varTy' of
         Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
           " has type " <> userShow varTy' <> ", but " <> userShow ty <>
           " was expected"
         Just Refl -> pure (PVar vid name)
-      Just (EObjectTy _) -> throwErrorIn preProp
+      Just (QEObjectTy _) -> throwErrorIn preProp
         "ERROR: object types not currently allowed in properties (issue 139)"
+      Just QTable       -> error "TODO"
+      Just (QColumns _) -> error "TODO"
+      _ -> error "pattern match is complete, but using pattern synonyms"
 
   -- quantifiers
   (a, PreForall vid name ty' p) -> Forall vid name ty' <$>
@@ -381,7 +385,8 @@ expToCheck
   -> Either String Check
 expToCheck tableEnv genStart nameEnv idEnv body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) (idEnv, tableEnv)
+  typedBody    <- runReaderT (checkPreProp TBool preTypedBody)
+    (QEType' <$> idEnv, tableEnv)
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
@@ -400,7 +405,7 @@ expToProp
   -> Either String (Prop a)
 expToProp tableEnv genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  runReaderT (checkPreProp ty preTypedBody) (idEnv, tableEnv)
+  runReaderT (checkPreProp ty preTypedBody) (QEType' <$> idEnv, tableEnv)
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
