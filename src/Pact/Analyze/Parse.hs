@@ -319,12 +319,18 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TBool, PreApp "row-read" [TableLit tn, rk]) -> do
     _ <- expectTableExists tn
     RowRead tn <$> checkPreProp TStr rk
+  (TInt, PreApp "row-read-count" [TableLit tn, rk]) -> do
+    _ <- expectTableExists tn
+    RowReadCount tn <$> checkPreProp TStr rk
   --
   -- TODO: should be "row-written"
   --
   (TBool, PreApp "row-write" [TableLit tn, rk]) -> do
     _ <- expectTableExists tn
     RowWrite tn <$> checkPreProp TStr rk
+  (TInt, PreApp "row-write-count" [TableLit tn, rk]) -> do
+    _ <- expectTableExists tn
+    RowWriteCount tn <$> checkPreProp TStr rk
   (TBool, PreApp "authorized-by" [PreStringLit ks])
     -> pure (KsNameAuthorized (KeySetName ks))
   (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk]) -> do

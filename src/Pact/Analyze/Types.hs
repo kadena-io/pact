@@ -588,10 +588,14 @@ data Prop a where
   DecColumnDelta :: TableName  -> ColumnName                 -> Prop Decimal
   -- ^ The difference (@after-before@) in a column's decimal sum across a transaction
 
-  RowRead  :: TableName  -> Prop RowKey -> Prop Bool
+  RowRead       :: TableName  -> Prop RowKey -> Prop Bool
   -- ^ Whether a row is read
-  RowWrite :: TableName  -> Prop RowKey -> Prop Bool
+  RowReadCount  :: TableName  -> Prop RowKey -> Prop Integer
+  -- ^ Number of times a row is read
+  RowWrite      :: TableName  -> Prop RowKey -> Prop Bool
   -- ^ Whether a row is written
+  RowWriteCount :: TableName  -> Prop RowKey -> Prop Integer
+  -- ^ Number of times a row is written
 
   --
   -- TODO: StaleRead?
