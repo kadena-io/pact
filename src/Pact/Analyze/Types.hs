@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
@@ -397,37 +398,36 @@ oneIfS = over s2Sbv oneIf
 isConcreteS :: SymWord a => S a -> Bool
 isConcreteS = isConcrete . _sSbv
 
-data EType where
+data QKind = QType | QAny
+
+data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
-  EType     :: (Show a, SymWord a, SMTValue a) => Type a -> EType
-  EObjectTy ::                                    Schema -> EType
+  EType     :: (Show a, SymWord a, SMTValue a) => Type a -> Quantifiable q
+  EObjectTy ::                                    Schema -> Quantifiable q
+  QTable    ::                                              Quantifiable 'QAny
+  QColumns  :: TableName                                 -> Quantifiable 'QAny
 
-deriving instance Show EType
+deriving instance Show (Quantifiable q)
 
-instance Eq EType where
+instance Eq (Quantifiable q) where
   EType a == EType b = case typeEq a b of
     Just _refl -> True
     Nothing    -> False
   EObjectTy a == EObjectTy b = a == b
-  _ == _ = False
+  QTable      == QTable      = True
+  QColumns a  == QColumns b  = a == b
+  _           == _           = False
 
-instance EqSymbolic EType where
+instance EqSymbolic (Quantifiable q) where
   ety .== ety' = fromBool $ ety == ety'
 
-data QType
-  = QEType' EType
-  | QTable
-  | QColumns TableName
-  deriving (Eq, Show)
+type EType = Quantifiable 'QType
+type QType = Quantifiable 'QAny
 
-pattern QEType :: () => (Show a, SymWord a, SMTValue a) => Type a -> QType
-pattern QEType x = QEType' (EType x)
-
-pattern QEObjectTy :: Schema -> QType
-pattern QEObjectTy x = QEType' (EObjectTy x)
-
--- TODO: uncomment when on modern ghc
--- {-# complete QEType, QEObjectTy, QType, QColumns #-}
+coerceQType :: EType -> QType
+coerceQType = \case
+  EType ty         -> EType ty
+  EObjectTy schema -> EObjectTy schema
 
 -- | Unique variable IDs
 --
@@ -827,14 +827,12 @@ instance UserShow PreProp where
 instance UserShow Pact.Exp where
   userShowsPrec _ = tShow
 
-instance UserShow QType where
+instance UserShow (Quantifiable q) where
   userShowsPrec d = \case
-    QEType ty     -> userShowsPrec d ty
-    QEObjectTy ty -> userShowsPrec d ty
-    QTable        -> "table"
-    QColumns tn   -> "(columns " <> userShow tn <> ")"
-    _             ->
-      error "pattern match is complete, but using pattern synonyms"
+    EType ty     -> userShowsPrec d ty
+    EObjectTy ty -> userShowsPrec d ty
+    QTable       -> "table"
+    QColumns tn  -> "(columns " <> userShow tn <> ")"
 
 instance UserShow TableName where
   userShowsPrec _ (TableName tn) = T.pack tn

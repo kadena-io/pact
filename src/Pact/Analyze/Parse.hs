@@ -114,6 +114,7 @@ stringLike = \case
   ELitString str -> Just str
   _              -> Nothing
 
+-- XXX Remove some uses of these lits
 pattern TableLit :: TableName -> PreProp
 pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
 
@@ -177,7 +178,7 @@ expToPreProp = \case
           nameTy <- case maybeTranslateType' (const Nothing) ty of
             Just ty' -> do
               vid <- genVarId
-              pure (vid, name, QEType' ty')
+              pure (vid, name, coerceQType ty')
             -- This is challenging because `ty : Pact.Type TypeName`, but
             -- `maybeTranslateType` handles `Pact.Type UserType`.
             Nothing -> throwErrorIn exp
@@ -212,16 +213,15 @@ checkPreProp ty preProp = case (ty, preProp) of
     case varTy of
       Nothing -> throwErrorT $
         "couldn't find property variable " <> name
-      Just (QEType varTy') -> case typeEq ty varTy' of
+      Just (EType varTy') -> case typeEq ty varTy' of
         Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
           " has type " <> userShow varTy' <> ", but " <> userShow ty <>
           " was expected"
         Just Refl -> pure (PVar vid name)
-      Just (QEObjectTy _) -> throwErrorIn preProp
+      Just (EObjectTy _) -> throwErrorIn preProp
         "ERROR: object types not currently allowed in properties (issue 139)"
       Just QTable       -> error "TODO"
       Just (QColumns _) -> error "TODO"
-      _ -> error "pattern match is complete, but using pattern synonyms"
 
   -- quantifiers
   (a, PreForall vid name ty' p) -> Forall vid name ty' <$>
@@ -386,7 +386,7 @@ expToCheck
 expToCheck tableEnv genStart nameEnv idEnv body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   typedBody    <- runReaderT (checkPreProp TBool preTypedBody)
-    (QEType' <$> idEnv, tableEnv)
+    (coerceQType <$> idEnv, tableEnv)
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
@@ -405,7 +405,7 @@ expToProp
   -> Either String (Prop a)
 expToProp tableEnv genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  runReaderT (checkPreProp ty preTypedBody) (QEType' <$> idEnv, tableEnv)
+  runReaderT (checkPreProp ty preTypedBody) (coerceQType <$> idEnv, tableEnv)
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of

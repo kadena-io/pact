@@ -1387,25 +1387,24 @@ analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
-analyzePropO (Forall vid _name (QEType (_ :: Types.Type ty)) p) = do
+analyzePropO (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Forall _vid _name (QEObjectTy _) _p) =
+analyzePropO (Forall _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
 analyzePropO (Forall _vid _name QTable _p) =
   throwError "TODO: table quantification"
 analyzePropO (Forall _vid _name (QColumns _tab) _p) =
   throwError "TODO: column quantification"
-analyzePropO (Exists vid _name (QEType (_ :: Types.Type ty)) p) = do
+analyzePropO (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Exists _vid _name (QEObjectTy _) _p) =
+analyzePropO (Exists _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
 analyzePropO (Exists _vid _name QTable _p) =
   throwError "TODO: table quantification"
 analyzePropO (Exists _vid _name (QColumns _tab) _p) =
   throwError "TODO: column quantification"
-analyzePropO _ = error "pattern match is complete but using pattern synonyms"
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1417,19 +1416,19 @@ analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
 
 -- Abstraction
-analyzeProp (Forall vid _name (QEType (_ :: Types.Type ty)) p) = do
+analyzeProp (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Forall _vid _name (QEObjectTy _) _p) =
+analyzeProp (Forall _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
 analyzeProp (Forall _vid _name QTable _p) =
   throwError "TODO: table quantification"
 analyzeProp (Forall _vid _name (QColumns _tab) _p) =
   throwError "TODO: column quantification"
-analyzeProp (Exists vid _name (QEType (_ :: Types.Type ty)) p) = do
+analyzeProp (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Exists _vid _name (QEObjectTy _) _p) =
+analyzeProp (Exists _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
 analyzeProp (PVar vid name) = lookupVal name vid
 analyzeProp (Exists _vid _name QTable _p) =
@@ -1505,7 +1504,6 @@ analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
 analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.cellEnforced tn cn sRk
-analyzeProp _ = error "pattern match is complete but using pattern synonyms"
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
