@@ -1465,43 +1465,43 @@ analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
-analyzeProp (TableRead tn)  = view $ qeAnalyzeState.tableRead tn
-analyzeProp (TableWrite tn) = view $ qeAnalyzeState.tableWritten tn
-analyzeProp (ColumnWrite _tableName _colName)
+analyzeProp (TableRead (TableLit tn))  = view $ qeAnalyzeState.tableRead tn
+analyzeProp (TableWrite (TableLit tn)) = view $ qeAnalyzeState.tableWritten tn
+analyzeProp (ColumnWrite (TableLit _tableName) (ColumnLit _colName))
   = throwError "column write analysis not yet implemented"
-analyzeProp (ColumnRead _tableName _colName)
+analyzeProp (ColumnRead (TableLit _tableName) (ColumnLit _colName))
   = throwError "column read analysis not yet implemented"
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
-analyzeProp (IntCellDelta tableName colName pRk) = do
+analyzeProp (IntCellDelta (TableLit tableName) (ColumnLit colName) pRk) = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.intCellDelta tableName colName sRk
-analyzeProp (DecCellDelta tableName colName pRk) = do
+analyzeProp (DecCellDelta (TableLit tableName) (ColumnLit colName) pRk) = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.decCellDelta tableName colName sRk
-analyzeProp (IntColumnDelta tableName colName) = view $
+analyzeProp (IntColumnDelta (TableLit tableName) (ColumnLit colName)) = view $
   qeAnalyzeState.intColumnDelta tableName colName
-analyzeProp (DecColumnDelta tableName colName) = view $
+analyzeProp (DecColumnDelta (TableLit tableName) (ColumnLit colName)) = view $
   qeAnalyzeState.decColumnDelta tableName colName
-analyzeProp (RowRead tn pRk)  = do
+analyzeProp (RowRead (TableLit tn) pRk)  = do
   sRk <- analyzeProp pRk
   numReads <- view $ qeAnalyzeState.rowReadCount tn sRk
   pure $ sansProv $ numReads .== 1
-analyzeProp (RowReadCount tn pRk)  = do
+analyzeProp (RowReadCount (TableLit tn) pRk)  = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.rowReadCount tn sRk
-analyzeProp (RowWrite tn pRk) = do
+analyzeProp (RowWrite (TableLit tn) pRk) = do
   sRk <- analyzeProp pRk
   writes <- view $ qeAnalyzeState.rowWriteCount tn sRk
   pure $ sansProv $ writes .== 1
-analyzeProp (RowWriteCount tn pRk) = do
+analyzeProp (RowWriteCount (TableLit tn) pRk) = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.rowWriteCount tn sRk
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProp (RowEnforced tn cn pRk) = do
+analyzeProp (RowEnforced (TableLit tn) (ColumnLit cn) pRk) = do
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.cellEnforced tn cn sRk
 
