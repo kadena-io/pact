@@ -280,20 +280,20 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       PIntegerComparison Eq (RowWriteCount "tokens" (PVar 0 "row")) 0
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr) (RowRead "tokens" (PVar 0 "row"))
+      Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr)
+      Exists 0 "row" (EType TStr)
         (PIntegerComparison Eq (RowReadCount "tokens" (PVar 0 "row")) 1)
-    expectPass code $ Satisfiable $ Exists 0 "row" (QEType TStr) $
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Satisfiable $ Exists 0 "row" (QEType TStr) $
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Success ==> (Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Success ==> (Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
 
@@ -334,10 +334,10 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks1" (PVar 0 "row")
     -- Using the other keyset:
-    expectFail code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks2" (PVar 0 "row")
 
   describe "enforce-keyset.row-level.write" $ do
@@ -359,22 +359,22 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Abort
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr) (RowWrite "tokens" (PVar 0 "row"))
+      Exists 0 "row" (EType TStr) (RowWrite "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr)
+      Exists 0 "row" (EType TStr)
         (PIntegerComparison Eq (RowWriteCount "tokens" (PVar 0 "row")) 1)
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr) (RowRead "tokens" (PVar 0 "row"))
+      Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr)
+      Exists 0 "row" (EType TStr)
         (PIntegerComparison Eq (RowReadCount "tokens" (PVar 0 "row")) 1)
     expectPass code $ Valid $ Success ==>
-      Exists 0 "row" (QEType TStr) (RowEnforced "tokens" "ks" (PVar 0 "row"))
-    expectPass code $ Satisfiable $ Exists 0 "row" (QEType TStr) $
+      Exists 0 "row" (EType TStr) (RowEnforced "tokens" "ks" (PVar 0 "row"))
+    expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       bnot $ RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Valid $ RowWrite "tokens" (PVar 0 "acct")
                           ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
@@ -421,9 +421,9 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowRead "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
-    expectFail code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectFail code $ Valid $ Forall 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
   describe "table-read.multiple-read" $
@@ -650,18 +650,18 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
-    expectPass code $ Valid $ bnot $ Exists 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ bnot $ Exists 0 "row" (EType TStr) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 2
 
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       PStringComparison Neq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 0
 
-    expectPass code $ Valid $ Forall 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
       PStringComparison Eq (PVar 0 "row" :: Prop String) (PLit "bob") ==>
         PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
-    expectPass code $ Valid $ Exists 0 "row" (QEType TStr) $
+    expectPass code $ Valid $ Exists 0 "row" (EType TStr) $
       PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 0 "row")) 3
 
     expectPass code $ Valid $
@@ -1114,8 +1114,8 @@ spec = describe "analyze" $ do
     let a0       = PVar 0 "a"
         a1       = PVar 1 "a"
         -- b        = PVar 0 "b"
-        ty       = QEType TStr
-        intTy    = QEType TInt
+        ty       = EType TStr
+        intTy    = EType TInt
         allA0    = Forall 0 "a"
         allA1    = Forall 1 "a"
         existsA0 = Exists 0 "a"
@@ -1217,8 +1217,8 @@ spec = describe "analyze" $ do
       textToProp TBool "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (Forall (VarId 0) "x" (QEType TStr)
-            (Forall (VarId 1) "y" (QEType TStr)
+          (Forall (VarId 0) "x" (EType TStr)
+            (Forall (VarId 1) "y" (EType TStr)
               (PStringComparison Eq
                 (PVar (VarId 0) "x")
                 (PVar (VarId 1) "y"))))
@@ -1230,7 +1230,7 @@ spec = describe "analyze" $ do
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
-          (Exists (VarId 0) "row" (QEType TStr)
+          (Exists (VarId 0) "row" (EType TStr)
             (PIntegerComparison Eq
               (IntCellDelta "accounts" "balance" (PVar (VarId 0) "row"))
               2)))
@@ -1278,11 +1278,10 @@ spec = describe "analyze" $ do
       userShow (PreBoolLit False)   `shouldBe` "false"
 
     it "renders quantifiers how you would expect" $ do
-      userShow (PreForall 0 "foo" (QEType TBool) (PreVar 0 "foo"))
+      userShow (PreForall 0 "foo" (EType TBool) (PreVar 0 "foo"))
         `shouldBe`
         "(forall (foo:bool) foo)"
-      userShow
-        (PreExists 0 "bar" (QEType TBool) (PreApp "not" [PreVar 0 "bar"]))
+      userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
 

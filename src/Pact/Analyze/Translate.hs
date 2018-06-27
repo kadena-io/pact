@@ -185,7 +185,7 @@ maybeTranslateType = maybeTranslateType' $ \(Pact.Schema _ _ fields _) ->
 
 maybeTranslateType' :: Alternative f => (a -> f EType) -> Pact.Type a -> f EType
 maybeTranslateType' f = \case
-  TyUser a -> f a
+  TyUser a         -> f a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
   TySchema _ ty'   -> maybeTranslateType' f ty'
