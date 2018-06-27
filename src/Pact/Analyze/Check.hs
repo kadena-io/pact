@@ -348,7 +348,7 @@ resultQuery goal model0 = do
 
     Satisfaction ->
       case satResult of
-        SBV.Sat   -> pure . SatisfiedProperty =<< lift (saturateModel model0)
+        SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
