@@ -282,8 +282,13 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable Success
     expectPass code $ Valid $ bnot $ Exists 0 "row" (EType TStr) $
       RowWrite "tokens" (PVar 0 "row")
+    expectPass code $ Valid $ Forall 0 "row" (EType TStr) $
+      PIntegerComparison Eq (RowWriteCount "tokens" (PVar 0 "row")) 0
     expectPass code $ Valid $ Success ==>
       Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (EType TStr)
+        (PIntegerComparison Eq (RowReadCount "tokens" (PVar 0 "row")) 1)
     expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
       RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
@@ -356,7 +361,13 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Success ==>
       Exists 0 "row" (EType TStr) (RowWrite "tokens" (PVar 0 "row"))
     expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (EType TStr)
+        (PIntegerComparison Eq (RowWriteCount "tokens" (PVar 0 "row")) 1)
+    expectPass code $ Valid $ Success ==>
       Exists 0 "row" (EType TStr) (RowRead "tokens" (PVar 0 "row"))
+    expectPass code $ Valid $ Success ==>
+      Exists 0 "row" (EType TStr)
+        (PIntegerComparison Eq (RowReadCount "tokens" (PVar 0 "row")) 1)
     expectPass code $ Valid $ Success ==>
       Exists 0 "row" (EType TStr) (RowEnforced "tokens" "ks" (PVar 0 "row"))
     expectPass code $ Satisfiable $ Exists 0 "row" (EType TStr) $
@@ -367,6 +378,25 @@ spec = describe "analyze" $ do
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
     expectPass code $ Valid $ RowWrite "tokens" (PVar 0 "acct")
                           ==> RowEnforced "tokens" "ks" (PVar 0 "acct")
+
+  describe "enforce-keyset.row-level.write-count" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
+
+            (defun test:string ()
+              (write tokens 'joel { 'balance: 10 })
+              (write tokens 'joel { 'balance: 100 }))
+          |]
+    expectPass code $ Valid $
+      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 2
+    expectPass code $ Valid $ PNot $
+      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 1
+    expectPass code $ Valid $ PNot $
+      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 3
+    expectPass code $ Valid $
+      PIntegerComparison Eq (RowReadCount "tokens" (PLit "joel")) 0
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
