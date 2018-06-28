@@ -9,6 +9,7 @@ module AnalyzeSpec (spec) where
 
 import           Control.Lens                 (at, findOf, (^.))
 import           Control.Monad.State.Strict   (runStateT)
+import qualified Data.Default                 as Default
 import           Data.Either                  (isLeft)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
@@ -18,8 +19,8 @@ import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
-import           Test.Hspec                   (Spec, describe, it, pendingWith,
-                                               runIO, shouldBe, shouldSatisfy)
+import           Test.Hspec                   (Spec, describe, expectationFailure, it, runIO,
+                                               shouldBe, shouldSatisfy, pendingWith)
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
@@ -52,6 +53,17 @@ wrap code =
     (commit-tx)
   |]
 
+wrapNoTable :: Text -> Text
+wrapNoTable code =
+  [text|
+    (env-keys ["admin"])
+    (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
+    (begin-tx)
+    (define-keyset 'ks (read-keyset "keyset"))
+    (module test 'ks $code)
+    (commit-tx)
+  |]
+
 data TestFailure
   = TestCheckFailure CheckFailure
   | NoTestModule
@@ -81,12 +93,16 @@ runVerification code = do
     Left tf -> pure $ Just tf
     Right moduleData -> do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
-      -- TODO(joel): use `fromLeft` when we're on modern GHC
       case results of
-        Left failures -> pure $ Just $ ParseFailures failures
-        Right results' -> pure $ case findOf (traverse . traverse) isLeft results' of
-          Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
-          _                              -> Nothing
+        ModuleParseFailures failures -> pure $ Just $ ParseFailures failures
+        ModuleCheckFailure _parsed failure
+          -> pure $ Just $ TestCheckFailure failure
+        ModuleChecks propResults invariantResults -> pure $
+          case findOf (traverse . traverse) isLeft propResults of
+            Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
+            _ -> case findOf  (traverse . traverse . traverse) isLeft invariantResults of
+              Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
+              Nothing                        -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
 runCheck code check = do
@@ -126,6 +142,7 @@ decConserves tn cn = PDecimalComparison Eq 0 $
 
 spec :: Spec
 spec = describe "analyze" $ do
+{-
   describe "result" $ do
     let code =
           [text|
@@ -633,7 +650,54 @@ spec = describe "analyze" $ do
 
     expectVerified code
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
+-}
 
+  describe "conserves-mass.decimal.failing-invariant" $ do
+    let code =
+          [text|
+            (defschema account
+              (meta "accounts schema"
+                (invariant (>= balance 0.0)))
+              balance:decimal)
+            (deftable accounts:{account})
+
+            (defun test:string (from:string to:string amount:decimal)
+              (let ((from-bal (at 'balance (read accounts from)))
+                    (to-bal   (at 'balance (read accounts to))))
+                ; (enforce (> amount 0.0)       "Non-positive amount")
+                (enforce (>= from-bal amount) "Insufficient Funds")
+                (enforce (!= from to)         "Sender is the recipient")
+                (update accounts from { "balance": (- from-bal amount) })
+                (update accounts to   { "balance": (+ to-bal amount) })))
+          |]
+
+    eModuleData <- runIO $ compile $ wrapNoTable code
+    case eModuleData of
+      Left err -> it "failed to compile" $ expectationFailure (show err)
+      Right moduleData -> do
+        results <- runIO $
+          verifyModule (HM.fromList [("test", moduleData)]) moduleData
+        case results of
+          ModuleParseFailures failures -> it "unexpectedly failed to parse" $
+            expectationFailure $ show failures
+          ModuleCheckFailure _parsed failure
+            -> it "unexpectedly failed to check" $
+              expectationFailure $ show failure
+          ModuleChecks propResults invariantResults -> do
+            it "should have no prop results" $
+              propResults `shouldBe` HM.singleton "test" []
+            it "should have specified invariant failures" $
+              let expected = HM.singleton "test" $
+                    TableMap $ Map.singleton "accounts"
+                      [ Left (Default.def, SmtFailure (Invalid (Model
+                        (ModelTags
+                          Map.empty Map.empty Map.empty Map.empty Map.empty
+                          (Located Default.def (EType TStr, OpaqueVal)))
+                        Map.empty)))
+                      ]
+              in invariantResults `shouldBe` expected
+
+{-
   describe "cell-delta.integer" $ do
     let code =
           [text|
@@ -1393,3 +1457,4 @@ spec = describe "analyze" $ do
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
   --            named)
   --
+-}

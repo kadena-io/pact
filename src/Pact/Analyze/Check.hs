@@ -9,11 +9,14 @@
 module Pact.Analyze.Check
   ( verifyModule
   , verifyCheck
+  , describeCheckFailure
   , describeCheckResult
   , describeParseFailure
   , CheckFailure(..)
   , CheckSuccess(..)
   , CheckResult
+  , ModuleResult(..)
+  , SmtFailure(..)
   , ParseFailure
   ) where
 
@@ -21,7 +24,8 @@ import           Control.Exception         as E
 import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
                                             traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), (?~), _1, _2, _Just)
+                                            (^?), (^@..), (?~), (&), (%~),
+                                            _1, _2, _Just, _Right)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -70,18 +74,16 @@ import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util
+
+import Debug.Trace
 
 data CheckSuccess
   = SatisfiedProperty Model
   | ProvedTheorem
-  deriving Show
+  deriving (Eq, Show)
 
 type ParseFailure = (Exp, String)
-
-describeParseFailure :: ParseFailure -> Text
-describeParseFailure (exp, info)
-  = T.pack (renderParsed (exp ^. eParsed))
-  <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 data SmtFailure
   = Invalid Model
@@ -90,13 +92,40 @@ data SmtFailure
   | UnexpectedFailure SBV.SMTException
   deriving Show
 
+instance Eq SmtFailure where
+  Invalid m1 == Invalid m2 = m1 == m2
+  Unsatisfiable == Unsatisfiable = True
+  -- no instance Eq for SMTReasonUnknown or SMTException
+  _ == _ = False
+
 data CheckFailure
   = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure TranslateFailure
   | AnalyzeFailure AnalyzeFailure
   | SmtFailure SmtFailure
-  deriving Show
+  deriving (Eq, Show)
+
+type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
+
+data ModuleResult
+  = ModuleParseFailures [ParseFailure]
+  | ModuleCheckFailure Parsed CheckFailure
+  | ModuleChecks
+    (HM.HashMap Text [CheckResult])
+    (HM.HashMap Text (TableMap [CheckResult]))
+  deriving (Eq, Show)
+
+describeCheckSuccess :: CheckSuccess -> Text
+describeCheckSuccess = \case
+  SatisfiedProperty model -> "Property satisfied with model:\n"
+                          <> showModel model
+  ProvedTheorem           -> "Property proven valid"
+
+describeParseFailure :: ParseFailure -> Text
+describeParseFailure (exp, info)
+  = T.pack (renderParsed (exp ^. eParsed))
+  <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
@@ -120,6 +149,9 @@ describeCheckFailure parsed failure =
             AnalyzeFailure err   -> describeAnalyzeFailure err
             SmtFailure err       -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
+
+describeCheckResult :: CheckResult -> Text
+describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
@@ -209,17 +241,6 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 
     showResult :: Text
     showResult = showTVal $ _located res
-
-describeCheckSuccess :: CheckSuccess -> Text
-describeCheckSuccess = \case
-  SatisfiedProperty model -> "Property satisfied with model:\n"
-                          <> showModel model
-  ProvedTheorem           -> "Property proven valid"
-
-type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
-
-describeCheckResult :: CheckResult -> Text
-describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
 
 --
 -- TODO: implement machine-friendly JSON output for CheckResult
@@ -352,6 +373,64 @@ resultQuery goal model0 = do
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
+fillMeInJoel :: Parsed
+fillMeInJoel = Default.def
+
+-- TODO: better naming btw checkFunctionInvariants / verifyFunctionInvariants
+checkFunctionInvariants
+  :: [Table]
+  -> Pact.Info
+  -> [Named Node]
+  -> [AST Node]
+  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckSuccess]))
+checkFunctionInvariants tables info pactArgs body = runExceptT $ do
+    (args, tm, tagAllocs) <- hoist generalize $
+      withExcept (\err -> (fillMeInJoel, TranslateFailure err)) $
+        runTranslation pactArgs body
+
+    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+      tags <- lift $ allocModelTags info args tm tagAllocs
+      resultsTable <- withExceptT (\err -> (fillMeInJoel, AnalyzeFailure err)) $
+        runInvariantAnalysis tables tm tags
+      traceShowM ("checkFunctionInvariants tags", tags)
+      traceShowM ("checkFunctionInvariants resultsTable", resultsTable)
+
+      hoist SBV.query $
+        for resultsTable $ \results ->
+          for results $ \(AnalysisResult prop ksProvs) ->
+            withExceptT (\err -> (fillMeInJoel, SmtFailure err)) $
+              inNewAssertionStack $ do
+                void $ lift $ SBV.constrain prop
+                resultQuery goal $ Model tags ksProvs
+
+  where
+    goal :: Goal
+    goal = Validation
+
+    config :: SBV.SMTConfig
+    config = SBV.z3
+
+    -- SBV also provides 'inNewAssertionStack', but in 'Query'
+    inNewAssertionStack
+      :: ExceptT a SBV.Query CheckSuccess
+      -> ExceptT a SBV.Query CheckSuccess
+    inNewAssertionStack act = do
+      lift $ SBV.push 1
+      result <- act
+      lift $ SBV.pop 1
+      pure result
+
+    -- Discharges impure 'SMTException's from sbv.
+    catchingExceptions
+      :: IO (Either (Parsed, CheckFailure) b)
+      -> IO (Either (Parsed, CheckFailure) b)
+    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
+      pure $ Left $ (fillMeInJoel, SmtFailure $ UnexpectedFailure e)
+
+    runSymbolic :: Symbolic a -> IO a
+    runSymbolic = fmap fst .
+      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
+
 checkFunction
   :: [Table]
   -> Pact.Info
@@ -480,19 +559,11 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
                   (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
-      eitherChecks = runExpParserOver "properties" properties property
+      checks :: Either [ParseFailure] [(Parsed, Check)]
+      checks = runExpParserOver "properties" properties property
         (expToCheck tableEnv vidStart nameEnv idEnv)
 
-      checks :: Either [ParseFailure] [(Parsed, Check)]
-      checks = ((defnParsed, InvariantsHold):) <$> eitherChecks
-
   in (ref, checks)
-
-(<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
-(<$$>) = fmap . fmap
-
-(<&&>) :: (Functor f, Functor g) => f (g a) -> (a -> b) -> f (g b)
-(<&&>) = flip (<$$>)
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just
@@ -530,8 +601,8 @@ runExpParserOver name multiExp singularExp parser =
 
   in if null failures then Right (rights parsedList') else Left failures
 
-verifyFunction :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
-verifyFunction tables ref props = do
+verifyFunctionProps :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
+verifyFunctionProps tables ref props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
@@ -543,12 +614,36 @@ verifyFunction tables ref props = do
       else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
     _ -> pure []
 
+verifyFunctionInvariants
+  :: [Table]
+  -> Ref
+  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckResult]))
+verifyFunctionInvariants tables ref = do
+  (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
+  let failures = tcState ^. tcFailures
+  traceShowM ("verifyFunctionInvariants failures", failures)
+
+  case fun of
+    TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
+      if Set.null failures
+      then do
+        checkResult <- checkFunctionInvariants tables _fInfo _fArgs _fBody
+        pure $ checkResult
+          & _Right . traverse . traverse %~ Right
+
+      else pure (Left (getInfoParsed _fInfo, TypecheckFailure failures))
+
+    -- TODO: should this be an error?
+    _ -> pure $ Right $ TableMap Map.empty
+
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
   :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
   -> ModuleData                         -- ^ the module we're verifying
-  -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]))
+  -> IO ModuleResult
+  -- -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]
+  --                              ,HM.HashMap Text (TableMap [CheckResult])))
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
@@ -570,7 +665,7 @@ verifyModule modules moduleData = do
     funRefs
 
   case tables of
-    Left errs -> pure (Left errs)
+    Left errs -> pure (ModuleParseFailures errs)
     Right tables' -> do
 
       let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
@@ -579,12 +674,21 @@ verifyModule modules moduleData = do
           funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
           funChecks' = sequence (fmap sequence funChecks)
 
-          verifyFun :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
-          verifyFun = uncurry (verifyFunction tables')
+          verifyFunProps :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
+          verifyFunProps = uncurry (verifyFunctionProps tables')
 
       case funChecks' of
-        Left errs -> pure (Left errs)
-        Right funChecks'' -> Right <$> traverse verifyFun funChecks''
+        Left errs         -> pure (ModuleParseFailures errs)
+        Right funChecks'' -> do
+          funChecks''' <- traverse verifyFunProps funChecks''
+          invariantChecks <- runExceptT $ for funRefs $ \ref -> do
+            tabledResults <- lift $ verifyFunctionInvariants tables' ref
+            case tabledResults of
+              Left err      -> throwError err
+              Right results -> pure results
+          pure $ case invariantChecks of
+            Left (parsed, err)     -> ModuleCheckFailure parsed err
+            Right invariantChecks' -> ModuleChecks funChecks''' invariantChecks'
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
@@ -601,7 +705,7 @@ verifyCheck moduleData funName check = do
     case tables of
       Left failures -> pure $ Left failures
       Right tables' -> Right <$> case moduleFun moduleData funName of
-        Just funRef -> head <$> verifyFunction tables' funRef [(parsed, check)]
+        Just funRef -> head <$> verifyFunctionProps tables' funRef [(parsed, check)]
         Nothing     -> pure $ Left (parsed, NotAFunction funName)
 
   where
