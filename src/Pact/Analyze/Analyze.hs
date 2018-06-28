@@ -14,6 +14,7 @@
 
 module Pact.Analyze.Analyze where
 
+import           Control.Applicative        (ZipList (..))
 import           Control.Lens               (At (at), Ixed (ix), Lens', ifoldl,
                                              iforM, lens, makeLenses, over,
                                              preview, singular, use, view, (%=),
@@ -30,7 +31,7 @@ import           Control.Monad.State.Strict (MonadState, modify')
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Aeson                 as Aeson
 import           Data.ByteString.Lazy       (toStrict)
-import           Data.Foldable              (foldl', foldrM, for_)
+import           Data.Foldable              (foldl', foldrM)
 import           Data.Functor.Identity      (Identity (Identity))
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -66,6 +67,7 @@ import           Pact.Types.Version         (pactVersion)
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
 import qualified Pact.Analyze.Types         as Types
+import           Pact.Analyze.Util
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -118,7 +120,7 @@ data LatticeAnalyzeState
     --       finer-grained tracking, so that we can test whether a single
     --       invariant is being maintained
     --
-    , _lasMaintainsInvariants :: SBV Bool
+    , _lasMaintainsInvariants :: TableMap (ZipList (SBV Bool))
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
@@ -161,6 +163,10 @@ instance Mergeable LatticeAnalyzeState where
           (symbolicMerge force test csEnforced    csEnforced')
           (symbolicMerge force test csWritten     csWritten')
 
+instance Mergeable a => Mergeable (ZipList a) where
+  symbolicMerge force test (ZipList xs) (ZipList ys)
+    = ZipList (symbolicMerge force test xs ys)
+
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
   = GlobalAnalyzeState
@@ -193,7 +199,7 @@ data AnalysisResult
   = AnalysisResult
     { _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
-    }
+    } deriving Show
 
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
@@ -207,7 +213,7 @@ mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
-        , _lasMaintainsInvariants = true
+        , _lasMaintainsInvariants = mkMaintainsInvariants
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
         , _lasIntCellDeltas       = intCellDeltas
@@ -254,6 +260,10 @@ mkInitialAnalyzeState tables = AnalyzeState
     mkPerTableSFunArray defaultV = TableMap $ Map.fromList $ zip
       tableNames
       (repeat $ mkSFunArray $ const defaultV)
+
+    mkMaintainsInvariants = TableMap $ Map.fromList $
+      tables <&> \Table { _tableName, _tableInvariants } ->
+        (TableName (T.unpack _tableName), ZipList $ const true <$> _tableInvariants)
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
@@ -322,7 +332,7 @@ data AnalyzeFailure
   -- For cases we don't handle yet:
   | UnhandledObject (Term Object)
   | UnhandledTerm Text
-  deriving Show
+  deriving (Eq, Show)
 
 describeAnalyzeFailure :: AnalyzeFailure -> Text
 describeAnalyzeFailure = \case
@@ -530,7 +540,7 @@ tagVarBinding vid av = do
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
 
-maintainsInvariants :: Lens' AnalyzeState SBool
+maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList SBool))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
 tableRead :: TableName -> Lens' AnalyzeState (S Bool)
@@ -725,19 +735,21 @@ applyInvariants
   -> Map Text SBVI.SVal
   -- ^ Mapping from the fields in this table to the @SVal@ holding that field
   --   in this context.
-  -> (S Bool -> Analyze ())
+  -> ([S Bool] -> Analyze ())
   -- ^ The function used to apply an invariant in this context. The @SBV Bool@
   --   is an assertion of what it would take for the invariant to be true in
   --   this context.
   -> Analyze ()
-applyInvariants tn sValFields addInvariant = do
+applyInvariants tn sValFields addInvariants = do
   mInvariants <- view (invariants . at tn)
   case mInvariants of
     Nothing -> pure ()
-    Just invariants' -> for_ invariants' $ \invariant ->
-      case runReaderT (checkInvariant invariant) sValFields of
-        Left  err -> throwError err
-        Right inv -> addInvariant inv
+    Just invariants' -> do
+      invariants'' <- for invariants' $ \invariant ->
+        case runReaderT (checkInvariant invariant) sValFields of
+          Left  err -> throwError err
+          Right inv -> pure inv
+      addInvariants invariants''
 
 analyzeAtO
   :: forall m term
@@ -852,7 +864,7 @@ analyzeTermO = \case
           (_etype, AVal _prov sVal) -> Just sVal
           _                         -> Nothing
 
-    applyInvariants tn sValFields addConstraint
+    applyInvariants tn sValFields (mapM_ addConstraint)
 
     pure $ Object aValFields
 
@@ -1186,7 +1198,10 @@ analyzeTerm = \case
     let sValFields :: Map Text SBVI.SVal
         sValFields = Map.mapMaybe id mValFields
 
-    applyInvariants tn sValFields (\inv -> maintainsInvariants %= (&&& (_sSbv inv)))
+    applyInvariants tn sValFields $ \invariants' ->
+      let fs :: ZipList (SBool -> SBool)
+          fs = ZipList $ ((&&&) . _sSbv) <$> invariants'
+      in maintainsInvariants . at tn . _Just %= (fs <*>)
 
     --
     -- TODO: make a constant on the pact side that this uses:
@@ -1535,7 +1550,6 @@ analyzeProp (RowEnforced tn cn pRk) = do
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
-    InvariantsHold  -> assumingSuccess =<< invariantsHold
     PropertyHolds p -> assumingSuccess =<< analyzeProp p
     Valid p         -> analyzeProp p
     Satisfiable p   -> analyzeProp p
@@ -1546,8 +1560,19 @@ analyzeCheck = \case
       success <- view (qeAnalyzeState.succeeds)
       pure $ success ==> p
 
-    invariantsHold :: Query (S Bool)
-    invariantsHold = sansProv <$> view (qeAnalyzeState.maintainsInvariants)
+analyzeInvariants :: Query (TableMap [S Bool])
+analyzeInvariants = assumingSuccess =<< invariantsHold'
+  where
+    assumingSuccess :: TableMap [S Bool] -> Query (TableMap [S Bool])
+    assumingSuccess ps = do
+      success <- view (qeAnalyzeState.succeeds)
+      pure $ (success ==>) <$$> ps
+
+    invariantsHold :: Query (TableMap (ZipList (S Bool)))
+    invariantsHold = sansProv <$$$> view (qeAnalyzeState.maintainsInvariants)
+
+    invariantsHold' :: Query (TableMap [S Bool])
+    invariantsHold' = getZipList <$$> invariantsHold
 
 runAnalysis
   :: [Table]
@@ -1569,6 +1594,26 @@ runAnalysis tables tm check tags = do
       query = analyzeCheck check
       ksProvs = state1 ^. globalState.gasKsProvenances
 
-  prop <- _sSbv <$> runReaderT (queryAction query) qEnv
+  prop <- runReaderT (queryAction query) qEnv
+  pure $ AnalysisResult (_sSbv prop) ksProvs
 
-  pure $ AnalysisResult prop ksProvs
+runInvariantAnalysis
+  :: [Table]
+  -> ETerm
+  -> ModelTags
+  -> ExceptT AnalyzeFailure Symbolic (TableMap [AnalysisResult])
+runInvariantAnalysis tables tm tags = do
+  let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
+      aEnv   = mkAnalyzeEnv tables tags
+      state0 = mkInitialAnalyzeState tables
+
+  (funResult, state1, ()) <- hoist generalize $
+    runRWST (runAnalyze act) aEnv state0
+
+  lift $ runConstraints $ state1 ^. globalState.gasConstraints
+
+  let qEnv  = mkQueryEnv aEnv state1 funResult
+      ksProvs = state1 ^. globalState.gasKsProvenances
+
+  preResults <- runReaderT (queryAction analyzeInvariants) qEnv
+  pure $ preResults <&&> \sbool -> AnalysisResult (_sSbv sbool) ksProvs

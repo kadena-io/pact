@@ -702,14 +702,14 @@ data Goal
 deriving instance Eq Goal
 
 data Check
-  = InvariantsHold             -- valid, assuming success
-  | PropertyHolds  (Prop Bool) -- valid, assuming success
+  -- = InvariantsHold             -- valid, assuming success
+  = PropertyHolds  (Prop Bool) -- valid, assuming success
   | Satisfiable    (Prop Bool) -- sat,   not assuming success
   | Valid          (Prop Bool) -- valid, not assuming success
   deriving Show
 
 checkGoal :: Check -> Goal
-checkGoal InvariantsHold    = Validation
+-- checkGoal InvariantsHold    = Validation
 checkGoal (PropertyHolds _) = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
@@ -719,7 +719,7 @@ data Located a
     { _location :: Pact.Info
     , _located  :: a
     }
-  deriving Functor
+  deriving (Eq, Functor)
 
 deriving instance Show a => Show (Located a)
 
@@ -743,14 +743,14 @@ data ModelTags
     , _mtResult :: Located TVal
     -- ^ return value of the function being checked
     }
-  deriving Show
+  deriving (Eq, Show)
 
 data Model
   = Model
     { _modelTags    :: ModelTags
     , _modelKsProvs :: Map TagId Provenance
     }
-  deriving Show
+  deriving (Eq, Show)
 
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
@@ -992,7 +992,7 @@ instance Mergeable a => Mergeable (ColumnMap a) where
 
 newtype TableMap a
   = TableMap { _tableMap :: Map TableName a }
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance Mergeable a => Mergeable (TableMap a) where
   symbolicMerge force test (TableMap left) (TableMap right) = TableMap $

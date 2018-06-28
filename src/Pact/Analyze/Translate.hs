@@ -66,7 +66,7 @@ data TranslateFailure
   | FailedVarLookup Text
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
-  deriving Show
+  deriving (Eq, Show)
 
 describeTranslateFailure :: TranslateFailure -> Text
 describeTranslateFailure = \case

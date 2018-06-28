@@ -13,6 +13,7 @@ import           Data.Map.Strict    (Map)
 import           Data.SBV           (HasKind, SymWord)
 import           Data.SBV.Control   (SMTValue)
 import           Data.Text          (Text)
+import           Data.Typeable      ((:~:) (Refl))
 
 import           Pact.Analyze.Types
 
@@ -121,6 +122,15 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
+
+instance Eq (Term a) where
+  -- XXX
+  _ == _ = False
+
+instance Eq ETerm where
+  ETerm tm1 ty1 == ETerm tm2 ty2 = case typeEq ty1 ty2 of
+    Just Refl -> tm1 == tm2
+    Nothing   -> False
 
 lit :: SymWord a => a -> Term a
 lit = Literal . literalS
