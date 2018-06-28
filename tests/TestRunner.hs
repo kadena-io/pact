@@ -5,6 +5,7 @@
 import Pact.Server.Server
 import Pact.ApiReq
 import Pact.Types.API
+import Pact.Types.Command
 
 import Crypto.Random
 import Crypto.Ed25519.Pure
@@ -35,7 +36,12 @@ main = do
       print "Printing out request"
       print (toJSON req)
       r <- post "http://localhost:8080/api/v1/send" (toJSON (SubmitBatch [req]))
+      print "Printing response of send"
       print r
+      print "Submitting Poll"
+      p <- post "http://localhost:8080/api/v1/poll" (toJSON (Poll [RequestKey (_cmdHash req)]))
+      print "Printing response of poll"
+      print p
       _ <- threadDelay (20000000)
       print (asyncThreadId a)
       iscancelled <- poll a
