@@ -22,6 +22,8 @@ module Pact.ApiReq
     ,ApiReq(..)
     ,apiReq
     ,mkApiReqExec
+    ,mkExec
+    ,mkCont
     ) where
 
 import Control.Monad.State.Strict
