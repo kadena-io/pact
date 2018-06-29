@@ -467,10 +467,10 @@ data PreProp
 data Prop a where
   -- Literals
 
+  -- | Injects a literal into the property language
   PLit :: SymWord a => a   -> Prop a
-  -- ^ Injects a literal into the property language
+  -- | Injects a symbolic value into the property language
   PSym ::              S a -> Prop a
-  -- ^ Injects a symbolic value into the property language
 
   -- TX success/failure
 
@@ -478,21 +478,21 @@ data Prop a where
   -- TODO: remove either Success Or Abort.
   --
 
+  -- | Whether a transaction aborts (does not succeed)
   Abort   :: Prop Bool
-  -- ^ Whether a transaction aborts (does not succeed)
+  -- | Whether a transaction succeeds (does not abort)
   Success :: Prop Bool
-  -- ^ Whether a transaction succeeds (does not abort)
+  -- | The return value of the function under examination
   Result  :: Prop a
-  -- ^ The return value of the function under examination
 
   -- Abstraction
 
+  -- | Introduces a universally-quantified variable over another property
   Forall :: VarId -> Text -> EType -> Prop a -> Prop a
-  -- ^ Introduces a universally-quantified variable over another property
+  -- | Introduces an existentially-quantified variable over another property
   Exists :: VarId -> Text -> EType -> Prop a -> Prop a
-  -- ^ Introduces an existentially-quantified variable over another property
+  -- | Refers to a function argument or universally/existentially-quantified variable
   PVar   :: VarId -> Text                 -> Prop a
-  -- ^ Refers to a function argument or universally/existentially-quantified variable
 
   -- Object ops
 
@@ -500,105 +500,105 @@ data Prop a where
   -- Note: PAt is the one property we can't yet parse because of the EType it
   -- includes
   --
+  -- | Projects from an object at a key
   PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop a
-  -- ^ Projects from an object at a key
 
   -- String ops
 
+  -- | Concatenates two strings
   PStrConcat :: Prop String -> Prop String -> Prop String
-  -- ^ Concatenates two strings
+  -- | Produces the length of a string
   PStrLength :: Prop String ->                Prop Integer
-  -- ^ Produces the length of a string
 
   -- Numeric ops
 
+  -- | An 'ArithOp' expression over two 'Decimal' expressions
   PDecArithOp      :: ArithOp        -> Prop Decimal -> Prop Decimal -> Prop Decimal
-  -- ^ An 'ArithOp' expression over two 'Decimal' expressions
+  -- | An 'ArithOp' expression over two 'Integer' expressions
   PIntArithOp      :: ArithOp        -> Prop Integer -> Prop Integer -> Prop Integer
-  -- ^ An 'ArithOp' expression over two 'Integer' expressions
+  -- | A 'UnaryArithOp' expression over a 'Decimal' expression
   PDecUnaryArithOp :: UnaryArithOp   -> Prop Decimal ->                 Prop Decimal
-  -- ^ A 'UnaryArithOp' expression over a 'Decimal' expression
+  -- | A 'UnaryArithOp' expression over an 'Integer expression
   PIntUnaryArithOp :: UnaryArithOp   -> Prop Integer ->                 Prop Integer
-  -- ^ A 'UnaryArithOp' expression over an 'Integer expression
+  -- | An 'ArithOp' expression over a 'Decimal' and an 'Integer' expression
   PDecIntArithOp   :: ArithOp        -> Prop Decimal -> Prop Integer -> Prop Decimal
-  -- ^ An 'ArithOp' expression over a 'Decimal' and an 'Integer' expression
+  -- | An 'ArithOp' expression over an 'Integer' and a 'Decimal' expression
   PIntDecArithOp   :: ArithOp        -> Prop Integer -> Prop Decimal -> Prop Decimal
-  -- ^ An 'ArithOp' expression over an 'Integer' and a 'Decimal' expression
+  -- | Integer modulus
   PModOp           :: Prop Integer   -> Prop Integer ->                 Prop Integer
-  -- ^ Integer modulus
-  PRoundingLikeOp1 :: RoundingLikeOp -> Prop Decimal ->                 Prop Integer
-  -- ^ Rounds a 'Decimal' expression to an 'Integer' expression per the
+  -- | Rounds a 'Decimal' expression to an 'Integer' expression per the
   -- 'RoundingLikeOp' strategy
-  PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal
-  -- ^ Rounds a 'Decimal' expression to a 'Decimal' expression with the
+  PRoundingLikeOp1 :: RoundingLikeOp -> Prop Decimal ->                 Prop Integer
+  -- | Rounds a 'Decimal' expression to a 'Decimal' expression with the
   -- specified 'Integer' level of precision and per the 'RoundingLikeOp'
   -- strategy
+  PRoundingLikeOp2 :: RoundingLikeOp -> Prop Decimal -> Prop Integer -> Prop Decimal
 
   -- Time
 
+  -- | Adds an 'Integer' expression to a 'Time' expression
   PIntAddTime :: Prop Time -> Prop Integer -> Prop Time
-  -- ^ Adds an 'Integer' expression to a 'Time' expression
+  -- | Adds a 'Decimal' expression to a 'Time' expression
   PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
-  -- ^ Adds a 'Decimal' expression to a 'Time' expression
 
   -- Comparison
 
+  -- | A 'ComparisonOp' expression over two 'Integer' expressions
   PIntegerComparison :: ComparisonOp -> Prop Integer -> Prop Integer -> Prop Bool
-  -- ^ A 'ComparisonOp' expression over two 'Integer' expressions
+  -- | A 'ComparisonOp' expression over two 'Decimal' expressions
   PDecimalComparison :: ComparisonOp -> Prop Decimal -> Prop Decimal -> Prop Bool
-  -- ^ A 'ComparisonOp' expression over two 'Decimal' expressions
+  -- | A 'ComparisonOp' expression over two 'Time' expressions
   PTimeComparison    :: ComparisonOp -> Prop Time    -> Prop Time    -> Prop Bool
-  -- ^ A 'ComparisonOp' expression over two 'Time' expressions
+  -- | A 'ComparisonOp' expression over two 'String' expressions
   PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
-  -- ^ A 'ComparisonOp' expression over two 'String' expressions
+  -- | A 'ComparisonOp' expression over two 'Bool' expressions
   PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
-  -- ^ A 'ComparisonOp' expression over two 'Bool' expressions
+  -- | A boolean comparison expression over two 'KeySet' expressions
   PKeySetEqNeq       :: EqNeq        -> Prop KeySet  -> Prop KeySet  -> Prop Bool
-  -- ^ A boolean comparison expression over two 'KeySet' expressions
 
   -- Boolean ops
 
-  PLogical :: LogicalOp -> [Prop Bool] -> Prop Bool
-  -- ^ A 'LogicalOp' expression over one or two 'Bool' expressions; one operand
+  -- | A 'LogicalOp' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
+  PLogical :: LogicalOp -> [Prop Bool] -> Prop Bool
 
   -- DB properties
 
+  -- | True when anything in the table is written
   TableWrite :: TableName  ->                Prop Bool
-  -- ^ True when anything in the table is written
+  -- | True when anything in the table is read
   TableRead  :: TableName  ->                Prop Bool
-  -- ^ True when anything in the table is read
 
   --
   -- NOTE: it's possible that in a standard library we could implement these in
   --       terms of "CellRead"/"CellWrite" and existential quantification.
   --
+  -- | Whether a column is written
   ColumnWrite :: TableName  -> ColumnName  -> Prop Bool
-  -- ^ Whether a column is written
+  -- | Whether a column is read
   ColumnRead  :: TableName  -> ColumnName  -> Prop Bool -- particular column is read
-  -- ^ Whether a column is read
 
   --
   -- TODO: rewrite these in terms of CellBefore, CellAfter, ColumnSumBefore,
   --       ColumnSumAfter:
   --
+  -- | The difference (@after-before@) in a cell's integer value across a transaction
   IntCellDelta   :: TableName  -> ColumnName  -> Prop RowKey -> Prop Integer
-  -- ^ The difference (@after-before@) in a cell's integer value across a transaction
+  -- | The difference (@after-before@) in a cell's decimal value across a transaction
   DecCellDelta   :: TableName  -> ColumnName  -> Prop RowKey -> Prop Decimal
-  -- ^ The difference (@after-before@) in a cell's decimal value across a transaction
+  -- | The difference (@after-before@) in a column's integer sum across a transaction
   IntColumnDelta :: TableName  -> ColumnName                 -> Prop Integer
-  -- ^ The difference (@after-before@) in a column's integer sum across a transaction
+  -- | The difference (@after-before@) in a column's decimal sum across a transaction
   DecColumnDelta :: TableName  -> ColumnName                 -> Prop Decimal
-  -- ^ The difference (@after-before@) in a column's decimal sum across a transaction
 
+  -- | Whether a row is read
   RowRead       :: TableName  -> Prop RowKey -> Prop Bool
-  -- ^ Whether a row is read
+  -- | Number of times a row is read
   RowReadCount  :: TableName  -> Prop RowKey -> Prop Integer
-  -- ^ Number of times a row is read
+  -- | Whether a row is written
   RowWrite      :: TableName  -> Prop RowKey -> Prop Bool
-  -- ^ Whether a row is written
+  -- | Number of times a row is written
   RowWriteCount :: TableName  -> Prop RowKey -> Prop Integer
-  -- ^ Number of times a row is written
 
   --
   -- TODO: StaleRead?
@@ -606,10 +606,10 @@ data Prop a where
 
   -- Authorization
 
+  -- | Whether a transaction contains a signature that satisfied the named key set
   KsNameAuthorized :: KeySetName ->                              Prop Bool
-  -- ^ Whether a transaction contains a signature that satisfied the named key set
+  -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: TableName  -> ColumnName -> Prop RowKey -> Prop Bool
-  -- ^ Whether a row has its keyset @enforce@d in a transaction
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = PLogical AndOp [a, b]
@@ -834,77 +834,77 @@ userShow = userShowsPrec 0
 data Invariant a where
 
   -- literals
+  -- | A 'Decimal' literal
   IDecimalLiteral :: Decimal -> Invariant Decimal
-  -- ^ A 'Decimal' literal
+  -- | An 'Integer' literal
   IIntLiteral     :: Integer -> Invariant Integer
-  -- ^ An 'Integer' literal
+  -- | A 'String' literal
   IStringLiteral  :: Text    -> Invariant String
-  -- ^ A 'String' literal
+  -- | A 'Time' literal
   ITimeLiteral    :: Time    -> Invariant Time
-  -- ^ A 'Time' literal
+  -- | A 'Bool' literal
   IBoolLiteral    :: Bool    -> Invariant Bool
-  -- ^ A 'Bool' literal
 
+  -- | Creates an invariant expression from a symbolic value
   ISym :: S a -> Invariant a
-  -- ^ Creates an invariant expression from a symbolic value
 
   -- variables
+  -- | Refers to a variable with the provided name
   IVar :: Text -> Invariant a
-  -- ^ Refers to a variable with the provided name
 
   -- string ops
+  -- | The concatenation of two 'String' expressions
   IStrConcat :: Invariant String -> Invariant String -> Invariant String
-  -- ^ The concatenation of two 'String' expressions
+  -- | The length of a 'String' expression
   IStrLength :: Invariant String                     -> Invariant Integer
-  -- ^ The length of a 'String' expression
 
   -- numeric ops
+  -- | An 'ArithOp' expression over two 'Decimal' expressions
   IDecArithOp      :: ArithOp             -> Invariant Decimal -> Invariant Decimal -> Invariant Decimal
-  -- ^ An 'ArithOp' expression over two 'Decimal' expressions
+  -- | An 'ArithOp' expression over two 'Integer' expressions
   IIntArithOp      :: ArithOp             -> Invariant Integer -> Invariant Integer -> Invariant Integer
-  -- ^ An 'ArithOp' expression over two 'Integer' expressions
+  -- | A 'UnaryArithOp' expression over a 'Decimal' expression
   IDecUnaryArithOp :: UnaryArithOp        -> Invariant Decimal ->                      Invariant Decimal
-  -- ^ A 'UnaryArithOp' expression over a 'Decimal' expression
+  -- | A 'UnaryArithOp' expression over an 'Integer expression
   IIntUnaryArithOp :: UnaryArithOp        -> Invariant Integer ->                      Invariant Integer
-  -- ^ A 'UnaryArithOp' expression over an 'Integer expression
+  -- | An 'ArithOp' expression over a 'Decimal' and an 'Integer' expression
   IDecIntArithOp   :: ArithOp             -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
-  -- ^ An 'ArithOp' expression over a 'Decimal' and an 'Integer' expression
+  -- | An 'ArithOp' expression over an 'Integer' and a 'Decimal' expression
   IIntDecArithOp   :: ArithOp             -> Invariant Integer -> Invariant Decimal -> Invariant Decimal
-  -- ^ An 'ArithOp' expression over an 'Integer' and a 'Decimal' expression
+  -- | Integer modulus
   IModOp           :: Invariant Integer   -> Invariant Integer ->                      Invariant Integer
-  -- ^ Integer modulus
-  IRoundingLikeOp1 :: RoundingLikeOp      -> Invariant Decimal ->                      Invariant Integer
-  -- ^ Rounds a 'Decimal' expression to an 'Integer' expression per the
+  -- | Rounds a 'Decimal' expression to an 'Integer' expression per the
   -- 'RoundingLikeOp' strategy
-  IRoundingLikeOp2 :: RoundingLikeOp      -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
-  -- ^ Rounds a 'Decimal' expression to a 'Decimal' expression with the
+  IRoundingLikeOp1 :: RoundingLikeOp      -> Invariant Decimal ->                      Invariant Integer
+  -- | Rounds a 'Decimal' expression to a 'Decimal' expression with the
   -- specified 'Integer' level of precision and per the 'RoundingLikeOp'
   -- strategy
+  IRoundingLikeOp2 :: RoundingLikeOp      -> Invariant Decimal -> Invariant Integer -> Invariant Decimal
 
   -- Time
+  -- | Adds an 'Integer' expression to a 'Time' expression
   IIntAddTime      :: Invariant Time -> Invariant Integer -> Invariant Time
-  -- ^ Adds an 'Integer' expression to a 'Time' expression
+  -- | Adds a 'Decimal' expression to a 'Time' expression
   IDecAddTime      :: Invariant Time -> Invariant Decimal -> Invariant Time
-  -- ^ Adds a 'Decimal' expression to a 'Time' expression
 
   -- comparison
+  -- | A 'ComparisonOp' expression over two 'Decimal' expressions
   IDecimalComparison :: ComparisonOp -> Invariant Decimal -> Invariant Decimal -> Invariant Bool
-  -- ^ A 'ComparisonOp' expression over two 'Decimal' expressions
+  -- | A 'ComparisonOp' expression over two 'Integer' expressions
   IIntComparison     :: ComparisonOp -> Invariant Integer -> Invariant Integer -> Invariant Bool
-  -- ^ A 'ComparisonOp' expression over two 'Integer' expressions
+  -- | A 'ComparisonOp' expression over two 'String' expressions
   IStringComparison  :: ComparisonOp -> Invariant String  -> Invariant String  -> Invariant Bool
-  -- ^ A 'ComparisonOp' expression over two 'String' expressions
+  -- | A 'ComparisonOp' expression over two 'Time' expressions
   ITimeComparison    :: ComparisonOp -> Invariant Time    -> Invariant Time    -> Invariant Bool
-  -- ^ A 'ComparisonOp' expression over two 'Time' expressions
+  -- | A 'ComparisonOp' expression over two 'Bool' expressions
   IBoolComparison    :: ComparisonOp -> Invariant Bool    -> Invariant Bool    -> Invariant Bool
-  -- ^ A 'ComparisonOp' expression over two 'Bool' expressions
+  -- | A boolean comparison expression over two 'KeySet' expressions
   IKeySetEqNeq       :: EqNeq        -> Invariant KeySet  -> Invariant KeySet  -> Invariant Bool
-  -- ^ A boolean comparison expression over two 'KeySet' expressions
 
   -- boolean ops
-  ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
-  -- ^ A 'LogicalOp' expression over one or two 'Bool' expressions; one operand
+  -- | A 'LogicalOp' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
+  ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 
 deriving instance Eq (Invariant a)
 deriving instance Show (Invariant a)
