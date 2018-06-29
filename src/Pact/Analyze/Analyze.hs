@@ -691,10 +691,6 @@ aval elimVal elimObj = \case
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwError OpaqueValEncountered
 
--- | Function composition that consumes two args instead of one
-(...) :: (a -> b) -> (x -> y -> a) -> x -> y -> b
-(...) = (.) . (.)
-
 expectVal :: MonadError AnalyzeFailure m => AVal -> m (S a)
 expectVal = aval (pure ... mkS) (throwError . AValUnexpectedlyObj)
 
