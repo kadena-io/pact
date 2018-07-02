@@ -339,8 +339,8 @@ verify i as = case as of
         case modResult of
           ModuleParseFailures failures  -> setop $ TcErrors $
             fmap (Text.unpack . describeParseFailure) $ failures
-          ModuleCheckFailure parsed checkFailure -> setop $ TcErrors $
-            pure $ Text.unpack $ describeCheckFailure parsed checkFailure
+          ModuleCheckFailure checkFailure -> setop $ TcErrors $
+            pure $ Text.unpack $ describeCheckFailure checkFailure
           ModuleChecks propResults invariantResults -> setop $ TcErrors $
             let x = toListOf (traverse . each) propResults
                 y = toListOf (traverse . traverse . each) invariantResults
