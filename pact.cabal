@@ -50,6 +50,7 @@ library
     exposed-modules:
       Pact.Analyze.Analyze
       Pact.Analyze.Check
+      Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Patterns
       Pact.Analyze.PrenexNormalize
