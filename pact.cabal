@@ -20,6 +20,7 @@ library
 
   exposed-modules:     Pact.Compile
                      , Pact.Eval
+                     , Pact.Gas
                      , Pact.Native
                      , Pact.Native.Db
                      , Pact.Native.Internal

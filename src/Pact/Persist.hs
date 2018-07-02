@@ -25,7 +25,7 @@ import Data.Monoid
 import Data.Hashable
 import Data.Typeable
 
-import Pact.Types.Runtime hiding ((<>))
+import Pact.Types.Runtime
 
 type Persist s a = s -> IO (s,a)
 
