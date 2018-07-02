@@ -14,6 +14,7 @@ module Pact.Analyze.Check
   , describeParseFailure
   , showModel
   , CheckFailure(..)
+  , CheckFailure'(..)
   , CheckSuccess(..)
   , CheckResult
   , ModuleResult(..)
@@ -54,7 +55,7 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Parsed, eParsed, mMetas, mName,
+import           Pact.Types.Lang           (Info, Parsed, eParsed, mMetas, mName,
                                             renderInfo, renderParsed, tMeta,
                                             _iInfo)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
@@ -99,7 +100,7 @@ instance Eq SmtFailure where
   -- no instance Eq for SMTReasonUnknown or SMTException
   _ == _ = False
 
-data CheckFailure
+data CheckFailure'
   = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure TranslateFailure
@@ -107,11 +108,16 @@ data CheckFailure
   | SmtFailure SmtFailure
   deriving (Eq, Show)
 
-type CheckResult = Either (Parsed, CheckFailure) CheckSuccess
+data CheckFailure = CheckFailure
+  { _checkFailureInfo :: !Parsed
+  , _checkFailure     :: !CheckFailure'
+  } deriving (Eq, Show)
+
+type CheckResult = Either CheckFailure CheckSuccess
 
 data ModuleResult
   = ModuleParseFailures [ParseFailure]
-  | ModuleCheckFailure Parsed CheckFailure
+  | ModuleCheckFailure CheckFailure
   | ModuleChecks
     (HM.HashMap Text [CheckResult])
     (HM.HashMap Text (TableMap [CheckResult]))
@@ -130,13 +136,13 @@ describeParseFailure (exp, info)
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
-  Invalid model -> "Invalidating model found:\n" <> showModel model
+  Invalid model  -> "Invalidating model found:\n" <> showModel model
   Unsatisfiable  -> "This property is unsatisfiable"
   Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
   UnexpectedFailure smtE -> T.pack $ show smtE
 
-describeCheckFailure :: Parsed -> CheckFailure -> Text
-describeCheckFailure parsed failure =
+describeCheckFailure :: CheckFailure -> Text
+describeCheckFailure (CheckFailure parsed failure) =
   case failure of
     TypecheckFailure fails -> T.unlines $ map
       (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ ":Warning: " ++ s))
@@ -152,7 +158,7 @@ describeCheckFailure parsed failure =
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 describeCheckResult :: CheckResult -> Text
-describeCheckResult = either (uncurry describeCheckFailure) describeCheckSuccess
+describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
@@ -383,30 +389,33 @@ checkFunctionInvariants
   -> Pact.Info
   -> [Named Node]
   -> [AST Node]
-  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckResult]))
+  -> IO (Either CheckFailure (TableMap [CheckResult]))
 checkFunctionInvariants tables info pactArgs body = runExceptT $ do
+    let parsed = getInfoParsed info
     (args, tm, tagAllocs) <- hoist generalize $
       -- TODO: runTranslation would ideally give us info about exactly where
       -- the translation failed. This is as close as we can get currently.
-      withExcept (\err -> (getInfoParsed info, TranslateFailure err)) $
+      withExcept (\err -> CheckFailure parsed (TranslateFailure err)) $
         runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
-      resultsTable <- withExceptT (\err -> (fillMeInJoel, AnalyzeFailure err)) $
-        runInvariantAnalysis tables tm tags
+      resultsTable <- withExceptT
+        (\err -> CheckFailure fillMeInJoel (AnalyzeFailure err)) $
+          runInvariantAnalysis tables tm tags
 
       ExceptT $ fmap Right $
         SBV.query $
           for2 resultsTable $ \(AnalysisResult prop ksProvs) -> do
-            e <- runExceptT $
+            queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
                 resultQuery goal $ Model tags ksProvs
 
             -- Either SmtFailure CheckSuccess -> CheckResult
-            pure $ case e of
-               Left smtFailure -> Left (fillMeInJoel, SmtFailure smtFailure)
+            pure $ case queryResult of
+               Left smtFailure -> Left $
+                 CheckFailure fillMeInJoel (SmtFailure smtFailure)
                Right pass      -> Right pass
 
   where
@@ -428,10 +437,10 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
-      :: IO (Either (Parsed, CheckFailure) b)
-      -> IO (Either (Parsed, CheckFailure) b)
+      :: IO (Either CheckFailure b)
+      -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ (fillMeInJoel, SmtFailure $ UnexpectedFailure e)
+      pure $ Left $ CheckFailure fillMeInJoel $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
@@ -444,7 +453,7 @@ checkFunction
   -> [Named Node]
   -> [AST Node]
   -> Check
-  -> IO (Either CheckFailure CheckSuccess)
+  -> IO (Either CheckFailure' CheckSuccess)
 checkFunction tables info pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
       runTranslation pactArgs body
@@ -454,7 +463,7 @@ checkFunction tables info pactArgs body check = runExceptT $ do
       AnalysisResult prop ksProvs <- withExceptT AnalyzeFailure $
         runAnalysis tables tm check tags
       void $ lift $ SBV.output prop
-      hoist SBV.query $ withExceptT SmtFailure $
+      hoist SBV.query $ withExceptT (SmtFailure) $
         resultQuery goal $ Model tags ksProvs
 
   where
@@ -466,8 +475,8 @@ checkFunction tables info pactArgs body check = runExceptT $ do
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
-      :: IO (Either CheckFailure b)
-      -> IO (Either CheckFailure b)
+      :: IO (Either CheckFailure' b)
+      -> IO (Either CheckFailure' b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
       pure $ Left $ SmtFailure $ UnexpectedFailure e
 
@@ -511,7 +520,7 @@ moduleTables modules (_mod, modRefs) = do
   pure $ if null failures then Right tables' else Left (concat failures)
 
 getInfoParsed :: Pact.Info -> Parsed
-getInfoParsed info = case _iInfo info of
+getInfoParsed parsed = case _iInfo parsed of
   Nothing               -> dummyParsed
   Just (_code, parsed') -> parsed'
 
@@ -617,14 +626,17 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-        first (parsed,) <$> checkFunction tables _fInfo _fArgs _fBody check
-      else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
+        first (CheckFailure parsed) <$>
+          checkFunction tables _fInfo _fArgs _fBody check
+      else
+        let parsed = getInfoParsed _fInfo
+        in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
     _ -> pure []
 
 verifyFunctionInvariants
   :: [Table]
   -> Ref
-  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckResult]))
+  -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants tables ref = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
@@ -687,7 +699,7 @@ verifyModule modules moduleData = do
               Left err      -> throwError err
               Right results -> pure results
           pure $ case invariantChecks of
-            Left (parsed, err)     -> ModuleCheckFailure parsed err
+            Left err               -> ModuleCheckFailure err
             Right invariantChecks' -> ModuleChecks funChecks''' invariantChecks'
 
 -- | Verifies a one-off 'Check' for a function.
@@ -706,7 +718,7 @@ verifyCheck moduleData funName check = do
       Left failures -> pure $ Left failures
       Right tables' -> Right <$> case moduleFun moduleData funName of
         Just funRef -> head <$> verifyFunctionProps tables' funRef [(parsed, check)]
-        Nothing     -> pure $ Left (parsed, NotAFunction funName)
+        Nothing     -> pure $ Left $ CheckFailure parsed $ NotAFunction funName
 
   where
     moduleFun :: ModuleData -> Text -> Maybe Ref

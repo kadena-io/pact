@@ -97,14 +97,13 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         ModuleParseFailures failures -> pure $ Just $ ParseFailures failures
-        ModuleCheckFailure _parsed failure
-          -> pure $ Just $ TestCheckFailure failure
+        ModuleCheckFailure failure   -> pure $ Just $ TestCheckFailure failure
         ModuleChecks propResults invariantResults -> pure $
           case findOf (traverse . traverse) isLeft propResults of
-            Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
+            Just (Left failure) -> Just $ TestCheckFailure failure
             _ -> case findOf  (traverse . traverse . traverse) isLeft invariantResults of
-              Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
-              Nothing                        -> Nothing
+              Just (Left failure) -> Just $ TestCheckFailure failure
+              Nothing             -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
 runCheck code check = do
@@ -114,9 +113,9 @@ runCheck code check = do
     Right moduleData -> do
       result <- verifyCheck moduleData "test" check
       pure $ case result of
-        Left parseFailures         -> Just $ ParseFailures parseFailures
-        Right (Left (_parsed, cf)) -> Just $ TestCheckFailure cf
-        Right (Right _)            -> Nothing
+        Left parseFailures -> Just $ ParseFailures parseFailures
+        Right (Left cf)    -> Just $ TestCheckFailure cf
+        Right (Right _)    -> Nothing
 
 expectVerified :: Text -> Spec
 expectVerified code = do
@@ -682,7 +681,7 @@ spec = describe "analyze" $ do
         case results of
           ModuleParseFailures failures -> it "unexpectedly failed to parse" $
             expectationFailure $ show failures
-          ModuleCheckFailure _parsed failure ->
+          ModuleCheckFailure (CheckFailure _parsed failure) ->
             it "unexpectedly failed to check" $ expectationFailure $
               case failure of
                 SmtFailure (Invalid model) -> T.unpack $ showModel model
@@ -691,9 +690,8 @@ spec = describe "analyze" $ do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
-            [SmtFailure (Invalid model)] <- pure $
+            [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-                . _2
             let (Model (ModelTags args _vars _reads writes _auths _result) map) = model
             Just (Located _ (_, (_, AVal _prov amount))) <- pure $
               find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
