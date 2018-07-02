@@ -25,17 +25,15 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), (?~), (&), (%~),
-                                            _1, _2, _Just, _Right)
+                                            traverseOf, traversed,
+                                            (<&>), (^.), (^?), (^@..), (?~),
+                                            _1, _2, _Just)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
                                             throwError, withExcept, withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Bifunctor            (first)
-import qualified Data.Default              as Default
 import           Data.Either               (lefts, partitionEithers, rights)
 import qualified Data.Foldable             as Foldable
 import qualified Data.HashMap.Strict       as HM
@@ -55,13 +53,13 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Info, Parsed, eParsed, mMetas, mName,
-                                            renderInfo, renderParsed, tMeta,
-                                            _iInfo)
+import           Pact.Types.Lang           (Info, Parsed, eParsed, mMetas,
+                                            mName, renderInfo, renderParsed,
+                                            tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TDef, TSchema, TTable),
-                                            asString, tInfo, tShow)
+                                            asString, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -77,8 +75,6 @@ import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
--- import Debug.Trace
 
 data CheckSuccess
   = SatisfiedProperty Model
@@ -168,8 +164,8 @@ analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
 analyzeToCheckFailure (AnalyzeFailure parsed err)
   = CheckFailure parsed (AnalyzeFailure' err)
 
-smtToCheckFailure :: SmtFailure -> CheckFailure
-smtToCheckFailure = CheckFailure Default.def . SmtFailure
+smtToCheckFailure :: Parsed -> SmtFailure -> CheckFailure
+smtToCheckFailure parsed = CheckFailure parsed . SmtFailure
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
@@ -264,7 +260,7 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
 
-allocModelTags :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
+allocModelTags :: Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
 allocModelTags funInfo args tm tagAllocs = ModelTags
     <$> allocateArgs
     <*> allocateVars
@@ -391,12 +387,11 @@ resultQuery goal model0 = do
 -- TODO: better naming btw checkFunctionInvariants / verifyFunctionInvariants
 checkFunctionInvariants
   :: [Table]
-  -> Pact.Info
+  -> Info
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 checkFunctionInvariants tables info pactArgs body = runExceptT $ do
-    let parsed = getInfoParsed info
     (args, tm, tagAllocs) <- hoist generalize $
       -- TODO: runTranslation would ideally give us info about exactly where
       -- the translation failed. This is as close as we can get currently.
@@ -454,12 +449,15 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
 
 checkFunction
   :: [Table]
-  -> Pact.Info
+  -- | 'Info' for the function being checked
+  -> Info
+  -- | 'Parsed for the property being checked
+  -> Parsed
   -> [Named Node]
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-checkFunction tables info pactArgs body check = runExceptT $ do
+checkFunction tables info parsed pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation pactArgs body
@@ -469,7 +467,7 @@ checkFunction tables info pactArgs body check = runExceptT $ do
       AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
         runAnalysis tables tm check tags
       void $ lift $ SBV.output prop
-      hoist SBV.query $ withExceptT smtToCheckFailure $
+      hoist SBV.query $ withExceptT (smtToCheckFailure parsed) $
         resultQuery goal $ Model tags ksProvs
 
   where
@@ -484,7 +482,7 @@ checkFunction tables info pactArgs body check = runExceptT $ do
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ smtToCheckFailure $ UnexpectedFailure e
+      pure $ Left $ smtToCheckFailure parsed $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
@@ -541,7 +539,6 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
 
   let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
-      defnParsed = getInfoParsed (defn ^. tInfo)
 
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:
@@ -627,8 +624,7 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-        -- first (CheckFailure parsed) <$>
-          checkFunction tables _fInfo _fArgs _fBody check
+             checkFunction tables _fInfo parsed _fArgs _fBody check
       else
         let parsed = getInfoParsed _fInfo
         in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
@@ -644,7 +640,11 @@ verifyFunctionInvariants tables ref = do
 
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
-      checkFunctionInvariants tables _fInfo _fArgs _fBody
+      if Set.null failures
+      then checkFunctionInvariants tables _fInfo _fArgs _fBody
+      else
+        let parsed = getInfoParsed _fInfo
+        in pure (Left (CheckFailure parsed (TypecheckFailure failures)))
 
     -- TODO: should this be an error?
     _ -> pure $ Right $ TableMap Map.empty

@@ -9,7 +9,6 @@ module AnalyzeSpec (spec) where
 
 import           Control.Lens                 (at, findOf, ix, (^.), (^..), _Left, _2)
 import           Control.Monad.State.Strict   (runStateT)
-import qualified Data.Default                 as Default
 import           Data.Either                  (isLeft)
 import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
@@ -692,7 +691,7 @@ spec = describe "analyze" $ do
 
             [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model (ModelTags args _vars _reads writes _auths _result) map) = model
+            let (Model (ModelTags args _vars _reads writes _auths _result) ksProvs) = model
             Just (Located _ (_, (_, AVal _prov amount))) <- pure $
               find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
 
@@ -701,7 +700,7 @@ spec = describe "analyze" $ do
 
             x <- pure $ find
               (\(Object m) ->
-                let (bal, AVal _ sval) = m Map.! "balance"
+                let (_bal, AVal _ sval) = m Map.! "balance"
                 in (SBV sval :: SBV Decimal) `isConcretely` (< 0))
               $ writes ^.. traverse . located . _2
 
@@ -711,7 +710,7 @@ spec = describe "analyze" $ do
             runIO $ putStrLn $ T.unpack $ showModel model
 
             it "should have specified invariant failures" $ do
-              map `shouldBe` Map.empty
+              ksProvs `shouldBe` Map.empty
 
 -- {-
   describe "cell-delta.integer" $ do

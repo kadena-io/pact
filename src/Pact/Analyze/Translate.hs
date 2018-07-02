@@ -320,7 +320,7 @@ translateObjBinding node bindingsA schema bodyA rhsT = do
           bindings
 
       nodeToNameVid = Map.fromList $
-        (\(_, _, (node, name, vid)) -> (node, (name, vid))) <$> bindings
+        (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
 
   mapETerm translateLet <$>
     local (unionPreferring nodeToNameVid) (translateBody (nodeParsed node) bodyA)

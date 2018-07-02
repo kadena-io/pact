@@ -66,12 +66,11 @@ import qualified Pact.Types.Runtime         as Pact
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Version         (pactVersion)
 
+import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
 import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Util
-
-import Control.Arrow (second)
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -166,13 +165,6 @@ instance Mergeable LatticeAnalyzeState where
           (symbolicMerge force test rsWritten     rsWritten')
           (symbolicMerge force test csEnforced    csEnforced')
           (symbolicMerge force test csWritten     csWritten')
-
-instance Mergeable a => Mergeable (ZipList a) where
-  symbolicMerge force test (ZipList xs) (ZipList ys)
-    = ZipList (symbolicMerge force test xs ys)
-
-instance Mergeable Parsed where
-  symbolicMerge _ _ a _b = a -- TODO is this a valid instance?
 
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
