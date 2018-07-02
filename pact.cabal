@@ -162,6 +162,22 @@ executable bench
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
+executable testing
+  main-is:             TestRunner.hs
+  build-depends:       base
+                     , pact
+                     , directory
+                     , async
+                     , wreq
+                     , aeson
+                     , ed25519-donna
+                     , crypto-api
+                     , lens
+  hs-source-dirs:      tests
+  ghc-options:         -Wall -threaded -rtsopts
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+  
 test-suite hspec
   type: exitcode-stdio-1.0
   main-is: hspec.hs
