@@ -32,7 +32,7 @@ import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Aeson                 as Aeson
 import           Data.ByteString.Lazy       (toStrict)
 import           Data.Foldable              (foldl', foldrM)
-import           Data.Functor.Identity      (Identity (Identity))
+import           Data.Functor.Identity      (Identity (Identity, runIdentity))
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Maybe                 (mapMaybe)
@@ -1550,8 +1550,8 @@ analyzeProp (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-analyzeCheck :: Check -> Query (S Bool)
-analyzeCheck = \case
+analyzeCheck :: Check -> Query (Identity (S Bool))
+analyzeCheck = fmap Identity . \case
     PropertyHolds p -> assumingSuccess =<< analyzeProp p
     Valid p         -> analyzeProp p
     Satisfiable p   -> analyzeProp p
@@ -1562,29 +1562,36 @@ analyzeCheck = \case
       success <- view (qeAnalyzeState.succeeds)
       pure $ success ==> p
 
-type PSBool = (Parsed, S Bool)
+-- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
+-- functor instead of three.
+newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [(Parsed, a)] }
 
-analyzeInvariants :: Query (TableMap [PSBool])
+instance Functor InvariantsF where
+  fmap f (InvariantsF a) = InvariantsF (f <$$$> a)
+
+analyzeInvariants :: Query (InvariantsF (S Bool))
 analyzeInvariants = assumingSuccess =<< invariantsHold'
   where
-    assumingSuccess :: TableMap [PSBool] -> Query (TableMap [PSBool])
+    assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
     assumingSuccess ps = do
       success <- view (qeAnalyzeState.succeeds)
-      pure $ (success ==>) <$$$> ps
+      pure $ (success ==>) <$> ps
 
-    invariantsHold :: Query (TableMap (ZipList PSBool))
+    invariantsHold :: Query (TableMap (ZipList (Parsed, S Bool)))
     invariantsHold = sansProv <$$$$> view (qeAnalyzeState.maintainsInvariants)
 
-    invariantsHold' :: Query (TableMap [PSBool])
-    invariantsHold' = getZipList <$$> invariantsHold
+    invariantsHold' :: Query (InvariantsF (S Bool))
+    invariantsHold' = InvariantsF <$> (getZipList <$$> invariantsHold)
 
-runAnalysis
-  :: [Table]
+-- | Helper to run either property or invariant analysis
+runAnalysis'
+  :: Functor f
+  => Query (f (S Bool))
+  -> [Table]
   -> ETerm
-  -> Check
   -> ModelTags
-  -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runAnalysis tables tm check tags = do
+  -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
+runAnalysis' query tables tm tags = do
   let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
       aEnv   = mkAnalyzeEnv tables tags
       state0 = mkInitialAnalyzeState tables
@@ -1595,29 +1602,24 @@ runAnalysis tables tm check tags = do
   lift $ runConstraints $ state1 ^. globalState.gasConstraints
 
   let qEnv  = mkQueryEnv aEnv state1 funResult
-      query = analyzeCheck check
       ksProvs = state1 ^. globalState.gasKsProvenances
 
-  prop <- runReaderT (queryAction query) qEnv
-  pure $ AnalysisResult (_sSbv prop) ksProvs
+  results <- runReaderT (queryAction query) qEnv
+  pure $ results <&> \prop -> AnalysisResult (_sSbv prop) ksProvs
+
+runPropertyAnalysis
+  :: Check
+  -> [Table]
+  -> ETerm
+  -> ModelTags
+  -> ExceptT AnalyzeFailure Symbolic AnalysisResult
+runPropertyAnalysis check tables tm tags =
+  runIdentity <$> runAnalysis' (analyzeCheck check) tables tm tags
 
 runInvariantAnalysis
   :: [Table]
   -> ETerm
   -> ModelTags
   -> ExceptT AnalyzeFailure Symbolic (TableMap [(Parsed, AnalysisResult)])
-runInvariantAnalysis tables tm tags = do
-  let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables tags
-      state0 = mkInitialAnalyzeState tables
-
-  (funResult, state1, ()) <- hoist generalize $
-    runRWST (runAnalyze act) aEnv state0
-
-  lift $ runConstraints $ state1 ^. globalState.gasConstraints
-
-  let qEnv    = mkQueryEnv aEnv state1 funResult
-      ksProvs = state1 ^. globalState.gasKsProvenances
-
-  preResults <- runReaderT (queryAction analyzeInvariants) qEnv
-  pure $ preResults <&&&> \sbool -> AnalysisResult (_sSbv sbool) ksProvs
+runInvariantAnalysis tables tm tags =
+  unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags
