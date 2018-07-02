@@ -123,6 +123,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 
 import Data.Serialize (Serialize)
+import Data.SBV (Mergeable(symbolicMerge))
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
@@ -142,6 +143,10 @@ instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
 
+instance Mergeable Parsed where
+  -- Because Parsed values have no effect on execution we just take the first
+  -- one.
+  symbolicMerge _ _ a _b = a
 
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
