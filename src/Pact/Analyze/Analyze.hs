@@ -31,6 +31,7 @@ import           Control.Monad.State.Strict (MonadState, modify')
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Aeson                 as Aeson
 import           Data.ByteString.Lazy       (toStrict)
+import qualified Data.Default               as Default
 import           Data.Foldable              (foldl', foldrM)
 import           Data.Functor.Identity      (Identity (Identity))
 import           Data.Map.Strict            (Map)
@@ -74,7 +75,7 @@ data AnalyzeEnv
     { _aeScope     :: Map VarId AVal              -- used as a stack
     , _aeKeySets   :: SFunArray KeySetName KeySet -- read-only
     , _aeKsAuths   :: SFunArray KeySet Bool       -- read-only
-    , _invariants  :: TableMap [Invariant Bool]
+    , _invariants  :: TableMap [(Pact.Parsed, Invariant Bool)]
     , _aeModelTags :: ModelTags
     }
   deriving Show
@@ -201,6 +202,33 @@ data AnalysisResult
     , _arKsProvenances :: Map TagId Provenance
     } deriving Show
 
+data AnalyzeFailure'
+  = AtHasNoRelevantFields EType Schema
+  | AValUnexpectedlySVal SBVI.SVal
+  | AValUnexpectedlyObj Object
+  | KeyNotPresent Text Object
+  | MalformedLogicalOpExec LogicalOp Int
+  | ObjFieldOfWrongType Text EType
+  | PossibleRoundoff Text
+  | UnsupportedDecArithOp ArithOp
+  | UnsupportedIntArithOp ArithOp
+  | UnsupportedUnaryOp UnaryArithOp
+  | UnsupportedRoundingLikeOp1 RoundingLikeOp
+  | UnsupportedRoundingLikeOp2 RoundingLikeOp
+  | FailureMessage Text
+  | OpaqueValEncountered
+  | VarNotInScope Text VarId
+  | UnsupportedObjectInDbCell
+  -- For cases we don't handle yet:
+  | UnhandledObject (Term Object)
+  | UnhandledTerm Text
+  deriving (Eq, Show)
+
+data AnalyzeFailure = AnalyzeFailure
+  { _analyzeFailureParsed :: !Pact.Parsed
+  , _analyzeFailure       :: !AnalyzeFailure'
+  }
+
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
@@ -208,6 +236,9 @@ makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''QueryEnv
 makeLenses ''AnalysisResult
+
+throwErrorNoLoc :: MonadError AnalyzeFailure m => AnalyzeFailure' -> m a
+throwErrorNoLoc = throwError . AnalyzeFailure Default.def
 
 mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
@@ -312,30 +343,8 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
 
-data AnalyzeFailure
-  = AtHasNoRelevantFields EType Schema
-  | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj Object
-  | KeyNotPresent Text Object
-  | MalformedLogicalOpExec LogicalOp Int
-  | ObjFieldOfWrongType Text EType
-  | PossibleRoundoff Text
-  | UnsupportedDecArithOp ArithOp
-  | UnsupportedIntArithOp ArithOp
-  | UnsupportedUnaryOp UnaryArithOp
-  | UnsupportedRoundingLikeOp1 RoundingLikeOp
-  | UnsupportedRoundingLikeOp2 RoundingLikeOp
-  | FailureMessage Text
-  | OpaqueValEncountered
-  | VarNotInScope Text VarId
-  | UnsupportedObjectInDbCell
-  -- For cases we don't handle yet:
-  | UnhandledObject (Term Object)
-  | UnhandledTerm Text
-  deriving (Eq, Show)
-
-describeAnalyzeFailure :: AnalyzeFailure -> Text
-describeAnalyzeFailure = \case
+describeAnalyzeFailure' :: AnalyzeFailure' -> Text
+describeAnalyzeFailure' = \case
     -- these are internal errors. not quite as much care is taken on the messaging
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
     AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
@@ -370,7 +379,7 @@ describeAnalyzeFailure = \case
     pleaseReportThis :: Text
     pleaseReportThis = "Please report this as a bug at https://github.com/kadena-io/pact/issues"
 
-instance IsString AnalyzeFailure where
+instance IsString AnalyzeFailure' where
   fromString = FailureMessage . T.pack
 
 newtype Analyze a
@@ -689,13 +698,13 @@ aval
 aval elimVal elimObj = \case
   AVal mProv sval -> elimVal mProv sval
   AnObj obj       -> elimObj obj
-  OpaqueVal       -> throwError OpaqueValEncountered
+  OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
 expectVal :: MonadError AnalyzeFailure m => AVal -> m (S a)
-expectVal = aval (pure ... mkS) (throwError . AValUnexpectedlyObj)
+expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: MonadError AnalyzeFailure m => AVal -> m Object
-expectObj = aval ((throwError . AValUnexpectedlySVal) ... getSVal) pure
+expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
@@ -708,10 +717,10 @@ lookupObj
 lookupObj name vid = do
   mVal <- view (scope . at vid)
   case mVal of
-    Nothing            -> throwError $ VarNotInScope name vid
-    Just (AVal _ val') -> throwError $ AValUnexpectedlySVal val'
+    Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
+    Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
     Just (AnObj obj)   -> pure obj
-    Just (OpaqueVal)   -> throwError OpaqueValEncountered
+    Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
 
 lookupVal
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
@@ -721,10 +730,10 @@ lookupVal
 lookupVal name vid = do
   mVal <- view $ scope . at vid
   case mVal of
-    Nothing                -> throwError $ VarNotInScope name vid
+    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj)       -> throwError $ AValUnexpectedlyObj obj
-    Just (OpaqueVal)       -> throwError OpaqueValEncountered
+    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
+    Just (OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
 
 applyInvariants
   :: TableName
@@ -741,9 +750,10 @@ applyInvariants tn sValFields addInvariants = do
   case mInvariants of
     Nothing -> pure ()
     Just invariants' -> do
-      invariants'' <- for invariants' $ \invariant ->
+      invariants'' <- for invariants' $ \(parsed, invariant) ->
         case runReaderT (checkInvariant invariant) sValFields of
-          Left  err -> throwError err
+          -- TODO: this seems wrong
+          Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure parsed err
           Right inv -> pure inv
       addInvariants invariants''
 
@@ -759,14 +769,14 @@ analyzeAtO colNameT objT = do
 
     let getObjVal :: Text -> m Object
         getObjVal fieldName = case Map.lookup fieldName fields of
-          Nothing -> throwError $ KeyNotPresent fieldName obj
-          Just (fieldType, AVal _ _) -> throwError $
+          Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
+          Just (fieldType, AVal _ _) -> throwErrorNoLoc $
             ObjFieldOfWrongType fieldName fieldType
           Just (_fieldType, AnObj subObj) -> pure subObj
-          Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+          Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
 
     case unliteralS sCn of
-      Nothing -> throwError "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
+      Nothing -> throwErrorNoLoc "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
       Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
@@ -788,18 +798,18 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
   colName :: S String <- analyze colNameT
 
   firstName:relevantFields' <- case relevantFields of
-    [] -> throwError $ AtHasNoRelevantFields retType schema
+    [] -> throwErrorNoLoc $ AtHasNoRelevantFields retType schema
     _  -> pure relevantFields
 
   let getObjVal fieldName = case Map.lookup fieldName fields of
-        Nothing -> throwError $ KeyNotPresent fieldName obj
+        Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
 
-        Just (fieldType, AnObj _subObj) -> throwError $
+        Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
           ObjFieldOfWrongType fieldName fieldType
 
-        Just (_fieldType, OpaqueVal) -> throwError OpaqueValEncountered
+        Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
 
   firstVal <- getObjVal firstName
 
@@ -847,7 +857,7 @@ analyzeTermO = \case
         --       the correct provenance into AVals all the way down into
         --       sub-objects.
         --
-        EObjectTy _    -> throwError UnsupportedObjectInDbCell
+        EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
 
       tagAccessCell mtReads tid fieldName av
 
@@ -879,11 +889,11 @@ analyzeTermO = \case
     case unliteralS testPasses of
       Just True  -> analyzeTermO then'
       Just False -> analyzeTermO else'
-      Nothing    -> throwError "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
+      Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
   At _schema colNameT objT _retType -> analyzeAtO colNameT objT
 
-  objT -> throwError $ UnhandledObject objT
+  objT -> throwErrorNoLoc $ UnhandledObject objT
 
 analyzeDecArithOp
   :: Analyzer m term
@@ -899,8 +909,8 @@ analyzeDecArithOp op xT yT = do
     Sub -> pure $ x - y
     Mul -> pure $ x * y
     Div -> pure $ x / y
-    Pow -> throwError $ UnsupportedDecArithOp op
-    Log -> throwError $ UnsupportedDecArithOp op
+    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
+    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntArithOp
   :: Analyzer m term
@@ -916,8 +926,8 @@ analyzeIntArithOp op xT yT = do
     Sub -> pure $ x - y
     Mul -> pure $ x * y
     Div -> pure $ x `sDiv` y
-    Pow -> throwError $ UnsupportedDecArithOp op
-    Log -> throwError $ UnsupportedDecArithOp op
+    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
+    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntDecArithOp
   :: Analyzer m term
@@ -933,8 +943,8 @@ analyzeIntDecArithOp op xT yT = do
     Sub -> pure $ fromIntegralS x - y
     Mul -> pure $ fromIntegralS x * y
     Div -> pure $ fromIntegralS x / y
-    Pow -> throwError $ UnsupportedDecArithOp op
-    Log -> throwError $ UnsupportedDecArithOp op
+    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
+    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeDecIntArithOp
   :: Analyzer m term
@@ -950,8 +960,8 @@ analyzeDecIntArithOp op xT yT = do
     Sub -> pure $ x - fromIntegralS y
     Mul -> pure $ x * fromIntegralS y
     Div -> pure $ x / fromIntegralS y
-    Pow -> throwError $ UnsupportedDecArithOp op
-    Log -> throwError $ UnsupportedDecArithOp op
+    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
+    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeUnaryArithOp
   :: (Analyzer m term, Num a, Show a, SymWord a)
@@ -962,9 +972,9 @@ analyzeUnaryArithOp op term = do
   x <- analyze term
   case op of
     Negate -> pure $ negate x
-    Sqrt   -> throwError $ UnsupportedUnaryOp op
-    Ln     -> throwError $ UnsupportedUnaryOp op
-    Exp    -> throwError $ UnsupportedUnaryOp op -- TODO: use svExp
+    Sqrt   -> throwErrorNoLoc $ UnsupportedUnaryOp op
+    Ln     -> throwErrorNoLoc $ UnsupportedUnaryOp op
+    Exp    -> throwErrorNoLoc $ UnsupportedUnaryOp op -- TODO: use svExp
     Abs    -> pure $ abs x
     Signum -> pure $ signum x
 
@@ -1075,7 +1085,7 @@ analyzeDecAddTime timeT secsT = do
   -- Convert seconds to milliseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
   then pure $ time + fromIntegralS (banker'sMethod (secs * 1000000))
-  else throwError $ PossibleRoundoff
+  else throwErrorNoLoc $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 analyzeEqNeq
@@ -1119,7 +1129,7 @@ analyzeLogicalOp op terms = do
     (AndOp, [a, b]) -> pure $ a &&& b
     (OrOp,  [a, b]) -> pure $ a ||| b
     (NotOp, [a])    -> pure $ bnot a
-    _               -> throwError $ MalformedLogicalOpExec op $ length terms
+    _               -> throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
@@ -1179,16 +1189,16 @@ analyzeTerm = \case
             EType TTime    -> timeCell    tn cn sRk true .= mkS mProv sVal
             EType TStr     -> stringCell  tn cn sRk true .= mkS mProv sVal
             EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv sVal
-            EType TAny     -> void $ throwError OpaqueValEncountered
-            EObjectTy _    -> void $ throwError UnsupportedObjectInDbCell
+            EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
+            EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
           pure (Just sVal)
 
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
-        AnObj obj'' -> throwError $ AValUnexpectedlyObj obj''
-        OpaqueVal   -> throwError OpaqueValEncountered
+        AnObj obj'' -> throwErrorNoLoc $ AValUnexpectedlyObj obj''
+        OpaqueVal   -> throwErrorNoLoc OpaqueValEncountered
 
 
     let sValFields :: Map Text SBVI.SVal
@@ -1253,9 +1263,9 @@ analyzeTerm = \case
       ETerm str TStr   -> Left          <$> analyze str
       ETerm int TInt   -> Right . Left  <$> analyze int
       ETerm bool TBool -> Right . Right <$> analyze bool
-      _                -> throwError "We can only analyze calls to `format` formatting {string,integer,bool}"
+      _                -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
     case unliteralS formatStr' of
-      Nothing -> throwError ""
+      Nothing -> throwErrorNoLoc "" -- XXX fix error message
       Just concreteStr -> case format concreteStr args' of
         Left err -> throwError err
         Right tm -> pure tm
@@ -1266,7 +1276,7 @@ analyzeTerm = \case
     case (unliteralS formatStr', unliteralS time') of
       (Just formatStr'', Just time'') -> pure $ literalS $
         formatTime defaultTimeLocale formatStr'' (unMkTime time'')
-      _ -> throwError "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
+      _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
 
   ParseTime mFormatStr timeStr -> do
     formatStr' <- case mFormatStr of
@@ -1278,12 +1288,12 @@ analyzeTerm = \case
         case parseTime defaultTimeLocale formatStr'' timeStr'' of
           Nothing   -> succeeds .= false >> pure 0
           Just time -> pure $ literalS $ mkTime time
-      _ -> throwError "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
+      _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do
     let sHash = literalS . T.unpack . Pact.asString . Pact.hash
         notStaticErr :: AnalyzeFailure
-        notStaticErr = "We can only analyze calls to `hash` with statically determined contents"
+        notStaticErr = AnalyzeFailure Default.def "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
       ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
@@ -1302,12 +1312,12 @@ analyzeTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      ETerm _ TDecimal -> throwError "We can't yet analyze calls to `hash` on decimals"
+      ETerm _ TDecimal -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      ETerm _ _        -> throwError "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
-      EObject _ _      -> throwError "We can't yet analyze calls to `hash on objects"
+      ETerm _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      EObject _ _      -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
 
-  n -> throwError $ UnhandledTerm $ tShow n
+  n -> throwErrorNoLoc $ UnhandledTerm $ tShow n
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
@@ -1334,7 +1344,7 @@ format s tms = do
   if plen == 1
   then Right (literalS s)
   else if plen - length tms > 1
-       then Left "format: not enough arguments for template"
+       then Left (AnalyzeFailure Default.def "format: not enough arguments for template")
        else Right $ foldl'
               (\r (e, t) -> r .++ rep e .++ t)
               (head parts)
@@ -1359,7 +1369,7 @@ checkInvariant = \case
     mVal <- view (at name)
     case mVal of
       Just val -> pure (sansProv (SBVI.SBV val))
-      Nothing  -> throwError $ fromString $
+      Nothing  -> throwErrorNoLoc $ fromString $
         "column name not in scope: " ++ show name
 
   -- string ops
@@ -1403,23 +1413,23 @@ getLitTableName (PLit tn) = pure tn
 getLitTableName (PVar vid name) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
-    Nothing -> throwError $ fromString $
+    Nothing -> throwErrorNoLoc $ fromString $
       "could not find table in scope: " <> T.unpack name
     Just tn -> pure tn
-getLitTableName (PSym _) = throwError "Symbolic values can't be table names"
-getLitTableName Result = throwError "Function results can't be table names"
-getLitTableName (PAt _ _ _ _) = throwError "Object values can't be table names"
+getLitTableName (PSym _) = throwErrorNoLoc "Symbolic values can't be table names"
+getLitTableName Result = throwErrorNoLoc "Function results can't be table names"
+getLitTableName (PAt _ _ _ _) = throwErrorNoLoc "Object values can't be table names"
 
 getLitColName :: Prop ColumnName -> Query ColumnName
 getLitColName (PLit cn) = pure cn
-getLitColName _ = throwError "TODO: column quantification"
+getLitColName _ = throwErrorNoLoc "TODO: column quantification"
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
-analyzePropO (PLit _) = throwError "We don't support property object literals"
-analyzePropO (PSym _) = throwError "Symbolic values can't be objects"
+analyzePropO (PLit _) = throwErrorNoLoc "We don't support property object literals"
+analyzePropO (PSym _) = throwErrorNoLoc "Symbolic values can't be objects"
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1435,19 +1445,19 @@ analyzeProp (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (Forall _vid _name (EObjectTy _) _p) =
-  throwError "objects can't currently be quantified in properties (issue 139)"
+  throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 analyzeProp (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
   pure $ foldr (&&&) true bools
 analyzeProp (Forall _vid _name (QColumnOf _tab) _p) =
-  throwError "TODO: column quantification"
+  throwErrorNoLoc "TODO: column quantification"
 analyzeProp (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (Exists _vid _name (EObjectTy _) _p) =
-  throwError "objects can't currently be quantified in properties (issue 139)"
+  throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 analyzeProp (PVar vid name) = lookupVal name vid
 analyzeProp (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
@@ -1455,7 +1465,7 @@ analyzeProp (Exists vid _name QTable prop) = do
     local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
   pure $ foldr (|||) true bools
 analyzeProp (Exists _vid _name (QColumnOf _tab) _p) =
-  throwError "TODO: column quantification"
+  throwErrorNoLoc "TODO: column quantification"
 
 -- String ops
 analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
@@ -1493,9 +1503,9 @@ analyzeProp (TableWrite tn) = do
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.tableWritten tn'
 analyzeProp (ColumnWrite _ _)
-  = throwError "column write analysis not yet implemented"
+  = throwErrorNoLoc "column write analysis not yet implemented"
 analyzeProp (ColumnRead _ _)
-  = throwError "column read analysis not yet implemented"
+  = throwErrorNoLoc "column read analysis not yet implemented"
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
