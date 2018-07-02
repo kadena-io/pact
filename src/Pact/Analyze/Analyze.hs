@@ -749,7 +749,7 @@ applyInvariants tn sValFields addInvariants = do
     Just invariants' -> do
       invariants'' <- for invariants' $ \(parsed, invariant) ->
         case runReaderT (checkInvariant invariant) sValFields of
-          -- TODO: this seems wrong
+          -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure parsed err
           Right inv -> pure inv
       addInvariants invariants''
