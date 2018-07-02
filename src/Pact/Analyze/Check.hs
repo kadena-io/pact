@@ -14,7 +14,7 @@ module Pact.Analyze.Check
   , describeParseFailure
   , showModel
   , CheckFailure(..)
-  , CheckFailure'(..)
+  , CheckFailureNoLoc(..)
   , CheckSuccess(..)
   , CheckResult
   , ModuleResult(..)
@@ -95,12 +95,12 @@ data SmtFailure
   deriving Show
 
 instance Eq SmtFailure where
-  Invalid m1 == Invalid m2 = m1 == m2
+  Invalid m1    == Invalid m2    = m1 == m2
   Unsatisfiable == Unsatisfiable = True
   -- no instance Eq for SMTReasonUnknown or SMTException
   _ == _ = False
 
-data CheckFailure'
+data CheckFailureNoLoc
   = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure' TranslateFailureNoLoc
@@ -110,7 +110,7 @@ data CheckFailure'
 
 data CheckFailure = CheckFailure
   { _checkFailureParsed :: !Parsed
-  , _checkFailure       :: !CheckFailure'
+  , _checkFailure       :: !CheckFailureNoLoc
   } deriving (Eq, Show)
 
 type CheckResult = Either CheckFailure CheckSuccess
@@ -406,7 +406,7 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
 
       ExceptT $ fmap Right $
         SBV.query $
-          for2 resultsTable $ \(AnalysisResult prop ksProvs) -> do
+          for2 resultsTable $ \(parsed, AnalysisResult prop ksProvs) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
@@ -415,7 +415,7 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
                Left smtFailure -> Left $
-                 CheckFailure fillMeInJoel (SmtFailure smtFailure)
+                 CheckFailure parsed (SmtFailure smtFailure)
                Right pass      -> Right pass
 
   where
