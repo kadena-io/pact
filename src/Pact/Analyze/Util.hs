@@ -47,5 +47,6 @@ getInfoParsed parsed = case _iInfo parsed of
   Nothing               -> dummyParsed
   Just (_code, parsed') -> parsed'
 
+-- | A 'Parsed' for when there is no location info available.
 dummyParsed :: Parsed
 dummyParsed = Default.def

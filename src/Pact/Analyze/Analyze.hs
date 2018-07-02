@@ -31,7 +31,6 @@ import           Control.Monad.State.Strict (MonadState, modify')
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Aeson                 as Aeson
 import           Data.ByteString.Lazy       (toStrict)
-import qualified Data.Default               as Default
 import           Data.Foldable              (foldl', foldrM)
 import           Data.Functor.Identity      (Identity (Identity))
 import           Data.Map.Strict            (Map)
@@ -236,7 +235,7 @@ makeLenses ''QueryEnv
 makeLenses ''AnalysisResult
 
 throwErrorNoLoc :: MonadError AnalyzeFailure m => AnalyzeFailure' -> m a
-throwErrorNoLoc = throwError . AnalyzeFailure Default.def
+throwErrorNoLoc = throwError . AnalyzeFailure dummyParsed
 
 mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
@@ -1292,7 +1291,7 @@ analyzeTerm = \case
   Hash value -> do
     let sHash = literalS . T.unpack . Pact.asString . Pact.hash
         notStaticErr :: AnalyzeFailure
-        notStaticErr = AnalyzeFailure Default.def "We can only analyze calls to `hash` with statically determined contents"
+        notStaticErr = AnalyzeFailure dummyParsed "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
       ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
@@ -1343,7 +1342,7 @@ format s tms = do
   if plen == 1
   then Right (literalS s)
   else if plen - length tms > 1
-       then Left (AnalyzeFailure Default.def "format: not enough arguments for template")
+       then Left (AnalyzeFailure dummyParsed "format: not enough arguments for template")
        else Right $ foldl'
               (\r (e, t) -> r .++ rep e .++ t)
               (head parts)
