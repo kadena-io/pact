@@ -12,6 +12,8 @@ import Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Data.Aeson
+import Data.Text as T
+import qualified Data.HashMap.Strict as HM
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
@@ -30,70 +32,64 @@ _serverPath = "http://localhost:" ++ testPort ++ "/api/v1/"
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
 
-
 data TestExec = TestExec
   { _teCode :: String,
     _teData :: Value,
-    _teKeyPair :: KeyPair,
+    _teKeyPairs :: [KeyPair],
     _teNonce :: String
-  } deriving Show 
+  } deriving (Eq,Show) 
 
-data TestResult = Error String | Success ApiResult
-  deriving Show
+data TestCont = TestCont
+  { _tcTxId :: Int,
+    _tcStep :: Int,
+    _tcRollback :: Bool,
+    _tcData :: Value,
+    _tcKeyPairs :: [KeyPair],
+    _tcNonce :: String
+  } deriving (Eq,Show)
 
 main :: IO ()
 main = do
-  {--withAsync (serve _testConfigFilePath) $ \a -> do
-      (priv,publ) <- genKeys
-      req <- toJSON (SubmitBatch
-                         [mkExec "(+ 1 2)" Null Nothing
-                          [KeyPair priv publ]
-                           $ Just "test1"]) 
-      print "Printing response of send"
-      print r
-      print "Submitting Poll"
-      p <- post "http://localhost:8080/api/v1/poll" (toJSON (Poll [RequestKey (_cmdHash req)]))
-      print "Printing response of poll"
-      print p
-      print "printing result of sending command"
-      _ <- threadDelay (20000000)
-      print (asyncThreadId a)
-      iscancelled <- poll a
-      print iscancelled--}
-
+  (priv,publ) <- genKeys
+  cmd <- mkExec  "(+ 1 2)" Null Nothing
+             [KeyPair priv publ] (Just "test1")
+  res <- runAll [cmd]
+  print "Printing result of runAll"
+  print res
   print "server should be down. check"
   _ <- threadDelay (10000000)
   print "time to check ended. cleaning up now"
   flushDb
 
-{-testCmd :: IO (ApiResponse ApiResult)
-testCmd = 
-  withAsync (serve _testConfigFilePath) $ \a -> do
-      (priv,publ) <- genKeys
-      sendReq <- mkExec  "(+ 1 2)" Null Nothing
-                 [KeyPair priv publ] (Just "test1")
-      sendResp <- asJSON =<< post (_serverPath ++ "send") (toJSON $ SubmitBatch [sendReq])
-      case (view responseBody sendResp) of
-        sf@ApiFailure{..} -> return sf
-        ApiSuccess{..} -> do
-          let pollReq = toJSON (_apiResponse)
-          pollResp <- asJSON =<< post (_serverPath ++ "poll") pollReq
-          
-          case (PollResponses $ view responseBody pollResp) of
-            pf@ApiFailure{..} -> return pf
-            ps@ApiSuccess{..} -> return ps-}
+runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+runAll cmds = do
+  withAsync (serve _testConfigFilePath) $ \_ -> do
+    sendResp <- doSend $ SubmitBatch cmds
+    case sendResp of
+      ApiFailure _ -> return $ HM.empty
+      ApiSuccess RequestKeys{..} -> do
+        pollResp <- doPoll $ Poll _rkRequestKeys
+        case pollResp of
+          ApiFailure _ -> return $ HM.empty
+          ApiSuccess (PollResponses apiResults) -> return apiResults
 
-{--testExecCmd :: [TestExec] -> IO (TestResult)
-testExecCmd cmd = do
-  let batch = --}
-    
-doSend :: (ToJSON req) => req -> IO (Response (ApiResponse RequestKeys))
+doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
 doSend req = do
+  sendResp <- doSend' req
+  return $ view responseBody sendResp
+    
+doSend' :: (ToJSON req) => req -> IO (Response (ApiResponse RequestKeys))
+doSend' req = do
   sendResp <- post (_serverPath ++ "send") (toJSON req)
   asJSON sendResp
 
-doPoll :: (ToJSON req) => req -> IO (Response (ApiResponse PollResponses))
+doPoll :: (ToJSON req) => req -> IO (ApiResponse PollResponses)
 doPoll req = do
+  pollResp <- doPoll' req
+  return $ view responseBody pollResp
+
+doPoll' :: (ToJSON req) => req -> IO (Response (ApiResponse PollResponses))
+doPoll' req = do
   pollResp <- post (_serverPath ++ "poll") (toJSON req)
   asJSON pollResp
 

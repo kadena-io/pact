@@ -173,6 +173,8 @@ executable testing
                      , ed25519-donna
                      , crypto-api
                      , lens
+                     , text
+                     , unordered-containers
   hs-source-dirs:      tests
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
