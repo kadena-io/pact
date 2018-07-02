@@ -217,7 +217,6 @@ data AnalyzeFailureNoLoc
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
   -- For cases we don't handle yet:
-  | UnhandledObject (Term Object)
   | UnhandledTerm Text
   deriving (Eq, Show)
 
@@ -358,7 +357,6 @@ describeAnalyzeFailureNoLoc = \case
 
     -- these are likely user-facing errors
     FailureMessage msg -> msg
-    UnhandledObject obj -> foundUnsupported $ tShow obj
     UnhandledTerm termText -> foundUnsupported termText
     VarNotInScope name vid -> "variable not in scope: " <> name <> " (vid " <> tShow vid <> ")"
     --
@@ -890,7 +888,7 @@ analyzeTermO = \case
 
   At _schema colNameT objT _retType -> analyzeAtO colNameT objT
 
-  objT -> throwErrorNoLoc $ UnhandledObject objT
+  objT -> throwErrorNoLoc $ UnhandledTerm $ tShow objT
 
 analyzeDecArithOp
   :: Analyzer m term
