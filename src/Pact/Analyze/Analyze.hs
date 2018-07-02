@@ -1261,7 +1261,7 @@ analyzeTerm = \case
       ETerm bool TBool -> Right . Right <$> analyze bool
       _                -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
     case unliteralS formatStr' of
-      Nothing -> throwErrorNoLoc "" -- XXX fix error message
+      Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just concreteStr -> case format concreteStr args' of
         Left err -> throwError err
         Right tm -> pure tm
