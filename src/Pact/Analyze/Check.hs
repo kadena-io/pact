@@ -106,6 +106,7 @@ data CheckFailureNoLoc
   | SmtFailure SmtFailure
   deriving (Eq, Show)
 
+-- TODO: change Parsed to Info if possible
 data CheckFailure = CheckFailure
   { _checkFailureParsed :: !Parsed
   , _checkFailure       :: !CheckFailureNoLoc
@@ -160,8 +161,8 @@ describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 translateToCheckFailure :: TranslateFailure -> CheckFailure
-translateToCheckFailure (TranslateFailure parsed err)
-  = CheckFailure parsed (TranslateFailure' err)
+translateToCheckFailure (TranslateFailure info err)
+  = CheckFailure (getInfoParsed info) (TranslateFailure' err)
 
 analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
 analyzeToCheckFailure (AnalyzeFailure parsed err)
@@ -396,9 +397,7 @@ checkFunctionInvariants
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 checkFunctionInvariants tables info pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
-      -- TODO: runTranslation would ideally give us info about exactly where
-      -- the translation failed. This is as close as we can get currently.
-      withExcept translateToCheckFailure $ runTranslation pactArgs body
+      withExcept translateToCheckFailure $ runTranslation info pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
@@ -465,7 +464,7 @@ checkFunction
 checkFunction tables info parsed pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
-        runTranslation pactArgs body
+        runTranslation info pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
