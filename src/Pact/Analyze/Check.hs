@@ -12,6 +12,7 @@ module Pact.Analyze.Check
   , describeCheckFailure
   , describeCheckResult
   , describeParseFailure
+  , showModel
   , CheckFailure(..)
   , CheckSuccess(..)
   , CheckResult
@@ -76,7 +77,7 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-import Debug.Trace
+-- import Debug.Trace
 
 data CheckSuccess
   = SatisfiedProperty Model
@@ -382,26 +383,31 @@ checkFunctionInvariants
   -> Pact.Info
   -> [Named Node]
   -> [AST Node]
-  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckSuccess]))
+  -> IO (Either (Parsed, CheckFailure) (TableMap [CheckResult]))
 checkFunctionInvariants tables info pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
-      withExcept (\err -> (fillMeInJoel, TranslateFailure err)) $
+      -- TODO: runTranslation would ideally give us info about exactly where
+      -- the translation failed. This is as close as we can get currently.
+      withExcept (\err -> (getInfoParsed info, TranslateFailure err)) $
         runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
       resultsTable <- withExceptT (\err -> (fillMeInJoel, AnalyzeFailure err)) $
         runInvariantAnalysis tables tm tags
-      traceShowM ("checkFunctionInvariants tags", tags)
-      traceShowM ("checkFunctionInvariants resultsTable", resultsTable)
 
-      hoist SBV.query $
-        for resultsTable $ \results ->
-          for results $ \(AnalysisResult prop ksProvs) ->
-            withExceptT (\err -> (fillMeInJoel, SmtFailure err)) $
+      ExceptT $ fmap Right $
+        SBV.query $
+          for2 resultsTable $ \(AnalysisResult prop ksProvs) -> do
+            e <- runExceptT $
               inNewAssertionStack $ do
-                void $ lift $ SBV.constrain prop
+                void $ lift $ SBV.constrain $ SBV.bnot prop
                 resultQuery goal $ Model tags ksProvs
+
+            -- Either SmtFailure CheckSuccess -> CheckResult
+            pure $ case e of
+               Left smtFailure -> Left (fillMeInJoel, SmtFailure smtFailure)
+               Right pass      -> Right pass
 
   where
     goal :: Goal
@@ -429,7 +435,8 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
+      -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
+      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
 
 checkFunction
   :: [Table]
@@ -621,17 +628,10 @@ verifyFunctionInvariants
 verifyFunctionInvariants tables ref = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
-  traceShowM ("verifyFunctionInvariants failures", failures)
 
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
-      if Set.null failures
-      then do
-        checkResult <- checkFunctionInvariants tables _fInfo _fArgs _fBody
-        pure $ checkResult
-          & _Right . traverse . traverse %~ Right
-
-      else pure (Left (getInfoParsed _fInfo, TypecheckFailure failures))
+      checkFunctionInvariants tables _fInfo _fArgs _fBody
 
     -- TODO: should this be an error?
     _ -> pure $ Right $ TableMap Map.empty

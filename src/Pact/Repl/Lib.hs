@@ -344,7 +344,7 @@ verify i as = case as of
           ModuleChecks propResults invariantResults -> setop $ TcErrors $
             let x = toListOf (traverse . each) propResults
                 y = toListOf (traverse . traverse . each) invariantResults
-            in fmap (Text.unpack . describeCheckResult) $ x <> y
+            in Text.unpack . describeCheckResult <$> x <> y
 
 
         return (tStr "")

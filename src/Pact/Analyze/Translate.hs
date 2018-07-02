@@ -615,6 +615,7 @@ translateNode astNode = case astNode of
 
   ast -> throwError $ UnexpectedNode ast
 
+-- TODO: give the exact location of failure
 runTranslation
   :: [Named Node]
   -> [AST Node]

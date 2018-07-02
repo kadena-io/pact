@@ -7,15 +7,17 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, (^.))
+import           Control.Lens                 (at, findOf, ix, (^.), (^..), _Left, _2)
 import           Control.Monad.State.Strict   (runStateT)
 import qualified Data.Default                 as Default
 import           Data.Either                  (isLeft)
+import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)))
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)), isConcretely)
+import           Data.SBV.Internals           (SBV(SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
@@ -680,22 +682,38 @@ spec = describe "analyze" $ do
         case results of
           ModuleParseFailures failures -> it "unexpectedly failed to parse" $
             expectationFailure $ show failures
-          ModuleCheckFailure _parsed failure
-            -> it "unexpectedly failed to check" $
-              expectationFailure $ show failure
+          ModuleCheckFailure _parsed failure ->
+            it "unexpectedly failed to check" $ expectationFailure $
+              case failure of
+                SmtFailure (Invalid model) -> T.unpack $ showModel model
+                _                          -> show failure
           ModuleChecks propResults invariantResults -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
-            it "should have specified invariant failures" $
-              let expected = HM.singleton "test" $
-                    TableMap $ Map.singleton "accounts"
-                      [ Left (Default.def, SmtFailure (Invalid (Model
-                        (ModelTags
-                          Map.empty Map.empty Map.empty Map.empty Map.empty
-                          (Located Default.def (EType TStr, OpaqueVal)))
-                        Map.empty)))
-                      ]
-              in invariantResults `shouldBe` expected
+
+            [SmtFailure (Invalid model)] <- pure $
+              invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
+                . _2
+            let (Model (ModelTags args _vars _reads writes _auths _result) map) = model
+            Just (Located _ (_, (_, AVal _prov amount))) <- pure $
+              find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
+
+            it "should have a negative amount" $
+              (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+
+            x <- pure $ find
+              (\(Object m) ->
+                let (bal, AVal _ sval) = m Map.! "balance"
+                in (SBV sval :: SBV Decimal) `isConcretely` (< 0))
+              $ writes ^.. traverse . located . _2
+
+            it "should have a negative write" $
+              x `shouldSatisfy` isJust
+
+            runIO $ putStrLn $ T.unpack $ showModel model
+
+            it "should have specified invariant failures" $ do
+              map `shouldBe` Map.empty
 
 {-
   describe "cell-delta.integer" $ do
