@@ -93,8 +93,10 @@ data SmtFailure
 instance Eq SmtFailure where
   Invalid m1    == Invalid m2    = m1 == m2
   Unsatisfiable == Unsatisfiable = True
-  -- no instance Eq for SMTReasonUnknown or SMTException
-  _ == _ = False
+
+  -- SMTReasonUnknown and SMTException don't provide instances of Eq, so we
+  -- always return 'False' in these cases.
+  _             ==             _ = False
 
 data CheckFailureNoLoc
   = NotAFunction Text
@@ -115,8 +117,9 @@ data ModuleResult
   = ModuleParseFailures [ParseFailure]
   | ModuleCheckFailure CheckFailure
   | ModuleChecks
-    (HM.HashMap Text [CheckResult])
-    (HM.HashMap Text (TableMap [CheckResult]))
+    { propertyChecks  :: HM.HashMap Text [CheckResult]
+    , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
+    }
   deriving (Eq, Show)
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -403,6 +406,8 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
         (\(AnalyzeFailure parsed err) -> CheckFailure parsed (AnalyzeFailure' err)) $
           runInvariantAnalysis tables tm tags
 
+      -- Iterate through each invariant in a single query so we can reuse our
+      -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
           for2 resultsTable $ \(parsed, AnalysisResult prop ksProvs) -> do
@@ -655,8 +660,6 @@ verifyModule
   :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
   -> ModuleData                         -- ^ the module we're verifying
   -> IO ModuleResult
-  -- -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]
-  --                              ,HM.HashMap Text (TableMap [CheckResult])))
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 

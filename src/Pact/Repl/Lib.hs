@@ -342,9 +342,9 @@ verify i as = case as of
           ModuleCheckFailure checkFailure -> setop $ TcErrors $
             pure $ Text.unpack $ describeCheckFailure checkFailure
           ModuleChecks propResults invariantResults -> setop $ TcErrors $
-            let x = toListOf (traverse . each) propResults
-                y = toListOf (traverse . traverse . each) invariantResults
-            in Text.unpack . describeCheckResult <$> x <> y
+            let propResults'      = propResults      ^.. traverse . each
+                invariantResults' = invariantResults ^.. traverse . traverse . each
+            in Text.unpack . describeCheckResult <$> propResults' <> invariantResults'
 
 
         return (tStr "")
