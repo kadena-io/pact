@@ -39,8 +39,14 @@ for2 = flip (traverse . traverse)
 astParsed :: AST Node -> Parsed
 astParsed = nodeParsed . _aNode
 
+astInfo :: AST Node -> Info
+astInfo = nodeInfo . _aNode
+
 nodeParsed :: Node -> Parsed
-nodeParsed = getInfoParsed . _tiInfo . _aId
+nodeParsed = getInfoParsed . nodeInfo
+
+nodeInfo :: Node -> Info
+nodeInfo =  _tiInfo . _aId
 
 getInfoParsed :: Info -> Parsed
 getInfoParsed parsed = case _iInfo parsed of
@@ -50,3 +56,7 @@ getInfoParsed parsed = case _iInfo parsed of
 -- | A 'Parsed' for when there is no location info available.
 dummyParsed :: Parsed
 dummyParsed = Default.def
+
+-- | An 'Info' for when there is no location info available.
+dummyInfo :: Info
+dummyInfo = Default.def
