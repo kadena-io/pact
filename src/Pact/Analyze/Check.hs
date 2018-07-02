@@ -469,7 +469,7 @@ checkFunction tables info parsed pactArgs body check = runExceptT $ do
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
       AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
-        runAnalysis tables tm check tags
+        runPropertyAnalysis check tables tm tags
       void $ lift $ SBV.output prop
       hoist SBV.query $ withExceptT (smtToCheckFailure parsed) $
         resultQuery goal $ Model tags ksProvs
