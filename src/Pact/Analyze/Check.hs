@@ -451,7 +451,7 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
       -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
 
-checkFunction
+checkFunctionProperty
   :: [Table]
   -- | 'Info' for the function being checked
   -> Info
@@ -461,7 +461,7 @@ checkFunction
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-checkFunction tables info parsed pactArgs body check = runExceptT $ do
+checkFunctionProperty tables info parsed pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation info pactArgs body
@@ -552,7 +552,8 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
       -- fail harder if we can't make sense of a type
 
       -- TODO(joel): this relies on generating the same unique ids as
-      -- @checkFunction@. We need to more carefully enforce this is true!
+      -- @checkFunctionProperty@. We need to more carefully enforce this is
+      -- true!
       env :: [(Text, VarId, EType)]
       env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
         $ zip vids
@@ -628,7 +629,7 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-             checkFunction tables _fInfo parsed _fArgs _fBody check
+             checkFunctionProperty tables _fInfo parsed _fArgs _fBody check
       else
         let parsed = getInfoParsed _fInfo
         in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
