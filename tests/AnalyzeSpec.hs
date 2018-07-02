@@ -143,7 +143,7 @@ decConserves tn cn = PDecimalComparison Eq 0 $
 
 spec :: Spec
 spec = describe "analyze" $ do
-{-
+-- {-
   describe "result" $ do
     let code =
           [text|
@@ -651,7 +651,7 @@ spec = describe "analyze" $ do
 
     expectVerified code
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
--}
+-- -}
 
   describe "conserves-mass.decimal.failing-invariant" $ do
     let code =
@@ -713,7 +713,7 @@ spec = describe "analyze" $ do
             it "should have specified invariant failures" $ do
               map `shouldBe` Map.empty
 
-{-
+-- {-
   describe "cell-delta.integer" $ do
     let code =
           [text|
@@ -1473,4 +1473,4 @@ spec = describe "analyze" $ do
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
   --            named)
   --
--}
+-- -}

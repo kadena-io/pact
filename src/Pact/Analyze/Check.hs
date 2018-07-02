@@ -103,14 +103,14 @@ instance Eq SmtFailure where
 data CheckFailure'
   = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
-  | TranslateFailure TranslateFailure
-  | AnalyzeFailure AnalyzeFailure
+  | TranslateFailure' TranslateFailureNoLoc
+  | AnalyzeFailure' AnalyzeFailure'
   | SmtFailure SmtFailure
   deriving (Eq, Show)
 
 data CheckFailure = CheckFailure
-  { _checkFailureInfo :: !Parsed
-  , _checkFailure     :: !CheckFailure'
+  { _checkFailureParsed :: !Parsed
+  , _checkFailure       :: !CheckFailure'
   } deriving (Eq, Show)
 
 type CheckResult = Either CheckFailure CheckSuccess
@@ -150,11 +150,11 @@ describeCheckFailure (CheckFailure parsed failure) =
 
     _ ->
       let str = case failure of
-            NotAFunction name    -> "No function named " <> name
-            TypecheckFailure _   -> error "impossible (handled above)"
-            TranslateFailure err -> describeTranslateFailure err
-            AnalyzeFailure err   -> describeAnalyzeFailure err
-            SmtFailure err       -> describeSmtFailure err
+            NotAFunction name     -> "No function named " <> name
+            TypecheckFailure _    -> error "impossible (handled above)"
+            TranslateFailure' err -> describeTranslateFailureNoLoc err
+            AnalyzeFailure' err   -> describeAnalyzeFailure' err
+            SmtFailure err        -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
 describeCheckResult :: CheckResult -> Text
@@ -252,9 +252,6 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 --
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
-
-dummyParsed :: Parsed
-dummyParsed = Default.def
 
 allocModelTags :: Pact.Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
 allocModelTags funInfo args tm tagAllocs = ModelTags
@@ -383,6 +380,10 @@ resultQuery goal model0 = do
 fillMeInJoel :: Parsed
 fillMeInJoel = Default.def
 
+translateToCheckFailure :: TranslateFailure -> CheckFailure
+translateToCheckFailure (TranslateFailure parsed err)
+  = CheckFailure parsed (TranslateFailure' err)
+
 -- TODO: better naming btw checkFunctionInvariants / verifyFunctionInvariants
 checkFunctionInvariants
   :: [Table]
@@ -395,13 +396,12 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       -- TODO: runTranslation would ideally give us info about exactly where
       -- the translation failed. This is as close as we can get currently.
-      withExcept (\err -> CheckFailure parsed (TranslateFailure err)) $
-        runTranslation pactArgs body
+      withExcept translateToCheckFailure $ runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
       resultsTable <- withExceptT
-        (\err -> CheckFailure fillMeInJoel (AnalyzeFailure err)) $
+        (\(AnalyzeFailure parsed err) -> CheckFailure parsed (AnalyzeFailure' err)) $
           runInvariantAnalysis tables tm tags
 
       ExceptT $ fmap Right $
@@ -447,23 +447,31 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
       -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
 
+analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
+analyzeToCheckFailure (AnalyzeFailure parsed err)
+  = CheckFailure parsed (AnalyzeFailure' err)
+
+smtToCheckFailure :: SmtFailure -> CheckFailure
+smtToCheckFailure = CheckFailure Default.def . SmtFailure
+
 checkFunction
   :: [Table]
   -> Pact.Info
   -> [Named Node]
   -> [AST Node]
   -> Check
-  -> IO (Either CheckFailure' CheckSuccess)
+  -> IO (Either CheckFailure CheckSuccess)
 checkFunction tables info pactArgs body check = runExceptT $ do
-    (args, tm, tagAllocs) <- hoist generalize $ withExcept TranslateFailure $
-      runTranslation pactArgs body
+    (args, tm, tagAllocs) <- hoist generalize $
+      withExcept translateToCheckFailure $
+        runTranslation pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags info args tm tagAllocs
-      AnalysisResult prop ksProvs <- withExceptT AnalyzeFailure $
+      AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
         runAnalysis tables tm check tags
       void $ lift $ SBV.output prop
-      hoist SBV.query $ withExceptT (SmtFailure) $
+      hoist SBV.query $ withExceptT smtToCheckFailure $
         resultQuery goal $ Model tags ksProvs
 
   where
@@ -475,10 +483,10 @@ checkFunction tables info pactArgs body check = runExceptT $ do
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
-      :: IO (Either CheckFailure' b)
-      -> IO (Either CheckFailure' b)
+      :: IO (Either CheckFailure b)
+      -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ SmtFailure $ UnexpectedFailure e
+      pure $ Left $ smtToCheckFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
@@ -514,15 +522,10 @@ moduleTables modules (_mod, modRefs) = do
             "invariants" invariants invariant $
             \meta -> runReaderT (expToInvariant TBool meta) _utFields
 
-      pure $ Table tabName schema . fmap snd <$> parsed
+      pure $ Table tabName schema <$> parsed
 
   let (failures, tables') = partitionEithers eitherTables
   pure $ if null failures then Right tables' else Left (concat failures)
-
-getInfoParsed :: Pact.Info -> Parsed
-getInfoParsed parsed = case _iInfo parsed of
-  Nothing               -> dummyParsed
-  Just (_code, parsed') -> parsed'
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleFunRefs :: ModuleData -> HM.HashMap Text Ref
@@ -626,7 +629,7 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-        first (CheckFailure parsed) <$>
+        -- first (CheckFailure parsed) <$>
           checkFunction tables _fInfo _fArgs _fBody check
       else
         let parsed = getInfoParsed _fInfo

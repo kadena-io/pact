@@ -23,6 +23,7 @@ import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
                                              runStateT)
+import qualified Data.Default               as Default
 import           Data.Foldable              (foldl')
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
@@ -35,6 +36,7 @@ import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           Pact.Types.Lang            (Literal (..), PrimType (..),
                                              Type (..))
+import           Pact.Types.Lang            (Parsed)
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
@@ -45,8 +47,14 @@ import           System.Locale              (defaultTimeLocale)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util
 
-data TranslateFailure
+data TranslateFailure = TranslateFailure
+  { _translateFailureParsed :: !Pact.Parsed
+  , _translateFailure       :: !TranslateFailureNoLoc
+  }
+
+data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
   | NonStringLitInBinding (AST Node)
   | EmptyBody
@@ -57,7 +65,7 @@ data TranslateFailure
   | TypeMismatch EType EType
   | UnexpectedNode (AST Node)
   | MissingConcreteType (Pact.Type Pact.UserType)
-  | AlternativeFailures [TranslateFailure]
+  | AlternativeFailures [TranslateFailureNoLoc]
   | MonadFailure String
   | NonStaticColumns (AST Node)
   | BadNegationType (AST Node)
@@ -68,8 +76,8 @@ data TranslateFailure
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving (Eq, Show)
 
-describeTranslateFailure :: TranslateFailure -> Text
-describeTranslateFailure = \case
+describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
+describeTranslateFailureNoLoc = \case
   BranchesDifferentTypes t1 t2 -> "two branches unexpectedly have different types: (" <> tShow t1 <> ") vs (" <> tShow t2 <> ")"
   NonStringLitInBinding ast -> "We only support analysis of binding forms (bind / with-read) binding string literals. Instead we found " <> tShow ast
   EmptyBody -> "can't translate an empty body"
@@ -80,7 +88,7 @@ describeTranslateFailure = \case
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
   UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
-  AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
+  AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailureNoLoc <$> failures)
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
   BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
@@ -89,12 +97,19 @@ describeTranslateFailure = \case
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
-instance Monoid TranslateFailure where
+instance Monoid TranslateFailureNoLoc where
   mempty = AlternativeFailures []
   mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
   mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
   mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
   mappend x y = AlternativeFailures [x, y]
+
+-- TODO(joel): I'm not entirely pleased with this instance throwing away
+-- location info
+instance Monoid TranslateFailure where
+  mempty = TranslateFailure Default.def mempty
+  TranslateFailure _ x `mappend` TranslateFailure _ y
+    = TranslateFailure Default.def (x <> y)
 
 mkTranslateEnv :: [Arg] -> Map Node (Text, VarId)
 mkTranslateEnv = foldl'
@@ -116,6 +131,7 @@ data TranslateState
     }
 
 makePrisms ''TagAllocation
+makeLenses ''TranslateFailure
 makeLenses ''TranslateState
 
 instance HasVarId TranslateState where
@@ -128,12 +144,13 @@ newtype TranslateM a
                           (Except TranslateFailure))
                         a
     }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
+  deriving (Functor, Applicative, Monad, Alternative, MonadPlus,
     MonadReader (Map Node (Text, VarId)), MonadState TranslateState,
     MonadError TranslateFailure)
 
+-- TODO(joel): Ideally we should always have location info
 instance MonadFail TranslateM where
-  fail s = throwError (MonadFailure s)
+  fail s = throwError (TranslateFailure Default.def (MonadFailure s))
 
 writeTagAlloc :: TagAllocation -> TranslateM ()
 writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
@@ -222,10 +239,18 @@ maybeTranslateType' f = \case
   TyList _         -> empty
   TyFun _          -> empty
 
+throwErrorNode
+  :: MonadError TranslateFailure m => Pact.Node -> TranslateFailureNoLoc -> m a
+throwErrorNode node = throwError . TranslateFailure (nodeParsed node)
+
+throwErrorAst
+  :: MonadError TranslateFailure m => AST Node -> TranslateFailureNoLoc -> m a
+throwErrorAst ast = throwError . TranslateFailure (astParsed ast)
+
 translateType :: MonadError TranslateFailure m => Node -> m EType
 translateType node = case _aTy node of
   (maybeTranslateType -> Just ety) -> pure ety
-  ty                               -> throwError $ UnhandledType node ty
+  ty                               -> throwErrorNode node $ UnhandledType node ty
 
 translateArg
   :: (MonadState s m, HasVarId s, MonadError TranslateFailure m)
@@ -240,38 +265,40 @@ translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
   ty <- translateType node
   case ty of
-    EType _primTy    -> throwError $ NotConvertibleToSchema $ _aTy node
+    EType _primTy    -> throwErrorNode node $ NotConvertibleToSchema $ _aTy node
     EObjectTy schema -> pure schema
 
-translateBody :: [AST Node] -> TranslateM ETerm
-translateBody [] = throwError EmptyBody
-translateBody [ast] = translateNode ast
-translateBody (ast:asts) = do
-  ast'  <- translateNode ast
-  asts' <- translateBody asts
-  pure $ case asts' of
-    ETerm   astsT ty -> ETerm   (Sequence ast' astsT) ty
-    EObject astsO ty -> EObject (Sequence ast' astsO) ty
+translateBody :: Parsed -> [AST Node] -> TranslateM ETerm
+translateBody parsed = \case
+  []       -> throwError $ TranslateFailure parsed EmptyBody
+  [ast]    -> translateNode ast
+  ast:asts -> do
+    ast'  <- translateNode ast
+    asts' <- translateBody parsed asts
+    pure $ case asts' of
+      ETerm   astsT ty -> ETerm   (Sequence ast' astsT) ty
+      EObject astsO ty -> EObject (Sequence ast' astsO) ty
 
 translateObjBinding
-  :: [(Named Node, AST Node)]
+  :: Node
+  -> [(Named Node, AST Node)]
   -> Schema
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateObjBinding bindingsA schema bodyA rhsT = do
+translateObjBinding node bindingsA schema bodyA rhsT = do
   (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
     \(Named unmungedVarName varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
           varInfo = varNode ^. aId . Pact.tiInfo
       varType <- translateType varNode
-      vid <- genVarId
+      vid     <- genVarId
       tagVarBinding varInfo unmungedVarName varType vid
       case colAst of
         AST_StringLit colName ->
           pure (T.unpack colName, varType, (varNode, varName, vid))
         _ ->
-          throwError $ NonStringLitInBinding colAst
+          throwErrorNode varNode $ NonStringLitInBinding colAst
 
   bindingId <- genVarId
   let freshVar = Var "binding" bindingId
@@ -296,11 +323,11 @@ translateObjBinding bindingsA schema bodyA rhsT = do
         (\(_, _, (node, name, vid)) -> (node, (name, vid))) <$> bindings
 
   mapETerm translateLet <$>
-    local (unionPreferring nodeToNameVid) (translateBody bodyA)
+    local (unionPreferring nodeToNameVid) (translateBody (nodeParsed node) bodyA)
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = case astNode of
-  AST_Let _ [] body -> translateBody body
+  AST_Let _ [] body -> translateBody (astParsed astNode) body
 
   AST_Let node ((Named unmungedVarName varNode _, rhsNode):bindingsRest) body -> do
     rhsETerm <- translateNode rhsNode
@@ -322,7 +349,7 @@ translateNode astNode = case astNode of
         ETerm   bodyTm bodyTy -> ETerm   (Let varName vid rhsETerm bodyTm) bodyTy
         EObject bodyTm bodyTy -> EObject (Let varName vid rhsETerm bodyTm) bodyTy
 
-  AST_InlinedApp body -> translateBody body
+  AST_InlinedApp body -> translateBody (astParsed astNode) body
 
   AST_Var node -> do
     Just (varName, vid) <- view (at node)
@@ -335,7 +362,7 @@ translateNode astNode = case astNode of
   AST_NegativeLit l -> case l of
     LInteger i -> pure $ ETerm (IntUnaryArithOp Negate (lit i)) TInt
     LDecimal d -> pure $ ETerm (DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
-    _ -> throwError $ BadNegationType astNode
+    _          -> throwErrorAst astNode $ BadNegationType astNode
 
   AST_Lit l -> case l of
     LInteger i -> pure $ ETerm (lit i) TInt
@@ -350,7 +377,7 @@ translateNode astNode = case astNode of
     case ty of
       TInt     -> pure (ETerm (IntUnaryArithOp Negate (Var name vid)) TInt)
       TDecimal -> pure (ETerm (DecUnaryArithOp Negate (Var name vid)) TDecimal)
-      _        -> throwError $ BadNegationType astNode
+      _        -> throwErrorAst astNode $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
     ETerm condTerm TBool <- translateNode cond
@@ -402,21 +429,21 @@ translateNode astNode = case astNode of
     case daysTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (60 * 60 * 24) days') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (60 * 60 * 24) days') TDecimal
-      _        -> throwError $ BadTimeType astNode
+      _        -> throwErrorAst astNode $ BadTimeType astNode
 
   AST_Hours hours -> do
     ETerm hours' hoursTy <- translateNode hours
     case hoursTy of
       TInt     -> pure $ ETerm (IntArithOp Mul (60 * 60) hours') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul (60 * 60) hours') TDecimal
-      _        -> throwError $ BadTimeType astNode
+      _        -> throwErrorAst astNode $ BadTimeType astNode
 
   AST_Minutes minutes -> do
     ETerm minutes' minutesTy <- translateNode minutes
     case minutesTy of
       TInt     -> pure $ ETerm (IntArithOp Mul 60 minutes') TInt
       TDecimal -> pure $ ETerm (DecArithOp Mul 60 minutes') TDecimal
-      _        -> throwError $ BadTimeType astNode
+      _        -> throwErrorAst astNode $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
@@ -436,11 +463,11 @@ translateNode astNode = case astNode of
               "<=" -> pure Lte
               "="  -> pure Eq
               "!=" -> pure Neq
-              _    -> throwError $ MalformedComparison fn args
+              _    -> throwErrorAst astNode $ MalformedComparison fn args
             case typeEq ta tb of
               Just Refl -> pure $ ETerm (Comparison op a' b') TBool
-              _         -> throwError (TypeMismatch (EType ta) (EType tb))
-          _ -> throwError $ MalformedComparison fn args
+              _         -> throwErrorAst astNode (TypeMismatch (EType ta) (EType tb))
+          _ -> throwErrorAst astNode $ MalformedComparison fn args
 
         mkLogical :: TranslateM ETerm
         mkLogical = case args of
@@ -448,15 +475,15 @@ translateNode astNode = case astNode of
             ETerm a' TBool <- translateNode a
             case fn of
               "not" -> pure $ ETerm (Logical NotOp [a']) TBool
-              _     -> throwError $ MalformedComparison fn args
+              _     -> throwErrorAst astNode $ MalformedComparison fn args
           [a, b] -> do
             ETerm a' TBool <- translateNode a
             ETerm b' TBool <- translateNode b
             case fn of
               "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
               "or"  -> pure $ ETerm (Logical OrOp [a', b']) TBool
-              _     -> throwError $ MalformedLogicalOp fn args
-          _ -> throwError $ MalformedLogicalOp fn args
+              _     -> throwErrorAst astNode $ MalformedLogicalOp fn args
+          _ -> throwErrorAst astNode $ MalformedLogicalOp fn args
 
         mkArith :: TranslateM ETerm
         mkArith = case args of
@@ -482,7 +509,7 @@ translateNode astNode = case astNode of
                      ETerm (IntDecArithOp (opFromName fn) a' b') TDecimal
                    (TDecimal, TInt)     -> pure $
                      ETerm (DecIntArithOp (opFromName fn) a' b') TDecimal
-                   _ -> throwError $ MalformedArithOp fn args
+                   _ -> throwErrorAst astNode $ MalformedArithOp fn args
               | otherwise -> case (tyA, tyB, fn) of
                 (TDecimal, TInt, "round")   -> pure $
                   ETerm (RoundingLikeOp2 Round a' b') TDecimal
@@ -490,7 +517,7 @@ translateNode astNode = case astNode of
                   ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
                 (TDecimal, TInt, "floor")   -> pure $
                   ETerm (RoundingLikeOp2 Floor a' b') TDecimal
-                _ -> throwError $ MalformedArithOp fn args
+                _ -> throwErrorAst astNode $ MalformedArithOp fn args
           [a] -> do
             ETerm a' ty <- translateNode a
             case (fn, ty) of
@@ -509,8 +536,8 @@ translateNode astNode = case astNode of
               ("round",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Round a') TInt
               ("ceiling", TDecimal) -> pure $ ETerm (RoundingLikeOp1 Ceiling a') TInt
               ("floor",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Floor a') TInt
-              _         -> throwError $ MalformedArithOp fn args
-          _ -> throwError $ MalformedArithOp fn args
+              _         -> throwErrorAst astNode $ MalformedArithOp fn args
+          _ -> throwErrorAst astNode $ MalformedArithOp fn args
 
         mkConcat :: TranslateM ETerm
         mkConcat = case (fn, args) of
@@ -543,7 +570,7 @@ translateNode astNode = case astNode of
     ETerm b tb <- translateNode fBranch
     case typeEq ta tb of
       Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
-      _         -> throwError (BranchesDifferentTypes (EType ta) (EType tb))
+      _         -> throwErrorAst astNode (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
 
@@ -552,12 +579,12 @@ translateNode astNode = case astNode of
     ETerm key' TStr <- translateNode key
     tid <- tagRead node schema
     let readT = EObject (Read tid (TableName (T.unpack table)) schema key') schema
-    translateObjBinding bindings schema body readT
+    translateObjBinding node bindings schema body readT
 
-  AST_Bind _ objectA bindings schemaNode body -> do
+  AST_Bind node objectA bindings schemaNode body -> do
     schema <- translateSchema schemaNode
     objectT <- translateNode objectA
-    translateObjBinding bindings schema body objectT
+    translateObjBinding node bindings schema body objectT
 
   -- Time
   -- Tricky: seconds could be either integer or decimal
@@ -580,7 +607,7 @@ translateNode astNode = case astNode of
     (Schema fields) <- translateSchema node
     columns' <- fmap Set.fromList $ for columns $ \case
       AST_Lit (LString col) -> pure col
-      bad                   -> throwError (NonStaticColumns bad)
+      bad                   -> throwErrorAst astNode (NonStaticColumns bad)
     let schema = Schema $
           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
@@ -602,7 +629,7 @@ translateNode astNode = case astNode of
       k' <- case k of
         AST_Lit (LString t) -> pure t
         -- TODO: support non-const keys
-        _                   -> throwError $ NonConstKey k
+        _                   -> throwErrorAst astNode $ NonConstKey k
       ty <- translateType $ v ^. aNode
       v' <- translateNode v
       pure (k', (ty, v'))
@@ -613,7 +640,7 @@ translateNode astNode = case astNode of
   -- TODO: more cases.
   --
 
-  ast -> throwError $ UnexpectedNode ast
+  ast -> throwErrorAst astNode $ UnexpectedNode ast
 
 -- TODO: give the exact location of failure
 runTranslation
@@ -630,9 +657,11 @@ runTranslation pactArgs body = do
     runArgsTranslation =
       runStateT (traverse translateArg pactArgs) (VarId 0)
 
-    runBodyTranslation :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
+    runBodyTranslation
+      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
     runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $
       (flip runStateT (TranslateState [] 0 nextVarId) $
         (runReaderT
-          (unTranslateM (translateBody body))
+          -- TODO(joel): Add location info
+          (unTranslateM (translateBody Default.def body))
           (mkTranslateEnv args)))
