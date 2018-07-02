@@ -199,7 +199,7 @@ data AnalysisResult
     , _arKsProvenances :: Map TagId Provenance
     } deriving Show
 
-data AnalyzeFailure'
+data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType Schema
   | AValUnexpectedlySVal SBVI.SVal
   | AValUnexpectedlyObj Object
@@ -223,7 +223,7 @@ data AnalyzeFailure'
 
 data AnalyzeFailure = AnalyzeFailure
   { _analyzeFailureParsed :: !Parsed
-  , _analyzeFailure       :: !AnalyzeFailure'
+  , _analyzeFailure       :: !AnalyzeFailureNoLoc
   }
 
 makeLenses ''AnalyzeEnv
@@ -233,9 +233,6 @@ makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''QueryEnv
 makeLenses ''AnalysisResult
-
-throwErrorNoLoc :: MonadError AnalyzeFailure m => AnalyzeFailure' -> m a
-throwErrorNoLoc = throwError . AnalyzeFailure dummyParsed
 
 mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
@@ -340,8 +337,11 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
 
-describeAnalyzeFailure' :: AnalyzeFailure' -> Text
-describeAnalyzeFailure' = \case
+throwErrorNoLoc :: MonadError AnalyzeFailure m => AnalyzeFailureNoLoc -> m a
+throwErrorNoLoc = throwError . AnalyzeFailure dummyParsed
+
+describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
+describeAnalyzeFailureNoLoc = \case
     -- these are internal errors. not quite as much care is taken on the messaging
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
     AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
@@ -376,7 +376,7 @@ describeAnalyzeFailure' = \case
     pleaseReportThis :: Text
     pleaseReportThis = "Please report this as a bug at https://github.com/kadena-io/pact/issues"
 
-instance IsString AnalyzeFailure' where
+instance IsString AnalyzeFailureNoLoc where
   fromString = FailureMessage . T.pack
 
 newtype Analyze a

@@ -100,7 +100,7 @@ data CheckFailureNoLoc
   = NotAFunction Text
   | TypecheckFailure (Set TC.Failure)
   | TranslateFailure' TranslateFailureNoLoc
-  | AnalyzeFailure' AnalyzeFailure'
+  | AnalyzeFailure' AnalyzeFailureNoLoc
   | SmtFailure SmtFailure
   deriving (Eq, Show)
 
@@ -149,7 +149,7 @@ describeCheckFailure (CheckFailure parsed failure) =
             NotAFunction name     -> "No function named " <> name
             TypecheckFailure _    -> error "impossible (handled above)"
             TranslateFailure' err -> describeTranslateFailureNoLoc err
-            AnalyzeFailure' err   -> describeAnalyzeFailure' err
+            AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
             SmtFailure err        -> describeSmtFailure err
       in T.pack (renderParsed parsed) <> ":Warning: " <> str
 
