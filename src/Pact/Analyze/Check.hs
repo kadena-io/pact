@@ -160,6 +160,17 @@ describeCheckFailure (CheckFailure parsed failure) =
 describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
 
+translateToCheckFailure :: TranslateFailure -> CheckFailure
+translateToCheckFailure (TranslateFailure parsed err)
+  = CheckFailure parsed (TranslateFailure' err)
+
+analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
+analyzeToCheckFailure (AnalyzeFailure parsed err)
+  = CheckFailure parsed (AnalyzeFailure' err)
+
+smtToCheckFailure :: SmtFailure -> CheckFailure
+smtToCheckFailure = CheckFailure Default.def . SmtFailure
+
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showModel :: Model -> Text
@@ -377,13 +388,6 @@ resultQuery goal model0 = do
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
-fillMeInJoel :: Parsed
-fillMeInJoel = Default.def
-
-translateToCheckFailure :: TranslateFailure -> CheckFailure
-translateToCheckFailure (TranslateFailure parsed err)
-  = CheckFailure parsed (TranslateFailure' err)
-
 -- TODO: better naming btw checkFunctionInvariants / verifyFunctionInvariants
 checkFunctionInvariants
   :: [Table]
@@ -440,19 +444,13 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ CheckFailure fillMeInJoel $ SmtFailure $ UnexpectedFailure e
+      pure $ Left $ CheckFailure (getInfoParsed info) $
+        SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
       -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
-
-analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
-analyzeToCheckFailure (AnalyzeFailure parsed err)
-  = CheckFailure parsed (AnalyzeFailure' err)
-
-smtToCheckFailure :: SmtFailure -> CheckFailure
-smtToCheckFailure = CheckFailure Default.def . SmtFailure
 
 checkFunction
   :: [Table]
