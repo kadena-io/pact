@@ -100,8 +100,10 @@ runVerification code = do
         ModuleChecks propResults invariantResults -> pure $
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
-            _ -> case findOf  (traverse . traverse . traverse) isLeft invariantResults of
+            _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
+
               Just (Left failure) -> Just $ TestCheckFailure failure
+              Just (Right _)      -> error "impossible: result of isLeft"
               Nothing             -> Nothing
 
 runCheck :: Text -> Check -> IO (Maybe TestFailure)
@@ -142,7 +144,6 @@ decConserves tn cn = PDecimalComparison Eq 0 $
 
 spec :: Spec
 spec = describe "analyze" $ do
--- {-
   describe "result" $ do
     let code =
           [text|
@@ -650,7 +651,6 @@ spec = describe "analyze" $ do
 
     expectVerified code
     expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
--- -}
 
   describe "conserves-mass.decimal.failing-invariant" $ do
     let code =
@@ -710,7 +710,6 @@ spec = describe "analyze" $ do
             it "should have no keyset provenance" $ do
               ksProvs `shouldBe` Map.empty
 
--- {-
   describe "cell-delta.integer" $ do
     let code =
           [text|
@@ -1470,4 +1469,3 @@ spec = describe "analyze" $ do
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
   --            named)
   --
--- -}
