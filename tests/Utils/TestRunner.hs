@@ -1,8 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{--module TestRunner
-  () where
---}
+
+module Utils.TestRunner
+  ( runAll
+  , flushDb
+  , genKeys) where
+
 import Pact.Server.Server
 import Pact.ApiReq
 import Pact.Types.API
@@ -12,22 +15,21 @@ import Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Data.Aeson
-import Data.Text as T
+import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Control.Lens
 import Network.Wreq
 import System.Directory
 
-_testDir, _testLogDir, _testConfigFilePath, testPort, _serverPath :: String
+_testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
 _testDir = "tests/resume/"
 _testLogDir = "tests/resume/test-log/"
 _testConfigFilePath = "tests/resume/test-config.yaml"
 
-testPort = "8080"
-_serverPath = "http://localhost:" ++ testPort ++ "/api/v1/"
+_testPort = "8080"
+_serverPath = "http://localhost:" ++ _testPort ++ "/api/v1/"
 
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
@@ -47,19 +49,6 @@ data TestCont = TestCont
     _tcKeyPairs :: [KeyPair],
     _tcNonce :: String
   } deriving (Eq,Show)
-
-main :: IO ()
-main = do
-  (priv,publ) <- genKeys
-  cmd <- mkExec  "(+ 1 2)" Null Nothing
-             [KeyPair priv publ] (Just "test1")
-  res <- runAll [cmd]
-  print "Printing result of runAll"
-  print res
-  print "server should be down. check"
-  _ <- threadDelay (10000000)
-  print "time to check ended. cleaning up now"
-  flushDb
 
 runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 runAll cmds = do

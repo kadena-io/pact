@@ -161,24 +161,6 @@ executable bench
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
-
-executable testing
-  main-is:             TestRunner.hs
-  build-depends:       base
-                     , pact
-                     , directory
-                     , async
-                     , wreq
-                     , aeson
-                     , ed25519-donna
-                     , crypto-api
-                     , lens
-                     , text
-                     , unordered-containers
-  hs-source-dirs:      tests
-  ghc-options:         -Wall -threaded -rtsopts
-  ghc-prof-options:    -fprof-auto -fprof-auto-calls
-  default-language:    Haskell2010
   
 test-suite hspec
   type: exitcode-stdio-1.0
@@ -200,6 +182,10 @@ test-suite hspec
               , bytestring
               , mtl
               , text
+              , async
+              , ed25519-donna
+              , crypto-api
+              , wreq
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
@@ -209,6 +195,8 @@ test-suite hspec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
+                PactContinuationSpec
+                Utils.TestRunner
   if !impl(ghcjs)
     other-modules:
         DocgenSpec
