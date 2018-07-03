@@ -143,11 +143,6 @@ instance Default Parsed where def = Parsed mempty 0
 instance HasBytes Parsed where bytes = bytes . _pDelta
 instance Pretty Parsed where pretty = pretty . _pDelta
 
-instance Mergeable Parsed where
-  -- Because Parsed values have no effect on execution we just take the first
-  -- one.
-  symbolicMerge _ _ a _b = a
-
 newtype Code = Code { _unCode :: Text }
   deriving (Eq,Ord,IsString,ToJSON,FromJSON,Semigroup,Monoid,Generic,NFData,AsString)
 instance Show Code where show = unpack . _unCode
@@ -176,6 +171,10 @@ instance Ord Info where
   Info Nothing <= _ = True
   _ <= Info Nothing = False
 
+instance Mergeable Info where
+  -- Because Info values have no effect on execution we just take the max
+  -- (which could possibly have more info)
+  symbolicMerge _ _ a b = max a b
 
 instance Default Info where def = Info Nothing
 

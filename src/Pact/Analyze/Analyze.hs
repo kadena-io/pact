@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -58,7 +59,7 @@ import           Data.Traversable           (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash            as Pact
-import           Pact.Types.Lang            (Parsed)
+import           Pact.Types.Lang            (Info)
 import           Pact.Types.Runtime         (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
                                              Type (TyPrim), tShow)
 import qualified Pact.Types.Runtime         as Pact
@@ -73,11 +74,12 @@ import           Pact.Analyze.Util
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope     :: Map VarId AVal              -- used as a stack
-    , _aeKeySets   :: SFunArray KeySetName KeySet -- read-only
-    , _aeKsAuths   :: SFunArray KeySet Bool       -- read-only
-    , _invariants  :: TableMap [(Parsed, Invariant Bool)]
-    , _aeModelTags :: ModelTags
+    { _aeScope     :: !(Map VarId AVal)              -- used as a stack
+    , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
+    , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
+    , _invariants  :: !(TableMap [(Info, Invariant Bool)])
+    , _aeModelTags :: !ModelTags
+    , _aeInfo      :: !Info
     }
   deriving Show
 
@@ -122,7 +124,7 @@ data LatticeAnalyzeState
     --       finer-grained tracking, so that we can test whether a single
     --       invariant is being maintained
     --
-    , _lasMaintainsInvariants :: TableMap (ZipList (Parsed, SBV Bool))
+    , _lasMaintainsInvariants :: TableMap (ZipList (Info, SBV Bool))
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
@@ -221,7 +223,7 @@ data AnalyzeFailureNoLoc
   deriving (Eq, Show)
 
 data AnalyzeFailure = AnalyzeFailure
-  { _analyzeFailureParsed :: !Parsed
+  { _analyzeFailureParsed :: !Info
   , _analyzeFailure       :: !AnalyzeFailureNoLoc
   }
 
@@ -336,9 +338,6 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
 
-throwErrorNoLoc :: MonadError AnalyzeFailure m => AnalyzeFailureNoLoc -> m a
-throwErrorNoLoc = throwError . AnalyzeFailure dummyParsed
-
 describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
 describeAnalyzeFailureNoLoc = \case
     -- these are internal errors. not quite as much care is taken on the messaging
@@ -395,8 +394,8 @@ newtype Query a
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure)
 
-mkAnalyzeEnv :: [Table] -> ModelTags -> AnalyzeEnv
-mkAnalyzeEnv tables tags =
+mkAnalyzeEnv :: [Table] -> ModelTags -> Info -> AnalyzeEnv
+mkAnalyzeEnv tables tags info =
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
@@ -407,7 +406,7 @@ mkAnalyzeEnv tables tags =
       argMap :: Map VarId AVal
       argMap = view (located._2._2) <$> _mtArgs tags
 
-  in AnalyzeEnv argMap keySets' keySetAuths invariants' tags
+  in AnalyzeEnv argMap keySets' keySetAuths invariants' tags info
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -444,26 +443,36 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
-class (MonadError AnalyzeFailure m) => Analyzer m term where
-  analyze  :: (Show a, SymWord a) => term a -> m (S a)
+class (MonadError AnalyzeFailure m) => Analyzer m term | m -> term where
+  analyze         :: (Show a, SymWord a) => term a -> m (S a)
+  throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
 
 class Analyzer m term => ObjectAnalyzer m term where
   analyzeO :: term Object -> m Object
 
 instance Analyzer Analyze Term where
   analyze  = analyzeTerm
+  throwErrorNoLoc err = do
+    info <- view (analyzeEnv . aeInfo)
+    throwError $ AnalyzeFailure info err
 
 instance ObjectAnalyzer Analyze Term where
   analyzeO = analyzeTermO
 
 instance Analyzer Query Prop where
   analyze  = analyzeProp
+  throwErrorNoLoc err = do
+    info <- view (analyzeEnv . aeInfo)
+    throwError $ AnalyzeFailure info err
 
 instance ObjectAnalyzer Query Prop where
   analyzeO = analyzePropO
 
 instance Analyzer InvariantCheck Invariant where
   analyze = checkInvariant
+  throwErrorNoLoc err = do
+    info <- view _1
+    throwError $ AnalyzeFailure info err
 
 class SymbolicTerm term where
   injectS :: S a -> term a
@@ -544,7 +553,7 @@ tagVarBinding vid av = do
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
 
-maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Parsed, SBool)))
+maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Info, SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
 tableRead :: TableName -> Lens' AnalyzeState (S Bool)
@@ -685,7 +694,7 @@ ksAuthorized sKs = do
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 aval
-  :: MonadError AnalyzeFailure m
+  :: Analyzer m term
   => (Maybe Provenance -> SBVI.SVal -> m a)
   -> (Object -> m a)
   -> AVal
@@ -695,17 +704,17 @@ aval elimVal elimObj = \case
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
-expectVal :: MonadError AnalyzeFailure m => AVal -> m (S a)
+expectVal :: Analyzer m term => AVal -> m (S a)
 expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
 
-expectObj :: MonadError AnalyzeFailure m => AVal -> m Object
+expectObj :: Analyzer m term => AVal -> m Object
 expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
 lookupObj
-  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  :: (Analyzer m term, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m Object
@@ -718,7 +727,7 @@ lookupObj name vid = do
     Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
 
 lookupVal
-  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  :: (Analyzer m term, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m (S a)
@@ -745,10 +754,10 @@ applyInvariants tn sValFields addInvariants = do
   case mInvariants of
     Nothing -> pure ()
     Just invariants' -> do
-      invariants'' <- for invariants' $ \(parsed, invariant) ->
-        case runReaderT (checkInvariant invariant) sValFields of
+      invariants'' <- for invariants' $ \(info, invariant) ->
+        case runReaderT (checkInvariant invariant) (info, sValFields) of
           -- Use the location of the invariant
-          Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure parsed err
+          Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
           Right inv -> pure inv
       addInvariants invariants''
 
@@ -974,14 +983,14 @@ analyzeUnaryArithOp op term = do
     Signum -> pure $ signum x
 
 analyzeModOp
-  :: Analyzer m term
+  :: (Analyzer m term)
   => term Integer
   -> term Integer
   -> m (S Integer)
 analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
 
 analyzeRoundingLikeOp1
-  :: Analyzer m term
+  :: (Analyzer m term)
   => RoundingLikeOp
   -> term Decimal
   -> m (S Integer)
@@ -1069,7 +1078,7 @@ analyzeIntAddTime timeT secsT = do
   pure $ time + fromIntegralS (secs * 1000000)
 
 analyzeDecAddTime
-  :: Analyzer m term
+  :: (Analyzer m term)
   => term Time
   -> term Decimal
   -> m (S Time)
@@ -1200,9 +1209,8 @@ analyzeTerm = \case
         sValFields = Map.mapMaybe id mValFields
 
     applyInvariants tn sValFields $ \invariants' ->
-      let fs :: ZipList ((Parsed, SBV Bool) -> (Parsed, SBV Bool))
+      let fs :: ZipList ((Info, SBV Bool) -> (Info, SBV Bool))
           fs = ZipList $ (\s (p, s') -> (p, _sSbv s &&& s')) <$> invariants'
-          -- fs = ZipList $ (\s (p, s') -> (p, sSbv s &&& s')) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
 
     --
@@ -1289,7 +1297,7 @@ analyzeTerm = \case
   Hash value -> do
     let sHash = literalS . T.unpack . Pact.asString . Pact.hash
         notStaticErr :: AnalyzeFailure
-        notStaticErr = AnalyzeFailure dummyParsed "We can only analyze calls to `hash` with statically determined contents"
+        notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
       ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
@@ -1340,13 +1348,13 @@ format s tms = do
   if plen == 1
   then Right (literalS s)
   else if plen - length tms > 1
-       then Left (AnalyzeFailure dummyParsed "format: not enough arguments for template")
+       then Left (AnalyzeFailure dummyInfo "format: not enough arguments for template")
        else Right $ foldl'
               (\r (e, t) -> r .++ rep e .++ t)
               (head parts)
               (zip tms (tail parts))
 
-type InvariantCheck = ReaderT (Map Text SBVI.SVal) (Either AnalyzeFailure)
+type InvariantCheck = ReaderT (Info, Map Text SBVI.SVal) (Either AnalyzeFailure)
 
 checkInvariant :: Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
@@ -1362,7 +1370,7 @@ checkInvariant = \case
 
   -- variables
   IVar name         -> do
-    mVal <- view (at name)
+    mVal <- view (_2 . at name)
     case mVal of
       Just val -> pure (sansProv (SBVI.SBV val))
       Nothing  -> throwErrorNoLoc $ fromString $
@@ -1564,7 +1572,7 @@ analyzeCheck = fmap Identity . \case
 
 -- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
 -- functor instead of three.
-newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [(Parsed, a)] }
+newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [(Info, a)] }
 
 instance Functor InvariantsF where
   fmap f (InvariantsF a) = InvariantsF (f <$$$> a)
@@ -1577,7 +1585,7 @@ analyzeInvariants = assumingSuccess =<< invariantsHold'
       success <- view (qeAnalyzeState.succeeds)
       pure $ (success ==>) <$> ps
 
-    invariantsHold :: Query (TableMap (ZipList (Parsed, S Bool)))
+    invariantsHold :: Query (TableMap (ZipList (Info, S Bool)))
     invariantsHold = sansProv <$$$$> view (qeAnalyzeState.maintainsInvariants)
 
     invariantsHold' :: Query (InvariantsF (S Bool))
@@ -1590,10 +1598,11 @@ runAnalysis'
   -> [Table]
   -> ETerm
   -> ModelTags
+  -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables tm tags = do
+runAnalysis' query tables tm tags info = do
   let act    = analyzeETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables tags
+      aEnv   = mkAnalyzeEnv tables tags info
       state0 = mkInitialAnalyzeState tables
 
   (funResult, state1, ()) <- hoist generalize $
@@ -1612,14 +1621,16 @@ runPropertyAnalysis
   -> [Table]
   -> ETerm
   -> ModelTags
+  -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables tm tags =
-  runIdentity <$> runAnalysis' (analyzeCheck check) tables tm tags
+runPropertyAnalysis check tables tm tags info =
+  runIdentity <$> runAnalysis' (analyzeCheck check) tables tm tags info
 
 runInvariantAnalysis
   :: [Table]
   -> ETerm
   -> ModelTags
-  -> ExceptT AnalyzeFailure Symbolic (TableMap [(Parsed, AnalysisResult)])
-runInvariantAnalysis tables tm tags =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags
+  -> Info
+  -> ExceptT AnalyzeFailure Symbolic (TableMap [(Info, AnalysisResult)])
+runInvariantAnalysis tables tm tags info =
+  unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags info

@@ -692,7 +692,7 @@ type Arg
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
-  , _tableInvariants :: [(Pact.Parsed, Invariant Bool)]
+  , _tableInvariants :: [(Pact.Info, Invariant Bool)]
   } deriving (Show)
 
 data Goal

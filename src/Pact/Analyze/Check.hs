@@ -53,9 +53,9 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Info, Parsed, eParsed, mMetas,
-                                            mName, renderInfo, renderParsed,
-                                            tMeta)
+import           Pact.Types.Lang           (Code(Code), Info(Info), eParsed,
+                                            mMetas, mName, renderInfo,
+                                            renderParsed, tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TDef, TSchema, TTable),
@@ -106,9 +106,8 @@ data CheckFailureNoLoc
   | SmtFailure SmtFailure
   deriving (Eq, Show)
 
--- TODO: change Parsed to Info if possible
 data CheckFailure = CheckFailure
-  { _checkFailureParsed :: !Parsed
+  { _checkFailureParsed :: !Info
   , _checkFailure       :: !CheckFailureNoLoc
   } deriving (Eq, Show)
 
@@ -142,7 +141,7 @@ describeSmtFailure = \case
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeCheckFailure :: CheckFailure -> Text
-describeCheckFailure (CheckFailure parsed failure) =
+describeCheckFailure (CheckFailure info failure) =
   case failure of
     TypecheckFailure fails -> T.unlines $ map
       (\(TC.Failure ti s) -> T.pack (renderInfo (_tiInfo ti) ++ ":Warning: " ++ s))
@@ -155,21 +154,22 @@ describeCheckFailure (CheckFailure parsed failure) =
             TranslateFailure' err -> describeTranslateFailureNoLoc err
             AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
             SmtFailure err        -> describeSmtFailure err
-      in T.pack (renderParsed parsed) <> ":Warning: " <> str
+      in T.pack (renderParsed (infoToParsed info)) <> ":Warning: " <> str
 
 describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
 
+-- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
-  = CheckFailure (infoToParsed info) (TranslateFailure' err)
+  = CheckFailure info (TranslateFailure' err)
 
 analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
-analyzeToCheckFailure (AnalyzeFailure parsed err)
-  = CheckFailure parsed (AnalyzeFailure' err)
+analyzeToCheckFailure (AnalyzeFailure info err)
+  = CheckFailure info (AnalyzeFailure' err)
 
-smtToCheckFailure :: Parsed -> SmtFailure -> CheckFailure
-smtToCheckFailure parsed = CheckFailure parsed . SmtFailure
+smtToCheckFailure :: Info -> SmtFailure -> CheckFailure
+smtToCheckFailure info = CheckFailure info . SmtFailure
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
@@ -394,21 +394,21 @@ verifyFunctionInvariants'
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' tables info pactArgs body = runExceptT $ do
+verifyFunctionInvariants' tables funInfo pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
-      withExcept translateToCheckFailure $ runTranslation info pactArgs body
+      withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      tags <- lift $ allocModelTags info args tm tagAllocs
+      tags <- lift $ allocModelTags funInfo args tm tagAllocs
       resultsTable <- withExceptT
-        (\(AnalyzeFailure parsed err) -> CheckFailure parsed (AnalyzeFailure' err)) $
-          runInvariantAnalysis tables tm tags
+        analyzeToCheckFailure $
+          runInvariantAnalysis tables tm tags funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
-          for2 resultsTable $ \(parsed, AnalysisResult prop ksProvs) -> do
+          for2 resultsTable $ \(info, AnalysisResult prop ksProvs) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
@@ -417,7 +417,7 @@ verifyFunctionInvariants' tables info pactArgs body = runExceptT $ do
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
                Left smtFailure -> Left $
-                 CheckFailure parsed (SmtFailure smtFailure)
+                 CheckFailure info (SmtFailure smtFailure)
                Right pass      -> Right pass
 
   where
@@ -442,8 +442,7 @@ verifyFunctionInvariants' tables info pactArgs body = runExceptT $ do
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ CheckFailure (infoToParsed info) $
-        SmtFailure $ UnexpectedFailure e
+      pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
@@ -455,22 +454,22 @@ verifyFunctionProperty
   -- | 'Info' for the function being checked
   -> Info
   -- | 'Parsed for the property being checked
-  -> Parsed
+  -> Info
   -> [Named Node]
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty tables info parsed pactArgs body check = runExceptT $ do
+verifyFunctionProperty tables funInfo propInfo pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
-        runTranslation info pactArgs body
+        runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      tags <- lift $ allocModelTags info args tm tagAllocs
+      tags <- lift $ allocModelTags funInfo args tm tagAllocs
       AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
-        runPropertyAnalysis check tables tm tags
+        runPropertyAnalysis check tables tm tags funInfo
       void $ lift $ SBV.output prop
-      hoist SBV.query $ withExceptT (smtToCheckFailure parsed) $
+      hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
         resultQuery goal $ Model tags ksProvs
 
   where
@@ -485,7 +484,7 @@ verifyFunctionProperty tables info parsed pactArgs body check = runExceptT $ do
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ smtToCheckFailure parsed $ UnexpectedFailure e
+      pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
     runSymbolic = fmap fst .
@@ -517,11 +516,11 @@ moduleTables modules (_mod, modRefs) = do
           invariants = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
           invariant  = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariant"
 
-          parsed = runExpParserOver
+          invInfo = runExpParserOver
             "invariants" invariants invariant $
             \meta -> runReaderT (expToInvariant TBool meta) _utFields
 
-      pure $ Table tabName schema <$> parsed
+      pure $ Table tabName schema <$> invInfo
 
   let (failures, tables') = partitionEithers eitherTables
   pure $ if null failures then Right tables' else Left (concat failures)
@@ -535,7 +534,7 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
+  -> HM.HashMap Text (Ref, Either [ParseFailure] [(Info, Check)])
 moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
@@ -577,7 +576,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
                   (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
-      checks :: Either [ParseFailure] [(Parsed, Check)]
+      checks :: Either [ParseFailure] [(Info, Check)]
       checks = runExpParserOver "properties" properties property
         (expToCheck tableEnv vidStart nameEnv idEnv)
 
@@ -594,6 +593,9 @@ collectExps name multiExp singularExp = case multiExp of
     Just exp -> Right [exp]
     Nothing  -> Right []
 
+expToInfo :: Exp -> Info
+expToInfo exp = Info (Just (Code (tShow exp), exp ^. eParsed))
+
 -- | This runs a parser over a collection of 'Exp's, collecting the failures
 -- or successes.
 runExpParserOver
@@ -602,16 +604,16 @@ runExpParserOver
   -> Maybe Exp
   -> Maybe Exp
   -> (Exp -> Either String t)
-  -> Either [ParseFailure] [(Parsed, t)]
+  -> Either [ParseFailure] [(Info, t)]
 runExpParserOver name multiExp singularExp parser =
   let
       exps = collectExps name multiExp singularExp
-      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Parsed, t)]
+      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Info, t)]
       parsedList = exps <&&> \meta -> case parser meta of
         Left err   -> Left [(meta, err)]
-        Right good -> Right (meta ^. eParsed, good)
+        Right good -> Right (expToInfo meta, good)
 
-      parsedList' :: [Either [ParseFailure] (Parsed, t)]
+      parsedList' :: [Either [ParseFailure] (Info, t)]
       parsedList' = join <$> sequence parsedList
 
       failures :: [ParseFailure]
@@ -619,7 +621,7 @@ runExpParserOver name multiExp singularExp parser =
 
   in if null failures then Right (rights parsedList') else Left failures
 
-verifyFunctionProps :: [Table] -> Ref -> [(Parsed, Check)] -> IO [CheckResult]
+verifyFunctionProps :: [Table] -> Ref -> [(Info, Check)] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
@@ -627,11 +629,9 @@ verifyFunctionProps tables ref props = do
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
-      then for props $ \(parsed, check) ->
-             verifyFunctionProperty tables _fInfo parsed _fArgs _fBody check
-      else
-        let parsed = infoToParsed _fInfo
-        in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
+      then for props $ \(info, check) ->
+             verifyFunctionProperty tables _fInfo info _fArgs _fBody check
+      else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
     _ -> pure []
 
 verifyFunctionInvariants
@@ -646,12 +646,8 @@ verifyFunctionInvariants tables ref = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then verifyFunctionInvariants' tables _fInfo _fArgs _fBody
-      else
-        let parsed = infoToParsed _fInfo
-        in pure (Left (CheckFailure parsed (TypecheckFailure failures)))
-    other ->
-      let parsed = infoToParsed (_tlInfo other)
-      in pure $ Left (CheckFailure parsed (NotAFunction (tShow ref)))
+      else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
+    other -> pure $ Left $ CheckFailure (_tlInfo other) (NotAFunction (tShow ref))
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -684,13 +680,13 @@ verifyModule modules moduleData = do
       Left errs -> throwError (ModuleParseFailures errs)
       Right tables' -> pure tables'
 
-    let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
+    let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Info, Check)])
         funChecks = moduleFunChecks tables' funTypes
 
-        funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
+        funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Info, Check)]))
         funChecks' = sequence (fmap sequence funChecks)
 
-        verifyFunProps :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
+        verifyFunProps :: (Ref, [(Info, Check)]) -> IO [CheckResult]
         verifyFunProps = uncurry (verifyFunctionProps tables')
 
     funChecks'' <- case funChecks' of
@@ -716,16 +712,16 @@ verifyCheck
   -> Check          -- ^ the check we're running
   -> IO (Either [ParseFailure] CheckResult)
 verifyCheck moduleData funName check = do
-    let parsed = dummyParsed
+    let info       = dummyInfo
         moduleName = moduleData ^. _1.mName
-        modules = HM.fromList [(moduleName, moduleData)]
+        modules    = HM.fromList [(moduleName, moduleData)]
 
     tables <- moduleTables modules moduleData
     case tables of
       Left failures -> pure $ Left failures
       Right tables' -> Right <$> case moduleFun moduleData funName of
-        Just funRef -> head <$> verifyFunctionProps tables' funRef [(parsed, check)]
-        Nothing     -> pure $ Left $ CheckFailure parsed $ NotAFunction funName
+        Just funRef -> head <$> verifyFunctionProps tables' funRef [(info, check)]
+        Nothing     -> pure $ Left $ CheckFailure info $ NotAFunction funName
 
   where
     moduleFun :: ModuleData -> Text -> Maybe Ref
