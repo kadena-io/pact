@@ -691,25 +691,23 @@ spec = describe "analyze" $ do
 
             [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model (ModelTags args _vars _reads writes _auths _result) ksProvs) = model
-            Just (Located _ (_, (_, AVal _prov amount))) <- pure $
-              find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
+            let (Model (ModelTags args _ _ writes _ _) ksProvs) = model
 
-            it "should have a negative amount" $
+            it "should have a negative amount" $ do
+              Just (Located _ (_, (_, AVal _prov amount))) <- pure $
+                find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
               (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
-            x <- pure $ find
-              (\(Object m) ->
-                let (_bal, AVal _ sval) = m Map.! "balance"
-                in (SBV sval :: SBV Decimal) `isConcretely` (< 0))
+            let negativeWrite (Object m) =
+                  let (_bal, AVal _ sval) = m Map.! "balance"
+                  in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+            balanceWrite <- pure $ find negativeWrite
               $ writes ^.. traverse . located . _2
 
             it "should have a negative write" $
-              x `shouldSatisfy` isJust
+              balanceWrite `shouldSatisfy` isJust
 
-            runIO $ putStrLn $ T.unpack $ showModel model
-
-            it "should have specified invariant failures" $ do
+            it "should have no keyset provenance" $ do
               ksProvs `shouldBe` Map.empty
 
 -- {-
