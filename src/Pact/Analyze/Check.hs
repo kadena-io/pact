@@ -64,9 +64,9 @@ import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures)
+                                            TopLevel (TopFun, TopTable,
+                                            _tlInfo), UserType (_utFields,
+                                            _utName), runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Analyze      hiding (invariants)
@@ -649,9 +649,9 @@ verifyFunctionInvariants tables ref = do
       else
         let parsed = infoToParsed _fInfo
         in pure (Left (CheckFailure parsed (TypecheckFailure failures)))
-
-    -- TODO: should this be an error?
-    _ -> pure $ Right $ TableMap Map.empty
+    other ->
+      let parsed = infoToParsed (_tlInfo other)
+      in pure $ Left (CheckFailure parsed (NotAFunction (tShow ref)))
 
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
@@ -679,31 +679,35 @@ verifyModule modules moduleData = do
     HM.empty
     funRefs
 
-  case tables of
-    Left errs -> pure (ModuleParseFailures errs)
-    Right tables' -> do
+  runExceptT' $ do
+    tables' <- case tables of
+      Left errs -> throwError (ModuleParseFailures errs)
+      Right tables' -> pure tables'
 
-      let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-          funChecks = moduleFunChecks tables' funTypes
+    let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
+        funChecks = moduleFunChecks tables' funTypes
 
-          funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
-          funChecks' = sequence (fmap sequence funChecks)
+        funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
+        funChecks' = sequence (fmap sequence funChecks)
 
-          verifyFunProps :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
-          verifyFunProps = uncurry (verifyFunctionProps tables')
+        verifyFunProps :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
+        verifyFunProps = uncurry (verifyFunctionProps tables')
 
-      case funChecks' of
-        Left errs         -> pure (ModuleParseFailures errs)
-        Right funChecks'' -> do
-          funChecks''' <- traverse verifyFunProps funChecks''
-          invariantChecks <- runExceptT $ for funRefs $ \ref -> do
-            tabledResults <- lift $ verifyFunctionInvariants tables' ref
-            case tabledResults of
-              Left err      -> throwError err
-              Right results -> pure results
-          pure $ case invariantChecks of
-            Left err               -> ModuleCheckFailure err
-            Right invariantChecks' -> ModuleChecks funChecks''' invariantChecks'
+    funChecks'' <- case funChecks' of
+      Left errs         -> throwError (ModuleParseFailures errs)
+      Right funChecks'' -> pure funChecks''
+
+    funChecks''' <- lift $ traverse verifyFunProps funChecks''
+    invariantChecks <- for funRefs $ \ref -> do
+      tabledResults <- lift $ verifyFunctionInvariants tables' ref
+      case tabledResults of
+        Left err      -> throwError $ ModuleCheckFailure err
+        Right results -> pure results
+
+    pure $ ModuleChecks funChecks''' invariantChecks
+
+runExceptT' :: Functor m => ExceptT a m a -> m a
+runExceptT' = fmap (either id id) . runExceptT
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
