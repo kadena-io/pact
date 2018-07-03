@@ -162,7 +162,7 @@ describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
-  = CheckFailure (getInfoParsed info) (TranslateFailure' err)
+  = CheckFailure (infoToParsed info) (TranslateFailure' err)
 
 analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
 analyzeToCheckFailure (AnalyzeFailure parsed err)
@@ -442,7 +442,7 @@ verifyFunctionInvariants' tables info pactArgs body = runExceptT $ do
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
     catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
-      pure $ Left $ CheckFailure (getInfoParsed info) $
+      pure $ Left $ CheckFailure (infoToParsed info) $
         SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
@@ -630,7 +630,7 @@ verifyFunctionProps tables ref props = do
       then for props $ \(parsed, check) ->
              verifyFunctionProperty tables _fInfo parsed _fArgs _fBody check
       else
-        let parsed = getInfoParsed _fInfo
+        let parsed = infoToParsed _fInfo
         in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
     _ -> pure []
 
@@ -647,7 +647,7 @@ verifyFunctionInvariants tables ref = do
       if Set.null failures
       then verifyFunctionInvariants' tables _fInfo _fArgs _fBody
       else
-        let parsed = getInfoParsed _fInfo
+        let parsed = infoToParsed _fInfo
         in pure (Left (CheckFailure parsed (TypecheckFailure failures)))
 
     -- TODO: should this be an error?

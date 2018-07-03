@@ -154,11 +154,11 @@ instance MonadFail TranslateM where
 
 -- | Call when entering a node to set the current context
 nodeContext :: Node -> TranslateM a -> TranslateM a
-nodeContext node = local (_1 .~ nodeInfo node)
+nodeContext node = local (_1 .~ nodeToInfo node)
 
 -- | Call when entering an ast node to set the current context
 astContext :: AST Node -> TranslateM a -> TranslateM a
-astContext ast = local (_1 .~ astInfo ast)
+astContext ast = local (_1 .~ astToInfo ast)
 
 writeTagAlloc :: TagAllocation -> TranslateM ()
 writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc

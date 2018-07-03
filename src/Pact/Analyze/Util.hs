@@ -36,20 +36,20 @@ for2
   => s (t a) -> (a -> f b) -> f (s (t b))
 for2 = flip (traverse . traverse)
 
-astParsed :: AST Node -> Parsed
-astParsed = nodeParsed . _aNode
+astToParsed :: AST Node -> Parsed
+astToParsed = nodeToParsed . _aNode
 
-astInfo :: AST Node -> Info
-astInfo = nodeInfo . _aNode
+astToInfo :: AST Node -> Info
+astToInfo = nodeToInfo . _aNode
 
-nodeParsed :: Node -> Parsed
-nodeParsed = getInfoParsed . nodeInfo
+nodeToParsed :: Node -> Parsed
+nodeToParsed = infoToParsed . nodeToInfo
 
-nodeInfo :: Node -> Info
-nodeInfo =  _tiInfo . _aId
+nodeToInfo :: Node -> Info
+nodeToInfo =  _tiInfo . _aId
 
-getInfoParsed :: Info -> Parsed
-getInfoParsed parsed = case _iInfo parsed of
+infoToParsed :: Info -> Parsed
+infoToParsed parsed = case _iInfo parsed of
   Nothing               -> dummyParsed
   Just (_code, parsed') -> parsed'
 
