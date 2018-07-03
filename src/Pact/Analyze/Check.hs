@@ -388,14 +388,13 @@ resultQuery goal model0 = do
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
--- TODO: better naming btw checkFunctionInvariants / verifyFunctionInvariants
-checkFunctionInvariants
+verifyFunctionInvariants'
   :: [Table]
   -> Info
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-checkFunctionInvariants tables info pactArgs body = runExceptT $ do
+verifyFunctionInvariants' tables info pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation info pactArgs body
 
@@ -451,7 +450,7 @@ checkFunctionInvariants tables info pactArgs body = runExceptT $ do
       -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
 
-checkFunctionProperty
+verifyFunctionProperty
   :: [Table]
   -- | 'Info' for the function being checked
   -> Info
@@ -461,7 +460,7 @@ checkFunctionProperty
   -> [AST Node]
   -> Check
   -> IO (Either CheckFailure CheckSuccess)
-checkFunctionProperty tables info parsed pactArgs body check = runExceptT $ do
+verifyFunctionProperty tables info parsed pactArgs body check = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation info pactArgs body
@@ -552,7 +551,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
       -- fail harder if we can't make sense of a type
 
       -- TODO(joel): this relies on generating the same unique ids as
-      -- @checkFunctionProperty@. We need to more carefully enforce this is
+      -- @verifyFunctionProperty@. We need to more carefully enforce this is
       -- true!
       env :: [(Text, VarId, EType)]
       env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
@@ -629,7 +628,7 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(parsed, check) ->
-             checkFunctionProperty tables _fInfo parsed _fArgs _fBody check
+             verifyFunctionProperty tables _fInfo parsed _fArgs _fBody check
       else
         let parsed = getInfoParsed _fInfo
         in pure [Left (CheckFailure parsed (TypecheckFailure failures))]
@@ -646,7 +645,7 @@ verifyFunctionInvariants tables ref = do
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
-      then checkFunctionInvariants tables _fInfo _fArgs _fBody
+      then verifyFunctionInvariants' tables _fInfo _fArgs _fBody
       else
         let parsed = getInfoParsed _fInfo
         in pure (Left (CheckFailure parsed (TypecheckFailure failures)))
