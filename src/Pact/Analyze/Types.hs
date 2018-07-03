@@ -702,14 +702,12 @@ data Goal
 deriving instance Eq Goal
 
 data Check
-  -- = InvariantsHold             -- valid, assuming success
   = PropertyHolds  (Prop Bool) -- valid, assuming success
   | Satisfiable    (Prop Bool) -- sat,   not assuming success
   | Valid          (Prop Bool) -- valid, not assuming success
   deriving Show
 
 checkGoal :: Check -> Goal
--- checkGoal InvariantsHold    = Validation
 checkGoal (PropertyHolds _) = Validation
 checkGoal (Satisfiable _)   = Satisfaction
 checkGoal (Valid _)         = Validation
