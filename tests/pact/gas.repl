@@ -1,0 +1,4 @@
+(env-gaslimit 10)
+(env-gasrate 1)
+(map (+ 1) (make-list 8 8))
+(expect-failure "out of gas" (+ 1 2))

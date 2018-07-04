@@ -81,7 +81,8 @@ module Pact.Types.Lang
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
    Text,pack,unpack,
-   mDocs,mMetas
+   mDocs,mMetas,
+   Gas(..),GasPrice(..)
    ) where
 
 
@@ -121,6 +122,7 @@ import Data.Maybe
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
+import Data.Int (Int64)
 
 import Data.Serialize (Serialize)
 
@@ -622,9 +624,23 @@ instance Show Ref where
     show (Direct t) = abbrev t
     show (Ref t) = abbrev t
 
+-- | Gas compute cost unit.
+newtype Gas = Gas Int64
+  deriving (Eq,Ord,Num,Real,Integral,Enum)
+instance Show Gas where show (Gas g) = show g
+instance Monoid Gas where
+  mempty = 0
+  (Gas a) `mappend` (Gas b) = Gas $ a + b
+
+
+-- | Price per 'Gas' unit.
+newtype GasPrice = GasPrice Decimal
+  deriving (Eq,Ord,Num,Real,Fractional,RealFrac,NFData,Enum)
+instance Show GasPrice where show (GasPrice p) = show p
+
 data NativeDFun = NativeDFun {
       _nativeName :: NativeDefName,
-      _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name)
+      _nativeFun :: forall m . Monad m => FunApp -> [Term Ref] -> m (Gas,Term Name)
     }
 instance Eq NativeDFun where a == b = _nativeName a == _nativeName b
 instance Show NativeDFun where show a = show $ _nativeName a

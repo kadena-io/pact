@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
@@ -31,10 +32,25 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
+import Data.Semigroup ((<>))
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
 
+
+class Readable a where
+  readable :: a -> ReadValue
+
+instance Readable (Columns Persistable) where
+  readable = ReadData
+instance Readable RowKey where
+  readable = ReadKey
+instance Readable TxId where
+  readable = const ReadTxId
+instance Readable (TxLog (Columns Persistable)) where
+  readable = ReadData . _txValue
+instance Readable (TxId, TxLog (Columns Persistable)) where
+  readable = ReadData . _txValue . snd
 
 
 dbDefs :: NativeModule
@@ -65,7 +81,7 @@ dbDefs =
      \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
-    ,defRNative "read" read'
+    ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
      "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
@@ -78,11 +94,11 @@ dbDefs =
       \`$(select people ['firstName,'lastName] (where 'name (= \"Fatima\")))` \
       \`$(select people (where 'age (> 30)))`?"
 
-    ,defRNative "keys" keys'
+    ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
      "Return all keys in TABLE. `$(keys 'accounts)`"
 
-    ,defRNative "txids" txids'
+    ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
@@ -94,10 +110,10 @@ dbDefs =
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
       "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
-    ,defRNative "txlog" txlog
+    ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
       "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
-    ,defRNative "keylog" keylog
+    ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
       "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
       \indexed by txid. \
@@ -125,7 +141,7 @@ descKeySet :: RNativeFun e
 descKeySet i [TLitString t] = do
   r <- readRow (_faInfo i) KeySets (KeySetName t)
   case r of
-    Just v -> return (toTerm (toJSON v))
+    Just v -> return $ toTerm (toJSON v)
     Nothing -> evalError' i $ "Keyset not found: " ++ show t
 descKeySet i as = argsError i as
 
@@ -135,10 +151,10 @@ descModule i [TLitString t] = do
   case mods of
     Just (Module{..},_) ->
       return $ TObject [(tStr "name",tStr $ asString _mName),
-                        (tStr "hash", tStr $ asString _mHash),
-                        (tStr "keyset", tStr $ asString _mKeySet),
-                        (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
-                        (tStr "code", tStr $ asString _mCode)] TyAny def
+                         (tStr "hash", tStr $ asString _mHash),
+                         (tStr "keyset", tStr $ asString _mKeySet),
+                         (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
+                         (tStr "code", tStr $ asString _mCode)] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
 
@@ -152,8 +168,8 @@ userTable' TTable {..} = TableName $ asString _tModule <> "_" <> asString _tTabl
 userTable' t = error $ "creating user table from non-TTable: " ++ show t
 
 
-read' :: RNativeFun e
-read' i as@(table@TTable {}:TLitString key:rest) = do
+read' :: GasRNativeFun e
+read' g0 i as@(table@TTable {}:TLitString key:rest) = do
   cols <- case rest of
     [] -> return []
     [l] -> colsToList (argsError i as) l
@@ -162,11 +178,25 @@ read' i as@(table@TTable {}:TLitString key:rest) = do
   mrow <- readRow (_faInfo i) (userTable table) (RowKey key)
   case mrow of
     Nothing -> failTx (_faInfo i) $ "read: row not found: " ++ show key
-    Just cs -> case cols of
+    Just cs -> do
+      g <- gasPostRead i g0 cs
+      fmap (g,) $ case cols of
         [] -> return $ columnsToObject (_tTableType table) cs
         _ -> columnsToObject' (_tTableType table) cols cs
 
-read' i as = argsError i as
+read' _ i as = argsError i as
+
+gasPostRead :: Readable r =>FunApp -> Gas -> r -> Eval e Gas
+gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
+
+gasPostRead' :: Readable r => FunApp -> Gas -> r -> Eval e a -> Eval e (Gas,a)
+gasPostRead' i g0 row action = gasPostRead i g0 row >>= \g -> (g,) <$> action
+
+-- | TODO improve post-streaming
+gasPostReads :: Readable r => FunApp -> Gas -> ([r] -> a) -> Eval e [r] -> Eval e (Gas,a)
+gasPostReads i g0 postProcess action = do
+  rs <- action
+  (,postProcess rs) <$> foldM (gasPostRead i) g0 rs
 
 columnsToObject :: ToTerm a => Type (Term n) -> Columns a -> Term n
 columnsToObject ty = (\ps -> TObject ps ty def) . map (toTerm *** toTerm) . M.toList . _columns
@@ -191,20 +221,22 @@ select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
 select i as = argsError' i as
 
 select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
-           Term Ref -> Term Name -> Eval e (Term Name)
+           Term Ref -> Term Name -> Eval e (Gas,Term Name)
 select' i _ cols' app@TApp{} tbl@TTable{} = do
+    g0 <- computeGas (Right i) $ GSelect cols' app tbl
     guardTable i tbl
     let fi = _faInfo i
         tblTy = _tTableType tbl
     ks <- keys fi (userTable' tbl)
-    fmap (\b -> TList (reverse b) tblTy def) $ (\f -> foldM f [] ks) $ \rs k -> do
+    fmap (second (\b -> TList (reverse b) tblTy def)) $ (\f -> foldM f (g0,[]) ks) $ \(gPrev,rs) k -> do
       mrow <- readRow fi (userTable tbl) k
       case mrow of
         Nothing -> evalError fi $ "select: unexpected error, key not found in select: " ++ show k ++ ", table: " ++ show tbl
         Just row -> do
+          g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
           result <- apply' app [obj]
-          case result of
+          fmap (g,) $ case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
                   Nothing -> return (obj:rs)
@@ -216,62 +248,72 @@ select' i as _ _ _ = argsError' i as
 
 withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
-  !tkd <- (,,) <$> reduce table' <*> reduce key' <*> reduce defaultRow'
+  (!g0,!tkd) <- preGas fi [table',key',defaultRow']
   case tkd of
-    (table@TTable {..},TLitString key,TObject defaultRow _ _) -> do
+    ([table@TTable {..},TLitString key,TObject defaultRow _ _]) -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
-        Nothing -> bindToRow ps bd b =<< toColumns fi defaultRow
-        (Just row) -> bindToRow ps bd b row
+        Nothing -> (g0,) <$> (bindToRow ps bd b =<< toColumns fi defaultRow)
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withDefaultRead fi as = argsError' fi as
 
 withRead :: NativeFun e
 withRead fi as@[table',key',b@(TBinding ps bd (BindSchema _) _)] = do
-  !tk <- (,) <$> reduce table' <*> reduce key'
+  (!g0,!tk) <- preGas fi [table',key']
   case tk of
-    (table@TTable {..},TLitString key) -> do
+    [table@TTable {..},TLitString key] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
         Nothing -> failTx (_faInfo fi) $ "with-read: row not found: " ++ show key
-        (Just row) -> bindToRow ps bd b row
+        (Just row) -> gasPostRead' fi g0 row $ bindToRow ps bd b row
     _ -> argsError' fi as
 withRead fi as = argsError' fi as
 
 bindToRow :: [(Arg (Term Ref),Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
-bindToRow ps bd b (Columns row) = bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
+bindToRow ps bd b (Columns row) = do
+  bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
 
-keys' :: RNativeFun e
-keys' i [table@TTable {..}] = do
+keys' :: GasRNativeFun e
+keys' g i [table@TTable {..}] =
+  gasPostReads i g
+    ((\b -> TList b tTyString def) . map toTerm) $ do
+      guardTable i table
+      keys (_faInfo i) (userTable' table)
+keys' _ i as = argsError i as
+
+
+txids' :: GasRNativeFun e
+txids' g i [table@TTable {..},TLitInteger key] =
+  gasPostReads i g
+    ((\b -> TList b tTyInteger def) . map toTerm) $ do
+      guardTable i table
+      txids (_faInfo i) (userTable' table) (fromIntegral key)
+txids' _ i as = argsError i as
+
+txlog :: GasRNativeFun e
+txlog g i [table@TTable {..},TLitInteger tid] =
+  gasPostReads i g
+    ((`TValue` def) . toJSON . over (traverse . txValue) (columnsToObject _tTableType)) $ do
+      guardTable i table
+      getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+txlog _ i as = argsError i as
+
+keylog :: GasRNativeFun e
+keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
+  let postProc = toTList tTyValue def . map toTxidObj
+        where toTxidObj (t,r) =
+                toTObject TyAny def [(tStr "txid", toTerm t),(tStr "value",columnsToObject _tTableType (_txValue r))]
+  gasPostReads i g postProc $ do
     guardTable i table
-    (\b -> TList b tTyString def) . map toTerm <$> keys (_faInfo i) (userTable' table)
-keys' i as = argsError i as
+    tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
+    logs <- fmap concat $ forM tids $ \tid -> fmap (map (tid,)) $ getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+    return $ filter (\(_,TxLog {..}) -> _txKey == key) logs
 
-
-txids' :: RNativeFun e
-txids' i [table@TTable {..},TLitInteger key] = do
-  guardTable i table
-  (\b -> TList b tTyInteger def) . map toTerm <$> txids (_faInfo i) (userTable' table) (fromIntegral key)
-txids' i as = argsError i as
-
-txlog :: RNativeFun e
-txlog i [table@TTable {..},TLitInteger tid] = do
-  guardTable i table
-  (`TValue` def) . toJSON . over (traverse . txValue) (columnsToObject _tTableType) <$>
-    getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
-txlog i as = argsError i as
-
-keylog :: RNativeFun e
-keylog i [table@TTable {..},TLitString key,TLitInteger utid] = do
-  guardTable i table
-  tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
-  logs <- fmap concat $ forM tids $ \tid -> fmap (map (tid,)) $ getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
-  let toTxidObj (t,r) = toTObject TyAny def [(tStr "txid", toTerm t),(tStr "value",columnsToObject _tTableType (_txValue r))]
-  return $ toTList tTyValue def $ map toTxidObj $ (`filter` logs) $ \(_,TxLog {..}) -> _txKey == key
-keylog i as = argsError i as
+keylog _ i as = argsError i as
 
 
 write :: WriteType -> RNativeFun e
