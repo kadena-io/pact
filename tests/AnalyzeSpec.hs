@@ -1278,7 +1278,7 @@ spec = describe "analyze" $ do
             (PNot (TableWrite "table")))
 
     it "parses quantified columns" $ do
-      pendingWith "completely separate parser for props"
+      pendingWith "separate parser for props"
       textToProp TBool "(forall (column:(column-of table)) (not (column-write table column)))"
         `shouldBe`
         Right
@@ -1304,7 +1304,7 @@ spec = describe "analyze" $ do
         "(exists (bar:bool) (not bar))"
 -- -}
 
-  describe "enforce-keyset.row-level.read" $ do
+  describe "table quantification" $ do
     let code =
           [text|
             (defschema simple-schema balance:integer)
@@ -1343,6 +1343,47 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
+
+  describe "column quantification" $ do
+    let code =
+          [text|
+            (defschema simple-schema balance:integer)
+            (deftable simple-table:{simple-schema})
+
+            (defun test1:integer ()
+              ("don't touch a column"
+                (properties [
+                  (forall (column:(column-of simple-table)) (not (column-write column)))
+                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                ])
+              )
+              1)
+
+            (defun test2:string ()
+              ("write a column"
+                (properties [
+                  (exists (column:(column-of simple-table)) (column-write column))
+                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                ])
+              )
+              (insert simple-table "joel" { 'balance : 5 }))
+
+            (defun test3:object{simple-schema} ()
+              ("read a column"
+                (properties [
+                  (forall (column:(column-of simple-table)) (not (column-write column)))
+                  (exists (column:(column-of simple-table)) (column-read column))
+                ])
+              )
+              (read simple-table "joel"))
+
+          |]
+
+    -- TODO replace this check with expectVerified after 'pending' is removed
+    res <- runIO $ runVerification $ wrap code
+    it "passes in-code checks" $ do
+      pendingWith "separate parser for props"
+      res `shouldSatisfy` isNothing
 
   --
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
