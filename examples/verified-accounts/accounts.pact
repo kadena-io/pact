@@ -27,6 +27,17 @@
 
   (defconst PACT_REF "ref")
 
+  (model
+    ; TODO: abstract over table / column
+    (defproperty conserves-mass
+      (= (column-delta 'accounts 'balance) 0.0))
+
+    (defproperty correct-auth
+      (when
+        (not (authorized-by 'accounts-admin-keyset))
+        abort))
+  )
+
   (defun create-account (address:string ccy)
     (insert accounts address
       { "balance": 0.0

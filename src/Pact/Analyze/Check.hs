@@ -48,11 +48,11 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
                                             renderParsed, tMeta, _iInfo,
-                                            _tPropertyBody)
+                                            _tPropertyBody, _tPropertyDefs)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TDef, TSchema, TTable,
-                                            TDefProperty),
+                                            TModel),
                                             asString, tInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
@@ -330,10 +330,10 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   _             -> False
 
 -- Get the set (HashMap) of refs to functions in this module.
-modulePropDefs :: ModuleData -> HM.HashMap Text Exp
-modulePropDefs (_mod, modRefs) = flip HM.mapMaybe modRefs $ \case
-  Ref (TDefProperty {_tPropertyBody}) -> Just _tPropertyBody
-  _                                   -> Nothing
+modulePropDefs :: ModuleData -> [Pact.TPropertyDef Ref]
+modulePropDefs (_mod, modRefs) = flip foldMap modRefs $ \case
+  Ref (TModel {_tPropertyDefs}) -> [_tPropertyDefs]
+  _                             -> []
 
 moduleFunChecks
   :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)

@@ -74,15 +74,16 @@ module Pact.Types.Lang
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tArgs,
-   tPropertyBody,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tPropertyDefs,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
    Text,pack,unpack,
-   mDocs,mMetas
+   mDocs,mMetas,
+   TPropertyDef(..)
    ) where
 
 
@@ -773,16 +774,22 @@ data Term n =
     , _tMeta :: !(Maybe Meta)
     , _tInfo :: !Info
     } |
-    TDefProperty {
-      _tDefName :: !Text
-    , _tModule :: !ModuleName
-    , _tArgs :: ![Arg (Term n)]
-    -- This is not the best, but we will eventually parse this Exp into a
-    -- property downstream of here
-    , _tPropertyBody :: !Exp
+    TModel {
+      _tPropertyDefs :: ![TPropertyDef n]
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
+
+data TPropertyDef n = TPropertyDef
+  { _tPropertyName :: !Text
+  -- , _tModule    :: !ModuleName
+  , _tPropertyArgs :: ![Arg (Term n)]
+  -- This is not the best, but we will eventually parse this Exp into a
+  -- property downstream of here
+  , _tPropertyBody :: !Exp
+  , _tPropertyInfo :: !Info
+  }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance Show n => Show (Term n) where
     show TModule {..} =
@@ -813,8 +820,8 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ maybeDelim " " _tMeta ++ ")"
-    show TDefProperty {..} =
-      "(TDefProperty " ++ asString' _tDefName ++ " " ++ show _tPropertyBody ++ ")"
+    show TModel {..} =
+      "(TModel " ++ show _tPropertyDefs ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -856,9 +863,12 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
-  liftEq eq (TDefProperty a b c d e) (TDefProperty m n o p q) =
-    a == m && b == n && liftEq (liftEq (liftEq eq)) c o && d == p && e == q
+  liftEq eq (TModel a b) (TModel m n) = liftEq (liftEq eq) a m && b == n
   liftEq _ _ _ = False
+
+instance Eq1 TPropertyDef where
+  liftEq eq (TPropertyDef a b c d) (TPropertyDef m n o p) =
+    a == m && liftEq (liftEq (liftEq eq)) b n && c == o && d == p
 
 
 instance Applicative Term where
@@ -884,8 +894,9 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
-    TDefProperty {..} >>= f = TDefProperty {_tArgs=fmap (fmap (>>= f)) _tArgs,..}
-
+    TModel props i >>= f = TModel (fmap f' props) i
+      where f' (TPropertyDef name args body i') =
+              TPropertyDef name (fmap (fmap (>>= f)) args) body i'
 
 instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
@@ -954,7 +965,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
-      TDefProperty {..} -> Left $ "defproperty " <> asString _tDefName
+      TModel {..} -> Left "model"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -1012,7 +1023,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TDefProperty {..} = "<defproperty " ++ asString' _tDefName ++ ">"
+abbrev TModel {..} = "<model ...>"
 
 
 
