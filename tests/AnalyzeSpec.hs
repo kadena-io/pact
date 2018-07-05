@@ -126,7 +126,6 @@ decConserves tn cn = PDecimalComparison Eq 0 $
 
 spec :: Spec
 spec = describe "analyze" $ do
--- {-
   describe "result" $ do
     let code =
           [text|
@@ -1302,7 +1301,6 @@ spec = describe "analyze" $ do
       userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
--- -}
 
   describe "table quantification" $ do
     let code =
@@ -1384,6 +1382,12 @@ spec = describe "analyze" $ do
     it "passes in-code checks" $ do
       pendingWith "separate parser for props"
       res `shouldSatisfy` isNothing
+
+  describe "UserShow" $ do
+    it "schema looks okay" $ do
+      let schema = Schema $
+            Map.fromList [("name", EType TStr), ("balance", EType TInt)]
+      userShow schema `shouldBe` "{ balance: integer, name: string }"
 
   --
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs

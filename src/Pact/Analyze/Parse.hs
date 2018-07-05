@@ -198,7 +198,6 @@ expToPreProp = \case
           = throwErrorIn exp $
             "type annotation required for all property bindings."
         propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
-          -- XXX handle table / columns
           nameTy <- case maybeTranslateType' (const Nothing) ty of
             Just ty' -> do
               vid <- genVarId
@@ -257,8 +256,8 @@ checkPreProp ty preProp = case (ty, preProp) of
         Just Refl -> pure (PVar vid name)
       Just (EObjectTy _) -> throwErrorIn preProp
         "ERROR: object types not currently allowed in properties (issue 139)"
-      Just QTable        -> error "TODO"
-      Just (QColumnOf _) -> error "TODO"
+      Just QTable        -> error "Table names are parsed in parseTableName"
+      Just (QColumnOf _) -> error "Column names are parsed in parseColumnName"
 
   -- quantifiers
   (TBool, viewQ -> Just (q, vid, name, ty', p)) -> do
