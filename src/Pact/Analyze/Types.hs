@@ -805,7 +805,7 @@ class UserShow a where
 
 instance UserShow (Type a) where
   userShowsPrec _ = \case
-    TInt     -> "int"
+    TInt     -> "integer"
     TBool    -> "bool"
     TStr     -> "string"
     TTime    -> "time"
@@ -858,8 +858,11 @@ instance UserShow TableName where
 instance UserShow ColumnName where
   userShowsPrec _ (ColumnName cn) = T.pack cn
 
+-- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where
-  userShowsPrec _ (Schema _) = "TODO userShowsPrec Schema)"
+  userShowsPrec _ (Schema schema) =
+    let go result k a = result <> ", " <> k <> ": " <> userShow a
+    in "{ " <> T.drop 2 (Map.foldlWithKey go "" schema) <> " }"
 
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
