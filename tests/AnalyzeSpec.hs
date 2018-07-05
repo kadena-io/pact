@@ -18,8 +18,8 @@ import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
-import           Test.Hspec                   (Spec, describe, it, runIO,
-                                               shouldBe, shouldSatisfy)
+import           Test.Hspec                   (Spec, describe, it, pendingWith,
+                                               runIO, shouldBe, shouldSatisfy)
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
@@ -126,6 +126,7 @@ decConserves tn cn = PDecimalComparison Eq 0 $
 
 spec :: Spec
 spec = describe "analyze" $ do
+-- {-
   describe "result" $ do
     let code =
           [text|
@@ -1269,6 +1270,21 @@ spec = describe "analyze" $ do
       textToProp TInt  "result"  `shouldBe` Right Result
       textToProp TStr  "result"  `shouldBe` Right Result
 
+    it "parses quantified tables" $ do
+      textToProp TBool "(forall (table:table) (not (table-write table)))"
+        `shouldBe`
+        Right
+          (Forall (VarId 0) "table" QTable
+            (PNot (TableWrite "table")))
+
+    it "parses quantified columns" $ do
+      pendingWith "completely separate parser for props"
+      textToProp TBool "(forall (column:(column-of table)) (not (column-write table column)))"
+        `shouldBe`
+        Right
+          (Forall (VarId 0) "column" (QColumnOf "table")
+            (PNot (ColumnWrite "table" "column")))
+
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
       userShow (PreIntegerLit 1)    `shouldBe` "1"
@@ -1286,6 +1302,47 @@ spec = describe "analyze" $ do
       userShow (PreExists 0 "bar" (EType TBool) (PreApp "not" [PreVar 0 "bar"]))
         `shouldBe`
         "(exists (bar:bool) (not bar))"
+-- -}
+
+  describe "enforce-keyset.row-level.read" $ do
+    let code =
+          [text|
+            (defschema simple-schema balance:integer)
+            (deftable simple-table:{simple-schema})
+
+            (defschema additional-schema name:string)
+            (deftable additional-table:{additional-schema})
+
+            (defun test1:integer ()
+              ("don't touch a table"
+                (properties [
+                  (forall (table:table) (not (table-write table)))
+                  (forall (table:table) (not (table-read table)))
+                ])
+              )
+              1)
+
+            (defun test2:string ()
+              ("write a table"
+                (properties [
+                  (exists (table:table) (table-write table))
+                  (forall (table:table) (not (table-read table)))
+                ])
+              )
+              (insert simple-table "joel" { 'balance : 5 }))
+
+            (defun test3:object{simple-schema} ()
+              ("read a table"
+                (properties [
+                  (forall (table:table) (not (table-write table)))
+                  (exists (table:table) (table-read table))
+                ])
+              )
+              (read simple-table "joel"))
+
+          |]
+
+    expectVerified code
 
   --
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs

@@ -405,7 +405,7 @@ data Quantifiable :: QKind -> * where
   EType     :: (Show a, SymWord a, SMTValue a) => Type a -> Quantifiable q
   EObjectTy ::                                    Schema -> Quantifiable q
   QTable    ::                                              Quantifiable 'QAny
-  QColumns  :: TableName                                 -> Quantifiable 'QAny
+  QColumnOf :: TableName                                 -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
@@ -415,7 +415,7 @@ instance Eq (Quantifiable q) where
     Nothing    -> False
   EObjectTy a == EObjectTy b = a == b
   QTable      == QTable      = True
-  QColumns a  == QColumns b  = a == b
+  QColumnOf a == QColumnOf b = a == b
   _           == _           = False
 
 instance EqSymbolic (Quantifiable q) where
@@ -428,6 +428,12 @@ coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
   EObjectTy schema -> EObjectTy schema
+
+downcastQType :: QType -> Maybe EType
+downcastQType = \case
+  EType ty         -> Just $ EType ty
+  EObjectTy schema -> Just $ EObjectTy schema
+  _                -> Nothing
 
 -- | Unique variable IDs
 --
@@ -515,11 +521,11 @@ data Prop a where
   -- Abstraction
 
   -- | Introduces a universally-quantified variable over another property
-  Forall :: VarId -> Text -> QType -> Prop a -> Prop a
+  Forall :: VarId -> Text -> QType -> Prop Bool -> Prop Bool
   -- | Introduces an existentially-quantified variable over another property
-  Exists :: VarId -> Text -> QType -> Prop a -> Prop a
+  Exists :: VarId -> Text -> QType -> Prop Bool -> Prop Bool
   -- | Refers to a function argument or universally/existentially-quantified variable
-  PVar   :: VarId -> Text                    -> Prop a
+  PVar   :: VarId -> Text ->                       Prop a
 
   -- Object ops
 
@@ -844,7 +850,7 @@ instance UserShow (Quantifiable q) where
     EType ty     -> userShowsPrec d ty
     EObjectTy ty -> userShowsPrec d ty
     QTable       -> "table"
-    QColumns tn  -> "(columns " <> userShow tn <> ")"
+    QColumnOf tn -> "(column-of " <> userShow tn <> ")"
 
 instance UserShow TableName where
   userShowsPrec _ (TableName tn) = T.pack tn
