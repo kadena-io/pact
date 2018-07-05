@@ -120,18 +120,6 @@ stringLike = \case
   ELitString str -> Just str
   _              -> Nothing
 
-toQ :: PreProp -> Maybe
-  ( VarId -> Text -> QType -> Prop Bool -> Prop Bool
-  , VarId
-  , Text
-  , QType
-  , PreProp
-  )
-toQ = \case
-  PreForall vid name ty' p -> Just (Forall, vid, name, ty', p)
-  PreExists vid name ty' p -> Just (Exists, vid, name, ty', p)
-  _ -> Nothing
-
 type TableEnv = TableMap (ColumnMap EType)
 
 data PropCheckEnv = PropCheckEnv
@@ -231,6 +219,19 @@ expToPreProp = \case
               "couldn't find property variable " <> var
             Just vid -> pure (PreVar vid var)
 
+-- helper view pattern for checking quantifiers
+viewQ :: PreProp -> Maybe
+  ( VarId -> Text -> QType -> Prop Bool -> Prop Bool
+  , VarId
+  , Text
+  , QType
+  , PreProp
+  )
+viewQ = \case
+  PreForall vid name ty' p -> Just (Forall, vid, name, ty', p)
+  PreExists vid name ty' p -> Just (Exists, vid, name, ty', p)
+  _                        -> Nothing
+
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp = case (ty, preProp) of
   -- literals
@@ -260,7 +261,7 @@ checkPreProp ty preProp = case (ty, preProp) of
       Just (QColumnOf _) -> error "TODO"
 
   -- quantifiers
-  (TBool, toQ -> Just (q, vid, name, ty', p)) -> do
+  (TBool, viewQ -> Just (q, vid, name, ty', p)) -> do
     let quantifyTable = case ty' of
           QTable -> Set.insert (TableName (T.unpack name))
           _      -> id
