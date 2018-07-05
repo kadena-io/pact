@@ -159,18 +159,18 @@ mkApiReqCont ar@ApiReq{..} fp = do
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
 
-  ((ar,code,cdata,addy),) <$> mkCont txId step rollback _ylResume code cdata addy _ylKeyPairs _ylNonce
+  ((ar,code,cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
 
-mkCont :: TxId -> Int -> Bool -> Maybe Value -> String -> Value -> Maybe Address -> [KeyPair]
+mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [KeyPair]
   -> Maybe String -> IO (Command Text)
-mkCont txid step rollback resume _ mdata addy kps ridm = do
+mkCont txid step rollback mdata addy kps ridm = do
   rid <- maybe (show <$> getCurrentTime) return ridm
   return $ decodeUtf8 <$>
     mkCommand
     (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
-    (((Continuation (ContMsg txid step rollback resume (Just mdata))) :: (PactRPC ContMsg)))
+    (((Continuation (ContMsg txid step rollback Nothing (Just mdata))) :: (PactRPC ContMsg)))
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
