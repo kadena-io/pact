@@ -16,11 +16,11 @@ import           Control.Applicative        (Alternative(empty, (<|>)))
 import           Control.Lens               (at, cons, makeLenses, makePrisms,
                                              view, (%~), (<&>), (?~), (^.),
                                              (^?))
-import           Control.Monad              (MonadPlus (mzero))
+import           Control.Monad              (MonadPlus (mzero), (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
-import           Control.Monad.Reader       (runReaderT)
-import           Control.Monad.Reader       (MonadReader (local), ReaderT)
+import           Control.Monad.Reader       (MonadReader (local),
+                                             ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
                                              runStateT)
 import           Data.Foldable              (foldl')
@@ -179,15 +179,26 @@ unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
 maybeTranslateType :: Pact.Type Pact.UserType -> Maybe EType
-maybeTranslateType = maybeTranslateType' $ \(Pact.Schema _ _ fields _) ->
-  fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-    \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
+maybeTranslateType =
+  let handleUserType :: Pact.UserType -> Maybe QType
+      handleUserType (Pact.Schema _ _ fields _) =
+        fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
+          \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
 
-maybeTranslateType' :: Alternative f => (a -> f EType) -> Pact.Type a -> f EType
+  in maybeTranslateType' handleUserType >=> downcastQType
+
+-- A helper to translate types that doesn't know how to handle user types
+-- itself
+maybeTranslateType'
+  :: Alternative f
+  => (a -> f QType)
+  -> Pact.Type a
+  -> f QType
 maybeTranslateType' f = \case
   TyUser a         -> f a
 
   -- TODO(joel): understand the difference between the TyUser and TySchema cases
+  TySchema Pact.TyTable _ -> pure QTable
   TySchema _ ty'   -> maybeTranslateType' f ty'
 
   TyPrim TyBool    -> pure $ EType TBool
@@ -197,10 +208,12 @@ maybeTranslateType' f = \case
   TyPrim TyTime    -> pure $ EType TTime
   TyPrim TyKeySet  -> pure $ EType TKeySet
 
-  -- Pretend any and var are the same -- we can't analyze either of them.
+  -- Pretend any and an unknown var are the same -- we can't analyze either of
+  -- them.
   -- TODO(joel): revisit this assumption
-  TyAny            -> pure $ EType TAny
-  TyVar _          -> pure $ EType TAny
+  TyVar (Pact.SchemaVar (Pact.TypeVarName "table")) -> pure QTable
+  TyVar _                                           -> pure $ EType TAny
+  TyAny                                             -> pure $ EType TAny
 
   --
   -- TODO: handle these:
@@ -212,7 +225,7 @@ maybeTranslateType' f = \case
 translateType :: MonadError TranslateFailure m => Node -> m EType
 translateType node = case _aTy node of
   (maybeTranslateType -> Just ety) -> pure ety
-  ty                           -> throwError $ UnhandledType node ty
+  ty                               -> throwError $ UnhandledType node ty
 
 translateArg
   :: (MonadState s m, HasVarId s, MonadError TranslateFailure m)

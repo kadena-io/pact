@@ -19,16 +19,18 @@ data Quantifier
 class Float a where
   float :: Prop a -> ([Quantifier], Prop a)
 
-#define STANDARD_INSTANCES                                             \
-  PLit{}  -> ([], p);                                                  \
-  PSym{}  -> ([], p);                                                  \
-  Result  -> ([], p);                                                  \
+#define QUANTIFIER_INSTANCES                                           \
   Forall uid name ty prop ->                                           \
     let (qs, prop') = float prop                                       \
     in (Forall' uid name ty:qs, prop');                                \
   Exists uid name ty prop ->                                           \
     let (qs, prop') = float prop                                       \
-    in (Exists' uid name ty:qs, prop');                                \
+    in (Exists' uid name ty:qs, prop');
+
+#define STANDARD_INSTANCES                                             \
+  PLit{}  -> ([], p);                                                  \
+  PSym{}  -> ([], p);                                                  \
+  Result  -> ([], p);                                                  \
   PVar _ _ -> ([], p);                                                 \
   PAt schema a b ty -> PAt schema <$> float a <*> float b <*> pure ty;
 
@@ -98,6 +100,7 @@ floatTimeQuantifiers p = case p of
 floatBoolQuantifiers :: Prop Bool -> ([Quantifier], Prop Bool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
+  QUANTIFIER_INSTANCES
 
   Abort              -> ([], p)
   Success            -> ([], p)

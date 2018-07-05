@@ -181,6 +181,8 @@ data QueryEnv
     { _qeAnalyzeEnv    :: AnalyzeEnv
     , _qeAnalyzeState  :: AnalyzeState
     , _qeAnalyzeResult :: AVal
+    , _qeTableScope    :: Map VarId TableName
+    , _qeColumnScope   :: Map VarId ()
     }
 
 data AnalysisResult
@@ -364,7 +366,7 @@ newtype Analyze a
             MonadState AnalyzeState, MonadError AnalyzeFailure)
 
 mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
-mkQueryEnv = QueryEnv
+mkQueryEnv env state result = QueryEnv env state result Map.empty Map.empty
 
 --
 -- TODO: rename this. @Query@ is already taken by sbv.
@@ -1381,30 +1383,21 @@ checkInvariant = \case
       (NotOp, [a])    -> pure $ bnot a
       _               -> error "impossible schema logical op"
 
+getLitTableName :: Prop TableName -> Query TableName
+getLitTableName (PLit tn) = pure tn
+getLitTableName (PVar vid name) = do
+  mTn <- view $ qeTableScope . at vid
+  case mTn of
+    Nothing -> throwError $ fromString $
+      "could not find table in scope: " <> T.unpack name
+    Just tn -> pure tn
+
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
 analyzePropO (PSym _) = throwError "Symbols can't be objects"
-analyzePropO (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at vid ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Forall _vid _name (EObjectTy _) _p) =
-  throwError "objects can't currently be quantified in properties (issue 139)"
-analyzePropO (Forall _vid _name QTable _p) =
-  throwError "TODO: table quantification"
-analyzePropO (Forall _vid _name (QColumns _tab) _p) =
-  throwError "TODO: column quantification"
-analyzePropO (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at vid ?~ mkAVal' sbv) $ analyzePropO p
-analyzePropO (Exists _vid _name (EObjectTy _) _p) =
-  throwError "objects can't currently be quantified in properties (issue 139)"
-analyzePropO (Exists _vid _name QTable _p) =
-  throwError "TODO: table quantification"
-analyzePropO (Exists _vid _name (QColumns _tab) _p) =
-  throwError "TODO: column quantification"
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1421,9 +1414,12 @@ analyzeProp (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
 analyzeProp (Forall _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
-analyzeProp (Forall _vid _name QTable _p) =
-  throwError "TODO: table quantification"
-analyzeProp (Forall _vid _name (QColumns _tab) _p) =
+analyzeProp (Forall vid _name QTable prop) = do
+  TableMap tables <- view (analyzeEnv . invariants)
+  bools <- for (Map.keys tables) $ \tableName ->
+    local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
+  pure $ foldr (&&&) true bools
+analyzeProp (Forall _vid _name (QColumnOf _tab) _p) =
   throwError "TODO: column quantification"
 analyzeProp (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
@@ -1431,9 +1427,12 @@ analyzeProp (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
 analyzeProp (Exists _vid _name (EObjectTy _) _p) =
   throwError "objects can't currently be quantified in properties (issue 139)"
 analyzeProp (PVar vid name) = lookupVal name vid
-analyzeProp (Exists _vid _name QTable _p) =
-  throwError "TODO: table quantification"
-analyzeProp (Exists _vid _name (QColumns _tab) _p) =
+analyzeProp (Exists vid _name QTable prop) = do
+  TableMap tables <- view (analyzeEnv . invariants)
+  bools <- for (Map.keys tables) $ \tableName ->
+    local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
+  pure $ foldr (|||) true bools
+analyzeProp (Exists _vid _name (QColumnOf _tab) _p) =
   throwError "TODO: column quantification"
 
 -- String ops
@@ -1465,8 +1464,12 @@ analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 analyzeProp (PLogical op props) = analyzeLogicalOp op props
 
 -- DB properties
-analyzeProp (TableRead (PLit tn))  = view $ qeAnalyzeState.tableRead tn
-analyzeProp (TableWrite (PLit tn)) = view $ qeAnalyzeState.tableWritten tn
+analyzeProp (TableRead tn) = do
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.tableRead tn'
+analyzeProp (TableWrite tn) = do
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.tableWritten tn'
 analyzeProp (ColumnWrite (PLit _tableName) (PLit _colName))
   = throwError "column write analysis not yet implemented"
 analyzeProp (ColumnRead (PLit _tableName) (PLit _colName))
@@ -1474,36 +1477,45 @@ analyzeProp (ColumnRead (PLit _tableName) (PLit _colName))
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
-analyzeProp (IntCellDelta (PLit tableName) (PLit colName) pRk) = do
+analyzeProp (IntCellDelta tn (PLit colName) pRk) = do
+  tn' <- getLitTableName tn
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.intCellDelta tableName colName sRk
-analyzeProp (DecCellDelta (PLit tableName) (PLit colName) pRk) = do
+  view $ qeAnalyzeState.intCellDelta tn' colName sRk
+analyzeProp (DecCellDelta tn (PLit colName) pRk) = do
+  tn' <- getLitTableName tn
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.decCellDelta tableName colName sRk
-analyzeProp (IntColumnDelta (PLit tableName) (PLit colName)) = view $
-  qeAnalyzeState.intColumnDelta tableName colName
-analyzeProp (DecColumnDelta (PLit tableName) (PLit colName)) = view $
-  qeAnalyzeState.decColumnDelta tableName colName
-analyzeProp (RowRead (PLit tn) pRk)  = do
+  view $ qeAnalyzeState.decCellDelta tn' colName sRk
+analyzeProp (IntColumnDelta tn (PLit colName)) = do
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.intColumnDelta tn' colName
+analyzeProp (DecColumnDelta tn (PLit colName)) = do
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.decColumnDelta tn' colName
+analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
-  numReads <- view $ qeAnalyzeState.rowReadCount tn sRk
+  tn' <- getLitTableName tn
+  numReads <- view $ qeAnalyzeState.rowReadCount tn' sRk
   pure $ sansProv $ numReads .== 1
-analyzeProp (RowReadCount (PLit tn) pRk)  = do
+analyzeProp (RowReadCount tn pRk)  = do
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.rowReadCount tn sRk
-analyzeProp (RowWrite (PLit tn) pRk) = do
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.rowReadCount tn' sRk
+analyzeProp (RowWrite tn pRk) = do
   sRk <- analyzeProp pRk
-  writes <- view $ qeAnalyzeState.rowWriteCount tn sRk
+  tn' <- getLitTableName tn
+  writes <- view $ qeAnalyzeState.rowWriteCount tn' sRk
   pure $ sansProv $ writes .== 1
-analyzeProp (RowWriteCount (PLit tn) pRk) = do
+analyzeProp (RowWriteCount tn pRk) = do
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.rowWriteCount tn sRk
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.rowWriteCount tn' sRk
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProp (RowEnforced (PLit tn) (PLit cn) pRk) = do
+analyzeProp (RowEnforced tn (PLit cn) pRk) = do
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.cellEnforced tn cn sRk
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.cellEnforced tn' cn sRk
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case

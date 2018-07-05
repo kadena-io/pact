@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 
@@ -14,15 +15,19 @@ module Pact.Analyze.Parse
   ) where
 
 import           Control.Applicative          (Alternative, (<|>))
-import           Control.Lens                 (_1, _2, at, ix, view,
-                                               (^.), (^..), (&), (?~))
+import           Control.Lens                 (at, ix, makeLenses, view,
+                                               (^.), (^..), (&), (?~), (%~))
+import           Control.Monad                (when)
 import           Control.Monad.Except         (MonadError(throwError))
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Data.Foldable                (asum, find)
+import           Data.Maybe                   (isJust)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Semigroup               ((<>))
+import qualified Data.Set                     as Set
+import           Data.Set                     (Set)
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -115,22 +120,49 @@ stringLike = \case
   ELitString str -> Just str
   _              -> Nothing
 
+toQ :: PreProp -> Maybe
+  ( VarId -> Text -> QType -> Prop Bool -> Prop Bool
+  , VarId
+  , Text
+  , QType
+  , PreProp
+  )
+toQ = \case
+  PreForall vid name ty' p -> Just (Forall, vid, name, ty', p)
+  PreExists vid name ty' p -> Just (Exists, vid, name, ty', p)
+  _ -> Nothing
+
 type TableEnv = TableMap (ColumnMap EType)
 
+data PropCheckEnv = PropCheckEnv
+  { _varTys            :: Map VarId QType
+  , _tableEnv          :: TableEnv
+  , _quantifiedTables  :: Set TableName
+  -- , _quantifiedColumns :: Set ColumnName
+  }
+
 type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
-type PropCheck = ReaderT (Map VarId QType, TableEnv) (Either String)
+type PropCheck = ReaderT PropCheckEnv (Either String)
 
 type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
 
+makeLenses ''PropCheckEnv
+
 parseTableName :: PreProp -> PropCheck (Prop TableName)
 parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
--- parseTableName (PreVar vid name) = do
---   varTy <- view (_1 . at vid)
---   case varTy of
---     Just QTable -> error "TODO"
+parseTableName (PreVar vid name) = do
+  varTy <- view (varTys . at vid)
+  case varTy of
+    Just QTable -> pure (fromString (T.unpack name))
+    _           -> throwError $ T.unpack $
+      "invalid table name: " <> name
+parseTableName bad = throwError $ T.unpack $
+  "invalid table name: " <> userShow bad
 
 parseColumnName :: PreProp -> PropCheck (Prop ColumnName)
 parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
+parseColumnName bad = throwError $ T.unpack $
+  "invalid table name: " <> userShow bad
 
 -- The conversion from @Exp@ to @PreProp@
 --
@@ -182,7 +214,7 @@ expToPreProp = \case
           nameTy <- case maybeTranslateType' (const Nothing) ty of
             Just ty' -> do
               vid <- genVarId
-              pure (vid, name, coerceQType ty')
+              pure (vid, name, ty')
             -- This is challenging because `ty : Pact.Type TypeName`, but
             -- `maybeTranslateType` handles `Pact.Type UserType`.
             Nothing -> throwErrorIn exp
@@ -213,7 +245,7 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TBool, PreSuccess)  -> pure Success
   (_, PreResult)       -> pure Result
   (_, PreVar vid name) -> do
-    varTy <- view (_1 . at vid)
+    varTy <- view (varTys . at vid)
     case varTy of
       Nothing -> throwErrorT $
         "couldn't find property variable " <> name
@@ -224,14 +256,18 @@ checkPreProp ty preProp = case (ty, preProp) of
         Just Refl -> pure (PVar vid name)
       Just (EObjectTy _) -> throwErrorIn preProp
         "ERROR: object types not currently allowed in properties (issue 139)"
-      Just QTable       -> error "TODO"
-      Just (QColumns _) -> error "TODO"
+      Just QTable        -> error "TODO"
+      Just (QColumnOf _) -> error "TODO"
 
   -- quantifiers
-  (a, PreForall vid name ty' p) -> Forall vid name ty' <$>
-    (local (& _1 . at vid ?~ ty') $ checkPreProp a p)
-  (a, PreExists vid name ty' p) -> Exists vid name ty' <$>
-    (local (& _1 . at vid ?~ ty') $ checkPreProp a p)
+  (TBool, toQ -> Just (q, vid, name, ty', p)) -> do
+    let quantifyTable = case ty' of
+          QTable -> Set.insert (TableName (T.unpack name))
+          _      -> id
+    let modEnv env = env & varTys . at vid  ?~ ty'
+                         & quantifiedTables %~ quantifyTable
+
+    q vid name ty' <$> local modEnv (checkPreProp TBool p)
 
   -- TODO: PreAt / PAt
 
@@ -367,7 +403,7 @@ checkPreProp ty preProp = case (ty, preProp) of
 expectColumnType
   :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
 expectColumnType (PLit tn) (PLit cn) expectedTy = do
-  tys <- asks (^.. _2 . ix tn . ix cn)
+  tys <- asks (^.. tableEnv . ix tn . ix cn)
   case tys of
     [EType foundTy] -> case typeEq foundTy expectedTy of
       Nothing   -> throwErrorT $
@@ -377,14 +413,16 @@ expectColumnType (PLit tn) (PLit cn) expectedTy = do
       Just Refl -> pure ()
     _ -> throwErrorT $
       "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
+expectColumnType _ _ _
+  = error "table and column names must be concrete at this point"
 
 expectTableExists :: Prop TableName -> PropCheck ()
 expectTableExists (PLit tn) = do
-  tn' <- view $ _2 . at tn
-  case tn' of
-    Nothing -> throwErrorT $
-      "expected table " <> userShow tn <> "but it isn't in scope"
-    Just _  -> pure ()
+  quantified <- view $ quantifiedTables . at tn
+  defined    <- view $ tableEnv . at tn
+  when (not (isJust quantified || isJust defined)) $
+    throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
+expectTableExists _ = error "table name must be concrete at this point"
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
@@ -404,10 +442,10 @@ expToCheck
   -> Exp
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv genStart nameEnv idEnv body = do
+expToCheck tableEnv' genStart nameEnv idEnv body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody)
-    (coerceQType <$> idEnv, tableEnv)
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  typedBody <- runReaderT (checkPreProp TBool preTypedBody) env
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
@@ -424,9 +462,10 @@ expToProp
   -> Exp
   -- ^ Exp to convert
   -> Either String (Prop a)
-expToProp tableEnv genStart nameEnv idEnv ty body = do
+expToProp tableEnv' genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
-  runReaderT (checkPreProp ty preTypedBody) (coerceQType <$> idEnv, tableEnv)
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  runReaderT (checkPreProp ty preTypedBody) env
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
