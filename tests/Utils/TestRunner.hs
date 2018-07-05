@@ -1,10 +1,18 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Utils.TestRunner
-  ( runAll
+  ( ApiResultCheck(..)
+  , runAll
   , flushDb
-  , genKeys) where
+  , genKeys
+  , threeStepPactCode
+  , makeCheck
+  , checkResults
+  , checkIfSuccess
+  , checkIfFailure
+  ) where
 
 import Pact.Server.Server
 import Pact.ApiReq
@@ -22,6 +30,7 @@ import Control.Monad
 import Control.Lens
 import Network.Wreq
 import System.Directory
+import NeatInterpolation (text)
 
 _testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
 _testDir = "tests/resume/"
@@ -34,21 +43,11 @@ _serverPath = "http://localhost:" ++ _testPort ++ "/api/v1/"
 _logFiles :: [String]
 _logFiles = ["access.log","commands.sqlite","error.log","pact.sqlite"]
 
-data TestExec = TestExec
-  { _teCode :: String,
-    _teData :: Value,
-    _teKeyPairs :: [KeyPair],
-    _teNonce :: String
-  } deriving (Eq,Show) 
-
-data TestCont = TestCont
-  { _tcTxId :: Int,
-    _tcStep :: Int,
-    _tcRollback :: Bool,
-    _tcData :: Value,
-    _tcKeyPairs :: [KeyPair],
-    _tcNonce :: String
-  } deriving (Eq,Show)
+data ApiResultCheck = ApiResultCheck
+  { _arcReqKey :: RequestKey
+  , _arcIsFailure :: Bool
+  , _arcExpect :: Maybe Value
+  } deriving (Show, Eq)
 
 runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 runAll cmds = do
@@ -60,7 +59,8 @@ runAll cmds = do
         pollResp <- doPoll $ Poll _rkRequestKeys
         case pollResp of
           ApiFailure _ -> return $ HM.empty
-          ApiSuccess (PollResponses apiResults) -> return apiResults
+          ApiSuccess (PollResponses apiResults) -> do
+            return apiResults
 
 doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
 doSend req = do
@@ -89,9 +89,52 @@ flushDb = mapM_ deleteIfExists _logFiles
           isFile <- doesFileExist fp
           when isFile $ removeFile fp
 
-genKeys :: IO ((PrivateKey, PublicKey))
+genKeys :: IO KeyPair
 genKeys = do
   g :: SystemRandom <- newGenIO
   case generateKeyPair g of
     Left _ -> error "Something went wrong in genKeys"
-    Right (s,p,_) -> return (s,p)
+    Right (s,p,_) -> return $ KeyPair s p
+
+makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
+makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect
+
+checkResults :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Bool
+checkResults resultsMap checks = foldl isExpected True checks
+  where isExpected acc ApiResultCheck{..} =
+          case (HM.lookup _arcReqKey resultsMap) of
+            Nothing -> False
+            Just (ApiResult cmdRes _ _) -> case cmdRes of
+              Object h -> if _arcIsFailure then (acc && (checkIfFailure h _arcExpect))
+                          else (acc && (checkIfSuccess h _arcExpect))
+              _ -> False
+
+checkIfSuccess :: Object -> Maybe Value -> Bool
+checkIfSuccess h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "success")
+checkIfSuccess h (Just expect) = isSuccess && isMatch
+  where isSuccess = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "success")
+        isMatch = (HM.lookup (T.pack "data") h == Just (toJSON expect))
+
+checkIfFailure :: Object -> Maybe Value -> Bool
+checkIfFailure h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure")
+checkIfFailure h (Just expect) = isFailure && isMatch
+  where isFailure = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure")
+        isMatch = (HM.lookup (T.pack "detail") h == Just (toJSON expect))
+
+threeStepPactCode :: String -> T.Text
+threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+            (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step
+                 (let ((str1 "step 1"))
+                  str1))
+                (step
+                 (let ((str2 "step 2"))
+                  str2))
+                (step
+                 (let ((str3 "step 3"))
+                  str3))))
+            |] 
+

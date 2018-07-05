@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module PactContinuationSpec (spec) where
 
@@ -13,33 +14,51 @@ import Pact.Types.Command
 import Pact.Types.Runtime
 import qualified Data.Text as T
 
-makeTestApiResult :: Value -> TxId -> ApiResult
-makeTestApiResult cmdData txId = ApiResult cmdValue cmdTxId Nothing
-  where cmdValue = toJSON (CommandSuccess cmdData)
-        cmdTxId = Just txId
-
-
 spec :: Spec
 spec = describe "testPactContinuation" testPactContinuation
 
 testPactContinuation :: Spec
 testPactContinuation = before_ flushDb $ do
-  it "sends simple command to locally running dev server" $ do
-    let expRes = Just $ makeTestApiResult (Number 3) (TxId 0)
+  it "sends (+ 1 2) command to locally running dev server" $ do
+    let cmdData = (toJSON . CommandSuccess . Number) 3
+        expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
     testSimpleServerCmd `shouldReturn` expRes
 
-  context "when provided with current next step" $ do
+  context "when provided with correct next step" $ do
     it "executes the next step and updates pact state" $ do 
-      True `shouldBe` True
+      testNextStep `shouldReturn` True
 
-testCorrectNextStep :: Spec
-testCorrectNextStep = undefined
+testNextStep :: IO Bool
+testNextStep = do
+  let moduleName = "testNextStep"
+  adminKeys <- genKeys
+
+  moduleCmd       <- mkExec (T.unpack (threeStepPactCode moduleName))
+                     (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                     Nothing [adminKeys] (Just "test1")
+  executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
+                     Null Nothing [adminKeys] (Just "test2")
+  contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
+  checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
+  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
+  flushDb
+  
+
+  let moduleCheck       = makeCheck moduleCmd False Nothing
+      executePactCheck  = makeCheck executePactCmd False $ Just "step 1"
+      contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 2"
+      checkStateCheck   = makeCheck checkStateCmd True
+                          (Just "Invalid continuation step value: Received 1 but expected 2")
+      allChecks         = [moduleCheck, executePactCheck, contNextStepCheck, checkStateCheck]
+ 
+  return (checkResults allResults allChecks)
+
 
 testSimpleServerCmd :: IO (Maybe ApiResult)
 testSimpleServerCmd = do
-  (priv,publ) <- genKeys
+  simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null Nothing
-             [KeyPair priv publ] (Just "test1")
+             [simpleKeys] (Just "test1")
   allResults <- runAll [cmd]
   return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
 
