@@ -7,11 +7,12 @@ module Utils.TestRunner
   , runAll
   , flushDb
   , genKeys
-  , threeStepPactCode
   , makeCheck
   , checkResults
   , checkIfSuccess
   , checkIfFailure
+  , threeStepPactCode
+  , errorStepPactCode
   ) where
 
 import Pact.Server.Server
@@ -128,13 +129,29 @@ threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
            endCode = [text| 'k
               (defpact tester ()
                 (step
-                 (let ((str1 "step 1"))
+                 (let ((str1 "step 0"))
                   str1))
                 (step
-                 (let ((str2 "step 2"))
+                 (let ((str2 "step 1"))
                   str2))
                 (step
-                 (let ((str3 "step 3"))
+                 (let ((str3 "step 2"))
                   str3))))
             |] 
 
+errorStepPactCode :: String -> T.Text
+errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+     where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+            (module|]
+           endCode = [text| 'k
+              (defpact tester ()
+                (step
+                 (let ((str1 "step 0"))
+                  str1))
+                (step
+                 (let ((str2 (+ "will throw error")))
+                  str2))
+                (step
+                 (let ((str3 "step 2"))
+                  str3))))
+            |] 
