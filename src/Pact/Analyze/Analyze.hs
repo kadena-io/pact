@@ -182,6 +182,10 @@ data QueryEnv
     , _qeAnalyzeState  :: AnalyzeState
     , _qeAnalyzeResult :: AVal
     , _qeTableScope    :: Map VarId TableName
+    --
+    -- TODO: implement column quantification. update 'getLitColName', and
+    -- 'analyzeProp' for @Forall@ and @Exists@ at the same time.
+    --
     , _qeColumnScope   :: Map VarId ()
     }
 
@@ -1397,7 +1401,7 @@ getLitTableName (PAt _ _ _ _) = throwError "Object values can't be table names"
 
 getLitColName :: Prop ColumnName -> Query ColumnName
 getLitColName (PLit cn) = pure cn
-getLitColName _ = throwError "TODO: support non-literal column names with column quantification"
+getLitColName _ = throwError "TODO: column quantification"
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
