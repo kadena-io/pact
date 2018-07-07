@@ -34,13 +34,19 @@ library
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
+                     , Pact.Types.Exp
+                     , Pact.Types.Gas
                      , Pact.Types.Hash
+                     , Pact.Types.Info
                      , Pact.Types.Lang
                      , Pact.Types.Logger
                      , Pact.Types.Native
                      , Pact.Types.Parser
+                     , Pact.Types.Persistence
                      , Pact.Types.Runtime
                      , Pact.Types.Orphans
+                     , Pact.Types.Term
+                     , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
                      , Crypto.Hash.Blake2Native
