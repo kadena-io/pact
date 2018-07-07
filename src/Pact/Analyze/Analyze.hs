@@ -1391,13 +1391,20 @@ getLitTableName (PVar vid name) = do
     Nothing -> throwError $ fromString $
       "could not find table in scope: " <> T.unpack name
     Just tn -> pure tn
+getLitTableName (PSym _) = throwError "Symbolic values can't be table names"
+getLitTableName Result = throwError "Function results can't be table names"
+getLitTableName (PAt _ _ _ _) = throwError "Object values can't be table names"
+
+getLitColName :: Prop ColumnName -> Query ColumnName
+getLitColName (PLit cn) = pure cn
+getLitColName _ = throwError "TODO: support non-literal column names with column quantification"
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLit _) = throwError "We don't support property object literals"
-analyzePropO (PSym _) = throwError "Symbols can't be objects"
+analyzePropO (PSym _) = throwError "Symbolic values can't be objects"
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
@@ -1470,27 +1477,31 @@ analyzeProp (TableRead tn) = do
 analyzeProp (TableWrite tn) = do
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.tableWritten tn'
-analyzeProp (ColumnWrite (PLit _tableName) (PLit _colName))
+analyzeProp (ColumnWrite _ _)
   = throwError "column write analysis not yet implemented"
-analyzeProp (ColumnRead (PLit _tableName) (PLit _colName))
+analyzeProp (ColumnRead _ _)
   = throwError "column read analysis not yet implemented"
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
-analyzeProp (IntCellDelta tn (PLit colName) pRk) = do
+analyzeProp (IntCellDelta tn cn pRk) = do
   tn' <- getLitTableName tn
+  cn' <- getLitColName cn
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.intCellDelta tn' colName sRk
-analyzeProp (DecCellDelta tn (PLit colName) pRk) = do
+  view $ qeAnalyzeState.intCellDelta tn' cn' sRk
+analyzeProp (DecCellDelta tn cn pRk) = do
   tn' <- getLitTableName tn
+  cn' <- getLitColName cn
   sRk <- analyzeProp pRk
-  view $ qeAnalyzeState.decCellDelta tn' colName sRk
-analyzeProp (IntColumnDelta tn (PLit colName)) = do
+  view $ qeAnalyzeState.decCellDelta tn' cn' sRk
+analyzeProp (IntColumnDelta tn cn) = do
   tn' <- getLitTableName tn
-  view $ qeAnalyzeState.intColumnDelta tn' colName
-analyzeProp (DecColumnDelta tn (PLit colName)) = do
+  cn' <- getLitColName cn
+  view $ qeAnalyzeState.intColumnDelta tn' cn'
+analyzeProp (DecColumnDelta tn cn) = do
   tn' <- getLitTableName tn
-  view $ qeAnalyzeState.decColumnDelta tn' colName
+  cn' <- getLitColName cn
+  view $ qeAnalyzeState.decColumnDelta tn' cn'
 analyzeProp (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
@@ -1512,10 +1523,11 @@ analyzeProp (RowWriteCount tn pRk) = do
 
 -- Authorization
 analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProp (RowEnforced tn (PLit cn) pRk) = do
+analyzeProp (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
-  view $ qeAnalyzeState.cellEnforced tn' cn sRk
+  cn' <- getLitColName cn
+  view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
