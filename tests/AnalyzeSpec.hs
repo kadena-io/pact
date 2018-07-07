@@ -1312,7 +1312,7 @@ spec = describe "analyze" $ do
             (deftable additional-table:{additional-schema})
 
             (defun test1:integer ()
-              ("don't touch a table"
+              (meta "don't touch a table"
                 (properties [
                   (forall (table:table) (not (table-write table)))
                   (forall (table:table) (not (table-read table)))
@@ -1321,7 +1321,7 @@ spec = describe "analyze" $ do
               1)
 
             (defun test2:string ()
-              ("write a table"
+              (meta "write a table"
                 (properties [
                   (exists (table:table) (table-write table))
                   (forall (table:table) (not (table-read table)))
@@ -1330,7 +1330,7 @@ spec = describe "analyze" $ do
               (insert simple-table "joel" { 'balance : 5 }))
 
             (defun test3:object{simple-schema} ()
-              ("read a table"
+              (meta "read a table"
                 (properties [
                   (forall (table:table) (not (table-write table)))
                   (exists (table:table) (table-read table))
@@ -1349,7 +1349,7 @@ spec = describe "analyze" $ do
             (deftable simple-table:{simple-schema})
 
             (defun test1:integer ()
-              ("don't touch a column"
+              (meta "don't touch a column"
                 (properties [
                   (forall (column:(column-of simple-table)) (not (column-write column)))
                   (forall (column:(column-of simple-table)) (not (column-read column)))
@@ -1358,7 +1358,7 @@ spec = describe "analyze" $ do
               1)
 
             (defun test2:string ()
-              ("write a column"
+              (meta "write a column"
                 (properties [
                   (exists (column:(column-of simple-table)) (column-write column))
                   (forall (column:(column-of simple-table)) (not (column-read column)))
@@ -1367,7 +1367,7 @@ spec = describe "analyze" $ do
               (insert simple-table "joel" { 'balance : 5 }))
 
             (defun test3:object{simple-schema} ()
-              ("read a column"
+              (meta "read a column"
                 (properties [
                   (forall (column:(column-of simple-table)) (not (column-write column)))
                   (exists (column:(column-of simple-table)) (column-read column))
