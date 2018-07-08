@@ -455,18 +455,18 @@ verifyFunctionProperty
   -> [AST Node]
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) = runExceptT $ do
-    (args, tm, tagAllocs) <- hoist generalize $
-      withExcept translateToCheckFailure $
-        runTranslation funInfo pactArgs body
-
-    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      tags <- lift $ allocModelTags funInfo args tm tagAllocs
-      AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
-        runPropertyAnalysis check tables tm tags funInfo
-      void $ lift $ SBV.output prop
-      hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-        resultQuery goal $ Model tags ksProvs
+verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
+    runExceptT $ do
+      (args, tm, tagAllocs) <- hoist generalize $
+        withExcept translateToCheckFailure $
+          runTranslation funInfo pactArgs body
+      ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+        tags <- lift $ allocModelTags funInfo args tm tagAllocs
+        AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
+          runPropertyAnalysis check tables tm tags funInfo
+        void $ lift $ SBV.output prop
+        hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
+          resultQuery goal $ Model tags ksProvs
 
   where
     goal :: Goal
