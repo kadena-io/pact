@@ -389,12 +389,12 @@ resultQuery goal model0 = do
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
 verifyFunctionInvariants'
-  :: [Table]
-  -> Info
+  :: Info
+  -> [Table]
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' tables funInfo pactArgs body = runExceptT $ do
+verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
@@ -449,16 +449,13 @@ verifyFunctionInvariants' tables funInfo pactArgs body = runExceptT $ do
       SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
 
 verifyFunctionProperty
-  :: [Table]
-  -- | 'Info' for the function being checked
-  -> Info
-  -- | 'Info' for the property being checked
-  -> Info
+  :: Info
+  -> [Table]
   -> [Named Node]
   -> [AST Node]
-  -> Check
+  -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty tables funInfo propInfo pactArgs body check = runExceptT $ do
+verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) = runExceptT $ do
     (args, tm, tagAllocs) <- hoist generalize $
       withExcept translateToCheckFailure $
         runTranslation funInfo pactArgs body
@@ -629,7 +626,7 @@ verifyFunctionProps tables ref props = do
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
       then for props $ \(info, check) ->
-             verifyFunctionProperty tables _fInfo info _fArgs _fBody check
+             verifyFunctionProperty _fInfo tables _fArgs _fBody (Located info check)
       else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
     _ -> pure []
 
@@ -644,7 +641,7 @@ verifyFunctionInvariants tables ref = do
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
-      then verifyFunctionInvariants' tables _fInfo _fArgs _fBody
+      then verifyFunctionInvariants' _fInfo tables _fArgs _fBody
       else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
     other -> pure $ Left $ CheckFailure (_tlInfo other) (NotAFunction (tShow ref))
 
