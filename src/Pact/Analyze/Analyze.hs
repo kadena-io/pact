@@ -199,7 +199,8 @@ data AnalysisResult
   = AnalysisResult
     { _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
-    } deriving Show
+    }
+  deriving (Show)
 
 data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType Schema
@@ -1558,8 +1559,8 @@ analyzeProp (RowEnforced tn cn pRk) = do
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
-analyzeCheck :: Check -> Query (Identity (S Bool))
-analyzeCheck = fmap Identity . \case
+analyzeCheck :: Check -> Query (S Bool)
+analyzeCheck = \case
     PropertyHolds p -> assumingSuccess =<< analyzeProp p
     Valid p         -> analyzeProp p
     Satisfiable p   -> analyzeProp p
@@ -1624,7 +1625,7 @@ runPropertyAnalysis
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
 runPropertyAnalysis check tables tm tags info =
-  runIdentity <$> runAnalysis' (analyzeCheck check) tables tm tags info
+  runIdentity <$> runAnalysis' (Identity <$> analyzeCheck check) tables tm tags info
 
 runInvariantAnalysis
   :: [Table]

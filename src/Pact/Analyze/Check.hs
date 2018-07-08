@@ -400,9 +400,8 @@ verifyFunctionInvariants' tables funInfo pactArgs body = runExceptT $ do
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       tags <- lift $ allocModelTags funInfo args tm tagAllocs
-      resultsTable <- withExceptT
-        analyzeToCheckFailure $
-          runInvariantAnalysis tables tm tags funInfo
+      resultsTable <- withExceptT analyzeToCheckFailure $
+        runInvariantAnalysis tables tm tags funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
@@ -453,7 +452,7 @@ verifyFunctionProperty
   :: [Table]
   -- | 'Info' for the function being checked
   -> Info
-  -- | 'Parsed for the property being checked
+  -- | 'Info' for the property being checked
   -> Info
   -> [Named Node]
   -> [AST Node]
