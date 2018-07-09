@@ -444,9 +444,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
-    runSymbolic = fmap fst .
-      -- SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup (goal == Satisfaction) config)
-      SBVI.runSymbolic (SBVI.SMTMode SBVI.ISetup True config)
+    runSymbolic = SBV.runSMTWith config
 
 verifyFunctionProperty
   :: Info
