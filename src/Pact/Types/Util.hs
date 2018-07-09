@@ -24,7 +24,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Data.Char
-import Data.Text (Text,pack)
+import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -190,3 +190,11 @@ pshow = text . show
 
 tShow :: Show a => a -> Text
 tShow = pack . show
+
+
+asString' :: AsString a => a -> String
+asString' = unpack . asString
+
+
+maybeDelim :: Show a => String -> Maybe a -> String
+maybeDelim d t = maybe "" ((d ++) . show) t

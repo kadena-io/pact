@@ -17,7 +17,6 @@ import Control.DeepSeq
 import Data.Aeson
 import Pact.Types.Crypto
 import Pact.Types.RPC
-import Pact.Types.Util
 import Pact.Types.Runtime
 import Pact.Interpreter
 import qualified Data.Set as S
