@@ -13,6 +13,8 @@ module Utils.TestRunner
   , checkIfFailure
   , threeStepPactCode
   , errorStepPactCode
+  , pactWithRollbackCode
+  , pactWithRollbackErrCode
   ) where
 
 import Pact.Server.Server
@@ -128,30 +130,40 @@ threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
             (module|]
            endCode = [text| 'k
               (defpact tester ()
-                (step
-                 (let ((str1 "step 0"))
-                  str1))
-                (step
-                 (let ((str2 "step 1"))
-                  str2))
-                (step
-                 (let ((str3 "step 2"))
-                  str3))))
-            |] 
+                (step "step 0")
+                (step "step 1")
+                (step "step 2")))
+              |] 
 
 errorStepPactCode :: String -> T.Text
 errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
      where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
-            (module|]
+                          (module|]
            endCode = [text| 'k
               (defpact tester ()
-                (step
-                 (let ((str1 "step 0"))
-                  str1))
-                (step
-                 (let ((str2 (+ "will throw error")))
-                  str2))
-                (step
-                 (let ((str3 "step 2"))
-                  str3))))
-            |] 
+                (step "step 0")
+                (step (+ "will throw error in step 1"))
+                (step "step 2")))
+              |] 
+
+pactWithRollbackCode :: String -> T.Text
+pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" "rollback 1")
+              (step-with-rollback "step 2" "rollback 2")))
+            |]
+
+pactWithRollbackErrCode :: String -> T.Text
+pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step-with-rollback "step 0" "rollback 0")
+              (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
+              (step-with-rollback "step 2" "rollback 2")))
+            |]
