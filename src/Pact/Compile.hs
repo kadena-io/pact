@@ -47,7 +47,6 @@ import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 
 import Pact.Types.Lang
-import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Hash
