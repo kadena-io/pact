@@ -14,10 +14,15 @@ import Pact.Types.Runtime
 import qualified Data.Text as T
 
 spec :: Spec
-spec = describe "testPactContinuation" testPactContinuation
+spec = describe "pacts in dev server" $ do
+  describe "testPactContinuation" $ do
+    testPactContinuation
+
+  {--describe "testPactRollback" $ do
+    testPactRollback--}
 
 testPactContinuation :: Spec
-testPactContinuation = before_ flushDb $ do
+testPactContinuation = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdData = (toJSON . CommandSuccess . Number) 3
         expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
@@ -146,3 +151,30 @@ testErrStep = do
       allChecks          = [moduleCheck, executePactCheck, contErrStepCheck, checkStateCheck]
  
   return (checkResults allResults allChecks)
+
+{--testPactRollback :: Spec
+testPactRollback = before_ flushDb $ after_ flushDb $ do
+  testCorrectRollbackStep
+
+  {--context "when provided with incorrect rollback step" $ do
+    it "throws error and does not delete pact from state" $ do
+      testIncorrectRollbackStep `shouldReturn` True
+
+  context "when error occurs when executing rollback function" $ do
+    it "throws error and does not delete pact from state" $ do
+      testRollbackErr `shouldReturn` True
+
+  context "when trying to rollback a step without a rollback function" $ do
+    it "does not delete pact from state" $ do
+      testNoRollbackFunc `shouldReturn` True--}
+
+testCorrectRollbackStep :: Spec
+testCorrectRollbackStep = 
+  context "when provided with correct rollback step" $
+    it "executes the rollback function and deletes pact from state" $ do
+      getExpect
+      print "hello"
+      "hello" `shouldBe` "world"
+
+getExpect :: Expectation
+getExpect = True `shouldBe` True--}
