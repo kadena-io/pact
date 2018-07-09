@@ -407,7 +407,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
-          for2 resultsTable $ \(info, AnalysisResult prop ksProvs) -> do
+          for2 resultsTable $ \(Located info (AnalysisResult prop ksProvs)) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
@@ -530,7 +530,7 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (Ref, Either [ParseFailure] [(Info, Check)])
+  -> HM.HashMap Text (Ref, Either [ParseFailure] [Located Check])
 moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
   -- TODO(joel): right now we can get away with ignoring the result type but we
   -- should use it for type checking
@@ -572,7 +572,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
                   (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
-      checks :: Either [ParseFailure] [(Info, Check)]
+      checks :: Either [ParseFailure] [Located Check]
       checks = runExpParserOver "properties" properties property
         (expToCheck tableEnv vidStart nameEnv idEnv)
 
@@ -600,16 +600,16 @@ runExpParserOver
   -> Maybe Exp
   -> Maybe Exp
   -> (Exp -> Either String t)
-  -> Either [ParseFailure] [(Info, t)]
+  -> Either [ParseFailure] [Located t]
 runExpParserOver name multiExp singularExp parser =
   let
       exps = collectExps name multiExp singularExp
-      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Info, t)]
+      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Located t)]
       parsedList = exps <&&> \meta -> case parser meta of
         Left err   -> Left [(meta, err)]
-        Right good -> Right (expToInfo meta, good)
+        Right good -> Right (Located (expToInfo meta) good)
 
-      parsedList' :: [Either [ParseFailure] (Info, t)]
+      parsedList' :: [Either [ParseFailure] (Located t)]
       parsedList' = join <$> sequence parsedList
 
       failures :: [ParseFailure]
@@ -617,7 +617,7 @@ runExpParserOver name multiExp singularExp parser =
 
   in if null failures then Right (rights parsedList') else Left failures
 
-verifyFunctionProps :: [Table] -> Ref -> [(Info, Check)] -> IO [CheckResult]
+verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
@@ -625,8 +625,7 @@ verifyFunctionProps tables ref props = do
   case fun of
     TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
       if Set.null failures
-      then for props $ \(info, check) ->
-             verifyFunctionProperty _fInfo tables _fArgs _fBody (Located info check)
+      then for props $ verifyFunctionProperty _fInfo tables _fArgs _fBody
       else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
     _ -> pure []
 
@@ -676,13 +675,13 @@ verifyModule modules moduleData = do
       Left errs -> throwError (ModuleParseFailures errs)
       Right tables' -> pure tables'
 
-    let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Info, Check)])
+    let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [Located Check])
         funChecks = moduleFunChecks tables' funTypes
 
-        funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Info, Check)]))
+        funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [Located Check]))
         funChecks' = sequence (fmap sequence funChecks)
 
-        verifyFunProps :: (Ref, [(Info, Check)]) -> IO [CheckResult]
+        verifyFunProps :: (Ref, [Located Check]) -> IO [CheckResult]
         verifyFunProps = uncurry (verifyFunctionProps tables')
 
     funChecks'' <- case funChecks' of
@@ -715,9 +714,10 @@ verifyCheck moduleData funName check = do
     tables <- moduleTables modules moduleData
     case tables of
       Left failures -> pure $ Left failures
-      Right tables' -> Right <$> case moduleFun moduleData funName of
-        Just funRef -> head <$> verifyFunctionProps tables' funRef [(info, check)]
-        Nothing     -> pure $ Left $ CheckFailure info $ NotAFunction funName
+      Right tables' -> Right <$>
+        case moduleFun moduleData funName of
+          Just funRef -> head <$> verifyFunctionProps tables' funRef [Located info check]
+          Nothing     -> pure $ Left $ CheckFailure info $ NotAFunction funName
 
   where
     moduleFun :: ModuleData -> Text -> Maybe Ref

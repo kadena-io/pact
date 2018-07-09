@@ -692,7 +692,7 @@ type Arg
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
-  , _tableInvariants :: [(Pact.Info, Invariant Bool)]
+  , _tableInvariants :: [Located (Invariant Bool)]
   } deriving (Show)
 
 data Goal
@@ -720,6 +720,10 @@ data Located a
   deriving (Eq, Functor)
 
 deriving instance Show a => Show (Located a)
+
+instance Mergeable a => Mergeable (Located a) where
+  symbolicMerge f t (Located i a) (Located i' a') =
+    Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
 newtype TagId
   = TagId Natural

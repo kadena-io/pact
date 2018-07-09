@@ -77,7 +77,7 @@ data AnalyzeEnv
     { _aeScope     :: !(Map VarId AVal)              -- used as a stack
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
-    , _invariants  :: !(TableMap [(Info, Invariant Bool)])
+    , _invariants  :: !(TableMap [Located (Invariant Bool)])
     , _aeModelTags :: !ModelTags
     , _aeInfo      :: !Info
     }
@@ -124,7 +124,7 @@ data LatticeAnalyzeState
     --       finer-grained tracking, so that we can test whether a single
     --       invariant is being maintained
     --
-    , _lasMaintainsInvariants :: TableMap (ZipList (Info, SBV Bool))
+    , _lasMaintainsInvariants :: TableMap (ZipList (Located (SBV Bool)))
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
@@ -472,7 +472,7 @@ instance ObjectAnalyzer Query Prop where
 instance Analyzer InvariantCheck Invariant where
   analyze = checkInvariant
   throwErrorNoLoc err = do
-    info <- view _1
+    info <- view location
     throwError $ AnalyzeFailure info err
 
 class SymbolicTerm term where
@@ -554,7 +554,7 @@ tagVarBinding vid av = do
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
 
-maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Info, SBool)))
+maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
 tableRead :: TableName -> Lens' AnalyzeState (S Bool)
@@ -755,8 +755,8 @@ applyInvariants tn sValFields addInvariants = do
   case mInvariants of
     Nothing -> pure ()
     Just invariants' -> do
-      invariants'' <- for invariants' $ \(info, invariant) ->
-        case runReaderT (checkInvariant invariant) (info, sValFields) of
+      invariants'' <- for invariants' $ \(Located info invariant) ->
+        case runReaderT (checkInvariant invariant) (Located info sValFields) of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
           Right inv -> pure inv
@@ -1210,8 +1210,8 @@ analyzeTerm = \case
         sValFields = Map.mapMaybe id mValFields
 
     applyInvariants tn sValFields $ \invariants' ->
-      let fs :: ZipList ((Info, SBV Bool) -> (Info, SBV Bool))
-          fs = ZipList $ (\s (p, s') -> (p, _sSbv s &&& s')) <$> invariants'
+      let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
+          fs = ZipList $ (\s -> fmap (_sSbv s &&&)) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
 
     --
@@ -1355,7 +1355,7 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
-type InvariantCheck = ReaderT (Info, Map Text SBVI.SVal) (Either AnalyzeFailure)
+type InvariantCheck = ReaderT (Located (Map Text SBVI.SVal)) (Either AnalyzeFailure)
 
 checkInvariant :: Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
@@ -1370,8 +1370,8 @@ checkInvariant = \case
   ISym sym -> pure sym
 
   -- variables
-  IVar name         -> do
-    mVal <- view (_2 . at name)
+  IVar name -> do
+    mVal <- view (located . at name)
     case mVal of
       Just val -> pure (sansProv (SBVI.SBV val))
       Nothing  -> throwErrorNoLoc $ fromString $
@@ -1573,7 +1573,7 @@ analyzeCheck = \case
 
 -- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
 -- functor instead of three.
-newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [(Info, a)] }
+newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [Located a] }
 
 instance Functor InvariantsF where
   fmap f (InvariantsF a) = InvariantsF (f <$$$> a)
@@ -1586,7 +1586,7 @@ analyzeInvariants = assumingSuccess =<< invariantsHold'
       success <- view (qeAnalyzeState.succeeds)
       pure $ (success ==>) <$> ps
 
-    invariantsHold :: Query (TableMap (ZipList (Info, S Bool)))
+    invariantsHold :: Query (TableMap (ZipList (Located (S Bool))))
     invariantsHold = sansProv <$$$$> view (qeAnalyzeState.maintainsInvariants)
 
     invariantsHold' :: Query (InvariantsF (S Bool))
@@ -1632,6 +1632,6 @@ runInvariantAnalysis
   -> ETerm
   -> ModelTags
   -> Info
-  -> ExceptT AnalyzeFailure Symbolic (TableMap [(Info, AnalysisResult)])
+  -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
 runInvariantAnalysis tables tm tags info =
   unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags info
