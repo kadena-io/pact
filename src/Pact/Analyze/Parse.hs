@@ -246,27 +246,13 @@ viewQ = \case
 
 inferrable :: PreProp -> Bool
 inferrable = \case
-  PreDecimalLit{}    -> True
-  PreIntegerLit{}    -> True
-  PreStringLit{}     -> True
-  PreTimeLit{}       -> True
-  PreBoolLit{}       -> True
-  PreAbort           -> True
-  PreSuccess         -> True
-  PreVar{}           -> True
-  PreExists{}        -> True
-  PreForall{}        -> True
-  PreAnn{}           -> True
-  PreResult          -> True
-  PreAt{}            -> True
-  PreLiteralObject{} -> True
-
   -- we can infer all functions (as is typical bidirectionally), except for the
   -- overloaded ones.
   PreApp f _
     | Just _ <- textToArithOp f      -> False
     | Just _ <- textToUnaryArithOp f -> False
     | otherwise                      -> True
+  _                                  -> True
 
 inferVar :: VarId -> Text -> (forall a. Prop a) -> PropCheck EProp
 inferVar vid name prop = do
