@@ -336,8 +336,10 @@ verify i as = case as of
       Just md -> do
         results <- liftIO $ verifyModule modules md
         case results of
-          Left failures  -> setop $ TcErrors $
+          Left (ParseFailures failures)  -> setop $ TcErrors $
             fmap (Text.unpack . describeParseFailure) $ failures
+          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors $ pure $
+            Text.unpack $ msg <> ": " <> tShow ty
           Right results' -> setop $ TcErrors $
             fmap (Text.unpack . describeCheckResult) $
             toListOf (traverse . each) results'

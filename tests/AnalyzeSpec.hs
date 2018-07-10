@@ -56,7 +56,7 @@ data TestFailure
   = TestCheckFailure CheckFailure
   | NoTestModule
   | ReplError String
-  | ParseFailures [ParseFailure]
+  | VerificationFailure VerificationFailure
   deriving Show
 
 --
@@ -82,9 +82,9 @@ runVerification code = do
     Right moduleData -> do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       -- TODO(joel): use `fromLeft` when we're on modern GHC
-      case results of
-        Left failures -> pure $ Just $ ParseFailures failures
-        Right results' -> pure $ case findOf (traverse . traverse) isLeft results' of
+      pure $ case results of
+        Left failure   -> Just $ VerificationFailure failure
+        Right results' -> case findOf (traverse . traverse) isLeft results' of
           Just (Left (_parsed, failure)) -> Just $ TestCheckFailure failure
           _                              -> Nothing
 
@@ -96,7 +96,7 @@ runCheck code check = do
     Right moduleData -> do
       result <- verifyCheck moduleData "test" check
       pure $ case result of
-        Left parseFailures         -> Just $ ParseFailures parseFailures
+        Left failure               -> Just $ VerificationFailure failure
         Right (Left (_parsed, cf)) -> Just $ TestCheckFailure cf
         Right (Right _)            -> Nothing
 

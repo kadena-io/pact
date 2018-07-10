@@ -15,16 +15,18 @@ module Pact.Analyze.Check
   , CheckSuccess(..)
   , CheckResult
   , ParseFailure
+  , VerificationFailure(..)
   ) where
 
 import           Control.Exception         as E
 import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             itraversed, ix, toListOf,
                                             traverseOf, traversed, (<&>), (^.),
-                                            (^?), (^@..), (?~), _1, _2, _Just)
+                                            (^?), (^@..), (?~), (&), (%~),
+                                            _1, _2, _Just, _Left)
 import           Control.Monad             ((>=>), join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
-                                            throwError, withExcept, withExceptT)
+                                            throwError, withExcept, withExceptT, MonadError)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
@@ -98,9 +100,14 @@ data CheckFailure
   | SmtFailure SmtFailure
   deriving Show
 
+data VerificationFailure
+  = ParseFailures [ParseFailure]
+  | TypeTranslationFailure Text (Pact.Type TC.UserType)
+  deriving Show
+
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
-  Invalid model -> "Invalidating model found:\n" <> showModel model
+  Invalid model  -> "Invalidating model found:\n" <> showModel model
   Unsatisfiable  -> "This property is unsatisfiable"
   Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
   UnexpectedFailure smtE -> T.pack $ show smtE
@@ -438,9 +445,9 @@ moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-moduleFunChecks tables modTys = modTys <&>
-  \(ref@(Ref defn), Pact.FunType argTys resultTy) ->
+  -> Either VerificationFailure (HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)]))
+moduleFunChecks tables modTys = for modTys $
+  \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
   let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
@@ -450,31 +457,30 @@ moduleFunChecks tables modTys = modTys <&>
       --       not there yet:
       vids = VarId <$> [1..]
 
-      -- TODO(joel): we probably don't want mapMaybe here and instead should
-      -- fail harder if we can't make sense of a type
-
       -- TODO(joel): this relies on generating the same unique ids as
       -- @checkFunction@. We need to more carefully enforce this is true!
-      env :: [(Text, VarId, EType)]
-      env = fmap (\(vid, (text, ty)) -> (text, vid, ty))
-        $ zip vids
-        $ flip mapMaybe argTys $ \(Pact.Arg name ty _info) ->
-            case maybeTranslateType ty of
-              Just ety -> Just (name, ety)
-              Nothing  -> Nothing
+  argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
+    case maybeTranslateType ty of
+      Just ety -> pure (name, ety)
+      Nothing  -> throwError $
+        TypeTranslationFailure "couldn't translate argument type" ty
 
-      -- TODO(joel): fail via Either
-      env' = case maybeTranslateType resultTy of
-               Just ety -> ("result", 0, ety) : env
-               Nothing  -> error "couldn't translate result type"
+  resultTy' <- case maybeTranslateType resultTy of
+    Just ety -> pure ("result", 0, ety)
+    Nothing  -> throwError $
+      TypeTranslationFailure "couldn't translate result type" resultTy
+
+  let env :: [(Text, VarId, EType)]
+      env = resultTy' :
+        ((\(vid, (text, ty)) -> (text, vid, ty)) <$> zip vids argTys')
 
       nameEnv :: Map Text VarId
-      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env'
+      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env
 
       idEnv :: Map VarId EType
-      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env'
+      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env
 
-      vidStart = VarId (length env')
+      vidStart = VarId (length env)
 
       tableEnv = TableMap $ Map.fromList $
         tables <&> \Table { _tableName, _tableType } ->
@@ -490,7 +496,7 @@ moduleFunChecks tables modTys = modTys <&>
       checks :: Either [ParseFailure] [(Parsed, Check)]
       checks = ((defnParsed, InvariantsHold):) <$> eitherChecks
 
-  in (ref, checks)
+  pure (ref, checks)
 
 (<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
 (<$$>) = fmap . fmap
@@ -547,14 +553,19 @@ verifyFunction tables ref props = do
       else pure [Left (getInfoParsed _fInfo, TypecheckFailure failures)]
     _ -> pure []
 
+-- TODO: use from Control.Monad.Except when on mtl 2.2.2
+liftEither :: MonadError e m => Either e a -> m a
+liftEither = either throwError return
+
 -- | Verifies properties on all functions, and that each function maintains all
 -- invariants.
 verifyModule
   :: HM.HashMap ModuleName ModuleData   -- ^ all loaded modules
   -> ModuleData                         -- ^ the module we're verifying
-  -> IO (Either [ParseFailure] (HM.HashMap Text [CheckResult]))
-verifyModule modules moduleData = do
-  tables <- moduleTables modules moduleData
+  -> IO (Either VerificationFailure (HM.HashMap Text [CheckResult]))
+verifyModule modules moduleData = runExceptT $ do
+  tables <- ExceptT $ fmap (& _Left %~ ParseFailures) $
+    moduleTables modules moduleData
 
   let funRefs :: HM.HashMap Text Ref
       funRefs = moduleFunRefs moduleData
@@ -564,7 +575,7 @@ verifyModule modules moduleData = do
   --
   (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
-      maybeFun <- runTC 0 False $ typecheckTopLevel ref
+      maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _name funType _args _body) _meta, _tcState)
           -> HM.insert name (ref, funType) accum
@@ -573,29 +584,25 @@ verifyModule modules moduleData = do
     HM.empty
     funRefs
 
-  case tables of
-    Left errs -> pure (Left errs)
-    Right tables' -> do
+  (funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)]))
+    <- liftEither $ moduleFunChecks tables funTypes
 
-      let funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-          funChecks = moduleFunChecks tables' funTypes
+  let funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
+      funChecks' = sequence (fmap sequence funChecks)
 
-          funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [(Parsed, Check)]))
-          funChecks' = sequence (fmap sequence funChecks)
+      verifyFun :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
+      verifyFun = uncurry (verifyFunction tables)
 
-          verifyFun :: (Ref, [(Parsed, Check)]) -> IO [CheckResult]
-          verifyFun = uncurry (verifyFunction tables')
-
-      case funChecks' of
-        Left errs -> pure (Left errs)
-        Right funChecks'' -> Right <$> traverse verifyFun funChecks''
+  case funChecks' of
+    Left errs         -> throwError $ ParseFailures errs
+    Right funChecks'' -> lift $ traverse verifyFun funChecks''
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
   :: ModuleData     -- ^ the module we're verifying
   -> Text           -- ^ the name of the function
   -> Check          -- ^ the check we're running
-  -> IO (Either [ParseFailure] CheckResult)
+  -> IO (Either VerificationFailure CheckResult)
 verifyCheck moduleData funName check = do
     let parsed = dummyParsed
         moduleName = moduleData ^. _1.mName
@@ -603,7 +610,7 @@ verifyCheck moduleData funName check = do
 
     tables <- moduleTables modules moduleData
     case tables of
-      Left failures -> pure $ Left failures
+      Left failures -> pure $ Left $ ParseFailures failures
       Right tables' -> Right <$> case moduleFun moduleData funName of
         Just funRef -> head <$> verifyFunction tables' funRef [(parsed, check)]
         Nothing     -> pure $ Left (parsed, NotAFunction funName)
