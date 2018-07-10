@@ -1221,6 +1221,21 @@ spec = describe "analyze" $ do
         `shouldBe`
         Left "in (+ 0 1), expected decimal, found (+ 0 1)"
 
+    it "checks prop objects" $ do
+      let pairSchema = Schema $
+            Map.fromList [("x", EType TInt), ("y", EType TInt)]
+          ety    = EType TInt
+          litObj = PLiteralObject $ Map.fromList
+            [ ("x", EProp (PLit 0) TInt)
+            , ("y", EProp (PLit 1) TInt)
+            ]
+
+      -- textToProp TInt "(at 'x { 'x: 0, 'y: 1 })" `shouldBe` Right litObj
+
+      textToProp TInt "(at 'x { 'x: 0, 'y: 1 })"
+        `shouldBe`
+        Right (PAt pairSchema (PLit "x") litObj ety)
+
     it "infers forall / exists" $ do
       textToProp TBool "(forall (x:string y:string) (= x y))"
         `shouldBe`
