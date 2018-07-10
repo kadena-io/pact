@@ -3,14 +3,12 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module Utils.TestRunner
-  ( ApiResultCheck(..)
+  ( ApiResultCheck (..)
   , runAll
   , flushDb
   , genKeys
   , makeCheck
-  , checkResults
-  , checkIfSuccess
-  , checkIfFailure
+  , checkResult
   , threeStepPactCode
   , errorStepPactCode
   , pactWithRollbackCode
@@ -100,20 +98,22 @@ genKeys = do
   g :: SystemRandom <- newGenIO
   case generateKeyPair g of
     Left _ -> error "Something went wrong in genKeys"
-    Right (s,p,_) -> return $ KeyPair s p
+    Right (s,p,_) -> return $ KeyPair s p 
+
+
 
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect
 
-checkResults :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Bool
-checkResults resultsMap checks = foldl isExpected True checks
-  where isExpected acc ApiResultCheck{..} =
-          case (HM.lookup _arcReqKey resultsMap) of
-            Nothing -> False
-            Just (ApiResult cmdRes _ _) -> case cmdRes of
-              Object h -> if _arcIsFailure then (acc && (checkIfFailure h _arcExpect))
-                          else (acc && (checkIfSuccess h _arcExpect))
-              _ -> False
+checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Bool
+checkResult isFailure expect result =
+  case result of
+    Nothing -> False
+    Just (ApiResult cmdRes _ _) ->
+      case cmdRes of
+        Object h -> if isFailure then (checkIfFailure h expect)
+                    else (checkIfSuccess h expect)
+        _ -> False
 
 checkIfSuccess :: Object -> Maybe Value -> Bool
 checkIfSuccess h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "success")
@@ -126,6 +126,10 @@ checkIfFailure h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.
 checkIfFailure h (Just expect) = isFailure && isMatch
   where isFailure = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure")
         isMatch = (HM.lookup (T.pack "detail") h == Just (toJSON expect))
+
+
+
+-- SAMPLE PACT CODE
 
 threeStepPactCode :: String -> T.Text
 threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]

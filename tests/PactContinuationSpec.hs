@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module PactContinuationSpec (spec) where
 
@@ -12,6 +13,17 @@ import Pact.Types.API
 import Pact.Types.Command
 import Pact.Types.Runtime
 import qualified Data.Text as T
+
+shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectation
+shouldMatch results checks = mapM_ match checks
+  where match ApiResultCheck{..} = do
+          let apiRes = HM.lookup _arcReqKey results
+          shouldSatisfyWithArgs apiRes _arcIsFailure _arcExpect 
+
+shouldSatisfyWithArgs :: Maybe ApiResult -> Bool -> Maybe Value -> Expectation 
+shouldSatisfyWithArgs apiRes isFailure expect = do
+  let checkResultWithArgs = checkResult isFailure expect
+  apiRes `shouldSatisfy` checkResultWithArgs
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -32,19 +44,19 @@ testPactContinuation = before_ flushDb $ after_ flushDb $ do
 
   context "when provided with correct next step" $
     it "executes the next step and updates pact's state" $
-      testCorrectNextStep `shouldReturn` True
+      testCorrectNextStep
 
   context "when provided with incorrect next step" $
-    it "throws error and does not update pact's state" $
-      testIncorrectNextStep `shouldReturn` True
+    it "throws error and does not update pact's state" 
+      testIncorrectNextStep
 
   context "when last step of a pact executed" $
-    it "deletes pact from the state" $
-      testLastStep `shouldReturn` True
+    it "deletes pact from the state"
+      testLastStep
 
   context "when error occurs when executing pact step" $
-    it "throws error and does not update pact's state" $
-      testErrStep `shouldReturn` True
+    it "throws error and does not update pact's state"
+      testErrStep
 
 testSimpleServerCmd :: IO (Maybe ApiResult)
 testSimpleServerCmd = do
@@ -54,7 +66,8 @@ testSimpleServerCmd = do
   allResults <- runAll [cmd]
   return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
 
-testCorrectNextStep :: IO Bool
+
+testCorrectNextStep :: Expectation
 testCorrectNextStep = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeys
@@ -74,10 +87,11 @@ testCorrectNextStep = do
       checkStateCheck   = makeCheck checkStateCmd True
                           (Just "Invalid continuation step value: Received 1 but expected 2")
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck, checkStateCheck]
- 
-  return (checkResults allResults allChecks)
+      
+  allResults `shouldMatch` allChecks
 
-testIncorrectNextStep :: IO Bool
+
+testIncorrectNextStep :: Expectation
 testIncorrectNextStep = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
@@ -90,7 +104,7 @@ testIncorrectNextStep = do
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults        <- runAll [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
-
+  
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       incorrectStepCheck = makeCheck incorrectStepCmd True $
@@ -98,9 +112,10 @@ testIncorrectNextStep = do
       checkStateCheck    = makeCheck checkStateCmd False $ Just "step 1"
       allChecks          = [moduleCheck, executePactCheck, incorrectStepCheck, checkStateCheck]
 
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testLastStep :: IO Bool
+
+testLastStep :: Expectation
 testLastStep = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
@@ -125,9 +140,10 @@ testLastStep = do
       allChecks          = [moduleCheck, executePactCheck, contNextStep1Check,
                             contNextStep2Check, checkStateCheck]
  
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testErrStep :: IO Bool
+
+testErrStep :: Expectation
 testErrStep = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
@@ -148,7 +164,7 @@ testErrStep = do
                            (Just "Invalid continuation step value: Received 2 but expected 1")
       allChecks          = [moduleCheck, executePactCheck, contErrStepCheck, checkStateCheck]
  
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
 
 
@@ -157,22 +173,23 @@ testErrStep = do
 testPactRollback :: Spec
 testPactRollback = before_ flushDb $ after_ flushDb $ do
   context "when provided with correct rollback step" $
-    it "executes the rollback function and deletes pact from state" $
-      testCorrectRollbackStep `shouldReturn` True
+    it "executes the rollback function and deletes pact from state"
+      testCorrectRollbackStep
 
   context "when provided with incorrect rollback step" $
-    it "throws error and does not delete pact from state" $
-      testIncorrectRollbackStep `shouldReturn` True
+    it "throws error and does not delete pact from state" 
+      testIncorrectRollbackStep
 
   context "when error occurs when executing rollback function" $
-    it "throws error and does not delete pact from state" $
-      testRollbackErr `shouldReturn` True
+    it "throws error and does not delete pact from state"
+      testRollbackErr
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs that no rollback function exists for step and deletes pact from state" $
-      testNoRollbackFunc `shouldReturn` True
+    it "outputs that no rollback function exists for step and deletes pact from state" 
+      testNoRollbackFunc
 
-testCorrectRollbackStep :: IO Bool
+
+testCorrectRollbackStep :: Expectation
 testCorrectRollbackStep = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
@@ -197,9 +214,10 @@ testCorrectRollbackStep = do
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            rollbackStepCheck, checkStateCheck]
  
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testIncorrectRollbackStep :: IO Bool
+
+testIncorrectRollbackStep :: Expectation
 testIncorrectRollbackStep = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
@@ -224,9 +242,10 @@ testIncorrectRollbackStep = do
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            incorrectRbCheck, checkStateCheck]
  
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testRollbackErr :: IO Bool
+
+testRollbackErr :: Expectation
 testRollbackErr = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
@@ -251,9 +270,10 @@ testRollbackErr = do
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             rollbackErrCheck, checkStateCheck]
  
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testNoRollbackFunc :: IO Bool
+
+testNoRollbackFunc :: Expectation
 testNoRollbackFunc = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
@@ -278,7 +298,7 @@ testNoRollbackFunc = do
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             noRollbackCheck, checkStateCheck]
 
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
 
 
@@ -287,17 +307,18 @@ testNoRollbackFunc = do
 testPactYield :: Spec
 testPactYield = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
-    it "resumes value" $
-      testValidYield `shouldReturn` True
+    it "resumes value" 
+      testValidYield
 
   context "when previous step does not yield value" $
-    it "throws error when trying to resume, and does not delete pact from state" $
-      testNoYield `shouldReturn` True
+    it "throws error when trying to resume, and does not delete pact from state"
+      testNoYield
 
-  it "resets yielded values after each step" $
-    testResetYield `shouldReturn` True
+  it "resets yielded values after each step"
+    testResetYield
+
     
-testValidYield :: IO Bool
+testValidYield :: Expectation
 testValidYield = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
@@ -318,13 +339,14 @@ testValidYield = do
       resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
       resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
       checkStateCheck     = makeCheck checkStateCmd True 
-                           (Just "applyContinuation: txid not found: 1")
+                            (Just "applyContinuation: txid not found: 1")
       allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
                              resumeOnlyCheck, checkStateCheck]
 
-  return (checkResults allResults allChecks)
-       
-testNoYield :: IO Bool
+  allResults `shouldMatch` allChecks
+
+    
+testNoYield :: Expectation
 testNoYield = do
   let moduleName = "testNoYield"
   adminKeys <- genKeys
@@ -349,9 +371,10 @@ testNoYield = do
       allChecks        = [moduleCheck, executePactCheck, noYieldStepCheck,
                          resumeErrCheck, checkStateCheck]
 
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
 
-testResetYield :: IO Bool
+
+testResetYield :: Expectation
 testResetYield = do
   let moduleName = "testResetYield"
   adminKeys <- genKeys
@@ -376,4 +399,4 @@ testResetYield = do
       allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
                            resumeStepCheck, checkStateCheck]
 
-  return (checkResults allResults allChecks)
+  allResults `shouldMatch` allChecks
