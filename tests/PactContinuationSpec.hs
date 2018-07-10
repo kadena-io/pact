@@ -15,13 +15,13 @@ import qualified Data.Text as T
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
-  describe "testPactContinuation" $ do
-    testPactContinuation
+  describe "testPactContinuation" testPactContinuation
+  describe "testPactRollback" testPactRollback
+  describe "testPactYield" testPactYield
 
-  describe "testPactRollback" $ do
-    testPactRollback
 
--- SIMPLE CONTINUATIONS
+
+-- CONTINUATIONS TESTS
 
 testPactContinuation :: Spec
 testPactContinuation = before_ flushDb $ after_ flushDb $ do
@@ -67,7 +67,6 @@ testCorrectNextStep = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
-  flushDb 
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
@@ -91,7 +90,6 @@ testIncorrectNextStep = do
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults        <- runAll [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
-  flushDb
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -117,7 +115,6 @@ testLastStep = do
   checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
   allResults       <- runAll [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
-  flushDb
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -143,7 +140,6 @@ testErrStep = do
   contErrStepCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
   allResults       <- runAll [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
-  flushDb
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -153,6 +149,8 @@ testErrStep = do
       allChecks          = [moduleCheck, executePactCheck, contErrStepCheck, checkStateCheck]
  
   return (checkResults allResults allChecks)
+
+
 
 -- ROLLBACK TESTS
 
@@ -189,7 +187,6 @@ testCorrectRollbackStep = do
   checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
   allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
-  flushDb 
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
@@ -217,7 +214,6 @@ testIncorrectRollbackStep = do
   checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
   allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
-  flushDb 
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
@@ -272,15 +268,112 @@ testNoRollbackFunc = do
   checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
   allResults       <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
-  flushDb
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck  = makeCheck contNextStepCmd False $ Just "step 1"
-      noRollbackCheck    = makeCheck noRollbackCmd False $ Just "No rollback on step 1"
+      noRollbackCheck    = makeCheck noRollbackCmd False $ Just "No rollback on step 1" -- not a failure
       checkStateCheck    = makeCheck checkStateCmd True
                            (Just "applyContinuation: txid not found: 1")
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             noRollbackCheck, checkStateCheck]
+
+  return (checkResults allResults allChecks)
+
+
+
+-- YIELD / RESUME TESTS
+
+testPactYield :: Spec
+testPactYield = before_ flushDb $ after_ flushDb $ do
+  context "when previous step yields value" $
+    it "resumes value" $
+      testValidYield `shouldReturn` True
+
+  context "when previous step does not yield value" $
+    it "throws error when trying to resume, and does not delete pact from state" $
+      testNoYield `shouldReturn` True
+
+  it "resets yielded values after each step" $
+    testResetYield `shouldReturn` True
+    
+testValidYield :: IO Bool
+testValidYield = do
+  let moduleName = "testValidYield"
+  adminKeys <- genKeys
+
+  moduleCmd          <- mkExec (T.unpack (pactWithYield moduleName))
+                        (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                        Nothing [adminKeys] (Just "test1")
+  executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
+                        Null Nothing [adminKeys] (Just "test2")
+  resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
+  resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
+  checkStateCmd      <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
+  allResults         <- runAll [moduleCmd, executePactCmd, resumeAndYieldCmd,
+                                resumeOnlyCmd, checkStateCmd]
+
+  let moduleCheck         = makeCheck moduleCmd False Nothing
+      executePactCheck    = makeCheck executePactCmd False $ Just "testing->Step0"
+      resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
+      resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
+      checkStateCheck     = makeCheck checkStateCmd True 
+                           (Just "applyContinuation: txid not found: 1")
+      allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
+                             resumeOnlyCheck, checkStateCheck]
+
+  return (checkResults allResults allChecks)
+       
+testNoYield :: IO Bool
+testNoYield = do
+  let moduleName = "testNoYield"
+  adminKeys <- genKeys
+
+  moduleCmd      <- mkExec (T.unpack (pactWithYieldErr moduleName))
+                    (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                    Nothing [adminKeys] (Just "test1")
+  executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
+                    Null Nothing [adminKeys] (Just "test2")
+  noYieldStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
+  resumeErrCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
+  checkStateCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test5")
+  allResults     <- runAll [moduleCmd, executePactCmd, noYieldStepCmd,
+                           resumeErrCmd, checkStateCmd]
+
+  let moduleCheck      = makeCheck moduleCmd False Nothing
+      executePactCheck = makeCheck executePactCmd False $ Just "testing->Step0"
+      noYieldStepCheck = makeCheck noYieldStepCmd False $ Just "step 1 has no yield"
+      resumeErrCheck   = makeCheck resumeErrCmd True Nothing
+      checkStateCheck  = makeCheck checkStateCmd True
+                         (Just "Invalid continuation step value: Received 1 but expected 2")
+      allChecks        = [moduleCheck, executePactCheck, noYieldStepCheck,
+                         resumeErrCheck, checkStateCheck]
+
+  return (checkResults allResults allChecks)
+
+testResetYield :: IO Bool
+testResetYield = do
+  let moduleName = "testResetYield"
+  adminKeys <- genKeys
+
+  moduleCmd        <- mkExec (T.unpack (pactWithSameNameYield moduleName))
+                        (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                        Nothing [adminKeys] (Just "test1")
+  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)") 
+                        Null Nothing [adminKeys] (Just "test2")
+  yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
+  resumeStepCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
+  checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
+  allResults       <- runAll [moduleCmd, executePactCmd, yieldSameKeyCmd,
+                              resumeStepCmd, checkStateCmd]
+
+  let moduleCheck       = makeCheck moduleCmd False Nothing
+      executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
+      yieldSameKeyCheck = makeCheck yieldSameKeyCmd False $ Just "step 1"
+      resumeStepCheck   = makeCheck resumeStepCmd False $ Just "step 1"
+      checkStateCheck   = makeCheck checkStateCmd True 
+                           (Just "applyContinuation: txid not found: 1")
+      allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
+                           resumeStepCheck, checkStateCheck]
 
   return (checkResults allResults allChecks)

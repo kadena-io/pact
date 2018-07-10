@@ -15,6 +15,9 @@ module Utils.TestRunner
   , errorStepPactCode
   , pactWithRollbackCode
   , pactWithRollbackErrCode
+  , pactWithYield
+  , pactWithYieldErr
+  , pactWithSameNameYield
   ) where
 
 import Pact.Server.Server
@@ -166,4 +169,59 @@ pactWithRollbackErrCode moduleName = T.concat [begCode, T.pack moduleName, endCo
               (step-with-rollback "step 0" "rollback 0")
               (step-with-rollback "step 1" (+ "will throw error in rollback 1"))
               (step-with-rollback "step 2" "rollback 2")))
+            |]
+
+pactWithYield :: String -> T.Text
+pactWithYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0})
+                  result0))
+              (step
+                (resume {"step0-result" := res0 }
+                  (let ((result1 (+ res0 "->Step1")))
+                    (yield {"step1-result": result1})
+                    result1)))
+              (step
+                (resume { "step1-result" := res1 }
+                      (+ res1 "->Step2")))))
+            |]
+
+pactWithYieldErr :: String -> T.Text
+pactWithYieldErr moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester (name)
+              (step
+                (let ((result0 (+ name "->Step0")))
+                  (yield { "step0-result": result0 })
+                result0))
+              (step "step 1 has no yield")
+              (step
+                (resume { "step0-result" := res0 }
+                      (+ res0 "->Step2")))))
+            |]
+
+pactWithSameNameYield :: String -> T.Text
+pactWithSameNameYield moduleName = T.concat [begCode, T.pack moduleName, endCode]
+  where begCode = [text| (define-keyset 'k (read-keyset "admin-keyset"))
+                       (module|]
+        endCode = [text| 'k
+            (defpact tester ()
+              (step
+                (let ((result0 "step 0"))
+                  (yield { "result": result0 })
+                result0))
+              (step
+                (let ((result1 "step 1"))
+                  (yield { "result": result1 })
+                result1))
+              (step
+                (resume { "result" := res }
+                     res)))))
             |]
