@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
@@ -255,8 +256,24 @@ inferrable = \case
   PreExists{}     -> True
   PreForall{}     -> True
   PreAnn{}        -> True
-  PreResult       -> False
+  PreResult       -> True
   PreAt{}         -> False
+
+inferVar :: VarId -> Text -> (forall a. Prop a) -> PropCheck EProp
+inferVar vid name prop = do
+  varTy <- view (varTys . at vid)
+  case varTy of
+    Nothing -> throwErrorT $
+      "couldn't find property variable " <> name
+    Just (EType varTy') -> pure (EProp prop varTy')
+      -- case typeEq ty varTy' of
+      -- Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
+      --   " has type " <> userShow varTy' <> ", but " <> userShow ty <>
+      --   " was expected"
+      -- Just Refl -> pure (PVar vid name)
+    Just (EObjectTy _) -> error "TODO(joel)"
+    Just QTable        -> error "Table names are parsed in parseTableName"
+    Just (QColumnOf _) -> error "Column names are parsed in parseColumnName"
 
 inferPreProp :: PreProp -> PropCheck EProp
 inferPreProp preProp = case preProp of
@@ -273,21 +290,10 @@ inferPreProp preProp = case preProp of
     EType ty -> do
       prop <- checkPreProp ty tm
       pure $ EProp prop ty
-  PreVar vid name -> do
-    varTy <- view (varTys . at vid)
-    case varTy of
-      Nothing -> throwErrorT $
-        "couldn't find property variable " <> name
-      Just (EType varTy') -> pure (EProp (PVar vid name) varTy')
-        -- case typeEq ty varTy' of
-        -- Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
-        --   " has type " <> userShow varTy' <> ", but " <> userShow ty <>
-        --   " was expected"
-        -- Just Refl -> pure (PVar vid name)
-      Just (EObjectTy _) -> throwErrorIn preProp
-        "ERROR: object types not currently allowed in properties (issue 139)"
-      Just QTable        -> error "Table names are parsed in parseTableName"
-      Just (QColumnOf _) -> error "Column names are parsed in parseColumnName"
+
+  -- identifiers
+  PreResult       -> inferVar 0 "result" Result
+  PreVar vid name -> inferVar vid name (PVar vid name)
 
   -- quantifiers
   (viewQ -> Just (q, vid, name, ty', p)) -> do
@@ -444,10 +450,6 @@ checkPreProp ty preProp
         Nothing   -> throwError "TODO (1)"
       EObjectProp prop schema -> error "TODO (2)"
   | otherwise = case (ty, preProp) of
-
-  -- identifiers
-  -- TODO: can result be inferred?
-  (_, PreResult)       -> pure Result
 
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b

@@ -627,7 +627,7 @@ runTranslation pactArgs body = do
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
     runArgsTranslation =
-      runStateT (traverse translateArg pactArgs) (VarId 0)
+      runStateT (traverse translateArg pactArgs) (VarId 1)
 
     runBodyTranslation :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
     runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $

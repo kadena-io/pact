@@ -439,9 +439,8 @@ moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
   -> HM.HashMap Text (Ref, Either [ParseFailure] [(Parsed, Check)])
-moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys _) ->
-  -- TODO(joel): right now we can get away with ignoring the result type but we
-  -- should use it for type checking
+moduleFunChecks tables modTys = modTys <&>
+  \(ref@(Ref defn), Pact.FunType argTys resultTy) ->
 
   let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
       property   = defn ^? tMeta . _Just . mMetas . ix "property"
@@ -449,7 +448,7 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
 
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:
-      vids = VarId <$> [0..]
+      vids = VarId <$> [1..]
 
       -- TODO(joel): we probably don't want mapMaybe here and instead should
       -- fail harder if we can't make sense of a type
@@ -464,13 +463,18 @@ moduleFunChecks tables modTys = modTys <&> \(ref@(Ref defn), Pact.FunType argTys
               Just ety -> Just (name, ety)
               Nothing  -> Nothing
 
+      -- TODO(joel): fail via Either
+      env' = case maybeTranslateType resultTy of
+               Just ety -> ("result", 0, ety) : env
+               Nothing  -> error "couldn't translate result type"
+
       nameEnv :: Map Text VarId
-      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env
+      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env'
 
       idEnv :: Map VarId EType
-      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env
+      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env'
 
-      vidStart = VarId (length env)
+      vidStart = VarId (length env')
 
       tableEnv = TableMap $ Map.fromList $
         tables <&> \Table { _tableName, _tableType } ->
