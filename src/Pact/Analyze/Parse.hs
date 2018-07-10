@@ -457,8 +457,8 @@ checkPreProp ty preProp
     case eprop of
       EProp prop ty' -> case typeEq ty ty' of
         Just Refl -> pure prop
-        Nothing   -> throwErrorIn preProp "could not check"
-      EObjectProp _ _ -> throwErrorIn preProp "could not check"
+        Nothing   -> typeError preProp ty ty'
+      EObjectProp _prop ty' -> typeError preProp ty ty'
   | otherwise = case (ty, preProp) of
 
   (TStr, PreApp "+" [a, b])
@@ -482,14 +482,18 @@ checkPrePropObject ty preProp
   | inferrable preProp = do
     eprop <- inferPreProp preProp
     case eprop of
-      EProp _ _ -> throwErrorIn preProp "could not check"
+      EProp _ ty' -> typeError preProp ty ty'
       -- TODO:
       -- * should this use subtyping?
       -- * should this use nominal equality?
       EObjectProp prop schema -> if schema == ty
         then pure prop
-        else throwErrorIn preProp "could not check"
+        else typeError preProp ty schema
   | otherwise = throwErrorIn preProp "could not check"
+
+typeError :: (UserShow a, UserShow b) => PreProp -> a -> b -> PropCheck c
+typeError preProp a b = throwErrorIn preProp $
+  "type error: " <> userShow a <> " vs " <> userShow b
 
 expectColumnType
   :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
