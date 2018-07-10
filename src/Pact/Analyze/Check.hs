@@ -29,8 +29,9 @@ import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             (<&>), (^.), (^?), (^@..), (?~),
                                             _1, _2, _Just)
 import           Control.Monad             ((>=>), join, void)
-import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
-                                            throwError, withExcept, withExceptT)
+import           Control.Monad.Except      (ExceptT (ExceptT), catchError,
+                                            runExceptT, throwError, withExcept,
+                                            withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
@@ -431,10 +432,15 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       :: ExceptT a SBV.Query CheckSuccess
       -> ExceptT a SBV.Query CheckSuccess
     inNewAssertionStack act = do
-      lift $ SBV.push 1
-      result <- act
-      lift $ SBV.pop 1
-      pure result
+        push
+        result <- act `catchError` \e -> pop *> throwError e
+        pop
+        pure result
+
+      where
+        push = lift $ SBV.push 1
+        pop  = lift $ SBV.pop 1
+
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
