@@ -182,6 +182,8 @@ expToPreProp = \case
       body'
       bindings'
 
+  EList' [EAtom' "at", objIx, obj]
+    -> PreAt <$> expToPreProp objIx <*> expToPreProp obj
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
   EAtom' "abort"   -> pure PreAbort
@@ -231,51 +233,224 @@ viewQ = \case
   PreExists vid name ty' p -> Just (Exists, vid, name, ty', p)
   _                        -> Nothing
 
-checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
-checkPreProp ty preProp = case (ty, preProp) of
-  -- literals
-  (TDecimal, PreDecimalLit a) -> pure (PLit a)
-  (TInt, PreIntegerLit a)     -> pure (PLit a)
-  (TStr, PreStringLit a)      -> pure (PLit (T.unpack a))
-  (TTime, PreTimeLit a)       -> pure (PLit a)
-  (TBool, PreBoolLit a)       -> pure (PLit a)
+inferrable :: PreProp -> Bool
+inferrable = \case
+  PreDecimalLit{} -> True
+  PreIntegerLit{} -> True
+  PreStringLit{}  -> True
+  PreTimeLit{}    -> True
+  PreBoolLit{}    -> True
+  PreAbort        -> True
+  PreSuccess      -> True
 
-  -- identifiers
-  (TBool, PreAbort)    -> pure Abort
-  (TBool, PreSuccess)  -> pure Success
-  (_, PreResult)       -> pure Result
-  (_, PreVar vid name) -> do
+  -- we can infer all functions (as is typical bidirectionally), except for the
+  -- overloaded ones.
+  PreApp f args
+    | Just _ <- textToArithOp f      -> False
+    | Just _ <- textToUnaryArithOp f -> False
+    | otherwise                      -> True
+
+  PreApp{}        -> False
+  PreVar{}        -> True
+  PreExists{}     -> True
+  PreForall{}     -> True
+  PreAnn{}        -> True
+  PreResult       -> False
+  PreAt{}         -> False
+
+inferPreProp :: PreProp -> PropCheck EProp
+inferPreProp preProp = case preProp of
+  -- literals
+  PreDecimalLit a -> pure (EProp (PLit a) TDecimal)
+  PreIntegerLit a -> pure (EProp (PLit a) TInt)
+  PreStringLit a  -> pure (EProp (PLit (T.unpack a)) TStr)
+  PreTimeLit a    -> pure (EProp (PLit a) TTime)
+  PreBoolLit a    -> pure (EProp (PLit a) TBool)
+  PreAbort        -> pure (EProp Abort   TBool)
+  PreSuccess      -> pure (EProp Success TBool)
+
+  PreAnn ety tm -> case ety of
+    EType ty -> do
+      prop <- checkPreProp ty tm
+      pure $ EProp prop ty
+  PreVar vid name -> do
     varTy <- view (varTys . at vid)
     case varTy of
       Nothing -> throwErrorT $
         "couldn't find property variable " <> name
-      Just (EType varTy') -> case typeEq ty varTy' of
-        Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
-          " has type " <> userShow varTy' <> ", but " <> userShow ty <>
-          " was expected"
-        Just Refl -> pure (PVar vid name)
+      Just (EType varTy') -> pure (EProp (PVar vid name) varTy')
+        -- case typeEq ty varTy' of
+        -- Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
+        --   " has type " <> userShow varTy' <> ", but " <> userShow ty <>
+        --   " was expected"
+        -- Just Refl -> pure (PVar vid name)
       Just (EObjectTy _) -> throwErrorIn preProp
         "ERROR: object types not currently allowed in properties (issue 139)"
       Just QTable        -> error "Table names are parsed in parseTableName"
       Just (QColumnOf _) -> error "Column names are parsed in parseColumnName"
 
   -- quantifiers
-  (TBool, viewQ -> Just (q, vid, name, ty', p)) -> do
+  (viewQ -> Just (q, vid, name, ty', p)) -> do
     let quantifyTable = case ty' of
           QTable -> Set.insert (TableName (T.unpack name))
           _      -> id
     let modEnv env = env & varTys . at vid  ?~ ty'
                          & quantifiedTables %~ quantifyTable
 
-    q vid name ty' <$> local modEnv (checkPreProp TBool p)
 
-  -- TODO: PreAt / PAt
+    inner <- q vid name ty' <$> local modEnv (checkPreProp TBool p)
+    pure $ EProp inner TBool
 
-  -- applications
-  (TInt, PreApp "str-length" [str]) -> PStrLength <$> checkPreProp TStr str
+  -- applications:
+  --
+  -- Function types are inferred; arguments are checked.
+  PreApp "str-length" [str] -> do
+    str' <- checkPreProp TStr str
+    pure $ EProp (PStrLength str') TInt
+
+  PreApp "mod" [a, b] -> do
+    it <- PModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
+    pure $ EProp it TInt
+  PreApp (textToRoundingLikeOp -> Just op) [a] -> do
+    it <- PRoundingLikeOp1 op <$> checkPreProp TDecimal a
+    pure $ EProp it TInt
+  PreApp (textToRoundingLikeOp -> Just op) [a, b] -> do
+    it <- PRoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
+    pure $ EProp it TDecimal
+  PreApp "add-time" [a, b] -> do
+    a' <- checkPreProp TTime a
+    it <-asum'
+      [ PIntAddTime a' <$> checkPreProp TInt b
+      , PDecAddTime a' <$> checkPreProp TDecimal b
+      ] (throwErrorIn preProp "invalid argument types")
+    pure $ EProp it TTime
+
+  PreApp op'@(textToComparisonOp -> Just op) [a, b] -> do
+    it <- asum'
+      [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
+      , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
+      , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
+      , PBoolComparison    op <$> checkPreProp TBool a    <*> checkPreProp TBool b
+      , PStringComparison  op <$> checkPreProp TStr a     <*> checkPreProp TStr b
+      , case textToEqNeq op' of
+        Just eqNeq -> PKeySetEqNeq eqNeq
+          <$> checkPreProp TKeySet a
+          <*> checkPreProp TKeySet b
+        Nothing -> throwErrorIn preProp $
+          "found " <> op' <> " where = or != was expected"
+      ] (throwErrorIn preProp $ "expected bool, but found " <> userShow preProp)
+    pure $ EProp it TBool
+
+  PreApp op'@(textToLogicalOp -> Just op) args -> do
+    it <- case (op, args) of
+      (NotOp, [a])    -> PNot <$> checkPreProp TBool a
+      (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
+      (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
+      _               -> throwErrorIn preProp $
+        op' <> " applied to wrong number of arguments"
+    pure $ EProp it TBool
+
+  PreApp "when" [a, b] -> do
+    propNotA <- PNot <$> checkPreProp TBool a
+    it <- POr propNotA <$> checkPreProp TBool b
+    pure $ EProp it TBool
+
+  --
+  -- TODO: should be "table-written"
+  --
+  PreApp "table-write" [tn] -> do
+    tn' <- parseTableName tn
+    expectTableExists tn'
+    pure $ EProp (TableWrite tn') TBool
+  PreApp "table-read" [tn] -> do
+    tn' <- parseTableName tn
+    expectTableExists tn'
+    pure $ EProp (TableRead tn') TBool
+
+  --
+  -- NOTE: disabled until implemented on the backend:
+  --
+  -- (TBool, PreApp "column-written" [PLit tn, PLit cn])
+  --   -> pure (ColumnWrite tn cn)
+  -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
+  --   -> pure (ColumnRead tn cn)
+
+  PreApp "cell-delta" [tn, cn, rk] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    asum
+      [ do
+          _   <- expectColumnType tn' cn' TInt
+          it <- IntCellDelta tn' cn' <$> checkPreProp TStr rk
+          pure $ EProp it TInt
+      , do
+          _   <- expectColumnType tn' cn' TDecimal
+          it <- DecCellDelta tn' cn' <$> checkPreProp TStr rk
+          pure $ EProp it TDecimal
+      ]
+  PreApp "column-delta" [tn, cn] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    asum
+      [ do
+          _   <- expectColumnType tn' cn' TInt
+          pure $ EProp (IntColumnDelta tn' cn') TInt
+      , do
+          _   <- expectColumnType tn' cn' TDecimal
+          pure $ EProp (DecColumnDelta tn' cn') TDecimal
+      ]
+  PreApp "row-read" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    it <- RowRead tn' <$> checkPreProp TStr rk
+    pure $ EProp it TBool
+  PreApp "row-read-count" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    it <- RowReadCount tn' <$> checkPreProp TStr rk
+    pure $ EProp it TInt
+  --
+  -- TODO: should be "row-written"
+  --
+  PreApp "row-write" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    it <- RowWrite tn' <$> checkPreProp TStr rk
+    pure $ EProp it TBool
+  PreApp "row-write-count" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    it <- RowWriteCount tn' <$> checkPreProp TStr rk
+    pure $ EProp it TInt
+  PreApp "authorized-by" [PreStringLit ks]
+    -> pure $ EProp (KsNameAuthorized (KeySetName ks)) TBool
+  PreApp "row-enforced" [tn, cn, rk] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TKeySet
+    it <- RowEnforced tn' cn' <$> checkPreProp TStr rk
+    pure $ EProp it TBool
+
+checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
+checkPreProp ty preProp
+  | inferrable preProp = do
+    eprop <- inferPreProp preProp
+    case eprop of
+      EProp prop ty' -> case typeEq ty ty' of
+        Just Refl -> pure prop
+        Nothing   -> throwError "TODO (1)"
+      EObjectProp prop schema -> error "TODO (2)"
+  | otherwise = case (ty, preProp) of
+
+  -- identifiers
+  -- TODO: can result be inferred?
+  (_, PreResult)       -> pure Result
+
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
-
   (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> asum'
     [ PDecArithOp    op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
     , PDecIntArithOp op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
@@ -288,115 +463,16 @@ checkPreProp ty preProp = case (ty, preProp) of
   (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
     -> PIntUnaryArithOp op <$> checkPreProp TInt a
 
-  (TInt, PreApp "mod" [a, b])
-    -> PModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
-  (TInt, PreApp (textToRoundingLikeOp -> Just op) [a])
-    -> PRoundingLikeOp1 op <$> checkPreProp TDecimal a
-  (TDecimal, PreApp (textToRoundingLikeOp -> Just op) [a, b])
-    -> PRoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
-  (TTime, PreApp "add-time" [a, b]) -> do
-    a' <- checkPreProp TTime a
-    asum'
-      [ PIntAddTime a' <$> checkPreProp TInt b
-      , PDecAddTime a' <$> checkPreProp TDecimal b
-      ] (throwErrorIn preProp "invalid argument types")
-
-  (TBool, PreApp op'@(textToComparisonOp -> Just op) [a, b]) -> asum'
-    [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
-    , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-    , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
-    , PBoolComparison    op <$> checkPreProp TBool a    <*> checkPreProp TBool b
-    , PStringComparison  op <$> checkPreProp TStr a     <*> checkPreProp TStr b
-    , case textToEqNeq op' of
-      Just eqNeq -> PKeySetEqNeq eqNeq
-        <$> checkPreProp TKeySet a
-        <*> checkPreProp TKeySet b
-      Nothing -> throwErrorIn preProp $
-        "found " <> op' <> " where = or != was expected"
-    ] (throwErrorIn preProp $ "expected bool, but found " <> userShow preProp)
-
-  (TBool, PreApp op'@(textToLogicalOp -> Just op) args) -> case (op, args) of
-    (NotOp, [a])    -> PNot <$> checkPreProp TBool a
-    (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
-    (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
-    _               -> throwErrorIn preProp $
-      op' <> " applied to wrong number of arguments"
-
-  (TBool, PreApp "when" [a, b]) -> do
-    propNotA <- PNot <$> checkPreProp TBool a
-    POr propNotA <$> checkPreProp TBool b
-
-  --
-  -- TODO: should be "table-written"
-  --
-  (TBool, PreApp "table-write" [tn]) -> do
-    tn' <- parseTableName tn
-    expectTableExists tn'
-    pure (TableWrite tn')
-  (TBool, PreApp "table-read" [tn]) -> do
-    tn' <- parseTableName tn
-    expectTableExists tn'
-    pure (TableRead tn')
-  --
-  -- NOTE: disabled until implemented on the backend:
-  --
-  -- (TBool, PreApp "column-written" [PLit tn, PLit cn])
-  --   -> pure (ColumnWrite tn cn)
-  -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
-  --   -> pure (ColumnRead tn cn)
-  (TInt, PreApp "cell-delta" [tn, cn, rk]) -> do
-    tn' <- parseTableName tn
-    cn' <- parseColumnName cn
-    _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' TInt
-    IntCellDelta tn' cn' <$> checkPreProp TStr rk
-  (TDecimal, PreApp "cell-delta" [tn, cn, rk]) -> do
-    tn' <- parseTableName tn
-    cn' <- parseColumnName cn
-    _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' TDecimal
-    DecCellDelta tn' cn' <$> checkPreProp TStr rk
-  (TInt, PreApp "column-delta" [tn, cn]) -> do
-    tn' <- parseTableName tn
-    cn' <- parseColumnName cn
-    _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' TInt
-    -- TODO: if these weren't *Int*ColumnDelta / *Dec*ColumnDelta these clauses
-    -- could be collapsed
-    pure (IntColumnDelta tn' cn')
-  (TDecimal, PreApp "column-delta" [tn, cn]) -> do
-    tn' <- parseTableName tn
-    cn' <- parseColumnName cn
-    _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' TDecimal
-    pure (DecColumnDelta tn' cn')
-  (TBool, PreApp "row-read" [tn, rk]) -> do
-    tn' <- parseTableName tn
-    _   <- expectTableExists tn'
-    RowRead tn' <$> checkPreProp TStr rk
-  (TInt, PreApp "row-read-count" [tn, rk]) -> do
-    tn' <- parseTableName tn
-    _   <- expectTableExists tn'
-    RowReadCount tn' <$> checkPreProp TStr rk
-  --
-  -- TODO: should be "row-written"
-  --
-  (TBool, PreApp "row-write" [tn, rk]) -> do
-    tn' <- parseTableName tn
-    _   <- expectTableExists tn'
-    RowWrite tn' <$> checkPreProp TStr rk
-  (TInt, PreApp "row-write-count" [tn, rk]) -> do
-    tn' <- parseTableName tn
-    _   <- expectTableExists tn'
-    RowWriteCount tn' <$> checkPreProp TStr rk
-  (TBool, PreApp "authorized-by" [PreStringLit ks])
-    -> pure (KsNameAuthorized (KeySetName ks))
-  (TBool, PreApp "row-enforced" [tn, cn, rk]) -> do
-    tn' <- parseTableName tn
-    cn' <- parseColumnName cn
-    _   <- expectTableExists tn'
-    _   <- expectColumnType tn' cn' TKeySet
-    RowEnforced tn' cn' <$> checkPreProp TStr rk
+  (_, PreAt objIx obj) -> do
+    objIx' <- checkPreProp TStr objIx
+    EObjectProp objProp objSchema <- inferPreProp obj
+    undefined
+    -- case objSchema of
+    --   Schema objTy' -> case objTy' ^. at objIx of
+    --     Nothing -> throwError "TODO"
+    --     Just ty' -> if ty /= ty'
+    --       then throwError "TODO"
+    --       else PAt objSchema ObjIx
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 

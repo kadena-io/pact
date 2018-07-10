@@ -481,8 +481,9 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  -- -- TODO: parse
-  -- -- | PreAt {- Schema -} PreProp PreProp -- EType
+  | PreAt {- Schema -} PreProp PreProp -- EType
+
+  | PreAnn EType PreProp
   deriving Eq
 
 pattern TableNameLit :: String -> Prop TableName
@@ -655,6 +656,10 @@ pattern PNot a = PLogical NotOp [a]
 
 deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
+
+data EProp where
+  EProp       :: Prop a      -> Type a -> EProp
+  EObjectProp :: Prop Object -> Schema -> EProp
 
 instance Boolean (Prop Bool) where
   true   = PLit True
