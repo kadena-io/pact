@@ -5,6 +5,7 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 
@@ -32,6 +33,7 @@ import           Data.Set                     (Set)
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:)(Refl))
 import           Prelude                      hiding (exp)
 
@@ -187,6 +189,12 @@ expToPreProp = \case
     -> PreAt objIx <$> expToPreProp obj
   exp@(EList' [EAtom' "at", _, _]) -> throwErrorIn exp
     "Unable to statically determine the key used in an object access"
+  EObject bindings _parsed -> do
+    bindings' <- for bindings $ \(key, body) -> case stringLike key of
+      Just key' -> (key',) <$> expToPreProp body
+      Nothing   -> throwErrorIn key "static key required"
+    pure $ PreLiteralObject $ Map.fromList bindings'
+
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
   EAtom' "abort"   -> pure PreAbort
@@ -238,13 +246,20 @@ viewQ = \case
 
 inferrable :: PreProp -> Bool
 inferrable = \case
-  PreDecimalLit{} -> True
-  PreIntegerLit{} -> True
-  PreStringLit{}  -> True
-  PreTimeLit{}    -> True
-  PreBoolLit{}    -> True
-  PreAbort        -> True
-  PreSuccess      -> True
+  PreDecimalLit{}    -> True
+  PreIntegerLit{}    -> True
+  PreStringLit{}     -> True
+  PreTimeLit{}       -> True
+  PreBoolLit{}       -> True
+  PreAbort           -> True
+  PreSuccess         -> True
+  PreVar{}           -> True
+  PreExists{}        -> True
+  PreForall{}        -> True
+  PreAnn{}           -> True
+  PreResult          -> True
+  PreAt{}            -> True
+  PreLiteralObject{} -> True
 
   -- we can infer all functions (as is typical bidirectionally), except for the
   -- overloaded ones.
@@ -252,13 +267,6 @@ inferrable = \case
     | Just _ <- textToArithOp f      -> False
     | Just _ <- textToUnaryArithOp f -> False
     | otherwise                      -> True
-
-  PreVar{}        -> True
-  PreExists{}     -> True
-  PreForall{}     -> True
-  PreAnn{}        -> True
-  PreResult       -> True
-  PreAt{}         -> False
 
 inferVar :: VarId -> Text -> (forall a. Prop a) -> PropCheck EProp
 inferVar vid name prop = do
@@ -308,6 +316,22 @@ inferPreProp preProp = case preProp of
 
     inner <- q vid name ty' <$> local modEnv (checkPreProp TBool p)
     pure $ EProp inner TBool
+
+  PreAt objIx obj -> do
+    EObjectProp objProp objSchema@(Schema tyMap) <- inferPreProp obj
+    case tyMap ^? ix objIx of
+      Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
+      Just ety@(EType ty) -> pure $ EProp
+        (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+        ty
+      Just ety@(EObjectTy schemaTy) -> pure $ EObjectProp
+        (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+        schemaTy
+
+  PreLiteralObject obj -> do
+    obj' <- traverse inferPreProp obj
+    let schema = fmap ePropToEType obj'
+    pure $ EObjectProp (PLiteralObject obj') (Schema schema)
 
   -- applications:
   --
@@ -468,20 +492,6 @@ checkPreProp ty preProp
     -> PDecUnaryArithOp op <$> checkPreProp TDecimal a
   (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
     -> PIntUnaryArithOp op <$> checkPreProp TInt a
-
-  -- TODO
-  -- * this could be inferred
-  -- * infer object types
-  (_, PreAt objIx obj) -> do
-    EObjectProp objProp objSchema <- inferPreProp obj
-    case objSchema of
-      Schema objTy' -> case objTy' ^? ix objIx of
-        Nothing -> throwError "TODO"
-        Just (EType ty') -> case typeEq ty ty' of
-          Just Refl -> pure $
-            PAt objSchema (PLit (T.unpack objIx)) objProp (EType ty)
-          Nothing   -> throwError "TODO"
-        Just _ -> throwError "TODO"
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 

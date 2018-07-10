@@ -20,10 +20,10 @@ class Float a where
   float :: Prop a -> ([Quantifier], Prop a)
 
 #define STANDARD_INSTANCES                                             \
-  PLit{}  -> ([], p);                                                  \
-  PSym{}  -> ([], p);                                                  \
-  Result  -> ([], p);                                                  \
-  PVar _ _ -> ([], p);                                                 \
+  PLit{} -> ([], p);                                                  \
+  PSym{} -> ([], p);                                                  \
+  Result -> ([], p);                                                  \
+  PVar{} -> ([], p);                                                 \
   PAt schema a b ty -> PAt schema a <$> float b <*> pure ty;
 
 instance Float Integer where
@@ -42,7 +42,10 @@ instance Float Time where
   float = floatTimeQuantifiers
 
 instance Float Object where
-  float p = case p of STANDARD_INSTANCES
+  float p = case p of
+    STANDARD_INSTANCES
+    -- TODO: is this right?
+    PLiteralObject{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of STANDARD_INSTANCES
