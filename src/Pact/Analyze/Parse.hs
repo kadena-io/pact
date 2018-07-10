@@ -280,7 +280,9 @@ inferPreProp preProp = case preProp of
     EType ty -> do
       prop <- checkPreProp ty tm
       pure $ EProp prop ty
-    _ -> throwError "TODO"
+    EObjectTy schema -> do
+      prop <- checkPrePropObject schema tm
+      pure $ EObjectProp prop schema
 
   -- identifiers
   PreResult       -> inferVar 0 "result" Result
@@ -293,7 +295,6 @@ inferPreProp preProp = case preProp of
           _      -> id
     let modEnv env = env & varTys . at vid  ?~ ty'
                          & quantifiedTables %~ quantifyTable
-
 
     inner <- q vid name ty' <$> local modEnv (checkPreProp TBool p)
     pure $ EProp inner TBool
@@ -456,8 +457,8 @@ checkPreProp ty preProp
     case eprop of
       EProp prop ty' -> case typeEq ty ty' of
         Just Refl -> pure prop
-        Nothing   -> throwError "TODO (1)"
-      EObjectProp prop schema -> error "TODO (2)"
+        Nothing   -> throwErrorIn preProp "could not check"
+      EObjectProp _ _ -> throwErrorIn preProp "could not check"
   | otherwise = case (ty, preProp) of
 
   (TStr, PreApp "+" [a, b])
@@ -475,6 +476,20 @@ checkPreProp ty preProp
     -> PIntUnaryArithOp op <$> checkPreProp TInt a
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
+
+checkPrePropObject :: Schema -> PreProp -> PropCheck (Prop Object)
+checkPrePropObject ty preProp
+  | inferrable preProp = do
+    eprop <- inferPreProp preProp
+    case eprop of
+      EProp _ _ -> throwErrorIn preProp "could not check"
+      -- TODO:
+      -- * should this use subtyping?
+      -- * should this use nominal equality?
+      EObjectProp prop schema -> if schema == ty
+        then pure prop
+        else throwErrorIn preProp "could not check"
+  | otherwise = throwErrorIn preProp "could not check"
 
 expectColumnType
   :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
