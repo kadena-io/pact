@@ -260,15 +260,10 @@ inferVar vid name prop = do
   case varTy of
     Nothing -> throwErrorT $
       "couldn't find property variable " <> name
-    Just (EType varTy') -> pure (EProp prop varTy')
-      -- case typeEq ty varTy' of
-      -- Nothing   -> throwErrorT $ "property type mismatch: " <> name <>
-      --   " has type " <> userShow varTy' <> ", but " <> userShow ty <>
-      --   " was expected"
-      -- Just Refl -> pure (PVar vid name)
-    Just (EObjectTy _) -> error "TODO(joel)"
-    Just QTable        -> error "Table names are parsed in parseTableName"
-    Just (QColumnOf _) -> error "Column names are parsed in parseColumnName"
+    Just (EType varTy')     -> pure (EProp prop varTy')
+    Just (EObjectTy schema) -> pure (EObjectProp prop schema)
+    Just QTable             -> error "Table names cannot be vars"
+    Just QColumnOf{}        -> error "Column names cannot be vars"
 
 inferPreProp :: PreProp -> PropCheck EProp
 inferPreProp preProp = case preProp of
