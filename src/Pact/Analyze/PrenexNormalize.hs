@@ -24,7 +24,7 @@ class Float a where
   PSym{}  -> ([], p);                                                  \
   Result  -> ([], p);                                                  \
   PVar _ _ -> ([], p);                                                 \
-  PAt schema a b ty -> PAt schema <$> float a <*> float b <*> pure ty;
+  PAt schema a b ty -> PAt schema a <$> float b <*> pure ty;
 
 instance Float Integer where
   float = floatIntegerQuantifiers

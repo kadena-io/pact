@@ -17,7 +17,7 @@ module Pact.Analyze.Parse
 
 import           Control.Applicative          (Alternative, (<|>))
 import           Control.Lens                 (at, ix, makeLenses, view,
-                                               (^.), (^..), (&), (?~), (%~))
+                                               (^.), (^..), (&), (?~), (%~), (^?))
 import           Control.Monad                (when)
 import           Control.Monad.Except         (MonadError(throwError))
 import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
@@ -183,8 +183,10 @@ expToPreProp = \case
       body'
       bindings'
 
-  EList' [EAtom' "at", objIx, obj]
-    -> PreAt <$> expToPreProp objIx <*> expToPreProp obj
+  EList' [EAtom' "at", stringLike -> Just objIx, obj]
+    -> PreAt objIx <$> expToPreProp obj
+  exp@(EList' [EAtom' "at", _, _]) -> throwErrorIn exp
+    "Unable to statically determine the key used in an object access"
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
   EAtom' "abort"   -> pure PreAbort
@@ -246,12 +248,11 @@ inferrable = \case
 
   -- we can infer all functions (as is typical bidirectionally), except for the
   -- overloaded ones.
-  PreApp f args
+  PreApp f _
     | Just _ <- textToArithOp f      -> False
     | Just _ <- textToUnaryArithOp f -> False
     | otherwise                      -> True
 
-  PreApp{}        -> False
   PreVar{}        -> True
   PreExists{}     -> True
   PreForall{}     -> True
@@ -290,6 +291,7 @@ inferPreProp preProp = case preProp of
     EType ty -> do
       prop <- checkPreProp ty tm
       pure $ EProp prop ty
+    _ -> throwError "TODO"
 
   -- identifiers
   PreResult       -> inferVar 0 "result" Result
@@ -440,6 +442,8 @@ inferPreProp preProp = case preProp of
     it <- RowEnforced tn' cn' <$> checkPreProp TStr rk
     pure $ EProp it TBool
 
+  _ -> throwErrorIn preProp "could not infer type"
+
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp
   | inferrable preProp = do
@@ -465,16 +469,19 @@ checkPreProp ty preProp
   (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
     -> PIntUnaryArithOp op <$> checkPreProp TInt a
 
+  -- TODO
+  -- * this could be inferred
+  -- * infer object types
   (_, PreAt objIx obj) -> do
-    objIx' <- checkPreProp TStr objIx
     EObjectProp objProp objSchema <- inferPreProp obj
-    undefined
-    -- case objSchema of
-    --   Schema objTy' -> case objTy' ^. at objIx of
-    --     Nothing -> throwError "TODO"
-    --     Just ty' -> if ty /= ty'
-    --       then throwError "TODO"
-    --       else PAt objSchema ObjIx
+    case objSchema of
+      Schema objTy' -> case objTy' ^? ix objIx of
+        Nothing -> throwError "TODO"
+        Just (EType ty') -> case typeEq ty ty' of
+          Just Refl -> pure $
+            PAt objSchema (PLit (T.unpack objIx)) objProp (EType ty)
+          Nothing   -> throwError "TODO"
+        Just _ -> throwError "TODO"
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
@@ -504,10 +511,6 @@ expectTableExists _ = error "table name must be concrete at this point"
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
---
--- TODO: the one property this can't parse yet is PAt because it includes an
--- EType.
---
 expToCheck
   :: TableEnv
   -- ^ Tables and schemas in scope

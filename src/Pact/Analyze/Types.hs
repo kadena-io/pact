@@ -481,7 +481,7 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  | PreAt {- Schema -} PreProp PreProp -- EType
+  | PreAt {- Schema -} Text PreProp -- EType
 
   | PreAnn EType PreProp
   deriving Eq
@@ -846,6 +846,9 @@ instance UserShow PreProp where
       "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
     PreApp name applicands -> "(" <> name <> " " <> T.unwords
       ((map userShow) applicands) <> ")"
+
+    PreAt objIx obj -> "(at '" <> objIx <> " " <> userShow obj <> ")"
+    PreAnn ety tm   -> "(" <> userShow tm <> ":" <> userShow ety <> ")"
 
 instance UserShow Pact.Exp where
   userShowsPrec _ = tShow
