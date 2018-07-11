@@ -1408,10 +1408,10 @@ analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLiteralObject props) = do
   props' <- for props $ \case
-    EProp prop ty       -> do
+    EProp ty prop       -> do
       prop' <- analyzeProp prop
       pure (EType ty, mkAVal prop')
-    EObjectProp prop ty -> do
+    EObjectProp ty prop -> do
       prop' <- analyzePropO prop
       pure (EObjectTy ty, AnObj prop')
   pure $ Object props'

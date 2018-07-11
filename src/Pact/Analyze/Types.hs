@@ -483,8 +483,6 @@ data PreProp
 
   | PreAt {- Schema -} Text PreProp -- EType
   | PreLiteralObject (Map Text PreProp)
-
-  | PreAnn EType PreProp
   deriving Eq
 
 pattern TableNameLit :: String -> Prop TableName
@@ -663,22 +661,22 @@ deriving instance Show a => Show (Prop a)
 data EProp where
   EProp
     :: (SymWord a, SMTValue a, Show a, Eq a)
-    => Prop a -> Type a -> EProp
-  EObjectProp :: Prop Object -> Schema -> EProp
+    => Type a -> Prop a -> EProp
+  EObjectProp :: Schema -> Prop Object -> EProp
 
 deriving instance Show EProp
 
 instance Eq EProp where
-  EProp pa ta == EProp pb tb = case typeEq ta tb of
+  EProp ta pa == EProp tb pb = case typeEq ta tb of
     Just Refl -> pa == pb
     Nothing   -> False
-  EObjectProp pa sa == EObjectProp pb sb = sa == sb && pa == pb
+  EObjectProp sa pa == EObjectProp sb pb = sa == sb && pa == pb
   _ == _ = False
 
 ePropToEType :: EProp -> EType
 ePropToEType = \case
-  EProp _ ty            -> EType ty
-  EObjectProp _ schema' -> EObjectTy schema'
+  EProp ty _            -> EType ty
+  EObjectProp schema' _ -> EObjectTy schema'
 
 instance Boolean (Prop Bool) where
   true   = PLit True
@@ -868,7 +866,6 @@ instance UserShow PreProp where
 
     PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
     PreLiteralObject obj -> userShowsPrec prec obj
-    PreAnn ety tm        -> "(" <> userShow tm <> ":" <> userShow ety <> ")"
 
 instance UserShow Pact.Exp where
   userShowsPrec _ = tShow

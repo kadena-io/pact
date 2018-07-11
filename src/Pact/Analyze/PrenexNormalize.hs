@@ -44,7 +44,6 @@ instance Float Time where
 instance Float Object where
   float p = case p of
     STANDARD_INSTANCES
-    -- TODO: is this right?
     PLiteralObject{} -> ([], p)
 
 instance Float KeySet where

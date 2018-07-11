@@ -1242,41 +1242,40 @@ spec = describe "analyze" $ do
     it "infers prop objects" $ do
       let pairSchema = Schema $
             Map.fromList [("x", EType TInt), ("y", EType TInt)]
-          ety    = EType TInt
+          ety = EType TInt
           litPair = PLiteralObject $ Map.fromList
-            [ ("x", EProp (PLit 0) TInt)
-            , ("y", EProp (PLit 1) TInt)
+            [ ("x", EProp TInt (PLit 0))
+            , ("y", EProp TInt (PLit 1))
             ]
 
           nestedObj = PLiteralObject $
-            Map.singleton "foo" (EObjectProp litPair pairSchema)
+            Map.singleton "foo" (EObjectProp pairSchema litPair)
 
           nestedSchema = Schema $
             Map.singleton "foo" (EObjectTy pairSchema)
 
       inferProp'' "{ 'x: 0, 'y: 1 }"
         `shouldBe`
-        Right (EObjectProp litPair pairSchema)
+        Right (EObjectProp pairSchema litPair)
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (EProp (PAt pairSchema (PLit "x") litPair ety) TInt)
+        Right (EProp TInt (PAt pairSchema (PLit "x") litPair ety))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
-        Right (EObjectProp nestedObj nestedSchema)
+        Right (EObjectProp nestedSchema nestedObj)
 
     it "infers forall / exists" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (EProp
+          (EProp TBool
             (Forall (VarId 1) "x" (EType TStr)
               (Forall (VarId 2) "y" (EType TStr)
                 (PStringComparison Eq
                   (PVar (VarId 1) "x")
-                  (PVar (VarId 2) "y"))))
-            TBool)
+                  (PVar (VarId 2) "y")))))
 
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       textToPropTableEnv
@@ -1325,8 +1324,8 @@ spec = describe "analyze" $ do
 
       textToProp   TBool "abort"   `shouldBe` Right Abort
       textToProp   TBool "success" `shouldBe` Right Success
-      inferProp''  "abort"         `shouldBe` Right (EProp Abort TBool)
-      inferProp''  "success"       `shouldBe` Right (EProp Success TBool)
+      inferProp''  "abort"         `shouldBe` Right (EProp TBool Abort)
+      inferProp''  "success"       `shouldBe` Right (EProp TBool Success)
 
       textToProp'' TBool "result"  `shouldBe` Right Result
       textToProp'' TInt  "result"  `shouldBe` Right Result
@@ -1336,20 +1335,18 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (table:table) (not (table-write table)))"
         `shouldBe`
         Right
-          (EProp
+          (EProp TBool
             (Forall (VarId 1) "table" QTable
-              (PNot (TableWrite "table")))
-            TBool)
+              (PNot (TableWrite "table"))))
 
     it "parses quantified columns" $ do
       pendingWith "separate parser for props"
       inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
         `shouldBe`
         Right
-          (EProp
+          (EProp TBool
             (Forall (VarId 1) "column" (QColumnOf "table")
-              (PNot (ColumnWrite "table" "column")))
-            TBool)
+              (PNot (ColumnWrite "table" "column"))))
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do

@@ -25,8 +25,9 @@ import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
                                             (^?), (^@..), (?~), (&), (%~),
                                             _1, _2, _Just, _Left)
 import           Control.Monad             ((>=>), join, void)
-import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT,
-                                            throwError, withExcept, withExceptT, MonadError)
+import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
+                                            runExceptT, throwError, withExcept,
+                                            withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
@@ -457,8 +458,8 @@ moduleFunChecks tables modTys = for modTys $
       --       not there yet:
       vids = VarId <$> [1..]
 
-      -- TODO(joel): this relies on generating the same unique ids as
-      -- @checkFunction@. We need to more carefully enforce this is true!
+  -- TODO(joel): this relies on generating the same unique ids as
+  -- @checkFunction@. We need to more carefully enforce this is true!
   argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
     case maybeTranslateType ty of
       Just ety -> pure (name, ety)
