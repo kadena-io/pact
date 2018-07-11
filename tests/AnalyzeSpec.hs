@@ -1457,3 +1457,32 @@ spec = describe "analyze" $ do
   -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
   --            named)
   --
+
+  describe "at-properties verify" $ do
+    let code = [text|
+          (defschema user
+            (meta "user info"
+              (invariants
+                [(>= (length first) 2)
+                 (>= (length last) 2)
+                 (=  (length ssn) 9)
+                 (>= balance 0)
+                ]))
+            first:string
+            last:string
+            ssn:string
+            balance:integer
+            )
+
+          (defun test:object{user} (first:string last:string ssn:string balance:integer)
+            (meta "make a user"
+              (properties
+                [ (= (at 'first result) first)
+                  (= (at 'last result) last)
+                  (= (at 'ssn result) ssn)
+                  (= (at 'balance result) balance)
+                ]))
+             { 'first:first, 'last:last, 'ssn:ssn, 'balance:balance })
+          |]
+
+    expectVerified code
