@@ -29,6 +29,7 @@ import Pact.Types.RPC
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Types.Server
 import Pact.Types.Logger
+import Pact.Gas
 
 import Pact.Interpreter
 
@@ -100,6 +101,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore) <- liftIO $ readMVar _ceState
   let evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                 (MsgData (userSigsToPactKeySet _cmdSigs) edata Nothing _cmdHash) refStore
+                freeGasEnv
   pr <- liftIO $ evalExec evalEnv parsedCode
   void $ liftIO $ swapMVar _ceState $ CommandState (erRefStore pr)
   return $ jsonResult _ceMode rk $ CommandSuccess (last (erOutput pr))

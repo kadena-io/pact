@@ -48,6 +48,7 @@ import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 import Data.List
+import Data.Monoid
 
 
 import Pact.Types.Typecheck

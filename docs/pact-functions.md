@@ -1225,6 +1225,40 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 ```
 
 
+### env-gas {#env-gas}
+
+ *&rarr;*&nbsp;`integer`
+
+*gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Query gas state, or set it to GAS
+
+
+### env-gaslimit {#env-gaslimit}
+
+*limit*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Set environment gas limit to LIMIT
+
+
+### env-gasprice {#env-gasprice}
+
+*price*&nbsp;`decimal` *&rarr;*&nbsp;`string`
+
+
+Set environment gas price to PRICE
+
+
+### env-gasrate {#env-gasrate}
+
+*rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
+
+
+Update gas model to charge constant RATE
+
+
 ### env-hash {#env-hash}
 
 *hash*&nbsp;`string` *&rarr;*&nbsp;`string`

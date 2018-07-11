@@ -18,11 +18,9 @@
 module Pact.Native
     (natives
     ,nativeDefs
-    ,moduleToMap
-    ,initEvalEnv)
+    ,moduleToMap)
     where
 
-import Control.Concurrent hiding (yield)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (asks)
@@ -229,13 +227,13 @@ langDefs =
 
 
 if' :: NativeFun e
-if' i [cond,then',else'] = reduce cond >>= \cm -> case cm of
+if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \cm -> case cm of
            TLiteral (LBool c) _ -> reduce (if c then then' else else')
            t -> evalError' i $ "if: conditional not boolean: " ++ show t
 if' i as = argsError' i as
 
 map' :: NativeFun e
-map' i [app@TApp {},l] = reduce l >>= \l' -> case l' of
+map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
@@ -254,7 +252,7 @@ reverse' _ [l@TList{}] = return $ over tList reverse l
 reverse' i as = argsError i as
 
 fold' :: NativeFun e
-fold' i [app@TApp {},initv,l] = reduce l >>= \l' -> case l' of
+fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
                          foldM (\r a -> apply' app [r,a]) initv' ls
            t -> evalError' i $ "fold: expecting list: " ++ abbrev t
@@ -262,7 +260,7 @@ fold' i as = argsError' i as
 
 
 filter' :: NativeFun e
-filter' i [app@TApp {},l] = reduce l >>= \l' -> case l' of
+filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
                          forM ls (\a -> do
                            t <- apply' app [a]
@@ -315,7 +313,7 @@ remove _ [key,TObject ps t _] = return $ TObject (filter (\(k,_) -> unsetInfo ke
 remove i as = argsError i as
 
 compose :: NativeFun e
-compose _ [appA@TApp {},appB@TApp {},v] = do
+compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
   a <- apply' appA [v']
   apply' appB [a]
@@ -379,10 +377,10 @@ readInteger i [TLitString key] = do
 readInteger i as = argsError i as
 
 enforce :: NativeFun e
-enforce i as = runPure (mapM reduce as >>= enforce' i)
+enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
 
 enforceOne :: NativeFun e
-enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ do
+enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ gasUnreduced i as $ do
   msg' <- reduce msg >>= \m -> case m of
     TLitString s -> return s
     _ -> argsError' i as
@@ -410,7 +408,7 @@ pactId i [] = use evalPactExec >>= \pe -> case pe of
 pactId i as = argsError i as
 
 bind :: NativeFun e
-bind _ [src,TBinding ps bd (BindSchema _) bi] =
+bind i as@[src,TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $
   reduce src >>= bindObjectLookup >>= bindReduce ps bd bi
 bind i as = argsError' i as
 
@@ -431,13 +429,6 @@ listModules _ _ = do
   mods <- view $ eeRefStore.rsModules
   return $ toTermList tTyString $ map asString $ M.keys mods
 
-
-initEvalEnv :: e -> PactDb e -> Hash -> IO (EvalEnv e)
-initEvalEnv e b h = do
-  mv <- newMVar e
-  return $ EvalEnv (RefStore nativeDefs M.empty) def Null def def def mv b def h
-
-
 unsetInfo :: Term a -> Term a
 unsetInfo a = set tInfo def a
 {-# INLINE unsetInfo #-}
@@ -453,7 +444,7 @@ yield i [t@TObject {}] = do
 yield i as = argsError i as
 
 resume :: NativeFun e
-resume i [TBinding ps bd (BindSchema _) bi] = do
+resume i as@[TBinding ps bd (BindSchema _) bi] = gasUnreduced i as $ do
   rm <- asks $ firstOf $ eePactStep . _Just . psResume . _Just
   case rm of
     Nothing -> evalError' i "Resume: no yielded value in context"
@@ -461,7 +452,7 @@ resume i [TBinding ps bd (BindSchema _) bi] = do
 resume i as = argsError' i as
 
 where' :: NativeFun e
-where' i as@[k',app@TApp{},r'] = ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
+where' i as@[k',app@TApp{},r'] = gasUnreduced i as $ ((,) <$> reduce k' <*> reduce r') >>= \kr -> case kr of
   (k,r@TObject {}) -> lookupObj k (_tObject r) >>= \v -> apply' app [v]
   _ -> argsError' i as
 where' i as = argsError' i as
@@ -534,7 +525,7 @@ searchTermList val = foldl search False
 
 
 constantly :: NativeFun e
-constantly _ (v:_) = reduce v
+constantly i (v:_) = gasUnreduced i [v] $ reduce v
 constantly i as = argsError' i as
 
 identity :: RNativeFun e
