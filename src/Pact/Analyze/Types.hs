@@ -481,7 +481,7 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  | PreAt {- Schema -} Text PreProp -- EType
+  | PreAt Text PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving Eq
 
