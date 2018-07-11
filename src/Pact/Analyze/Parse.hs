@@ -293,15 +293,19 @@ inferPreProp preProp = case preProp of
     EProp TBool . q vid name ty' <$> local modEnv (checkPreProp TBool p)
 
   PreAt objIx obj -> do
-    EObjectProp objSchema@(Schema tyMap) objProp <- inferPreProp obj
-    case tyMap ^? ix objIx of
-      Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
-      Just ety@(EType ty) -> pure $ EProp
-        ty
-        (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
-      Just ety@(EObjectTy schemaTy) -> pure $ EObjectProp
-        schemaTy
-        (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+    obj' <- inferPreProp obj
+    case obj' of
+      EProp ty _ -> throwErrorIn preProp $
+        "expected object (with key " <> tShow objIx <> ") but found type " <>
+        userShow ty
+      EObjectProp objSchema@(Schema tyMap) objProp -> case tyMap ^? ix objIx of
+        Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
+        Just ety@(EType ty) -> pure $ EProp
+          ty
+          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+        Just ety@(EObjectTy schemaTy) -> pure $ EObjectProp
+          schemaTy
+          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
 
   PreLiteralObject obj -> do
     obj' <- traverse inferPreProp obj
@@ -324,25 +328,38 @@ inferPreProp preProp = case preProp of
     pure $ EProp TDecimal it
   PreApp "add-time" [a, b] -> do
     a' <- checkPreProp TTime a
-    EProp TTime <$> asum'
-      [ PIntAddTime a' <$> checkPreProp TInt b
-      , PDecAddTime a' <$> checkPreProp TDecimal b
-      ] (throwErrorIn preProp "invalid argument types")
+    b' <- inferPreProp b
+    case b' of
+      EProp TInt     b'' -> pure $ EProp TTime $ PIntAddTime a' b''
+      EProp TDecimal b'' -> pure $ EProp TTime $ PDecAddTime a' b''
+      _                  -> throwErrorIn b $
+        "expected integer or decimal, found " <> userShow (ePropToEType b')
 
   PreApp op'@(textToComparisonOp -> Just op) [a, b] -> do
-    EProp TBool <$> asum'
-      [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
-      , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-      , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
-      , PBoolComparison    op <$> checkPreProp TBool a    <*> checkPreProp TBool b
-      , PStringComparison  op <$> checkPreProp TStr a     <*> checkPreProp TStr b
-      , case textToEqNeq op' of
-        Just eqNeq -> PKeySetEqNeq eqNeq
-          <$> checkPreProp TKeySet a
-          <*> checkPreProp TKeySet b
-        Nothing -> throwErrorIn preProp $
-          "found " <> op' <> " where = or != was expected"
-      ] (throwErrorIn preProp $ "expected bool, but found " <> userShow preProp)
+    a' <- inferPreProp a
+    b' <- inferPreProp b
+    let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop Bool)
+            -> Prop a -> Prop a -> PropCheck EProp
+        ret c aProp bProp = pure $ EProp TBool $ c op aProp bProp
+    case (a', b') of
+      (EProp aTy aProp, EProp bTy bProp) -> case typeEq aTy bTy of
+        Nothing -> typeError preProp aTy bTy
+        Just Refl -> case aTy of
+          TInt     -> ret PIntegerComparison aProp bProp
+          TDecimal -> ret PDecimalComparison aProp bProp
+          TTime    -> ret PTimeComparison    aProp bProp
+          TBool    -> ret PBoolComparison    aProp bProp
+          TStr     -> ret PStringComparison  aProp bProp
+          TKeySet  -> case textToEqNeq op' of
+            Just eqNeq -> pure $ EProp TBool $ PKeySetEqNeq eqNeq aProp bProp
+            Nothing    -> throwErrorIn preProp
+              "keysets only support equality (=) / inequality (!=) checks"
+      (_, _) -> throwErrorIn preProp $
+        -- TODO(joel)
+        "in properties we can currently only compare primitive types, not yet objects (found " <>
+        userShow (ePropToEType a') <> " and " <> userShow (ePropToEType b') <>
+        ")"
+
 
   PreApp op'@(textToLogicalOp -> Just op) args -> do
     EProp TBool <$> case (op, args) of
@@ -443,11 +460,19 @@ checkPreProp ty preProp
 
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
-  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> asum'
-    [ PDecArithOp    op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-    , PDecIntArithOp op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
-    , PIntDecArithOp op <$> checkPreProp TInt a     <*> checkPreProp TDecimal b
-    ] (throwErrorIn preProp $ "expected decimal, found " <> userShow preProp)
+  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> do
+    a' <- inferPreProp a
+    b' <- inferPreProp b
+    case (a', b') of
+      (EProp TDecimal aprop, EProp TDecimal bprop) ->
+        pure $ PDecArithOp op aprop bprop
+      (EProp TDecimal aprop, EProp TInt bprop) ->
+        pure $ PDecIntArithOp op aprop bprop
+      (EProp TInt aprop, EProp TDecimal bprop) ->
+        pure $ PIntDecArithOp op aprop bprop
+      (_, _) -> throwErrorIn preProp $
+        "unexpected argument types for (+): " <> userShow (ePropToEType a') <>
+        " and " <> userShow (ePropToEType b')
   (TInt, PreApp (textToArithOp -> Just op) [a, b])
     -> PIntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
   (TDecimal, PreApp (textToUnaryArithOp -> Just op) [a])
