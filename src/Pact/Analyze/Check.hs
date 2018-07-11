@@ -406,6 +406,20 @@ resultQuery goal model0 = do
 --     SBV.Unsat -> throwError VacuousConstraints
 --     SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
+-- SBV also provides 'inNewAssertionStack', but in 'Query'
+inNewAssertionStack
+  :: ExceptT a SBV.Query CheckSuccess
+  -> ExceptT a SBV.Query CheckSuccess
+inNewAssertionStack act = do
+    push
+    result <- act `catchError` \e -> pop *> throwError e
+    pop
+    pure result
+
+  where
+    push = lift $ SBV.push 1
+    pop  = lift $ SBV.pop 1
+
 verifyFunctionInvariants'
   :: Info
   -> [Table]
@@ -443,21 +457,6 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
 
     config :: SBV.SMTConfig
     config = SBV.z3
-
-    -- SBV also provides 'inNewAssertionStack', but in 'Query'
-    inNewAssertionStack
-      :: ExceptT a SBV.Query CheckSuccess
-      -> ExceptT a SBV.Query CheckSuccess
-    inNewAssertionStack act = do
-        push
-        result <- act `catchError` \e -> pop *> throwError e
-        pop
-        pure result
-
-      where
-        push = lift $ SBV.push 1
-        pop  = lift $ SBV.pop 1
-
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
