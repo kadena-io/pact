@@ -78,7 +78,7 @@ bindReduce ps bd bi lkpFun = do
                                 Just v -> return v
             t -> evalError bi $ "Invalid column identifier in binding: " ++ show t
   let bd'' = instantiate (resolveArg bi (map snd vs)) bd
-  -- | NB stack frame here just documents scope, but does not incur gas
+  -- NB stack frame here just documents scope, but does not incur gas
   call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $!
     ((0,) <$> reduceBody bd'')
 
