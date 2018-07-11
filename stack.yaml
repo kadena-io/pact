@@ -14,7 +14,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/LeventErkok/sbv.git
-    commit: 17a962cd096bbf699fdc576e7bc3c1ad0cd0f723 # with exposed SMTValue methods
+    commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
   extra-dep: true
 
 extra-deps:

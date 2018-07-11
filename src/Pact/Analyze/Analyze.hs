@@ -42,11 +42,11 @@ import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>), 
                                              EqSymbolic ((./=), (.==)), HasKind,
                                              Mergeable (symbolicMerge),
                                              OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                             SBV, SBool, SFunArray,
+                                             SBV, SBool,
                                              SymArray (readArray, writeArray),
                                              SymWord (exists_, forall_),
                                              Symbolic, constrain, false, ite,
-                                             mkSFunArray, sDiv, sMod,
+                                             sDiv, sMod,
                                              uninterpret, (.^))
 import qualified Data.SBV.Internals         as SBVI
 import qualified Data.SBV.String            as SBV
@@ -66,6 +66,7 @@ import qualified Pact.Types.Runtime         as Pact
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Version         (pactVersion)
 
+import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
