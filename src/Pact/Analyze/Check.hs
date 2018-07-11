@@ -396,6 +396,16 @@ resultQuery goal model0 = do
         SBV.Unsat -> throwError Unsatisfiable
         SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
 
+-- -- Assumes sat mode. It might be a decent idea for us to introduce an indexed
+-- -- type to denote which things assume certain modes.
+-- checkConstraintVacuity :: ExceptT SmtFailure SBV.Query ()
+-- checkConstraintVacuity = do
+--   prePropRes <- lift $ SBV.checkSat
+--   case prePropRes of
+--     SBV.Sat   -> pure ()
+--     SBV.Unsat -> throwError VacuousConstraints
+--     SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+
 verifyFunctionInvariants'
   :: Info
   -> [Table]
