@@ -50,6 +50,7 @@ library
     exposed-modules:
       Pact.Analyze.Analyze
       Pact.Analyze.Check
+      Pact.Analyze.LegacySFunArray
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Patterns
@@ -130,7 +131,7 @@ library
       , fast-logger
       , haskeline >= 0.7.3 && < 0.8
       , safe-exceptions >= 0.1.5.0 && < 0.2
-      , sbv >= 7.8 && < 7.9
+      , sbv >= 7.9 && < 7.10
       , snap-core
       , snap-server
       , statistics >= 0.13.3 && < 0.15
