@@ -28,7 +28,7 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (TableEnv, expToProp)
+import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 
@@ -1178,6 +1178,24 @@ spec = describe "analyze" $ do
           (Map.singleton 0 (EType TAny))
           (TableMap mempty)
 
+        inferProp'
+          :: Map Text VarId
+          -> Map VarId EType
+          -> TableEnv
+          -> Text
+          -> Either String EProp
+        inferProp' env1 env2 tableEnv t = case parseExprs t of
+          Right [exp'] ->
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 exp'
+          Left err -> Left err
+          _        -> Left "Error: unexpected result from parseExprs"
+
+        inferProp'' :: Text -> Either String EProp
+        inferProp'' = inferProp'
+          (Map.singleton "result" 0)
+          (Map.singleton 0 (EType TAny))
+          (TableMap mempty)
+
         textToPropTableEnv :: TableEnv -> Type a -> Text -> Either String (Prop a)
         textToPropTableEnv tableEnv = textToProp'
           (Map.singleton "result" 0)
@@ -1204,7 +1222,7 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
 
-    it "infers +" $ do
+    it "checks +" $ do
       textToProp TStr "(+ \"a\" \"b\")"
         `shouldBe`
         Right (PStrConcat (PLit "a") (PLit "b"))
@@ -1221,30 +1239,44 @@ spec = describe "analyze" $ do
         `shouldBe`
         Left "in (+ 0 1), expected decimal, found (+ 0 1)"
 
-    it "checks prop objects" $ do
+    it "infers prop objects" $ do
       let pairSchema = Schema $
             Map.fromList [("x", EType TInt), ("y", EType TInt)]
           ety    = EType TInt
-          litObj = PLiteralObject $ Map.fromList
+          litPair = PLiteralObject $ Map.fromList
             [ ("x", EProp (PLit 0) TInt)
             , ("y", EProp (PLit 1) TInt)
             ]
 
-      -- textToProp TInt "(at 'x { 'x: 0, 'y: 1 })" `shouldBe` Right litObj
+          nestedObj = PLiteralObject $
+            Map.singleton "foo" (EObjectProp litPair pairSchema)
 
-      textToProp TInt "(at 'x { 'x: 0, 'y: 1 })"
+          nestedSchema = Schema $
+            Map.singleton "foo" (EObjectTy pairSchema)
+
+      inferProp'' "{ 'x: 0, 'y: 1 }"
         `shouldBe`
-        Right (PAt pairSchema (PLit "x") litObj ety)
+        Right (EObjectProp litPair pairSchema)
+
+      inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
+        `shouldBe`
+        Right (EProp (PAt pairSchema (PLit "x") litPair ety) TInt)
+
+      inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
+        `shouldBe`
+        Right (EObjectProp nestedObj nestedSchema)
 
     it "infers forall / exists" $ do
-      textToProp TBool "(forall (x:string y:string) (= x y))"
+      inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (Forall (VarId 1) "x" (EType TStr)
-            (Forall (VarId 2) "y" (EType TStr)
-              (PStringComparison Eq
-                (PVar (VarId 1) "x")
-                (PVar (VarId 2) "y"))))
+          (EProp
+            (Forall (VarId 1) "x" (EType TStr)
+              (Forall (VarId 2) "y" (EType TStr)
+                (PStringComparison Eq
+                  (PVar (VarId 1) "x")
+                  (PVar (VarId 2) "y"))))
+            TBool)
 
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       textToPropTableEnv
@@ -1293,24 +1325,31 @@ spec = describe "analyze" $ do
 
       textToProp   TBool "abort"   `shouldBe` Right Abort
       textToProp   TBool "success" `shouldBe` Right Success
+      inferProp''  "abort"         `shouldBe` Right (EProp Abort TBool)
+      inferProp''  "success"       `shouldBe` Right (EProp Success TBool)
+
       textToProp'' TBool "result"  `shouldBe` Right Result
       textToProp'' TInt  "result"  `shouldBe` Right Result
       textToProp'' TStr  "result"  `shouldBe` Right Result
 
     it "parses quantified tables" $ do
-      textToProp TBool "(forall (table:table) (not (table-write table)))"
+      inferProp'' "(forall (table:table) (not (table-write table)))"
         `shouldBe`
         Right
-          (Forall (VarId 1) "table" QTable
-            (PNot (TableWrite "table")))
+          (EProp
+            (Forall (VarId 1) "table" QTable
+              (PNot (TableWrite "table")))
+            TBool)
 
     it "parses quantified columns" $ do
       pendingWith "separate parser for props"
-      textToProp TBool "(forall (column:(column-of table)) (not (column-write table column)))"
+      inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
         `shouldBe`
         Right
-          (Forall (VarId 1) "column" (QColumnOf "table")
-            (PNot (ColumnWrite "table" "column")))
+          (EProp
+            (Forall (VarId 1) "column" (QColumnOf "table")
+              (PNot (ColumnWrite "table" "column")))
+            TBool)
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do

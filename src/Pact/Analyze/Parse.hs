@@ -13,6 +13,7 @@ module Pact.Analyze.Parse
   ( expToCheck
   , expToProp
   , expToInvariant
+  , inferProp
   , TableEnv
   ) where
 
@@ -557,6 +558,23 @@ expToProp tableEnv' genStart nameEnv idEnv ty body = do
   preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
   runReaderT (checkPreProp ty preTypedBody) env
+
+inferProp
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
+  -- ^ ID to start issuing from
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
+  -> Exp
+  -- ^ Exp to convert
+  -> Either String EProp
+inferProp tableEnv' genStart nameEnv idEnv body = do
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  runReaderT (inferPreProp preTypedBody) env
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
