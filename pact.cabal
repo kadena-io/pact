@@ -182,21 +182,19 @@ test-suite hspec
               , bytestring
               , mtl
               , text
-              , async
-              , ed25519-donna
-              , crypto-api
-              , wreq
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
       , sbv
+      , async
+      , ed25519-donna
+      , crypto-api
+      , wreq
   other-modules:
                 AnalyzeSpec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
-                PactContinuationSpec
-                Utils.TestRunner
   if !impl(ghcjs)
     other-modules:
         DocgenSpec
@@ -204,3 +202,5 @@ test-suite hspec
       , ParserSpec
       , PersistSpec
       , TypecheckSpec
+      , PactContinuationSpec
+      , Utils.TestRunner
