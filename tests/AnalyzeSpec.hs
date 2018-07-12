@@ -392,7 +392,7 @@ spec = describe "analyze" $ do
     expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
-  describe "enforce-one" $ do
+  describe "enforce-one.1" $ do
     let code =
           [text|
         (defun test:bool (systime:time timeout:time)
@@ -411,6 +411,53 @@ spec = describe "analyze" $ do
         (PAnd
           (PTimeComparison Gte systime timeout)
           (KsNameAuthorized "dk"))
+
+  describe "enforce-one.2" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce false)
+             (enforce true)]))
+          |]
+
+    expectPass code $ Valid Success
+
+  describe "enforce-one.3" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce false)
+             (enforce false)]))
+          |]
+
+    expectPass code $ Valid $ PNot Success
+
+  describe "enforce-one.4" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce true)
+             (and (enforce true)
+                  (enforce false))]))
+          |]
+
+    expectPass code $ Valid Success
+
+  -- This one is a little subtle. Even though the `or` would evaluate to
+  -- `true`, one of its `enforce`s threw, so it fails.
+  describe "enforce-one.5" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(or (enforce true)
+                 (enforce false))]))
+          |]
+
+    expectPass code $ Valid $ PNot Success
 
   describe "table-read.multiple-read" $
     let code =
