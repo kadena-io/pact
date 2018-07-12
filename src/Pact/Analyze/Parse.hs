@@ -350,6 +350,8 @@ inferPreProp preProp = case preProp of
           TTime    -> ret PTimeComparison    aProp bProp
           TBool    -> ret PBoolComparison    aProp bProp
           TStr     -> ret PStringComparison  aProp bProp
+          TAny     -> throwErrorIn preProp $
+            "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case textToEqNeq op' of
             Just eqNeq -> pure $ EProp TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp
