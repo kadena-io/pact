@@ -13,7 +13,7 @@ import           Data.Text            (Text)
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (BindType (BindLet, BindSchema),
                                        Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Table),
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
                                        Fun (FDefun, FNative), Named, Node,
                                        PrimValue (PrimLit), Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
@@ -181,3 +181,6 @@ pattern AST_At node colName obj <- App node (NativeFunc "at") [colName, obj]
 
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
+
+pattern AST_Step :: AST a
+pattern AST_Step <- Step _ _ _ _

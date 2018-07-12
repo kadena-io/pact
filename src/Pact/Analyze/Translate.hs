@@ -56,6 +56,9 @@ data TranslateFailure
   | BadTimeType (AST Node)
   | NonConstKey (AST Node)
   | FailedVarLookup Text
+  | NoPacts (AST Node)
+  | NoLists (AST Node)
+  | NoKeys (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving Show
@@ -70,7 +73,9 @@ describeTranslateFailure = \case
   MalformedComparison op args -> "Unsupported comparison op " <> op <> " with args " <> tShow args
   NotConvertibleToSchema ty -> "Expected a schema, but found " <> tShow ty
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
-  UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  -- Uncomment for debugging
+  -- UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
+  UnexpectedNode _ast -> "Analysis doesn't support this construct yet"
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
@@ -78,6 +83,9 @@ describeTranslateFailure = \case
   BadTimeType node -> "Invalid: days / hours / minutes applied to non-integer / decimal: " <> tShow node
   NonConstKey k -> "Pact can currently only analyze constant keys in objects. Found " <> tShow k
   FailedVarLookup varName -> "Failed to look up a variable (" <> varName <> "). This likely means the variable wasn't properly bound."
+  NoPacts _node -> "Analysis of pacts is not yet supported"
+  NoLists _node -> "Analysis of lists is not yet supported"
+  NoKeys _node  -> "`keys` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   where
     tShow :: Show a => a -> Text
@@ -509,4 +517,14 @@ translateNode astNode = case astNode of
   -- TODO: more cases.
   --
 
-  ast -> throwError $ UnexpectedNode ast
+  AST_Step                -> throwError $ NoPacts astNode
+  AST_NFun _ "pact-id" [] -> throwError $ NoPacts astNode
+
+  AST_NFun _ f _
+    | f `Set.member` Set.fromList
+      ["map", "make-list", "filter", "reverse", "sort", "take", "fold"]
+    -> throwError $ NoLists astNode
+
+  AST_NFun _ "keys" [_] -> throwError $ NoKeys astNode
+
+  _ -> throwError $ UnexpectedNode astNode
