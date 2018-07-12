@@ -418,6 +418,16 @@ testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
 
   it "cancels escrow immediately if creditor cancels" $
     testCreditorCancel
+
+  it "throws error when creditor or debtor try to finish alone" $
+    testFinishAlone
+
+  it "throws error when final price negotiated up" $
+    testPriceNegUp
+
+  context "when both debtor and creditor finish together" $
+    it "finishes escrow if final price stays the same or negotiated down" $
+      testValidEscrowFinish
       
 testDebtorPreTimeoutCancel :: Expectation
 testDebtorPreTimeoutCancel = do
@@ -468,9 +478,49 @@ testCreditorCancel = do
 
   twoPartyEscrow allCmds allChecks
 
+testFinishAlone :: Expectation
+testFinishAlone = do
+  let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
+      testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
+  
+  (_, tryCredAloneCmd) <- mkApiReq (testPathCred ++ "01-cont.yaml")
+  (_, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
+  let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
+  
+  let tryCredAloneCheck = makeCheck tryCredAloneCmd True 
+                          (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
+      tryDebAloneCheck  = makeCheck tryDebAloneCmd True
+                          (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
+      allChecks         = [tryCredAloneCheck, tryDebAloneCheck]
 
+  twoPartyEscrow allCmds allChecks
 
--- TODO TxId of escrow is 5!!
+testPriceNegUp :: Expectation
+testPriceNegUp = do
+  let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
+  
+  (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
+  let tryNegUpCheck = makeCheck tryNegUpCmd True $
+                      (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
+
+  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck]
+
+testValidEscrowFinish :: Expectation
+testValidEscrowFinish = do
+  let testPath = testDir ++ "cont-scripts/pass-both-price-down-"
+
+  (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
+  (_, credBalanceCmd) <- mkApiReq (testPath ++ "02-cred-balance.yaml")
+  (_, debBalanceCmd) <- mkApiReq (testPath ++ "03-deb-balance.yaml")
+  let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
+  
+  let tryNegDownCheck  = makeCheck tryNegDownCmd False $ 
+                         (Just "Escrow completed with 1.75 paid and 0.25 refunded")
+      credBalanceCheck = makeCheck credBalanceCmd False $ Just "1.75"
+      debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
+      allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
+       
+  twoPartyEscrow allCmds allChecks
 
 twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Expectation
 twoPartyEscrow testCmds testChecks = do 
