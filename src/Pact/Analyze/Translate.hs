@@ -306,6 +306,12 @@ translateNode astNode = case astNode of
       ETerm ksT TKeySet <- translateNode ksA
       return $ ETerm (Enforce (KsAuthorized ksT)) TBool
 
+  AST_EnforceOne enforces -> do
+    tms <- for enforces $ \enforce -> do
+      ETerm enforce' TBool <- translateNode enforce
+      pure enforce'
+    return $ ETerm (EnforceOne tms) TBool
+
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
     case daysTy of

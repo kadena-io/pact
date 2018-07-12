@@ -49,7 +49,7 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SymWord (exists_, forall_),
                                             Symbolic, constrain, false, free,
                                             ite, mkSFunArray, sDiv, sMod,
-                                            uninterpret, (.^))
+                                            uninterpret, bOr, (.^))
 import qualified Data.SBV.Internals        as SBVI
 import qualified Data.SBV.String           as SBV
 import qualified Data.Set                  as Set
@@ -1126,9 +1126,23 @@ analyzeTerm = \case
     testPasses <- analyzeTerm cond
     iteS testPasses (analyzeTerm then') (analyzeTerm else')
 
+  -- TODO: check that the body of enforce is pure
   Enforce cond -> do
     cond' <- analyzeTerm cond
     succeeds %= (&&& cond')
+    pure true
+
+  EnforceOne conds -> do
+    initSucceeds <- use succeeds
+
+    successRecord <- for conds $ \cond -> do
+      succeeds .= true
+      _ <- analyzeTerm cond
+      use succeeds
+
+    let anySucceeded = bOr successRecord
+    succeeds .= (initSucceeds &&& anySucceeded)
+
     pure true
 
   Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT

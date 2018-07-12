@@ -47,7 +47,8 @@ data Term ret where
   Sequence       :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
-  Enforce        :: Term Bool -> Term Bool
+  Enforce        :: Term Bool   -> Term Bool
+  EnforceOne     :: [Term Bool] -> Term Bool
 
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet

@@ -101,6 +101,10 @@ pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
 
+pattern AST_EnforceOne :: forall a. [AST a] -> AST a
+pattern AST_EnforceOne enforces <-
+  App _node (NativeFunc "enforce-one") [_, List _ enforces]
+
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-
   App _node (NativeFunc "format") [str, List _ vars]

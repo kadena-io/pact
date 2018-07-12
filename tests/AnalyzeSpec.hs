@@ -392,6 +392,26 @@ spec = describe "analyze" $ do
     expectFail code $ Valid $ Forall 0 "row" (Ty (Rep @String)) $
       RowWrite "tokens" (PVar 0 "row") ==> RowEnforced "tokens" "ks" (PVar 0 "row")
 
+  describe "enforce-one" $ do
+    let code =
+          [text|
+        (defun test:bool (systime:time timeout:time)
+          (enforce-one
+            "Cancel can only be effected by creditor, or debitor after timeout"
+            [(enforce-keyset 'ck)
+             (and (enforce (>= systime timeout) "Timeout expired")
+                  (enforce-keyset 'dk))]))
+          |]
+
+    let systime = PVar 0 "systime"
+        timeout = PVar 1 "timeout"
+    expectPass code $ Valid $ Success ==>
+      POr
+        (KsNameAuthorized "ck")
+        (PAnd
+          (PTimeComparison Gte systime timeout)
+          (KsNameAuthorized "dk"))
+
   describe "table-read.multiple-read" $
     let code =
           [text|
