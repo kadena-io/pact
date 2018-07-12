@@ -30,6 +30,7 @@ spec = describe "pacts in dev server" $ do
   describe "testPactContinuation" testPactContinuation
   describe "testPactRollback" testPactRollback
   describe "testPactYield" testPactYield
+  describe "testTwoPartyEscrow" testTwoPartyEscrow
 
 
 
@@ -400,3 +401,66 @@ testResetYield = do
                            resumeStepCheck, checkStateCheck]
 
   allResults `shouldMatch` allChecks
+
+
+
+-- TWO PARTY ESCROW TESTS
+
+testTwoPartyEscrow :: Spec
+testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
+  context "when debtor tries to cancel pre-timeout" $
+    it "throws error and money still escrowed" $
+      twoPartyEscrow [] [] --testDebtorPreTimeoutCancel
+
+twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Expectation
+twoPartyEscrow testCmds testChecks = do 
+  let setupPath = testDir ++ "cont-scripts/setup-"
+  
+  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml") 
+  (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
+  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")                  
+  (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
+  (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
+  (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
+  (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
+  let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
+                : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
+  allResults <- runAll allCmds
+
+  let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
+      acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"
+      testModuleCheck     = makeCheck testModuleCmd False $ Just "test module loaded"
+      createAcctCheck     = makeCheck createAcctCmd False Nothing -- Alice should be funded with $100
+      resetTimeCheck      = makeCheck resetTimeCmd False Nothing
+      runEscrowCheck      = makeCheck runEscrowCmd False Nothing
+      balanceCheck        = makeCheck balanceCmd False $ Just "98.00"
+      allChecks           = sysModuleCheck : acctModuleCheck : testModuleCheck
+                            : createAcctCheck : resetTimeCheck : runEscrowCheck
+                            : balanceCheck : testChecks
+
+  allResults `shouldMatch` allChecks
+
+-- TODO TxId of escrow is 5!!
+
+{--testDebtorPreTimeoutCancel :: Expectation
+testDebtorPreTimeoutCancel = do
+  aliceKeys <- genKeys
+  bobKeys <- genKeys
+
+  resetTimeCmd <- mkExec ("(test.reset-time)") Null Nothing [aliceKeys] (Just "test1")
+  runEscrowCmd <- mkExec ("(test.run-escrow \"Alice\" \"Bob\")") Null Nothing [aliceKeys] (Just "test2")
+  checkEscrowCmd <- mkExec ("test.get-balance \"Alice\")") Null Nothing [aliceKeys] (Just "test3")
+  tryCancelCmd <- mkCont (TxId 7) 0 True Null Nothing [aliceKeys] (Just "test4") -- txId num includes setup cmds
+  checkStillEscrowCmd <- mkExec ("test.get-balance \"Alice\")") Null Nothing [aliceKeys] (Just "test5")
+  let allCmds = [resetTimeCmd, runEscrowCmd, checkEscrowCmd, tryCancelCmd, checkStillEscrowCmd]
+  
+
+  let resetTimeCheck = makeCheck resetTimeCmd False Nothing
+      runEscrowCheck = makeCheck runEscrowCmd False Nothing
+      checkEscrowCheck = makeCheck checkEscrowCmd False $ Just (Number 88)
+      tryCancelCheck = makeCheck tryCancelCmd True Nothing
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just (Number 88)
+      allChecks = [resetTimeCheck, runEscrowCheck, checkEscrowCheck, tryCancelCheck, checkStillEscrowCheck]
+
+  twoPartyEscrow aliceKeys bobKeys allCmds allChecks--}
+  

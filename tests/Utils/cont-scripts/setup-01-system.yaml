@@ -1,0 +1,18 @@
+# Provides mock system module for 'accounts'
+code: |-
+  (define-keyset 'k (read-keyset "accounts-admin-keyset"))
+  (module system 'k
+    (defschema sysdata curtime:time)
+    (deftable systbl:{sysdata})
+    (defconst KEY "sys")
+    (defun set-system-time (curtime) (write systbl KEY { 'curtime: curtime }))
+    (defun get-system-time () (at 'curtime (read systbl KEY)))
+  )
+  (create-table systbl)
+  "system module loaded"
+data:
+  accounts-admin-keyset: ["ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"]
+keyPairs:
+  - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+    secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+nonce: setup-step01

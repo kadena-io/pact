@@ -4,6 +4,7 @@
 
 module Utils.TestRunner
   ( ApiResultCheck (..)
+  , testDir
   , runAll
   , flushDb
   , genKeys
@@ -36,10 +37,10 @@ import Network.Wreq
 import System.Directory
 import NeatInterpolation (text)
 
-_testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
-_testDir = "tests/resume/"
-_testLogDir = "tests/resume/test-log/"
-_testConfigFilePath = "tests/resume/test-config.yaml"
+testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
+testDir = "tests/Utils/"
+_testLogDir = testDir ++ "test-log/"
+_testConfigFilePath = testDir ++ "test-config.yaml"
 
 _testPort = "8080"
 _serverPath = "http://localhost:" ++ _testPort ++ "/api/v1/"

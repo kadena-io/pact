@@ -21,7 +21,7 @@ module Pact.ApiReq
      KeyPair(..)
     ,ApiReq(..)
     ,apiReq
-    ,mkApiReqExec
+    ,mkApiReq
     ,mkExec
     ,mkCont
     ) where
