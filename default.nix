@@ -49,12 +49,12 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv >= 7.6
+            # sbv >= 7.9
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "LeventErkok";
               repo = "sbv";
-              rev = "17a962cd096bbf699fdc576e7bc3c1ad0cd0f723";
-              sha256 = "1k4gsw4i754l84s45ygj96r2wgy46ml6njacf0qn0pjvyps6q8hy";
+              rev = "3dc60340634c82f39f6c5dca2b3859d10925cfdf";
+              sha256 = "18xcxg1h19zx6gdzk3dfs87447k3xjqn40raghjz53bg5k8cdc31";
             }) {});
 
             # Most recent github commit.  Might also work with 0.14.0.2
