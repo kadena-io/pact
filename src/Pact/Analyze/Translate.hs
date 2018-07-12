@@ -10,10 +10,8 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative, (<|>))
 import           Control.Lens               (at, view, (<&>), (?~), (^.),
                                              (^?))
-import           Control.Monad              (MonadPlus (mzero))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Gen          (GenT, MonadGen(gen))
@@ -36,6 +34,7 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           System.Locale              (defaultTimeLocale)
 
+import           Pact.Analyze.Parse
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types
@@ -51,7 +50,6 @@ data TranslateFailure
   | TypeMismatch EType EType
   | UnexpectedNode (AST Node)
   | MissingConcreteType (Pact.Type Pact.UserType)
-  | AlternativeFailures [TranslateFailure]
   | MonadFailure String
   | NonStaticColumns (AST Node)
   | BadNegationType (AST Node)
@@ -74,7 +72,6 @@ describeTranslateFailure = \case
   TypeMismatch ty1 ty2 -> "Type mismatch: (" <> tShow ty1 <> ") vs (" <> tShow ty2 <> ")"
   UnexpectedNode ast -> "Unexpected node in translation: " <> tShow ast
   MissingConcreteType ty -> "The typechecker should always produce a concrete type, but we found " <> tShow ty
-  AlternativeFailures failures -> "Multiple failures: " <> T.unlines (mappend "  " . describeTranslateFailure <$> failures)
   MonadFailure str -> "Translation failure: " <> T.pack str
   NonStaticColumns col -> "When reading only certain columns we require all columns to be concrete in order to do analysis. We found " <> tShow col
   BadNegationType node -> "Invalid: negation of a non-integer / decimal: " <> tShow node
@@ -86,13 +83,6 @@ describeTranslateFailure = \case
     tShow :: Show a => a -> Text
     tShow = T.pack . show
 
-instance Monoid TranslateFailure where
-  mempty = AlternativeFailures []
-  mappend (AlternativeFailures xs) (AlternativeFailures ys) = AlternativeFailures (xs `mappend` ys)
-  mappend (AlternativeFailures xs) x = AlternativeFailures (x:xs)
-  mappend x (AlternativeFailures xs) = AlternativeFailures (x:xs)
-  mappend x y = AlternativeFailures [x, y]
-
 mkTranslateEnv :: [Arg] -> Map Node (Text, UniqueId)
 mkTranslateEnv = foldl'
   (\m (nm, uid, node) -> Map.insert node (nm, uid) m)
@@ -100,7 +90,7 @@ mkTranslateEnv = foldl'
 
 newtype TranslateM a
   = TranslateM { unTranslateM :: ReaderT (Map Node (Text, UniqueId)) (GenT UniqueId (Except TranslateFailure)) a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus,
+  deriving (Functor, Applicative, Monad,
     MonadReader (Map Node (Text, UniqueId)), MonadError TranslateFailure, MonadGen UniqueId)
 
 instance MonadFail TranslateM where
@@ -338,112 +328,109 @@ translateNode astNode = case astNode of
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
     -> pure $ ETerm (lit (mkTime timeLit')) TTime
 
-  AST_NFun_Basic fn args ->
-    let mkComparison :: TranslateM ETerm
-        mkComparison = case args of
-          [a, b] -> do
-            ETerm a' ta <- translateNode a
-            ETerm b' tb <- translateNode b
-            op <- case fn of
-              ">"  -> pure Gt
-              "<"  -> pure Lt
-              ">=" -> pure Gte
-              "<=" -> pure Lte
-              "="  -> pure Eq
-              "!=" -> pure Neq
-              _    -> throwError $ MalformedComparison fn args
-            case typeEq ta tb of
-              Just Refl -> pure $ ETerm (Comparison op a' b') TBool
-              _         -> throwError (TypeMismatch (EType ta) (EType tb))
-          _ -> throwError $ MalformedComparison fn args
+  AST_NFun_Basic "mod" [a, b] ->  do
+    ETerm a' TInt <- translateNode a
+    ETerm b' TInt <- translateNode b
+    pure (ETerm (ModOp a' b') TInt)
 
-        mkLogical :: TranslateM ETerm
-        mkLogical = case args of
-          [a] -> do
-            ETerm a' TBool <- translateNode a
-            case fn of
-              "not" -> pure $ ETerm (Logical NotOp [a']) TBool
-              _     -> throwError $ MalformedComparison fn args
-          [a, b] -> do
-            ETerm a' TBool <- translateNode a
-            ETerm b' TBool <- translateNode b
-            case fn of
-              "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
-              "or"  -> pure $ ETerm (Logical OrOp [a', b']) TBool
-              _     -> throwError $ MalformedLogicalOp fn args
-          _ -> throwError $ MalformedLogicalOp fn args
+  AST_NFun_Basic (textToComparisonOp -> Just op) [a, b] -> do
+    ETerm a' ta <- translateNode a
+    ETerm b' tb <- translateNode b
+    case typeEq ta tb of
+      Just Refl -> pure $ ETerm (Comparison op a' b') TBool
+      _         -> throwError (TypeMismatch (EType ta) (EType tb))
 
-        mkArith :: TranslateM ETerm
-        mkArith = case args of
-          [a, b] -> do
-            ETerm a' tyA <- translateNode a
-            ETerm b' tyB <- translateNode b
-            if
-              | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
-                -> let opFromName = \case
-                         ("+" :: Text) -> Add
-                         "-"           -> Sub
-                         "*"           -> Mul
-                         "/"           -> Div
-                         "^"           -> Pow
-                         "log"         -> Log
-                         _             -> error "impossible"
-                 in case (tyA, tyB) of
-                   (TInt, TInt)         -> pure $
-                     ETerm (IntArithOp (opFromName fn) a' b') TInt
-                   (TDecimal, TDecimal) -> pure $
-                     ETerm (DecArithOp (opFromName fn) a' b') TDecimal
-                   (TInt, TDecimal)     -> pure $
-                     ETerm (IntDecArithOp (opFromName fn) a' b') TDecimal
-                   (TDecimal, TInt)     -> pure $
-                     ETerm (DecIntArithOp (opFromName fn) a' b') TDecimal
-                   _ -> throwError $ MalformedArithOp fn args
-              | otherwise -> case (tyA, tyB, fn) of
-                (TDecimal, TInt, "round")   -> pure $
-                  ETerm (RoundingLikeOp2 Round a' b') TDecimal
-                (TDecimal, TInt, "ceiling") -> pure $
-                  ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
-                (TDecimal, TInt, "floor")   -> pure $
-                  ETerm (RoundingLikeOp2 Floor a' b') TDecimal
-                _ -> throwError $ MalformedArithOp fn args
-          [a] -> do
-            ETerm a' ty <- translateNode a
-            case (fn, ty) of
-              ("-",    TInt) -> pure $ ETerm (IntUnaryArithOp Negate a') TInt
-              ("sqrt", TInt) -> pure $ ETerm (IntUnaryArithOp Sqrt a') TInt
-              ("ln",   TInt) -> pure $ ETerm (IntUnaryArithOp Ln a') TInt
-              ("exp",  TInt) -> pure $ ETerm (IntUnaryArithOp Exp a') TInt
-              ("abs",  TInt) -> pure $ ETerm (IntUnaryArithOp Abs a') TInt
+  AST_NFun_Basic fn@(textToComparisonOp -> Just _) args
+    -> throwError $ MalformedComparison fn args
 
-              ("-",    TDecimal) -> pure $ ETerm (DecUnaryArithOp Negate a') TDecimal
-              ("sqrt", TDecimal) -> pure $ ETerm (DecUnaryArithOp Sqrt a') TDecimal
-              ("ln",   TDecimal) -> pure $ ETerm (DecUnaryArithOp Ln a') TDecimal
-              ("exp",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Exp a') TDecimal
-              ("abs",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Abs a') TDecimal
+  -- logical: not, and, or
 
-              ("round",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Round a') TInt
-              ("ceiling", TDecimal) -> pure $ ETerm (RoundingLikeOp1 Ceiling a') TInt
-              ("floor",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Floor a') TInt
-              _         -> throwError $ MalformedArithOp fn args
-          _ -> throwError $ MalformedArithOp fn args
+  AST_NFun_Basic "not" [a] -> do
+    ETerm a' TBool <- translateNode a
+    pure $ ETerm (Logical NotOp [a']) TBool
 
-        mkConcat :: TranslateM ETerm
-        mkConcat = case (fn, args) of
-          ("+", [a, b]) -> do
-            ETerm a' TStr <- translateNode a
-            ETerm b' TStr <- translateNode b
-            pure (ETerm (Concat a' b') TStr)
-          _ -> mzero
+  AST_NFun_Basic fn args@[a, b]
+    | fn == "and" || fn == "or" -> do
+      ETerm a' tyA <- translateNode a
+      ETerm b' tyB <- translateNode b
+      case (tyA, tyB) of
+        (TBool, TBool) -> case fn of
+          "and" -> pure $ ETerm (Logical AndOp [a', b']) TBool
+          "or"  -> pure $ ETerm (Logical OrOp [a', b']) TBool
+          _     -> error "impossible"
+        _ -> throwError $ MalformedLogicalOp fn args
 
-        mkMod :: TranslateM ETerm
-        mkMod = case (fn, args) of
-          ("mod", [a, b]) -> do
-            ETerm a' TInt <- translateNode a
-            ETerm b' TInt <- translateNode b
-            pure (ETerm (ModOp a' b') TInt)
-          _ -> mzero
+  AST_NFun_Basic fn@(textToLogicalOp -> Just _) args
+    -> throwError $ MalformedLogicalOp fn args
 
-    in mkMod <|> mkArith <|> mkComparison <|> mkLogical <|> mkConcat
+  -- arithmetic
+
+  AST_NFun_Basic fn args@[a, b]
+    | fn `Set.member` Set.fromList ["round", "ceiling", "floor"] -> do
+      ETerm a' tyA <- translateNode a
+      ETerm b' tyB <- translateNode b
+      case (tyA, tyB, fn) of
+        (TDecimal, TInt, "round")   -> pure $
+          ETerm (RoundingLikeOp2 Round a' b') TDecimal
+        (TDecimal, TInt, "ceiling") -> pure $
+          ETerm (RoundingLikeOp2 Ceiling a' b') TDecimal
+        (TDecimal, TInt, "floor")   -> pure $
+          ETerm (RoundingLikeOp2 Floor a' b') TDecimal
+        _ -> throwError $ MalformedArithOp fn args
+
+  AST_NFun_Basic fn [a]
+    | fn `Set.member` Set.fromList
+      ["-", "sqrt", "ln", "exp", "abs", "round", "ceiling", "floor"]
+    -> do
+      ETerm a' ty <- translateNode a
+      case (fn, ty) of
+        ("-",    TInt) -> pure $ ETerm (IntUnaryArithOp Negate a') TInt
+        ("sqrt", TInt) -> pure $ ETerm (IntUnaryArithOp Sqrt a') TInt
+        ("ln",   TInt) -> pure $ ETerm (IntUnaryArithOp Ln a') TInt
+        ("exp",  TInt) -> pure $ ETerm (IntUnaryArithOp Exp a') TInt
+        ("abs",  TInt) -> pure $ ETerm (IntUnaryArithOp Abs a') TInt
+
+        ("-",    TDecimal) -> pure $ ETerm (DecUnaryArithOp Negate a') TDecimal
+        ("sqrt", TDecimal) -> pure $ ETerm (DecUnaryArithOp Sqrt a') TDecimal
+        ("ln",   TDecimal) -> pure $ ETerm (DecUnaryArithOp Ln a') TDecimal
+        ("exp",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Exp a') TDecimal
+        ("abs",  TDecimal) -> pure $ ETerm (DecUnaryArithOp Abs a') TDecimal
+
+        ("round",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Round a') TInt
+        ("ceiling", TDecimal) -> pure $ ETerm (RoundingLikeOp1 Ceiling a') TInt
+        ("floor",   TDecimal) -> pure $ ETerm (RoundingLikeOp1 Floor a') TInt
+        _ -> throwError $ MalformedArithOp fn [a]
+
+  AST_NFun_Basic "+" [a, b] -> do
+    ETerm a' tyA <- translateNode a
+    ETerm b' tyB <- translateNode b
+    case (tyA, tyB) of
+      (TStr, TStr)         -> pure $ ETerm (Concat a' b') TStr
+      (TInt, TInt)         -> pure $ ETerm (IntArithOp Add a' b') TInt
+      (TDecimal, TDecimal) -> pure $ ETerm (DecArithOp Add a' b') TDecimal
+      (TInt, TDecimal)     -> pure $ ETerm (IntDecArithOp Add a' b') TDecimal
+      (TDecimal, TInt)     -> pure $ ETerm (DecIntArithOp Add a' b') TDecimal
+      -- TODO(joel): handle other forms of plus! (object merging)
+      _ -> throwError $ MalformedArithOp "+" [a, b]
+
+  AST_NFun_Basic fn args@[a, b]
+    | fn `Set.member` Set.fromList ["-", "*", "/", "^"] -> do
+      ETerm a' tyA <- translateNode a
+      ETerm b' tyB <- translateNode b
+      let Just op = textToArithOp fn
+      case (tyA, tyB) of
+        (TInt, TInt)         -> pure $
+          ETerm (IntArithOp op a' b') TInt
+        (TDecimal, TDecimal) -> pure $
+          ETerm (DecArithOp op a' b') TDecimal
+        (TInt, TDecimal)     -> pure $
+          ETerm (IntDecArithOp op a' b') TDecimal
+        (TDecimal, TInt)     -> pure $
+          ETerm (DecIntArithOp op a' b') TDecimal
+        _ -> throwError $ MalformedArithOp fn args
+
+  AST_NFun_Basic fn@(textToArithOp -> Just _) args
+    -> throwError $ MalformedArithOp fn args
 
   AST_NFun _node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do

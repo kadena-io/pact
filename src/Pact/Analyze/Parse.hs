@@ -9,6 +9,9 @@ module Pact.Analyze.Parse
   ( expToCheck
   , expToProp
   , expToInvariant
+  , textToArithOp
+  , textToComparisonOp
+  , textToLogicalOp
   ) where
 
 import           Control.Lens         (at, view, (^.))
