@@ -1,9 +1,0 @@
-type: "cont"
-txId: 5
-step: 3
-rollback: False
-code: (+ 1 2)
-keyPairs:
-    - public: ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9 
-      secret: 756f0d270d3ed42594529817e89ffa311b4bd5359d76cbcbb135fb178071faaa
-nonce: step04

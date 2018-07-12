@@ -38,7 +38,7 @@ import System.Directory
 import NeatInterpolation (text)
 
 testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
-testDir = "tests/Utils/"
+testDir = "tests/"
 _testLogDir = testDir ++ "test-log/"
 _testConfigFilePath = testDir ++ "test-config.yaml"
 
