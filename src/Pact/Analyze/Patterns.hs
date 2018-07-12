@@ -85,6 +85,18 @@ pattern AST_ReadKeyset :: forall a. AST a -> AST a
 pattern AST_ReadKeyset name <-
   App _node (NativeFunc "read-keyset") [name]
 
+pattern AST_ReadDecimal :: forall a. AST a -> AST a
+pattern AST_ReadDecimal name <-
+  App _node (NativeFunc "read-decimal") [name]
+
+pattern AST_ReadInteger :: forall a. AST a -> AST a
+pattern AST_ReadInteger name <-
+  App _node (NativeFunc "read-integer") [name]
+
+pattern AST_ReadMsg :: forall a. AST a -> AST a
+pattern AST_ReadMsg name <-
+  App _node (NativeFunc "read-msg") [name]
+
 pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object

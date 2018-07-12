@@ -75,9 +75,11 @@ import qualified Pact.Analyze.Types        as Types
 
 data AnalyzeEnv
   = AnalyzeEnv
-    { _aeScope    :: Map UniqueId AVal           -- used as a stack
-    , _aeKeySets  :: SFunArray KeySetName KeySet -- read-only
-    , _aeKsAuths  :: SFunArray KeySet Bool       -- read-only
+    { _aeScope    :: Map UniqueId AVal            -- used as a stack
+    -- TODO(Joel): should this key be String?
+    , _aeKeySets  :: SFunArray KeySetName KeySet  -- read-only
+    , _aeKsAuths  :: SFunArray KeySet Bool        -- read-only
+    , _aeDecimals :: SFunArray String Decimal -- read-only
     , _invariants :: Map TableName [Invariant Bool]
     }
   deriving Show
@@ -431,13 +433,14 @@ allocateArgMap args = fmap Map.fromList $ for args $ \(name, uid, node) ->
 
 mkAnalyzeEnv :: Map UniqueId AVal -> [Table] -> AnalyzeEnv
 mkAnalyzeEnv args tables =
-  let keySets'    = mkFreeArray "keySets"
+  let keySets'    = mkFreeArray "envKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
+      decimals    = mkFreeArray "envDecimals"
 
       invariants' = Map.fromList $ tables <&> \(Table tname _ut someInvariants)
         -> (TableName (T.unpack tname), someInvariants)
 
-  in AnalyzeEnv args keySets' keySetAuths invariants'
+  in AnalyzeEnv args keySets' keySetAuths decimals invariants'
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
@@ -462,11 +465,14 @@ class HasAnalyzeEnv a where
   scope :: Lens' a (Map UniqueId AVal)
   scope = analyzeEnv.aeScope
 
-  keySets :: Lens' a (SFunArray KeySetName KeySet)
-  keySets = analyzeEnv.aeKeySets
+  envKeySets :: Lens' a (SFunArray KeySetName KeySet)
+  envKeySets = analyzeEnv.aeKeySets
 
   ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
+
+  envDecimals :: Lens' a (SFunArray String Decimal)
+  envDecimals = analyzeEnv.aeDecimals
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
@@ -634,7 +640,7 @@ resolveKeySet
   => S KeySetName
   -> m (S KeySet)
 resolveKeySet sKsn = fmap sansProv $
-  readArray <$> view keySets <*> pure (_sSbv sKsn)
+  readArray <$> view envKeySets <*> pure (_sSbv sKsn)
 
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
@@ -654,6 +660,14 @@ ksAuthorized sKs = do
     Nothing ->
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
+
+-- TODO: switch to lens
+resolveDecimal
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => S String
+  -> m (S Decimal)
+resolveDecimal sDn = fmap sansProv $
+  readArray <$> view envDecimals <*> pure (_sSbv sDn)
 
 aval
   :: MonadError AnalyzeFailure m
@@ -1023,7 +1037,7 @@ analyzeRoundingLikeOp2 op x precision = do
 -- uses a 64-bit count of microseconds since the MJD epoch. So, our symbolic
 -- representation is naturally a 64-bit integer.
 --
--- The effect from a Pact-user's point of view is that we stores 6 digits to
+-- The effect from a Pact-user's point of view is that we store 6 digits to
 -- the right of the decimal point in times (even though we don't print
 -- sub-second precision by default...).
 --
@@ -1207,7 +1221,8 @@ analyzeTerm = \case
 
   Logical op args -> analyzeLogicalOp op args
 
-  ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
+  ReadKeySet str  -> resolveKeySet =<< symKsName <$> analyzeTerm str
+  ReadDecimal str -> resolveDecimal =<< analyzeTerm str
 
   KsAuthorized ks -> ksAuthorized =<< analyzeTerm ks
   NameAuthorized str -> nameAuthorized =<< symKsName <$> analyzeTerm str

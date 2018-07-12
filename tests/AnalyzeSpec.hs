@@ -249,6 +249,17 @@ spec = describe "analyze" $ do
 
     expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
 
+  -- just a sanity check -- we can't prove much until we can talk about
+  -- read-decimal in properties
+  describe "read-decimal" $ do
+    let code =
+          [text|
+            (defun test:decimal ()
+              (read-decimal "foo"))
+          |]
+    expectPass code $ Satisfiable $ PDecimalComparison Eq Result 0
+    expectPass code $ Satisfiable $ PDecimalComparison Eq Result 1
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|

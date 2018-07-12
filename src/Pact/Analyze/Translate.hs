@@ -287,6 +287,13 @@ translateNode astNode = case astNode of
     ETerm nameT TStr <- translateNode nameA
     return $ ETerm (ReadKeySet nameT) TKeySet
 
+  AST_ReadDecimal nameA -> do
+    ETerm nameT TStr <- translateNode nameA
+    return $ ETerm (ReadDecimal nameT) TDecimal
+
+  AST_ReadInteger _ -> throwError $ UnexpectedNode astNode
+  AST_ReadMsg _     -> throwError $ UnexpectedNode astNode
+
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do

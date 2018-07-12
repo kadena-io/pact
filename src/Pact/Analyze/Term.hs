@@ -49,8 +49,13 @@ data Term ret where
   -- Conditional transaction abort
   Enforce        :: Term Bool -> Term Bool
 
-  -- Keyset access
+  -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet
+  ReadDecimal     :: Term String -> Term Decimal
+
+  -- TODO: ReadInteger, ReadMsg
+
+  -- Keyset access
   KsAuthorized    :: Term KeySet -> Term Bool
   NameAuthorized  :: Term String -> Term Bool
 
