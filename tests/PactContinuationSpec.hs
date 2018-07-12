@@ -410,7 +410,67 @@ testTwoPartyEscrow :: Spec
 testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
   context "when debtor tries to cancel pre-timeout" $
     it "throws error and money still escrowed" $
-      twoPartyEscrow [] [] --testDebtorPreTimeoutCancel
+      testDebtorPreTimeoutCancel
+
+  context "when debtor tries to cancel after timeout" $
+    it "cancels escrow and deposits escrowed amount back to debtor" $
+      testDebtorPostTimeoutCancel
+
+  it "cancels escrow immediately if creditor cancels" $
+    testCreditorCancel
+      
+testDebtorPreTimeoutCancel :: Expectation
+testDebtorPreTimeoutCancel = do
+  let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
+  
+  (_, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
+  (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
+  let allCmds = [tryCancelCmd, checkStillEscrowCmd]
+  
+  let cancelMsg = T.concat ["(enforce-one\n        \"Cancel c...: Failure:",
+                            " Tx Failed: Cancel can only be effected by",
+                            " creditor, or debitor after timeout"]
+      tryCancelCheck        = makeCheck tryCancelCmd True $ Just $ String cancelMsg
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "98.00"
+      allChecks             = [tryCancelCheck, checkStillEscrowCheck]
+
+  twoPartyEscrow allCmds allChecks
+
+testDebtorPostTimeoutCancel :: Expectation
+testDebtorPostTimeoutCancel = do
+  let testPath = testDir ++ "cont-scripts/pass-deb-cancel-"
+
+  (_, setTimeCmd)          <- mkApiReq (testPath ++ "01-set-time.yaml")
+  (_, tryCancelCmd)        <- mkApiReq (testPath ++ "02-rollback.yaml")
+  (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
+  let allCmds = [setTimeCmd, tryCancelCmd, checkStillEscrowCmd]
+
+  let setTimeCheck = makeCheck setTimeCmd False Nothing
+      tryCancelCheck = makeCheck tryCancelCmd False Nothing
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
+      allChecks = [setTimeCheck, tryCancelCheck, checkStillEscrowCheck]
+
+  twoPartyEscrow allCmds allChecks
+
+testCreditorCancel :: Expectation
+testCreditorCancel = do
+  let testPath = testDir ++ "cont-scripts/pass-cred-cancel-"
+
+  (_, resetTimeCmd)        <- mkApiReq (testPath ++ "01-reset.yaml")
+  (_, credCancelCmd)       <- mkApiReq (testPath ++ "02-rollback.yaml")
+  (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "03-balance.yaml")
+  let allCmds = [resetTimeCmd, credCancelCmd, checkStillEscrowCmd]
+
+  let resetTimeCheck = makeCheck resetTimeCmd False Nothing
+      credCancelCheck = makeCheck credCancelCmd False Nothing
+      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
+      allChecks = [resetTimeCheck, credCancelCheck, checkStillEscrowCheck]
+
+  twoPartyEscrow allCmds allChecks
+
+
+
+-- TODO TxId of escrow is 5!!
 
 twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Expectation
 twoPartyEscrow testCmds testChecks = do 
@@ -440,27 +500,4 @@ twoPartyEscrow testCmds testChecks = do
 
   allResults `shouldMatch` allChecks
 
--- TODO TxId of escrow is 5!!
-
-{--testDebtorPreTimeoutCancel :: Expectation
-testDebtorPreTimeoutCancel = do
-  aliceKeys <- genKeys
-  bobKeys <- genKeys
-
-  resetTimeCmd <- mkExec ("(test.reset-time)") Null Nothing [aliceKeys] (Just "test1")
-  runEscrowCmd <- mkExec ("(test.run-escrow \"Alice\" \"Bob\")") Null Nothing [aliceKeys] (Just "test2")
-  checkEscrowCmd <- mkExec ("test.get-balance \"Alice\")") Null Nothing [aliceKeys] (Just "test3")
-  tryCancelCmd <- mkCont (TxId 7) 0 True Null Nothing [aliceKeys] (Just "test4") -- txId num includes setup cmds
-  checkStillEscrowCmd <- mkExec ("test.get-balance \"Alice\")") Null Nothing [aliceKeys] (Just "test5")
-  let allCmds = [resetTimeCmd, runEscrowCmd, checkEscrowCmd, tryCancelCmd, checkStillEscrowCmd]
-  
-
-  let resetTimeCheck = makeCheck resetTimeCmd False Nothing
-      runEscrowCheck = makeCheck runEscrowCmd False Nothing
-      checkEscrowCheck = makeCheck checkEscrowCmd False $ Just (Number 88)
-      tryCancelCheck = makeCheck tryCancelCmd True Nothing
-      checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just (Number 88)
-      allChecks = [resetTimeCheck, runEscrowCheck, checkEscrowCheck, tryCancelCheck, checkStillEscrowCheck]
-
-  twoPartyEscrow aliceKeys bobKeys allCmds allChecks--}
   

@@ -1,0 +1,6 @@
+code: |-
+  (system.set-system-time test.TIMEOUT)
+keyPairs:
+  - public: 7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804
+    secret: 2e8c91521479537221576a7c3c80c46d0fa3fc663804117f0c7011366dec35de
+nonce: pass-deb-cancel-step01
