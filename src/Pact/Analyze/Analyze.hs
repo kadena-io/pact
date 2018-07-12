@@ -26,8 +26,7 @@ import           Control.Lens              (At (at), Index, IxValue, Ixed (ix),
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError (throwError), runExcept)
-import           Control.Monad.Reader      (MonadReader (local), ReaderT,
-                                            runReaderT)
+import           Control.Monad.Reader      (MonadReader (local), ReaderT(..))
 import           Control.Monad.RWS.Strict  (RWST (RWST, runRWST))
 import           Control.Monad.State       (MonadState)
 import           Control.Monad.Trans.Class (lift)
@@ -1107,19 +1106,6 @@ analyzeComparisonOp op xT yT = do
     Eq  -> x .== y
     Neq -> x ./= y
 
-analyzeLogicalOp
-  :: (Analyzer m term, Boolean (S a), Show a, SymWord a)
-  => LogicalOp
-  -> [term a]
-  -> m (S a)
-analyzeLogicalOp op terms = do
-  symBools <- traverse analyze terms
-  case (op, symBools) of
-    (AndOp, [a, b]) -> pure $ a &&& b
-    (OrOp,  [a, b]) -> pure $ a ||| b
-    (NotOp, [a])    -> pure $ bnot a
-    _               -> throwError $ MalformedLogicalOpExec op $ length terms
-
 analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
   IfThenElse cond then' else' -> do
@@ -1233,7 +1219,15 @@ analyzeTerm = \case
 
   Comparison op x y -> analyzeComparisonOp op x y
 
-  Logical op args -> analyzeLogicalOp op args
+  -- short-circuit and / or
+  Logical AndOp [a, b] -> do
+    a' <- analyze a
+    ite (_sSbv a') (analyze b) (pure false)
+  Logical OrOp [a, b] -> do
+    a' <- analyze a
+    ite (_sSbv a') (pure true) (analyze b)
+  Logical NotOp [a] -> bnot <$> analyze a
+  Logical op terms -> throwError $ MalformedLogicalOpExec op $ length terms
 
   ReadKeySet str  -> resolveKeySet =<< symKsName <$> analyzeTerm str
   ReadDecimal str -> resolveDecimal =<< analyzeTerm str
@@ -1453,7 +1447,13 @@ analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
 analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 
 -- Boolean ops
-analyzeProp (PLogical op props) = analyzeLogicalOp op props
+analyzeProp (PLogical op props) = do
+  symBools <- traverse analyzeProp props
+  case (op, symBools) of
+    (AndOp, [a, b]) -> pure $ a &&& b
+    (OrOp,  [a, b]) -> pure $ a ||| b
+    (NotOp, [a])    -> pure $ bnot a
+    _               -> throwError $ MalformedLogicalOpExec op $ length props
 
 -- DB properties
 analyzeProp (TableRead tn)  = view $ model.tableRead tn

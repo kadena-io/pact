@@ -453,11 +453,45 @@ spec = describe "analyze" $ do
           [text|
         (defun test:bool ()
           (enforce-one ""
+            [(or (enforce false)
+                 (enforce true))]))
+          |]
+
+    expectPass code $ Valid $ PNot Success
+
+  -- This one is also subtle. `or` short-circuits so the second `enforce` never
+  -- throws.
+  describe "enforce-one.5" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
             [(or (enforce true)
                  (enforce false))]))
           |]
 
-    expectPass code $ Valid $ PNot Success
+    expectPass code $ Valid Success
+
+  describe "logical short-circuiting" $ do
+    describe "and" $ do
+      let code =
+            [text|
+          (defun test:bool (x: bool)
+            (and x (enforce false)))
+            |]
+
+      expectPass code $ Valid $ PVar 0 "x" ==> PNot Success
+      expectPass code $ Valid $ PNot (PVar 0 "x") ==> Success
+
+    describe "or" $ do
+      let code =
+            [text|
+          (defun test:bool (x: bool)
+            (or x (enforce false)))
+            |]
+
+      expectPass code $ Valid $ PVar 0 "x" ==> Success
+      expectPass code $ Valid $ PNot (PVar 0 "x") ==> PNot Success
 
   describe "table-read.multiple-read" $
     let code =
