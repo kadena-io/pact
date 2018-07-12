@@ -672,7 +672,7 @@ runTranslation info pactArgs body = do
       -- methods require a reader in a pair.
       runStateT
         (runReaderT (traverse translateArg pactArgs) (info, ()))
-        (VarId 0)
+        (VarId 1)
 
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])

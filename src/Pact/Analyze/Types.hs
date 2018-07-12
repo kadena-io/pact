@@ -481,8 +481,8 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  -- -- TODO: parse
-  -- -- | PreAt {- Schema -} PreProp PreProp -- EType
+  | PreAt Text PreProp
+  | PreLiteralObject (Map Text PreProp)
   deriving Eq
 
 pattern TableNameLit :: String -> Prop TableName
@@ -535,6 +535,8 @@ data Prop a where
   --
   -- | Projects from an object at a key
   PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop a
+
+  PLiteralObject :: Map Text EProp -> Prop Object
 
   -- String ops
 
@@ -655,6 +657,26 @@ pattern PNot a = PLogical NotOp [a]
 
 deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
+
+data EProp where
+  EProp
+    :: (SymWord a, SMTValue a, Show a, Eq a)
+    => Type a -> Prop a -> EProp
+  EObjectProp :: Schema -> Prop Object -> EProp
+
+deriving instance Show EProp
+
+instance Eq EProp where
+  EProp ta pa == EProp tb pb = case typeEq ta tb of
+    Just Refl -> pa == pb
+    Nothing   -> False
+  EObjectProp sa pa == EObjectProp sb pb = sa == sb && pa == pb
+  _ == _ = False
+
+ePropToEType :: EProp -> EType
+ePropToEType = \case
+  EProp ty _            -> EType ty
+  EObjectProp schema' _ -> EObjectTy schema'
 
 instance Boolean (Prop Bool) where
   true   = PLit True
@@ -825,7 +847,7 @@ instance UserShow ArithOp where
     Log -> "log"
 
 instance UserShow PreProp where
-  userShowsPrec _d = \case
+  userShowsPrec prec = \case
     PreIntegerLit i -> tShow i
     PreStringLit t  -> tShow t
     PreDecimalLit d -> tShow d
@@ -844,6 +866,9 @@ instance UserShow PreProp where
     PreApp name applicands -> "(" <> name <> " " <> T.unwords
       ((map userShow) applicands) <> ")"
 
+    PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
+    PreLiteralObject obj -> userShowsPrec prec obj
+
 instance UserShow Pact.Exp where
   userShowsPrec _ = tShow
 
@@ -860,11 +885,14 @@ instance UserShow TableName where
 instance UserShow ColumnName where
   userShowsPrec _ (ColumnName cn) = T.pack cn
 
+instance UserShow a => UserShow (Map Text a) where
+  userShowsPrec _ m =
+    let go result k a = result <> ", " <> k <> ": " <> userShow a
+    in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
+
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where
-  userShowsPrec _ (Schema schema) =
-    let go result k a = result <> ", " <> k <> ": " <> userShow a
-    in "{ " <> T.drop 2 (Map.foldlWithKey go "" schema) <> " }"
+  userShowsPrec d (Schema schema) = userShowsPrec d schema
 
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0

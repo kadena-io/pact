@@ -337,15 +337,16 @@ verify i as = case as of
         modResult <- liftIO $ verifyModule modules md
         -- TODO: build describeModuleResult
         case modResult of
-          ModuleParseFailures failures  -> setop $ TcErrors $
+          Left (ModuleParseFailures failures)  -> setop $ TcErrors $
             fmap (Text.unpack . describeParseFailure) $ failures
-          ModuleCheckFailure checkFailure -> setop $ TcErrors $
+          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors $
             pure $ Text.unpack $ describeCheckFailure checkFailure
-          ModuleChecks propResults invariantResults -> setop $ TcErrors $
+          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors $ pure $
+            Text.unpack $ msg <> ": " <> tShow ty
+          Right (ModuleChecks propResults invariantResults) -> setop $ TcErrors $
             let propResults'      = propResults      ^.. traverse . each
                 invariantResults' = invariantResults ^.. traverse . traverse . each
             in Text.unpack . describeCheckResult <$> propResults' <> invariantResults'
-
 
         return (tStr "")
 

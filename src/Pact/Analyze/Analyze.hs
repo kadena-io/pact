@@ -10,7 +10,6 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeApplications           #-}
 
 module Pact.Analyze.Analyze where
@@ -1434,6 +1433,15 @@ analyzePropO :: Prop Object -> Query Object
 analyzePropO Result = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
+analyzePropO (PLiteralObject props) = do
+  props' <- for props $ \case
+    EProp ty prop       -> do
+      prop' <- analyzeProp prop
+      pure (EType ty, mkAVal prop')
+    EObjectProp ty prop -> do
+      prop' <- analyzePropO prop
+      pure (EObjectTy ty, AnObj prop')
+  pure $ Object props'
 analyzePropO (PLit _) = throwErrorNoLoc "We don't support property object literals"
 analyzePropO (PSym _) = throwErrorNoLoc "Symbolic values can't be objects"
 
@@ -1445,6 +1453,7 @@ analyzeProp Success = view $ qeAnalyzeState.succeeds
 analyzeProp Abort   = bnot <$> analyzeProp Success
 analyzeProp Result  = expectVal =<< view qeAnalyzeResult
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
+analyzeProp (PLiteralObject _) = error "objects are not SymWords"
 
 -- Abstraction
 analyzeProp (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
