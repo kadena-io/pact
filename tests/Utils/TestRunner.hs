@@ -59,18 +59,17 @@ runAll cmds = do
   withAsync (serve _testConfigFilePath) $ \_ -> do
     sendResp <- doSend $ SubmitBatch cmds
     case sendResp of
-      ApiFailure _ -> return $ HM.empty
+      ApiFailure _ -> return HM.empty
       ApiSuccess RequestKeys{..} -> do
         pollResp <- doPoll $ Poll _rkRequestKeys
         case pollResp of
-          ApiFailure _ -> return $ HM.empty
+          ApiFailure _ -> return HM.empty
           ApiSuccess (PollResponses apiResults) -> do
             return apiResults
 
 doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
 doSend req = do
-  sendResp <- doSend' req
-  return $ view responseBody sendResp
+  view responseBody <$> doSend' req
     
 doSend' :: (ToJSON req) => req -> IO (Response (ApiResponse RequestKeys))
 doSend' req = do
@@ -79,8 +78,7 @@ doSend' req = do
 
 doPoll :: (ToJSON req) => req -> IO (ApiResponse PollResponses)
 doPoll req = do
-  pollResp <- doPoll' req
-  return $ view responseBody pollResp
+  view responseBody <$> doPoll' req
 
 doPoll' :: (ToJSON req) => req -> IO (Response (ApiResponse PollResponses))
 doPoll' req = do
@@ -112,21 +110,21 @@ checkResult isFailure expect result =
     Nothing -> False
     Just (ApiResult cmdRes _ _) ->
       case cmdRes of
-        Object h -> if isFailure then (checkIfFailure h expect)
-                    else (checkIfSuccess h expect)
+        Object h -> if isFailure then checkIfFailure h expect
+                    else checkIfSuccess h expect
         _ -> False
 
 checkIfSuccess :: Object -> Maybe Value -> Bool
-checkIfSuccess h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "success")
+checkIfSuccess h Nothing = HM.lookup (T.pack "status") h == (Just . String . T.pack) "success"
 checkIfSuccess h (Just expect) = isSuccess && isMatch
-  where isSuccess = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "success")
-        isMatch = (HM.lookup (T.pack "data") h == Just (toJSON expect))
+  where isSuccess = HM.lookup (T.pack "status") h == (Just . String . T.pack) "success"
+        isMatch = HM.lookup (T.pack "data") h == Just (toJSON expect)
 
 checkIfFailure :: Object -> Maybe Value -> Bool
-checkIfFailure h Nothing = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure")
+checkIfFailure h Nothing = HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure"
 checkIfFailure h (Just expect) = isFailure && isMatch
-  where isFailure = (HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure")
-        isMatch = (HM.lookup (T.pack "detail") h == Just (toJSON expect))
+  where isFailure = HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure"
+        isMatch = HM.lookup (T.pack "detail") h == Just (toJSON expect)
 
 
 

@@ -98,7 +98,7 @@ mkApiReq fp = do
 
 mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
 mkApiReqExec ar@ApiReq{..} fp = do
-  (code,cdata) <- (withCurrentDirectory (takeDirectory fp)) $ do
+  (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
       (Just f,Nothing) -> liftIO (readFile f)
@@ -141,7 +141,7 @@ mkApiReqCont ar@ApiReq{..} fp = do
     Just r  -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  cdata <- (withCurrentDirectory (takeDirectory fp)) $ do
+  cdata <- withCurrentDirectory (takeDirectory fp) $ do
     case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
       (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
@@ -165,7 +165,7 @@ mkCont txid step rollback mdata addy kps ridm = do
     (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
-    (((Continuation (ContMsg txid step rollback mdata)) :: (PactRPC ContMsg)))
+    (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\

@@ -137,7 +137,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 
           -- Setup environement and get result
           let sigs = userSigsToPactKeySet _cmdSigs
-              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) _cpYield
+              pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)

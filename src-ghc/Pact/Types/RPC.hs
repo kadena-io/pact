@@ -81,5 +81,5 @@ instance FromJSON ContMsg where
     {-# INLINE parseJSON #-}
 
 instance ToJSON ContMsg where
-    toJSON ContMsg{..} = object $
+    toJSON ContMsg{..} = object
       [ "txid" .= _cmTxId, "step" .= _cmStep, "rollback" .= _cmRollback, "data" .= _cmData]

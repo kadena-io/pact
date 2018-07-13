@@ -44,7 +44,7 @@ testPactContinuation = before_ flushDb $ after_ flushDb $ do
     testSimpleServerCmd `shouldReturn` expRes
 
   context "when provided with correct next step" $
-    it "executes the next step and updates pact's state" $
+    it "executes the next step and updates pact's state"
       testCorrectNextStep
 
   context "when provided with incorrect next step" $
@@ -74,7 +74,7 @@ testCorrectNextStep = do
   adminKeys <- genKeys
 
   moduleCmd       <- mkExec (T.unpack (threeStepPactCode moduleName))
-                     (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
                      Nothing [adminKeys] (Just "test1")
   executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
                      Null Nothing [adminKeys] (Just "test2")
@@ -98,7 +98,7 @@ testIncorrectNextStep = do
   adminKeys <- genKeys
 
   moduleCmd         <- mkExec (T.unpack (threeStepPactCode moduleName))
-                       (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                       (object ["admin-keyset" .= [_kpPublic adminKeys]])
                        Nothing [adminKeys] (Just "test1")
   executePactCmd    <- mkExec ("(" ++ moduleName ++ ".tester)")
                        Null Nothing [adminKeys] (Just "test2")
@@ -108,7 +108,7 @@ testIncorrectNextStep = do
   
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
-      incorrectStepCheck = makeCheck incorrectStepCmd True $
+      incorrectStepCheck = makeCheck incorrectStepCmd True
                            (Just "Invalid continuation step value: Received 2 but expected 1")
       checkStateCheck    = makeCheck checkStateCmd False $ Just "step 1"
       allChecks          = [moduleCheck, executePactCheck, incorrectStepCheck, checkStateCheck]
@@ -122,7 +122,7 @@ testLastStep = do
   adminKeys <- genKeys
 
   moduleCmd        <- mkExec (T.unpack (threeStepPactCode moduleName))
-                      (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
                       Nothing [adminKeys] (Just "test1")
   executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
                       Null Nothing [adminKeys] (Just "test2")
@@ -150,7 +150,7 @@ testErrStep = do
   adminKeys <- genKeys
 
   moduleCmd        <- mkExec (T.unpack (errorStepPactCode moduleName))
-                      (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
                       Nothing [adminKeys] (Just "test1")
   executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
                       Null Nothing [adminKeys] (Just "test2")
@@ -196,7 +196,7 @@ testCorrectRollbackStep = do
   adminKeys <- genKeys
 
   moduleCmd       <- mkExec (T.unpack (pactWithRollbackCode moduleName))
-                     (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
                      Nothing [adminKeys] (Just "test1")
   executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
                      Null Nothing [adminKeys] (Just "test2")
@@ -224,7 +224,7 @@ testIncorrectRollbackStep = do
   adminKeys <- genKeys
 
   moduleCmd       <- mkExec (T.unpack (pactWithRollbackCode moduleName))
-                     (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                     (object ["admin-keyset" .= [_kpPublic adminKeys]])
                      Nothing [adminKeys] (Just "test1")
   executePactCmd  <- mkExec ("(" ++ moduleName ++ ".tester)")
                      Null Nothing [adminKeys] (Just "test2")
@@ -237,7 +237,7 @@ testIncorrectRollbackStep = do
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
-      incorrectRbCheck  = makeCheck incorrectRbCmd True $
+      incorrectRbCheck  = makeCheck incorrectRbCmd True 
                           (Just "Invalid rollback step value: Received 2 but expected 1")
       checkStateCheck   = makeCheck checkStateCmd False $ Just "step 2"
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
@@ -252,7 +252,7 @@ testRollbackErr = do
   adminKeys <- genKeys
 
   moduleCmd        <- mkExec (T.unpack (pactWithRollbackErrCode moduleName))
-                      (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
                       Nothing [adminKeys] (Just "test1")
   executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
                       Null Nothing [adminKeys] (Just "test2")
@@ -280,7 +280,7 @@ testNoRollbackFunc = do
   adminKeys <- genKeys
 
   moduleCmd        <- mkExec (T.unpack (threeStepPactCode moduleName))
-                      (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                      (object ["admin-keyset" .= [_kpPublic adminKeys]])
                       Nothing [adminKeys] (Just "test1")
   executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
                       Null Nothing [adminKeys] (Just "test2")
@@ -325,7 +325,7 @@ testValidYield = do
   adminKeys <- genKeys
 
   moduleCmd          <- mkExec (T.unpack (pactWithYield moduleName))
-                        (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                        (object ["admin-keyset" .= [_kpPublic adminKeys]])
                         Nothing [adminKeys] (Just "test1")
   executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
                         Null Nothing [adminKeys] (Just "test2")
@@ -353,7 +353,7 @@ testNoYield = do
   adminKeys <- genKeys
 
   moduleCmd      <- mkExec (T.unpack (pactWithYieldErr moduleName))
-                    (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                    (object ["admin-keyset" .= [_kpPublic adminKeys]])
                     Nothing [adminKeys] (Just "test1")
   executePactCmd <- mkExec ("(" ++ moduleName ++ ".tester \"testing\")") -- pact takes an input
                     Null Nothing [adminKeys] (Just "test2")
@@ -381,7 +381,7 @@ testResetYield = do
   adminKeys <- genKeys
 
   moduleCmd        <- mkExec (T.unpack (pactWithSameNameYield moduleName))
-                        (object ["admin-keyset" .= [(_kpPublic adminKeys)]])
+                        (object ["admin-keyset" .= [_kpPublic adminKeys]])
                         Nothing [adminKeys] (Just "test1")
   executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)") 
                         Null Nothing [adminKeys] (Just "test2")
@@ -409,24 +409,24 @@ testResetYield = do
 testTwoPartyEscrow :: Spec
 testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
   context "when debtor tries to cancel pre-timeout" $
-    it "throws error and money still escrowed" $
+    it "throws error and money still escrowed"
       testDebtorPreTimeoutCancel
 
   context "when debtor tries to cancel after timeout" $
-    it "cancels escrow and deposits escrowed amount back to debtor" $
+    it "cancels escrow and deposits escrowed amount back to debtor"
       testDebtorPostTimeoutCancel
 
-  it "cancels escrow immediately if creditor cancels" $
+  it "cancels escrow immediately if creditor cancels"
     testCreditorCancel
 
-  it "throws error when creditor or debtor try to finish alone" $
+  it "throws error when creditor or debtor try to finish alone"
     testFinishAlone
 
-  it "throws error when final price negotiated up" $
+  it "throws error when final price negotiated up"
     testPriceNegUp
 
   context "when both debtor and creditor finish together" $
-    it "finishes escrow if final price stays the same or negotiated down" $
+    it "finishes escrow if final price stays the same or negotiated down"
       testValidEscrowFinish
       
 testDebtorPreTimeoutCancel :: Expectation
@@ -500,7 +500,7 @@ testPriceNegUp = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
   
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
-  let tryNegUpCheck = makeCheck tryNegUpCmd True $
+  let tryNegUpCheck = makeCheck tryNegUpCmd True
                       (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
 
   twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck]
@@ -514,7 +514,7 @@ testValidEscrowFinish = do
   (_, debBalanceCmd) <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
   
-  let tryNegDownCheck  = makeCheck tryNegDownCmd False $ 
+  let tryNegDownCheck  = makeCheck tryNegDownCmd False
                          (Just "Escrow completed with 1.75 paid and 0.25 refunded")
       credBalanceCheck = makeCheck credBalanceCmd False $ Just "1.75"
       debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
