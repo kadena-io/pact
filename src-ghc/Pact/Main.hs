@@ -38,7 +38,7 @@ import Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Pact.Repl
-import Pact.Parse
+import Pact.PactExpParser
 import Pact.Types.Runtime hiding (PublicKey)
 import Pact.Server.Server
 #ifndef mingw32_HOST_OS

@@ -80,7 +80,7 @@ parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
 parseColumnName bad = throwError $ T.unpack $
   "invalid table name: " <> userShow bad
 
--- The conversion from @Exp@ to @PreProp@
+-- The conversion from @PactExp@ to @PreProp@
 --
 --
 -- The biggest thing it handles is generating unique ids for variables and
@@ -92,7 +92,7 @@ parseColumnName bad = throwError $ T.unpack $
 -- @ComparisonOp@, etc. We handle this in @checkPreProp@ as it doesn't cause
 -- any difficulty there and is less burdensome than creating a new data type
 -- for these operators.
-expToPreProp :: Exp -> PropParse PreProp
+expToPreProp :: PactExp -> PropParse PreProp
 expToPreProp = \case
   ELiteral (LDecimal d) _ -> pure (PreDecimalLit (mkDecimal d))
   ELiteral (LInteger i) _ -> pure (PreIntegerLit i)
@@ -136,7 +136,7 @@ expToPreProp = \case
 -- | Parse a set of bindings like '(x:integer y:string)'
 parseBindings
   :: MonadError String m
-  => (Text -> QType -> m binding) -> [Exp] -> m [binding]
+  => (Text -> QType -> m binding) -> [PactExp] -> m [binding]
 parseBindings mkBinding = \case
   [] -> pure []
   -- we require a type annotation
@@ -473,7 +473,7 @@ expectTableExists (PLit tn) = do
     throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
 expectTableExists _ = error "table name must be concrete at this point"
 
--- Convert an @Exp@ to a @Check@ in an environment where the variables have
+-- Convert an @PactExp@ to a @Check@ in an environment where the variables have
 -- types.
 expToCheck
   :: TableEnv
@@ -484,10 +484,10 @@ expToCheck
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty PactExp)
   -- ^ Defined props in the environment
-  -> Exp
-  -- ^ Exp to convert
+  -> PactExp
+  -- ^ PactExp to convert
   -> Either String Check
 expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
   PropertyHolds . prenexConvert
@@ -502,11 +502,11 @@ expToProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty PactExp)
   -- ^ Defined props in the environment
   -> Type a
-  -> Exp
-  -- ^ Exp to convert
+  -> PactExp
+  -- ^ PactExp to convert
   -> Either String (Prop a)
 expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
   (preTypedBody, preTypedPropDefs)
@@ -524,10 +524,10 @@ inferProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty PactExp)
   -- ^ Defined props in the environment
-  -> Exp
-  -- ^ Exp to convert
+  -> PactExp
+  -- ^ PactExp to convert
   -> Either String EProp
 inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
   (preTypedBody, preTypedPropDefs)
@@ -540,8 +540,8 @@ parseToPreProp
   :: Traversable t
   => VarId
   -> Map Text VarId
-  -> t (DefinedProperty Exp)
-  -> Exp
+  -> t (DefinedProperty PactExp)
+  -> PactExp
   -> Either String (PreProp, t (DefinedProperty PreProp))
 parseToPreProp genStart nameEnv propDefs body =
   (`evalStateT` genStart) $ (`runReaderT` nameEnv) $ do

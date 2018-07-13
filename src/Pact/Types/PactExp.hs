@@ -6,15 +6,15 @@
 {-# LANGUAGE ViewPatterns #-}
 
 -- |
--- Module      :  Pact.Types.Exp
+-- Module      :  Pact.Types.PactExp
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Exp, the output of the Pact parser, and Literal.
+-- PactExp, the output of the Pact parser, and Literal.
 --
 
-module Pact.Types.Exp
+module Pact.Types.PactExp
  (
    Parsed(..),
    Code(..),
@@ -39,9 +39,10 @@ module Pact.Types.Exp
    Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
    mkTyVar,mkTyVar',mkSchemaVar,
    isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
-   Exp(..),eLiteral,eAtom,eBinding,eList,eLitListType,eObject,eParsed,eQualifier,eSymbol,eType,
+   PactExp(..),eLiteral,eAtom,eBinding,eList,eLitListType,eObject,eParsed,eQualifier,eSymbol,eType,
    _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
-   pattern EList',pattern ELitList,pattern ELitString,pattern EAtom'
+   pattern EList',pattern ELitList,pattern ELitString,pattern EAtom',
+   IsLiteralList(..)
    ) where
 
 
@@ -68,7 +69,7 @@ import Text.Trifecta (try,ident,TokenParsing,(<?>))
 import Data.Serialize (Serialize)
 
 import Pact.Types.Util
-import Pact.Types.Parser
+import Pact.Types.Parser (style, qualified)
 import Pact.Types.Info
 import Pact.Types.Type
 
@@ -155,8 +156,15 @@ litToPrim LDecimal {} = TyDecimal
 litToPrim LBool {} = TyBool
 litToPrim LTime {} = TyTime
 
+data IsLiteralList
+  = IsLiteralList (Type TypeName)
+  | IsntLiteralList
+  deriving (Eq, Generic)
+
+instance NFData IsLiteralList
+
 -- | Pact expressions, with parsing info.
-data Exp =
+data PactExp =
   -- | Literals
   ELiteral { _eLiteral :: !Literal, _eParsed :: !Parsed } |
   -- | Symbol, effectively a string literal
@@ -168,37 +176,37 @@ data Exp =
         , _eParsed :: !Parsed
         } |
   -- | Lists. '_eLitListType' distinguishes literal lists (`[1 2 3]`) from body forms.
-  EList { _eList :: ![Exp], _eLitListType :: !(Maybe (Type TypeName)), _eParsed :: !Parsed } |
+  EList { _eList :: ![PactExp], _eLitListType :: !IsLiteralList, _eParsed :: !Parsed } |
   -- | Object literals.
-  EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
+  EObject { _eObject :: ![(PactExp,PactExp)], _eParsed :: !Parsed } |
   -- | Special binding forms.
-  EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
+  EBinding { _eBinding :: ![(PactExp,PactExp)], _eParsed :: !Parsed }
            deriving (Eq,Generic)
 
-instance NFData Exp
+instance NFData PactExp
 
 
-pattern EList' :: [Exp] -> Exp
-pattern EList' ls <- EList ls Nothing _
-pattern ELitList :: [Exp] -> Exp
-pattern ELitList ls <- EList ls (Just _) _
-pattern EAtom' :: Text -> Exp
+pattern EList' :: [PactExp] -> PactExp
+pattern EList' ls <- EList ls IsntLiteralList _
+pattern ELitList :: [PactExp] -> PactExp
+pattern ELitList ls <- EList ls (IsLiteralList _) _
+pattern EAtom' :: Text -> PactExp
 pattern EAtom' tag <- EAtom tag Nothing Nothing _
-pattern ELitString :: Text -> Exp
+pattern ELitString :: Text -> PactExp
 pattern ELitString s <- ELiteral (LString s) _
 
-makePrisms ''Exp
+makePrisms ''PactExp
 
 
 
 
-instance Show Exp where
+instance Show PactExp where
     show (ELiteral i _) = show i
     show (ESymbol s _) = '\'':unpack s
     show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
-    show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
-    show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
+    show (EList ls IsntLiteralList _) = "(" ++ unwords (map show ls) ++ ")"
+    show (EList ls IsLiteralList {} _) = "[" ++ unwords (map show ls) ++ "]"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
 
-$(makeLenses ''Exp)
+$(makeLenses ''PactExp)

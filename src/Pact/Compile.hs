@@ -1,20 +1,19 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Compiler from 'Exp' -> 'Term Name'
+-- Compiler from 'PactExp -> 'Term Name'
 --
 
 module Pact.Compile
@@ -25,33 +24,34 @@ module Pact.Compile
 
 where
 
-import Text.Trifecta as TF
-import Text.Trifecta.Delta as TF
-import Control.Applicative
-import Data.List
-import Control.Monad
-import Control.Monad.Except
-import Control.Monad.State
-import Control.Monad.Reader
-import Control.Arrow
-import Prelude hiding (exp)
-import Bound
-import Text.PrettyPrint.ANSI.Leijen (putDoc)
-import Control.Exception
-import Data.String
-import Control.Lens
-import Data.Maybe
-import Data.Default
-import qualified Data.Text as T
-import Data.Text.Encoding (encodeUtf8)
-import qualified Data.HashSet as HS
+import           Bound
+import           Control.Applicative
+import           Control.Arrow
+import           Control.Exception
+import           Control.Lens
+import           Control.Monad
+import           Control.Monad.Except
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Default
+import qualified Data.HashSet                 as HS
+import           Data.List
+import           Data.Maybe
+import           Data.String
+import qualified Data.Text                    as T
+import           Data.Text.Encoding           (encodeUtf8)
+import           Prelude                      hiding (exp)
+import           Text.PrettyPrint.ANSI.Leijen (putDoc)
+import           Text.Trifecta                as TF
+import           Text.Trifecta.Delta          as TF
 
-import Pact.Types.Lang
-import Pact.Parse (exprsOnly,parseExprs)
-import Pact.Types.Runtime (PactError(..),PactErrorType(..))
-import Pact.Types.Hash
+import           Pact.PactExpParser           (exprsOnly, parseExprs)
+import           Pact.Types.Hash
+import           Pact.Types.Lang
+import           Pact.Types.Runtime           (PactError (..),
+                                               PactErrorType (..))
 
-type MkInfo = Exp -> Info
+type MkInfo = PactExp -> Info
 
 mkEmptyInfo :: MkInfo
 mkEmptyInfo e = Info (Just (mempty,_eParsed e))
@@ -65,7 +65,7 @@ mkTextInfo s e = Info (Just (Code $ T.take (_pLength d) $ T.drop (fromIntegral $
   where d = _eParsed e
 
 data CompileState = CompileState {
-  _csFresh :: Int,
+  _csFresh  :: Int,
   _csModule :: Maybe (ModuleName,Hash)
   }
 instance Default CompileState where def = CompileState 0 def
@@ -76,20 +76,20 @@ type Compile a = ReaderT MkInfo (StateT CompileState (Except PactError)) a
 reserved :: [Text]
 reserved = map pack $ words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-compile :: MkInfo -> Exp -> Either PactError (Term Name)
+compile :: MkInfo -> PactExp -> Either PactError (Term Name)
 compile mi e = runExcept (evalStateT (runReaderT (run e) mi) def)
 
-compileExps :: Traversable t => MkInfo -> t Exp -> Either PactError (t (Term Name))
+compileExps :: Traversable t => MkInfo -> t PactExp -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
 
 syntaxError :: Info -> String -> Compile a
 syntaxError i s = throwError $ PactError SyntaxError i def (pack s)
 
-syntaxError' :: Exp -> String -> Compile a
+syntaxError' :: PactExp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s
 
-doUse :: [Exp] -> Info -> Compile (Term Name)
+doUse :: [PactExp] -> Info -> Compile (Term Name)
 doUse as i = case as of
   [m] -> mkM m Nothing
   [m,eh@(ELitString h)] -> mkM m . Just =<< mkHash "use" h eh
@@ -102,7 +102,7 @@ doUse as i = case as of
       _ -> syntaxError i "use: module name must be symbol/string/bare atom"
     mk s h = return $ TUse (ModuleName s) h i
 
-mkHash :: String -> Text -> Exp -> Compile Hash
+mkHash :: String -> Text -> PactExp -> Compile Hash
 mkHash msg h el = case fromText' h of
       Left e -> mkInfo el >>= \i -> syntaxError i $ msg ++ ": bad hash: " ++ e
       Right mh -> return mh
@@ -111,13 +111,13 @@ mkHash msg h el = case fromText' h of
 --
 -- * `"docstring"`
 -- * `@doc ...` / `@meta ...`
-pattern MetaExp :: Meta -> [Exp] -> [Exp]
+pattern MetaExp :: Meta -> [PactExp] -> [PactExp]
 pattern MetaExp dm exps <- (doMeta -> (dm, exps))
 
 -- | Consume a meta-block (returning the leftover body).
 --
 -- Helper for 'MetaExp'.
-doMeta :: [Exp] -> (Meta, [Exp])
+doMeta :: [PactExp] -> (Meta, [PactExp])
 doMeta = \case
   -- Either we encounter a plain docstring:
   ELitString docs : exps
@@ -139,31 +139,31 @@ doMeta = \case
   exps -> (Meta Nothing Nothing, exps)
 
 -- | A (non-empty) body with a possible meta-annotation
-pattern MetaBodyExp :: Meta -> [Exp] -> [Exp]
+pattern MetaBodyExp :: Meta -> [PactExp] -> [PactExp]
 pattern MetaBodyExp meta body <- (doMetaBody -> Just (meta, body))
 
 -- TODO(joel): uncomment when on modern ghc
 -- {-# complete MetaBodyExp, [] #-}
 
 -- | Consume a meta-annotationa and body. Helper for 'MetaBodyExp'.
-doMetaBody :: [Exp] -> Maybe (Meta, [Exp])
-doMetaBody exp  = case exp of
+doMetaBody :: [PactExp] -> Maybe (Meta, [PactExp])
+doMetaBody exp = case exp of
   []                -> Nothing
   MetaExp meta body -> Just (meta, body)
   _                 -> error "the first two patterns are complete"
 
-doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
+doModule :: [PactExp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   handleModule n k es li ai
 doModule (EAtom n Nothing Nothing _:ELiteral (LString k) _:es) li ai =
   handleModule n k es li ai
 doModule _ li _ = syntaxError li "Invalid module definition"
 
-handleModule :: Text -> Text -> [Exp] -> Info -> Info -> Compile (Term Name)
+handleModule :: Text -> Text -> [PactExp] -> Info -> Info -> Compile (Term Name)
 handleModule n k es li ai =
   case es of
     MetaBodyExp meta body -> mkModule body meta
-    _ -> syntaxError ai "Empty module"
+    _                     -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
         TDef {} -> return d
@@ -180,7 +180,7 @@ handleModule n k es li ai =
           Just _ -> syntaxError li "Invalid nested module"
           Nothing -> do
             let code = case li of
-                  Info Nothing -> "<code unavailable>"
+                  Info Nothing      -> "<code unavailable>"
                   Info (Just (c,_)) -> c
                 modName = ModuleName n
                 modHash = hash $ encodeUtf8 $ _unCode code
@@ -189,7 +189,7 @@ handleModule n k es li ai =
             csModule .= Nothing
             let blessed = HS.fromList $ (`concatMap` bd) $ \t -> case t of
                   TBless {..} -> [_tBlessed]
-                  _ -> []
+                  _           -> []
             return $ TModule
               (Module modName (KeySetName k) docs code modHash blessed)
               (abstract (const Nothing) (TList bd TyAny li)) li
@@ -200,10 +200,10 @@ currentModule i = use csModule >>= \m -> case m of
   Just cm -> return cm
   Nothing -> syntaxError i "Must be declared within module"
 
-doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
+doDef :: [PactExp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
     case es of
-      (EAtom dn Nothing ty _:EList args Nothing _:MetaBodyExp meta body) ->
+      (EAtom dn Nothing ty _:EList args IsntLiteralList _:MetaBodyExp meta body) ->
           mkDef dn ty args body meta
       _ -> syntaxError namei "Invalid def"
       where
@@ -230,55 +230,55 @@ _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 maybeTyVar :: Info -> Maybe (Type TypeName) -> Compile (Type (Term Name))
-maybeTyVar _ Nothing = freshTyVar
+maybeTyVar _ Nothing  = freshTyVar
 maybeTyVar i (Just t) = return (liftTy i t)
 
 liftTy :: Info -> Type TypeName -> Type (Term Name)
 liftTy i = fmap (return . (`Name` i) . asString)
 
-doStep :: [Exp] -> Info -> Compile (Term Name)
+doStep :: [PactExp] -> Info -> Compile (Term Name)
 doStep [exp] i = TStep Nothing <$> run exp <*> pure Nothing <*> pure i
 doStep [entity,exp] i =
     TStep <$> (Just <$> run entity) <*> run exp <*> pure Nothing <*> pure i
 doStep _ i = syntaxError i "Invalid step definition"
 
-doStepRollback :: [Exp] -> Info -> Compile (Term Name)
+doStepRollback :: [PactExp] -> Info -> Compile (Term Name)
 doStepRollback [exp,rb] i = TStep Nothing <$> run exp <*> (Just <$> run rb) <*> pure i
 doStepRollback [entity,exp,rb] i =
     TStep <$> (Just <$> run entity) <*> run exp <*> (Just <$> run rb) <*> pure i
 doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 
-letPair :: Exp -> Compile (Arg (Term Name), Term Name)
-letPair e@(EList [k@(EAtom s Nothing ty _),v] Nothing _) = do
+letPair :: PactExp -> Compile (Arg (Term Name), Term Name)
+letPair e@(EList [k@(EAtom s Nothing ty _),v] IsntLiteralList _) = do
   ki <- mkInfo k
   (,) <$> (Arg <$> pure s <*> maybeTyVar ki ty <*> mkInfo e) <*> run v
 letPair t = syntaxError' t "Invalid let pair"
 
-doLet :: [Exp] -> Info -> Compile (Term Name)
+doLet :: [PactExp] -> Info -> Compile (Term Name)
 doLet (bindings:body) i = do
   bPairs <-
     case bindings of
-      (EList es Nothing _) -> forM es letPair
-      t -> syntaxError' t "Invalid let bindings"
+      (EList es IsntLiteralList _) -> forM es letPair
+      t                            -> syntaxError' t "Invalid let bindings"
   let bNames = map (\(aa,_) -> Name (_aName aa) (_aInfo aa)) bPairs
   bs <- abstract (`elemIndex` bNames) <$> runBody body i
   return $ TBinding bPairs bs BindLet i
 doLet _ i = syntaxError i "Invalid let declaration"
 
 -- | let* is a macro to nest a bunch of lets
-doLets :: [Exp] -> Info -> Compile (Term Name)
+doLets :: [PactExp] -> Info -> Compile (Term Name)
 doLets (bindings:body) i =
   case bindings of
-      e@(EList [_] Nothing _) -> doLet (e:body) i
-      (EList (e:es) Nothing _) -> let e' = head es in
-                          doLet [EList [e] Nothing (_eParsed e),
+      e@(EList [_] IsntLiteralList _) -> doLet (e:body) i
+      (EList (e:es) IsntLiteralList _) -> let e' = head es in
+                          doLet [EList [e] IsntLiteralList (_eParsed e),
                                  EList (EAtom "let*" Nothing Nothing (_eParsed e'):
-                                        EList es Nothing (_eParsed e'):body)
-                                   Nothing (_eParsed e')] i
+                                        EList es IsntLiteralList (_eParsed e'):body)
+                                   IsntLiteralList (_eParsed e')] i
       e -> syntaxError' e "Invalid let* binding"
 doLets _ i = syntaxError i "Invalid let declaration"
 
-doConst :: [Exp] -> Info -> Compile (Term Name)
+doConst :: [PactExp] -> Info -> Compile (Term Name)
 doConst es i = case es of
   EAtom dn Nothing ct _ : t : MetaExp dm []
     -> mkConst dn ct t dm
@@ -290,7 +290,7 @@ doConst es i = case es of
       a <- Arg <$> pure dn <*> maybeTyVar i ty <*> pure i
       return $ TConst a (fst cm) (CVRaw v') docs i
 
-doSchema :: [Exp] -> Info -> Compile (Term Name)
+doSchema :: [PactExp] -> Info -> Compile (Term Name)
 doSchema es i = case es of
   (EAtom utn Nothing Nothing _:MetaBodyExp meta as) ->
     mkUT utn as meta
@@ -303,7 +303,7 @@ doSchema es i = case es of
         _ -> syntaxError i "Invalid schema field definition"
       return $ TSchema (TypeName utn) (fst cm) docs fs i
 
-doTable :: [Exp] -> Info -> Compile (Term Name)
+doTable :: [PactExp] -> Info -> Compile (Term Name)
 doTable es i = case es of
   EAtom tn Nothing ty _ : MetaExp meta [] -> mkT tn ty meta
   _ -> syntaxError i "Invalid table definition"
@@ -316,16 +316,16 @@ doTable es i = case es of
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
       return $ TTable (TableName tn) (fst cm) (snd cm) tty docs i
 
-doBless :: [Exp] -> Info -> Compile (Term Name)
+doBless :: [PactExp] -> Info -> Compile (Term Name)
 doBless [he@(ELitString s)] i = mkHash "bless" s he >>= \h -> return $ TBless h i
 doBless _ i = syntaxError i "Invalid bless, must contain valid hash"
 
-mkInfo :: Exp -> Compile Info
+mkInfo :: PactExp -> Compile Info
 mkInfo e = ask >>= \f -> return (f e)
 
-run :: Exp -> Compile (Term Name)
+run :: PactExp -> Compile (Term Name)
 
-run l@(EList (ea@(EAtom a q Nothing _):rest) Nothing _) = do
+run l@(EList (ea@(EAtom a q Nothing _):rest) IsntLiteralList _) = do
     li <- mkInfo l
     ai <- mkInfo ea
     case (a,q) of
@@ -364,7 +364,7 @@ run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
 run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
                     | isNothing t = mkInfo e >>= mkVar s q
                     | otherwise = syntaxError' e "Invalid typed var"
-run e@(EList els (Just lty) _i) = mkInfo e >>= \i -> TList <$> mapM run els <*> pure (liftTy i lty) <*> pure i
+run e@(EList els (IsLiteralList lty) _i) = mkInfo e >>= \i -> TList <$> mapM run els <*> pure (liftTy i lty) <*> pure i
 run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 
@@ -373,20 +373,20 @@ mkVar s q i = TVar <$> pure (maybe (Name s i) (\qn -> QName (ModuleName s) qn i)
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]
-mapNonEmpty s _ [] i = syntaxError i $ "Empty " ++ s
+mapNonEmpty s _ [] i     = syntaxError i $ "Empty " ++ s
 mapNonEmpty _ act body _ = mapM act body
 {-# INLINE mapNonEmpty #-}
 
-runNonEmpty :: String -> [Exp] -> Info -> Compile [Term Name]
+runNonEmpty :: String -> [PactExp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
-atomVar :: Exp -> Compile (Arg (Term Name))
+atomVar :: PactExp -> Compile (Arg (Term Name))
 atomVar e@(EAtom a Nothing ty _i) = mkInfo e >>= \i -> Arg <$> pure a <*> maybeTyVar i ty <*> pure i
 atomVar e = syntaxError' e "Expected unqualified atom"
 {-# INLINE atomVar #-}
 
-runBody :: [Exp] -> Info -> Compile (Term Name)
+runBody :: [PactExp] -> Info -> Compile (Term Name)
 runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 {-# INLINE runBody #-}
 
@@ -394,37 +394,37 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile
 
-_compile :: Result ([Exp],String) -> IO (Either PactError [Term Name])
-_compile (Failure f) = putDoc (_errDoc f) >> error "Parse failed"
+_compile :: Result ([PactExp],String) -> IO (Either PactError [Term Name])
+_compile (Failure f)     = putDoc (_errDoc f) >> error "Parse failed"
 _compile (Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
 
 
 _compileStr :: String -> IO [Term Name]
 _compileStr code = do
     r <- _compile ((,code) <$> TF.parseString exprsOnly mempty code)
-    case r of Left e -> throwIO $ userError (show e)
+    case r of Left e  -> throwIO $ userError (show e)
               Right t -> return t
 
 
-_parseF :: FilePath -> IO (TF.Result ([Exp],String))
+_parseF :: FilePath -> IO (TF.Result ([PactExp],String))
 _parseF fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx exprsOnly fp
 
 _compileFile :: FilePath -> IO [Term Name]
 _compileFile f = do
     p <- _parseF f
     rs <- case p of
-            (Failure e) -> putDoc (_errDoc e) >> error "Parse failed"
+            (Failure e)      -> putDoc (_errDoc e) >> error "Parse failed"
             (Success (es,s)) -> return $ map (compile (mkStringInfo s)) es
     case sequence rs of
-      Left e -> throwIO $ userError (show e)
+      Left e   -> throwIO $ userError (show e)
       Right ts -> return ts
 
 _atto :: FilePath -> IO [Term Name]
 _atto fp = do
   f <- pack <$> readFile fp
   rs <- case parseExprs f of
-    Left s -> throwIO $ userError s
+    Left s   -> throwIO $ userError s
     Right es -> return $ map (compile (mkStringInfo (unpack f))) es
   case sequence rs of
-      Left e -> throwIO $ userError (show e)
+      Left e   -> throwIO $ userError (show e)
       Right ts -> return ts

@@ -45,7 +45,7 @@ style :: CharParsing m => IdentifierStyle m
 style = IdentifierStyle "atom"
         (letter <|> symbols)
         (letter <|> digit <|> symbols)
-        (HS.fromList ["true","false"])
+        HS.empty
         Symbol
         ReservedIdentifier
 

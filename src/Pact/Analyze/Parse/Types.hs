@@ -27,9 +27,9 @@ import           Pact.Types.Util            (tShow)
 import           Pact.Analyze.Feature       hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.Types
 
--- @PreProp@ stands between @Exp@ and @Prop@.
+-- @PreProp@ stands between @PactExp@ and @Prop@.
 --
--- The conversion from @Exp@ is light, handled in @expToPreProp@.
+-- The conversion from @PactExp@ is light, handled in @expToPreProp@.
 data PreProp
   -- literals
   = PreIntegerLit Integer
@@ -99,7 +99,7 @@ textToQuantifier = \case
   SExistentialQuantification -> Just PreExists
   _                          -> Nothing
 
-stringLike :: Exp -> Maybe Text
+stringLike :: PactExp -> Maybe Text
 stringLike = \case
   ESymbol str _  -> Just str
   ELitString str -> Just str

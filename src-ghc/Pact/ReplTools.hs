@@ -23,7 +23,7 @@ import System.Console.Haskeline
    filenameWordBreakChars, Settings(Settings), simpleCompletion)
 import Data.Monoid
 
-import Pact.Parse
+import Pact.PactExpParser
 import Pact.Types.Runtime
 import Pact.Native
 import Pact.Repl

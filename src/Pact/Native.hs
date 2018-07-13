@@ -48,7 +48,7 @@ import Pact.Native.Time
 import Pact.Native.Ops
 import Pact.Native.Keysets
 import Pact.Types.Runtime
-import Pact.Parse
+import Pact.PactExpParser
 import Pact.Types.Version
 import Pact.Types.Hash
 
@@ -346,9 +346,9 @@ readMsg i as = argsError i as
 newtype ParsedDecimal = ParsedDecimal Decimal
 instance FromJSON ParsedDecimal where
   parseJSON (String s) =
-    ParsedDecimal <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LDecimal d) -> return d
-                        Right (LInteger i) -> return (fromIntegral i)
+    ParsedDecimal <$> case parseNumber s of
+                        Right (Right d) -> return d
+                        Right (Left i)  -> return (fromIntegral i)
                         _ -> fail $ "Failure parsing decimal string: " ++ show s
   parseJSON (Number n) = return $ ParsedDecimal (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
@@ -364,8 +364,8 @@ readDecimal i as = argsError i as
 newtype ParsedInteger = ParsedInteger Integer
 instance FromJSON ParsedInteger where
   parseJSON (String s) =
-    ParsedInteger <$> case AP.parseOnly (unPactParser number) s of
-                        Right (LInteger i) -> return i
+    ParsedInteger <$> case parseNumber s of
+                        Right (Left i) -> return i
                         _ -> fail $ "Failure parsing integer string: " ++ show s
   parseJSON (Number n) = return $ ParsedInteger (round n)
   parseJSON v = fail $ "Failure parsing integer: " ++ show v

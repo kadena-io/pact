@@ -27,14 +27,16 @@ library
                      , Pact.Native.Time
                      , Pact.Native.Ops
                      , Pact.Native.Keysets
-                     , Pact.Parse
+                     , Pact.PactExpParser
                      , Pact.PersistPactDb
                      , Pact.Persist
                      , Pact.Persist.Pure
                      , Pact.Repl
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
-                     , Pact.Types.Exp
+                     , Pact.SExpParser
+                     , Pact.Types.SExp
+                     , Pact.Types.PactExp
                      , Pact.Types.Gas
                      , Pact.Types.Hash
                      , Pact.Types.Info
@@ -141,6 +143,7 @@ library
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.0 && < 1.1
+                     , comonad
 
   if !impl(ghcjs)
     build-depends:
@@ -214,6 +217,7 @@ test-suite hspec
       , ed25519-donna
       , crypto-api
       , wreq
+      , trifecta
   other-modules:
                 AnalyzeSpec
                 Blake2Spec

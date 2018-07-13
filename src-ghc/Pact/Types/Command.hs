@@ -63,7 +63,7 @@ import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
 import Pact.Types.Hash
-import Pact.Parse
+import Pact.PactExpParser
 import Pact.Types.RPC
 
 data Command a = Command
@@ -124,7 +124,7 @@ instance NFData a => NFData (ProcessedCommand a)
 
 data ParsedCode = ParsedCode {
   _pcCode :: !Text,
-  _pcExps :: ![Exp]
+  _pcExps :: ![PactExp]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
