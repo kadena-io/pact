@@ -108,6 +108,8 @@ data Term ret where
 
   Comparison      :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
 
+  ObjectEqNeq     :: EqNeq -> Term Object -> Term Object -> Term Bool
+
   Logical         :: LogicalOp -> [Term Bool] -> Term Bool
 
   Concat          :: Term String -> Term String -> Term String

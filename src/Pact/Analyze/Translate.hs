@@ -480,6 +480,18 @@ translateNode astNode = astContext astNode $ case astNode of
               _         -> throwError' (TypeMismatch (EType ta) (EType tb))
           _ -> throwError' $ MalformedComparison fn args
 
+        mkObjEqNeq :: TranslateM ETerm
+        mkObjEqNeq = case args of
+          [a, b] -> do
+            EObject a' _ <- translateNode a
+            EObject b' _ <- translateNode b
+            op <- case fn of
+              "="  -> pure Eq'
+              "!=" -> pure Neq'
+              _    -> throwError' $ MalformedComparison fn args
+            pure $ ETerm (ObjectEqNeq op a' b') TBool
+          _ -> throwError' $ MalformedComparison fn args
+
         mkLogical :: TranslateM ETerm
         mkLogical = case args of
           [a] -> do
@@ -566,7 +578,7 @@ translateNode astNode = astContext astNode $ case astNode of
             pure (ETerm (ModOp a' b') TInt)
           _ -> mzero
 
-    in mkMod <|> mkArith <|> mkComparison <|> mkLogical <|> mkConcat
+    in mkMod <|> mkArith <|> mkComparison <|> mkObjEqNeq <|> mkLogical <|> mkConcat
 
   AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do

@@ -519,6 +519,23 @@ spec = describe "analyze" $ do
           |]
     in expectPass code $ Valid $ bnot Abort
 
+  describe "object-equality" $ do
+    -- let _ =
+    --       [text|
+    --         (defun test:bool ()
+    --           (let ((acct1:object{account} {"balance": 10})
+    --                 (acct2:object{account} {"balance": 5}))
+    --             (and (= acct1 acct1)
+    --                  (= acct2 acct2)
+    --                  (!= acct1 acct2)
+    --                  (!= acct2 acct1))))
+    --       |]
+    --
+    -- in expectPass code $ Valid (Result :: Prop Bool)
+
+    it "is blocking on a fix" $ do
+      pendingWith "a fix for https://github.com/kadena-io/pact/issues/156"
+
   describe "table-read" $ do
     let code =
           [text|

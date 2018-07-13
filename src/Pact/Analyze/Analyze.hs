@@ -1106,6 +1106,19 @@ analyzeEqNeq op xT yT = do
     Eq'  -> x .== y
     Neq' -> x ./= y
 
+analyzeObjectEqNeq
+  :: (ObjectAnalyzer m term)
+  => EqNeq
+  -> term Object
+  -> term Object
+  -> m (S Bool)
+analyzeObjectEqNeq op xT yT = do
+  x <- analyzeO xT
+  y <- analyzeO yT
+  pure $ sansProv $ case op of
+    Eq'  -> x .== y
+    Neq' -> x ./= y
+
 analyzeComparisonOp
   :: (Analyzer m term, SymWord a, Show a)
   => ComparisonOp
