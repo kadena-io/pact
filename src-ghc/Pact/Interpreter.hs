@@ -69,8 +69,8 @@ evalContinuation ee pact = interpret ee [pact]
 
 
 setupEvalEnv :: PactDbEnv e -> Maybe EntityName -> ExecutionMode ->
-                MsgData -> RefStore -> EvalEnv e
-setupEvalEnv dbEnv ent mode msgData refStore =
+                MsgData -> RefStore -> GasEnv -> EvalEnv e
+setupEvalEnv dbEnv ent mode msgData refStore gasEnv =
   EvalEnv {
     _eeRefStore = refStore
   , _eeMsgSigs = mdSigs msgData
@@ -82,6 +82,7 @@ setupEvalEnv dbEnv ent mode msgData refStore =
   , _eePactDbVar = pdPactDbVar dbEnv
   , _eePurity = PImpure
   , _eeHash = mdHash msgData
+  , _eeGasEnv = gasEnv
   }
   where modeToTx (Transactional t) = Just t
         modeToTx Local = Nothing

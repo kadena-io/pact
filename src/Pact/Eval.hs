@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -27,6 +28,7 @@ module Pact.Eval
     ,installModule
     ,runPure,runPureSys,Purity
     ,liftTerm,apply,apply'
+    ,preGas
     ) where
 
 import Control.Lens
@@ -52,6 +54,8 @@ import Unsafe.Coerce
 import Data.Aeson (Value)
 
 import Pact.Types.Runtime
+import Pact.Gas
+
 
 evalBeginTx :: Info -> Eval e ()
 evalBeginTx i = beginTx i =<< view eeTxId
@@ -115,13 +119,23 @@ apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
 apply' :: Term Ref -> [Term Name] -> Eval e (Term Name)
 apply' app as' = apply (_tAppFun app) (_tAppArgs app) (_tInfo app) as'
 
+-- | Precompute gas on unreduced args returning reduced values.
+preGas :: FunApp -> [Term Ref] -> Eval e (Gas,[Term Name])
+preGas i as =
+  computeGas (Right i) (GUnreduced as) >>= \g -> (g,) <$> mapM reduce as
+
+topLevelCall
+  :: Info -> Text -> GasArgs -> (Gas -> Eval e (Gas, a)) -> Eval e a
+topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
+  computeGas (Left (i,name)) gasArgs >>= action
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse mn h i) = evalUse mn h i >> return (tStr $ pack $ "Using " ++ show mn)
+eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
+  evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
 
 
-eval (TModule m bod i) = do
+eval (TModule m bod i) = topLevelCall i "module" (GModule m) $ \g0 -> do
   -- enforce old module keysets
   oldM <- readRow i Modules (_mName m)
   case oldM of
@@ -130,9 +144,9 @@ eval (TModule m bod i) = do
   -- enforce new module keyset
   enforceKeySetName i (_mKeySet m)
   -- build/install module from defs
-  _defs <- loadModule m bod i
+  (g,_defs) <- loadModule m bod i g0
   writeRow i Write Modules (_mName m) m
-  return $ msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m)
+  return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
 
 eval t = enscope t >>= reduce
 
@@ -160,23 +174,28 @@ evalUse mn h i = do
 -- to be non-recursive. The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-loadModule :: Module -> Scope n Term Name -> Info ->
-              Eval e (HM.HashMap Text (Term Name))
-loadModule m bod1 mi = do
-  modDefs1 <-
+loadModule :: Module -> Scope n Term Name -> Info -> Gas ->
+              Eval e (Gas,HM.HashMap Text (Term Name))
+loadModule m bod1 mi g0 = do
+  (g1,modDefs1) <-
     case instantiate' bod1 of
-      (TList bd _ _bi) ->
-        fmap (HM.fromList . concat) $ forM bd $ \t -> do
-          dnm <- case t of
-            TDef {..} -> return $ Just _tDefName
-            TNative {..} -> return $ Just $ asString _tNativeName
-            TConst {..} -> return $ Just $ _aName _tConstArg
-            TSchema {..} -> return $ Just $ asString _tSchemaName
-            TTable {..} -> return $ Just $ asString _tTableName
-            TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
-            TBless {..} -> return Nothing
-            _ -> evalError (_tInfo t) "Invalid module member"
-          return $ maybe [] (\dn -> [(dn,t)]) dnm
+      (TList bd _ _bi) -> do
+        let doDef (g,rs) t = do
+              dnm <- case t of
+                TDef {..} -> return $ Just _tDefName
+                TNative {..} -> return $ Just $ asString _tNativeName
+                TConst {..} -> return $ Just $ _aName _tConstArg
+                TSchema {..} -> return $ Just $ asString _tSchemaName
+                TTable {..} -> return $ Just $ asString _tTableName
+                TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+                TBless {..} -> return Nothing
+                _ -> evalError (_tInfo t) "Invalid module member"
+              case dnm of
+                Nothing -> return (g, rs)
+                Just dn -> do
+                  g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember m)
+                  return (g + g',(dn,t):rs)
+        second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
     fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
@@ -204,7 +223,7 @@ loadModule m bod1 mi = do
   evaluatedDefs <- traverse evalConstRef defs
   installModule (m,evaluatedDefs)
   (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
-  return modDefs1
+  return (g1,modDefs1)
 
 
 
@@ -290,19 +309,20 @@ resolveArg :: Info -> [Term n] -> Int -> Term n
 resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at index " ++ show i) $
                      as `atMay` i
 
-appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e a -> Eval e a
+appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) as)))
 
 reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp TDef {..} as ai = do
+  g <- computeGas (Left (_tInfo, asString _tDefName)) GUser
   as' <- mapM reduce as
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
       fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs <$> _tMeta)
-  appCall fa ai as $
+  appCall fa ai as $ fmap (g,) $ do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
