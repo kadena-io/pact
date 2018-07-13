@@ -137,12 +137,9 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 
           -- Setup environement and get result
           let sigs = userSigsToPactKeySet _cmdSigs
-              msgData = case _cmData of
-                Nothing -> Null
-                Just d -> d
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show $ _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                        (MsgData sigs msgData pactStep _cmdHash) _csRefStore
+                        (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
@@ -167,8 +164,7 @@ continuationUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandPact -> 
 continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} PactExec{..} = do
   let nextStep = _cmStep + 1
       isLast = nextStep >= _cpStepCount
-      updatePact step = CommandPact _cpTxId _cpContinuation _cpStepCount step _peYield
-      updateState pacts = CommandState _csRefStore pacts
+      updateState pacts = CommandState _csRefStore pacts -- never loading modules during continuations 
 
   if isLast
     then do
@@ -176,8 +172,7 @@ continuationUpdate CommandEnv{..} ContMsg{..} CommandState{..} CommandPact{..} P
         ++ show _cmTxId
       void $ liftIO $ swapMVar _ceState $ updateState $ M.delete _cmTxId _csPacts
     else do
-      let newPact = updatePact _cmStep
-      -- TODO get resume from yield
+      let newPact = CommandPact _cpTxId _cpContinuation _cpStepCount _cmStep _peYield
       liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: updated state of pact "
         ++ show _cmTxId ++ ": " ++ show newPact
-      void $ liftIO $ swapMVar _ceState $ CommandState _csRefStore $ M.insert _cmTxId newPact _csPacts 
+      void $ liftIO $ swapMVar _ceState $ updateState $ M.insert _cmTxId newPact _csPacts 

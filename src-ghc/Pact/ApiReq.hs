@@ -165,7 +165,7 @@ mkCont txid step rollback mdata addy kps ridm = do
     (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
     addy
     (pack $ show rid)
-    (((Continuation (ContMsg txid step rollback Nothing (Just mdata))) :: (PactRPC ContMsg)))
+    (((Continuation (ContMsg txid step rollback mdata)) :: (PactRPC ContMsg)))
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\
