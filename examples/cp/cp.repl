@@ -8,7 +8,7 @@
 (begin-tx)
 (load "cp.pact")
 (commit-tx)
-(typecheck 'cp)
+(verify 'cp)
 (begin-tx)
 (use 'cp)
 (use 'cash)

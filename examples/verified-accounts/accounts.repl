@@ -4,4 +4,3 @@
 (load "accounts.pact")
 (commit-tx)
 (verify 'accounts)
-; (typecheck 'accounts true)
