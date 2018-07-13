@@ -141,25 +141,20 @@ mkApiReqCont ar@ApiReq{..} fp = do
     Just r  -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  (code,cdata) <- (withCurrentDirectory (takeDirectory fp)) $ do
-    code <- case (_ylCodeFile,_ylCode) of
-      (Nothing,Just c) -> return c
-      (Just f,Nothing) -> liftIO (readFile f)
-      _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
-    cdata <- case (_ylDataFile,_ylData) of
+  cdata <- (withCurrentDirectory (takeDirectory fp)) $ do
+    case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
       (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           eitherDecode
       (Nothing,Nothing) -> return Null
-      _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-    return (code,cdata)  
+      _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither" 
   addy <- case (_ylTo,_ylFrom) of
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
 
-  ((ar,code,cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
+  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
 
 mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [KeyPair]
   -> Maybe String -> IO (Command Text)
