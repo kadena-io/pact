@@ -5,7 +5,7 @@ module Pact.Bench where
 
 import Criterion.Main
 
-import Pact.Parse
+import Pact.PactExpParser
 import Pact.Compile
 import Pact.Types.Lang
 import Control.Exception
@@ -51,7 +51,7 @@ benchParse = bgroup "parse" $ (`map` exps) $
                Right s -> s
                Left er -> error $ "Pact parse failed: " ++ er
 
-benchCompile :: [(String,[Exp])] -> Benchmark
+benchCompile :: [(String,[PactExp])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
   \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
 

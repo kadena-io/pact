@@ -24,7 +24,7 @@ import           NeatInterpolation            (text)
 import           Test.Hspec                   (Spec, describe, expectationFailure, it, runIO,
                                                shouldBe, shouldSatisfy, pendingWith)
 
-import           Pact.Parse                   (parseExprs)
+import           Pact.PactExpParser           (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
 import           Pact.Types.Runtime           (ModuleData, eeRefStore,

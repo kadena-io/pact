@@ -1,16 +1,15 @@
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFoldable             #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
 -- |
 -- Module      :  Pact.Types.Term
@@ -52,45 +51,45 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses)
-import Control.Applicative
-import Data.List
-import Control.Monad
-import Prelude
-import Control.Arrow ((***),first)
-import Data.Functor.Classes
-import Bound
-import Data.Text (Text,pack,unpack)
-import Data.Text.Encoding
-import Data.Aeson
-import qualified Data.ByteString.UTF8 as BS
-import qualified Data.ByteString.Lazy.UTF8 as BSL
-import Data.String
-import Data.Default
-import Data.Thyme
-import GHC.Generics (Generic)
-import Data.Decimal
-import Data.Hashable
-import Data.Foldable
+import           Bound
+import           Control.Applicative
+import           Control.Arrow                (first, (***))
+import           Control.DeepSeq
+import           Control.Lens                 (makeLenses)
+import           Control.Monad
+import           Data.Aeson
+import qualified Data.ByteString.Lazy.UTF8    as BSL
+import qualified Data.ByteString.UTF8         as BS
+import           Data.Decimal
+import           Data.Default
+import           Data.Foldable
+import           Data.Functor.Classes
+import           Data.Hashable
+import qualified Data.HashMap.Strict          as HM
+import qualified Data.HashSet                 as HS
+import           Data.Int                     (Int64)
+import           Data.List
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Serialize               (Serialize)
+import           Data.String
+import           Data.Text                    (Text, pack, unpack)
+import           Data.Text.Encoding
+import           Data.Thyme
+import           GHC.Generics                 (Generic)
+import           Prelude
+import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
-import Data.Monoid
-import Control.DeepSeq
-import Data.Maybe
-import qualified Data.HashSet as HS
-import qualified Data.HashMap.Strict as HM
-import Data.Int (Int64)
-import Data.Serialize (Serialize)
 
-import Pact.Types.Util
-import Pact.Types.Info
-import Pact.Types.Type
-import Pact.Types.Exp
+import           Pact.Types.Info
+import           Pact.Types.PactExp
+import           Pact.Types.Type
+import           Pact.Types.Util
 
 
 data Meta = Meta
-  { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: !(Maybe Exp)  -- ^ model
+  { _mDocs  :: !(Maybe Text)    -- ^ docs
+  , _mModel :: !(Maybe PactExp) -- ^ model
   } deriving (Eq, Show, Generic)
 instance ToJSON Meta where
   toJSON Meta {..} = object
@@ -108,7 +107,7 @@ instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
 data KeySet = KeySet {
-      _ksKeys :: ![PublicKey]
+      _ksKeys    :: ![PublicKey]
     , _ksPredFun :: !Name
     } deriving (Eq,Generic)
 instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
@@ -132,7 +131,7 @@ instance Show KeySetName where show (KeySetName s) = show s
 
 data DefType = Defun | Defpact deriving (Eq,Show)
 defTypeRep :: DefType -> String
-defTypeRep Defun = "defun"
+defTypeRep Defun   = "defun"
 defTypeRep Defpact = "defpact"
 
 newtype NativeDefName = NativeDefName Text
@@ -141,12 +140,12 @@ instance Show NativeDefName where show (NativeDefName s) = show s
 
 -- | Capture function application metadata
 data FunApp = FunApp {
-      _faInfo :: !Info
-    , _faName :: !Text
-    , _faModule :: !(Maybe ModuleName)
+      _faInfo    :: !Info
+    , _faName    :: !Text
+    , _faModule  :: !(Maybe ModuleName)
     , _faDefType :: !DefType
-    , _faTypes :: !(FunTypes (Term Name))
-    , _faDocs :: !(Maybe Text)
+    , _faTypes   :: !(FunTypes (Term Name))
+    , _faDocs    :: !(Maybe Text)
     }
 
 instance Show FunApp where
@@ -165,7 +164,7 @@ data Ref =
                deriving (Eq)
 instance Show Ref where
     show (Direct t) = abbrev t
-    show (Ref t) = abbrev t
+    show (Ref t)    = abbrev t
 
 -- | Gas compute cost unit.
 newtype Gas = Gas Int64
@@ -191,27 +190,27 @@ data BindType n =
   BindSchema { _bType :: n }
   deriving (Eq,Functor,Foldable,Traversable,Ord)
 instance (Show n) => Show (BindType n) where
-  show BindLet = "let"
+  show BindLet        = "let"
   show (BindSchema b) = "bind" ++ show b
 instance (Pretty n) => Pretty (BindType n) where
-  pretty BindLet = "let"
+  pretty BindLet        = "let"
   pretty (BindSchema b) = "bind" PP.<> pretty b
 
 instance Eq1 BindType where
-  liftEq _ BindLet BindLet = True
+  liftEq _ BindLet BindLet                = True
   liftEq eq (BindSchema a) (BindSchema m) = eq a m
-  liftEq _ _ _ = False
+  liftEq _ _ _                            = False
 
 newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
 data Module = Module {
-    _mName :: !ModuleName
-  , _mKeySet :: !KeySetName
-  , _mMeta :: !Meta
-  , _mCode :: !Code
-  , _mHash :: !Hash
+    _mName    :: !ModuleName
+  , _mKeySet  :: !KeySetName
+  , _mMeta    :: !Meta
+  , _mCode    :: !Code
+  , _mHash    :: !Hash
   , _mBlessed :: !(HS.HashSet Hash)
   } deriving (Eq)
 instance Show Module where
@@ -229,115 +228,115 @@ instance FromJSON Module where
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
-  CVEval { _cvRaw :: !n
+  CVEval { _cvRaw  :: !n
          , _cvEval :: !n }
   deriving (Eq,Functor,Foldable,Traversable,Generic)
 
 instance Show o => Show (ConstVal o) where
-  show (CVRaw r) = show r
+  show (CVRaw r)    = show r
   show (CVEval _ e) = show e
 
 instance Eq1 ConstVal where
-  liftEq eq (CVRaw a) (CVRaw b) = eq a b
+  liftEq eq (CVRaw a) (CVRaw b)       = eq a b
   liftEq eq (CVEval a c) (CVEval b d) = eq a b && eq c d
-  liftEq _ _ _ = False
+  liftEq _ _ _                        = False
 
 -- | Pact evaluable term.
 data Term n =
     TModule {
-      _tModuleDef :: Module
+      _tModuleDef  :: Module
     , _tModuleBody :: !(Scope () Term n)
-    , _tInfo :: !Info
+    , _tInfo       :: !Info
     } |
     TList {
-      _tList :: ![Term n]
+      _tList     :: ![Term n]
     , _tListType :: Type (Term n)
-    , _tInfo :: !Info
+    , _tInfo     :: !Info
     } |
     TDef {
       _tDefName :: !Text
-    , _tModule :: !ModuleName
+    , _tModule  :: !ModuleName
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
+    , _tMeta    :: !Meta
+    , _tInfo    :: !Info
     } |
     TNative {
       _tNativeName :: !NativeDefName
-    , _tNativeFun :: !NativeDFun
-    , _tFunTypes :: FunTypes (Term n)
+    , _tNativeFun  :: !NativeDFun
+    , _tFunTypes   :: FunTypes (Term n)
     , _tNativeDocs :: Text
-    , _tInfo :: !Info
+    , _tInfo       :: !Info
     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
-    , _tModule :: !ModuleName
+    , _tModule   :: !ModuleName
     , _tConstVal :: !(ConstVal (Term n))
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
+    , _tMeta     :: !Meta
+    , _tInfo     :: !Info
     } |
     TApp {
-      _tAppFun :: !(Term n)
+      _tAppFun  :: !(Term n)
     , _tAppArgs :: ![Term n]
-    , _tInfo :: !Info
+    , _tInfo    :: !Info
     } |
     TVar {
-      _tVar :: !n
+      _tVar  :: !n
     , _tInfo :: !Info
     } |
     TBinding {
       _tBindPairs :: ![(Arg (Term n),Term n)]
-    , _tBindBody :: !(Scope Int Term n)
-    , _tBindType :: BindType (Type (Term n))
-    , _tInfo :: !Info
+    , _tBindBody  :: !(Scope Int Term n)
+    , _tBindType  :: BindType (Type (Term n))
+    , _tInfo      :: !Info
     } |
     TObject {
-      _tObject :: ![(Term n,Term n)]
+      _tObject     :: ![(Term n,Term n)]
     , _tObjectType :: !(Type (Term n))
-    , _tInfo :: !Info
+    , _tInfo       :: !Info
     } |
     TSchema {
       _tSchemaName :: !TypeName
-    , _tModule :: !ModuleName
-    , _tMeta :: !Meta
-    , _tFields :: ![Arg (Term n)]
-    , _tInfo :: !Info
+    , _tModule     :: !ModuleName
+    , _tMeta       :: !Meta
+    , _tFields     :: ![Arg (Term n)]
+    , _tInfo       :: !Info
     } |
     TLiteral {
       _tLiteral :: !Literal
-    , _tInfo :: !Info
+    , _tInfo    :: !Info
     } |
     TKeySet {
       _tKeySet :: !KeySet
-    , _tInfo :: !Info
+    , _tInfo   :: !Info
     } |
     TUse {
       _tModuleName :: !ModuleName
     , _tModuleHash :: !(Maybe Hash)
-    , _tInfo :: !Info
+    , _tInfo       :: !Info
     } |
     TBless {
       _tBlessed :: !Hash
-    , _tInfo :: !Info
+    , _tInfo    :: !Info
     } |
     TValue {
       _tValue :: !Value
-    , _tInfo :: !Info
+    , _tInfo  :: !Info
     } |
     TStep {
-      _tStepEntity :: !(Maybe (Term n))
-    , _tStepExec :: !(Term n)
+      _tStepEntity   :: !(Maybe (Term n))
+    , _tStepExec     :: !(Term n)
     , _tStepRollback :: !(Maybe (Term n))
-    , _tInfo :: !Info
+    , _tInfo         :: !Info
     } |
     TTable {
       _tTableName :: !TableName
-    , _tModule :: ModuleName
-    , _tHash :: !Hash
+    , _tModule    :: ModuleName
+    , _tHash      :: !Hash
     , _tTableType :: !(Type (Term n))
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
+    , _tMeta      :: !Meta
+    , _tInfo      :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
@@ -373,7 +372,7 @@ instance Show n => Show (Term n) where
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
-showParamType t = ":" ++ show t
+showParamType t     = ":" ++ show t
 
 --deriveEq1 ''Term
 -- instance Show1 Term
@@ -455,7 +454,7 @@ instance Show n => ToJSON (Term n) where
     toJSON (TObject kvs _ _) =
         object $ map (kToJSON *** toJSON) kvs
             where kToJSON (TLitString s) = s
-                  kToJSON t = pack (abbrev t)
+                  kToJSON t              = pack (abbrev t)
     toJSON (TList ts _ _) = toJSON ts
     toJSON t = toJSON (abbrev t)
     {-# INLINE toJSON #-}
@@ -496,7 +495,7 @@ typeof t = case t of
       TApp {..} -> Left "app"
       TVar {..} -> Left "var"
       TBinding {..} -> case _tBindType of
-        BindLet -> Left "let"
+        BindLet       -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tObjectType
       TKeySet {} -> Right $ TyPrim TyKeySet

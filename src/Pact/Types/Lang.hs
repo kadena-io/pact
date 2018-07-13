@@ -4,14 +4,14 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
 --
--- Export of types related to Info, Type, Literal, Exp, Term.
+-- Export of types related to Info, Type, Literal, PactExp, Term.
 --
 
 module Pact.Types.Lang
  ( module Pact.Types.Util
  , module Pact.Types.Info
  , module Pact.Types.Type
- , module Pact.Types.Exp
+ , module Pact.Types.PactExp
  , module Pact.Types.Term
  , Text,unpack,pack
    ) where
@@ -20,6 +20,6 @@ module Pact.Types.Lang
 import Pact.Types.Util
 import Pact.Types.Info
 import Pact.Types.Type
-import Pact.Types.Exp
+import Pact.Types.PactExp
 import Pact.Types.Term
 import Data.Text

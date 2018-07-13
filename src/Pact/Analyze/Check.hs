@@ -53,14 +53,18 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
-                                            mName, renderInfo,
-                                            renderParsed, tMeta, mModel)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
+import           Pact.Types.Info
+import           Pact.Types.Lang           (eParsed, mModel, renderInfo,
+                                            renderParsed, tMeta)
+import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
+                                            pattern ELitList,
+                                            IsLiteralList (IsntLiteralList),
+                                            ModuleData, ModuleName, PactExp,
                                             Ref (Ref),
-                                            Term (TConst, TDef, TSchema,
-                                            TTable), asString, tShow, pattern ELitList, pattern EAtom', pattern EList')
+                                            Term (TConst, TDef, TSchema, TTable),
+                                            asString, tShow)
 import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Term           (mName)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -92,7 +96,7 @@ data CheckSuccess
   | ProvedTheorem
   deriving (Eq, Show)
 
-type ParseFailure = (Exp, String)
+type ParseFailure = (PactExp, String)
 
 data SmtFailure
   = Invalid Model
@@ -364,7 +368,8 @@ moduleTables modules (_mod, modRefs) = do
 --
 -- * '(defproperty foo (> 1 0))'
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
-parseDefprops :: Exp -> Either ParseFailure [(Text, DefinedProperty Exp)]
+parseDefprops
+  :: PactExp -> Either ParseFailure [(Text, DefinedProperty PactExp)]
 parseDefprops (ELitList exps) = traverse parseDefprops' exps where
   parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, EList' args, body ] -> do
@@ -385,7 +390,8 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 
 -- Get the set of properties defined in this module
 modulePropDefs
-  :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty Exp))
+  :: ModuleData
+  -> Either ParseFailure (HM.HashMap Text (DefinedProperty PactExp))
 modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
   = case model of
       Just model' -> HM.fromList <$> parseDefprops model'
@@ -394,7 +400,7 @@ modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty PactExp)
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
 moduleFunChecks tables modTys propDefs = for modTys $
@@ -451,15 +457,15 @@ moduleFunChecks tables modTys propDefs = for modTys $
   pure (ref, Right checks)
 
 -- | Given an exp like '(k v)', convert it to a singleton map
-expToMapping :: Exp -> Maybe (Map Text Exp)
-expToMapping (Pact.EList [Pact.EAtom k Nothing Nothing _, v] Nothing _)
+expToMapping :: PactExp -> Maybe (Map Text PactExp)
+expToMapping (Pact.EList [Pact.EAtom k Nothing Nothing _, v] IsntLiteralList _)
   = Just $ Map.singleton k v
 expToMapping _ = Nothing
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just
 -- collects the properties / invariants in a list.
-collectExps :: String -> Maybe Exp -> Maybe Exp -> Either ParseFailure [Exp]
+collectExps :: String -> Maybe PactExp -> Maybe PactExp -> Either ParseFailure [PactExp]
 collectExps name multiExp singularExp = case multiExp of
   Just (Pact.ELitList exps') -> Right exps'
   Just exp -> Left (exp, name ++ " must be a list")
@@ -467,15 +473,15 @@ collectExps name multiExp singularExp = case multiExp of
     Just exp -> Right [exp]
     Nothing  -> Right []
 
-expToInfo :: Exp -> Info
+expToInfo :: PactExp -> Info
 expToInfo exp = Info (Just (Code (tShow exp), exp ^. eParsed))
 
 -- | This runs a parser over a collection of 'Exp's, collecting the failures
 -- or successes.
 runExpParserOver
   :: forall t.
-     [Exp]
-  -> (Exp -> Either String t)
+     [PactExp]
+  -> (PactExp -> Either String t)
   -> Either ParseFailure [Located t]
 runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
@@ -539,7 +545,7 @@ verifyModule modules moduleData = runExceptT $ do
         $ concatMap HM.keys
         $ allModulePropDefs
 
-      propDefs :: HM.HashMap Text (DefinedProperty Exp)
+      propDefs :: HM.HashMap Text (DefinedProperty PactExp)
       propDefs = HM.unions allModulePropDefs
 
       typecheckedRefs :: HM.HashMap Text Ref

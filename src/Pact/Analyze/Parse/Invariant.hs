@@ -21,7 +21,7 @@ import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
+expToInvariant :: Type a -> PactExp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
   (_, EAtom' varName) -> do
     schemaTys <- ask

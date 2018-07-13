@@ -52,6 +52,7 @@ import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
+import           Pact.Types.Lang              (PactExp)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
@@ -553,7 +554,7 @@ instance UserShow ArithOp where
     Pow -> "^"
     Log -> "log"
 
-instance UserShow Pact.Exp where
+instance UserShow PactExp where
   userShowsPrec _ = tShow
 
 newtype ColumnMap a
