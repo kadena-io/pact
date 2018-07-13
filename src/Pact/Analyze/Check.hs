@@ -314,8 +314,8 @@ getInfoParsed info = case _iInfo info of
   Just (_code, parsed') -> parsed'
 
 -- Get the set (HashMap) of refs to functions in this module.
-moduleFunRefs :: ModuleData -> HM.HashMap Text Ref
-moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
+moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
+moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   Ref (TDef {})   -> True
   Ref (TConst {}) -> True
   _               -> False
@@ -399,11 +399,11 @@ verifyModule
 verifyModule modules moduleData = do
   tables <- moduleTables modules moduleData
 
-  let funRefs :: HM.HashMap Text Ref
-      funRefs = moduleFunRefs moduleData
+  let typecheckedRefs :: HM.HashMap Text Ref
+      typecheckedRefs = moduleTypecheckableRefs moduleData
 
-  -- For each ref, if it typechecks as a function (which it should), keep its
-  -- signature.
+  -- For each ref, if it typechecks as a function (it'll either be a function
+  -- or a constant), keep its signature.
   --
   (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
@@ -414,7 +414,7 @@ verifyModule modules moduleData = do
         _ -> accum
     )
     HM.empty
-    funRefs
+    typecheckedRefs
 
   let funChecks :: HM.HashMap Text (Ref, [(Parsed, Check)])
       funChecks = moduleFunChecks funTypes
