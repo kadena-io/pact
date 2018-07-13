@@ -1455,7 +1455,7 @@ analyzePropO (PLiteralObject props) = do
       prop' <- analyzePropO prop
       pure (EObjectTy ty, AnObj prop')
   pure $ Object props'
-analyzePropO (PLit _) = throwErrorNoLoc "We don't support property object literals"
+analyzePropO (PLit _) = error "PLit is only for simple types"
 analyzePropO (PSym _) = throwErrorNoLoc "Symbolic values can't be objects"
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
