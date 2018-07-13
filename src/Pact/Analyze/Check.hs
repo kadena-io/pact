@@ -48,8 +48,8 @@ import           Pact.Types.Lang           (Parsed, eParsed, mMetas, renderInfo,
                                             renderParsed, tMeta, _iInfo)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
-                                            Term (TDef, TSchema, TTable),
-                                            asString, tInfo, tShow)
+                                            Term (TConst, TDef, TSchema,
+                                            TTable), asString, tInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST, Fun (FDefun, _fInfo),
                                             Named (_nnName, _nnNamed), Node,
@@ -316,8 +316,9 @@ getInfoParsed info = case _iInfo info of
 -- Get the set (HashMap) of refs to functions in this module.
 moduleFunRefs :: ModuleData -> HM.HashMap Text Ref
 moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
-  Ref (TDef {}) -> True
-  _             -> False
+  Ref (TDef {})   -> True
+  Ref (TConst {}) -> True
+  _               -> False
 
 moduleFunChecks
   :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)
