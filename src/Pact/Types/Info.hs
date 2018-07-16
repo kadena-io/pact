@@ -36,7 +36,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Data.Monoid
 import Data.Semigroup (Semigroup)
 import Control.DeepSeq
-import Data.SBV (Mergeable(symbolicMerge))
 
 import Pact.Types.Orphans ()
 import Pact.Types.Util
@@ -82,11 +81,6 @@ instance Ord Info where
   Info (Just (_,d)) <= Info (Just (_,e)) = d <= e
   Info Nothing <= _ = True
   _ <= Info Nothing = False
-
-instance Mergeable Info where
-  -- Because Info values have no effect on execution we just take the max
-  -- (which could possibly have more info)
-  symbolicMerge _ _ a b = max a b
 
 instance Default Info where def = Info Nothing
 

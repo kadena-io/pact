@@ -57,6 +57,8 @@ import qualified Pact.Types.Lang            as Pact
 import qualified Pact.Types.Typecheck       as TC
 import           Pact.Types.Util            (AsString, tShow)
 
+import           Pact.Analyze.Orphans       ()
+
 -- TODO: could implement this stuff generically or add newtype-awareness
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
