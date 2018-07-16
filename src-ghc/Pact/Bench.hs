@@ -17,7 +17,6 @@ import Control.DeepSeq
 import Data.Aeson
 import Pact.Types.Crypto
 import Pact.Types.RPC
-import Pact.Types.Util
 import Pact.Types.Runtime
 import Pact.Interpreter
 import qualified Data.Set as S
@@ -30,6 +29,7 @@ import qualified Data.Map.Strict as M
 import Pact.Persist.MockPersist
 import Pact.Persist
 import Unsafe.Coerce
+import Pact.Gas
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -73,7 +73,7 @@ loadBenchModule db = do
            (object ["keyset" .= object ["keys" .= ["benchadmin"::Text], "pred" .= (">"::Text)]])
            Nothing
            initialHash
-  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore) pc
+  erRefStore <$> evalExec (setupEvalEnv db entity (Transactional 1) md initRefStore freeGasEnv) pc
 
 parseCode :: Text -> IO ParsedCode
 parseCode m = ParsedCode m <$> eitherDie (parseExprs m)
@@ -84,7 +84,7 @@ benchNFIO bname = bench bname . nfIO
 runPactExec :: PactDbEnv e -> RefStore -> ParsedCode -> IO Value
 runPactExec dbEnv refStore pc = do
   t <- Transactional . fromIntegral <$> getCPUTime
-  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore) pc
+  toJSON . erOutput <$> evalExec (setupEvalEnv dbEnv entity t (initMsgData initialHash) refStore freeGasEnv) pc
 
 benchKeySet :: KeySet
 benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)

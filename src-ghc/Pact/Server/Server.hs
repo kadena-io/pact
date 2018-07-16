@@ -35,7 +35,7 @@ import System.Log.FastLogger
 import Data.Default
 
 import Pact.Types.Command
-import Pact.Types.Runtime hiding (Update,(<>))
+import Pact.Types.Runtime hiding (Update)
 import Pact.Types.SQLite
 import Pact.Types.Server
 import Pact.Types.Logger

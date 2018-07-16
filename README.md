@@ -140,6 +140,26 @@ sudo systemctl restart nix-daemon.service
 
 5. Run `nix-build` from the project root
 
+### Incremental Builds
+
+Building with `nix-build` does a full rebuild every time, which is usually not
+what you want when developing. To do incremental builds, you need to enter a nix
+shell. To do that use the following command:
+
+```
+$ nix-shell -A shells.ghc
+```
+
+This puts you in a shell that has all the necessary dependencies installed. Once
+inside this shell you can build as normal with cabal using `cabal build` or
+`cabal new-build`.
+
+You can also build with stack inside this shell as follows:
+
+```
+$ stack --stack-yaml stack-nix.yaml build
+```
+
 License
 ---
 

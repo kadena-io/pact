@@ -21,6 +21,7 @@ import System.Console.Haskeline
   (runInputT, withInterrupt, InputT, getInputLine, handleInterrupt,
    CompletionFunc, completeQuotedWord, completeWord, listFiles,
    filenameWordBreakChars, Settings(Settings), simpleCompletion)
+import Data.Monoid
 
 import Pact.Parse
 import Pact.Types.Runtime

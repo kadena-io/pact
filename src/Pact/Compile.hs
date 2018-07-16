@@ -47,9 +47,8 @@ import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as M
 
 import Pact.Types.Lang
-import Pact.Types.Util
 import Pact.Parse (exprsOnly,parseExprs)
-import Pact.Types.Runtime (PactError(..))
+import Pact.Types.Runtime (PactError(..),PactErrorType(..))
 import Pact.Types.Hash
 
 type MkInfo = Exp -> Info
@@ -85,7 +84,7 @@ compileExps mi exps = sequence $ compile mi <$> exps
 
 
 syntaxError :: Info -> String -> Compile a
-syntaxError i s = throwError $ SyntaxError i def (pack s)
+syntaxError i s = throwError $ PactError SyntaxError i def (pack s)
 
 syntaxError' :: Exp -> String -> Compile a
 syntaxError' e s = mkInfo e >>= \i -> syntaxError i s

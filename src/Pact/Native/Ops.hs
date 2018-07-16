@@ -103,7 +103,7 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
                  "Boolean logic with short-circuit. `(" <> asString n <> " true false)`"
     where
       fun :: NativeFun e
-      fun i as@[a,b] = reduce a >>= \a' -> case a' of
+      fun i as@[a,b] = gasUnreduced i as $ reduce a >>= \a' -> case a' of
         TLitBool x | x == shortC -> return $ toTerm x
                    | otherwise -> reduce b >>= \b' -> case b' of
                        TLitBool y -> return $ toTerm $ x `bop` y
@@ -128,7 +128,7 @@ liftLogic n bop desc shortCircuit =
     "`(" <> asString n <> " (> 20) (> 10) 15)`")
   where
     r = mkTyVar "r" []
-    fun _ [a@TApp{},b@TApp{},v'] = reduce v' >>= \v -> do
+    fun i as@[a@TApp{},b@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> do
       ar <- apply' a [v]
       case ar of
         TLitBool ab
@@ -142,7 +142,7 @@ liftLogic n bop desc shortCircuit =
     fun i as = argsError' i as
 
 liftNot :: NativeFun e
-liftNot _ [app@TApp{},v'] = reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
+liftNot i as@[app@TApp{},v'] = gasUnreduced i as $ reduce v' >>= \v -> apply' app [v] >>= \r -> case r of
   TLitBool b -> return $ toTerm $ not b
   _ -> delegateError "not?" app r
 liftNot i as = argsError' i as

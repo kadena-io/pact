@@ -50,7 +50,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import Data.Monoid
 
 import Pact.Types.Lang
-import Pact.Types.Util
 import Pact.Types.Native
 
 

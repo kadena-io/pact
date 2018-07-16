@@ -43,7 +43,7 @@ import Data.Monoid
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
-import Pact.Types.Runtime hiding ((<>))
+import Pact.Types.Runtime
 import Pact.Persist as P
 import Pact.Types.Logger
 
