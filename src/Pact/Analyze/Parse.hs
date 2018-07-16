@@ -341,6 +341,9 @@ inferPreProp preProp = case preProp of
     let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop Bool)
             -> Prop a -> Prop a -> PropCheck EProp
         ret c aProp bProp = pure $ EProp TBool $ c op aProp bProp
+        eqNeqMsg :: Text -> Text
+        eqNeqMsg nouns = nouns
+                      <> " only support equality (=) / inequality (!=) checks"
     case (a', b') of
       (EProp aTy aProp, EProp bTy bProp) -> case typeEq aTy bTy of
         Nothing -> typeError preProp aTy bTy
@@ -354,14 +357,14 @@ inferPreProp preProp = case preProp of
             "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case textToEqNeq op' of
             Just eqNeq -> pure $ EProp TBool $ PKeySetEqNeq eqNeq aProp bProp
-            Nothing    -> throwErrorIn preProp
-              "keysets only support equality (=) / inequality (!=) checks"
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
+      (EObjectProp _ aProp, EObjectProp _ bProp) -> case textToEqNeq op' of
+          Just eqNeq -> pure $ EProp TBool $ PObjectEqNeq eqNeq aProp bProp
+          Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
       (_, _) -> throwErrorIn preProp $
-        -- TODO(joel)
-        "in properties we can currently only compare primitive types, not yet objects (found " <>
+        "can't compare primitive types with objects (found " <>
         userShow (ePropToEType a') <> " and " <> userShow (ePropToEType b') <>
         ")"
-
 
   PreApp op'@(textToLogicalOp -> Just op) args -> do
     EProp TBool <$> case (op, args) of

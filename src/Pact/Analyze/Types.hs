@@ -588,6 +588,8 @@ data Prop a where
   PStringComparison  :: ComparisonOp -> Prop String  -> Prop String  -> Prop Bool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
   PBoolComparison    :: ComparisonOp -> Prop Bool    -> Prop Bool    -> Prop Bool
+  -- | A boolean comparison expression over two 'Object' expressions
+  PObjectEqNeq       :: EqNeq        -> Prop Object  -> Prop Object  -> Prop Bool
   -- | A boolean comparison expression over two 'KeySet' expressions
   PKeySetEqNeq       :: EqNeq        -> Prop KeySet  -> Prop KeySet  -> Prop Bool
 

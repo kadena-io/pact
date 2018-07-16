@@ -116,6 +116,7 @@ floatBoolQuantifiers p = case p of
   PTimeComparison    op a b -> PTimeComparison    op <$> float a <*> float b
   PBoolComparison    op a b -> PBoolComparison    op <$> float a <*> float b
   PStringComparison  op a b -> PStringComparison  op <$> float a <*> float b
+  PObjectEqNeq       op a b -> PObjectEqNeq       op <$> float a <*> float b
   PKeySetEqNeq       op a b -> PKeySetEqNeq       op <$> float a <*> float b
 
   PAnd a b     -> PAnd <$> float a <*> float b

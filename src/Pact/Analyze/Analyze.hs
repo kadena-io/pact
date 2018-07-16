@@ -1518,6 +1518,7 @@ analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
 analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
 analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
 analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
+analyzeProp (PObjectEqNeq op x y)       = analyzeObjectEqNeq  op x y
 analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
 
 -- Boolean ops
