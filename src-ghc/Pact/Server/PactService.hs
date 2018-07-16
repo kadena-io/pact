@@ -110,7 +110,7 @@ handlePactExec :: [Term Name] -> PactExec -> CommandM p (Maybe CommandPact)
 handlePactExec em PactExec{..} = do
   CommandEnv{..} <- ask
   unless (length em == 1) $
-    throwCmdEx $ "handleYield: defpact execution must occur as a single command: " ++ show em
+    throwCmdEx $ "handlePactExec: defpact execution must occur as a single command: " ++ show em
   case _ceMode of
     Local -> return Nothing
     Transactional tid -> do
@@ -155,6 +155,8 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
 
 rollbackUpdate :: CommandEnv p -> ContMsg -> CommandState -> CommandM p ()
 rollbackUpdate CommandEnv{..} ContMsg{..} CommandState{..} = do
+  -- if step doesn't have a rollback function, no error thrown. Therefore, pact will be deleted
+  -- from state. 
   let newState = CommandState _csRefStore $ M.delete _cmTxId _csPacts
   liftIO $ logLog _ceLogger "DEBUG" $ "applyContinuation: rollbackUpdate: reaping pact "
     ++ show _cmTxId
