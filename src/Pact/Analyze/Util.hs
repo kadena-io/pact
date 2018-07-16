@@ -9,23 +9,8 @@ import           Pact.Types.Typecheck      (AST(_aNode), Node(_aId), _tiInfo)
 (<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
 (<$$>) = fmap . fmap
 
-(<$$$>)
-  :: (Functor f, Functor g, Functor h)
-  => (a -> b) -> f (g (h a)) -> f (g (h b))
-(<$$$>) = fmap . fmap . fmap
-
-(<$$$$>)
-  :: (Functor f, Functor g, Functor h, Functor i)
-  => (a -> b) -> f (g (h (i a))) -> f (g (h (i b)))
-(<$$$$>) = fmap . fmap . fmap . fmap
-
 (<&&>) :: (Functor f, Functor g) => f (g a) -> (a -> b) -> f (g b)
 (<&&>) = flip (<$$>)
-
-(<&&&>)
-  :: (Functor f, Functor g, Functor h)
-  => f (g (h a)) -> (a -> b) -> f (g (h b))
-(<&&&>) = flip (<$$$>)
 
 -- | Function composition that consumes two args instead of one
 (...) :: (a -> b) -> (x -> y -> a) -> x -> y -> b

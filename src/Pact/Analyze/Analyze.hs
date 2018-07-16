@@ -1600,21 +1600,24 @@ analyzeCheck = \case
 newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [Located a] }
 
 instance Functor InvariantsF where
-  fmap f (InvariantsF a) = InvariantsF (f <$$$> a)
+  fmap f (InvariantsF a) = InvariantsF ((fmap . fmap . fmap) f a)
 
 analyzeInvariants :: Query (InvariantsF (S Bool))
-analyzeInvariants = assumingSuccess =<< invariantsHold'
+analyzeInvariants = assumingSuccess =<< invariantsHold''
   where
     assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
     assumingSuccess ps = do
       success <- view (qeAnalyzeState.succeeds)
       pure $ (success ==>) <$> ps
 
-    invariantsHold :: Query (TableMap (ZipList (Located (S Bool))))
-    invariantsHold = sansProv <$$$$> view (qeAnalyzeState.maintainsInvariants)
+    invariantsHold :: Query (TableMap (ZipList (Located (SBV Bool))))
+    invariantsHold = view (qeAnalyzeState.maintainsInvariants)
 
-    invariantsHold' :: Query (InvariantsF (S Bool))
+    invariantsHold' :: Query (InvariantsF (SBV Bool))
     invariantsHold' = InvariantsF <$> (getZipList <$$> invariantsHold)
+
+    invariantsHold'' :: Query (InvariantsF (S Bool))
+    invariantsHold'' = sansProv <$$> invariantsHold'
 
 -- | Helper to run either property or invariant analysis
 runAnalysis'
