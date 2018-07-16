@@ -31,8 +31,26 @@ spec = describe "pacts in dev server" $ do
   describe "testPactRollback" testPactRollback
   describe "testPactYield" testPactYield
   describe "testTwoPartyEscrow" testTwoPartyEscrow
+  describe "testNestedPacts" testNestedPacts
 
+testNestedPacts :: Spec
+testNestedPacts = before_ flushDb $ after_ flushDb $ do
+  it "throws error when multiple defpact executions occur in same transaction" $ do
+    adminKeys <- genKeys
+    
+    moduleCmd <- mkExec (T.unpack (threeStepPactCode "nestedPact"))
+                 (object ["admin-keyset" .= [_kpPublic adminKeys]])
+                 Nothing [adminKeys] (Just "test1")
+    nestedExecPactCmd <- mkExec ("(nestedPact.tester)" ++ " (nestedPact.tester)")
+                         Null Nothing [adminKeys] (Just "test2")
+    allResults <- runAll [moduleCmd, nestedExecPactCmd]
+    
+    let allChecks = [makeCheck moduleCmd False Nothing,
+                     makeCheck nestedExecPactCmd True $
+                     (Just "(defpact tester ()\n  (step \"st...: Failure: Nested pact execution, aborting")]
 
+    allResults `shouldMatch` allChecks
+    
 
 -- CONTINUATIONS TESTS
 
