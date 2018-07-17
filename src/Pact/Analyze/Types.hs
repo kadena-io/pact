@@ -709,11 +709,13 @@ instance Num (Prop Decimal) where
   signum      = PDecUnaryArithOp Signum
   negate      = PDecUnaryArithOp Negate
 
---
--- TODO: extract data type
---
-type Arg
-  = (Text, VarId, TC.Node, EType)
+-- | An argument to a function
+data Arg = Arg
+  { argName  :: Text
+  , argVarId :: VarId
+  , argNode  :: TC.Node
+  , argType  :: EType
+  }
 
 data Table = Table
   { _tableName       :: Text
