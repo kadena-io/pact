@@ -112,7 +112,7 @@ instance Monoid TranslateFailure where
 
 mkTranslateEnv :: [Arg] -> Map Node (Text, VarId)
 mkTranslateEnv = foldl'
-  (\m (nm, vid, node, _ety) -> Map.insert node (nm, vid) m)
+  (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
   Map.empty
 
 data TagAllocation
@@ -269,7 +269,7 @@ translateArg
 translateArg (Named nm node _) = do
   vid <- genVarId
   ety <- translateType (_aTy node)
-  pure (nm, vid, node, ety)
+  pure (Arg nm vid node ety)
 
 translateSchema :: Pact.Type Pact.UserType -> TranslateM Schema
 translateSchema ty = do
