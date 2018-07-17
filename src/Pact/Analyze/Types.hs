@@ -683,19 +683,19 @@ ePropToEType = \case
   EObjectProp schema' _ -> EObjectTy schema'
 
 instance Boolean (Prop Bool) where
-  true   = PLit True
-  false  = PLit False
-  bnot p = PLogical NotOp [p]
+  true      = PLit True
+  false     = PLit False
+  bnot p    = PLogical NotOp [p]
   p1 &&& p2 = PAnd p1 p2
   p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop Integer) where
   fromInteger = PLit . fromInteger
-  (+)    = PIntArithOp Add
-  (*)    = PIntArithOp Mul
-  abs    = PIntUnaryArithOp Abs
-  signum = PIntUnaryArithOp Signum
-  negate = PIntUnaryArithOp Negate
+  (+)         = PIntArithOp Add
+  (*)         = PIntArithOp Mul
+  abs         = PIntUnaryArithOp Abs
+  signum      = PIntUnaryArithOp Signum
+  negate      = PIntUnaryArithOp Negate
 
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
@@ -703,11 +703,11 @@ mkDecimal (Decimal.Decimal places mantissa) = fromRational $
 
 instance Num (Prop Decimal) where
   fromInteger = PLit . mkDecimal . fromInteger
-  (+)    = PDecArithOp Add
-  (*)    = PDecArithOp Mul
-  abs    = PDecUnaryArithOp Abs
-  signum = PDecUnaryArithOp Signum
-  negate = PDecUnaryArithOp Negate
+  (+)         = PDecArithOp Add
+  (*)         = PDecArithOp Mul
+  abs         = PDecUnaryArithOp Abs
+  signum      = PDecUnaryArithOp Signum
+  negate      = PDecUnaryArithOp Negate
 
 --
 -- TODO: extract data type
@@ -728,9 +728,9 @@ data Goal
 deriving instance Eq Goal
 
 data Check
-  = PropertyHolds  (Prop Bool) -- valid, assuming success
-  | Satisfiable    (Prop Bool) -- sat,   not assuming success
-  | Valid          (Prop Bool) -- valid, not assuming success
+  = PropertyHolds (Prop Bool) -- valid, assuming success
+  | Satisfiable   (Prop Bool) -- sat,   not assuming success
+  | Valid         (Prop Bool) -- valid, not assuming success
   --
   -- TODO: potentially another case for satisfiable, assuming success?
   --
