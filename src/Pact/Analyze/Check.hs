@@ -292,7 +292,7 @@ allocModelTags args locatedTm tagAllocs = ModelTags
         (alloc :: Symbolic (SBV t))
 
     allocArgs :: Symbolic (Map VarId (Located (Text, TVal)))
-    allocArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
+    allocArgs = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
       av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
       pure (vid, Located info (nm, (ety, av)))
