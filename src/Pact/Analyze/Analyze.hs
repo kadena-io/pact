@@ -47,7 +47,7 @@ import           Data.SBV                  (Boolean (bnot, true, (&&&), (==>), (
                                             SBV, SBool, SFunArray,
                                             SymArray (readArray, writeArray),
                                             SymWord (exists_, forall_),
-                                            Symbolic, constrain, false, free_,
+                                            Symbolic, constrain, false, free,
                                             ite, mkSFunArray, sDiv, sMod,
                                             uninterpret, (.^))
 import qualified Data.SBV.Internals        as SBVI
@@ -405,6 +405,7 @@ allocateArgMap args = fmap Map.fromList $ for args $ \(name, uid, node) ->
   let ty = Pact._aTy node
       wrap = lift . fmap (mkAVal . sansProv)
       reportBadArg = throwError . UnhandledTerm . ("argument: " <>)
+      sName = T.unpack name
 
       eVar :: ExceptT AnalyzeFailure Symbolic AVal
       eVar = case ty of
@@ -412,13 +413,13 @@ allocateArgMap args = fmap Map.fromList $ for args $ \(name, uid, node) ->
                -- TODO: possibly use Translate's logic to convert to EType,
                --       and dispatch off of that:
                --
-               TyPrim TyInteger -> wrap (free_ :: Symbolic (SBV Integer))
-               TyPrim TyBool    -> wrap (free_ :: Symbolic (SBV Bool))
-               TyPrim TyDecimal -> wrap (free_ :: Symbolic (SBV Decimal))
-               TyPrim TyTime    -> wrap (free_ :: Symbolic (SBV Int64))
-               TyPrim TyString  -> wrap (free_ :: Symbolic (SBV String))
-               TyUser _         -> wrap (free_ :: Symbolic (SBV UserType))
-               TyPrim TyKeySet  -> wrap (free_ :: Symbolic (SBV KeySet))
+               TyPrim TyInteger -> wrap (free sName :: Symbolic (SBV Integer))
+               TyPrim TyBool    -> wrap (free sName :: Symbolic (SBV Bool))
+               TyPrim TyDecimal -> wrap (free sName :: Symbolic (SBV Decimal))
+               TyPrim TyTime    -> wrap (free sName :: Symbolic (SBV Int64))
+               TyPrim TyString  -> wrap (free sName :: Symbolic (SBV String))
+               TyUser _         -> wrap (free sName :: Symbolic (SBV UserType))
+               TyPrim TyKeySet  -> wrap (free sName :: Symbolic (SBV KeySet))
 
                TyPrim TyValue   -> reportBadArg name
                TyAny            -> reportBadArg name

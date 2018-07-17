@@ -111,12 +111,54 @@ To build, you'll need a working [Haskell Stack install](https://docs.haskellstac
 
 To install for use with Atom and the command line, issue 'stack install' and then either add `$HOME/.local/bin` to your path, or symlink `$HOME/.local/bin/pact` somewhere in your PATH.
 
-Building with GHCJS
+Building with Nix / NixOS
 ---
 
-To build pact for browser use, add `--stack-yaml stack-ghcjs.yaml` to your stack commands. The script [web/build.sh](web/build.sh) builds Pact and minifies it; you'll need the [closure compiler](https://www.npmjs.com/package/google-closure-compiler) and a Java Runtime Environment installed.
+1. Go to https://nixos.org/nix/, click "Get Nix", follow the instructions to install the Nix package manager
+2. Edit `$NIX_CONF_DIR/nix.conf`
+3. Set the `binary-caches` and `binary-cache-public-keys` lines as follows:
 
+```
+binary-caches = https://pact.cachix.org https://nixcache.reflex-frp.org https://cache.nixos.org/
+binary-cache-public-keys = pact.cachix.org-1:cg1bsryGrHnQzqEp52NcHq4mBBL+R25XbR2Q/I/vQ8Y= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+```
 
+4. Restart the nix daemon.
+
+On mac:
+
+```
+sudo launchctl stop org.nixos.nix-daemon
+sudo launchctl start org.nixos.nix-daemon
+```
+
+On linux:
+
+```
+sudo systemctl restart nix-daemon.service
+```
+
+5. Run `nix-build` from the project root
+
+### Incremental Builds
+
+Building with `nix-build` does a full rebuild every time, which is usually not
+what you want when developing. To do incremental builds, you need to enter a nix
+shell. To do that use the following command:
+
+```
+$ nix-shell -A shells.ghc
+```
+
+This puts you in a shell that has all the necessary dependencies installed. Once
+inside this shell you can build as normal with cabal using `cabal build` or
+`cabal new-build`.
+
+You can also build with stack inside this shell as follows:
+
+```
+$ stack --stack-yaml stack-nix.yaml build
+```
 
 License
 ---

@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
@@ -46,8 +47,9 @@ import Statistics.Resampling.Bootstrap
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
-
-import Pact.Native.Internal
+-- intentionally hidden unused functions to prevent lib functions from consuming gas
+import Pact.Native.Internal hiding (defRNative,defGasRNative,defNative)
+import qualified Pact.Native.Internal as Native
 import Pact.Types.Runtime
 import Pact.Eval
 import Pact.Persist.Pure
@@ -64,25 +66,38 @@ initLibState loggers = do
   createSchema m
   return (LibState m Noop def def)
 
+-- | Native function with no gas consumption.
+type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
+
+zeroGas :: Eval e a -> Eval e (Gas,a)
+zeroGas = fmap (0,)
+
+defZNative :: NativeDefName -> ZNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZNative name fun = Native.defNative name $ \fi as -> zeroGas $ fun fi as
+
+defZRNative :: NativeDefName -> RNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
+defZRNative name fun = Native.defNative name (reduced fun)
+    where reduced f fi as = mapM reduce as >>= zeroGas . f fi
+
 replDefs :: NativeModule
 replDefs =
   let rt = mkSchemaVar "row"
       tableTy = TySchema TyObject rt
   in ("Repl",
      [
-      defRNative "load" load (funType tTyString [("file",tTyString)] <>
+      defZRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
       "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " <>
       "`$(load \"accounts.repl\")`"
-     ,defRNative "export" export (funType tTyString [("tables",TyList tableTy)]) $
+     ,defZRNative "export" export (funType tTyString [("tables",TyList tableTy)]) $
       "Export user-defined tables to Excel FILE." <>
       "`$(export [\"accounts\" \"customers\"])`"
-     ,defRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
+     ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
-     ,defRNative "env-data" setmsg (funType tTyString [("json",json)]) $
+     ,defZRNative "env-data" setmsg (funType tTyString [("json",json)]) $
       "Set transaction JSON data, either as encoded string, or as pact types coerced to JSON. " <>
       "`(env-data { \"keyset\": { \"keys\": [\"my-key\" \"admin-key\"], \"pred\": \"keys-any\" } })`"
-     ,defRNative "env-step"
+     ,defZRNative "env-step"
       setstep (funType tTyString [] <>
                funType tTyString [("step-idx",tTyInteger)] <>
                funType tTyString [("step-idx",tTyInteger),("rollback",tTyBool)] <>
@@ -90,43 +105,50 @@ replDefs =
       ("Set pact step state. With no arguments, unset step. With STEP-IDX, set step index to execute. " <>
        "ROLLBACK instructs to execute rollback expression, if any. RESUME sets a value to be read via 'resume'." <>
        "Clears any previous pact execution state. `$(env-step 1)` `$(env-step 0 true)`")
-     ,defRNative "pact-state" pactState (funType (tTyObject TyAny) [])
+     ,defZRNative "pact-state" pactState (funType (tTyObject TyAny) [])
       ("Inspect state from previous pact execution. Returns object with fields " <>
       "'yield': yield result or 'false' if none; 'step': executed step; " <>
       "'executed': indicates if step was skipped because entity did not match. `$(pact-state)`")
-     ,defRNative "env-entity" setentity
+     ,defZRNative "env-entity" setentity
       (funType tTyString [] <> funType tTyString [("entity",tTyString)])
       ("Set environment confidential ENTITY id, or unset with no argument. " <>
       "Clears any previous pact execution state. `$(env-entity \"my-org\")` `$(env-entity)`")
-     ,defRNative "begin-tx" (tx Begin) (funType tTyString [] <>
+     ,defZRNative "begin-tx" (tx Begin) (funType tTyString [] <>
                                         funType tTyString [("name",tTyString)])
        "Begin transaction with optional NAME. `$(begin-tx \"load module\")`"
-     ,defRNative "commit-tx" (tx Commit) (funType tTyString []) "Commit transaction. `$(commit-tx)`"
-     ,defRNative "rollback-tx" (tx Rollback) (funType tTyString []) "Rollback transaction. `$(rollback-tx)`"
-     ,defRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
+     ,defZRNative "commit-tx" (tx Commit) (funType tTyString []) "Commit transaction. `$(commit-tx)`"
+     ,defZRNative "rollback-tx" (tx Rollback) (funType tTyString []) "Rollback transaction. `$(rollback-tx)`"
+     ,defZRNative "expect" expect (funType tTyString [("doc",tTyString),("expected",a),("actual",a)])
       "Evaluate ACTUAL and verify that it equals EXPECTED. `(expect \"Sanity prevails.\" 4 (+ 2 2))`"
-     ,defNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)]) $
+     ,defZNative "expect-failure" expectFail (funType tTyString [("doc",tTyString),("exp",a)]) $
       "Evaluate EXP and succeed only if it throws an error. " <>
       "`(expect-failure \"Enforce fails on false\" (enforce false \"Expected error\"))`"
-     ,defNative "bench" bench' (funType tTyString [("exprs",TyAny)])
+     ,defZNative "bench" bench' (funType tTyString [("exprs",TyAny)])
       "Benchmark execution of EXPRS. `$(bench (+ 1 2))`"
-     ,defRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
+     ,defZRNative "typecheck" tc (funType tTyString [("module",tTyString)] <>
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
-
+     ,defZRNative "env-gaslimit" setGasLimit (funType tTyString [("limit",tTyInteger)])
+       "Set environment gas limit to LIMIT"
+     ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
+       "Query gas state, or set it to GAS"
+     ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
+       "Set environment gas price to PRICE"
+     ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
+       "Update gas model to charge constant RATE"
 #if !defined(ghcjs_HOST_OS)
-     ,defRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
+     ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
 #endif
 
-     ,defRNative "json" json' (funType tTyValue [("exp",a)]) $
+     ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
-     ,defRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
+     ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
      "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
-     ,defRNative "print" print' (funType tTyString [("value",a)])
+     ,defZRNative "print" print' (funType tTyString [("value",a)])
      "Print a string, mainly to format newlines correctly"
-     ,defRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
+     ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ])
      where
@@ -279,7 +301,7 @@ expect i [TLitString a,b,c] =
   else testFailure i a $ "FAILURE: " <> a <> ": expected " <> pack (show b) <> ", received " <> pack (show c)
 expect i as = argsError i as
 
-expectFail :: NativeFun LibState
+expectFail :: ZNativeFun LibState
 expectFail i as@[a,b] = do
   a' <- reduce a
   case a' of
@@ -291,7 +313,7 @@ expectFail i as@[a,b] = do
     _ -> argsError' i as
 expectFail i as = argsError' i as
 
-bench' :: NativeFun LibState
+bench' :: ZNativeFun LibState
 #if !defined(ghcjs_HOST_OS)
 bench' i as = do
   e <- ask
@@ -363,7 +385,7 @@ json' _ [a] = return $ TValue (toJSON a) def
 json' i as = argsError i as
 
 sigKeyset :: RNativeFun LibState
-sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (asString KeysAll)
+sigKeyset _ _ = view eeMsgSigs >>= \ss -> return $ toTerm $ KeySet (S.toList ss) (Name (asString KeysAll) def)
 
 print' :: RNativeFun LibState
 print' _ [v] = setop (Print v) >> return (tStr "")
@@ -376,3 +398,29 @@ envHash i [TLitString s] = case fromText' s of
     setenv eeHash h
     return $ tStr $ "Set tx hash to " <> s
 envHash i as = argsError i as
+
+setGasLimit :: RNativeFun LibState
+setGasLimit _ [TLitInteger l] = do
+  setenv (eeGasEnv . geGasLimit) (fromIntegral l)
+  return $ tStr $ "Set gas limit to " <> tShow l
+setGasLimit i as = argsError i as
+
+envGas :: RNativeFun LibState
+envGas _ [] = use evalGas >>= \g -> return (tLit $ LInteger $ fromIntegral g)
+envGas _ [TLitInteger g] = do
+  evalGas .= fromIntegral g
+  return $ tStr $ "Set gas to " <> tShow g
+envGas i as = argsError i as
+
+setGasPrice :: RNativeFun LibState
+setGasPrice _ [TLiteral (LDecimal d) _] = do
+  setenv (eeGasEnv . geGasPrice) (GasPrice d)
+  return $ tStr $ "Set gas price to " <> tShow d
+setGasPrice i as = argsError i as
+
+setGasRate :: RNativeFun LibState
+setGasRate _ [TLitInteger r] = do
+    setenv (eeGasEnv . geGasModel) (constGasModel $ fromIntegral r)
+    return $ tStr $ "Set gas rate to " <> tShow r
+
+setGasRate i as = argsError i as

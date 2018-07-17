@@ -287,7 +287,7 @@ spec = describe "analyze" $ do
             (deftable tokens:{token-row})
 
             (defun test:integer (acct:string)
-              ("test"
+              (meta "test"
                 (property (forall (row:string)
                   (row-enforced "tokens" "ks" row))))
               (with-read tokens acct { "ks" := ks, "balance" := bal }
@@ -569,7 +569,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defschema account2
-              ("accounts schema"
+              (meta "accounts schema"
                 (invariant (>= balance 0.0)))
               balance:decimal)
             (deftable accounts2:{account2})
@@ -591,7 +591,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defun test:string ()
-              (""
+              (meta ""
                 (properties [
                   (not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))
                 ]))
@@ -902,7 +902,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defschema ints-row
-              ("doc"
+              (meta "doc"
                 (invariants
                   [(> pos 0)
                    (< neg 0)]))
@@ -924,7 +924,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defschema ints-row
-              ("doc"
+              (meta "doc"
                 (invariant (!= nonzero 0)))
               nonzero:integer)
             (deftable ints:{ints-row})
@@ -941,7 +941,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defschema ints-row
-              ("doc"
+              (meta "doc"
                 (invariant (= zero 0)))
               zero:integer)
             (deftable ints:{ints-row})
@@ -1031,7 +1031,7 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defschema central-bank-schema
-              ("central bank"
+              (meta "central bank"
                 (invariants
                   [(= 1000000 (+ reserve circulation))
                    (>= reserve 0)
