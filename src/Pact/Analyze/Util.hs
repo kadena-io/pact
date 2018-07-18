@@ -16,6 +16,10 @@ import           Pact.Types.Typecheck      (AST(_aNode), Node(_aId), _tiInfo)
 (...) :: (a -> b) -> (x -> y -> a) -> x -> y -> b
 (...) = (<$$>)
 
+-- | Function composition that consumes three args instead of one
+(....) :: (a -> b) -> (x -> y -> z -> a) -> x -> y -> z -> b
+(....) = fmap . fmap . fmap
+
 for2
   :: (Traversable s, Traversable t, Applicative f)
   => s (t a) -> (a -> f b) -> f (s (t b))
@@ -45,3 +49,6 @@ dummyParsed = Default.def
 -- | An 'Info' for when there is no location info available.
 dummyInfo :: Info
 dummyInfo = Default.def
+
+vacuous :: String -> a
+vacuous msg = error $ "vacuous: " ++ msg

@@ -541,12 +541,14 @@ data PropSpecific a where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> PropSpecific Bool
 
+deriving instance Eq a => Eq (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
 
 inject :: PropSpecific a -> Prop a
 inject = PropSpecific
 
 data PureTerm et t a where
+  Lit :: a -> PureTerm et t a
   -- | Injects a symbolic value into the language
   Sym :: S a -> PureTerm et t a
 
@@ -566,10 +568,16 @@ data PureTerm et t a where
   DecAddTime      :: t Time -> t Decimal -> PureTerm et t Time
 
   -- comparison
+  -- | A 'ComparisonOp' expression over two 'Integer' expressions
+  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> PureTerm et t Bool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  Comparison
-    :: (Show a, SymWord a, Float a)
-    => ComparisonOp -> t a -> t a -> PureTerm et t Bool
+  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> PureTerm et t Bool
+  -- | A 'ComparisonOp' expression over two 'Time' expressions
+  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> PureTerm et t Bool
+  -- | A 'ComparisonOp' expression over two 'String' expressions
+  StringComparison  :: ComparisonOp -> t String  -> t String  -> PureTerm et t Bool
+  -- | A 'ComparisonOp' expression over two 'Bool' expressions
+  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> PureTerm et t Bool
 
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm et t Bool
   ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm et t Bool
@@ -583,20 +591,14 @@ data PureTerm et t a where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t Bool] -> PureTerm et t Bool
 
--- deriving instance (Show a, Show (t Decimal), Show (t Integer), Show (t String), Show (t Bool), Show (t Time)) => Show (PureTerm t a)
-instance Show (PureTerm EProp Prop a) where
-  showsPrec _ _ = showString "TODO(joel)"
-instance Show (PureTerm EInvariant Invariant a) where
-  showsPrec _ _ = showString "TODO(joel)"
+deriving instance Show a => Show (PureTerm EProp Prop a)
+deriving instance Show a => Show (PureTerm EInvariant Invariant a)
 
-instance Eq a => Eq (PureTerm EProp Prop a) where
-  (==) = error "TODO(joel)"
-instance Eq a => Eq (PureTerm EInvariant Invariant a) where
-  (==) = error "TODO(joel)"
+deriving instance Eq a => Eq (PureTerm EProp Prop a)
+deriving instance Eq a => Eq (PureTerm EInvariant Invariant a)
 
-pattern PLit :: SymWord a => a -> Prop a
-pattern PLit a <- PureProp (Sym (unliteralS -> Just a)) where
-  PLit a = PureProp (Sym (literalS a))
+pattern PLit :: a -> Prop a
+pattern PLit a = PureProp (Lit a)
 
 data Prop a where
   PropSpecific :: PropSpecific a  -> Prop a
@@ -606,10 +608,7 @@ data Prop a where
   -- variable
   PVar   :: VarId -> Text -> Prop a
 
-instance Eq a => Eq (Prop a) where
-  -- PropSpecific a == PropSpecific b = a == b
-  PureProp a == PureProp b = a == b
--- deriving instance Eq a => Eq (Prop a)
+deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
 pattern PNumerical :: Numerical Prop t -> Prop t
@@ -627,11 +626,11 @@ pattern PDecAddTime x y = PureProp (DecAddTime x y)
 pattern PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
 pattern PAt a b c d = PureProp (At a b c d)
 
-pattern PComparison
-  :: ()
-  => (Show a, SymWord a, Float a)
-  => ComparisonOp -> Prop a -> Prop a -> Prop Bool
-pattern PComparison op x y = PureProp (Comparison op x y)
+-- pattern PComparison
+--   :: ()
+--   => (Show a, SymWord a, Float a)
+--   => ComparisonOp -> Prop a -> Prop a -> Prop Bool
+-- pattern PComparison op x y = PureProp (Comparison op x y)
 
 pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
 pattern PKeySetEqNeq op x y = PureProp (KeySetEqNeq op x y)
@@ -928,15 +927,23 @@ data EInvariant where
     => Invariant a -> Type a -> EInvariant
   -- EInvariantObject
 
+instance Eq EInvariant where
+  EInvariant ia ta == EInvariant ib tb = case typeEq ta tb of
+    Just Refl -> ia == ib
+    Nothing   -> False
+
+instance Show EInvariant where
+  show (EInvariant inv ty) = "(" ++ show inv ++ ": " ++ show ty ++ ")"
+
 pattern ILiteral :: SymWord a => a -> Invariant a
 pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where
   ILiteral a = PureInvariant (Sym (literalS a))
 
-pattern IComparison
-  :: ()
-  => (Show a, SymWord a, Float a)
-  => ComparisonOp -> Invariant a -> Invariant a -> Invariant Bool
-pattern IComparison op x y = PureInvariant (Comparison op x y)
+-- pattern IComparison
+--   :: ()
+--   => (Show a, SymWord a, Float a)
+--   => ComparisonOp -> Invariant a -> Invariant a -> Invariant Bool
+-- pattern IComparison op x y = PureInvariant (Comparison op x y)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)

@@ -12,7 +12,7 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative(empty, (<|>)))
+import           Control.Applicative        (Alternative(empty))
 import           Control.Lens               (at, cons, makeLenses, makePrisms,
                                              view, (%~), (<&>), (?~), (^.),
                                              (^?), (.~), _1, _2)
@@ -23,7 +23,7 @@ import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
                                              runStateT)
-import           Data.Foldable              (foldl')
+import           Data.Foldable              (asum, foldl')
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Monoid                ((<>))
@@ -476,9 +476,32 @@ translateNode astNode = astContext astNode $ case astNode of
               "="  -> pure Eq
               "!=" -> pure Neq
               _    -> throwError' $ MalformedComparison fn args
-            case typeEq ta tb of
-              Just Refl -> pure $ ETerm (PureTerm $ Comparison op a' b') TBool
-              _         -> throwError' (TypeMismatch (EType ta) (EType tb))
+            case (ta, tb) of
+              (TInt, TInt)         -> pure $
+                ETerm (PureTerm (IntegerComparison op a' b')) TBool
+              (TDecimal, TDecimal) -> pure $
+                ETerm (PureTerm (DecimalComparison op a' b')) TBool
+              (TTime, TTime)       -> pure $
+                ETerm (PureTerm (TimeComparison op a' b')) TBool
+              (TStr, TStr)         -> pure $
+                ETerm (PureTerm (StringComparison op a' b')) TBool
+              (TBool, TBool)       -> pure $
+                ETerm (PureTerm (BoolComparison op a' b')) TBool
+              (_, _) -> case typeEq ta tb of
+                Just Refl -> throwError' $ MalformedComparison fn args
+                _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
+          _ -> throwError' $ MalformedComparison fn args
+
+        mkKeySetEqNeq :: TranslateM ETerm
+        mkKeySetEqNeq = case args of
+          [a, b] -> do
+            ETerm a' TKeySet <- translateNode a
+            ETerm b' TKeySet <- translateNode b
+            op <- case fn of
+              "="  -> pure Eq'
+              "!=" -> pure Neq'
+              _    -> throwError' $ MalformedComparison fn args
+            pure $ ETerm (PureTerm (KeySetEqNeq op a' b')) TBool
           _ -> throwError' $ MalformedComparison fn args
 
         mkObjEqNeq :: TranslateM ETerm
@@ -579,7 +602,8 @@ translateNode astNode = astContext astNode $ case astNode of
             pure (ETerm (injectNumerical $ ModOp a' b') TInt)
           _ -> mzero
 
-    in mkMod <|> mkArith <|> mkComparison <|> mkObjEqNeq <|> mkLogical <|> mkConcat
+    in asum [mkMod, mkArith, mkComparison, mkKeySetEqNeq, mkObjEqNeq,
+         mkLogical, mkConcat]
 
   AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do
@@ -612,19 +636,19 @@ translateNode astNode = astContext astNode $ case astNode of
     nodeContext node $
       translateObjBinding bindings schema body objectT
 
-  -- Time
-  -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyInteger -> do
-      ETerm time' TTime   <- translateNode time
-      ETerm seconds' TInt <- translateNode seconds
-      pure (ETerm (PureTerm (IntAddTime time' seconds')) TTime)
+    | seconds ^. aNode . aTy == TyPrim TyInteger ||
+      seconds ^. aNode . aTy == TyPrim TyDecimal -> do
+      ETerm time' TTime <- translateNode time
+      ETerm seconds' ty <- translateNode seconds
 
-  AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyDecimal -> do
-      ETerm time' TTime       <- translateNode time
-      ETerm seconds' TDecimal <- translateNode seconds
-      pure (ETerm (PureTerm (DecAddTime time' seconds')) TTime)
+      case ty of
+        TInt ->
+          pure (ETerm (PureTerm (IntAddTime time' seconds')) TTime)
+        TDecimal ->
+          pure (ETerm (PureTerm (DecAddTime time' seconds')) TTime)
+        _ -> throwError' $ MonadFailure $
+          "Unexpected type for seconds in add-time " ++ show ty
 
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
