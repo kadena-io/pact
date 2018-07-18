@@ -47,7 +47,7 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature
+import           Pact.Analyze.Feature         hiding (str, obj, ks)
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
@@ -150,9 +150,9 @@ textToComparisonOp = \case
 
 textToEqNeq :: Text -> Maybe EqNeq
 textToEqNeq = \case
-  "="  -> Just Eq'
-  "!=" -> Just Neq'
-  _    -> Nothing
+  SEquality   -> Just Eq'
+  SInequality -> Just Neq'
+  _           -> Nothing
 
 textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
 textToRoundingLikeOp = \case

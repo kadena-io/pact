@@ -59,127 +59,118 @@ symbol = _docSymbol . doc
 availability :: Feature -> Availability
 availability = _docAvailability . doc
 
+int, dec, str, time, bool, obj, ks :: Text
+int  = "integer"
+dec  = "decimal"
+str  = "string"
+time = "time"
+bool = "bool"
+obj  = "object"
+ks   = "keyset"
+
 doc :: Feature -> Doc
 doc FAddition = Doc
   "+"
   InvAndProp
   "Addition of integers and decimals."
-  [ Usage "(+ x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(+ x y)" "decimal" [("x", "decimal"), ("y", "decimal")]]
+  [ Usage "(+ x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec] ]
 doc FSubtraction = Doc
   "-"
   InvAndProp
   "Subtraction of integers and decimals."
-  [ Usage "(- x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(- x y)" "decimal" [("x", "decimal"), ("y", "decimal")]]
+  [ Usage "(- x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec] ]
 doc FMultiplication = Doc
   "*"
   InvAndProp
   "Multiplication of integers and decimals."
-  [ Usage "(* x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(* x y)" "decimal" [("x", "decimal"), ("y", "decimal")]]
+  [ Usage "(* x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec] ]
 doc FDivision = Doc
   "/"
   InvAndProp
   "Division of integers and decimals."
-  [ Usage "(/ x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(/ x y)" "decimal" [("x", "decimal"), ("y", "decimal")]]
+  [ Usage "(/ x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec] ]
 doc FExponentiation = Doc
   "^"
   InvAndProp
   "Exponentiation of integers and decimals."
-  [ Usage "(^ x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(^ x y)" "decimal" [("x", "decimal"), ("y", "decimal")]]
+  [ Usage "(^ x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec] ]
 doc FLogarithm = Doc
   "log"
   InvAndProp
   "Logarithm of `x` base `b`."
-  [ Usage "(log b x)" "integer" [("b", "integer"), ("x", "integer")]
-  , Usage "(log b x)" "decimal" [("b", "decimal"), ("x", "decimal")]]
+  [ Usage "(log b x)" ty [("b", ty), ("x", ty)]
+  | ty <- [int, dec] ]
 doc FNegation = Doc
   "-"
   InvAndProp
   "Negation of integers and decimals."
-  [ Usage "(- x)" "integer" [("x", "integer")]
-  , Usage "(- x)" "decimal" [("x", "decimal")]]
+  [ Usage "(- x)" ty [("x", ty)]
+  | ty <- [int, dec] ]
 doc FSquareRoot = Doc
   "sqrt"
   InvAndProp
   "Square root of integers and decimals."
-  [ Usage "(sqrt x)" "integer" [("x", "integer")]
-  , Usage "(sqrt x)" "decimal" [("x", "decimal")]]
+  [ Usage "(sqrt x)" ty [("x", ty)]
+  | ty <- [int, dec] ]
 doc FNaturalLogarithm = Doc
   "ln"
   InvAndProp
   "Logarithm of integers and decimals base e."
-  [ Usage "(ln x)" "integer" [("x", "integer")]
-  , Usage "(ln x)" "decimal" [("x", "decimal")]]
+  [ Usage "(ln x)" ty [("x", ty)]
+  | ty <- [int, dec] ]
 doc FExponential = Doc
   "exp"
   InvAndProp
   "Exponential of integers and decimals. e raised to the integer or decimal `x`."
-  [ Usage "(exp x)" "integer" [("x", "integer")]
-  , Usage "(exp x)" "decimal" [("x", "decimal")]]
+  [ Usage "(exp x)" ty [("x", ty)]
+  | ty <- [int, dec] ]
 doc FAbsoluteValue = Doc
   "abs"
   InvAndProp
   "Absolute value of integers and decimals."
-  [ Usage "(abs x)" "integer" [("x", "integer")]
-  , Usage "(abs x)" "decimal" [("x", "decimal")]]
+  [ Usage "(abs x)" ty [("x", ty)]
+  | ty <- [int, dec] ]
 doc FGreaterThan = Doc
   ">"
   InvAndProp
   "True if `x` > `y`"
-  [ Usage "(> x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(> x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(> x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(> x y)" "time"    [("x", "time"),    ("y", "time")]]
+  [ Usage "(> x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time] ]
 doc FLessThan = Doc
   "<"
   InvAndProp
   "True if `x` < `y`"
-  [ Usage "(< x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(< x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(< x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(< x y)" "time"    [("x", "time"),    ("y", "time")]]
+  [ Usage "(< x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time] ]
 doc FGreaterThanOrEqual = Doc
   ">="
   InvAndProp
   "True if `x` >= `y`"
-  [ Usage "(>= x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(>= x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(>= x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(>= x y)" "time"    [("x", "time"),    ("y", "time")]]
+  [ Usage "(>= x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time] ]
 doc FLessThanOrEqual = Doc
   "<="
   InvAndProp
   "True if `x` <= `y`"
-  [ Usage "(<= x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(<= x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(<= x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(<= x y)" "time"    [("x", "time"),    ("y", "time")]]
+  [ Usage "(<= x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time] ]
 doc FEquality = Doc
   "="
   InvAndProp
   "True if `x` = `y`"
-  [ Usage "(= x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(= x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(= x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(= x y)" "time"    [("x", "time"),    ("y", "time")]
-  , Usage "(= x y)" "bool"    [("x", "bool"),    ("y", "bool")]
-  , Usage "(= x y)" "object"  [("x", "object"),  ("y", "object")]
-  , Usage "(= x y)" "keyset"  [("x", "keyset"),  ("y", "keyset")]]
+  [ Usage "(= x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time, bool, obj, ks] ]
 doc FInequality = Doc
   "!="
   InvAndProp
   "True if `x` != `y`"
-  [ Usage "(!= x y)" "integer" [("x", "integer"), ("y", "integer")]
-  , Usage "(!= x y)" "decimal" [("x", "decimal"), ("y", "decimal")]
-  , Usage "(!= x y)" "string"  [("x", "string"),  ("y", "string")]
-  , Usage "(!= x y)" "time"    [("x", "time"),    ("y", "time")]
-  , Usage "(!= x y)" "bool"    [("x", "bool"),    ("y", "bool")]
-  , Usage "(!= x y)" "object"  [("x", "object"),  ("y", "object")]
-  , Usage "(!= x y)" "keyset"  [("x", "keyset"),  ("y", "keyset")]]
+  [ Usage "(!= x y)" ty [("x", ty), ("y", ty)]
+  | ty <- [int, dec, str, time, bool, obj, ks] ]
 
 
 allFeatures :: [Feature]
