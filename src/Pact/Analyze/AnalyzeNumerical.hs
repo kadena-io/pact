@@ -23,6 +23,7 @@ class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   analyzeO        :: TermOf m Object -> m Object
   analyzeE        :: ETermOf m -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
+  getVar          :: VarId -> m (Maybe AVal)
 
 analyzeNumerical
   :: (Analyzer m, S :<: TermOf m)

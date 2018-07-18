@@ -47,10 +47,6 @@ etermEType (EObject _ sch) = EObjectTy sch
 data Term ret where
   PureTerm :: PureTerm ETerm Term a -> Term a
 
-  -- At holds the schema of the object it's accessing. We do this so we can
-  -- determine statically which fields can be accessed.
-  Var            :: Text -> VarId                    -> Term a
-
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
   -- `Symbolic` in its stack.

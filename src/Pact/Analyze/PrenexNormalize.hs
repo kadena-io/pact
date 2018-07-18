@@ -27,7 +27,7 @@ import           Pact.Analyze.Util
 
 #define STANDARD_INSTANCES                                            \
   PropSpecific Result -> ([], p);                                     \
-  PVar{}              -> ([], p);                                     \
+  PureProp Var{}      -> ([], p);                                     \
   PureProp Lit{}      -> ([], p);                                     \
   PureProp Sym{}      -> ([], p);                                     \
   PureProp (At schema a b ty) -> PAt schema a <$> float b <*> pure ty;

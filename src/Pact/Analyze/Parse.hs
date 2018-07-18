@@ -139,7 +139,7 @@ data PropCheckEnv = PropCheckEnv
 type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
 type PropCheck = ReaderT PropCheckEnv (Either String)
 
-type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
+type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
 makeLenses ''PropCheckEnv
 
@@ -282,7 +282,7 @@ inferPreProp preProp = case preProp of
 
   -- identifiers
   PreResult       -> inferVar 0 "result" (PropSpecific Result)
-  PreVar vid name -> inferVar vid name (PVar vid name)
+  PreVar vid name -> inferVar vid name (PureProp (Var vid name))
 
   -- quantifiers
   (viewQ -> Just (q, vid, name, ty', p)) -> do
@@ -576,22 +576,22 @@ inferProp tableEnv' genStart nameEnv idEnv body = do
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
-  (_, EAtom' var) -> do
+  (_, EAtom' varName) -> do
     schemaTys <- ask
-    case find (\arg -> arg ^. aName == var) schemaTys of
-      Just (Pact.Arg _name (TyPrim primTy) _info) -> case (ty, primTy) of
-        (TInt,     TyInteger) -> pure (IVar var)
-        (TDecimal, TyDecimal) -> pure (IVar var)
-        (TTime,    TyTime)    -> pure (IVar var)
-        (TStr,     TyString)  -> pure (IVar var)
-        (TBool,    TyBool)    -> pure (IVar var)
-        (TKeySet,  TyKeySet)  -> pure (IVar var)
+    case find (\(arg, _vid) -> arg ^. aName == varName) schemaTys of
+      Just (Pact.Arg _name (TyPrim primTy) _info, vid) -> case (ty, primTy) of
+        (TInt,     TyInteger) -> pure (PureInvariant (Var vid varName))
+        (TDecimal, TyDecimal) -> pure (PureInvariant (Var vid varName))
+        (TTime,    TyTime)    -> pure (PureInvariant (Var vid varName))
+        (TStr,     TyString)  -> pure (PureInvariant (Var vid varName))
+        (TBool,    TyBool)    -> pure (PureInvariant (Var vid varName))
+        (TKeySet,  TyKeySet)  -> pure (PureInvariant (Var vid varName))
         (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
-          "found variable " <> var <> " of type " <> tShow primTy <>
+          "found variable " <> varName <> " of type " <> tShow primTy <>
           " where " <> userShow ty <> " was expected"
-      _ -> throwErrorT $ "couldn't find column named " <> var
+      _ -> throwErrorT $ "couldn't find column named " <> varName
 
   (TDecimal, ELiteral (LDecimal d) _) -> pure (ILiteral (mkDecimal d))
   (TInt, ELiteral (LInteger i) _)     -> pure (ILiteral i)

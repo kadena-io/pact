@@ -312,7 +312,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
         _ -> nodeContext varNode $ throwError' $ NonStringLitInBinding colAst
 
   bindingId <- genVarId
-  let freshVar = Var "binding" bindingId
+  let freshVar = PureTerm $ Var bindingId "binding"
 
   let translateLet :: Term a -> Term a
       translateLet innerBody = Let "binding" bindingId rhsT $
@@ -367,8 +367,8 @@ translateNode astNode = astContext astNode $ case astNode of
     Just (varName, vid) <- view (_2 . at node)
     ty      <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'        -> ETerm (Var varName vid) ty'
-      EObjectTy schema -> EObject (Var varName vid) schema
+      EType ty'        -> ETerm (PureTerm (Var vid varName)) ty'
+      EObjectTy schema -> EObject (PureTerm (Var vid varName)) schema
 
   -- Int
   AST_NegativeLit l -> case l of
@@ -387,8 +387,10 @@ translateNode astNode = astContext astNode $ case astNode of
     Just (name, vid) <- view (_2 . at node)
     EType ty <- translateType (_aTy node)
     case ty of
-      TInt     -> pure (ETerm (inject $ IntUnaryArithOp Negate (Var name vid)) TInt)
-      TDecimal -> pure (ETerm (inject $ DecUnaryArithOp Negate (Var name vid)) TDecimal)
+      TInt     -> pure (ETerm (inject $ IntUnaryArithOp Negate
+        (PureTerm (Var vid name))) TInt)
+      TDecimal -> pure (ETerm (inject $ DecUnaryArithOp Negate
+        (PureTerm (Var vid name))) TDecimal)
       _        -> throwError' $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
