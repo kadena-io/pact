@@ -626,12 +626,6 @@ pattern PDecAddTime x y = PureProp (DecAddTime x y)
 pattern PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
 pattern PAt a b c d = PureProp (At a b c d)
 
--- pattern PComparison
---   :: ()
---   => (Show a, SymWord a, Float a)
---   => ComparisonOp -> Prop a -> Prop a -> Prop Bool
--- pattern PComparison op x y = PureProp (Comparison op x y)
-
 pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
 pattern PKeySetEqNeq op x y = PureProp (KeySetEqNeq op x y)
 
@@ -941,12 +935,6 @@ instance Show EInvariant where
 pattern ILiteral :: SymWord a => a -> Invariant a
 pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where
   ILiteral a = PureInvariant (Sym (literalS a))
-
--- pattern IComparison
---   :: ()
---   => (Show a, SymWord a, Float a)
---   => ComparisonOp -> Invariant a -> Invariant a -> Invariant Bool
--- pattern IComparison op x y = PureInvariant (Comparison op x y)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)
