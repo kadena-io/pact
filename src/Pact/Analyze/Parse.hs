@@ -101,7 +101,7 @@ textToEqNeq = \case
 
 textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
 textToRoundingLikeOp = \case
-  "round"   -> Just Round
+  SRound    -> Just Round
   "ceiling" -> Just Ceiling
   "floor"   -> Just Floor
   _         -> Nothing
