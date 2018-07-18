@@ -323,9 +323,9 @@ translateObjBinding bindingsA schema bodyA rhsT = do
             in Let varName vid
               (case varType of
                  EType ty ->
-                   ETerm   (At schema colTerm freshVar varType) ty
+                   ETerm   (PureTerm (At schema colTerm freshVar varType)) ty
                  EObjectTy sch ->
-                   EObject (At schema colTerm freshVar varType) sch)
+                   EObject (PureTerm (At schema colTerm freshVar varType)) sch)
               body)
           innerBody
           bindings
@@ -647,8 +647,8 @@ translateNode astNode = astContext astNode $ case astNode of
     ETerm colName' TStr <- translateNode colName
     ty <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'         -> ETerm   (At schema colName' obj' ty) ty'
-      EObjectTy schema' -> EObject (At schema colName' obj' ty) schema'
+      EType ty'         -> ETerm   (PureTerm (At schema colName' obj' ty)) ty'
+      EObjectTy schema' -> EObject (PureTerm (At schema colName' obj' ty)) schema'
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do

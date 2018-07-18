@@ -46,7 +46,6 @@ data Term ret where
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
-  At             :: Schema -> Term String -> Term Object -> EType -> Term a
   Var            :: Text -> VarId                    -> Term a
 
   -- invariant (inaccessible): a ~ Integer or a ~ Decimal
@@ -59,6 +58,10 @@ data Term ret where
   -- TODO: we need to allow computed keys here
   --
   LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
+
+  -- In principle, this should be a pure term, however, the analyze monad needs
+  -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
+  -- `Symbolic` in its stack.
   IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
 
   -- ^ should be pure

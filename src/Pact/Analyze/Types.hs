@@ -573,6 +573,8 @@ data PureTerm t a where
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm t Bool
   ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm t Bool
 
+  At             :: Schema -> t String -> t Object -> EType -> PureTerm t a
+
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
@@ -599,15 +601,6 @@ data Prop a where
   -- variable
   PVar   :: VarId -> Text -> Prop a
 
-  -- Object ops
-
-  --
-  -- Note: PAt is the one property we can't yet typecheck because of the EType
-  -- it includes
-  --
-  -- | Projects from an object at a key
-  PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop a
-
   PLiteralObject :: Map Text EProp -> Prop Object
 
 instance Eq a => Eq (Prop a) where
@@ -627,6 +620,8 @@ pattern PIntAddTime x y = PureProp (IntAddTime x y)
 
 pattern PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
 pattern PDecAddTime x y = PureProp (DecAddTime x y)
+
+pattern PAt a b c d = PureProp (At a b c d)
 
 pattern PComparison
   :: ()
