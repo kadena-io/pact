@@ -1,5 +1,6 @@
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP               #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE ViewPatterns      #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Features, availability, and documentation
@@ -201,62 +202,29 @@ symIs :: Feature -> Text -> Bool
 symIs feat sym = symbol feat == sym
 
 --
--- TODO: generate each of these using TH once we are on GHC 8.2.1+, which is
--- when template-haskell learned pattern synonym support. It seems that we can
--- not upgrade template-haskell without upgrading GHC because template-haskell
--- is bundled with GHC.
+-- TODO: generate these using TH once we are on GHC 8.2.1+, which is when
+-- template-haskell learned pattern synonym support. It seems that we can not
+-- upgrade template-haskell without upgrading GHC because template-haskell is
+-- bundled with GHC.
 --
 
-pattern SAddition :: Text
-pattern SAddition <- (symIs FAddition -> True)
+#define PAT(sfeat, ffeat) pattern sfeat :: Text ; pattern sfeat <- (symIs ffeat -> True)
 
-pattern SSubtraction :: Text
-pattern SSubtraction <- (symIs FSubtraction -> True)
-
-pattern SMultiplication :: Text
-pattern SMultiplication <- (symIs FMultiplication -> True)
-
-pattern SDivision :: Text
-pattern SDivision <- (symIs FDivision -> True)
-
-pattern SExponentiation :: Text
-pattern SExponentiation <- (symIs FExponentiation -> True)
-
-pattern SLogarithm :: Text
-pattern SLogarithm <- (symIs FLogarithm -> True)
-
-pattern SNegation :: Text
-pattern SNegation <- (symIs FNegation -> True)
-
-pattern SSquareRoot :: Text
-pattern SSquareRoot <- (symIs FSquareRoot -> True)
-
-pattern SNaturalLogarithm :: Text
-pattern SNaturalLogarithm <- (symIs FNaturalLogarithm -> True)
-
-pattern SExponential :: Text
-pattern SExponential <- (symIs FExponential -> True)
-
-pattern SAbsoluteValue :: Text
-pattern SAbsoluteValue <- (symIs FAbsoluteValue -> True)
-
-pattern SGreaterThan :: Text
-pattern SGreaterThan <- (symIs FGreaterThan -> True)
-
-pattern SLessThan :: Text
-pattern SLessThan <- (symIs FLessThan -> True)
-
-pattern SGreaterThanOrEqual :: Text
-pattern SGreaterThanOrEqual <- (symIs FGreaterThanOrEqual -> True)
-
-pattern SLessThanOrEqual :: Text
-pattern SLessThanOrEqual <- (symIs FLessThanOrEqual -> True)
-
-pattern SEquality :: Text
-pattern SEquality <- (symIs FEquality -> True)
-
-pattern SInequality :: Text
-pattern SInequality <- (symIs FInequality -> True)
-
-pattern SRound :: Text
-pattern SRound <- (symIs FRound -> True)
+PAT(SAddition, FAddition)
+PAT(SSubtraction, FSubtraction)
+PAT(SMultiplication, FMultiplication)
+PAT(SDivision, FDivision)
+PAT(SExponentiation, FExponentiation)
+PAT(SLogarithm, FLogarithm)
+PAT(SNegation, FNegation)
+PAT(SSquareRoot, FSquareRoot)
+PAT(SNaturalLogarithm, FNaturalLogarithm)
+PAT(SExponential, FExponential)
+PAT(SAbsoluteValue, FAbsoluteValue)
+PAT(SGreaterThan, FGreaterThan)
+PAT(SLessThan, FLessThan)
+PAT(SGreaterThanOrEqual, FGreaterThanOrEqual)
+PAT(SLessThanOrEqual, FLessThanOrEqual)
+PAT(SEquality, FEquality)
+PAT(SInequality, FInequality)
+PAT(SRound, FRound)
