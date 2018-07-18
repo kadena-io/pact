@@ -277,38 +277,41 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
     <*> allocateAuths
     <*> allocateResult
 
-  --
-  -- TODO: we need to figure out whether these free_ calls should indeed be
-  -- free_, or whether they should instead be e.g. exists_ calls. As it stands,
-  -- free_'s semantics differ depending on whether SBV is running in proof vs
-  -- sat mode. We have to get this right.
-  --
-
   where
+
+    --
+    -- TODO: we need to figure out whether these free_ calls should indeed be
+    -- free_, or whether they should instead be e.g. exists_ calls. As it stands,
+    -- free_'s semantics differ depending on whether SBV is running in proof vs
+    -- sat mode. We have to get this right.
+    --
+    alloc :: SymWord a => Symbolic (SBV a)
+    alloc = SBV.free_
+
     allocSchema :: Schema -> Symbolic Object
     allocSchema (Schema fieldTys) = Object <$>
-      for fieldTys (\ety -> (ety,) <$> alloc ety)
+      for fieldTys (\ety -> (ety,) <$> allocAVal ety)
 
-    alloc :: EType -> Symbolic AVal
-    alloc = \case
+    allocAVal :: EType -> Symbolic AVal
+    allocAVal = \case
       EObjectTy schema -> AnObj <$> allocSchema schema
       EType (_ :: Type t) -> mkAVal . sansProv <$>
-        (SBV.free_ :: Symbolic (SBV t))
+        (alloc :: Symbolic (SBV t))
 
     allocateArgs :: Symbolic (Map VarId (Located (Text, TVal)))
     allocateArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
-      av <- alloc ety <&> _AVal._1 ?~ FromInput nm
+      av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
       pure (vid, Located info (nm, (ety, av)))
 
     allocateVars :: Symbolic (Map VarId (Located (Text, TVal)))
     allocateVars = fmap Map.fromList $
       for (toListOf (traverse._AllocVarTag) tagAllocs) $
         \(Located info (vid, nm, ety)) ->
-          alloc ety <&> \av -> (vid, Located info (nm, (ety, av)))
+          allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
 
     allocRowKey :: Symbolic (S RowKey)
-    allocRowKey = sansProv <$> SBV.free_
+    allocRowKey = sansProv <$> alloc
 
     allocAccesses
       :: Prism' TagAllocation (Located (TagId, Schema))
@@ -328,13 +331,13 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
     allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocateAuths = fmap Map.fromList $
       for (toListOf (traverse._AllocAuthTag) tagAllocs) $ \(Located info tid) ->
-        (tid,) . Located info <$> SBV.free_
+        (tid,) . Located info <$> alloc
 
     allocateResult :: Symbolic (Located TVal)
     allocateResult = Located funInfo <$> case tm of
       ETerm _ ty ->
         let ety = EType ty
-        in (ety,) <$> alloc ety
+        in (ety,) <$> allocAVal ety
       EObject _ sch ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
