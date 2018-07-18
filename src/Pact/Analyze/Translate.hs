@@ -661,9 +661,8 @@ translateNode astNode = astContext astNode $ case astNode of
         AST_Lit (LString t) -> pure t
         -- TODO: support non-const keys
         _                   -> throwError' $ NonConstKey k
-      ty <- translateType $ v ^. aNode . aTy
       v' <- translateNode v
-      pure (k', (ty, v'))
+      pure (k', v')
     schema <- translateSchema (_aTy node)
     pure $ EObject (LiteralObject $ Map.fromList kvs') schema
 
