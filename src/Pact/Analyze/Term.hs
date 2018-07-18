@@ -10,7 +10,6 @@
 module Pact.Analyze.Term where
 
 import           Data.Data          (Data)
-import           Data.Map.Strict    (Map)
 import           Data.SBV           (HasKind, SymWord)
 import           Data.SBV.Control   (SMTValue)
 import           Data.Text          (Text)
