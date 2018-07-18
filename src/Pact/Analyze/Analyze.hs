@@ -1177,7 +1177,6 @@ analyzePropO (PLiteralObject props) = do
       prop' <- analyzePropO prop
       pure (EObjectTy ty, AnObj prop')
   pure $ Object props'
-analyzePropO (PLit _) = error "PLit is only for simple types"
 analyzePropO (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be objects"
 
 analyzePropSpecific :: SymWord a => PropSpecific a -> Query (S a)

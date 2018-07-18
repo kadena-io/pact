@@ -15,7 +15,6 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 #define STANDARD_INSTANCES                                  \
-  PLit{}              -> ([], p);                           \
   PureProp Sym{}      -> ([], p);                           \
   PropSpecific Result -> ([], p);                           \
   PVar{}              -> ([], p);                           \
