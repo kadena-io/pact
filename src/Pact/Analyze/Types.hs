@@ -594,8 +594,9 @@ data Prop a where
   PropSpecific :: PropSpecific a  -> Prop a
   PureProp     :: PureTerm Prop a -> Prop a
 
-  -- | Refers to a function argument or universally/existentially-quantified variable
-  PVar   :: VarId -> Text ->                       Prop a
+  -- | Refers to a function argument or universally/existentially-quantified
+  -- variable
+  PVar   :: VarId -> Text -> Prop a
 
   -- Object ops
 
@@ -612,7 +613,7 @@ data Prop a where
 
   -- TODO: pure
   -- | A boolean comparison expression over two 'Object' expressions
-  PObjectEqNeq       :: EqNeq        -> Prop Object  -> Prop Object  -> Prop Bool
+  PObjectEqNeq :: EqNeq -> Prop Object -> Prop Object -> Prop Bool
 
 instance Eq a => Eq (Prop a) where
   -- PropSpecific a == PropSpecific b = a == b
@@ -918,11 +919,9 @@ userShow = userShowsPrec 0
 -- The language is stateless. Arithmetic could be added if we decide it's
 -- useful.
 data Invariant a where
-
-  -- TODO: Probably all things should go here
   PureInvariant :: PureTerm Invariant a -> Invariant a
 
-  -- variables
+  -- TODO: we can move this to PureTerm when we assign invariant vars `VarId`s
   -- | Refers to a variable with the provided name
   IVar :: Text -> Invariant a
 
