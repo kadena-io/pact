@@ -388,7 +388,7 @@ instance Analyzer Analyze Term ETerm where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   analyzeO = analyzeTermO
-  analyzeE = error "TODO(joel)"
+  analyzeE = analyzeETerm'
 
 instance Analyzer Query Prop EProp where
   analyze  = analyzeProp
@@ -396,7 +396,13 @@ instance Analyzer Query Prop EProp where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   analyzeO = analyzePropO
-  analyzeE = error "TODO(joel)"
+  analyzeE = \case
+    EProp ty prop       -> do
+      prop' <- analyzeProp prop
+      pure (EType ty, mkAVal prop')
+    EObjectProp ty prop -> do
+      prop' <- analyzePropO prop
+      pure (EObjectTy ty, AnObj prop')
 
 symArrayAt
   :: forall array k v
@@ -816,10 +822,6 @@ analyzeTermO = \case
       Just False -> analyzeTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
-  PureTerm (At _schema colNameT objT _retType) -> analyzeAtO colNameT objT
-
-  objT -> throwErrorNoLoc $ UnhandledTerm $ tShow objT
-
 -- Note [Time Representation]
 --
 -- Pact uses the Thyme library (UTCTime) to represent times. Thyme internally
@@ -924,6 +926,8 @@ analyzeLogicalOp op terms = do
 
 analyzeTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 analyzeTerm = \case
+  PureTerm a -> analyzePure a
+
   IfThenElse cond then' else' -> do
     testPasses <- analyzeTerm cond
     iteS testPasses (analyzeTerm then') (analyzeTerm else')
@@ -934,8 +938,6 @@ analyzeTerm = \case
     pure true
 
   Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT
-
-  PureTerm (Sym a) -> pure a
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
@@ -1089,8 +1091,10 @@ analyzeTerm = \case
 
   n -> throwErrorNoLoc $ UnhandledTerm $ tShow n
 
+
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift
+
 
 -- For now we only allow these three types to be formatted.
 --
@@ -1135,7 +1139,8 @@ instance Analyzer InvariantCheck Invariant EInvariant where
   analyzeO = error "TODO(joel)"
   analyzeE = error "TODO(joel)"
 
-checkInvariant :: Invariant a -> InvariantCheck (S a)
+
+checkInvariant :: SymWord a => Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
   PureInvariant tm -> analyzePure tm
 
@@ -1147,6 +1152,7 @@ checkInvariant = \case
       Nothing  -> throwErrorNoLoc $ fromString $
         "column name not in scope: " ++ show name
 
+
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn
 getLitTableName (PVar vid name) = do
@@ -1155,21 +1161,27 @@ getLitTableName (PVar vid name) = do
     Nothing -> throwErrorNoLoc $ fromString $
       "could not find table in scope: " <> T.unpack name
     Just tn -> pure tn
-getLitTableName (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be table names"
 getLitTableName (PropSpecific Result)
   = throwErrorNoLoc "Function results can't be table names"
-getLitTableName (PAt _ _ _ _) = throwErrorNoLoc "Object values can't be table names"
+getLitTableName PureProp{} = throwErrorNoLoc "Pure values can't be table names"
+
 
 getLitColName :: Prop ColumnName -> Query ColumnName
 getLitColName (PLit cn) = pure cn
 getLitColName _ = throwErrorNoLoc "TODO: column quantification"
 
+
+analyzeProp :: SymWord a => Prop a -> Query (S a)
+analyzeProp (PureProp tm)    = analyzePure tm
+analyzeProp (PropSpecific a) = analyzePropSpecific a
+analyzeProp (PVar vid name)  = lookupVal name vid
+
+
 analyzePropO :: Prop Object -> Query Object
-analyzePropO (PureProp a) = analyzePureO a
+analyzePropO (PureProp a)          = analyzePureO a
 analyzePropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar vid name) = lookupObj name vid
-analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
-analyzePropO (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be objects"
+analyzePropO (PVar vid name)       = lookupObj name vid
+
 
 analyzePropSpecific :: SymWord a => PropSpecific a -> Query (S a)
 analyzePropSpecific Success = view $ qeAnalyzeState.succeeds
@@ -1260,50 +1272,39 @@ analyzePropSpecific (RowEnforced tn cn pRk) = do
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
 
-analyzeProp :: SymWord a => Prop a -> Query (S a)
-analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PropSpecific a) = analyzePropSpecific a
-
-analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
-
--- Abstraction
-analyzeProp (PVar vid name) = lookupVal name vid
-
--- String ops
-analyzeProp (PureProp tm) = analyzePure tm
-
 -- TODO: move to Pact.Analyze.AnalyzePure
 analyzePure
-  :: (Analyzer m term eterm, SymbolicTerm term)
+  :: (Analyzer m term eterm, SymbolicTerm term, SymWord a)
   => PureTerm eterm term a -> m (S a)
-analyzePure (Sym s) = pure s
-analyzePure (StrConcat p1 p2) = (.++) <$> analyze p1 <*> analyze p2
-analyzePure (StrLength p)    = over s2Sbv SBV.length <$> analyze p
-analyzePure (Numerical a) = analyzeNumerical a
-analyzePure (IntAddTime time secs) = analyzeIntAddTime time secs
-analyzePure (DecAddTime time secs) = analyzeDecAddTime time secs
-analyzePure (Comparison op x y)       = analyzeComparisonOp op x y
--- analyzePure (ObjectEqNeq op x y)      = analyzeObjectEqNeq  op x y
-analyzePure (KeySetEqNeq      op x y) = analyzeEqNeq        op x y
-analyzePure (Logical op props) = analyzeLogicalOp op props
--- analyzePure (At schema colNameT objT retType)
---   = analyzeAt schema colNameT objT retType
+analyzePure (Lit a)                    = pure (literalS a)
+analyzePure (Sym s)                    = pure s
+analyzePure (StrConcat p1 p2)          = (.++) <$> analyze p1 <*> analyze p2
+analyzePure (StrLength p)              = over s2Sbv SBV.length <$> analyze p
+analyzePure (Numerical a)              = analyzeNumerical a
+analyzePure (IntAddTime time secs)     = analyzeIntAddTime time secs
+analyzePure (DecAddTime time secs)     = analyzeDecAddTime time secs
+analyzePure (IntegerComparison op x y) = analyzeComparisonOp op x y
+analyzePure (DecimalComparison op x y) = analyzeComparisonOp op x y
+analyzePure (TimeComparison op x y)    = analyzeComparisonOp op x y
+analyzePure (StringComparison op x y)  = analyzeComparisonOp op x y
+analyzePure (BoolComparison op x y)    = analyzeComparisonOp op x y
+analyzePure (ObjectEqNeq op x y)       = analyzeObjectEqNeq  op x y
+analyzePure (KeySetEqNeq      op x y)  = analyzeEqNeq        op x y
+analyzePure (Logical op props)         = analyzeLogicalOp op props
+analyzePure (At schema colNameT objT retType)
+  = analyzeAt schema colNameT objT retType
+analyzePure LiteralObject {}
+  = error "literal object can't be an argument to analyzePure"
+
 
 analyzePureO
   :: (Analyzer m term eterm, SymbolicTerm term)
   => PureTerm eterm term Object -> m Object
-analyzePureO (LiteralObject obj) = undefined -- Object <$> traverse analyzeETerm' obj
--- analyzePropO (PLiteralObject props) = do
---   props' <- for props $ \case
---     EProp ty prop       -> do
---       prop' <- analyzeProp prop
---       pure (EType ty, mkAVal prop')
---     EObjectProp ty prop -> do
---       prop' <- analyzePropO prop
---       pure (EObjectTy ty, AnObj prop')
---   pure $ Object props'
-analyzePureO (At schema colNameT objT retType) = undefined
-  -- = analyzeAt schema colNameT objT retType
+analyzePureO (LiteralObject obj) = Object <$> traverse analyzeE obj
+analyzePureO (At _schema colNameT objT _retType)
+  = analyzeAtO colNameT objT
+analyzePureO _ = error "TODO(joel)"
+
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
