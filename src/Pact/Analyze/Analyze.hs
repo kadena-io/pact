@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TupleSections              #-}
 
 module Pact.Analyze.Analyze where
@@ -382,17 +383,21 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
-instance Analyzer Analyze Term ETerm where
-  analyze  = analyzeTerm
-  analyzeO = analyzeTermO
-  analyzeE = analyzeETerm'
-  throwErrorNoLoc err = do
+instance Analyzer Analyze where
+  type TermOf Analyze  = Term
+  type ETermOf Analyze = ETerm
+  analyze              = analyzeTerm
+  analyzeO             = analyzeTermO
+  analyzeE             = analyzeETerm'
+  throwErrorNoLoc err  = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
 
-instance Analyzer Query Prop EProp where
-  analyze  = analyzeProp
-  analyzeO = analyzePropO
+instance Analyzer Query where
+  type TermOf Query  = Prop
+  type ETermOf Query = EProp
+  analyze            = analyzeProp
+  analyzeO           = analyzePropO
   analyzeE = \case
     EProp ty prop       -> do
       prop' <- analyzeProp prop
@@ -404,9 +409,11 @@ instance Analyzer Query Prop EProp where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
 
-instance Analyzer InvariantCheck Invariant EInvariant where
-  analyze  = checkInvariant
-  analyzeO = checkInvariantO
+instance Analyzer InvariantCheck where
+  type TermOf InvariantCheck  = Invariant
+  type ETermOf InvariantCheck = EInvariant
+  analyze                     = checkInvariant
+  analyzeO                    = checkInvariantO
   analyzeE = \case
     EInvariant ty inv       -> do
       inv' <- checkInvariant inv
@@ -632,7 +639,7 @@ ksAuthorized sKs = do
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 aval
-  :: Analyzer m term eterm
+  :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
   -> (Object -> m a)
   -> AVal
@@ -642,17 +649,17 @@ aval elimVal elimObj = \case
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
-expectVal :: Analyzer m term eterm => AVal -> m (S a)
+expectVal :: Analyzer m => AVal -> m (S a)
 expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
 
-expectObj :: Analyzer m term eterm => AVal -> m Object
+expectObj :: Analyzer m => AVal -> m Object
 expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
 lookupObj
-  :: (Analyzer m term eterm, MonadReader r m, HasAnalyzeEnv r)
+  :: (Analyzer m, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m Object
@@ -665,7 +672,7 @@ lookupObj name vid = do
     Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
 
 lookupVal
-  :: (Analyzer m term eterm, MonadReader r m, HasAnalyzeEnv r)
+  :: (Analyzer m, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m (S a)
@@ -701,10 +708,10 @@ applyInvariants tn sValFields addInvariants = do
       addInvariants invariants''
 
 analyzeAtO
-  :: forall m term eterm
-   . Analyzer m term eterm
-  => term String
-  -> term Object
+  :: forall m
+   . Analyzer m
+  => TermOf m String
+  -> TermOf m Object
   -> m Object
 analyzeAtO colNameT objT = do
     obj@(Object fields) <- analyzeO objT
@@ -723,10 +730,10 @@ analyzeAtO colNameT objT = do
       Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
-  :: (Analyzer m term eterm, SymWord a)
+  :: (Analyzer m, SymWord a)
   => Schema
-  -> term String
-  -> term Object
+  -> TermOf m String
+  -> TermOf m Object
   -> EType
   -> m (S a)
 analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
@@ -857,9 +864,9 @@ analyzeTermO = \case
 -- false
 
 analyzeIntAddTime
-  :: Analyzer m term eterm
-  => term Time
-  -> term Integer
+  :: Analyzer m
+  => TermOf m Time
+  -> TermOf m Integer
   -> m (S Time)
 analyzeIntAddTime timeT secsT = do
   time <- analyze timeT
@@ -869,9 +876,9 @@ analyzeIntAddTime timeT secsT = do
   pure $ time + fromIntegralS (secs * 1000000)
 
 analyzeDecAddTime
-  :: Analyzer m term eterm
-  => term Time
-  -> term Decimal
+  :: Analyzer m
+  => TermOf m Time
+  -> TermOf m Decimal
   -> m (S Time)
 analyzeDecAddTime timeT secsT = do
   time <- analyze timeT
@@ -884,10 +891,10 @@ analyzeDecAddTime timeT secsT = do
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 analyzeEqNeq
-  :: (Analyzer m term eterm, SymWord a, Show a)
+  :: (Analyzer m, SymWord a, Show a)
   => EqNeq
-  -> term a
-  -> term a
+  -> TermOf m a
+  -> TermOf m a
   -> m (S Bool)
 analyzeEqNeq op xT yT = do
   x <- analyze xT
@@ -897,10 +904,10 @@ analyzeEqNeq op xT yT = do
     Neq' -> x ./= y
 
 analyzeObjectEqNeq
-  :: Analyzer m term eterm
+  :: Analyzer m
   => EqNeq
-  -> term Object
-  -> term Object
+  -> TermOf m Object
+  -> TermOf m Object
   -> m (S Bool)
 analyzeObjectEqNeq op xT yT = do
   x <- analyzeO xT
@@ -910,10 +917,10 @@ analyzeObjectEqNeq op xT yT = do
     Neq' -> x ./= y
 
 analyzeComparisonOp
-  :: (Analyzer m term eterm, SymWord a, Show a)
+  :: (Analyzer m, SymWord a, Show a)
   => ComparisonOp
-  -> term a
-  -> term a
+  -> TermOf m a
+  -> TermOf m a
   -> m (S Bool)
 analyzeComparisonOp op xT yT = do
   x <- analyze xT
@@ -927,9 +934,9 @@ analyzeComparisonOp op xT yT = do
     Neq -> x ./= y
 
 analyzeLogicalOp
-  :: (Analyzer m term eterm, Boolean (S a), Show a, SymWord a)
+  :: (Analyzer m, Boolean (S a), Show a, SymWord a)
   => LogicalOp
-  -> [term a]
+  -> [TermOf m a]
   -> m (S a)
 analyzeLogicalOp op terms = do
   symBools <- traverse analyze terms
@@ -1284,8 +1291,8 @@ analyzePropSpecific (RowEnforced tn cn pRk) = do
 
 -- TODO: move to Pact.Analyze.AnalyzePure
 analyzePure
-  :: (Analyzer m term eterm, SymbolicTerm term, SymWord a)
-  => PureTerm eterm term a -> m (S a)
+  :: (Analyzer m, SymbolicTerm (TermOf m), SymWord a)
+  => PureTerm (ETermOf m) (TermOf m) a -> m (S a)
 analyzePure (Lit a)                    = pure (literalS a)
 analyzePure (Sym s)                    = pure s
 analyzePure (StrConcat p1 p2)          = (.++) <$> analyze p1 <*> analyze p2
@@ -1308,8 +1315,8 @@ analyzePure LiteralObject {}
 
 
 analyzePureO
-  :: (Analyzer m term eterm, SymbolicTerm term)
-  => PureTerm eterm term Object -> m Object
+  :: (Analyzer m, SymbolicTerm (TermOf m))
+  => PureTerm (ETermOf m) (TermOf m) Object -> m Object
 analyzePureO (LiteralObject obj) = Object <$> traverse analyzeE obj
 analyzePureO (At _schema colNameT objT _retType)
   = analyzeAtO colNameT objT
