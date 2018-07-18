@@ -571,6 +571,7 @@ data PureTerm t a where
     => ComparisonOp -> t a -> t a -> PureTerm t Bool
 
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm t Bool
+  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm t Bool
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -609,12 +610,6 @@ data Prop a where
 
   PLiteralObject :: Map Text EProp -> Prop Object
 
-  -- String ops
-
-  -- TODO: pure
-  -- | A boolean comparison expression over two 'Object' expressions
-  PObjectEqNeq :: EqNeq -> Prop Object -> Prop Object -> Prop Bool
-
 instance Eq a => Eq (Prop a) where
   -- PropSpecific a == PropSpecific b = a == b
   PureProp a == PureProp b = a == b
@@ -641,6 +636,9 @@ pattern PComparison op x y = PureProp (Comparison op x y)
 
 pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
 pattern PKeySetEqNeq op x y = PureProp (KeySetEqNeq op x y)
+
+pattern PObjectEqNeq :: EqNeq -> Prop Object -> Prop Object -> Prop Bool
+pattern PObjectEqNeq op x y = PureProp (ObjectEqNeq op x y)
 
 pattern PLogical :: LogicalOp -> [Prop Bool] -> Prop Bool
 pattern PLogical op args = PureProp (Logical op args)
