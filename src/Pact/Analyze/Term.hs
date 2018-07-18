@@ -28,9 +28,11 @@ import           Pact.Analyze.Util
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
-  ETerm   :: (Float a, Show a, SymWord a, SMTValue a)
+  ETerm
+    :: (Float a, Show a, SymWord a, SMTValue a)
     => Term a -> Type a -> ETerm
-  EObject ::                                    Term Object -> Schema -> ETerm
+  EObject
+    :: Term Object -> Schema -> ETerm
 
 mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
 mapETerm f term = case term of
@@ -42,16 +44,11 @@ etermEType (ETerm _ ety)   = EType ety
 etermEType (EObject _ sch) = EObjectTy sch
 
 data Term ret where
-  PureTerm :: PureTerm Term a -> Term a
+  PureTerm :: PureTerm ETerm Term a -> Term a
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
   Var            :: Text -> VarId                    -> Term a
-
-  --
-  -- TODO: we need to allow computed keys here
-  --
-  LiteralObject  :: Map Text ETerm   -> Term Object
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
@@ -88,7 +85,7 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
-instance Show (PureTerm Term a) where
+instance Show (PureTerm ETerm Term a) where
   showsPrec _ _ = showString "TODO(joel)"
 
 lit :: SymWord a => a -> Term a

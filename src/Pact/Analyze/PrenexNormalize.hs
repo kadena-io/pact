@@ -40,7 +40,7 @@ instance Float Time where
 instance Float Object where
   float p = case p of
     STANDARD_INSTANCES
-    PLiteralObject{} -> ([], p)
+    PureProp LiteralObject{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of STANDARD_INSTANCES
