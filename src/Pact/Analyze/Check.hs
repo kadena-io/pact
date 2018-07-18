@@ -534,7 +534,8 @@ moduleTables modules (_mod, modRefs) = ExceptT $ do
 
           invInfo = runExpParserOver
             "invariants" invariants invariant $
-            \meta -> runReaderT (expToInvariant TBool meta) _utFields
+            \meta -> runReaderT (expToInvariant TBool meta)
+              (varIdArgs _utFields)
 
       pure $ Table tabName schema <$> invInfo
 
