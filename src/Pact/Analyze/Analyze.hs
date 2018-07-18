@@ -383,6 +383,15 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
+-- TODO Change SVal to AVal (allowing objects), update analyzer
+newtype InvariantCheck a = InvariantCheck
+  { unInvariantCheck :: ReaderT
+    (Located (Map VarId AVal))
+    (Either AnalyzeFailure) a
+  } deriving (Functor, Applicative, Monad, MonadError AnalyzeFailure,
+    MonadReader (Located (Map VarId AVal)))
+
+
 instance Analyzer Analyze where
   type TermOf Analyze  = Term
   type ETermOf Analyze = ETerm
@@ -392,6 +401,7 @@ instance Analyzer Analyze where
   throwErrorNoLoc err  = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
+  getVar vid = view (scope . at vid)
 
 instance Analyzer Query where
   type TermOf Query  = Prop
@@ -408,22 +418,24 @@ instance Analyzer Query where
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
+  getVar vid = view (scope . at vid)
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck  = Invariant
   type ETermOf InvariantCheck = EInvariant
-  analyze                     = checkInvariant
-  analyzeO                    = checkInvariantO
+  analyze  (PureInvariant tm) = analyzePure tm
+  analyzeO (PureInvariant tm) = analyzePureO tm
   analyzeE = \case
     EInvariant ty inv       -> do
-      inv' <- checkInvariant inv
+      inv' <- analyze inv
       pure (EType ty, mkAVal inv')
     EObjectInvariant ty inv -> do
-      inv' <- checkInvariantO inv
+      inv' <- analyzeO inv
       pure (EObjectTy ty, AnObj inv')
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
+  getVar vid = view (located . at vid)
 
 
 symArrayAt
@@ -658,35 +670,9 @@ expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
-lookupObj
-  :: (Analyzer m, MonadReader r m, HasAnalyzeEnv r)
-  => Text
-  -> VarId
-  -> m Object
-lookupObj name vid = do
-  mVal <- view (scope . at vid)
-  case mVal of
-    Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
-    Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
-    Just (AnObj obj)   -> pure obj
-    Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
-
-lookupVal
-  :: (Analyzer m, MonadReader r m, HasAnalyzeEnv r)
-  => Text
-  -> VarId
-  -> m (S a)
-lookupVal name vid = do
-  mVal <- view $ scope . at vid
-  case mVal of
-    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
-    Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
-    Just (OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
-
 applyInvariants
   :: TableName
-  -> Map Text SBVI.SVal
+  -> Map VarId AVal
   -- ^ Mapping from the fields in this table to the @SVal@ holding that field
   --   in this context.
   -> ([S Bool] -> Analyze ())
@@ -700,7 +686,7 @@ applyInvariants tn sValFields addInvariants = do
     Nothing -> pure ()
     Just invariants' -> do
       invariants'' <- for invariants' $ \(Located info invariant) ->
-        case runReaderT (unInvariantCheck (checkInvariant invariant))
+        case runReaderT (unInvariantCheck (analyze invariant))
                         (Located info sValFields) of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
@@ -793,6 +779,7 @@ analyzeTermO = \case
     rowReadCount tn sRk += 1
     tagAccessKey mtReads tid sRk
 
+
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
       sDirty <- use $ cellWritten tn cn sRk
@@ -816,18 +803,9 @@ analyzeTermO = \case
 
       pure (fieldType, av)
 
-    -- Constraints can only operate over int, bool, etc. All of which appear as
-    -- AVal, so we're safe ignoring the other AVal constructors.
-    let sValFields :: Map Text SBVI.SVal
-        sValFields = flip Map.mapMaybe aValFields $ \case
-          (_etype, AVal _prov sVal) -> Just sVal
-          _                         -> Nothing
-
-    applyInvariants tn sValFields (mapM_ addConstraint)
+    applyInvariants tn (snd <$> varIdColumns' aValFields) (mapM_ addConstraint)
 
     pure $ Object aValFields
-
-  Var name vid -> lookupObj name vid
 
   Let _name vid eterm body -> do
     av <- analyzeETerm eterm
@@ -1005,7 +983,7 @@ analyzeTerm = \case
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
-          pure (Just sVal)
+          pure (Just aval')
 
             -- TODO: handle EObjectTy here
 
@@ -1014,10 +992,10 @@ analyzeTerm = \case
         OpaqueVal   -> throwErrorNoLoc OpaqueValEncountered
 
 
-    let sValFields :: Map Text SBVI.SVal
-        sValFields = Map.mapMaybe id mValFields
+    let aValFields :: Map VarId AVal
+        aValFields = Map.mapMaybe id (varIdColumns' mValFields)
 
-    applyInvariants tn sValFields $ \invariants' ->
+    applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
           fs = ZipList $ (\s -> fmap (_sSbv s &&&)) <$> invariants'
       in maintainsInvariants . at tn . _Just %= (fs <*>)
@@ -1032,8 +1010,6 @@ analyzeTerm = \case
     tagVarBinding vid av
     local (scope.at vid ?~ av) $
       analyzeTerm body
-
-  Var name vid -> lookupVal name vid
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
@@ -1146,33 +1122,9 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
-newtype InvariantCheck a = InvariantCheck
-  { unInvariantCheck :: ReaderT
-    (Located (Map Text SBVI.SVal))
-    (Either AnalyzeFailure) a
-  } deriving (Functor, Applicative, Monad, MonadError AnalyzeFailure,
-    MonadReader (Located (Map Text SBVI.SVal)))
-
-
-checkInvariant :: SymWord a => Invariant a -> InvariantCheck (S a)
-checkInvariant = \case
-  PureInvariant tm -> analyzePure tm
-
-  -- variables
-  IVar name -> do
-    mVal <- view (located . at name)
-    case mVal of
-      Just val -> pure (sansProv (SBVI.SBV val))
-      Nothing  -> throwErrorNoLoc $ fromString $
-        "column name not in scope: " ++ show name
-
-checkInvariantO :: Invariant Object -> InvariantCheck Object
-checkInvariantO (PureInvariant tm) = analyzePureO tm
-checkInvariantO (IVar _name) = error "objects cannot be svals"
-
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn
-getLitTableName (PVar vid name) = do
+getLitTableName (PureProp (Var vid name)) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
     Nothing -> throwErrorNoLoc $ fromString $
@@ -1191,13 +1143,11 @@ getLitColName _ = throwErrorNoLoc "TODO: column quantification"
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PureProp tm)    = analyzePure tm
 analyzeProp (PropSpecific a) = analyzePropSpecific a
-analyzeProp (PVar vid name)  = lookupVal name vid
 
 
 analyzePropO :: Prop Object -> Query Object
 analyzePropO (PureProp a)          = analyzePureO a
 analyzePropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
-analyzePropO (PVar vid name)       = lookupObj name vid
 
 
 analyzePropSpecific :: SymWord a => PropSpecific a -> Query (S a)
@@ -1312,6 +1262,13 @@ analyzePure (At schema colNameT objT retType)
   = analyzeAt schema colNameT objT retType
 analyzePure LiteralObject {}
   = error "literal object can't be an argument to analyzePure"
+analyzePure (Var vid name) = do
+  mVal <- getVar vid
+  case mVal of
+    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
+    Just (AVal mProv sval) -> pure $ mkS mProv sval
+    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
+    Just (OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
 
 
 analyzePureO
@@ -1320,7 +1277,19 @@ analyzePureO
 analyzePureO (LiteralObject obj) = Object <$> traverse analyzeE obj
 analyzePureO (At _schema colNameT objT _retType)
   = analyzeAtO colNameT objT
-analyzePureO _ = error "TODO(joel)"
+analyzePureO (Var vid name) = do
+  mVal <- getVar vid
+  case mVal of
+    Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
+    Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
+    Just (AnObj obj)   -> pure obj
+    Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
+
+-- TODO(joel): I don't think an object can appear hear. Get more clarity on
+-- this.
+analyzePureO (Lit obj)     = pure obj
+analyzePureO (Sym _)       = vacuous "an object cannot be a symbolic value"
+analyzePureO (Numerical _) = vacuous "an object cannob be a numerical value"
 
 
 analyzeCheck :: Check -> Query (S Bool)

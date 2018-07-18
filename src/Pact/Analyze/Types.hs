@@ -65,6 +65,9 @@ import           Pact.Analyze.Numerical
 import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Util
 
+import Data.Function (on)
+import Data.List (sortBy)
+
 -- TODO: could implement this stuff generically or add newtype-awareness
 
 wrappedStringFromCW :: (String -> a) -> SBVI.CW -> a
@@ -287,6 +290,26 @@ objFields = lens getter setter
 newtype Schema
   = Schema (Map Text EType)
   deriving (Show, Eq)
+
+-- | When given a column mapping, this function gives a canonical way to assign
+-- var ids to each column. Also see 'varIdArgs'.
+varIdColumns :: ColumnMap a -> Map VarId a
+varIdColumns (ColumnMap m) = varIdColumns' (Map.mapKeys
+  (\(ColumnName name) -> T.pack name) m)
+
+varIdColumns' :: Map Text a -> Map VarId a
+varIdColumns' m =
+  let sortedList = sortBy (compare `on` fst) (Map.toList m)
+      reindexedList =
+        zipWith (\index (_name, val) -> (index, val)) [0..] sortedList
+  in Map.fromList reindexedList
+
+-- | Given args representing the columns of a schema, this function gives a
+-- canonical assignment of var ids to each column. Also see 'varIdColumns'.
+varIdArgs :: [Pact.Arg a] -> [(Pact.Arg a, VarId)]
+varIdArgs args =
+  let sortedList = sortBy (compare `on` Pact._aName) args
+  in zip sortedList [0..]
 
 -- | Untyped symbolic value.
 data AVal
@@ -577,6 +600,10 @@ data PureTerm et t a where
   -- | Injects a symbolic value into the language
   Sym :: S a -> PureTerm et t a
 
+  -- | Refers to a function argument, universally/existentially-quantified
+  -- variable, or column
+  Var :: VarId -> Text -> PureTerm et t a
+
   -- string ops
   -- | The concatenation of two 'String' expressions
   StrConcat :: t String -> t String -> PureTerm et t String
@@ -625,13 +652,12 @@ deriving instance Eq a => Eq (PureTerm EInvariant Invariant a)
 pattern PLit :: a -> Prop a
 pattern PLit a = PureProp (Lit a)
 
+pattern PVar :: VarId -> Text -> Prop t
+pattern PVar vid name = PureProp (Var vid name)
+
 data Prop a where
   PropSpecific :: PropSpecific a  -> Prop a
   PureProp     :: PureTerm EProp Prop a -> Prop a
-
-  -- | Refers to a function argument or universally/existentially-quantified
-  -- variable
-  PVar   :: VarId -> Text -> Prop a
 
 instance S :<: Prop where
   inject = PureProp . Sym
@@ -934,9 +960,6 @@ userShow = userShowsPrec 0
 -- useful.
 data Invariant a
   = PureInvariant (PureTerm EInvariant Invariant a)
-  -- TODO: we can move this to PureTerm when we assign invariant vars `VarId`s
-  -- | Refers to a variable with the provided name
-  | IVar Text
   deriving (Show, Eq)
 
 instance S :<: Invariant where
