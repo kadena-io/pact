@@ -932,9 +932,8 @@ instance Show EInvariant where
   show (EInvariant ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"
   show (EObjectInvariant ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")"
 
-pattern ILiteral :: SymWord a => a -> Invariant a
-pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where
-  ILiteral a = PureInvariant (Sym (literalS a))
+pattern ILiteral :: a -> Invariant a
+pattern ILiteral a = PureInvariant (Lit a)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)
