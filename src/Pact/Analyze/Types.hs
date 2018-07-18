@@ -14,6 +14,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Types where
 
@@ -585,14 +586,13 @@ instance Show (PureTerm Invariant a) where
 instance Eq a => Eq (PureTerm Prop a) where
   (==) = error "TODO(joel)"
 
+pattern PLit :: SymWord a => a -> Prop a
+pattern PLit a <- PureProp (Sym (unliteralS -> Just a)) where
+  PLit a = PureProp (Sym (literalS a))
+
 data Prop a where
   PropSpecific :: PropSpecific a  -> Prop a
   PureProp     :: PureTerm Prop a -> Prop a
-
-  -- Literals
-
-  -- | Injects a literal into the property language
-  PLit :: SymWord a => a   -> Prop a
 
   -- | Refers to a function argument or universally/existentially-quantified variable
   PVar   :: VarId -> Text ->                       Prop a
