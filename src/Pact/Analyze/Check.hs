@@ -278,13 +278,6 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
     <*> allocateResult
 
   where
-
-    --
-    -- TODO: we need to figure out whether these free_ calls should indeed be
-    -- free_, or whether they should instead be e.g. exists_ calls. As it stands,
-    -- free_'s semantics differ depending on whether SBV is running in proof vs
-    -- sat mode. We have to get this right.
-    --
     alloc :: SymWord a => Symbolic (SBV a)
     alloc = SBV.free_
 
