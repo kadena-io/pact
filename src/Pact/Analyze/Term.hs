@@ -51,7 +51,7 @@ data Term ret where
   --
   -- TODO: we need to allow computed keys here
   --
-  LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
+  LiteralObject  :: Map Text ETerm   -> Term Object
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having

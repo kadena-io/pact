@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TupleSections              #-}
 
 module Pact.Analyze.Analyze where
 
@@ -755,9 +756,12 @@ analyzeETerm :: ETerm -> Analyze AVal
 analyzeETerm (ETerm tm _)   = mkAVal <$> analyzeTerm tm
 analyzeETerm (EObject tm _) = AnObj <$> analyzeTermO tm
 
+analyzeETerm' :: ETerm -> Analyze TVal
+analyzeETerm' et = (etermEType et,) <$> analyzeETerm et
+
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
-  LiteralObject obj -> Object <$> (traverse . traverse) analyzeETerm obj
+  LiteralObject obj -> Object <$> traverse analyzeETerm' obj
 
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
