@@ -615,11 +615,16 @@ translateNode astNode = astContext astNode $ case astNode of
   -- Time
   -- Tricky: seconds could be either integer or decimal
   AST_AddTime time seconds
-    | seconds ^. aNode . aTy == TyPrim TyInteger ||
-      seconds ^. aNode . aTy == TyPrim TyDecimal -> do
-      ETerm time' TTime <- translateNode time
-      seconds'          <- translateNode seconds
-      pure (ETerm (AddTime time' seconds') TTime)
+    | seconds ^. aNode . aTy == TyPrim TyInteger -> do
+      ETerm time' TTime   <- translateNode time
+      ETerm seconds' TInt <- translateNode seconds
+      pure (ETerm (PureTerm (IntAddTime time' seconds')) TTime)
+
+  AST_AddTime time seconds
+    | seconds ^. aNode . aTy == TyPrim TyDecimal -> do
+      ETerm time' TTime       <- translateNode time
+      ETerm seconds' TDecimal <- translateNode seconds
+      pure (ETerm (PureTerm (DecAddTime time' seconds')) TTime)
 
   AST_Read node table key -> do
     ETerm key' TStr <- translateNode key
