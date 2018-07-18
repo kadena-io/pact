@@ -3,28 +3,25 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# options_ghc -fno-warn-orphans #-}
 
 module Pact.Analyze.PrenexNormalize (prenexConvert) where
 
 import           Data.Bifunctor     (bimap)
 import           Prelude            hiding (Float)
-import           Pact.Types.Lang    hiding (KeySet)
 
+import           Pact.Analyze.Numerical
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util
 
-data Quantifier
-  = Forall' VarId Text QType
-  | Exists' VarId Text QType
-
-class Float a where
-  float :: Prop a -> ([Quantifier], Prop a)
-
-#define STANDARD_INSTANCES                                             \
-  PLit{} -> ([], p);                                                  \
-  PSym{} -> ([], p);                                                  \
-  Result -> ([], p);                                                  \
-  PVar{} -> ([], p);                                                 \
+#define STANDARD_INSTANCES                                  \
+  PLit{}              -> ([], p);                           \
+  PureProp Sym{}      -> ([], p);                           \
+  PropSpecific Result -> ([], p);                           \
+  PVar{}              -> ([], p);                           \
   PAt schema a b ty -> PAt schema a <$> float b <*> pure ty;
+
+instance Float Any where
 
 instance Float Integer where
   float = floatIntegerQuantifiers
@@ -60,25 +57,38 @@ floatIntegerQuantifiers p = case p of
 
   PStrLength pStr -> PStrLength <$> float pStr
 
-  PIntArithOp op a b    -> PIntArithOp      op <$> float a <*> float b
-  PIntUnaryArithOp op a -> PIntUnaryArithOp op <$> float a
-  PModOp a b            -> PModOp              <$> float a <*> float b
-  PRoundingLikeOp1 op a -> PRoundingLikeOp1 op <$> float a
-  IntCellDelta tn cn a  -> IntCellDelta tn cn  <$> float a
-  RowWriteCount tn pRk  -> RowWriteCount tn    <$> float pRk
-  RowReadCount tn pRk   -> RowReadCount tn     <$> float pRk
-  IntColumnDelta{}      -> ([], p)
+  PNumerical (IntArithOp op a b)
+    -> PNumerical ... IntArithOp      op <$> float a <*> float b
+  PNumerical (IntUnaryArithOp op a)
+    -> PNumerical .   IntUnaryArithOp op <$> float a
+  PNumerical (ModOp a b)
+    -> PNumerical ... ModOp              <$> float a <*> float b
+  PNumerical (RoundingLikeOp1 op a)
+    -> PNumerical . RoundingLikeOp1 op <$> float a
+  PropSpecific (IntCellDelta tn cn a)
+    -> PropSpecific . IntCellDelta tn cn <$> float a
+  PropSpecific (RowWriteCount tn pRk)
+    -> PropSpecific . RowWriteCount tn   <$> float pRk
+  PropSpecific (RowReadCount tn pRk)
+    -> PropSpecific . RowReadCount tn    <$> float pRk
+  PropSpecific (IntColumnDelta{}) -> ([], p)
 
 floatDecimalQuantifiers :: Prop Decimal -> ([Quantifier], Prop Decimal)
 floatDecimalQuantifiers p = case p of
   STANDARD_INSTANCES
-  PDecArithOp op a b      -> PDecArithOp      op <$> float a <*> float b
-  PDecUnaryArithOp op a   -> PDecUnaryArithOp op <$> float a
-  PDecIntArithOp op a b   -> PDecIntArithOp   op <$> float a <*> float b
-  PIntDecArithOp op a b   -> PIntDecArithOp   op <$> float a <*> float b
-  PRoundingLikeOp2 op a b -> PRoundingLikeOp2 op <$> float a <*> float b
-  DecCellDelta tn cn a    -> DecCellDelta tn cn  <$> float a
-  DecColumnDelta{}        -> ([], p)
+  PNumerical (DecArithOp op a b)
+    -> PNumerical ... DecArithOp      op <$> float a <*> float b
+  PNumerical (DecUnaryArithOp op a)
+    -> PNumerical .   DecUnaryArithOp op <$> float a
+  PNumerical (DecIntArithOp op a b)
+    -> PNumerical ... DecIntArithOp   op <$> float a <*> float b
+  PNumerical (IntDecArithOp op a b)
+    -> PNumerical ... IntDecArithOp   op <$> float a <*> float b
+  PNumerical (RoundingLikeOp2 op a b)
+    -> PNumerical ... RoundingLikeOp2 op <$> float a <*> float b
+  PropSpecific (DecCellDelta tn cn a)
+    -> PropSpecific . DecCellDelta tn cn  <$> float a
+  PropSpecific (DecColumnDelta{}) -> ([], p)
 
 floatStringQuantifiers :: Prop String -> ([Quantifier], Prop String)
 floatStringQuantifiers p = case p of
@@ -95,43 +105,39 @@ floatBoolQuantifiers :: Prop Bool -> ([Quantifier], Prop Bool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
 
-  Forall uid name ty prop ->
+  PropSpecific (Forall uid name ty prop) ->
     let (qs, prop') = float prop
     in (Forall' uid name ty:qs, prop')
-  Exists uid name ty prop ->
+  PropSpecific (Exists uid name ty prop) ->
     let (qs, prop') = float prop
     in (Exists' uid name ty:qs, prop')
 
-  Abort              -> ([], p)
-  Success            -> ([], p)
-  TableWrite{}       -> ([], p)
-  TableRead{}        -> ([], p)
-  ColumnWrite{}      -> ([], p)
-  ColumnRead{}       -> ([], p)
-  KsNameAuthorized{} -> ([], p)
-  RowEnforced{}      -> ([], p)
+  PropSpecific Abort              -> ([], p)
+  PropSpecific Success            -> ([], p)
+  PropSpecific TableWrite{}       -> ([], p)
+  PropSpecific TableRead{}        -> ([], p)
+  PropSpecific ColumnWrite{}      -> ([], p)
+  PropSpecific ColumnRead{}       -> ([], p)
+  PropSpecific KsNameAuthorized{} -> ([], p)
+  PropSpecific RowEnforced{}      -> ([], p)
 
-  PIntegerComparison op a b -> PIntegerComparison op <$> float a <*> float b
-  PDecimalComparison op a b -> PDecimalComparison op <$> float a <*> float b
-  PTimeComparison    op a b -> PTimeComparison    op <$> float a <*> float b
-  PBoolComparison    op a b -> PBoolComparison    op <$> float a <*> float b
-  PStringComparison  op a b -> PStringComparison  op <$> float a <*> float b
-  PObjectEqNeq       op a b -> PObjectEqNeq       op <$> float a <*> float b
-  PKeySetEqNeq       op a b -> PKeySetEqNeq       op <$> float a <*> float b
+  PComparison  op a b -> PComparison  op <$> float a <*> float b
+  PObjectEqNeq op a b -> PObjectEqNeq op <$> float a <*> float b
+  PKeySetEqNeq op a b -> PKeySetEqNeq op <$> float a <*> float b
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
   PLogical _ _ -> error ("ill-defined logical op: " ++ show p)
 
-  RowRead  tn pRk -> RowRead  tn <$> float pRk
-  RowWrite tn pRk -> RowWrite tn <$> float pRk
+  PropSpecific (RowRead  tn pRk) -> PropSpecific . RowRead  tn <$> float pRk
+  PropSpecific (RowWrite tn pRk) -> PropSpecific . RowWrite tn <$> float pRk
 
 reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
 reassembleFloated qs prop =
   let mkQuantifiedProp q acc = case q of
-        Forall' uid name ty -> Forall uid name ty acc
-        Exists' uid name ty -> Exists uid name ty acc
+        Forall' uid name ty -> PropSpecific (Forall uid name ty acc)
+        Exists' uid name ty -> PropSpecific (Exists uid name ty acc)
   in foldr mkQuantifiedProp prop qs
 
 -- We first use @floatBoolQuantifiers@ to remove all quantifiers from the

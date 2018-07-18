@@ -31,9 +31,11 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Numerical
 import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util            ((...))
 
 wrap :: Text -> Text
 wrap code =
@@ -135,12 +137,21 @@ expectFail code check = do
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = PIntegerComparison Eq 0 $
+intConserves tn cn = PComparison Eq 0 $ inject $
   IntColumnDelta (PLit tn) (PLit cn)
 
 decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = PDecimalComparison Eq 0 $
+decConserves tn cn = PComparison Eq 0 $ inject $
   DecColumnDelta (PLit tn) (PLit cn)
+
+pattern Success' :: Prop Bool
+pattern Success' = PropSpecific Success
+
+pattern Abort' :: Prop Bool
+pattern Abort' = PropSpecific Abort
+
+pattern Result' :: Prop t
+pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
@@ -150,9 +161,9 @@ spec = describe "analyze" $ do
             (defun test:integer (x:integer)
               (* x -1))
           |]
-    expectPass code $ Valid $ PIntegerComparison Eq
-      (PIntArithOp Mul (-1) (PVar 1 "x"))
-      (Result :: Prop Integer)
+    expectPass code $ Valid $ PComparison Eq
+      (injectNumerical (IntArithOp Mul (-1) (PVar 1 "x")))
+      (inject Result :: Prop Integer)
 
   describe "inlining" $ do
     let code =
@@ -165,7 +176,7 @@ spec = describe "analyze" $ do
             (defun test:integer (a:integer)
               (helper a))
           |]
-    expectPass code $ Valid $ PIntegerComparison Gte (Result :: Prop Integer) 10
+    expectPass code $ Valid $ PComparison Gte (inject Result :: Prop Integer) 10
 
   describe "success" $ do
     let code =
@@ -173,8 +184,8 @@ spec = describe "analyze" $ do
             (defun test:bool (x:integer)
               (if (< x 10) true false))
           |]
-    expectPass code $ Valid Success
-    expectPass code $ Valid $ bnot Abort
+    expectPass code $ Valid (inject Success)
+    expectPass code $ Valid $ bnot Abort'
 
   describe "enforce.trivial" $ do
     let code =
@@ -182,10 +193,10 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce false "cannot pass"))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Valid Abort
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Valid Abort'
 
-    expectFail code $ Satisfiable Success
+    expectFail code $ Satisfiable (inject Success)
 
   describe "enforce.conditional" $ do
     let code =
@@ -195,11 +206,11 @@ spec = describe "analyze" $ do
                 (enforce (< x 5) "abort sometimes")
                 true))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable $ bnot Abort
-    expectPass code $ Satisfiable Success
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable $ bnot Abort'
+    expectPass code $ Satisfiable (inject Success)
 
-    expectFail code $ Valid Abort
+    expectFail code $ Valid Abort'
 
   describe "enforce.sequence" $ do
     let code =
@@ -211,7 +222,7 @@ spec = describe "analyze" $ do
                 true
                 false))
           |]
-    expectPass code $ Valid Abort
+    expectPass code $ Valid Abort'
 
   describe "enforce.sequence" $ do
     let code =
@@ -222,8 +233,8 @@ spec = describe "analyze" $ do
                 true
                 false))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (inject Success)
 
   describe "enforce.sequence" $ do
     let code =
@@ -234,12 +245,12 @@ spec = describe "analyze" $ do
                 true
                 false))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ (PIntegerComparison Gt (PVar 1 "x") (0 :: Prop Integer)) ==>
-      Success
-    expectPass code $ Valid $ (PIntegerComparison Eq (PVar 1 "x") (5 :: Prop Integer)) ==>
-      Success &&& (PBoolComparison Eq (Result :: Prop Bool) true)
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (inject Success)
+    expectPass code $ Valid $ (PComparison Gt (PVar 1 "x") (0 :: Prop Integer)) ==>
+      inject Success
+    expectPass code $ Valid $ (PComparison Eq (PVar 1 "x") (5 :: Prop Integer)) ==>
+      inject Success &&& (PComparison Eq (inject Result :: Prop Bool) true)
 
   describe "read-keyset.equality" $ do
     let code =
@@ -250,7 +261,7 @@ spec = describe "analyze" $ do
                    (read-keyset (+ "k" "s")))
                 "keysets equality failed"))
           |]
-    expectPass code $ Valid Success
+    expectPass code $ Valid (inject Success)
 
   describe "enforce-keyset.name.static" $ do
     let code =
@@ -258,11 +269,11 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset 'ks))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ Success ==> KsNameAuthorized "ks"
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (inject Success)
+    expectPass code $ Valid $ inject Success ==> inject (KsNameAuthorized "ks")
 
-    expectFail code $ Valid $ Success ==> KsNameAuthorized "different-ks"
+    expectFail code $ Valid $ inject Success ==> inject (KsNameAuthorized "different-ks")
 
   describe "enforce-keyset.name.dynamic" $ do
     let code =
@@ -270,7 +281,7 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset (+ "k" "s")))
           |]
-    expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
+    expectPass code $ Valid $ bnot (inject (KsNameAuthorized "ks")) ==> Abort'
 
   describe "enforce-keyset.value" $ do
     let code =
@@ -278,11 +289,11 @@ spec = describe "analyze" $ do
             (defun test:bool ()
               (enforce-keyset (read-keyset (+ "k" "s"))))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot (KsNameAuthorized "ks") ==> Abort
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (inject Success)
+    expectPass code $ Valid $ bnot (inject (KsNameAuthorized "ks")) ==> Abort'
 
-    expectFail code $ Valid $ bnot (KsNameAuthorized "different-ks") ==> Abort
+    expectFail code $ Valid $ bnot (inject (KsNameAuthorized "different-ks")) ==> Abort'
 
   describe "enforce-keyset.row-level.read" $ do
     let code =
@@ -298,24 +309,26 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ bnot $ Exists 1 "row" (EType TStr) $
-      RowWrite "tokens" (PVar 1 "row")
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      PIntegerComparison Eq (RowWriteCount "tokens" (PVar 1 "row")) 0
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr) (RowRead "tokens" (PVar 1 "row"))
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr)
-        (PIntegerComparison Eq (RowReadCount "tokens" (PVar 1 "row")) 1)
-    expectPass code $ Satisfiable $ Exists 1 "row" (EType TStr) $
-      RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Satisfiable $ Exists 1 "row" (EType TStr) $
-      bnot $ RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ Success ==> (Forall 1 "row" (EType TStr) $
-      RowRead "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks" (PVar 1 "row"))
-    expectPass code $ Valid $ Success ==> RowEnforced "tokens" "ks" (PVar 1 "acct")
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable (inject Success)
+    expectPass code $ Valid $ bnot $ inject $ Exists 1 "row" (EType TStr) $
+      inject $ RowWrite "tokens" (PVar 1 "row")
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      PComparison Eq (inject (RowWriteCount "tokens" (PVar 1 "row"))) 0
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr) (inject $ RowRead "tokens" (PVar 1 "row")))
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (PComparison Eq (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Satisfiable $ inject $ Exists 1 "row" (EType TStr) $
+      inject $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Satisfiable $ inject $ Exists 1 "row" (EType TStr) $
+      bnot $ inject $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Valid $ inject Success ==> (inject $ Forall 1 "row" (EType TStr) $
+      inject (RowRead "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks" (PVar 1 "row")))
+    expectPass code $ Valid $ inject Success ==>
+      inject (RowEnforced "tokens" "ks" (PVar 1 "acct"))
 
   describe "enforce-keyset.row-level.read.syntax" $ do
     let code =
@@ -337,7 +350,7 @@ spec = describe "analyze" $ do
 
     -- TODO: come up with better tests. Right now this just tests that this
     -- parses correctly.
-    expectPass code $ Satisfiable Abort
+    expectPass code $ Satisfiable Abort'
 
   describe "enforce-keyset.row-level.multiple-keysets" $ do
     let code =
@@ -354,11 +367,13 @@ spec = describe "analyze" $ do
                 (enforce-keyset ks)
                 bal))
           |]
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowRead "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks1" (PVar 1 "row")
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowRead "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks1" (PVar 1 "row"))
     -- Using the other keyset:
-    expectFail code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowRead "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks2" (PVar 1 "row")
+    expectFail code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowRead "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks2" (PVar 1 "row"))
 
   describe "enforce-keyset.row-level.write" $ do
     let code =
@@ -376,28 +391,33 @@ spec = describe "analyze" $ do
                   (enforce-keyset ks)
                   new-bal)))
           |]
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr) (RowWrite "tokens" (PVar 1 "row"))
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr)
-        (PIntegerComparison Eq (RowWriteCount "tokens" (PVar 1 "row")) 1)
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr) (RowRead "tokens" (PVar 1 "row"))
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr)
-        (PIntegerComparison Eq (RowReadCount "tokens" (PVar 1 "row")) 1)
-    expectPass code $ Valid $ Success ==>
-      Exists 1 "row" (EType TStr) (RowEnforced "tokens" "ks" (PVar 1 "row"))
-    expectPass code $ Satisfiable $ Exists 1 "row" (EType TStr) $
-      bnot $ RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowRead "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowWrite "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectPass code $ Valid $ RowWrite "tokens" (PVar 1 "acct")
-                          ==> RowEnforced "tokens" "ks" (PVar 1 "acct")
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable $ inject Success
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (inject (RowWrite "tokens" (PVar 1 "row"))))
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (PComparison Eq (inject (RowWriteCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (inject (RowRead "tokens" (PVar 1 "row"))))
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (PComparison Eq (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
+    expectPass code $ Valid $ inject Success ==>
+      inject (Exists 1 "row" (EType TStr)
+        (inject (RowEnforced "tokens" "ks" (PVar 1 "row"))))
+    expectPass code $ Satisfiable $ inject $ Exists 1 "row" (EType TStr) $
+      bnot $ inject $ RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowRead "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowWrite "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectPass code $ Valid $ inject (RowWrite "tokens" (PVar 1 "acct"))
+                          ==> inject (RowEnforced "tokens" "ks" (PVar 1 "acct"))
 
   describe "enforce-keyset.row-level.write-count" $ do
     let code =
@@ -410,13 +430,13 @@ spec = describe "analyze" $ do
               (write tokens 'joel { 'balance: 100 }))
           |]
     expectPass code $ Valid $
-      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 2
+      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 2
     expectPass code $ Valid $ PNot $
-      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 1
+      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 1
     expectPass code $ Valid $ PNot $
-      PIntegerComparison Eq (RowWriteCount "tokens" (PLit "joel")) 3
+      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 3
     expectPass code $ Valid $
-      PIntegerComparison Eq (RowReadCount "tokens" (PLit "joel")) 0
+      PComparison Eq (inject (RowReadCount "tokens" (PLit "joel"))) 0
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
@@ -441,10 +461,12 @@ spec = describe "analyze" $ do
     -- keyset, we don't consider the row to have been enforced due to
     -- invalidation:
     --
-    expectFail code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowRead "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks" (PVar 1 "row")
-    expectFail code $ Valid $ Forall 1 "row" (EType TStr) $
-      RowWrite "tokens" (PVar 1 "row") ==> RowEnforced "tokens" "ks" (PVar 1 "row")
+    expectFail code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowRead "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks" (PVar 1 "row"))
+    expectFail code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      inject (RowWrite "tokens" (PVar 1 "row")) ==>
+        inject (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
   describe "table-read.multiple-read" $
     let code =
@@ -461,7 +483,7 @@ spec = describe "analyze" $ do
                 (enforce (= stu-name "stu") "name is stu")
                 (enforce (= stu-balance 5) "balance is 5")))
           |]
-    in expectPass code $ Valid Success
+    in expectPass code $ Valid $ inject Success
 
   describe "table-read.one-read" $
     let code =
@@ -479,7 +501,7 @@ spec = describe "analyze" $ do
                 )
               )
           |]
-    in expectPass code $ Valid $ bnot Abort
+    in expectPass code $ Valid $ bnot Abort'
 
   describe "at.dynamic-key" $ do
     let code =
@@ -498,13 +520,13 @@ spec = describe "analyze" $ do
                 )
               )
           |]
-    expectPass code $ Valid Success
+    expectPass code $ Valid $ inject Success
 
     let schema = Schema $
           Map.fromList [("name", EType TStr), ("balance", EType TInt)]
         ety    = EType TStr
-    expectPass code $ Valid $ PStringComparison Eq
-      (PAt schema (PLit "name") Result ety)
+    expectPass code $ Valid $ PComparison Eq
+      (PAt schema (PLit "name") (inject Result) ety)
       (PLit "stu" :: Prop String)
 
   describe "at.object-in-object" $
@@ -517,7 +539,7 @@ spec = describe "analyze" $ do
               (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
                 (at "wrapped" obj)))
           |]
-    in expectPass code $ Valid $ bnot Abort
+    in expectPass code $ Valid $ bnot Abort'
 
   describe "object-equality" $ do
     -- let _ =
@@ -546,8 +568,8 @@ spec = describe "analyze" $ do
               (with-read tokens "stu" {"balance" := bal}
                 bal))
           |]
-    expectPass code $ Valid $ TableRead "tokens"
-    expectPass code $ Valid $ bnot $ TableRead "other"
+    expectPass code $ Valid $ inject $ TableRead "tokens"
+    expectPass code $ Valid $ bnot $ inject $ TableRead "other"
 
   describe "table-write.insert" $ do
     let code =
@@ -558,8 +580,8 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ TableWrite "tokens"
-    expectPass code $ Valid $ bnot $ TableWrite "other"
+    expectPass code $ Valid $ inject $ TableWrite "tokens"
+    expectPass code $ Valid $ bnot $ inject $ TableWrite "other"
 
   describe "table-write.update" $ do
     let code =
@@ -570,7 +592,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (update tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ TableWrite "tokens"
+    expectPass code $ Valid $ inject $ TableWrite "tokens"
 
   describe "table-write.write" $ do
     let code =
@@ -581,7 +603,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (write tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ TableWrite "tokens"
+    expectPass code $ Valid $ inject $ TableWrite "tokens"
 
   describe "table-write.conditional" $ do
     let code =
@@ -594,9 +616,9 @@ spec = describe "analyze" $ do
                 (insert tokens "stu" {"balance": 5})
                 "didn't write"))
           |]
-    expectPass code $ Satisfiable $ TableWrite "tokens"
-    expectPass code $ Satisfiable $ bnot $ TableWrite "tokens"
-    expectPass code $ Valid $ bnot $ TableWrite "other"
+    expectPass code $ Satisfiable $ inject $ TableWrite "tokens"
+    expectPass code $ Satisfiable $ bnot $ inject $ TableWrite "tokens"
+    expectPass code $ Valid $ bnot $ inject $ TableWrite "other"
 
   describe "table-write.conditional" $ do
     let code =
@@ -612,7 +634,8 @@ spec = describe "analyze" $ do
                 "didn't write"
                 (insert tokens "stu" {"balance": 5})))
           |]
-    expectPass code $ Valid $ Success ==> bnot (TableWrite "tokens")
+    expectPass code $ Valid $
+      inject Success ==> bnot (inject (TableWrite "tokens"))
 
   describe "conserves-mass.integer" $ do
     let code =
@@ -628,7 +651,8 @@ spec = describe "analyze" $ do
                 (update accounts to   { "balance": (+ to-bal amount) })))
           |]
 
-    expectPass code $ Valid $ Success ==> intConserves "accounts" "balance"
+    expectPass code $ Valid $
+      inject Success ==> intConserves "accounts" "balance"
 
   describe "conserves-mass.integer.without-uniqueness" $ do
     let code =
@@ -644,8 +668,8 @@ spec = describe "analyze" $ do
                 (update accounts to   { "balance": (+ to-bal amount) })))
           |]
 
-    expectPass code $ Satisfiable $ Success &&& intConserves "accounts" "balance"
-    expectPass code $ Satisfiable $ Success &&& bnot (intConserves "accounts" "balance")
+    expectPass code $ Satisfiable $ inject Success &&& intConserves "accounts" "balance"
+    expectPass code $ Satisfiable $ inject Success &&& bnot (intConserves "accounts" "balance")
 
   describe "conserves-mass.decimal" $ do
     let code =
@@ -667,7 +691,7 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid $ Success ==> decConserves "accounts2" "balance"
+    expectPass code $ Valid $ inject Success ==> decConserves "accounts2" "balance"
 
   describe "conserves-mass.decimal.failing-invariant" $ do
     let code =
@@ -740,22 +764,22 @@ spec = describe "analyze" $ do
 
     expectVerified code
 
-    expectPass code $ Valid $ bnot $ Exists 1 "row" (EType TStr) $
-      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 1 "row")) 2
+    expectPass code $ Valid $ bnot $ inject $ Exists 1 "row" (EType TStr) $
+      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      PStringComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
-        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 1 "row")) 0
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      PComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
+        PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0
 
-    expectPass code $ Valid $ Forall 1 "row" (EType TStr) $
-      PStringComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
-        PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 1 "row")) 3
+    expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
+      PComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
+        PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3
 
-    expectPass code $ Valid $ Exists 1 "row" (EType TStr) $
-      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PVar 1 "row")) 3
+    expectPass code $ Valid $ inject $ Exists 1 "row" (EType TStr) $
+      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3
 
     expectPass code $ Valid $
-      PIntegerComparison Eq (IntCellDelta "accounts" "balance" (PLit "bob")) 3
+      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PLit "bob"))) 3
 
   describe "with-read" $ do
     let code =
@@ -766,7 +790,7 @@ spec = describe "analyze" $ do
                 (enforce (= bal 10) "Read after write failed")))
           |]
 
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "with-read.nested" $ do
     let code =
@@ -779,7 +803,7 @@ spec = describe "analyze" $ do
                   (enforce (= bal 10) "Shadowing failed"))))
           |]
 
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "with-read.overlapping-names" $ do
     let code =
@@ -797,7 +821,7 @@ spec = describe "analyze" $ do
                   num)))
           |]
 
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "bind.from-read" $ do
     let code =
@@ -810,7 +834,7 @@ spec = describe "analyze" $ do
                   bal)))
           |]
 
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "bind.from-literal" $ do
     let code =
@@ -822,7 +846,7 @@ spec = describe "analyze" $ do
                   bal)))
           |]
 
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "let" $ do
     describe "sanity" $ do
@@ -835,7 +859,7 @@ spec = describe "analyze" $ do
                     (enforce (> z y) "z <= y")
                     true))
               |]
-        in expectPass code $ Valid $ bnot Abort
+        in expectPass code $ Valid $ bnot Abort'
 
       describe "2" $
         let code =
@@ -846,7 +870,7 @@ spec = describe "analyze" $ do
                     (enforce (< z y) "z >= y")
                     true))
               |]
-        in expectPass code $ Valid Abort
+        in expectPass code $ Valid Abort'
 
     describe "let*.sanity" $
         let code =
@@ -856,7 +880,7 @@ spec = describe "analyze" $ do
                          (y (* x 10)))
                    (enforce (= 22 (+ x y)) "x + y != 22")))
               |]
-        in expectPass code $ Valid $ bnot Abort
+        in expectPass code $ Valid $ bnot Abort'
 
     describe "nested" $
         let code =
@@ -867,7 +891,7 @@ spec = describe "analyze" $ do
                    (let ((z (let ((w 1)) (+ (+ x y) w))))
                      (enforce (= 6 z) "2 + 3 + 1 != 6"))))
               |]
-        in expectPass code $ Valid $ bnot Abort
+        in expectPass code $ Valid $ bnot Abort'
 
   describe "time" $
     let code =
@@ -922,7 +946,7 @@ spec = describe "analyze" $ do
                   "0.0010035 s = 0.001004 s")
               ))
           |]
-    in expectPass code $ Valid $ bnot Abort
+    in expectPass code $ Valid $ bnot Abort'
 
   describe "arith" $
     let code =
@@ -1031,7 +1055,7 @@ spec = describe "analyze" $ do
                 (enforce (= (ceiling -100.15234 2) -100.15) "")
               ))
           |]
-    in expectPass code $ Valid $ bnot Abort
+    in expectPass code $ Valid $ bnot Abort'
 
   describe "schema-invariants" $ do
     let code =
@@ -1053,7 +1077,7 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "schema-invariants.not-equals" $ do
     let code =
@@ -1070,7 +1094,7 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "schema-invariants.equals" $ do
     let code =
@@ -1087,7 +1111,7 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "format-time / parse-time" $ do
     let code =
@@ -1113,7 +1137,7 @@ spec = describe "analyze" $ do
                      "2016-07-23 13:30:45.001002"))
                      )
           |]
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "format" $ do
     let code =
@@ -1126,7 +1150,7 @@ spec = describe "analyze" $ do
               (enforce (= (format "{}" [str]) str))
             )
           |]
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "hash" $ do
     let code =
@@ -1160,7 +1184,7 @@ spec = describe "analyze" $ do
               ;   "61d3c8775e151b4582ca7f9a885a9b2195d5aa6acc58ddca61a504e9986bb8c06eeb37af722ad848f9009053b6379677bf111e25a680ab41a209c4d56ff1e183"))
             )
           |]
-    expectPass code $ Valid Success
+    expectPass code $ Valid Success'
 
   describe "enforce-keyset.row-level.read" $ do
     let code =
@@ -1195,8 +1219,8 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Satisfiable Abort
-    expectPass code $ Satisfiable Success
+    expectPass code $ Satisfiable Abort'
+    expectPass code $ Satisfiable Success'
 
   describe "prenex conversion" $ do
     -- These test a somewhat irrelevant implementation detail -- the specific
@@ -1206,10 +1230,10 @@ spec = describe "analyze" $ do
         -- b        = PVar 1 "b"
         ty       = EType TStr
         intTy    = EType TInt
-        allA0    = Forall 1 "a"
-        allA1    = Forall 2 "a"
-        existsA0 = Exists 1 "a"
-        existsA1 = Exists 2 "a"
+        allA0    = inject ... Forall 1 "a"
+        allA1    = inject ... Forall 2 "a"
+        existsA0 = inject ... Exists 1 "a"
+        existsA1 = inject ... Exists 2 "a"
 
     it "lifts all over not (becomes exists)" $
       prenexConvert (PNot (allA0 ty a0))
@@ -1242,9 +1266,10 @@ spec = describe "analyze" $ do
       existsA0 ty (existsA1 ty (PAnd a0 a1))
 
     it "lifts forall string" $
-      prenexConvert (PAnd (PLit True) (allA0 intTy (PIntegerComparison Gte a0 a0)))
+      prenexConvert (PAnd (PLit True)
+        (allA0 intTy (PComparison Gte (a0 :: Prop String) a0)))
       `shouldBe`
-      allA0 intTy (PAnd (PLit True) (PIntegerComparison Gte a0 a0))
+      allA0 intTy (PAnd (PLit True) (PComparison Gte (a0 :: Prop String) a0))
 
   describe "prop parse / typecheck" $ do
     let textToProp'
@@ -1299,16 +1324,16 @@ spec = describe "analyze" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
       textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
         `shouldBe`
-        Right (PIntegerComparison Gt (IntColumnDelta "a" "b") 0)
+        Right (PComparison Gt (inject (IntColumnDelta "a" "b")) 0)
 
       let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
       textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
-        Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+        Right (PComparison Gt (inject (DecColumnDelta "a" "b")) 0)
 
       textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
         `shouldBe`
-        Right (PDecimalComparison Gt (DecColumnDelta "a" "b") 0)
+        Right (PComparison Gt (inject (DecColumnDelta "a" "b")) 0)
 
     it "checks +" $ do
       textToProp TStr "(+ \"a\" \"b\")"
@@ -1317,11 +1342,11 @@ spec = describe "analyze" $ do
 
       textToProp TInt "(+ 0 1)"
         `shouldBe`
-        Right (PIntArithOp Add 0 1)
+        Right (injectNumerical (IntArithOp Add 0 1))
 
       textToProp TDecimal "(+ 0.0 1.0)"
         `shouldBe`
-        Right (PDecArithOp Add (PLit 0) (PLit 1))
+        Right (injectNumerical (DecArithOp Add (PLit 0) (PLit 1)))
 
       textToProp TDecimal "(+ 0 1)"
         `shouldBe`
@@ -1359,10 +1384,10 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right
           (EProp TBool
-            (Forall (VarId 1) "x" (EType TStr)
-              (Forall (VarId 2) "y" (EType TStr)
-                (PStringComparison Eq
-                  (PVar (VarId 1) "x")
+            (inject $ Forall (VarId 1) "x" (EType TStr)
+              (inject $ Forall (VarId 2) "y" (EType TStr)
+                (PComparison Eq
+                  (PVar (VarId 1) "x" :: Prop String)
                   (PVar (VarId 2) "y")))))
 
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
@@ -1372,9 +1397,9 @@ spec = describe "analyze" $ do
         "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
-          (Exists (VarId 1) "row" (EType TStr)
-            (PIntegerComparison Eq
-              (IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
+          (inject $ Exists (VarId 1) "row" (EType TStr)
+            (PComparison Eq
+              (inject $ IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
               2)))
 
     it "parses row-enforced / vars" $ do
@@ -1383,13 +1408,16 @@ spec = describe "analyze" $ do
           tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
       textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
       `shouldBe`
-      Right (RowEnforced (TableNameLit "accounts") (ColumnNameLit "ks") (PVar (VarId 1) "from"))
+      Right (inject $ RowEnforced
+        (TableNameLit "accounts")
+        (ColumnNameLit "ks")
+        (PVar (VarId 1) "from"))
 
     it "parses column properties" $
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
            `shouldBe`
-           Right (PIntegerComparison Eq (IntColumnDelta "accounts" "balance") 0)
+           Right (PComparison Eq (inject $ IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
       let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType TKeySet
@@ -1397,9 +1425,9 @@ spec = describe "analyze" $ do
          `shouldBe`
          Right (PLogical OrOp
            [ PLogical NotOp [
-               PLogical NotOp [KsNameAuthorized "accounts-admin-keyset"]
+               PLogical NotOp [inject $ KsNameAuthorized "accounts-admin-keyset"]
              ]
-           , Abort
+           , Abort'
            ])
 
     it "handles special identifiers" $ do
@@ -1410,22 +1438,22 @@ spec = describe "analyze" $ do
             (TableMap mempty)
             ty
 
-      textToProp   TBool "abort"   `shouldBe` Right Abort
-      textToProp   TBool "success" `shouldBe` Right Success
-      inferProp''  "abort"         `shouldBe` Right (EProp TBool Abort)
-      inferProp''  "success"       `shouldBe` Right (EProp TBool Success)
+      textToProp   TBool "abort"   `shouldBe` Right Abort'
+      textToProp   TBool "success" `shouldBe` Right Success'
+      inferProp''  "abort"         `shouldBe` Right (EProp TBool Abort')
+      inferProp''  "success"       `shouldBe` Right (EProp TBool Success')
 
-      textToProp'' TBool "result"  `shouldBe` Right Result
-      textToProp'' TInt  "result"  `shouldBe` Right Result
-      textToProp'' TStr  "result"  `shouldBe` Right Result
+      textToProp'' TBool "result"  `shouldBe` Right Result'
+      textToProp'' TInt  "result"  `shouldBe` Right Result'
+      textToProp'' TStr  "result"  `shouldBe` Right Result'
 
     it "parses quantified tables" $ do
       inferProp'' "(forall (table:table) (not (table-write table)))"
         `shouldBe`
         Right
           (EProp TBool
-            (Forall (VarId 1) "table" QTable
-              (PNot (TableWrite "table"))))
+            (inject $ Forall (VarId 1) "table" QTable
+              (PNot (inject $ TableWrite "table"))))
 
     it "parses quantified columns" $ do
       pendingWith "separate parser for props"
@@ -1433,8 +1461,8 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right
           (EProp TBool
-            (Forall (VarId 1) "column" (QColumnOf "table")
-              (PNot (ColumnWrite "table" "column"))))
+            (inject $ Forall (VarId 1) "column" (QColumnOf "table")
+              (PNot (inject $ ColumnWrite "table" "column"))))
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
