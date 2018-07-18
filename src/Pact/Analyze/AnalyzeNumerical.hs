@@ -1,9 +1,9 @@
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FunctionalDependencies     #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Pact.Analyze.AnalyzeNumerical where
 
 import           Control.Lens               (over)
@@ -17,11 +17,13 @@ import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
 
 -- TODO: type families would be nicer
-class (MonadError AnalyzeFailure m) => Analyzer m term eterm
-  | m -> term, m -> eterm where
-  analyze         :: (Show a, SymWord a) => term a -> m (S a)
-  analyzeO        :: term Object -> m Object
-  analyzeE        :: eterm -> m (EType, AVal)
+class (MonadError AnalyzeFailure m) => Analyzer m where --  term eterm
+  -- | m -> term, m -> eterm where
+  type TermOf m   :: * -> *
+  type ETermOf m  :: *
+  analyze         :: (Show a, SymWord a) => TermOf m a -> m (S a)
+  analyzeO        :: TermOf m Object -> m Object
+  analyzeE        :: ETermOf m -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
 
 -- TODO: replace with InjectPure
@@ -33,8 +35,8 @@ instance SymbolicTerm Prop      where injectS = PureProp      . Sym
 instance SymbolicTerm Invariant where injectS = PureInvariant . Sym
 
 analyzeNumerical
-  :: (Analyzer m term eterm, SymbolicTerm term)
-  => Numerical term a -> m (S a)
+  :: (Analyzer m, SymbolicTerm (TermOf m))
+  => Numerical (TermOf m) a -> m (S a)
 analyzeNumerical (DecArithOp op x y)      = analyzeDecArithOp op x y
 analyzeNumerical (IntArithOp op x y)      = analyzeIntArithOp op x y
 analyzeNumerical (IntDecArithOp op x y)   = analyzeIntDecArithOp op x y
@@ -46,10 +48,10 @@ analyzeNumerical (RoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
 analyzeNumerical (RoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 
 analyzeDecArithOp
-  :: Analyzer m term eterm
+  :: Analyzer m
   => ArithOp
-  -> term Decimal
-  -> term Decimal
+  -> TermOf m Decimal
+  -> TermOf m Decimal
   -> m (S Decimal)
 analyzeDecArithOp op xT yT = do
   x <- analyze xT
@@ -63,10 +65,10 @@ analyzeDecArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntArithOp
-  :: Analyzer m term eterm
+  :: Analyzer m
   => ArithOp
-  -> term Integer
-  -> term Integer
+  -> TermOf m Integer
+  -> TermOf m Integer
   -> m (S Integer)
 analyzeIntArithOp op xT yT = do
   x <- analyze xT
@@ -80,10 +82,10 @@ analyzeIntArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntDecArithOp
-  :: Analyzer m term eterm
+  :: Analyzer m
   => ArithOp
-  -> term Integer
-  -> term Decimal
+  -> TermOf m Integer
+  -> TermOf m Decimal
   -> m (S Decimal)
 analyzeIntDecArithOp op xT yT = do
   x <- analyze xT
@@ -97,10 +99,10 @@ analyzeIntDecArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeDecIntArithOp
-  :: Analyzer m term eterm
+  :: Analyzer m
   => ArithOp
-  -> term Decimal
-  -> term Integer
+  -> TermOf m Decimal
+  -> TermOf m Integer
   -> m (S Decimal)
 analyzeDecIntArithOp op xT yT = do
   x <- analyze xT
@@ -114,9 +116,9 @@ analyzeDecIntArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeUnaryArithOp
-  :: (Analyzer m term eterm, Num a, Show a, SymWord a)
+  :: (Analyzer m, Num a, Show a, SymWord a)
   => UnaryArithOp
-  -> term a
+  -> TermOf m a
   -> m (S a)
 analyzeUnaryArithOp op term = do
   x <- analyze term
@@ -129,16 +131,16 @@ analyzeUnaryArithOp op term = do
     Signum -> pure $ signum x
 
 analyzeModOp
-  :: Analyzer m term eterm
-  => term Integer
-  -> term Integer
+  :: Analyzer m
+  => TermOf m Integer
+  -> TermOf m Integer
   -> m (S Integer)
 analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
 
 analyzeRoundingLikeOp1
-  :: Analyzer m term eterm
+  :: Analyzer m
   => RoundingLikeOp
-  -> term Decimal
+  -> TermOf m Decimal
   -> m (S Integer)
 analyzeRoundingLikeOp1 op x = do
   x' <- analyze x
@@ -178,16 +180,16 @@ banker'sMethod x =
 -- x''': SInteger       := -10015
 -- return: SReal        := -100.15
 analyzeRoundingLikeOp2
-  :: forall m term eterm
-   . (Analyzer m term eterm, SymbolicTerm term)
+  :: forall m
+   . (Analyzer m, SymbolicTerm (TermOf m))
   => RoundingLikeOp
-  -> term Decimal
-  -> term Integer
+  -> TermOf m Decimal
+  -> TermOf m Integer
   -> m (S Decimal)
 analyzeRoundingLikeOp2 op x precision = do
   x'         <- analyze x
   precision' <- analyze precision
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: term Decimal)
+  x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: TermOf m Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
