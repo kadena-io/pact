@@ -30,6 +30,7 @@ data Feature
   | FLessThanOrEqual
   | FEquality
   | FInequality
+  | FRound
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -171,7 +172,12 @@ doc FInequality = Doc
   "True if `x` != `y`"
   [ Usage "(!= x y)" ty [("x", ty), ("y", ty)]
   | ty <- [int, dec, str, time, bool, obj, ks] ]
-
+doc FRound = Doc
+  "round"
+  InvAndProp
+  "Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal."
+  [ Usage "(round x)" int [("x", dec)]
+  , Usage "(round x)" int [("x", dec), ("prec", int)] ]
 
 allFeatures :: [Feature]
 allFeatures = enumFrom minBound
@@ -251,3 +257,6 @@ pattern SEquality <- (symIs FEquality -> True)
 
 pattern SInequality :: Text
 pattern SInequality <- (symIs FInequality -> True)
+
+pattern SRound :: Text
+pattern SRound <- (symIs FRound -> True)
