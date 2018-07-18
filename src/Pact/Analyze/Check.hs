@@ -270,12 +270,12 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 
 allocModelTags :: Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
 allocModelTags funInfo args tm tagAllocs = ModelTags
-    <$> allocateArgs
-    <*> allocateVars
-    <*> allocateReads
-    <*> allocateWrites
-    <*> allocateAuths
-    <*> allocateResult
+    <$> allocArgs
+    <*> allocVars
+    <*> allocReads
+    <*> allocWrites
+    <*> allocAuths
+    <*> allocResult
 
   where
     alloc :: SymWord a => Symbolic (SBV a)
@@ -291,14 +291,14 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
       EType (_ :: Type t) -> mkAVal . sansProv <$>
         (alloc :: Symbolic (SBV t))
 
-    allocateArgs :: Symbolic (Map VarId (Located (Text, TVal)))
-    allocateArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
+    allocArgs :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocArgs = fmap Map.fromList $ for args $ \(nm, vid, node, ety) -> do
       let info = node ^. TC.aId . TC.tiInfo
       av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
       pure (vid, Located info (nm, (ety, av)))
 
-    allocateVars :: Symbolic (Map VarId (Located (Text, TVal)))
-    allocateVars = fmap Map.fromList $
+    allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocVars = fmap Map.fromList $
       for (toListOf (traverse._AllocVarTag) tagAllocs) $
         \(Located info (vid, nm, ety)) ->
           allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
@@ -315,19 +315,19 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
         obj <- allocSchema schema
         pure (tid, Located info (srk, obj))
 
-    allocateReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocateReads = allocAccesses _AllocReadTag
+    allocReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocReads = allocAccesses _AllocReadTag
 
-    allocateWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocateWrites = allocAccesses _AllocWriteTag
+    allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocWrites = allocAccesses _AllocWriteTag
 
-    allocateAuths :: Symbolic (Map TagId (Located (SBV Bool)))
-    allocateAuths = fmap Map.fromList $
+    allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
+    allocAuths = fmap Map.fromList $
       for (toListOf (traverse._AllocAuthTag) tagAllocs) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
 
-    allocateResult :: Symbolic (Located TVal)
-    allocateResult = Located funInfo <$> case tm of
+    allocResult :: Symbolic (Located TVal)
+    allocResult = Located funInfo <$> case tm of
       ETerm _ ty ->
         let ety = EType ty
         in (ety,) <$> allocAVal ety
