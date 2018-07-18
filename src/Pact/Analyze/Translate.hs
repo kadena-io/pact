@@ -490,7 +490,7 @@ translateNode astNode = astContext astNode $ case astNode of
               "="  -> pure Eq'
               "!=" -> pure Neq'
               _    -> throwError' $ MalformedComparison fn args
-            pure $ ETerm (ObjectEqNeq op a' b') TBool
+            pure $ ETerm (PureTerm (ObjectEqNeq op a' b')) TBool
           _ -> throwError' $ MalformedComparison fn args
 
         mkLogical :: TranslateM ETerm

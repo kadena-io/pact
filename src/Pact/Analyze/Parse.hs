@@ -362,7 +362,7 @@ inferPreProp preProp = case preProp of
             Just eqNeq -> pure $ EProp TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
       (EObjectProp _ aProp, EObjectProp _ bProp) -> case textToEqNeq op' of
-          Just eqNeq -> pure $ EProp TBool $ PObjectEqNeq eqNeq aProp bProp
+          Just eqNeq -> pure $ EProp TBool $ PureProp $ ObjectEqNeq eqNeq aProp bProp
           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
       (_, _) -> throwErrorIn preProp $
         "can't compare primitive types with objects (found " <>
