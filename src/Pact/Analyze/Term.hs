@@ -48,12 +48,6 @@ data Term ret where
   -- determine statically which fields can be accessed.
   Var            :: Text -> VarId                    -> Term a
 
-  -- invariant (inaccessible): a ~ Integer or a ~ Decimal
-  --
-  -- TODO: possibly split into two constructors, like in Prop:
-  --
-  AddTime         :: Term Time -> ETerm -> Term Time
-
   --
   -- TODO: we need to allow computed keys here
   --
