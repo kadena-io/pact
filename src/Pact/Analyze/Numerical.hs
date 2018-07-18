@@ -5,8 +5,6 @@ module Pact.Analyze.Numerical where
 
 import Data.SBV          (AlgReal)
 
-import Pact.Analyze.Util ((...))
-
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
 
