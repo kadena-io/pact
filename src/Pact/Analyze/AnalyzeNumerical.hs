@@ -16,8 +16,12 @@ import           Pact.Analyze.Numerical
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
 
-class (MonadError AnalyzeFailure m) => Analyzer m term | m -> term where
-  analyze         :: (Show a, SymWord a) => term a -> m (S a)
+-- TODO: type families would be nicer
+class (MonadError AnalyzeFailure m) => Analyzer m term eterm
+  | m -> term, m -> eterm where
+  analyze  :: (Show a, SymWord a) => term a -> m (S a)
+  analyzeO :: term Object -> m Object
+  analyzeE :: eterm -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
 
 -- TODO: replace with InjectPure
@@ -29,7 +33,7 @@ instance SymbolicTerm Prop      where injectS = PureProp      . Sym
 instance SymbolicTerm Invariant where injectS = PureInvariant . Sym
 
 analyzeNumerical
-  :: (Analyzer m term, SymbolicTerm term)
+  :: (Analyzer m term eterm, SymbolicTerm term)
   => Numerical term a -> m (S a)
 analyzeNumerical (DecArithOp op x y)      = analyzeDecArithOp op x y
 analyzeNumerical (IntArithOp op x y)      = analyzeIntArithOp op x y
@@ -42,7 +46,7 @@ analyzeNumerical (RoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
 analyzeNumerical (RoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
 
 analyzeDecArithOp
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => ArithOp
   -> term Decimal
   -> term Decimal
@@ -59,7 +63,7 @@ analyzeDecArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntArithOp
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => ArithOp
   -> term Integer
   -> term Integer
@@ -76,7 +80,7 @@ analyzeIntArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeIntDecArithOp
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => ArithOp
   -> term Integer
   -> term Decimal
@@ -93,7 +97,7 @@ analyzeIntDecArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeDecIntArithOp
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => ArithOp
   -> term Decimal
   -> term Integer
@@ -110,7 +114,7 @@ analyzeDecIntArithOp op xT yT = do
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
 analyzeUnaryArithOp
-  :: (Analyzer m term, Num a, Show a, SymWord a)
+  :: (Analyzer m term eterm, Num a, Show a, SymWord a)
   => UnaryArithOp
   -> term a
   -> m (S a)
@@ -125,14 +129,14 @@ analyzeUnaryArithOp op term = do
     Signum -> pure $ signum x
 
 analyzeModOp
-  :: (Analyzer m term)
+  :: Analyzer m term eterm
   => term Integer
   -> term Integer
   -> m (S Integer)
 analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
 
 analyzeRoundingLikeOp1
-  :: (Analyzer m term)
+  :: Analyzer m term eterm
   => RoundingLikeOp
   -> term Decimal
   -> m (S Integer)
@@ -174,8 +178,8 @@ banker'sMethod x =
 -- x''': SInteger       := -10015
 -- return: SReal        := -100.15
 analyzeRoundingLikeOp2
-  :: forall m term
-   . (Analyzer m term, SymbolicTerm term)
+  :: forall m term eterm
+   . (Analyzer m term eterm, SymbolicTerm term)
   => RoundingLikeOp
   -> term Decimal
   -> term Integer

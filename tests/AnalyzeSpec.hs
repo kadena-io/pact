@@ -1356,12 +1356,12 @@ spec = describe "analyze" $ do
       let pairSchema = Schema $
             Map.fromList [("x", EType TInt), ("y", EType TInt)]
           ety = EType TInt
-          litPair = PLiteralObject $ Map.fromList
+          litPair = PureProp $ LiteralObject $ Map.fromList
             [ ("x", EProp TInt (PLit 0))
             , ("y", EProp TInt (PLit 1))
             ]
 
-          nestedObj = PLiteralObject $
+          nestedObj = PureProp $ LiteralObject $
             Map.singleton "foo" (EObjectProp pairSchema litPair)
 
           nestedSchema = Schema $
