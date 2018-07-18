@@ -1132,12 +1132,7 @@ instance Analyzer InvariantCheck Invariant where
 
 checkInvariant :: Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
-
-  -- literals
-  ILiteral a -> pure $ literalS a
-
   PureInvariant tm -> analyzePure tm
-  -- PureInvariant (Sym sym) -> pure sym
 
   -- variables
   IVar name -> do
