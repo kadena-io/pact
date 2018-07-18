@@ -269,6 +269,7 @@ fromNamedKs = FromNamedKs
 symRowKey :: S String -> S RowKey
 symRowKey = coerceS
 
+-- | Typed symbolic value.
 type TVal = (EType, AVal)
 
 newtype Object
