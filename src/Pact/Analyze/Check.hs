@@ -72,6 +72,7 @@ import           Pact.Types.Typecheck      (AST,
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Analyze      hiding (invariants)
+import           Pact.Analyze.Errors
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
 import           Pact.Analyze.Translate

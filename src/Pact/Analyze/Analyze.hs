@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
@@ -45,8 +44,7 @@ import           Data.SBV                   (Boolean (bnot, true, (&&&), (==>), 
                                              SymArray (readArray, writeArray),
                                              SymWord (exists_, forall_),
                                              Symbolic, constrain, false, ite,
-                                             sDiv, sMod,
-                                             uninterpret, (.^))
+                                             uninterpret)
 import qualified Data.SBV.Internals         as SBVI
 import qualified Data.SBV.String            as SBV
 import           Data.String                (IsString (fromString))
@@ -65,7 +63,10 @@ import qualified Pact.Types.Runtime         as Pact
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Version         (pactVersion)
 
+import           Pact.Analyze.AnalyzeNumerical
+import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
+import           Pact.Analyze.Numerical
 import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
@@ -202,32 +203,6 @@ data AnalysisResult
     }
   deriving (Show)
 
-data AnalyzeFailureNoLoc
-  = AtHasNoRelevantFields EType Schema
-  | AValUnexpectedlySVal SBVI.SVal
-  | AValUnexpectedlyObj Object
-  | KeyNotPresent Text Object
-  | MalformedLogicalOpExec LogicalOp Int
-  | ObjFieldOfWrongType Text EType
-  | PossibleRoundoff Text
-  | UnsupportedDecArithOp ArithOp
-  | UnsupportedIntArithOp ArithOp
-  | UnsupportedUnaryOp UnaryArithOp
-  | UnsupportedRoundingLikeOp1 RoundingLikeOp
-  | UnsupportedRoundingLikeOp2 RoundingLikeOp
-  | FailureMessage Text
-  | OpaqueValEncountered
-  | VarNotInScope Text VarId
-  | UnsupportedObjectInDbCell
-  -- For cases we don't handle yet:
-  | UnhandledTerm Text
-  deriving (Eq, Show)
-
-data AnalyzeFailure = AnalyzeFailure
-  { _analyzeFailureParsed :: !Info
-  , _analyzeFailure       :: !AnalyzeFailureNoLoc
-  }
-
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
 makeLenses ''GlobalAnalyzeState
@@ -339,44 +314,6 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
 mkSVal :: SBV a -> SBVI.SVal
 mkSVal (SBVI.SBV v) = v
 
-describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
-describeAnalyzeFailureNoLoc = \case
-    -- these are internal errors. not quite as much care is taken on the messaging
-    AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
-    AValUnexpectedlySVal sval -> "in analyzeTermO, found AVal where we expected AnObj" <> tShow sval
-    AValUnexpectedlyObj obj -> "in analyzeTerm, found AnObj where we expected AVal" <> tShow obj
-    KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
-    MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
-    ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"
-    PossibleRoundoff msg -> msg
-    UnsupportedDecArithOp op -> "unsupported decimal arithmetic op: " <> tShow op
-    UnsupportedIntArithOp op -> "unsupported integer arithmetic op: " <> tShow op
-    UnsupportedUnaryOp op -> "unsupported unary arithmetic op: " <> tShow op
-    UnsupportedRoundingLikeOp1 op -> "unsupported rounding (1) op: " <> tShow op
-    UnsupportedRoundingLikeOp2 op -> "unsupported rounding (2) op: " <> tShow op
-
-    -- these are likely user-facing errors
-    FailureMessage msg -> msg
-    UnhandledTerm termText -> foundUnsupported termText
-    VarNotInScope name vid -> "variable not in scope: " <> name <> " (vid " <> tShow vid <> ")"
-    --
-    -- TODO: maybe we should differentiate between opaque values and type
-    -- variables, because the latter would probably mean a problem from type
-    -- inference or the need for a type annotation?
-    --
-    OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
-    UnsupportedObjectInDbCell -> "We encountered the use of an object in a DB cell, which we don't yet support. " <> pleaseReportThis
-
-  where
-    foundUnsupported :: Text -> Text
-    foundUnsupported termText = "You found a term we don't have analysis support for yet. " <> pleaseReportThis <> "\n\n" <> termText
-
-    pleaseReportThis :: Text
-    pleaseReportThis = "Please report this as a bug at https://github.com/kadena-io/pact/issues"
-
-instance IsString AnalyzeFailureNoLoc where
-  fromString = FailureMessage . T.pack
-
 newtype Analyze a
   = Analyze
     { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
@@ -444,10 +381,6 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
-class (MonadError AnalyzeFailure m) => Analyzer m term | m -> term where
-  analyze         :: (Show a, SymWord a) => term a -> m (S a)
-  throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
-
 class Analyzer m term => ObjectAnalyzer m term where
   analyzeO :: term Object -> m Object
 
@@ -468,19 +401,6 @@ instance Analyzer Query Prop where
 
 instance ObjectAnalyzer Query Prop where
   analyzeO = analyzePropO
-
-instance Analyzer InvariantCheck Invariant where
-  analyze = checkInvariant
-  throwErrorNoLoc err = do
-    info <- view location
-    throwError $ AnalyzeFailure info err
-
-class SymbolicTerm term where
-  injectS :: S a -> term a
-
-instance SymbolicTerm Term      where injectS = Literal
-instance SymbolicTerm Prop      where injectS = PSym
-instance SymbolicTerm Invariant where injectS = ISym
 
 symArrayAt
   :: forall array k v
@@ -900,153 +820,6 @@ analyzeTermO = \case
 
   objT -> throwErrorNoLoc $ UnhandledTerm $ tShow objT
 
-analyzeDecArithOp
-  :: Analyzer m term
-  => ArithOp
-  -> term Decimal
-  -> term Decimal
-  -> m (S Decimal)
-analyzeDecArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
-  case op of
-    Add -> pure $ x + y
-    Sub -> pure $ x - y
-    Mul -> pure $ x * y
-    Div -> pure $ x / y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
-
-analyzeIntArithOp
-  :: Analyzer m term
-  => ArithOp
-  -> term Integer
-  -> term Integer
-  -> m (S Integer)
-analyzeIntArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
-  case op of
-    Add -> pure $ x + y
-    Sub -> pure $ x - y
-    Mul -> pure $ x * y
-    Div -> pure $ x `sDiv` y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
-
-analyzeIntDecArithOp
-  :: Analyzer m term
-  => ArithOp
-  -> term Integer
-  -> term Decimal
-  -> m (S Decimal)
-analyzeIntDecArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
-  case op of
-    Add -> pure $ fromIntegralS x + y
-    Sub -> pure $ fromIntegralS x - y
-    Mul -> pure $ fromIntegralS x * y
-    Div -> pure $ fromIntegralS x / y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
-
-analyzeDecIntArithOp
-  :: Analyzer m term
-  => ArithOp
-  -> term Decimal
-  -> term Integer
-  -> m (S Decimal)
-analyzeDecIntArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
-  case op of
-    Add -> pure $ x + fromIntegralS y
-    Sub -> pure $ x - fromIntegralS y
-    Mul -> pure $ x * fromIntegralS y
-    Div -> pure $ x / fromIntegralS y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
-
-analyzeUnaryArithOp
-  :: (Analyzer m term, Num a, Show a, SymWord a)
-  => UnaryArithOp
-  -> term a
-  -> m (S a)
-analyzeUnaryArithOp op term = do
-  x <- analyze term
-  case op of
-    Negate -> pure $ negate x
-    Sqrt   -> throwErrorNoLoc $ UnsupportedUnaryOp op
-    Ln     -> throwErrorNoLoc $ UnsupportedUnaryOp op
-    Exp    -> throwErrorNoLoc $ UnsupportedUnaryOp op -- TODO: use svExp
-    Abs    -> pure $ abs x
-    Signum -> pure $ signum x
-
-analyzeModOp
-  :: (Analyzer m term)
-  => term Integer
-  -> term Integer
-  -> m (S Integer)
-analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
-
-analyzeRoundingLikeOp1
-  :: (Analyzer m term)
-  => RoundingLikeOp
-  -> term Decimal
-  -> m (S Integer)
-analyzeRoundingLikeOp1 op x = do
-  x' <- analyze x
-  pure $ case op of
-    -- The only SReal -> SInteger conversion function that sbv provides is
-    -- sRealToSInteger (which realToIntegerS wraps), which computes the floor.
-    Floor   -> realToIntegerS x'
-
-    -- For ceiling we use the identity:
-    -- ceil(x) = -floor(-x)
-    Ceiling -> negate (realToIntegerS (negate x'))
-
-    -- Round is much more complicated because pact uses the banker's method,
-    -- where a real exactly between two integers (_.5) is rounded to the
-    -- nearest even.
-    Round   -> banker'sMethod x'
-
--- Round a real exactly between two integers (_.5) to the nearest even
-banker'sMethod :: S Decimal -> S Integer
-banker'sMethod x =
-  let wholePart      = realToIntegerS x
-      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
-
-  in iteS isExactlyHalf
-    -- nearest even number!
-    (wholePart + oneIfS wholePartIsOdd)
-    -- otherwise we take the floor of `x + 0.5`
-    (realToIntegerS (x + 0.5))
-
--- In the decimal rounding operations we shift the number left by `precision`
--- digits, round using the integer method, and shift back right.
---
--- x': SReal            := -100.15234
--- precision': SInteger := 2
--- x'': SReal           := -10015.234
--- x''': SInteger       := -10015
--- return: SReal        := -100.15
-analyzeRoundingLikeOp2
-  :: forall m term
-   . (Analyzer m term, SymbolicTerm term)
-  => RoundingLikeOp
-  -> term Decimal
-  -> term Integer
-  -> m (S Decimal)
-analyzeRoundingLikeOp2 op x precision = do
-  x'         <- analyze x
-  precision' <- analyze precision
-  let digitShift = over s2Sbv (10 .^) precision' :: S Integer
-      x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: term Decimal)
-  pure $ fromIntegralS x''' / fromIntegralS digitShift
-
 -- Note [Time Representation]
 --
 -- Pact uses the Thyme library (UTCTime) to represent times. Thyme internally
@@ -1162,7 +935,7 @@ analyzeTerm = \case
 
   Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT
 
-  Literal a -> pure a
+  PureTerm (Sym a) -> pure a
 
   At schema colNameT objT retType -> analyzeAt schema colNameT objT retType
 
@@ -1240,23 +1013,6 @@ analyzeTerm = \case
 
   Var name vid -> lookupVal name vid
 
-  DecArithOp op x y         -> analyzeDecArithOp op x y
-  IntArithOp op x y         -> analyzeIntArithOp op x y
-  IntDecArithOp op x y      -> analyzeIntDecArithOp op x y
-  DecIntArithOp op x y      -> analyzeDecIntArithOp op x y
-  IntUnaryArithOp op x      -> analyzeUnaryArithOp op x
-  DecUnaryArithOp op x      -> analyzeUnaryArithOp op x
-  ModOp x y                 -> analyzeModOp x y
-  RoundingLikeOp1 op x      -> analyzeRoundingLikeOp1 op x
-  RoundingLikeOp2 op x prec -> analyzeRoundingLikeOp2 op x prec
-
-  AddTime time (ETerm secs TInt)     -> analyzeIntAddTime time secs
-  AddTime time (ETerm secs TDecimal) -> analyzeDecAddTime time secs
-
-  Comparison op x y -> analyzeComparisonOp op x y
-
-  Logical op args -> analyzeLogicalOp op args
-
   ReadKeySet str -> resolveKeySet =<< symKsName <$> analyzeTerm str
 
   KsAuthorized tid ksT -> do
@@ -1270,8 +1026,6 @@ analyzeTerm = \case
     authorized <- nameAuthorized ksn
     tagAuth tid (Just $ fromNamedKs ksn) authorized
     pure authorized
-
-  Concat str1 str2 -> (.++) <$> analyzeTerm str1 <*> analyzeTerm str2
 
   PactVersion -> pure $ literalS $ T.unpack pactVersion
 
@@ -1370,17 +1124,20 @@ format s tms = do
 
 type InvariantCheck = ReaderT (Located (Map Text SBVI.SVal)) (Either AnalyzeFailure)
 
+instance Analyzer InvariantCheck Invariant where
+  analyze = checkInvariant
+  throwErrorNoLoc err = do
+    info <- view location
+    throwError $ AnalyzeFailure info err
+
 checkInvariant :: Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
 
   -- literals
-  IDecimalLiteral a -> pure $ literalS a
-  IIntLiteral     a -> pure $ literalS a
-  IStringLiteral  a -> pure $ literalS (T.unpack a)
-  ITimeLiteral    a -> pure $ literalS a
-  IBoolLiteral    a -> pure $ literalS a
+  ILiteral a -> pure $ literalS a
 
-  ISym sym -> pure sym
+  PureInvariant tm -> analyzePure tm
+  -- PureInvariant (Sym sym) -> pure sym
 
   -- variables
   IVar name -> do
@@ -1390,42 +1147,6 @@ checkInvariant = \case
       Nothing  -> throwErrorNoLoc $ fromString $
         "column name not in scope: " ++ show name
 
-  -- string ops
-  IStrConcat a b -> (.++) <$> checkInvariant a <*> checkInvariant b
-  IStrLength str -> over s2Sbv SBV.length <$> checkInvariant str
-
-  -- numeric ops
-  IDecArithOp op x y      -> analyzeDecArithOp op x y
-  IIntArithOp op x y      -> analyzeIntArithOp op x y
-  IIntDecArithOp op x y   -> analyzeIntDecArithOp op x y
-  IDecIntArithOp op x y   -> analyzeDecIntArithOp op x y
-  IIntUnaryArithOp op x   -> analyzeUnaryArithOp op x
-  IDecUnaryArithOp op x   -> analyzeUnaryArithOp op x
-  IModOp x y              -> analyzeModOp x y
-  IRoundingLikeOp1 op x   -> analyzeRoundingLikeOp1 op x
-  IRoundingLikeOp2 op x p -> analyzeRoundingLikeOp2 op x p
-
-  -- time
-  IIntAddTime time secs -> analyzeIntAddTime time secs
-  IDecAddTime time secs -> analyzeDecAddTime time secs
-
-  -- comparison
-  IDecimalComparison op a b -> analyzeComparisonOp op a b
-  IIntComparison     op a b -> analyzeComparisonOp op a b
-  IStringComparison  op a b -> analyzeComparisonOp op a b
-  ITimeComparison    op a b -> analyzeComparisonOp op a b
-  IBoolComparison    op a b -> analyzeComparisonOp op a b
-  IKeySetEqNeq       op a b -> analyzeEqNeq        op a b
-
-  -- boolean ops
-  ILogicalOp op args -> do
-    args' <- for args checkInvariant
-    case (op, args') of
-      (AndOp, [a, b]) -> pure $ a &&& b
-      (OrOp,  [a, b]) -> pure $ a ||| b
-      (NotOp, [a])    -> pure $ bnot a
-      _               -> error "impossible schema logical op"
-
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn
 getLitTableName (PVar vid name) = do
@@ -1434,8 +1155,9 @@ getLitTableName (PVar vid name) = do
     Nothing -> throwErrorNoLoc $ fromString $
       "could not find table in scope: " <> T.unpack name
     Just tn -> pure tn
-getLitTableName (PSym _) = throwErrorNoLoc "Symbolic values can't be table names"
-getLitTableName Result = throwErrorNoLoc "Function results can't be table names"
+getLitTableName (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be table names"
+getLitTableName (PropSpecific Result)
+  = throwErrorNoLoc "Function results can't be table names"
 getLitTableName (PAt _ _ _ _) = throwErrorNoLoc "Object values can't be table names"
 
 getLitColName :: Prop ColumnName -> Query ColumnName
@@ -1443,7 +1165,7 @@ getLitColName (PLit cn) = pure cn
 getLitColName _ = throwErrorNoLoc "TODO: column quantification"
 
 analyzePropO :: Prop Object -> Query Object
-analyzePropO Result = expectObj =<< view qeAnalyzeResult
+analyzePropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
 analyzePropO (PLiteralObject props) = do
@@ -1456,132 +1178,125 @@ analyzePropO (PLiteralObject props) = do
       pure (EObjectTy ty, AnObj prop')
   pure $ Object props'
 analyzePropO (PLit _) = error "PLit is only for simple types"
-analyzePropO (PSym _) = throwErrorNoLoc "Symbolic values can't be objects"
+analyzePropO (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be objects"
 
-analyzeProp :: SymWord a => Prop a -> Query (S a)
-analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PSym a) = pure a
-
-analyzeProp Success = view $ qeAnalyzeState.succeeds
-analyzeProp Abort   = bnot <$> analyzeProp Success
-analyzeProp Result  = expectVal =<< view qeAnalyzeResult
-analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
-analyzeProp (PLiteralObject _) = error "objects are not SymWords"
-
--- Abstraction
-analyzeProp (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
+analyzePropSpecific :: SymWord a => PropSpecific a -> Query (S a)
+analyzePropSpecific Success = view $ qeAnalyzeState.succeeds
+analyzePropSpecific Abort   = bnot <$> analyzePropSpecific Success
+analyzePropSpecific Result  = expectVal =<< view qeAnalyzeResult
+analyzePropSpecific (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Forall _vid _name (EObjectTy _) _p) =
+analyzePropSpecific (Forall _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
-analyzeProp (Forall vid _name QTable prop) = do
+analyzePropSpecific (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
   pure $ foldr (&&&) true bools
-analyzeProp (Forall _vid _name (QColumnOf _tab) _p) =
+analyzePropSpecific (Forall _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"
-analyzeProp (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
+analyzePropSpecific (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ analyzeProp p
-analyzeProp (Exists _vid _name (EObjectTy _) _p) =
+analyzePropSpecific (Exists _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
-analyzeProp (PVar vid name) = lookupVal name vid
-analyzeProp (Exists vid _name QTable prop) = do
+analyzePropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (& qeTableScope . at vid ?~ tableName) (analyzeProp prop)
   pure $ foldr (|||) true bools
-analyzeProp (Exists _vid _name (QColumnOf _tab) _p) =
+analyzePropSpecific (Exists _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"
 
--- String ops
-analyzeProp (PStrConcat p1 p2) = (.++) <$> analyzeProp p1 <*> analyzeProp p2
-analyzeProp (PStrLength p)     = over s2Sbv SBV.length <$> analyzeProp p
-
--- Numeric ops
-analyzeProp (PDecArithOp op x y)      = analyzeDecArithOp op x y
-analyzeProp (PIntArithOp op x y)      = analyzeIntArithOp op x y
-analyzeProp (PIntDecArithOp op x y)   = analyzeIntDecArithOp op x y
-analyzeProp (PDecIntArithOp op x y)   = analyzeDecIntArithOp op x y
-analyzeProp (PIntUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeProp (PDecUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeProp (PModOp x y)              = analyzeModOp x y
-analyzeProp (PRoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
-analyzeProp (PRoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
-
-analyzeProp (PIntAddTime time secs) = analyzeIntAddTime time secs
-analyzeProp (PDecAddTime time secs) = analyzeDecAddTime time secs
-
-analyzeProp (PIntegerComparison op x y) = analyzeComparisonOp op x y
-analyzeProp (PDecimalComparison op x y) = analyzeComparisonOp op x y
-analyzeProp (PTimeComparison op x y)    = analyzeComparisonOp op x y
-analyzeProp (PBoolComparison op x y)    = analyzeComparisonOp op x y
-analyzeProp (PStringComparison op x y)  = analyzeComparisonOp op x y
-analyzeProp (PObjectEqNeq op x y)       = analyzeObjectEqNeq  op x y
-analyzeProp (PKeySetEqNeq      op x y)  = analyzeEqNeq        op x y
-
--- Boolean ops
-analyzeProp (PLogical op props) = analyzeLogicalOp op props
-
 -- DB properties
-analyzeProp (TableRead tn) = do
+analyzePropSpecific (TableRead tn) = do
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.tableRead tn'
-analyzeProp (TableWrite tn) = do
+analyzePropSpecific (TableWrite tn) = do
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.tableWritten tn'
-analyzeProp (ColumnWrite _ _)
+analyzePropSpecific (ColumnWrite _ _)
   = throwErrorNoLoc "column write analysis not yet implemented"
-analyzeProp (ColumnRead _ _)
+analyzePropSpecific (ColumnRead _ _)
   = throwErrorNoLoc "column read analysis not yet implemented"
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
-analyzeProp (IntCellDelta tn cn pRk) = do
+analyzePropSpecific (IntCellDelta tn cn pRk) = do
   tn' <- getLitTableName tn
   cn' <- getLitColName cn
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.intCellDelta tn' cn' sRk
-analyzeProp (DecCellDelta tn cn pRk) = do
+analyzePropSpecific (DecCellDelta tn cn pRk) = do
   tn' <- getLitTableName tn
   cn' <- getLitColName cn
   sRk <- analyzeProp pRk
   view $ qeAnalyzeState.decCellDelta tn' cn' sRk
-analyzeProp (IntColumnDelta tn cn) = do
+analyzePropSpecific (IntColumnDelta tn cn) = do
   tn' <- getLitTableName tn
   cn' <- getLitColName cn
   view $ qeAnalyzeState.intColumnDelta tn' cn'
-analyzeProp (DecColumnDelta tn cn) = do
+analyzePropSpecific (DecColumnDelta tn cn) = do
   tn' <- getLitTableName tn
   cn' <- getLitColName cn
   view $ qeAnalyzeState.decColumnDelta tn' cn'
-analyzeProp (RowRead tn pRk)  = do
+analyzePropSpecific (RowRead tn pRk)  = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
   numReads <- view $ qeAnalyzeState.rowReadCount tn' sRk
   pure $ sansProv $ numReads .== 1
-analyzeProp (RowReadCount tn pRk)  = do
+analyzePropSpecific (RowReadCount tn pRk)  = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.rowReadCount tn' sRk
-analyzeProp (RowWrite tn pRk) = do
+analyzePropSpecific (RowWrite tn pRk) = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
   writes <- view $ qeAnalyzeState.rowWriteCount tn' sRk
   pure $ sansProv $ writes .== 1
-analyzeProp (RowWriteCount tn pRk) = do
+analyzePropSpecific (RowWriteCount tn pRk) = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.rowWriteCount tn' sRk
 
 -- Authorization
-analyzeProp (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
-analyzeProp (RowEnforced tn cn pRk) = do
+analyzePropSpecific (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
+analyzePropSpecific (RowEnforced tn cn pRk) = do
   sRk <- analyzeProp pRk
   tn' <- getLitTableName tn
   cn' <- getLitColName cn
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
+
+
+analyzeProp :: SymWord a => Prop a -> Query (S a)
+analyzeProp (PLit a) = pure $ literalS a
+analyzeProp (PureProp (Sym a)) = pure a
+analyzeProp (PropSpecific a) = analyzePropSpecific a
+
+analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
+analyzeProp (PLiteralObject _) = error "objects are not SymWords"
+
+-- Abstraction
+analyzeProp (PVar vid name) = lookupVal name vid
+
+-- String ops
+analyzeProp (PureProp tm) = analyzePure tm
+
+-- TODO: move to Pact.Analyze.AnalyzePure
+analyzePure
+  :: (Analyzer m term, SymbolicTerm term)
+  => PureTerm term a -> m (S a)
+analyzePure (Sym s) = pure s
+analyzePure (StrConcat p1 p2) = (.++) <$> analyze p1 <*> analyze p2
+analyzePure (StrLength p)    = over s2Sbv SBV.length <$> analyze p
+analyzePure (Numerical a) = analyzeNumerical a
+analyzePure (IntAddTime time secs) = analyzeIntAddTime time secs
+analyzePure (DecAddTime time secs) = analyzeDecAddTime time secs
+analyzePure (Comparison op x y)       = analyzeComparisonOp op x y
+-- analyzePure (ObjectEqNeq op x y)      = analyzeObjectEqNeq  op x y
+analyzePure (KeySetEqNeq      op x y) = analyzeEqNeq        op x y
+analyzePure (Logical op props) = analyzeLogicalOp op props
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case

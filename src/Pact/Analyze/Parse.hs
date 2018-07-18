@@ -46,9 +46,11 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
+import           Pact.Analyze.Numerical
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util
 
 throwErrorT :: MonadError String m => Text -> m a
 throwErrorT = throwError . T.unpack
@@ -235,7 +237,7 @@ expToPreProp = \case
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
-  ( VarId -> Text -> QType -> Prop Bool -> Prop Bool
+  ( VarId -> Text -> QType -> Prop Bool -> PropSpecific Bool
   , VarId
   , Text
   , QType
@@ -275,11 +277,11 @@ inferPreProp preProp = case preProp of
   PreStringLit a  -> pure (EProp TStr (PLit (T.unpack a)))
   PreTimeLit a    -> pure (EProp TTime (PLit a))
   PreBoolLit a    -> pure (EProp TBool (PLit a))
-  PreAbort        -> pure (EProp TBool Abort)
-  PreSuccess      -> pure (EProp TBool Success)
+  PreAbort        -> pure (EProp TBool (PropSpecific Abort))
+  PreSuccess      -> pure (EProp TBool (PropSpecific Success))
 
   -- identifiers
-  PreResult       -> inferVar 0 "result" Result
+  PreResult       -> inferVar 0 "result" (PropSpecific Result)
   PreVar vid name -> inferVar vid name (PVar vid name)
 
   -- quantifiers
@@ -290,7 +292,8 @@ inferPreProp preProp = case preProp of
     let modEnv env = env & varTys . at vid  ?~ ty'
                          & quantifiedTables %~ quantifyTable
 
-    EProp TBool . q vid name ty' <$> local modEnv (checkPreProp TBool p)
+    EProp TBool . PropSpecific . q vid name ty'
+      <$> local modEnv (checkPreProp TBool p)
 
   PreAt objIx obj -> do
     obj' <- inferPreProp obj
@@ -319,13 +322,13 @@ inferPreProp preProp = case preProp of
     EProp TInt . PStrLength <$> checkPreProp TStr str
 
   PreApp "mod" [a, b] -> do
-    it <- PModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
+    it <- PNumerical ... ModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
     pure $ EProp TInt it
   PreApp (textToRoundingLikeOp -> Just op) [a] ->
-    EProp TInt . PRoundingLikeOp1 op <$> checkPreProp TDecimal a
+    EProp TInt . PNumerical . RoundingLikeOp1 op <$> checkPreProp TDecimal a
   PreApp (textToRoundingLikeOp -> Just op) [a, b] -> do
-    it <- PRoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
-    pure $ EProp TDecimal it
+    it <- RoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
+    pure $ EProp TDecimal (PNumerical it)
   PreApp "add-time" [a, b] -> do
     a' <- checkPreProp TTime a
     b' <- inferPreProp b
@@ -348,11 +351,11 @@ inferPreProp preProp = case preProp of
       (EProp aTy aProp, EProp bTy bProp) -> case typeEq aTy bTy of
         Nothing -> typeError preProp aTy bTy
         Just Refl -> case aTy of
-          TInt     -> ret PIntegerComparison aProp bProp
-          TDecimal -> ret PDecimalComparison aProp bProp
-          TTime    -> ret PTimeComparison    aProp bProp
-          TBool    -> ret PBoolComparison    aProp bProp
-          TStr     -> ret PStringComparison  aProp bProp
+          TInt     -> ret PComparison aProp bProp
+          TDecimal -> ret PComparison aProp bProp
+          TTime    -> ret PComparison aProp bProp
+          TBool    -> ret PComparison aProp bProp
+          TStr     -> ret PComparison aProp bProp
           TAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case textToEqNeq op' of
@@ -384,11 +387,11 @@ inferPreProp preProp = case preProp of
   PreApp "table-write" [tn] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    pure $ EProp TBool (TableWrite tn')
+    pure $ EProp TBool (PropSpecific (TableWrite tn'))
   PreApp "table-read" [tn] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    pure $ EProp TBool (TableRead tn')
+    pure $ EProp TBool (PropSpecific (TableRead tn'))
 
   --
   -- NOTE: disabled until implemented on the backend:
@@ -405,10 +408,10 @@ inferPreProp preProp = case preProp of
     asum
       [ do
           _   <- expectColumnType tn' cn' TInt
-          EProp TInt . IntCellDelta tn' cn' <$> checkPreProp TStr rk
+          EProp TInt . PropSpecific . IntCellDelta tn' cn' <$> checkPreProp TStr rk
       , do
           _   <- expectColumnType tn' cn' TDecimal
-          EProp TDecimal . DecCellDelta tn' cn' <$> checkPreProp TStr rk
+          EProp TDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp TStr rk
       ]
   PreApp "column-delta" [tn, cn] -> do
     tn' <- parseTableName tn
@@ -417,38 +420,38 @@ inferPreProp preProp = case preProp of
     asum
       [ do
           _   <- expectColumnType tn' cn' TInt
-          pure $ EProp TInt (IntColumnDelta tn' cn')
+          pure $ EProp TInt (PropSpecific (IntColumnDelta tn' cn'))
       , do
           _   <- expectColumnType tn' cn' TDecimal
-          pure $ EProp TDecimal (DecColumnDelta tn' cn')
+          pure $ EProp TDecimal (PropSpecific (DecColumnDelta tn' cn'))
       ]
   PreApp "row-read" [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    EProp TBool . RowRead tn' <$> checkPreProp TStr rk
+    EProp TBool . PropSpecific . RowRead tn' <$> checkPreProp TStr rk
   PreApp "row-read-count" [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    EProp TInt . RowReadCount tn' <$> checkPreProp TStr rk
+    EProp TInt . PropSpecific . RowReadCount tn' <$> checkPreProp TStr rk
   --
   -- TODO: should be "row-written"
   --
   PreApp "row-write" [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    EProp TBool . RowWrite tn' <$> checkPreProp TStr rk
+    EProp TBool . PropSpecific . RowWrite tn' <$> checkPreProp TStr rk
   PreApp "row-write-count" [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    EProp TInt . RowWriteCount tn' <$> checkPreProp TStr rk
+    EProp TInt . PropSpecific . RowWriteCount tn' <$> checkPreProp TStr rk
   PreApp "authorized-by" [PreStringLit ks]
-    -> pure $ EProp TBool (KsNameAuthorized (KeySetName ks))
+    -> pure $ EProp TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
   PreApp "row-enforced" [tn, cn, rk] -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
     _   <- expectColumnType tn' cn' TKeySet
-    EProp TBool . RowEnforced tn' cn' <$> checkPreProp TStr rk
+    EProp TBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp TStr rk
 
   _ -> throwErrorIn preProp "could not infer type"
 
@@ -470,20 +473,20 @@ checkPreProp ty preProp
     b' <- inferPreProp b
     case (a', b') of
       (EProp TDecimal aprop, EProp TDecimal bprop) ->
-        pure $ PDecArithOp op aprop bprop
+        pure $ PNumerical $ DecArithOp op aprop bprop
       (EProp TDecimal aprop, EProp TInt bprop) ->
-        pure $ PDecIntArithOp op aprop bprop
+        pure $ PNumerical $ DecIntArithOp op aprop bprop
       (EProp TInt aprop, EProp TDecimal bprop) ->
-        pure $ PIntDecArithOp op aprop bprop
+        pure $ PNumerical $ IntDecArithOp op aprop bprop
       (_, _) -> throwErrorIn preProp $
         "unexpected argument types for (+): " <> userShow (ePropToEType a') <>
         " and " <> userShow (ePropToEType b')
   (TInt, PreApp (textToArithOp -> Just op) [a, b])
-    -> PIntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
+    -> PNumerical ... IntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
   (TDecimal, PreApp (textToUnaryArithOp -> Just op) [a])
-    -> PDecUnaryArithOp op <$> checkPreProp TDecimal a
+    -> PNumerical . DecUnaryArithOp op <$> checkPreProp TDecimal a
   (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
-    -> PIntUnaryArithOp op <$> checkPreProp TInt a
+    -> PNumerical . IntUnaryArithOp op <$> checkPreProp TInt a
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
@@ -590,39 +593,40 @@ expToInvariant ty exp = case (ty, exp) of
           " where " <> userShow ty <> " was expected"
       _ -> throwErrorT $ "couldn't find column named " <> var
 
-  (TDecimal, ELiteral (LDecimal d) _) -> pure (IDecimalLiteral (mkDecimal d))
-  (TInt, ELiteral (LInteger i) _)     -> pure (IIntLiteral i)
-  (TStr, stringLike -> Just s)        -> pure (IStringLiteral s)
+  (TDecimal, ELiteral (LDecimal d) _) -> pure (ILiteral (mkDecimal d))
+  (TInt, ELiteral (LInteger i) _)     -> pure (ILiteral i)
+  (TStr, stringLike -> Just s)        -> pure (ILiteral (T.unpack s))
   (TStr, ELiteral (LString _) _)      -> error "impossible (handled by stringLike)"
-  (TTime, ELiteral (LTime t) _)       -> pure (ITimeLiteral (mkTime t))
-  (TBool, ELiteral (LBool b) _)       -> pure (IBoolLiteral b)
+  (TTime, ELiteral (LTime t) _)       -> pure (ILiteral (mkTime t))
+  (TBool, ELiteral (LBool b) _)       -> pure (ILiteral b)
   (_, ELiteral _ _)                   ->
     throwErrorIn exp "literal of unexpected type"
 
-  (TInt, EList' [EAtom' "str-length", str]) -> IStrLength <$> expToInvariant TStr str
-  (TStr, EList' [EAtom' "+", a, b])
-    -> IStrConcat <$> expToInvariant TStr a <*> expToInvariant TStr b
+  (TInt, EList' [EAtom' "str-length", str])
+    -> PureInvariant . StrLength <$> expToInvariant TStr str
+  (TStr, EList' [EAtom' "+", a, b]) -> PureInvariant ... StrConcat
+    <$> expToInvariant TStr a <*> expToInvariant TStr b
 
   (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
-    [ IDecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , IDecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
-    , IIntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
+    [ injectNumerical ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , injectNumerical ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
+    , injectNumerical ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
     ] (throwErrorIn exp "unexpected argument types")
   (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
-    -> IIntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
+    -> injectNumerical ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
   (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> IDecUnaryArithOp op <$> expToInvariant TDecimal a
+    -> injectNumerical . DecUnaryArithOp op <$> expToInvariant TDecimal a
   (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> IIntUnaryArithOp op <$> expToInvariant TInt a
+    -> injectNumerical . IntUnaryArithOp op <$> expToInvariant TInt a
 
   (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
-    [ IIntComparison op     <$> expToInvariant TInt a     <*> expToInvariant TInt b
-    , IDecimalComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , ITimeComparison op    <$> expToInvariant TTime a    <*> expToInvariant TTime b
-    , IBoolComparison op    <$> expToInvariant TBool a    <*> expToInvariant TBool b
-    , IStringComparison op  <$> expToInvariant TStr a     <*> expToInvariant TStr b
+    [ IComparison op <$> expToInvariant TInt a     <*> expToInvariant TInt b
+    , IComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , IComparison op <$> expToInvariant TTime a    <*> expToInvariant TTime b
+    , IComparison op <$> expToInvariant TBool a    <*> expToInvariant TBool b
+    , IComparison op <$> expToInvariant TStr a     <*> expToInvariant TStr b
     , case textToEqNeq op' of
-      Just eqNeq -> IKeySetEqNeq eqNeq
+      Just eqNeq -> PureInvariant ... KeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
       Nothing -> throwErrorIn exp $
