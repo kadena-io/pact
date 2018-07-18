@@ -922,9 +922,6 @@ data Invariant a where
   -- TODO: Probably all things should go here
   PureInvariant :: PureTerm Invariant a -> Invariant a
 
-  -- | Literals
-  ILiteral :: SymWord a => a -> Invariant a
-
   -- variables
   -- | Refers to a variable with the provided name
   IVar :: Text -> Invariant a
@@ -932,6 +929,10 @@ data Invariant a where
 instance Eq a => Eq (Invariant a) where
 -- deriving instance Eq a => Eq (Invariant a)
 deriving instance Show a => Show (Invariant a)
+
+pattern ILiteral :: SymWord a => a -> Invariant a
+pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where
+  ILiteral a = PureInvariant (Sym (literalS a))
 
 pattern IComparison
   :: ()
