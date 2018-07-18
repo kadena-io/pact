@@ -384,17 +384,14 @@ instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 instance Analyzer Analyze Term ETerm where
   analyze  = analyzeTerm
+  analyzeO = analyzeTermO
+  analyzeE = analyzeETerm'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
-  analyzeO = analyzeTermO
-  analyzeE = analyzeETerm'
 
 instance Analyzer Query Prop EProp where
   analyze  = analyzeProp
-  throwErrorNoLoc err = do
-    info <- view (analyzeEnv . aeInfo)
-    throwError $ AnalyzeFailure info err
   analyzeO = analyzePropO
   analyzeE = \case
     EProp ty prop       -> do
@@ -403,12 +400,12 @@ instance Analyzer Query Prop EProp where
     EObjectProp ty prop -> do
       prop' <- analyzePropO prop
       pure (EObjectTy ty, AnObj prop')
+  throwErrorNoLoc err = do
+    info <- view (analyzeEnv . aeInfo)
+    throwError $ AnalyzeFailure info err
 
 instance Analyzer InvariantCheck Invariant EInvariant where
-  analyze = checkInvariant
-  throwErrorNoLoc err = do
-    info <- view location
-    throwError $ AnalyzeFailure info err
+  analyze  = checkInvariant
   analyzeO = checkInvariantO
   analyzeE = \case
     EInvariant ty inv       -> do
@@ -417,6 +414,9 @@ instance Analyzer InvariantCheck Invariant EInvariant where
     EObjectInvariant ty inv -> do
       inv' <- checkInvariantO inv
       pure (EObjectTy ty, AnObj inv')
+  throwErrorNoLoc err = do
+    info <- view location
+    throwError $ AnalyzeFailure info err
 
 
 symArrayAt
