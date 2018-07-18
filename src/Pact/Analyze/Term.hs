@@ -44,17 +44,30 @@ etermEType (EObject _ sch) = EObjectTy sch
 data Term ret where
   PureTerm :: PureTerm Term a -> Term a
 
+  -- At holds the schema of the object it's accessing. We do this so we can
+  -- determine statically which fields can be accessed.
+  At             :: Schema -> Term String -> Term Object -> EType -> Term a
+  Var            :: Text -> VarId                    -> Term a
+
+  -- invariant (inaccessible): a ~ Integer or a ~ Decimal
+  --
+  -- TODO: possibly split into two constructors, like in Prop:
+  --
+  AddTime         :: Term Time -> ETerm -> Term Time
+
   --
   -- TODO: we need to allow computed keys here
   --
   LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
+  IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
+
+  -- ^ should be pure
+  -- v term-specific
 
   -- Variable binding
   Let            :: Text -> VarId -> ETerm -> Term a -> Term a
-  Var            :: Text -> VarId                    -> Term a
 
   -- Control flow
-  IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
   Sequence       :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
@@ -65,21 +78,9 @@ data Term ret where
   KsAuthorized    :: TagId -> Term KeySet -> Term Bool
   NameAuthorized  :: TagId -> Term String -> Term Bool
 
-  -- At holds the schema of the object it's accessing. We do this so we can
-  -- determine statically which fields can be accessed.
-  At             :: Schema -> Term String -> Term Object -> EType -> Term a
-
   -- Table access
   Read           :: TagId -> TableName -> Schema      -> Term String -> Term Object
   Write          :: TagId -> TableName -> Term String -> Term Object -> Term String
-
-  -- invariant (inaccessible): a ~ Integer or a ~ Decimal
-  --
-  -- TODO: possibly split into two constructors, like in Prop:
-  --
-  AddTime         :: Term Time -> ETerm -> Term Time
-
-  ObjectEqNeq     :: EqNeq -> Term Object -> Term Object -> Term Bool
 
   PactVersion     :: Term String
 
