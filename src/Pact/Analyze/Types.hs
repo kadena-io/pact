@@ -622,6 +622,7 @@ pattern PIntAddTime x y = PureProp (IntAddTime x y)
 pattern PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
 pattern PDecAddTime x y = PureProp (DecAddTime x y)
 
+pattern PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
 pattern PAt a b c d = PureProp (At a b c d)
 
 pattern PComparison
