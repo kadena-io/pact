@@ -404,6 +404,21 @@ instance Analyzer Query Prop EProp where
       prop' <- analyzePropO prop
       pure (EObjectTy ty, AnObj prop')
 
+instance Analyzer InvariantCheck Invariant EInvariant where
+  analyze = checkInvariant
+  throwErrorNoLoc err = do
+    info <- view location
+    throwError $ AnalyzeFailure info err
+  analyzeO = checkInvariantO
+  analyzeE = \case
+    EInvariant ty inv       -> do
+      inv' <- checkInvariant inv
+      pure (EType ty, mkAVal inv')
+    EObjectInvariant ty inv -> do
+      inv' <- checkInvariantO inv
+      pure (EObjectTy ty, AnObj inv')
+
+
 symArrayAt
   :: forall array k v
    . (SymWord k, SymWord v, SymArray array)
@@ -1131,14 +1146,6 @@ newtype InvariantCheck a = InvariantCheck
   } deriving (Functor, Applicative, Monad, MonadError AnalyzeFailure,
     MonadReader (Located (Map Text SBVI.SVal)))
 
-instance Analyzer InvariantCheck Invariant EInvariant where
-  analyze = checkInvariant
-  throwErrorNoLoc err = do
-    info <- view location
-    throwError $ AnalyzeFailure info err
-  analyzeO = error "TODO(joel)"
-  analyzeE = error "TODO(joel)"
-
 
 checkInvariant :: SymWord a => Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
@@ -1152,6 +1159,9 @@ checkInvariant = \case
       Nothing  -> throwErrorNoLoc $ fromString $
         "column name not in scope: " ++ show name
 
+checkInvariantO :: Invariant Object -> InvariantCheck Object
+checkInvariantO (PureInvariant tm) = analyzePureO tm
+checkInvariantO (IVar _name) = error "objects cannot be svals"
 
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn

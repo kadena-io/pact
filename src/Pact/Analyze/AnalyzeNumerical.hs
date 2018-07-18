@@ -19,9 +19,9 @@ import           Pact.Analyze.Types         hiding (tableName)
 -- TODO: type families would be nicer
 class (MonadError AnalyzeFailure m) => Analyzer m term eterm
   | m -> term, m -> eterm where
-  analyze  :: (Show a, SymWord a) => term a -> m (S a)
-  analyzeO :: term Object -> m Object
-  analyzeE :: eterm -> m (EType, AVal)
+  analyze         :: (Show a, SymWord a) => term a -> m (S a)
+  analyzeO        :: term Object -> m Object
+  analyzeE        :: eterm -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
 
 -- TODO: replace with InjectPure
