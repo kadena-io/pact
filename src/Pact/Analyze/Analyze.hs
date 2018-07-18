@@ -382,26 +382,21 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
-class Analyzer m term => ObjectAnalyzer m term where
-  analyzeO :: term Object -> m Object
-
-instance Analyzer Analyze Term where
+instance Analyzer Analyze Term ETerm where
   analyze  = analyzeTerm
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
-
-instance ObjectAnalyzer Analyze Term where
   analyzeO = analyzeTermO
+  analyzeE = error "TODO(joel)"
 
-instance Analyzer Query Prop where
+instance Analyzer Query Prop EProp where
   analyze  = analyzeProp
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
-
-instance ObjectAnalyzer Query Prop where
   analyzeO = analyzePropO
+  analyzeE = error "TODO(joel)"
 
 symArrayAt
   :: forall array k v
@@ -616,7 +611,7 @@ ksAuthorized sKs = do
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
 aval
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => (Maybe Provenance -> SBVI.SVal -> m a)
   -> (Object -> m a)
   -> AVal
@@ -626,17 +621,17 @@ aval elimVal elimObj = \case
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
-expectVal :: Analyzer m term => AVal -> m (S a)
+expectVal :: Analyzer m term eterm => AVal -> m (S a)
 expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
 
-expectObj :: Analyzer m term => AVal -> m Object
+expectObj :: Analyzer m term eterm => AVal -> m Object
 expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
 lookupObj
-  :: (Analyzer m term, MonadReader r m, HasAnalyzeEnv r)
+  :: (Analyzer m term eterm, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m Object
@@ -649,7 +644,7 @@ lookupObj name vid = do
     Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
 
 lookupVal
-  :: (Analyzer m term, MonadReader r m, HasAnalyzeEnv r)
+  :: (Analyzer m term eterm, MonadReader r m, HasAnalyzeEnv r)
   => Text
   -> VarId
   -> m (S a)
@@ -684,8 +679,8 @@ applyInvariants tn sValFields addInvariants = do
       addInvariants invariants''
 
 analyzeAtO
-  :: forall m term
-   . ObjectAnalyzer m term
+  :: forall m term eterm
+   . Analyzer m term eterm
   => term String
   -> term Object
   -> m Object
@@ -706,7 +701,7 @@ analyzeAtO colNameT objT = do
       Just concreteColName -> getObjVal (T.pack concreteColName)
 
 analyzeAt
-  :: (ObjectAnalyzer m term, SymWord a)
+  :: (Analyzer m term eterm, SymWord a)
   => Schema
   -> term String
   -> term Object
@@ -761,7 +756,7 @@ analyzeETerm' et = (etermEType et,) <$> analyzeETerm et
 
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
-  LiteralObject obj -> Object <$> traverse analyzeETerm' obj
+  PureTerm a -> analyzePureO a
 
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> analyzeTerm rowKey
@@ -844,7 +839,7 @@ analyzeTermO = \case
 -- false
 
 analyzeIntAddTime
-  :: Analyzer m term
+  :: Analyzer m term eterm
   => term Time
   -> term Integer
   -> m (S Time)
@@ -856,7 +851,7 @@ analyzeIntAddTime timeT secsT = do
   pure $ time + fromIntegralS (secs * 1000000)
 
 analyzeDecAddTime
-  :: (Analyzer m term)
+  :: Analyzer m term eterm
   => term Time
   -> term Decimal
   -> m (S Time)
@@ -871,7 +866,7 @@ analyzeDecAddTime timeT secsT = do
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
 analyzeEqNeq
-  :: (Analyzer m term, SymWord a, Show a)
+  :: (Analyzer m term eterm, SymWord a, Show a)
   => EqNeq
   -> term a
   -> term a
@@ -884,7 +879,7 @@ analyzeEqNeq op xT yT = do
     Neq' -> x ./= y
 
 analyzeObjectEqNeq
-  :: (ObjectAnalyzer m term)
+  :: Analyzer m term eterm
   => EqNeq
   -> term Object
   -> term Object
@@ -897,7 +892,7 @@ analyzeObjectEqNeq op xT yT = do
     Neq' -> x ./= y
 
 analyzeComparisonOp
-  :: (Analyzer m term, SymWord a, Show a)
+  :: (Analyzer m term eterm, SymWord a, Show a)
   => ComparisonOp
   -> term a
   -> term a
@@ -914,7 +909,7 @@ analyzeComparisonOp op xT yT = do
     Neq -> x ./= y
 
 analyzeLogicalOp
-  :: (Analyzer m term, Boolean (S a), Show a, SymWord a)
+  :: (Analyzer m term eterm, Boolean (S a), Show a, SymWord a)
   => LogicalOp
   -> [term a]
   -> m (S a)
@@ -940,10 +935,6 @@ analyzeTerm = \case
   Sequence eterm valT -> analyzeETerm eterm *> analyzeTerm valT
 
   PureTerm (Sym a) -> pure a
-
-  -- TODO: analyzePure (need ObjectAnalyzer first)
-  PureTerm (At schema colNameT objT retType)
-    -> analyzeAt schema colNameT objT retType
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
@@ -1130,11 +1121,13 @@ format s tms = do
 
 type InvariantCheck = ReaderT (Located (Map Text SBVI.SVal)) (Either AnalyzeFailure)
 
-instance Analyzer InvariantCheck Invariant where
+instance Analyzer InvariantCheck Invariant EInvariant where
   analyze = checkInvariant
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
+  analyzeO = error "TODO(joel)"
+  analyzeE = error "TODO(joel)"
 
 checkInvariant :: Invariant a -> InvariantCheck (S a)
 checkInvariant = \case
@@ -1166,18 +1159,10 @@ getLitColName (PLit cn) = pure cn
 getLitColName _ = throwErrorNoLoc "TODO: column quantification"
 
 analyzePropO :: Prop Object -> Query Object
+analyzePropO (PureProp a) = analyzePureO a
 analyzePropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 analyzePropO (PVar vid name) = lookupObj name vid
 analyzePropO (PAt _schema colNameP objP _ety) = analyzeAtO colNameP objP
-analyzePropO (PLiteralObject props) = do
-  props' <- for props $ \case
-    EProp ty prop       -> do
-      prop' <- analyzeProp prop
-      pure (EType ty, mkAVal prop')
-    EObjectProp ty prop -> do
-      prop' <- analyzePropO prop
-      pure (EObjectTy ty, AnObj prop')
-  pure $ Object props'
 analyzePropO (PureProp (Sym _)) = throwErrorNoLoc "Symbolic values can't be objects"
 
 analyzePropSpecific :: SymWord a => PropSpecific a -> Query (S a)
@@ -1271,11 +1256,9 @@ analyzePropSpecific (RowEnforced tn cn pRk) = do
 
 analyzeProp :: SymWord a => Prop a -> Query (S a)
 analyzeProp (PLit a) = pure $ literalS a
-analyzeProp (PureProp (Sym a)) = pure a
 analyzeProp (PropSpecific a) = analyzePropSpecific a
 
 analyzeProp (PAt schema colNameP objP ety) = analyzeAt schema colNameP objP ety
-analyzeProp (PLiteralObject _) = error "objects are not SymWords"
 
 -- Abstraction
 analyzeProp (PVar vid name) = lookupVal name vid
@@ -1285,8 +1268,8 @@ analyzeProp (PureProp tm) = analyzePure tm
 
 -- TODO: move to Pact.Analyze.AnalyzePure
 analyzePure
-  :: (Analyzer m term, SymbolicTerm term)
-  => PureTerm term a -> m (S a)
+  :: (Analyzer m term eterm, SymbolicTerm term)
+  => PureTerm eterm term a -> m (S a)
 analyzePure (Sym s) = pure s
 analyzePure (StrConcat p1 p2) = (.++) <$> analyze p1 <*> analyze p2
 analyzePure (StrLength p)    = over s2Sbv SBV.length <$> analyze p
@@ -1297,6 +1280,24 @@ analyzePure (Comparison op x y)       = analyzeComparisonOp op x y
 -- analyzePure (ObjectEqNeq op x y)      = analyzeObjectEqNeq  op x y
 analyzePure (KeySetEqNeq      op x y) = analyzeEqNeq        op x y
 analyzePure (Logical op props) = analyzeLogicalOp op props
+-- analyzePure (At schema colNameT objT retType)
+--   = analyzeAt schema colNameT objT retType
+
+analyzePureO
+  :: (Analyzer m term eterm, SymbolicTerm term)
+  => PureTerm eterm term Object -> m Object
+analyzePureO (LiteralObject obj) = undefined -- Object <$> traverse analyzeETerm' obj
+-- analyzePropO (PLiteralObject props) = do
+--   props' <- for props $ \case
+--     EProp ty prop       -> do
+--       prop' <- analyzeProp prop
+--       pure (EType ty, mkAVal prop')
+--     EObjectProp ty prop -> do
+--       prop' <- analyzePropO prop
+--       pure (EObjectTy ty, AnObj prop')
+--   pure $ Object props'
+analyzePureO (At schema colNameT objT retType) = undefined
+  -- = analyzeAt schema colNameT objT retType
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case

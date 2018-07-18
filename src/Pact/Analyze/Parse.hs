@@ -313,7 +313,7 @@ inferPreProp preProp = case preProp of
   PreLiteralObject obj -> do
     obj' <- traverse inferPreProp obj
     let schema = Schema $ fmap ePropToEType obj'
-    pure $ EObjectProp schema (PLiteralObject obj')
+    pure $ EObjectProp schema $ PureProp $ LiteralObject obj'
 
   -- applications:
   --

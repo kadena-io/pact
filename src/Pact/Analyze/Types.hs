@@ -546,48 +546,52 @@ deriving instance Show a => Show (PropSpecific a)
 inject :: PropSpecific a -> Prop a
 inject = PropSpecific
 
-data PureTerm t a where
+data PureTerm et t a where
   -- | Injects a symbolic value into the language
-  Sym :: S a -> PureTerm t a
+  Sym :: S a -> PureTerm et t a
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> PureTerm t String
+  StrConcat :: t String -> t String -> PureTerm et t String
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> PureTerm t Integer
+  StrLength :: t String                     -> PureTerm et t Integer
 
   -- numeric ops
-  Numerical :: Numerical t a -> PureTerm t a
+  Numerical :: Numerical t a -> PureTerm et t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
-  IntAddTime      :: t Time -> t Integer -> PureTerm t Time
+  IntAddTime      :: t Time -> t Integer -> PureTerm et t Time
   -- | Adds a 'Decimal' expression to a 'Time' expression
-  DecAddTime      :: t Time -> t Decimal -> PureTerm t Time
+  DecAddTime      :: t Time -> t Decimal -> PureTerm et t Time
 
   -- comparison
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
   Comparison
     :: (Show a, SymWord a, Float a)
-    => ComparisonOp -> t a -> t a -> PureTerm t Bool
+    => ComparisonOp -> t a -> t a -> PureTerm et t Bool
 
-  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm t Bool
-  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm t Bool
+  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm et t Bool
+  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm et t Bool
 
-  At             :: Schema -> t String -> t Object -> EType -> PureTerm t a
+  At             :: Schema -> t String -> t Object -> EType -> PureTerm et t a
+
+  LiteralObject  :: Map Text et -> PureTerm et t Object
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
-  Logical :: LogicalOp -> [t Bool] -> PureTerm t Bool
+  Logical :: LogicalOp -> [t Bool] -> PureTerm et t Bool
 
 -- deriving instance (Show a, Show (t Decimal), Show (t Integer), Show (t String), Show (t Bool), Show (t Time)) => Show (PureTerm t a)
-instance Show (PureTerm Prop a) where
+instance Show (PureTerm EProp Prop a) where
   showsPrec _ _ = showString "TODO(joel)"
-instance Show (PureTerm Invariant a) where
+instance Show (PureTerm EInvariant Invariant a) where
   showsPrec _ _ = showString "TODO(joel)"
 
-instance Eq a => Eq (PureTerm Prop a) where
+instance Eq a => Eq (PureTerm EProp Prop a) where
+  (==) = error "TODO(joel)"
+instance Eq a => Eq (PureTerm EInvariant Invariant a) where
   (==) = error "TODO(joel)"
 
 pattern PLit :: SymWord a => a -> Prop a
@@ -596,13 +600,11 @@ pattern PLit a <- PureProp (Sym (unliteralS -> Just a)) where
 
 data Prop a where
   PropSpecific :: PropSpecific a  -> Prop a
-  PureProp     :: PureTerm Prop a -> Prop a
+  PureProp     :: PureTerm EProp Prop a -> Prop a
 
   -- | Refers to a function argument or universally/existentially-quantified
   -- variable
   PVar   :: VarId -> Text -> Prop a
-
-  PLiteralObject :: Map Text EProp -> Prop Object
 
 instance Eq a => Eq (Prop a) where
   -- PropSpecific a == PropSpecific b = a == b
@@ -913,16 +915,18 @@ userShow = userShowsPrec 0
 --
 -- The language is stateless. Arithmetic could be added if we decide it's
 -- useful.
-data Invariant a where
-  PureInvariant :: PureTerm Invariant a -> Invariant a
-
+data Invariant a
+  = PureInvariant (PureTerm EInvariant Invariant a)
   -- TODO: we can move this to PureTerm when we assign invariant vars `VarId`s
   -- | Refers to a variable with the provided name
-  IVar :: Text -> Invariant a
+  | IVar Text
+  deriving (Show, Eq)
 
-instance Eq a => Eq (Invariant a) where
--- deriving instance Eq a => Eq (Invariant a)
-deriving instance Show a => Show (Invariant a)
+data EInvariant where
+  EInvariant
+    :: (Show a, SymWord a, SMTValue a)
+    => Invariant a -> Type a -> EInvariant
+  -- EInvariantObject
 
 pattern ILiteral :: SymWord a => a -> Invariant a
 pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where

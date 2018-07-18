@@ -664,7 +664,7 @@ translateNode astNode = astContext astNode $ case astNode of
       v' <- translateNode v
       pure (k', v')
     schema <- translateSchema (_aTy node)
-    pure $ EObject (LiteralObject $ Map.fromList kvs') schema
+    pure $ EObject (PureTerm $ LiteralObject $ Map.fromList kvs') schema
 
   --
   -- TODO: more cases.
