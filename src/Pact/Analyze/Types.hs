@@ -923,17 +923,20 @@ data Invariant a
 
 data EInvariant where
   EInvariant
-    :: (Show a, SymWord a, SMTValue a)
-    => Invariant a -> Type a -> EInvariant
-  -- EInvariantObject
+    :: (Float a, Show a, SymWord a, SMTValue a)
+    => Type a -> Invariant a -> EInvariant
+  EObjectInvariant :: Schema -> Invariant Object -> EInvariant
 
 instance Eq EInvariant where
-  EInvariant ia ta == EInvariant ib tb = case typeEq ta tb of
+  EInvariant ta ia == EInvariant tb ib = case typeEq ta tb of
     Just Refl -> ia == ib
     Nothing   -> False
+  EObjectInvariant sa pa == EObjectInvariant sb pb = sa == sb && pa == pb
+  _ == _ = False
 
 instance Show EInvariant where
-  show (EInvariant inv ty) = "(" ++ show inv ++ ": " ++ show ty ++ ")"
+  show (EInvariant ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"
+  show (EObjectInvariant ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")"
 
 pattern ILiteral :: SymWord a => a -> Invariant a
 pattern ILiteral a <- PureInvariant (Sym (unliteralS -> Just a)) where
