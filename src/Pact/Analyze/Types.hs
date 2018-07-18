@@ -731,6 +731,9 @@ data Check
   = PropertyHolds  (Prop Bool) -- valid, assuming success
   | Satisfiable    (Prop Bool) -- sat,   not assuming success
   | Valid          (Prop Bool) -- valid, not assuming success
+  --
+  -- TODO: potentially another case for satisfiable, assuming success?
+  --
   deriving Show
 
 checkGoal :: Check -> Goal
