@@ -20,8 +20,6 @@ import           Pact.Analyze.Util
   PVar{}              -> ([], p);                           \
   PAt schema a b ty -> PAt schema a <$> float b <*> pure ty;
 
-instance Float Any where
-
 instance Float Integer where
   float = floatIntegerQuantifiers
 
@@ -43,6 +41,9 @@ instance Float Object where
     PureProp LiteralObject{} -> ([], p)
 
 instance Float KeySet where
+  float p = case p of STANDARD_INSTANCES
+
+instance Float Any where
   float p = case p of STANDARD_INSTANCES
 
 flipQuantifier :: Quantifier -> Quantifier
