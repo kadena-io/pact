@@ -47,6 +47,7 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
+import           Pact.Analyze.Feature
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
@@ -119,33 +120,33 @@ asum' foldable fallback = asum foldable <|> fallback
 
 textToArithOp :: Text -> Maybe ArithOp
 textToArithOp = \case
-  "+"   -> Just Add
-  "-"   -> Just Sub
-  "*"   -> Just Mul
-  "/"   -> Just Div
-  "^"   -> Just Pow
-  "log" -> Just Log
-  _     -> Nothing
+  SAddition       -> Just Add
+  SSubtraction    -> Just Sub
+  SMultiplication -> Just Mul
+  SDivision       -> Just Div
+  SExponentiation -> Just Pow
+  SLogarithm      -> Just Log
+  _               -> Nothing
 
 textToUnaryArithOp :: Text -> Maybe UnaryArithOp
 textToUnaryArithOp = \case
-  "-"    -> Just Negate
-  "sqrt" -> Just Sqrt
-  "ln"   -> Just Ln
-  "exp"  -> Just Exp
-  "abs"  -> Just Abs
+  SNegation         -> Just Negate
+  SSquareRoot       -> Just Sqrt
+  SNaturalLogarithm -> Just Ln
+  SExponential      -> Just Exp
+  SAbsoluteValue    -> Just Abs
   -- explicitly no signum
-  _      -> Nothing
+  _                 -> Nothing
 
 textToComparisonOp :: Text -> Maybe ComparisonOp
 textToComparisonOp = \case
-  ">"  -> Just Gt
-  "<"  -> Just Lt
-  ">=" -> Just Gte
-  "<=" -> Just Lte
-  "="  -> Just Eq
-  "!=" -> Just Neq
-  _    -> Nothing
+  SGreaterThan        -> Just Gt
+  SLessThan           -> Just Lt
+  SGreaterThanOrEqual -> Just Gte
+  SLessThanOrEqual    -> Just Lte
+  SEquality           -> Just Eq
+  SInequality         -> Just Neq
+  _                   -> Nothing
 
 textToEqNeq :: Text -> Maybe EqNeq
 textToEqNeq = \case
