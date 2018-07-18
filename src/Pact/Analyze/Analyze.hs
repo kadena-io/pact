@@ -816,7 +816,7 @@ analyzeTermO = \case
       Just False -> analyzeTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
-  At _schema colNameT objT _retType -> analyzeAtO colNameT objT
+  PureTerm (At _schema colNameT objT _retType) -> analyzeAtO colNameT objT
 
   objT -> throwErrorNoLoc $ UnhandledTerm $ tShow objT
 
@@ -937,7 +937,9 @@ analyzeTerm = \case
 
   PureTerm (Sym a) -> pure a
 
-  At schema colNameT objT retType -> analyzeAt schema colNameT objT retType
+  -- TODO: analyzePure (need ObjectAnalyzer first)
+  PureTerm (At schema colNameT objT retType)
+    -> analyzeAt schema colNameT objT retType
 
   --
   -- TODO: we might want to eventually support checking each of the semantics
