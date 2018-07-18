@@ -672,7 +672,8 @@ applyInvariants tn sValFields addInvariants = do
     Nothing -> pure ()
     Just invariants' -> do
       invariants'' <- for invariants' $ \(Located info invariant) ->
-        case runReaderT (checkInvariant invariant) (Located info sValFields) of
+        case runReaderT (unInvariantCheck (checkInvariant invariant))
+                        (Located info sValFields) of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
           Right inv -> pure inv
@@ -1119,7 +1120,12 @@ format s tms = do
               (head parts)
               (zip tms (tail parts))
 
-type InvariantCheck = ReaderT (Located (Map Text SBVI.SVal)) (Either AnalyzeFailure)
+newtype InvariantCheck a = InvariantCheck
+  { unInvariantCheck :: ReaderT
+    (Located (Map Text SBVI.SVal))
+    (Either AnalyzeFailure) a
+  } deriving (Functor, Applicative, Monad, MonadError AnalyzeFailure,
+    MonadReader (Located (Map Text SBVI.SVal)))
 
 instance Analyzer InvariantCheck Invariant EInvariant where
   analyze = checkInvariant
