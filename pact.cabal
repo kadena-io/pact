@@ -56,8 +56,11 @@ library
     hs-source-dirs: src-ghc
     exposed-modules:
       Pact.Analyze.Analyze
+      Pact.Analyze.AnalyzeNumerical
       Pact.Analyze.Check
+      Pact.Analyze.Errors
       Pact.Analyze.LegacySFunArray
+      Pact.Analyze.Numerical
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Patterns

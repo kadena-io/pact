@@ -137,11 +137,11 @@ expectFail code check = do
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
-intConserves tn cn = PComparison Eq 0 $ inject $
+intConserves tn cn = PureProp $ IntegerComparison Eq 0 $ inject $
   IntColumnDelta (PLit tn) (PLit cn)
 
 decConserves :: TableName -> ColumnName -> Prop Bool
-decConserves tn cn = PComparison Eq 0 $ inject $
+decConserves tn cn = PureProp $ DecimalComparison Eq 0 $ inject $
   DecColumnDelta (PLit tn) (PLit cn)
 
 pattern Success' :: Prop Bool
@@ -161,7 +161,7 @@ spec = describe "analyze" $ do
             (defun test:integer (x:integer)
               (* x -1))
           |]
-    expectPass code $ Valid $ PComparison Eq
+    expectPass code $ Valid $ PureProp $ IntegerComparison Eq
       (injectNumerical (IntArithOp Mul (-1) (PVar 1 "x")))
       (inject Result :: Prop Integer)
 
@@ -176,7 +176,8 @@ spec = describe "analyze" $ do
             (defun test:integer (a:integer)
               (helper a))
           |]
-    expectPass code $ Valid $ PComparison Gte (inject Result :: Prop Integer) 10
+    expectPass code $ Valid $ PureProp $
+      IntegerComparison Gte (inject Result :: Prop Integer) 10
 
   describe "success" $ do
     let code =
@@ -247,10 +248,11 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable Abort'
     expectPass code $ Satisfiable (inject Success)
-    expectPass code $ Valid $ (PComparison Gt (PVar 1 "x") (0 :: Prop Integer)) ==>
+    expectPass code $ Valid $ (PureProp $ IntegerComparison Gt (PVar 1 "x") 0) ==>
       inject Success
-    expectPass code $ Valid $ (PComparison Eq (PVar 1 "x") (5 :: Prop Integer)) ==>
-      inject Success &&& (PComparison Eq (inject Result :: Prop Bool) true)
+    expectPass code $ Valid $ (PureProp $ IntegerComparison Eq (PVar 1 "x") 5) ==>
+      inject Success &&&
+        (PureProp $ BoolComparison Eq (inject Result :: Prop Bool) true)
 
   describe "read-keyset.equality" $ do
     let code =
@@ -314,12 +316,14 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ bnot $ inject $ Exists 1 "row" (EType TStr) $
       inject $ RowWrite "tokens" (PVar 1 "row")
     expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
-      PComparison Eq (inject (RowWriteCount "tokens" (PVar 1 "row"))) 0
+      PureProp $ IntegerComparison Eq
+        (inject (RowWriteCount "tokens" (PVar 1 "row"))) 0
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr) (inject $ RowRead "tokens" (PVar 1 "row")))
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr)
-        (PComparison Eq (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
+        (PureProp $ IntegerComparison Eq
+          (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
     expectPass code $ Satisfiable $ inject $ Exists 1 "row" (EType TStr) $
       inject $ RowEnforced "tokens" "ks" (PVar 1 "row")
     expectPass code $ Satisfiable $ inject $ Exists 1 "row" (EType TStr) $
@@ -398,13 +402,15 @@ spec = describe "analyze" $ do
         (inject (RowWrite "tokens" (PVar 1 "row"))))
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr)
-        (PComparison Eq (inject (RowWriteCount "tokens" (PVar 1 "row"))) 1))
+        (PureProp $ IntegerComparison Eq
+          (inject (RowWriteCount "tokens" (PVar 1 "row"))) 1))
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr)
         (inject (RowRead "tokens" (PVar 1 "row"))))
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr)
-        (PComparison Eq (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
+        (PureProp $ IntegerComparison Eq
+          (inject (RowReadCount "tokens" (PVar 1 "row"))) 1))
     expectPass code $ Valid $ inject Success ==>
       inject (Exists 1 "row" (EType TStr)
         (inject (RowEnforced "tokens" "ks" (PVar 1 "row"))))
@@ -430,13 +436,17 @@ spec = describe "analyze" $ do
               (write tokens 'joel { 'balance: 100 }))
           |]
     expectPass code $ Valid $
-      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 2
+      PureProp $ IntegerComparison Eq
+        (inject (RowWriteCount "tokens" (PLit "joel"))) 2
     expectPass code $ Valid $ PNot $
-      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 1
+      PureProp $ IntegerComparison Eq
+        (inject (RowWriteCount "tokens" (PLit "joel"))) 1
     expectPass code $ Valid $ PNot $
-      PComparison Eq (inject (RowWriteCount "tokens" (PLit "joel"))) 3
+      PureProp $ IntegerComparison Eq
+        (inject (RowWriteCount "tokens" (PLit "joel"))) 3
     expectPass code $ Valid $
-      PComparison Eq (inject (RowReadCount "tokens" (PLit "joel"))) 0
+      PureProp $ IntegerComparison Eq
+        (inject (RowReadCount "tokens" (PLit "joel"))) 0
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
@@ -525,7 +535,7 @@ spec = describe "analyze" $ do
     let schema = Schema $
           Map.fromList [("name", EType TStr), ("balance", EType TInt)]
         ety    = EType TStr
-    expectPass code $ Valid $ PComparison Eq
+    expectPass code $ Valid $ PureProp $ StringComparison Eq
       (PAt schema (PLit "name") (inject Result) ety)
       (PLit "stu" :: Prop String)
 
@@ -765,21 +775,28 @@ spec = describe "analyze" $ do
     expectVerified code
 
     expectPass code $ Valid $ bnot $ inject $ Exists 1 "row" (EType TStr) $
-      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
+      PureProp $ IntegerComparison Eq
+        (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
     expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
-      PComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
-        PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0
+      PureProp (StringComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob"))
+        ==>
+        PureProp (IntegerComparison Eq
+          (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
     expectPass code $ Valid $ inject $ Forall 1 "row" (EType TStr) $
-      PComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob") ==>
-        PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3
+      PureProp (StringComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob"))
+        ==>
+        PureProp (IntegerComparison Eq
+          (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
     expectPass code $ Valid $ inject $ Exists 1 "row" (EType TStr) $
-      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3
+      PureProp (IntegerComparison Eq
+        (inject (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
     expectPass code $ Valid $
-      PComparison Eq (inject (IntCellDelta "accounts" "balance" (PLit "bob"))) 3
+      PureProp (IntegerComparison Eq
+        (inject (IntCellDelta "accounts" "balance" (PLit "bob"))) 3)
 
   describe "with-read" $ do
     let code =
@@ -1267,9 +1284,9 @@ spec = describe "analyze" $ do
 
     it "lifts forall string" $
       prenexConvert (PAnd (PLit True)
-        (allA0 intTy (PComparison Gte (a0 :: Prop String) a0)))
+        (allA0 intTy (PureProp $ StringComparison Gte a0 a0)))
       `shouldBe`
-      allA0 intTy (PAnd (PLit True) (PComparison Gte (a0 :: Prop String) a0))
+      allA0 intTy (PAnd (PLit True) (PureProp $ StringComparison Gte a0 a0))
 
   describe "prop parse / typecheck" $ do
     let textToProp'
@@ -1324,16 +1341,16 @@ spec = describe "analyze" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
       textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
         `shouldBe`
-        Right (PComparison Gt (inject (IntColumnDelta "a" "b")) 0)
+        Right (PureProp $ IntegerComparison Gt (inject (IntColumnDelta "a" "b")) 0)
 
       let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
       textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
         `shouldBe`
-        Right (PComparison Gt (inject (DecColumnDelta "a" "b")) 0)
+        Right (PureProp $ DecimalComparison Gt (inject (DecColumnDelta "a" "b")) 0)
 
       textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
         `shouldBe`
-        Right (PComparison Gt (inject (DecColumnDelta "a" "b")) 0)
+        Right (PureProp $ DecimalComparison Gt (inject (DecColumnDelta "a" "b")) 0)
 
     it "checks +" $ do
       textToProp TStr "(+ \"a\" \"b\")"
@@ -1386,7 +1403,7 @@ spec = describe "analyze" $ do
           (EProp TBool
             (inject $ Forall (VarId 1) "x" (EType TStr)
               (inject $ Forall (VarId 2) "y" (EType TStr)
-                (PComparison Eq
+                (PureProp $ StringComparison Eq
                   (PVar (VarId 1) "x" :: Prop String)
                   (PVar (VarId 2) "y")))))
 
@@ -1398,7 +1415,7 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right (PNot
           (inject $ Exists (VarId 1) "row" (EType TStr)
-            (PComparison Eq
+            (PureProp $ IntegerComparison Eq
               (inject $ IntCellDelta "accounts" "balance" (PVar (VarId 1) "row"))
               2)))
 
@@ -1417,7 +1434,7 @@ spec = describe "analyze" $ do
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
       in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
            `shouldBe`
-           Right (PComparison Eq (inject $ IntColumnDelta "accounts" "balance") 0)
+           Right (PureProp $ IntegerComparison Eq (inject $ IntColumnDelta "accounts" "balance") 0)
 
     it "parses (when (not (authorized-by 'accounts-admin-keyset)) abort)" $
       let tableEnv = singletonTableEnv "accounts" "accounts-admin-keyset" $ EType TKeySet

@@ -351,11 +351,11 @@ inferPreProp preProp = case preProp of
       (EProp aTy aProp, EProp bTy bProp) -> case typeEq aTy bTy of
         Nothing -> typeError preProp aTy bTy
         Just Refl -> case aTy of
-          TInt     -> ret PComparison aProp bProp
-          TDecimal -> ret PComparison aProp bProp
-          TTime    -> ret PComparison aProp bProp
-          TBool    -> ret PComparison aProp bProp
-          TStr     -> ret PComparison aProp bProp
+          TInt     -> ret (PureProp .... IntegerComparison) aProp bProp
+          TDecimal -> ret (PureProp .... DecimalComparison) aProp bProp
+          TTime    -> ret (PureProp .... TimeComparison) aProp bProp
+          TBool    -> ret (PureProp .... BoolComparison) aProp bProp
+          TStr     -> ret (PureProp .... StringComparison) aProp bProp
           TAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case textToEqNeq op' of
@@ -620,11 +620,16 @@ expToInvariant ty exp = case (ty, exp) of
     -> injectNumerical . IntUnaryArithOp op <$> expToInvariant TInt a
 
   (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
-    [ IComparison op <$> expToInvariant TInt a     <*> expToInvariant TInt b
-    , IComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , IComparison op <$> expToInvariant TTime a    <*> expToInvariant TTime b
-    , IComparison op <$> expToInvariant TBool a    <*> expToInvariant TBool b
-    , IComparison op <$> expToInvariant TStr a     <*> expToInvariant TStr b
+    [ PureInvariant ... IntegerComparison op
+      <$> expToInvariant TInt a     <*> expToInvariant TInt b
+    , PureInvariant ... DecimalComparison op
+      <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , PureInvariant ... TimeComparison op
+      <$> expToInvariant TTime a    <*> expToInvariant TTime b
+    , PureInvariant ... BoolComparison op
+      <$> expToInvariant TBool a    <*> expToInvariant TBool b
+    , PureInvariant ... StringComparison op
+      <$> expToInvariant TStr a     <*> expToInvariant TStr b
     , case textToEqNeq op' of
       Just eqNeq -> PureInvariant ... KeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a

@@ -84,8 +84,7 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
-instance Show (PureTerm ETerm Term a) where
-  showsPrec _ _ = showString "TODO(joel)"
+deriving instance Show a => Show (PureTerm ETerm Term a)
 
 lit :: SymWord a => a -> Term a
 lit = PureTerm . Sym . literalS

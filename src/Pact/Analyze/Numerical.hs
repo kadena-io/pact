@@ -47,32 +47,30 @@ data RoundingLikeOp
   | Floor   -- ^ Round to the previous integer
   deriving (Show, Eq)
 
+-- | Arithmetic ops
+--
+-- We partition the arithmetic operations in to these classes:
+-- - DecArithOp, IntArithOp: binary operators applied to (and returning) the
+--   same type (either integer or decimal).
+--   - Operations: { + - * / ^ log }
+-- - DecUnaryArithOp, IntUnaryArithOp: unary operators applied to and
+--   returning the same type (integer or decimal).
+--   - Operations: { - (negate) sqrt ln exp abs } (also signum even though
+--     it's not in pact)
+-- - DecIntArithOp, IntDecArithOp: binary operators applied to one integer
+--   and one decimal, returning a decimal. These are overloads of the integer
+--   / decimal binary ops.
+--   - Operations: { + - * / ^ log }
+-- - ModOp: Just modulus (oddly, it's the only operator with signature
+--   `integer -> integer -> integer`.
+--   - Operations: { mod }
+--
+-- - RoundingLikeOp1: Rounding decimals to integers.
+--   - Operations: { round floor ceiling }
+-- - RoundingLikeOp2: Rounding decimals to decimals with a specified level of
+--   precision.
+--   - Operations: { round floor ceiling }
 data Numerical t a where
-  Literal        :: a                       -> Numerical t a
-
-  -- Arithmetic ops
-  --
-  -- We partition the arithmetic operations in to these classes:
-  -- - DecArithOp, IntArithOp: binary operators applied to (and returning) the
-  --   same type (either integer or decimal).
-  --   - Operations: { + - * / ^ log }
-  -- - DecUnaryArithOp, IntUnaryArithOp: unary operators applied to and
-  --   returning the same type (integer or decimal).
-  --   - Operations: { - (negate) sqrt ln exp abs } (also signum even though
-  --     it's not in pact)
-  -- - DecIntArithOp, IntDecArithOp: binary operators applied to one integer
-  --   and one decimal, returning a decimal. These are overloads of the integer
-  --   / decimal binary ops.
-  --   - Operations: { + - * / ^ log }
-  -- - ModOp: Just modulus (oddly, it's the only operator with signature
-  --   `integer -> integer -> integer`.
-  --   - Operations: { mod }
-  --
-  -- - RoundingLikeOp1: Rounding decimals to integers.
-  --   - Operations: { round floor ceiling }
-  -- - RoundingLikeOp2: Rounding decimals to decimals with a specified level of
-  --   precision.
-  --   - Operations: { round floor ceiling }
   DecArithOp      :: ArithOp        -> t Decimal -> t Decimal -> Numerical t Decimal
   IntArithOp      :: ArithOp        -> t Integer -> t Integer -> Numerical t Integer
   DecUnaryArithOp :: UnaryArithOp   -> t Decimal ->              Numerical t Decimal
