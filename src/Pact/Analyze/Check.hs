@@ -74,7 +74,7 @@ import qualified Pact.Types.Typecheck      as TC
 import           Pact.Analyze.Analyze      hiding (invariants)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
-import           Pact.Analyze.Term         (ETerm (EObject, ETerm))
+import           Pact.Analyze.Term         (ETerm)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -329,10 +329,10 @@ allocModelTags args locatedTm tagAllocs = ModelTags
 
     allocResult :: Symbolic (Located TVal)
     allocResult = sequence $ locatedTm <&> \case
-      ETerm _ ty ->
+      ETerm ty _ ->
         let ety = EType ty
         in (ety,) <$> allocAVal ety
-      EObject _ sch ->
+      EObject sch _ ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided

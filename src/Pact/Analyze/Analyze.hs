@@ -391,30 +391,19 @@ newtype InvariantCheck a = InvariantCheck
   } deriving (Functor, Applicative, Monad, MonadError AnalyzeFailure,
     MonadReader (Located (Map VarId AVal)))
 
-
 instance Analyzer Analyze where
-  type TermOf Analyze  = Term
-  type ETermOf Analyze = ETerm
-  analyze              = analyzeTerm
-  analyzeO             = analyzeTermO
-  analyzeE             = analyzeETerm'
-  throwErrorNoLoc err  = do
+  type TermOf Analyze = Term
+  analyze             = analyzeTerm
+  analyzeO            = analyzeTermO
+  throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
 
 instance Analyzer Query where
-  type TermOf Query  = Prop
-  type ETermOf Query = EProp
-  analyze            = analyzeProp
-  analyzeO           = analyzePropO
-  analyzeE = \case
-    EProp ty prop       -> do
-      prop' <- analyzeProp prop
-      pure (EType ty, mkAVal prop')
-    EObjectProp ty prop -> do
-      prop' <- analyzePropO prop
-      pure (EObjectTy ty, AnObj prop')
+  type TermOf Query = Prop
+  analyze           = analyzeProp
+  analyzeO          = analyzePropO
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
@@ -422,16 +411,8 @@ instance Analyzer Query where
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck  = Invariant
-  type ETermOf InvariantCheck = EInvariant
   analyze  (PureInvariant tm) = analyzePure tm
   analyzeO (PureInvariant tm) = analyzePureO tm
-  analyzeE = \case
-    EInvariant ty inv       -> do
-      inv' <- analyze inv
-      pure (EType ty, mkAVal inv')
-    EObjectInvariant ty inv -> do
-      inv' <- analyzeO inv
-      pure (EObjectTy ty, AnObj inv')
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
@@ -763,11 +744,11 @@ analyzeAt schema@(Schema schemaFields) colNameT objT retType = do
     relevantFields'
 
 analyzeETerm :: ETerm -> Analyze AVal
-analyzeETerm (ETerm tm _)   = mkAVal <$> analyzeTerm tm
-analyzeETerm (EObject tm _) = AnObj <$> analyzeTermO tm
+analyzeETerm (ETerm _ tm)   = mkAVal <$> analyzeTerm tm
+analyzeETerm (EObject _ tm) = AnObj <$> analyzeTermO tm
 
 analyzeETerm' :: ETerm -> Analyze TVal
-analyzeETerm' et = (etermEType et,) <$> analyzeETerm et
+analyzeETerm' et = (existentialType et,) <$> analyzeETerm et
 
 analyzeTermO :: Term Object -> Analyze Object
 analyzeTermO = \case
@@ -1030,9 +1011,9 @@ analyzeTerm = \case
   Format formatStr args -> do
     formatStr' <- analyze formatStr
     args' <- for args $ \case
-      ETerm str TStr   -> Left          <$> analyze str
-      ETerm int TInt   -> Right . Left  <$> analyze int
-      ETerm bool TBool -> Right . Right <$> analyze bool
+      ETerm TStr  str  -> Left          <$> analyze str
+      ETerm TInt  int  -> Right . Left  <$> analyze int
+      ETerm TBool bool -> Right . Right <$> analyze bool
       _                -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
@@ -1066,15 +1047,15 @@ analyzeTerm = \case
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
-      ETerm tm TStr -> analyze tm <&> unliteralS >>= \case
+      ETerm TStr tm -> analyze tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
-      ETerm tm TInt -> analyze tm <&> unliteralS >>= \case
+      ETerm TInt tm -> analyze tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just int -> pure $ sHash $ toStrict $ Aeson.encode int
-      ETerm tm TBool -> analyze tm <&> unliteralS >>= \case
+      ETerm TBool tm -> analyze tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
 
@@ -1082,7 +1063,7 @@ analyzeTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      ETerm _ TDecimal -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
+      ETerm TDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
       ETerm _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
       EObject _ _      -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
@@ -1239,10 +1220,20 @@ analyzePropSpecific (RowEnforced tn cn pRk) = do
   view $ qeAnalyzeState.cellEnforced tn' cn' sRk
 
 
+analyzeE :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
+analyzeE = \case
+  ETerm ty prop   -> do
+    prop' <- analyze prop
+    pure (EType ty, mkAVal prop')
+  EObject ty prop -> do
+    prop' <- analyzeO prop
+    pure (EObjectTy ty, AnObj prop')
+
+
 -- TODO: move to Pact.Analyze.AnalyzePure
 analyzePure
   :: (Analyzer m, SymWord a)
-  => PureTerm (ETermOf m) (TermOf m) a -> m (S a)
+  => PureTerm (TermOf m) a -> m (S a)
 analyzePure (Lit a)                    = pure (literalS a)
 analyzePure (Sym s)                    = pure s
 analyzePure (StrConcat p1 p2)          = (.++) <$> analyze p1 <*> analyze p2
@@ -1273,7 +1264,7 @@ analyzePure (Var vid name) = do
 
 analyzePureO
   :: Analyzer m
-  => PureTerm (ETermOf m) (TermOf m) Object -> m Object
+  => PureTerm (TermOf m) Object -> m Object
 analyzePureO (LiteralObject obj) = Object <$> traverse analyzeE obj
 analyzePureO (At _schema colNameT objT _retType)
   = analyzeAtO colNameT objT

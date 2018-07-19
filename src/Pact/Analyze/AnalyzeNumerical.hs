@@ -18,10 +18,8 @@ import           Pact.Analyze.Types         hiding (tableName)
 
 class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   type TermOf m   :: * -> *
-  type ETermOf m  :: *
   analyze         :: (Show a, SymWord a) => TermOf m a -> m (S a)
   analyzeO        :: TermOf m Object -> m Object
-  analyzeE        :: ETermOf m -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
   getVar          :: VarId -> m (Maybe AVal)
 
