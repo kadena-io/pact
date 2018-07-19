@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -29,6 +30,8 @@ import           Data.Aeson                 (FromJSON, ToJSON)
 import           Data.AffineSpace           ((.+^), (.-.))
 import           Data.Data                  (Data)
 import qualified Data.Decimal               as Decimal
+import           Data.Function              (on)
+import           Data.List                  (sortBy)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
@@ -65,8 +68,39 @@ import           Pact.Analyze.Numerical
 import           Pact.Analyze.Orphans       ()
 import           Pact.Analyze.Util
 
-import Data.Function (on)
-import Data.List (sortBy)
+#define EQ_EXISTENTIAL(tm)                               \
+instance Eq (Existential tm) where                       \
+  ETerm ta ia == ETerm tb ib = case typeEq ta tb of {    \
+    Just Refl -> ia == ib;                               \
+    Nothing   -> False};                                 \
+  EObject sa pa == EObject sb pb = sa == sb && pa == pb; \
+  _ == _ = False;
+
+#define SHOW_EXISTENTIAL(tm)                                       \
+instance Show (Existential tm) where                               \
+  show (ETerm ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"; \
+  show (EObject ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")";
+
+data Existential (tm :: * -> *) where
+  ETerm   :: SimpleType a => Type a -> tm a      -> Existential tm
+  EObject ::                 Schema -> tm Object -> Existential tm
+
+-- TODO: when we have quantified constraints we can do this (also for Show):
+-- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
+--   ETerm ta ia == ETerm tb ib = case typeEq ta tb of
+--     Just Refl -> ia == ib
+--     Nothing   -> False
+--   EObject sa pa == EObject sb pb = sa == sb && pa == pb
+--   _ == _ = False
+
+mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
+mapExistential f term = case term of
+  ETerm   ty  term' -> ETerm   ty  (f term')
+  EObject sch term' -> EObject sch (f term')
+
+existentialType :: Existential tm -> EType
+existentialType (ETerm ety _)   = EType ety
+existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
 
@@ -595,59 +629,59 @@ instance Numerical Invariant :<: Invariant where
   project (PureInvariant (Numerical a)) = Just a
   project _                             = Nothing
 
-data PureTerm et t a where
-  Lit :: a -> PureTerm et t a
+data PureTerm t a where
+  Lit :: a -> PureTerm t a
   -- | Injects a symbolic value into the language
-  Sym :: S a -> PureTerm et t a
+  Sym :: S a -> PureTerm t a
 
   -- | Refers to a function argument, universally/existentially-quantified
   -- variable, or column
-  Var :: VarId -> Text -> PureTerm et t a
+  Var :: VarId -> Text -> PureTerm t a
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> PureTerm et t String
+  StrConcat :: t String -> t String -> PureTerm t String
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> PureTerm et t Integer
+  StrLength :: t String                     -> PureTerm t Integer
 
   -- numeric ops
-  Numerical :: Numerical t a -> PureTerm et t a
+  Numerical :: Numerical t a -> PureTerm t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
-  IntAddTime      :: t Time -> t Integer -> PureTerm et t Time
+  IntAddTime :: t Time -> t Integer -> PureTerm t Time
   -- | Adds a 'Decimal' expression to a 'Time' expression
-  DecAddTime      :: t Time -> t Decimal -> PureTerm et t Time
+  DecAddTime :: t Time -> t Decimal -> PureTerm t Time
 
   -- comparison
   -- | A 'ComparisonOp' expression over two 'Integer' expressions
-  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> PureTerm et t Bool
+  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> PureTerm t Bool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> PureTerm et t Bool
+  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> PureTerm t Bool
   -- | A 'ComparisonOp' expression over two 'Time' expressions
-  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> PureTerm et t Bool
+  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> PureTerm t Bool
   -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t String  -> t String  -> PureTerm et t Bool
+  StringComparison  :: ComparisonOp -> t String  -> t String  -> PureTerm t Bool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
-  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> PureTerm et t Bool
+  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> PureTerm t Bool
 
-  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm et t Bool
-  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm et t Bool
+  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm t Bool
+  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm t Bool
 
-  At             :: Schema -> t String -> t Object -> EType -> PureTerm et t a
+  At            :: Schema -> t String -> t Object -> EType -> PureTerm t a
 
-  LiteralObject  :: Map Text et -> PureTerm et t Object
+  LiteralObject :: Map Text (Existential t) -> PureTerm t Object
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
-  Logical :: LogicalOp -> [t Bool] -> PureTerm et t Bool
+  Logical :: LogicalOp -> [t Bool] -> PureTerm t Bool
 
-deriving instance Show a => Show (PureTerm EProp Prop a)
-deriving instance Show a => Show (PureTerm EInvariant Invariant a)
+deriving instance Show a => Show (PureTerm Prop a)
+deriving instance Show a => Show (PureTerm Invariant a)
 
-deriving instance Eq a => Eq (PureTerm EProp Prop a)
-deriving instance Eq a => Eq (PureTerm EInvariant Invariant a)
+deriving instance Eq a => Eq (PureTerm Prop a)
+deriving instance Eq a => Eq (PureTerm Invariant a)
 
 pattern PLit :: a -> Prop a
 pattern PLit a = PureProp (Lit a)
@@ -657,7 +691,7 @@ pattern PVar vid name = PureProp (Var vid name)
 
 data Prop a
   = PropSpecific (PropSpecific a)
-  | PureProp     (PureTerm EProp Prop a)
+  | PureProp     (PureTerm Prop a)
   deriving (Show, Eq)
 
 instance S :<: Prop where
@@ -702,23 +736,9 @@ pattern POr a b = PureProp (Logical OrOp [a, b])
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = PureProp (Logical NotOp [a])
 
-data EProp where
-  EProp       :: SimpleType a => Type a -> Prop a      -> EProp
-  EObjectProp ::                 Schema -> Prop Object -> EProp
-
-deriving instance Show EProp
-
-instance Eq EProp where
-  EProp ta pa == EProp tb pb = case typeEq ta tb of
-    Just Refl -> pa == pb
-    Nothing   -> False
-  EObjectProp sa pa == EObjectProp sb pb = sa == sb && pa == pb
-  _ == _ = False
-
-ePropToEType :: EProp -> EType
-ePropToEType = \case
-  EProp ty _            -> EType ty
-  EObjectProp schema' _ -> EObjectTy schema'
+type EProp = Existential Prop
+EQ_EXISTENTIAL(Prop)
+SHOW_EXISTENTIAL(Prop)
 
 instance Boolean (Prop Bool) where
   true      = PLit True
@@ -955,7 +975,7 @@ userShow = userShowsPrec 0
 -- * logical operations
 --
 -- The language is stateless.
-newtype Invariant a = PureInvariant (PureTerm EInvariant Invariant a)
+newtype Invariant a = PureInvariant (PureTerm Invariant a)
   deriving (Show, Eq)
 
 instance S :<: Invariant where
@@ -964,20 +984,9 @@ instance S :<: Invariant where
     PureInvariant (Sym a) -> Just a
     _                     -> Nothing
 
-data EInvariant where
-  EInvariant       :: SimpleType a => Type a -> Invariant a      -> EInvariant
-  EObjectInvariant ::                 Schema -> Invariant Object -> EInvariant
-
-instance Eq EInvariant where
-  EInvariant ta ia == EInvariant tb ib = case typeEq ta tb of
-    Just Refl -> ia == ib
-    Nothing   -> False
-  EObjectInvariant sa pa == EObjectInvariant sb pb = sa == sb && pa == pb
-  _ == _ = False
-
-instance Show EInvariant where
-  show (EInvariant ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"
-  show (EObjectInvariant ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")"
+type EInvariant = Existential Invariant
+EQ_EXISTENTIAL(Invariant)
+SHOW_EXISTENTIAL(Invariant)
 
 pattern ILiteral :: a -> Invariant a
 pattern ILiteral a = PureInvariant (Lit a)

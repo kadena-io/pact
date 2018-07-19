@@ -289,8 +289,8 @@ translateBody = \case
     ast'  <- translateNode ast
     asts' <- translateBody asts
     pure $ case asts' of
-      ETerm   astsT ty -> ETerm   (Sequence ast' astsT) ty
-      EObject astsO ty -> EObject (Sequence ast' astsO) ty
+      ETerm   ty astsT -> ETerm   ty $ Sequence ast' astsT
+      EObject ty astsO -> EObject ty $ Sequence ast' astsO
 
 translateObjBinding
   :: [(Named Node, AST Node)]
@@ -323,9 +323,9 @@ translateObjBinding bindingsA schema bodyA rhsT = do
             in Let varName vid
               (case varType of
                  EType ty ->
-                   ETerm   (PureTerm (At schema colTerm freshVar varType)) ty
+                   ETerm   ty  (PureTerm (At schema colTerm freshVar varType))
                  EObjectTy sch ->
-                   EObject (PureTerm (At schema colTerm freshVar varType)) sch)
+                   EObject sch (PureTerm (At schema colTerm freshVar varType)))
               body)
           innerBody
           bindings
@@ -333,7 +333,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
       nodeToNameVid = Map.fromList $
         (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
 
-  fmap (mapETerm translateLet) $
+  fmap (mapExistential translateLet) $
     local (_2 %~ unionPreferring nodeToNameVid) $
       translateBody bodyA
 
@@ -352,14 +352,14 @@ translateNode astNode = astContext astNode $ case astNode of
       --
 
       let varInfo = varNode ^. aId . Pact.tiInfo
-          varType = etermEType rhsETerm
+          varType = existentialType rhsETerm
 
       tagVarBinding varInfo unmungedVarName varType vid
 
       body' <- translateNode $ AST_Let node bindingsRest body
       pure $ case body' of
-        ETerm   bodyTm bodyTy -> ETerm   (Let varName vid rhsETerm bodyTm) bodyTy
-        EObject bodyTm bodyTy -> EObject (Let varName vid rhsETerm bodyTm) bodyTy
+        ETerm   bodyTy bodyTm -> ETerm   bodyTy (Let varName vid rhsETerm bodyTm)
+        EObject bodyTy bodyTm -> EObject bodyTy (Let varName vid rhsETerm bodyTm)
 
   AST_InlinedApp body -> translateBody body
 
@@ -367,109 +367,109 @@ translateNode astNode = astContext astNode $ case astNode of
     Just (varName, vid) <- view (_2 . at node)
     ty      <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'        -> ETerm (PureTerm (Var vid varName)) ty'
-      EObjectTy schema -> EObject (PureTerm (Var vid varName)) schema
+      EType ty'        -> ETerm ty'      $ PureTerm $ Var vid varName
+      EObjectTy schema -> EObject schema $ PureTerm $ Var vid varName
 
   -- Int
   AST_NegativeLit l -> case l of
-    LInteger i -> pure $ ETerm (inject $ IntUnaryArithOp Negate (lit i)) TInt
-    LDecimal d -> pure $ ETerm (inject $ DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
+    LInteger i -> pure $ ETerm TInt (inject $ IntUnaryArithOp Negate (lit i))
+    LDecimal d -> pure $ ETerm TDecimal (inject $ DecUnaryArithOp Negate (lit (mkDecimal d)))
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
-    LInteger i -> pure $ ETerm (lit i) TInt
-    LBool b    -> pure $ ETerm (lit b) TBool
-    LString s  -> pure $ ETerm (lit $ T.unpack s) TStr
-    LDecimal d -> pure $ ETerm (lit (mkDecimal d)) TDecimal
-    LTime t    -> pure $ ETerm (lit (mkTime t)) TTime
+    LInteger i -> pure $ ETerm TInt (lit i)
+    LBool b    -> pure $ ETerm TBool (lit b)
+    LString s  -> pure $ ETerm TStr (lit $ T.unpack s)
+    LDecimal d -> pure $ ETerm TDecimal (lit (mkDecimal d))
+    LTime t    -> pure $ ETerm TTime (lit (mkTime t))
 
   AST_NegativeVar node -> do
     Just (name, vid) <- view (_2 . at node)
     EType ty <- translateType (_aTy node)
     case ty of
-      TInt     -> pure (ETerm (inject $ IntUnaryArithOp Negate
-        (PureTerm (Var vid name))) TInt)
-      TDecimal -> pure (ETerm (inject $ DecUnaryArithOp Negate
-        (PureTerm (Var vid name))) TDecimal)
+      TInt     -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Negate $
+        PureTerm $ Var vid name
+      TDecimal -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Negate $
+        PureTerm $ Var vid name
       _        -> throwError' $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
-    ETerm condTerm TBool <- translateNode cond
-    pure $ ETerm (Enforce condTerm) TBool
+    ETerm TBool condTerm <- translateNode cond
+    pure $ ETerm TBool $ Enforce condTerm
 
   AST_Format formatStr vars -> do
-    ETerm formatStr' TStr <- translateNode formatStr
+    ETerm TStr formatStr' <- translateNode formatStr
     vars' <- for vars translateNode
-    pure $ ETerm (Format formatStr' vars') TStr
+    pure $ ETerm TStr $ Format formatStr' vars'
 
   AST_FormatTime formatStr time -> do
-    ETerm formatStr' TStr <- translateNode formatStr
-    ETerm time' TTime     <- translateNode time
-    pure $ ETerm (FormatTime formatStr' time') TStr
+    ETerm TStr formatStr' <- translateNode formatStr
+    ETerm TTime time'     <- translateNode time
+    pure $ ETerm TStr $ FormatTime formatStr' time'
 
   AST_ParseTime formatStr timeStr -> do
-    ETerm formatStr' TStr <- translateNode formatStr
-    ETerm timeStr' TStr   <- translateNode timeStr
-    pure $ ETerm (ParseTime (Just formatStr') timeStr') TTime
+    ETerm TStr formatStr' <- translateNode formatStr
+    ETerm TStr timeStr'   <- translateNode timeStr
+    pure $ ETerm TTime $ ParseTime (Just formatStr') timeStr'
 
   AST_Time timeStr -> do
-    ETerm timeStr' TStr <- translateNode timeStr
-    pure $ ETerm (ParseTime Nothing timeStr') TTime
+    ETerm TStr timeStr' <- translateNode timeStr
+    pure $ ETerm TTime $ ParseTime Nothing timeStr'
 
   AST_Hash val -> do
     val' <- translateNode val
-    pure $ ETerm (Hash val') TStr
+    pure $ ETerm TStr $ Hash val'
 
   AST_ReadKeyset nameA -> do
-    ETerm nameT TStr <- translateNode nameA
-    return $ ETerm (ReadKeySet nameT) TKeySet
+    ETerm TStr nameT <- translateNode nameA
+    return $ ETerm TKeySet $ ReadKeySet nameT
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
-      ETerm ksnT TStr <- translateNode ksA
+      ETerm TStr ksnT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ETerm (Enforce (NameAuthorized tid ksnT)) TBool
+      return $ ETerm TBool $ Enforce $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
-      ETerm ksT TKeySet <- translateNode ksA
+      ETerm TKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ETerm (Enforce (KsAuthorized tid ksT)) TBool
+      return $ ETerm TBool $ Enforce (KsAuthorized tid ksT)
 
   AST_Days days -> do
-    ETerm days' daysTy <- translateNode days
+    ETerm daysTy days' <- translateNode days
     case daysTy of
-      TInt     -> pure $ ETerm (inject $ IntArithOp Mul (60 * 60 * 24) days') TInt
-      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul (60 * 60 * 24) days') TDecimal
+      TInt     -> pure $ ETerm TInt     $ inject $ IntArithOp Mul (60 * 60 * 24) days'
+      TDecimal -> pure $ ETerm TDecimal $ inject $ DecArithOp Mul (60 * 60 * 24) days'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Hours hours -> do
-    ETerm hours' hoursTy <- translateNode hours
+    ETerm hoursTy hours' <- translateNode hours
     case hoursTy of
-      TInt     -> pure $ ETerm (inject $ IntArithOp Mul (60 * 60) hours') TInt
-      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul (60 * 60) hours') TDecimal
+      TInt     -> pure $ ETerm TInt     $ inject $ IntArithOp Mul (60 * 60) hours'
+      TDecimal -> pure $ ETerm TDecimal $ inject $ DecArithOp Mul (60 * 60) hours'
       _        -> throwError' $ BadTimeType astNode
 
   AST_Minutes minutes -> do
-    ETerm minutes' minutesTy <- translateNode minutes
+    ETerm minutesTy minutes' <- translateNode minutes
     case minutesTy of
-      TInt     -> pure $ ETerm (inject $ IntArithOp Mul 60 minutes') TInt
-      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul 60 minutes') TDecimal
+      TInt     -> pure $ ETerm TInt     $ inject $ IntArithOp Mul 60 minutes'
+      TDecimal -> pure $ ETerm TDecimal $ inject $ DecArithOp Mul 60 minutes'
       _        -> throwError' $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ETerm (lit (mkTime timeLit')) TTime
+    -> pure $ ETerm TTime $ lit (mkTime timeLit')
 
   AST_NFun_Basic fn args ->
     let mkComparison :: TranslateM ETerm
         mkComparison = case args of
           [a, b] -> do
-            ETerm a' ta <- translateNode a
-            ETerm b' tb <- translateNode b
+            ETerm ta a' <- translateNode a
+            ETerm tb b' <- translateNode b
             op <- case fn of
               ">"  -> pure Gt
               "<"  -> pure Lt
@@ -480,15 +480,15 @@ translateNode astNode = astContext astNode $ case astNode of
               _    -> throwError' $ MalformedComparison fn args
             case (ta, tb) of
               (TInt, TInt)         -> pure $
-                ETerm (PureTerm (IntegerComparison op a' b')) TBool
+                ETerm TBool $ PureTerm $ IntegerComparison op a' b'
               (TDecimal, TDecimal) -> pure $
-                ETerm (PureTerm (DecimalComparison op a' b')) TBool
+                ETerm TBool $ PureTerm $ DecimalComparison op a' b'
               (TTime, TTime)       -> pure $
-                ETerm (PureTerm (TimeComparison op a' b')) TBool
+                ETerm TBool $ PureTerm $ TimeComparison op a' b'
               (TStr, TStr)         -> pure $
-                ETerm (PureTerm (StringComparison op a' b')) TBool
+                ETerm TBool $ PureTerm $ StringComparison op a' b'
               (TBool, TBool)       -> pure $
-                ETerm (PureTerm (BoolComparison op a' b')) TBool
+                ETerm TBool $ PureTerm $ BoolComparison op a' b'
               (_, _) -> case typeEq ta tb of
                 Just Refl -> throwError' $ MalformedComparison fn args
                 _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
@@ -497,48 +497,48 @@ translateNode astNode = astContext astNode $ case astNode of
         mkKeySetEqNeq :: TranslateM ETerm
         mkKeySetEqNeq = case args of
           [a, b] -> do
-            ETerm a' TKeySet <- translateNode a
-            ETerm b' TKeySet <- translateNode b
+            ETerm TKeySet a' <- translateNode a
+            ETerm TKeySet b' <- translateNode b
             op <- case fn of
               "="  -> pure Eq'
               "!=" -> pure Neq'
               _    -> throwError' $ MalformedComparison fn args
-            pure $ ETerm (PureTerm (KeySetEqNeq op a' b')) TBool
+            pure $ ETerm TBool $ PureTerm $ KeySetEqNeq op a' b'
           _ -> throwError' $ MalformedComparison fn args
 
         mkObjEqNeq :: TranslateM ETerm
         mkObjEqNeq = case args of
           [a, b] -> do
-            EObject a' _ <- translateNode a
-            EObject b' _ <- translateNode b
+            EObject _ a' <- translateNode a
+            EObject _ b' <- translateNode b
             op <- case fn of
               "="  -> pure Eq'
               "!=" -> pure Neq'
               _    -> throwError' $ MalformedComparison fn args
-            pure $ ETerm (PureTerm (ObjectEqNeq op a' b')) TBool
+            pure $ ETerm TBool $ PureTerm $ ObjectEqNeq op a' b'
           _ -> throwError' $ MalformedComparison fn args
 
         mkLogical :: TranslateM ETerm
         mkLogical = case args of
           [a] -> do
-            ETerm a' TBool <- translateNode a
+            ETerm TBool a' <- translateNode a
             case fn of
-              "not" -> pure $ ETerm (PureTerm $ Logical NotOp [a']) TBool
+              "not" -> pure $ ETerm TBool $ PureTerm $ Logical NotOp [a']
               _     -> throwError' $ MalformedComparison fn args
           [a, b] -> do
-            ETerm a' TBool <- translateNode a
-            ETerm b' TBool <- translateNode b
+            ETerm TBool a' <- translateNode a
+            ETerm TBool b' <- translateNode b
             case fn of
-              "and" -> pure $ ETerm (PureTerm $ Logical AndOp [a', b']) TBool
-              "or"  -> pure $ ETerm (PureTerm $ Logical OrOp [a', b']) TBool
+              "and" -> pure $ ETerm TBool $ PureTerm $ Logical AndOp [a', b']
+              "or"  -> pure $ ETerm TBool $ PureTerm $ Logical OrOp [a', b']
               _     -> throwError' $ MalformedLogicalOp fn args
           _ -> throwError' $ MalformedLogicalOp fn args
 
         mkArith :: TranslateM ETerm
         mkArith = case args of
           [a, b] -> do
-            ETerm a' tyA <- translateNode a
-            ETerm b' tyB <- translateNode b
+            ETerm tyA a' <- translateNode a
+            ETerm tyB b' <- translateNode b
             if
               | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
                 -> let opFromName = \case
@@ -551,57 +551,57 @@ translateNode astNode = astContext astNode $ case astNode of
                          _             -> error "impossible"
                  in case (tyA, tyB) of
                    (TInt, TInt)         -> pure $
-                     ETerm (inject $ IntArithOp (opFromName fn) a' b') TInt
+                     ETerm TInt     $ inject $ IntArithOp (opFromName fn) a' b'
                    (TDecimal, TDecimal) -> pure $
-                     ETerm (inject $ DecArithOp (opFromName fn) a' b') TDecimal
+                     ETerm TDecimal $ inject $ DecArithOp (opFromName fn) a' b'
                    (TInt, TDecimal)     -> pure $
-                     ETerm (inject $ IntDecArithOp (opFromName fn) a' b') TDecimal
+                     ETerm TDecimal $ inject $ IntDecArithOp (opFromName fn) a' b'
                    (TDecimal, TInt)     -> pure $
-                     ETerm (inject $ DecIntArithOp (opFromName fn) a' b') TDecimal
+                     ETerm TDecimal $ inject $ DecIntArithOp (opFromName fn) a' b'
                    _ -> throwError' $ MalformedArithOp fn args
               | otherwise -> case (tyA, tyB, fn) of
                 (TDecimal, TInt, "round")   -> pure $
-                  ETerm (inject $ RoundingLikeOp2 Round a' b') TDecimal
+                  ETerm TDecimal $ inject $ RoundingLikeOp2 Round a' b'
                 (TDecimal, TInt, "ceiling") -> pure $
-                  ETerm (inject $ RoundingLikeOp2 Ceiling a' b') TDecimal
+                  ETerm TDecimal $ inject $ RoundingLikeOp2 Ceiling a' b'
                 (TDecimal, TInt, "floor")   -> pure $
-                  ETerm (inject $ RoundingLikeOp2 Floor a' b') TDecimal
+                  ETerm TDecimal $ inject $ RoundingLikeOp2 Floor a' b'
                 _ -> throwError' $ MalformedArithOp fn args
           [a] -> do
-            ETerm a' ty <- translateNode a
+            ETerm ty a' <- translateNode a
             case (fn, ty) of
-              ("-",    TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Negate a') TInt
-              ("sqrt", TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Sqrt a') TInt
-              ("ln",   TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Ln a') TInt
-              ("exp",  TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Exp a') TInt
-              ("abs",  TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Abs a') TInt
+              ("-",    TInt) -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Negate a'
+              ("sqrt", TInt) -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Sqrt a'
+              ("ln",   TInt) -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Ln a'
+              ("exp",  TInt) -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Exp a'
+              ("abs",  TInt) -> pure $ ETerm TInt $ inject $ IntUnaryArithOp Abs a'
 
-              ("-",    TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Negate a') TDecimal
-              ("sqrt", TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Sqrt a') TDecimal
-              ("ln",   TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Ln a') TDecimal
-              ("exp",  TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Exp a') TDecimal
-              ("abs",  TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Abs a') TDecimal
+              ("-",    TDecimal) -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Negate a'
+              ("sqrt", TDecimal) -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Sqrt a'
+              ("ln",   TDecimal) -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Ln a'
+              ("exp",  TDecimal) -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Exp a'
+              ("abs",  TDecimal) -> pure $ ETerm TDecimal $ inject $ DecUnaryArithOp Abs a'
 
-              ("round",   TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Round a') TInt
-              ("ceiling", TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Ceiling a') TInt
-              ("floor",   TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Floor a') TInt
+              ("round",   TDecimal) -> pure $ ETerm TInt $ inject $ RoundingLikeOp1 Round a'
+              ("ceiling", TDecimal) -> pure $ ETerm TInt $ inject $ RoundingLikeOp1 Ceiling a'
+              ("floor",   TDecimal) -> pure $ ETerm TInt $ inject $ RoundingLikeOp1 Floor a'
               _         -> throwError' $ MalformedArithOp fn args
           _ -> throwError' $ MalformedArithOp fn args
 
         mkConcat :: TranslateM ETerm
         mkConcat = case (fn, args) of
           ("+", [a, b]) -> do
-            ETerm a' TStr <- translateNode a
-            ETerm b' TStr <- translateNode b
-            pure (ETerm (PureTerm $ StrConcat a' b') TStr)
+            ETerm TStr a' <- translateNode a
+            ETerm TStr b' <- translateNode b
+            pure $ ETerm TStr $ PureTerm $ StrConcat a' b'
           _ -> mzero
 
         mkMod :: TranslateM ETerm
         mkMod = case (fn, args) of
           ("mod", [a, b]) -> do
-            ETerm a' TInt <- translateNode a
-            ETerm b' TInt <- translateNode b
-            pure (ETerm (inject $ ModOp a' b') TInt)
+            ETerm TInt a' <- translateNode a
+            ETerm TInt b' <- translateNode b
+            pure $ ETerm TInt $ inject $ ModOp a' b'
           _ -> mzero
 
     in asum [mkMod, mkArith, mkComparison, mkKeySetEqNeq, mkObjEqNeq,
@@ -609,26 +609,26 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do
-    ETerm row' TStr <- translateNode row
-    EObject obj' schema <- translateNode obj
-    tid <- tagWrite node schema
-    pure $ ETerm (Write tid (TableName (T.unpack tn)) row' obj') TStr
+    ETerm TStr row'     <- translateNode row
+    EObject schema obj' <- translateNode obj
+    tid                 <- tagWrite node schema
+    pure $ ETerm TStr $ Write tid (TableName (T.unpack tn)) row' obj'
 
   AST_If _ cond tBranch fBranch -> do
-    ETerm cond' TBool <- translateNode cond
-    ETerm a ta <- translateNode tBranch
-    ETerm b tb <- translateNode fBranch
+    ETerm TBool cond' <- translateNode cond
+    ETerm ta a <- translateNode tBranch
+    ETerm tb b <- translateNode fBranch
     case typeEq ta tb of
-      Just Refl -> pure $ ETerm (IfThenElse cond' a b) ta
+      Just Refl -> pure $ ETerm ta $ IfThenElse cond' a b
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
-  AST_NFun _node "pact-version" [] -> pure $ ETerm PactVersion TStr
+  AST_NFun _node "pact-version" [] -> pure $ ETerm TStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
     schema          <- translateSchema (_aTy schemaNode)
-    ETerm key' TStr <- translateNode key
+    ETerm TStr key' <- translateNode key
     tid             <- tagRead node schema
-    let readT = EObject (Read tid (TableName (T.unpack table)) schema key') schema
+    let readT = EObject schema $ Read tid (TableName (T.unpack table)) schema key'
     nodeContext node $
       translateObjBinding bindings schema body readT
 
@@ -641,26 +641,26 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_AddTime time seconds
     | seconds ^. aNode . aTy == TyPrim TyInteger ||
       seconds ^. aNode . aTy == TyPrim TyDecimal -> do
-      ETerm time' TTime <- translateNode time
-      ETerm seconds' ty <- translateNode seconds
+      ETerm TTime time' <- translateNode time
+      ETerm ty seconds' <- translateNode seconds
 
       case ty of
         TInt ->
-          pure (ETerm (PureTerm (IntAddTime time' seconds')) TTime)
+          pure $ ETerm TTime $ PureTerm $ IntAddTime time' seconds'
         TDecimal ->
-          pure (ETerm (PureTerm (DecAddTime time' seconds')) TTime)
+          pure $ ETerm TTime $ PureTerm $ DecAddTime time' seconds'
         _ -> throwError' $ MonadFailure $
           "Unexpected type for seconds in add-time " ++ show ty
 
   AST_Read node table key -> do
-    ETerm key' TStr <- translateNode key
+    ETerm TStr key' <- translateNode key
     schema <- translateSchema (_aTy node)
     tid <- tagRead node schema
-    pure (EObject (Read tid (TableName (T.unpack table)) schema key') schema)
+    pure $ EObject schema $ Read tid (TableName (T.unpack table)) schema key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
-    ETerm key' TStr <- translateNode key
+    ETerm TStr key' <- translateNode key
     (Schema fields) <- translateSchema (_aTy node)
     columns' <- fmap Set.fromList $ for columns $ \case
       AST_Lit (LString col) -> pure col
@@ -669,17 +669,16 @@ translateNode astNode = astContext astNode $ case astNode of
           Map.filterWithKey (\k _ -> k `Set.member` columns') fields
 
     tid <- tagRead node schema
-    pure $ EObject
-      (Read tid (TableName (T.unpack table)) schema key')
-      schema
+    pure $ EObject schema $
+      Read tid (TableName (T.unpack table)) schema key'
 
   AST_At node colName obj -> do
-    EObject obj' schema <- translateNode obj
-    ETerm colName' TStr <- translateNode colName
+    EObject schema obj' <- translateNode obj
+    ETerm TStr colName' <- translateNode colName
     ty <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'         -> ETerm   (PureTerm (At schema colName' obj' ty)) ty'
-      EObjectTy schema' -> EObject (PureTerm (At schema colName' obj' ty)) schema'
+      EType ty'         -> ETerm   ty'     $ PureTerm $ At schema colName' obj' ty
+      EObjectTy schema' -> EObject schema' $ PureTerm $ At schema colName' obj' ty
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -690,7 +689,7 @@ translateNode astNode = astContext astNode $ case astNode of
       v' <- translateNode v
       pure (k', v')
     schema <- translateSchema (_aTy node)
-    pure $ EObject (PureTerm $ LiteralObject $ Map.fromList kvs') schema
+    pure $ EObject schema $ PureTerm $ LiteralObject $ Map.fromList kvs'
 
   --
   -- TODO: more cases.
