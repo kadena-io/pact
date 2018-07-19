@@ -425,7 +425,7 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 -- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Float a, Show a, SymWord a, SMTValue a)
+type SimpleType a = (Show a, SymWord a, SMTValue a)
 
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
