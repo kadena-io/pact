@@ -208,7 +208,7 @@ symIs feat sym = symbol feat == sym
 -- bundled with GHC.
 --
 
-#define PAT(sfeat, ffeat) pattern sfeat :: Text ; pattern sfeat <- (symIs ffeat -> True)
+#define PAT(symbol, feat) pattern symbol :: Text ; pattern symbol <- (symIs feat -> True)
 
 PAT(SAddition, FAddition)
 PAT(SSubtraction, FSubtraction)
