@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeOperators         #-}
 module Pact.Analyze.AnalyzeNumerical where
 
 import           Control.Lens               (over)
@@ -13,12 +14,9 @@ import           Data.SBV                   (EqSymbolic ((.==)), SymWord,
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Numerical
-import           Pact.Analyze.Term
 import           Pact.Analyze.Types         hiding (tableName)
 
--- TODO: type families would be nicer
-class (MonadError AnalyzeFailure m) => Analyzer m where --  term eterm
-  -- | m -> term, m -> eterm where
+class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   type TermOf m   :: * -> *
   type ETermOf m  :: *
   analyze         :: (Show a, SymWord a) => TermOf m a -> m (S a)
@@ -26,16 +24,8 @@ class (MonadError AnalyzeFailure m) => Analyzer m where --  term eterm
   analyzeE        :: ETermOf m -> m (EType, AVal)
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
 
--- TODO: replace with InjectPure
-class SymbolicTerm term where
-  injectS :: S a -> term a
-
-instance SymbolicTerm Term      where injectS = PureTerm      . Sym
-instance SymbolicTerm Prop      where injectS = PureProp      . Sym
-instance SymbolicTerm Invariant where injectS = PureInvariant . Sym
-
 analyzeNumerical
-  :: (Analyzer m, SymbolicTerm (TermOf m))
+  :: (Analyzer m, S :<: TermOf m)
   => Numerical (TermOf m) a -> m (S a)
 analyzeNumerical (DecArithOp op x y)      = analyzeDecArithOp op x y
 analyzeNumerical (IntArithOp op x y)      = analyzeIntArithOp op x y
@@ -181,7 +171,7 @@ banker'sMethod x =
 -- return: SReal        := -100.15
 analyzeRoundingLikeOp2
   :: forall m
-   . (Analyzer m, SymbolicTerm (TermOf m))
+   . (Analyzer m, S :<: TermOf m)
   => RoundingLikeOp
   -> TermOf m Decimal
   -> TermOf m Integer
@@ -191,5 +181,5 @@ analyzeRoundingLikeOp2 op x precision = do
   precision' <- analyze precision
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 op (injectS x'' :: TermOf m Decimal)
+  x''' <- analyzeRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift

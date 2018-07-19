@@ -83,7 +83,3 @@ data Numerical t a where
 
 deriving instance (Show (t Decimal), Show (t Integer), Show a) => Show (Numerical t a)
 deriving instance (Eq (t Decimal), Eq (t Integer), Eq a) => Eq (Numerical t a)
-
-class InjectNumerical t where
-  injectNumerical  :: Numerical t a -> t a
-  projectNumerical :: t a -> Maybe (Numerical t a)

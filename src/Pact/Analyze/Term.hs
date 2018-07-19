@@ -1,11 +1,13 @@
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE PatternSynonyms    #-}
-{-# LANGUAGE Rank2Types         #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeOperators      #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeOperators         #-}
 
 module Pact.Analyze.Term where
 
@@ -86,29 +88,35 @@ deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
 deriving instance Show a => Show (PureTerm ETerm Term a)
 
+instance S :<: Term where
+  inject = PureTerm . Sym
+  project = \case
+    PureTerm (Sym a) -> Just a
+    _                -> Nothing
+
 lit :: SymWord a => a -> Term a
 lit = PureTerm . Sym . literalS
 
-instance InjectNumerical Term where
-  injectNumerical = PureTerm . Numerical
-  projectNumerical (PureTerm (Numerical a)) = Just a
-  projectNumerical _             = Nothing
+instance Numerical Term :<: Term where
+  inject = PureTerm . Numerical
+  project (PureTerm (Numerical a)) = Just a
+  project _                        = Nothing
 
 instance Num (Term Integer) where
   fromInteger = lit . fromInteger
-  (+)    = injectNumerical ... IntArithOp Add
-  (*)    = injectNumerical ... IntArithOp Mul
-  abs    = injectNumerical .   IntUnaryArithOp Abs
-  signum = injectNumerical .   IntUnaryArithOp Signum
-  negate = injectNumerical .   IntUnaryArithOp Negate
+  (+)    = inject ... IntArithOp Add
+  (*)    = inject ... IntArithOp Mul
+  abs    = inject .   IntUnaryArithOp Abs
+  signum = inject .   IntUnaryArithOp Signum
+  negate = inject .   IntUnaryArithOp Negate
 
 instance Num (Term Decimal) where
   fromInteger = lit . mkDecimal . fromInteger
-  (+)    = injectNumerical ... DecArithOp Add
-  (*)    = injectNumerical ... DecArithOp Mul
-  abs    = injectNumerical .   DecUnaryArithOp Abs
-  signum = injectNumerical .   DecUnaryArithOp Signum
-  negate = injectNumerical .   DecUnaryArithOp Negate
+  (+)    = inject ... DecArithOp Add
+  (*)    = inject ... DecArithOp Mul
+  abs    = inject .   DecUnaryArithOp Abs
+  signum = inject .   DecUnaryArithOp Signum
+  negate = inject .   DecUnaryArithOp Negate
 
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show, HasKind, SymWord)

@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
@@ -547,8 +548,29 @@ data PropSpecific a where
 deriving instance Eq a => Eq (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
 
-inject :: PropSpecific a -> Prop a
-inject = PropSpecific
+class sub :<: sup where
+  inject  :: sub a -> sup a
+  project :: sup a -> Maybe (sub a)
+
+pattern Inj :: sub :<: sup => sub a -> sup a
+pattern Inj a <- (project -> Just a) where
+  Inj a = inject a
+
+instance PropSpecific :<: Prop where
+  inject = PropSpecific
+  project = \case
+    PropSpecific a -> Just a
+    _              -> Nothing
+
+instance Numerical Prop :<: Prop where
+  inject = PureProp . Numerical
+  project (PureProp (Numerical a)) = Just a
+  project _                        = Nothing
+
+instance Numerical Invariant :<: Invariant where
+  inject = PureInvariant . Numerical
+  project (PureInvariant (Numerical a)) = Just a
+  project _                             = Nothing
 
 data PureTerm et t a where
   Lit :: a -> PureTerm et t a
@@ -611,6 +633,12 @@ data Prop a where
   -- variable
   PVar   :: VarId -> Text -> Prop a
 
+instance S :<: Prop where
+  inject = PureProp . Sym
+  project = \case
+    PureProp (Sym a) -> Just a
+    _                -> Nothing
+
 deriving instance Eq a => Eq (Prop a)
 deriving instance Show a => Show (Prop a)
 
@@ -640,11 +668,6 @@ pattern PLogical op args = PureProp (Logical op args)
 
 pattern PStrLength :: Prop String -> Prop Integer
 pattern PStrLength str = PureProp (StrLength str)
-
-instance InjectNumerical Prop where
-  injectNumerical = PureProp . Numerical
-  projectNumerical (PureProp (Numerical a)) = Just a
-  projectNumerical _              = Nothing
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = PureProp (Logical AndOp [a, b])
@@ -682,11 +705,11 @@ instance Boolean (Prop Bool) where
 
 instance Num (Prop Integer) where
   fromInteger = PLit . fromInteger
-  (+)         = injectNumerical ... IntArithOp Add
-  (*)         = injectNumerical ... IntArithOp Mul
-  abs         = injectNumerical .   IntUnaryArithOp Abs
-  signum      = injectNumerical .   IntUnaryArithOp Signum
-  negate      = injectNumerical .   IntUnaryArithOp Negate
+  (+)         = inject ... IntArithOp Add
+  (*)         = inject ... IntArithOp Mul
+  abs         = inject .   IntUnaryArithOp Abs
+  signum      = inject .   IntUnaryArithOp Signum
+  negate      = inject .   IntUnaryArithOp Negate
 
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
@@ -694,11 +717,11 @@ mkDecimal (Decimal.Decimal places mantissa) = fromRational $
 
 instance Num (Prop Decimal) where
   fromInteger = PLit . mkDecimal . fromInteger
-  (+)         = injectNumerical ... DecArithOp Add
-  (*)         = injectNumerical ... DecArithOp Mul
-  abs         = injectNumerical .   DecUnaryArithOp Abs
-  signum      = injectNumerical .   DecUnaryArithOp Signum
-  negate      = injectNumerical .   DecUnaryArithOp Negate
+  (+)         = inject ... DecArithOp Add
+  (*)         = inject ... DecArithOp Mul
+  abs         = inject .   DecUnaryArithOp Abs
+  signum      = inject .   DecUnaryArithOp Signum
+  negate      = inject .   DecUnaryArithOp Negate
 
 -- | An argument to a function
 data Arg = Arg
@@ -916,6 +939,12 @@ data Invariant a
   | IVar Text
   deriving (Show, Eq)
 
+instance S :<: Invariant where
+  inject = PureInvariant . Sym
+  project = \case
+    PureInvariant (Sym a) -> Just a
+    _                     -> Nothing
+
 data EInvariant where
   EInvariant       :: SimpleType a => Type a -> Invariant a      -> EInvariant
   EObjectInvariant ::                 Schema -> Invariant Object -> EInvariant
@@ -936,11 +965,6 @@ pattern ILiteral a = PureInvariant (Lit a)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)
-
-instance InjectNumerical Invariant where
-  injectNumerical = PureInvariant . Numerical
-  projectNumerical (PureInvariant (Numerical a)) = Just a
-  projectNumerical _                             = Nothing
 
 data SomeSchemaInvariant where
   SomeSchemaInvariant :: (Show a, Eq a) => Invariant a -> Type a -> SomeSchemaInvariant
