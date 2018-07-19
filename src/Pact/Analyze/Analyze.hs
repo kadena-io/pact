@@ -1288,8 +1288,8 @@ analyzePureO (Var vid name) = do
 -- TODO(joel): I don't think an object can appear hear. Get more clarity on
 -- this.
 analyzePureO (Lit obj)     = pure obj
-analyzePureO (Sym _)       = vacuous "an object cannot be a symbolic value"
-analyzePureO (Numerical _) = vacuous "an object cannob be a numerical value"
+analyzePureO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
+analyzePureO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 
 
 analyzeCheck :: Check -> Query (S Bool)
