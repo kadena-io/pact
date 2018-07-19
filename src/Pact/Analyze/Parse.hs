@@ -46,10 +46,9 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Numerical
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types           hiding (UserType)
 import           Pact.Analyze.Util
 
 throwErrorT :: MonadError String m => Text -> m a

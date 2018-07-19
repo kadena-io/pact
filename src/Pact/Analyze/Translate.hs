@@ -42,9 +42,7 @@ import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Analyze.Numerical
 import           Pact.Analyze.Patterns
-import           Pact.Analyze.Term
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 

@@ -60,7 +60,6 @@ library
       Pact.Analyze.Check
       Pact.Analyze.Errors
       Pact.Analyze.LegacySFunArray
-      Pact.Analyze.Numerical
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Patterns
@@ -68,6 +67,11 @@ library
       Pact.Analyze.Term
       Pact.Analyze.Translate
       Pact.Analyze.Types
+      Pact.Analyze.Types.Languages
+      Pact.Analyze.Types.Model
+      Pact.Analyze.Types.Numerical
+      Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.Terms
       Pact.Analyze.Util
       Pact.ApiReq
       Pact.Bench

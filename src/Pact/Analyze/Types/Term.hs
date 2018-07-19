@@ -9,16 +9,17 @@
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TypeOperators         #-}
 
-module Pact.Analyze.Term where
+module Pact.Analyze.Types.Term where
 
 import           Data.Data          (Data)
 import           Data.SBV           (HasKind, SymWord)
 import           Data.Text          (Text)
 import           Prelude            hiding (Float)
 
-import           Pact.Analyze.Numerical
-import           Pact.Analyze.PrenexNormalize ()
-import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Languages
+import           Pact.Analyze.Types.Model
+import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Util
 
 --
