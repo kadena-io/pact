@@ -605,6 +605,10 @@ data PropSpecific a where
 deriving instance Eq a => Eq (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
 
+-- | Subtyping relation from "Data types a la carte".
+--
+-- This can be read as "subtype", where we can always 'inject' the subtype into
+-- its supertype and sometimes 'project' the supertype down.
 class sub :<: sup where
   inject  :: sub a -> sup a
   project :: sup a -> Maybe (sub a)
@@ -653,7 +657,10 @@ data PureTerm t a where
   -- | Adds a 'Decimal' expression to a 'Time' expression
   DecAddTime :: t Time -> t Decimal -> PureTerm t Time
 
-  -- comparison
+  -- comparison. Note that while it's cumbersome to define five different
+  -- monomorphized comparisons, the alternative is implementing Eq by hand
+  -- here.
+
   -- | A 'ComparisonOp' expression over two 'Integer' expressions
   IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> PureTerm t Bool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
