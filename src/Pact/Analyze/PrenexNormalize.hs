@@ -6,31 +6,25 @@
 
 module Pact.Analyze.PrenexNormalize (prenexConvert) where
 
-import           Data.Bifunctor       (bimap)
-import           Prelude              hiding (Float)
-import           Pact.Types.Lang      hiding (KeySet)
+import           Data.Bifunctor     (bimap)
+import           Prelude            hiding (Float)
+import           Pact.Types.Lang    hiding (KeySet)
 
 import           Pact.Analyze.Types
 
 data Quantifier
-  = Forall' UniqueId Text Ty
-  | Exists' UniqueId Text Ty
+  = Forall' VarId Text QType
+  | Exists' VarId Text QType
 
 class Float a where
   float :: Prop a -> ([Quantifier], Prop a)
 
 #define STANDARD_INSTANCES                                             \
-  PLit{}  -> ([], p);                                                  \
-  PSym{}  -> ([], p);                                                  \
-  Result  -> ([], p);                                                  \
-  Forall uid name ty prop ->                                           \
-    let (qs, prop') = float prop                                       \
-    in (Forall' uid name ty:qs, prop');                                \
-  Exists uid name ty prop ->                                           \
-    let (qs, prop') = float prop                                       \
-    in (Exists' uid name ty:qs, prop');                                \
-  PVar _ _ -> ([], p);                                                 \
-  PAt schema a b ty -> PAt schema <$> float a <*> float b <*> pure ty;
+  PLit{} -> ([], p);                                                  \
+  PSym{} -> ([], p);                                                  \
+  Result -> ([], p);                                                  \
+  PVar{} -> ([], p);                                                 \
+  PAt schema a b ty -> PAt schema a <$> float b <*> pure ty;
 
 instance Float Integer where
   float = floatIntegerQuantifiers
@@ -48,7 +42,9 @@ instance Float Time where
   float = floatTimeQuantifiers
 
 instance Float Object where
-  float p = case p of STANDARD_INSTANCES
+  float p = case p of
+    STANDARD_INSTANCES
+    PLiteralObject{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of STANDARD_INSTANCES
@@ -69,7 +65,9 @@ floatIntegerQuantifiers p = case p of
   PModOp a b            -> PModOp              <$> float a <*> float b
   PRoundingLikeOp1 op a -> PRoundingLikeOp1 op <$> float a
   IntCellDelta tn cn a  -> IntCellDelta tn cn  <$> float a
-  IntColumnDelta{} -> ([], p)
+  RowWriteCount tn pRk  -> RowWriteCount tn    <$> float pRk
+  RowReadCount tn pRk   -> RowReadCount tn     <$> float pRk
+  IntColumnDelta{}      -> ([], p)
 
 floatDecimalQuantifiers :: Prop Decimal -> ([Quantifier], Prop Decimal)
 floatDecimalQuantifiers p = case p of
@@ -97,12 +95,19 @@ floatBoolQuantifiers :: Prop Bool -> ([Quantifier], Prop Bool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
 
+  Forall uid name ty prop ->
+    let (qs, prop') = float prop
+    in (Forall' uid name ty:qs, prop')
+  Exists uid name ty prop ->
+    let (qs, prop') = float prop
+    in (Exists' uid name ty:qs, prop')
+
   Abort              -> ([], p)
   Success            -> ([], p)
   TableWrite{}       -> ([], p)
   TableRead{}        -> ([], p)
   ColumnWrite{}      -> ([], p)
-  CellIncrease{}     -> ([], p)
+  ColumnRead{}       -> ([], p)
   KsNameAuthorized{} -> ([], p)
   RowEnforced{}      -> ([], p)
 
@@ -111,6 +116,7 @@ floatBoolQuantifiers p = case p of
   PTimeComparison    op a b -> PTimeComparison    op <$> float a <*> float b
   PBoolComparison    op a b -> PBoolComparison    op <$> float a <*> float b
   PStringComparison  op a b -> PStringComparison  op <$> float a <*> float b
+  PObjectEqNeq       op a b -> PObjectEqNeq       op <$> float a <*> float b
   PKeySetEqNeq       op a b -> PKeySetEqNeq       op <$> float a <*> float b
 
   PAnd a b     -> PAnd <$> float a <*> float b
@@ -118,8 +124,8 @@ floatBoolQuantifiers p = case p of
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
   PLogical _ _ -> error ("ill-defined logical op: " ++ show p)
 
-  RowRead tn pRk     -> RowRead tn <$> float pRk
-  RowWrite tn pRk    -> RowWrite tn <$> float pRk
+  RowRead  tn pRk -> RowRead  tn <$> float pRk
+  RowWrite tn pRk -> RowWrite tn <$> float pRk
 
 reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
 reassembleFloated qs prop =
