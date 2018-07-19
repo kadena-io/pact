@@ -29,24 +29,25 @@ import           Pact.Analyze.Util
 type ETerm = Existential Term
 
 data Term ret where
-  PureTerm :: PureTerm Term a -> Term a
+  PureTerm        :: PureTerm Term a -> Term a
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
   -- `Symbolic` in its stack.
-  IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
-
-  -- ^ should be pure
-  -- v term-specific
+  --
+  -- TODO(joel): In principle this could be pure and applied to all the
+  -- languages. Unfortunately, we can't add this to props because `Query` has
+  -- `Symbolic` in its stack, so it can't do an `ite`.
+  IfThenElse      :: Term Bool -> Term a -> Term a -> Term a
 
   -- Variable binding
-  Let            :: Text -> VarId -> ETerm -> Term a -> Term a
+  Let             :: Text -> VarId -> ETerm -> Term a -> Term a
 
   -- Control flow
-  Sequence       :: ETerm     -> Term a ->           Term a
+  Sequence        :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
-  Enforce        :: Term Bool -> Term Bool
+  Enforce         :: Term Bool -> Term Bool
 
   -- Keyset access
   ReadKeySet      :: Term String -> Term KeySet
@@ -54,8 +55,8 @@ data Term ret where
   NameAuthorized  :: TagId -> Term String -> Term Bool
 
   -- Table access
-  Read           :: TagId -> TableName -> Schema      -> Term String -> Term Object
-  Write          :: TagId -> TableName -> Term String -> Term Object -> Term String
+  Read            :: TagId -> TableName -> Schema      -> Term String -> Term Object
+  Write           :: TagId -> TableName -> Term String -> Term Object -> Term String
 
   PactVersion     :: Term String
 
