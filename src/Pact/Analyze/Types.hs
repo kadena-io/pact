@@ -955,7 +955,7 @@ userShow = userShowsPrec 0
 -- * logical operations
 --
 -- The language is stateless.
-data Invariant a = PureInvariant (PureTerm EInvariant Invariant a)
+newtype Invariant a = PureInvariant (PureTerm EInvariant Invariant a)
   deriving (Show, Eq)
 
 instance S :<: Invariant where
