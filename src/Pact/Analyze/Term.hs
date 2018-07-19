@@ -13,7 +13,6 @@ module Pact.Analyze.Term where
 
 import           Data.Data          (Data)
 import           Data.SBV           (HasKind, SymWord)
-import           Data.SBV.Control   (SMTValue)
 import           Data.Text          (Text)
 import           Prelude            hiding (Float)
 
@@ -27,25 +26,10 @@ import           Pact.Analyze.Util
 --       can use DeriveAnyClass and GND in the same file.
 --
 
-data ETerm where
-  -- TODO: remove Show (add constraint c?)
-  ETerm
-    :: (Float a, Show a, SymWord a, SMTValue a)
-    => Term a -> Type a -> ETerm
-  EObject
-    :: Term Object -> Schema -> ETerm
-
-mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
-mapETerm f term = case term of
-  ETerm term' ty    -> ETerm (f term') ty
-  EObject term' sch -> EObject (f term') sch
-
-etermEType :: ETerm -> EType
-etermEType (ETerm _ ety)   = EType ety
-etermEType (EObject _ sch) = EObjectTy sch
+type ETerm = Existential Term
 
 data Term ret where
-  PureTerm :: PureTerm ETerm Term a -> Term a
+  PureTerm :: PureTerm Term a -> Term a
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
@@ -82,7 +66,7 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
-deriving instance Show a => Show (PureTerm ETerm Term a)
+deriving instance Show a => Show (PureTerm Term a)
 
 instance S :<: Term where
   inject = PureTerm . Sym
