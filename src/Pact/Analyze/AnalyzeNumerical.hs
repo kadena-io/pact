@@ -13,7 +13,6 @@ import           Data.SBV                   (EqSymbolic ((.==)), SymWord,
                                              sDiv, sMod, (.^))
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Numerical
 import           Pact.Analyze.Types         hiding (tableName)
 
 class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where

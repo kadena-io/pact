@@ -10,7 +10,6 @@ import qualified Data.Text                  as T
 
 import           Pact.Types.Lang            (Info, tShow)
 
-import           Pact.Analyze.Numerical
 import           Pact.Analyze.Types         hiding (tableName)
 
 data AnalyzeFailureNoLoc

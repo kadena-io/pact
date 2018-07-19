@@ -68,11 +68,9 @@ import           Pact.Types.Version         (pactVersion)
 import           Pact.Analyze.AnalyzeNumerical
 import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
-import           Pact.Analyze.Numerical
-import           Pact.Analyze.Orphans       ()
-import           Pact.Analyze.Term
-import           Pact.Analyze.Types         hiding (tableName)
-import qualified Pact.Analyze.Types         as Types
+import           Pact.Analyze.Orphans         ()
+import           Pact.Analyze.Types           hiding (tableName)
+import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 
 data AnalyzeEnv

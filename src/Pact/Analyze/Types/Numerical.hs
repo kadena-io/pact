@@ -1,7 +1,7 @@
 {-# language FlexibleInstances  #-}
 {-# language GADTs              #-}
 {-# language StandaloneDeriving #-}
-module Pact.Analyze.Numerical where
+module Pact.Analyze.Types.Numerical where
 
 import Data.SBV          (AlgReal)
 

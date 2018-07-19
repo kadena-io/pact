@@ -10,7 +10,6 @@ module Pact.Analyze.PrenexNormalize (prenexConvert) where
 import           Data.Bifunctor     (bimap)
 import           Prelude            hiding (Float)
 
-import           Pact.Analyze.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
