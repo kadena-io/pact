@@ -746,7 +746,7 @@ data Located a
     { _location :: Pact.Info
     , _located  :: a
     }
-  deriving (Eq, Functor)
+  deriving (Eq, Functor, Foldable, Traversable)
 
 deriving instance Show a => Show (Located a)
 

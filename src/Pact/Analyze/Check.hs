@@ -268,8 +268,8 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
 
-allocModelTags :: Info -> [Arg] -> ETerm -> [TagAllocation] -> Symbolic ModelTags
-allocModelTags funInfo args tm tagAllocs = ModelTags
+allocModelTags :: [Arg] -> Located ETerm -> [TagAllocation] -> Symbolic ModelTags
+allocModelTags args locatedTm tagAllocs = ModelTags
     <$> allocArgs
     <*> allocVars
     <*> allocReads
@@ -327,7 +327,7 @@ allocModelTags funInfo args tm tagAllocs = ModelTags
         (tid,) . Located info <$> alloc
 
     allocResult :: Symbolic (Located TVal)
-    allocResult = Located funInfo <$> case tm of
+    allocResult = sequence $ locatedTm <&> \case
       ETerm _ ty ->
         let ety = EType ty
         in (ety,) <$> allocAVal ety
@@ -430,7 +430,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      tags <- lift $ allocModelTags funInfo args tm tagAllocs
+      tags <- lift $ allocModelTags args (Located funInfo tm) tagAllocs
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis tables tm tags funInfo
 
@@ -480,7 +480,7 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
         withExcept translateToCheckFailure $
           runTranslation funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        tags <- lift $ allocModelTags funInfo args tm tagAllocs
+        tags <- lift $ allocModelTags args (Located funInfo tm) tagAllocs
         AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis check tables tm tags funInfo
         void $ lift $ SBV.output prop
