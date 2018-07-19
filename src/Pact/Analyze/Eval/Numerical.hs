@@ -1,49 +1,42 @@
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
-module Pact.Analyze.AnalyzeNumerical where
+module Pact.Analyze.Eval.Numerical where
 
-import           Control.Lens               (over)
-import           Control.Monad.Except       (MonadError)
-import           Data.SBV                   (EqSymbolic ((.==)), SymWord,
-                                             sDiv, sMod, (.^))
+import           Control.Lens            (over)
+import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
+                                          sMod, (.^))
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Types         hiding (tableName)
+import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types      hiding (tableName)
 
-class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
-  type TermOf m   :: * -> *
-  analyze         :: (Show a, SymWord a) => TermOf m a -> m (S a)
-  analyzeO        :: TermOf m Object -> m Object
-  throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
-  getVar          :: VarId -> m (Maybe AVal)
-
-analyzeNumerical
+evalNumerical
   :: (Analyzer m, S :<: TermOf m)
   => Numerical (TermOf m) a -> m (S a)
-analyzeNumerical (DecArithOp op x y)      = analyzeDecArithOp op x y
-analyzeNumerical (IntArithOp op x y)      = analyzeIntArithOp op x y
-analyzeNumerical (IntDecArithOp op x y)   = analyzeIntDecArithOp op x y
-analyzeNumerical (DecIntArithOp op x y)   = analyzeDecIntArithOp op x y
-analyzeNumerical (IntUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeNumerical (DecUnaryArithOp op x)   = analyzeUnaryArithOp op x
-analyzeNumerical (ModOp x y)              = analyzeModOp x y
-analyzeNumerical (RoundingLikeOp1 op x)   = analyzeRoundingLikeOp1 op x
-analyzeNumerical (RoundingLikeOp2 op x p) = analyzeRoundingLikeOp2 op x p
+evalNumerical (DecArithOp op x y)      = evalDecArithOp op x y
+evalNumerical (IntArithOp op x y)      = evalIntArithOp op x y
+evalNumerical (IntDecArithOp op x y)   = evalIntDecArithOp op x y
+evalNumerical (DecIntArithOp op x y)   = evalDecIntArithOp op x y
+evalNumerical (IntUnaryArithOp op x)   = evalUnaryArithOp op x
+evalNumerical (DecUnaryArithOp op x)   = evalUnaryArithOp op x
+evalNumerical (ModOp x y)              = evalModOp x y
+evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
+evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
-analyzeDecArithOp
+evalDecArithOp
   :: Analyzer m
   => ArithOp
   -> TermOf m Decimal
   -> TermOf m Decimal
   -> m (S Decimal)
-analyzeDecArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
+evalDecArithOp op xT yT = do
+  x <- eval xT
+  y <- eval yT
   case op of
     Add -> pure $ x + y
     Sub -> pure $ x - y
@@ -52,15 +45,15 @@ analyzeDecArithOp op xT yT = do
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-analyzeIntArithOp
+evalIntArithOp
   :: Analyzer m
   => ArithOp
   -> TermOf m Integer
   -> TermOf m Integer
   -> m (S Integer)
-analyzeIntArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
+evalIntArithOp op xT yT = do
+  x <- eval xT
+  y <- eval yT
   case op of
     Add -> pure $ x + y
     Sub -> pure $ x - y
@@ -69,15 +62,15 @@ analyzeIntArithOp op xT yT = do
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-analyzeIntDecArithOp
+evalIntDecArithOp
   :: Analyzer m
   => ArithOp
   -> TermOf m Integer
   -> TermOf m Decimal
   -> m (S Decimal)
-analyzeIntDecArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
+evalIntDecArithOp op xT yT = do
+  x <- eval xT
+  y <- eval yT
   case op of
     Add -> pure $ fromIntegralS x + y
     Sub -> pure $ fromIntegralS x - y
@@ -86,15 +79,15 @@ analyzeIntDecArithOp op xT yT = do
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-analyzeDecIntArithOp
+evalDecIntArithOp
   :: Analyzer m
   => ArithOp
   -> TermOf m Decimal
   -> TermOf m Integer
   -> m (S Decimal)
-analyzeDecIntArithOp op xT yT = do
-  x <- analyze xT
-  y <- analyze yT
+evalDecIntArithOp op xT yT = do
+  x <- eval xT
+  y <- eval yT
   case op of
     Add -> pure $ x + fromIntegralS y
     Sub -> pure $ x - fromIntegralS y
@@ -103,13 +96,13 @@ analyzeDecIntArithOp op xT yT = do
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-analyzeUnaryArithOp
+evalUnaryArithOp
   :: (Analyzer m, Num a, Show a, SymWord a)
   => UnaryArithOp
   -> TermOf m a
   -> m (S a)
-analyzeUnaryArithOp op term = do
-  x <- analyze term
+evalUnaryArithOp op term = do
+  x <- eval term
   case op of
     Negate -> pure $ negate x
     Sqrt   -> throwErrorNoLoc $ UnsupportedUnaryOp op
@@ -118,20 +111,20 @@ analyzeUnaryArithOp op term = do
     Abs    -> pure $ abs x
     Signum -> pure $ signum x
 
-analyzeModOp
+evalModOp
   :: Analyzer m
   => TermOf m Integer
   -> TermOf m Integer
   -> m (S Integer)
-analyzeModOp xT yT = sMod <$> analyze xT <*> analyze yT
+evalModOp xT yT = sMod <$> eval xT <*> eval yT
 
-analyzeRoundingLikeOp1
+evalRoundingLikeOp1
   :: Analyzer m
   => RoundingLikeOp
   -> TermOf m Decimal
   -> m (S Integer)
-analyzeRoundingLikeOp1 op x = do
-  x' <- analyze x
+evalRoundingLikeOp1 op x = do
+  x' <- eval x
   pure $ case op of
     -- The only SReal -> SInteger conversion function that sbv provides is
     -- sRealToSInteger (which realToIntegerS wraps), which computes the floor.
@@ -167,17 +160,17 @@ banker'sMethod x =
 -- x'': SReal           := -10015.234
 -- x''': SInteger       := -10015
 -- return: SReal        := -100.15
-analyzeRoundingLikeOp2
+evalRoundingLikeOp2
   :: forall m
    . (Analyzer m, S :<: TermOf m)
   => RoundingLikeOp
   -> TermOf m Decimal
   -> TermOf m Integer
   -> m (S Decimal)
-analyzeRoundingLikeOp2 op x precision = do
-  x'         <- analyze x
-  precision' <- analyze precision
+evalRoundingLikeOp2 op x precision = do
+  x'         <- eval x
+  precision' <- eval precision
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
-  x''' <- analyzeRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)
+  x''' <- evalRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)
   pure $ fromIntegralS x''' / fromIntegralS digitShift
