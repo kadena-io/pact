@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -365,10 +366,12 @@ isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
 
+-- Integer, Decimal, Bool, String, Time
+type SimpleType a = (Float a, Show a, SymWord a, SMTValue a)
+
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
-  EType     :: (Float a, Show a, SymWord a, SMTValue a)
-    => Type a -> Quantifiable q
+  EType     :: SimpleType a =>                    Type a -> Quantifiable q
   EObjectTy ::                                    Schema -> Quantifiable q
   QTable    ::                                              Quantifiable 'QAny
   QColumnOf :: TableName                                 -> Quantifiable 'QAny
@@ -653,10 +656,8 @@ pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = PureProp (Logical NotOp [a])
 
 data EProp where
-  EProp
-    :: (SymWord a, SMTValue a, Show a, Eq a, Float a)
-    => Type a -> Prop a -> EProp
-  EObjectProp :: Schema -> Prop Object -> EProp
+  EProp       :: SimpleType a => Type a -> Prop a      -> EProp
+  EObjectProp ::                 Schema -> Prop Object -> EProp
 
 deriving instance Show EProp
 
@@ -916,10 +917,8 @@ data Invariant a
   deriving (Show, Eq)
 
 data EInvariant where
-  EInvariant
-    :: (Float a, Show a, SymWord a, SMTValue a)
-    => Type a -> Invariant a -> EInvariant
-  EObjectInvariant :: Schema -> Invariant Object -> EInvariant
+  EInvariant       :: SimpleType a => Type a -> Invariant a      -> EInvariant
+  EObjectInvariant ::                 Schema -> Invariant Object -> EInvariant
 
 instance Eq EInvariant where
   EInvariant ta ia == EInvariant tb ib = case typeEq ta tb of
