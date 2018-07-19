@@ -71,7 +71,7 @@ import           Pact.Types.Typecheck      (AST,
                                             _utName), runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Analyze      hiding (invariants)
+import           Pact.Analyze.Eval         hiding (invariants)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Translate
