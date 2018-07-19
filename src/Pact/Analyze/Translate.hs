@@ -693,10 +693,6 @@ translateNode astNode = astContext astNode $ case astNode of
     schema <- translateSchema (_aTy node)
     pure $ EObject schema $ PureTerm $ LiteralObject $ Map.fromList kvs'
 
-  --
-  -- TODO: more cases.
-  --
-
   ast -> throwError' $ UnexpectedNode ast
 
 runTranslation
