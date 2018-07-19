@@ -1,0 +1,9 @@
+data:
+  module-admin-keyset: ["06c9c56daa8a068e1f19f5578cdf1797b047252e1ef0eb4a1809aa3c2226f61e"]
+  module-operate-keyset: ["acda99515bb9a27e054898e1632626db92a5379d3e62867a60eaba783e017fe0"]
+codeFile: auth.pact
+keyPairs:
+  - public: 06c9c56daa8a068e1f19f5578cdf1797b047252e1ef0eb4a1809aa3c2226f61e
+    secret: 7ce4bae38fccfe33b6344b8c260bffa21df085cf033b3dc99b4781b550e1e922
+  - public: acda99515bb9a27e054898e1632626db92a5379d3e62867a60eaba783e017fe0
+    secret: f894d9adb39cdb525ac1707ebedf2a1f401c21f2f2709e4ebafc4af72a18094e

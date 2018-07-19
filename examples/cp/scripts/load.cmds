@@ -1,0 +1,5 @@
+load demo/cp/01-auth.yaml
+load demo/cp/02-cash.yaml
+load demo/cp/03-orders.yaml
+load demo/cp/04-cp.yaml
+load demo/cp/05-create.yaml
