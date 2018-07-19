@@ -57,6 +57,7 @@ library
     exposed-modules:
       Pact.Analyze.Analyze
       Pact.Analyze.Check
+      Pact.Analyze.Feature
       Pact.Analyze.LegacySFunArray
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
