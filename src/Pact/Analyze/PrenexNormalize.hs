@@ -50,18 +50,18 @@ instance Float Time where
 instance Float Object where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuous "numerical can't be Object"
+    PureProp Numerical{} -> vacuousMatch "numerical can't be Object"
     PureProp LiteralObject{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuous "numerical can't be KeySet"
+    PureProp Numerical{} -> vacuousMatch "numerical can't be KeySet"
 
 instance Float Any where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuous "numerical can't be Any"
+    PureProp Numerical{} -> vacuousMatch "numerical can't be Any"
 
 flipQuantifier :: Quantifier -> Quantifier
 flipQuantifier = \case
@@ -110,13 +110,13 @@ floatDecimalQuantifiers p = case p of
 floatStringQuantifiers :: Prop String -> ([Quantifier], Prop String)
 floatStringQuantifiers p = case p of
   STANDARD_INSTANCES
-  PureProp Numerical{} -> vacuous "numerical can't be String"
+  PureProp Numerical{} -> vacuousMatch "numerical can't be String"
   PureProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
 
 floatTimeQuantifiers :: Prop Time -> ([Quantifier], Prop Time)
 floatTimeQuantifiers p = case p of
   STANDARD_INSTANCES
-  PureProp Numerical{} -> vacuous "numerical can't be Time"
+  PureProp Numerical{} -> vacuousMatch "numerical can't be Time"
   PureProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
   PureProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
 
@@ -124,7 +124,7 @@ floatBoolQuantifiers :: Prop Bool -> ([Quantifier], Prop Bool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
 
-  PureProp Numerical{} -> vacuous "numerical can't be Bool"
+  PureProp Numerical{} -> vacuousMatch "numerical can't be Bool"
 
   PropSpecific (Forall uid name ty prop) ->
     let (qs, prop') = float prop
