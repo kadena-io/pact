@@ -372,8 +372,8 @@ translateNode astNode = astContext astNode $ case astNode of
 
   -- Int
   AST_NegativeLit l -> case l of
-    LInteger i -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Negate (lit i)) TInt
-    LDecimal d -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
+    LInteger i -> pure $ ETerm (inject $ IntUnaryArithOp Negate (lit i)) TInt
+    LDecimal d -> pure $ ETerm (inject $ DecUnaryArithOp Negate (lit (mkDecimal d))) TDecimal
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
@@ -387,8 +387,8 @@ translateNode astNode = astContext astNode $ case astNode of
     Just (name, vid) <- view (_2 . at node)
     EType ty <- translateType (_aTy node)
     case ty of
-      TInt     -> pure (ETerm (injectNumerical $ IntUnaryArithOp Negate (Var name vid)) TInt)
-      TDecimal -> pure (ETerm (injectNumerical $ DecUnaryArithOp Negate (Var name vid)) TDecimal)
+      TInt     -> pure (ETerm (inject $ IntUnaryArithOp Negate (Var name vid)) TInt)
+      TDecimal -> pure (ETerm (inject $ DecUnaryArithOp Negate (Var name vid)) TDecimal)
       _        -> throwError' $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
@@ -439,22 +439,22 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_Days days -> do
     ETerm days' daysTy <- translateNode days
     case daysTy of
-      TInt     -> pure $ ETerm (injectNumerical $ IntArithOp Mul (60 * 60 * 24) days') TInt
-      TDecimal -> pure $ ETerm (injectNumerical $ DecArithOp Mul (60 * 60 * 24) days') TDecimal
+      TInt     -> pure $ ETerm (inject $ IntArithOp Mul (60 * 60 * 24) days') TInt
+      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul (60 * 60 * 24) days') TDecimal
       _        -> throwError' $ BadTimeType astNode
 
   AST_Hours hours -> do
     ETerm hours' hoursTy <- translateNode hours
     case hoursTy of
-      TInt     -> pure $ ETerm (injectNumerical $ IntArithOp Mul (60 * 60) hours') TInt
-      TDecimal -> pure $ ETerm (injectNumerical $ DecArithOp Mul (60 * 60) hours') TDecimal
+      TInt     -> pure $ ETerm (inject $ IntArithOp Mul (60 * 60) hours') TInt
+      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul (60 * 60) hours') TDecimal
       _        -> throwError' $ BadTimeType astNode
 
   AST_Minutes minutes -> do
     ETerm minutes' minutesTy <- translateNode minutes
     case minutesTy of
-      TInt     -> pure $ ETerm (injectNumerical $ IntArithOp Mul 60 minutes') TInt
-      TDecimal -> pure $ ETerm (injectNumerical $ DecArithOp Mul 60 minutes') TDecimal
+      TInt     -> pure $ ETerm (inject $ IntArithOp Mul 60 minutes') TInt
+      TDecimal -> pure $ ETerm (inject $ DecArithOp Mul 60 minutes') TDecimal
       _        -> throwError' $ BadTimeType astNode
 
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
@@ -549,40 +549,40 @@ translateNode astNode = astContext astNode $ case astNode of
                          _             -> error "impossible"
                  in case (tyA, tyB) of
                    (TInt, TInt)         -> pure $
-                     ETerm (injectNumerical $ IntArithOp (opFromName fn) a' b') TInt
+                     ETerm (inject $ IntArithOp (opFromName fn) a' b') TInt
                    (TDecimal, TDecimal) -> pure $
-                     ETerm (injectNumerical $ DecArithOp (opFromName fn) a' b') TDecimal
+                     ETerm (inject $ DecArithOp (opFromName fn) a' b') TDecimal
                    (TInt, TDecimal)     -> pure $
-                     ETerm (injectNumerical $ IntDecArithOp (opFromName fn) a' b') TDecimal
+                     ETerm (inject $ IntDecArithOp (opFromName fn) a' b') TDecimal
                    (TDecimal, TInt)     -> pure $
-                     ETerm (injectNumerical $ DecIntArithOp (opFromName fn) a' b') TDecimal
+                     ETerm (inject $ DecIntArithOp (opFromName fn) a' b') TDecimal
                    _ -> throwError' $ MalformedArithOp fn args
               | otherwise -> case (tyA, tyB, fn) of
                 (TDecimal, TInt, "round")   -> pure $
-                  ETerm (injectNumerical $ RoundingLikeOp2 Round a' b') TDecimal
+                  ETerm (inject $ RoundingLikeOp2 Round a' b') TDecimal
                 (TDecimal, TInt, "ceiling") -> pure $
-                  ETerm (injectNumerical $ RoundingLikeOp2 Ceiling a' b') TDecimal
+                  ETerm (inject $ RoundingLikeOp2 Ceiling a' b') TDecimal
                 (TDecimal, TInt, "floor")   -> pure $
-                  ETerm (injectNumerical $ RoundingLikeOp2 Floor a' b') TDecimal
+                  ETerm (inject $ RoundingLikeOp2 Floor a' b') TDecimal
                 _ -> throwError' $ MalformedArithOp fn args
           [a] -> do
             ETerm a' ty <- translateNode a
             case (fn, ty) of
-              ("-",    TInt) -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Negate a') TInt
-              ("sqrt", TInt) -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Sqrt a') TInt
-              ("ln",   TInt) -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Ln a') TInt
-              ("exp",  TInt) -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Exp a') TInt
-              ("abs",  TInt) -> pure $ ETerm (injectNumerical $ IntUnaryArithOp Abs a') TInt
+              ("-",    TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Negate a') TInt
+              ("sqrt", TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Sqrt a') TInt
+              ("ln",   TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Ln a') TInt
+              ("exp",  TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Exp a') TInt
+              ("abs",  TInt) -> pure $ ETerm (inject $ IntUnaryArithOp Abs a') TInt
 
-              ("-",    TDecimal) -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Negate a') TDecimal
-              ("sqrt", TDecimal) -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Sqrt a') TDecimal
-              ("ln",   TDecimal) -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Ln a') TDecimal
-              ("exp",  TDecimal) -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Exp a') TDecimal
-              ("abs",  TDecimal) -> pure $ ETerm (injectNumerical $ DecUnaryArithOp Abs a') TDecimal
+              ("-",    TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Negate a') TDecimal
+              ("sqrt", TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Sqrt a') TDecimal
+              ("ln",   TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Ln a') TDecimal
+              ("exp",  TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Exp a') TDecimal
+              ("abs",  TDecimal) -> pure $ ETerm (inject $ DecUnaryArithOp Abs a') TDecimal
 
-              ("round",   TDecimal) -> pure $ ETerm (injectNumerical $ RoundingLikeOp1 Round a') TInt
-              ("ceiling", TDecimal) -> pure $ ETerm (injectNumerical $ RoundingLikeOp1 Ceiling a') TInt
-              ("floor",   TDecimal) -> pure $ ETerm (injectNumerical $ RoundingLikeOp1 Floor a') TInt
+              ("round",   TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Round a') TInt
+              ("ceiling", TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Ceiling a') TInt
+              ("floor",   TDecimal) -> pure $ ETerm (inject $ RoundingLikeOp1 Floor a') TInt
               _         -> throwError' $ MalformedArithOp fn args
           _ -> throwError' $ MalformedArithOp fn args
 
@@ -599,7 +599,7 @@ translateNode astNode = astContext astNode $ case astNode of
           ("mod", [a, b]) -> do
             ETerm a' TInt <- translateNode a
             ETerm b' TInt <- translateNode b
-            pure (ETerm (injectNumerical $ ModOp a' b') TInt)
+            pure (ETerm (inject $ ModOp a' b') TInt)
           _ -> mzero
 
     in asum [mkMod, mkArith, mkComparison, mkKeySetEqNeq, mkObjEqNeq,

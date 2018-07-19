@@ -1291,7 +1291,7 @@ analyzePropSpecific (RowEnforced tn cn pRk) = do
 
 -- TODO: move to Pact.Analyze.AnalyzePure
 analyzePure
-  :: (Analyzer m, SymbolicTerm (TermOf m), SymWord a)
+  :: (Analyzer m, SymWord a)
   => PureTerm (ETermOf m) (TermOf m) a -> m (S a)
 analyzePure (Lit a)                    = pure (literalS a)
 analyzePure (Sym s)                    = pure s
@@ -1315,7 +1315,7 @@ analyzePure LiteralObject {}
 
 
 analyzePureO
-  :: (Analyzer m, SymbolicTerm (TermOf m))
+  :: Analyzer m
   => PureTerm (ETermOf m) (TermOf m) Object -> m Object
 analyzePureO (LiteralObject obj) = Object <$> traverse analyzeE obj
 analyzePureO (At _schema colNameT objT _retType)
