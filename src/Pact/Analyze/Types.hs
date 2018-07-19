@@ -655,18 +655,16 @@ pattern PLit a = PureProp (Lit a)
 pattern PVar :: VarId -> Text -> Prop t
 pattern PVar vid name = PureProp (Var vid name)
 
-data Prop a where
-  PropSpecific :: PropSpecific a  -> Prop a
-  PureProp     :: PureTerm EProp Prop a -> Prop a
+data Prop a
+  = PropSpecific (PropSpecific a)
+  | PureProp     (PureTerm EProp Prop a)
+  deriving (Show, Eq)
 
 instance S :<: Prop where
   inject = PureProp . Sym
   project = \case
     PureProp (Sym a) -> Just a
     _                -> Nothing
-
-deriving instance Eq a => Eq (Prop a)
-deriving instance Show a => Show (Prop a)
 
 pattern PNumerical :: Numerical Prop t -> Prop t
 pattern PNumerical x = PureProp (Numerical x)
@@ -956,10 +954,8 @@ userShow = userShowsPrec 0
 -- * variables
 -- * logical operations
 --
--- The language is stateless. Arithmetic could be added if we decide it's
--- useful.
-data Invariant a
-  = PureInvariant (PureTerm EInvariant Invariant a)
+-- The language is stateless.
+data Invariant a = PureInvariant (PureTerm EInvariant Invariant a)
   deriving (Show, Eq)
 
 instance S :<: Invariant where
