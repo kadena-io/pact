@@ -50,5 +50,5 @@ dummyParsed = Default.def
 dummyInfo :: Info
 dummyInfo = Default.def
 
-vacuous :: String -> a
-vacuous msg = error $ "vacuous: " ++ msg
+vacuousMatch :: String -> a
+vacuousMatch msg = error $ "vacuous match: " ++ msg
