@@ -608,16 +608,16 @@ expToInvariant ty exp = case (ty, exp) of
     <$> expToInvariant TStr a <*> expToInvariant TStr b
 
   (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
-    [ injectNumerical ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , injectNumerical ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
-    , injectNumerical ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
+    [ Inj ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , Inj ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
+    , Inj ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
     ] (throwErrorIn exp "unexpected argument types")
   (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
-    -> injectNumerical ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
+    -> Inj ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
   (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> injectNumerical . DecUnaryArithOp op <$> expToInvariant TDecimal a
+    -> Inj . DecUnaryArithOp op <$> expToInvariant TDecimal a
   (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> injectNumerical . IntUnaryArithOp op <$> expToInvariant TInt a
+    -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
 
   (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
     [ PureInvariant ... IntegerComparison op
