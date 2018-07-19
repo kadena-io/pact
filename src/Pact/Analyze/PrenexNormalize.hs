@@ -81,7 +81,7 @@ floatIntegerQuantifiers p = case p of
   PureProp (Numerical (ModOp a b))
     -> PNumerical ... ModOp              <$> float a <*> float b
   PureProp (Numerical (RoundingLikeOp1 op a))
-    -> PNumerical . RoundingLikeOp1 op <$> float a
+    -> PNumerical . RoundingLikeOp1 op   <$> float a
   PropSpecific (IntCellDelta tn cn a)
     -> PropSpecific . IntCellDelta tn cn <$> float a
   PropSpecific (RowWriteCount tn pRk)
