@@ -35,8 +35,7 @@ data Feature
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
-  = InvOnly
-  | PropOnly
+  = PropOnly
   | InvAndProp
   deriving (Eq, Ord, Show)
 
