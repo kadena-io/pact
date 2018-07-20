@@ -24,23 +24,21 @@ import           Control.Monad               (void)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
                                               runExcept)
-import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify')
-import           Control.Monad.Trans.Class   (lift)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl')
-import           Data.Functor.Identity       (Identity (Identity, runIdentity))
+import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
-import           Data.SBV                    (Boolean (bnot, true, (&&&), (==>), (|||)),
+import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              Symbolic, constrain, false, ite)
+                                              constrain, false, ite)
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -50,14 +48,12 @@ import           Data.Traversable            (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
-import           Pact.Types.Lang             (Info)
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Invariant
-import           Pact.Analyze.Eval.Prop
 import           Pact.Analyze.Eval.Pure
 import           Pact.Analyze.Eval.Types
 import           Pact.Analyze.Orphans        ()
@@ -449,85 +445,3 @@ format s tms = do
               (\r (e, t) -> r .++ rep e .++ t)
               (head parts)
               (zip tms (tail parts))
-
-
-
-analyzeCheck :: Check -> Query (S Bool)
-analyzeCheck = \case
-    PropertyHolds p -> assumingSuccess =<< evalProp p
-    Valid p         -> evalProp p
-    Satisfiable p   -> evalProp p
-
-  where
-    assumingSuccess :: S Bool -> Query (S Bool)
-    assumingSuccess p = do
-      success <- view (qeAnalyzeState.succeeds)
-      pure $ success ==> p
-
--- | A convenience to treat a nested 'TableMap', '[]', and tuple as a single
--- functor instead of three.
-newtype InvariantsF a = InvariantsF { unInvariantsF :: TableMap [Located a] }
-
-instance Functor InvariantsF where
-  fmap f (InvariantsF a) = InvariantsF ((fmap . fmap . fmap) f a)
-
-analyzeInvariants :: Query (InvariantsF (S Bool))
-analyzeInvariants = assumingSuccess =<< invariantsHold''
-  where
-    assumingSuccess :: InvariantsF (S Bool) -> Query (InvariantsF (S Bool))
-    assumingSuccess ps = do
-      success <- view (qeAnalyzeState.succeeds)
-      pure $ (success ==>) <$> ps
-
-    invariantsHold :: Query (TableMap (ZipList (Located (SBV Bool))))
-    invariantsHold = view (qeAnalyzeState.maintainsInvariants)
-
-    invariantsHold' :: Query (InvariantsF (SBV Bool))
-    invariantsHold' = InvariantsF <$> (getZipList <$$> invariantsHold)
-
-    invariantsHold'' :: Query (InvariantsF (S Bool))
-    invariantsHold'' = sansProv <$$> invariantsHold'
-
--- | Helper to run either property or invariant analysis
-runAnalysis'
-  :: Functor f
-  => Query (f (S Bool))
-  -> [Table]
-  -> ETerm
-  -> ModelTags
-  -> Info
-  -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables tm tags info = do
-  let act    = evalETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables tags info
-      state0 = mkInitialAnalyzeState tables
-
-  (funResult, state1, ()) <- hoist generalize $
-    runRWST (runAnalyze act) aEnv state0
-
-  lift $ runConstraints $ state1 ^. globalState.gasConstraints
-
-  let qEnv  = mkQueryEnv aEnv state1 funResult
-      ksProvs = state1 ^. globalState.gasKsProvenances
-
-  results <- runReaderT (queryAction query) qEnv
-  pure $ results <&> \prop -> AnalysisResult (_sSbv prop) ksProvs
-
-runPropertyAnalysis
-  :: Check
-  -> [Table]
-  -> ETerm
-  -> ModelTags
-  -> Info
-  -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables tm tags info =
-  runIdentity <$> runAnalysis' (Identity <$> analyzeCheck check) tables tm tags info
-
-runInvariantAnalysis
-  :: [Table]
-  -> ETerm
-  -> ModelTags
-  -> Info
-  -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables tm tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags info
