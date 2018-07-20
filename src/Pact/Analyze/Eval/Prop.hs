@@ -22,7 +22,7 @@ import           Data.Traversable          (for)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Orphans      ()
 import           Pact.Analyze.Types        hiding (tableName)
 import qualified Pact.Analyze.Types        as Types

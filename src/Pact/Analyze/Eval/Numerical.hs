@@ -10,7 +10,7 @@ import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
                                           sMod, (.^))
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types      hiding (tableName)
 
 evalNumerical
