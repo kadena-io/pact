@@ -61,7 +61,6 @@ library
       Pact.Analyze.Eval.Prop
       Pact.Analyze.Eval.Core
       Pact.Analyze.Eval.Term
-      Pact.Analyze.Eval.Types
       Pact.Analyze.Check
       Pact.Analyze.Errors
       Pact.Analyze.LegacySFunArray
@@ -71,6 +70,7 @@ library
       Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate
       Pact.Analyze.Types
+      Pact.Analyze.Types.Eval
       Pact.Analyze.Types.Languages
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical

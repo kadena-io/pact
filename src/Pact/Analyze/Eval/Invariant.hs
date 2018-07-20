@@ -9,7 +9,7 @@ import           Data.Map.Strict         (Map)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
 
 -- TODO Change SVal to AVal (allowing objects), update analyzer

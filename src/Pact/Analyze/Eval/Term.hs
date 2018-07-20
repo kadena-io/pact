@@ -47,7 +47,7 @@ import           Pact.Types.Version          (pactVersion)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
