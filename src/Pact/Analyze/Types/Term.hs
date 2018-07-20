@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -74,13 +75,17 @@ instance S :<: Term where
     PureTerm (Sym a) -> Just a
     _                -> Nothing
 
-lit :: SymWord a => a -> Term a
-lit = PureTerm . Sym . literalS
+instance Core Term :<: Term where
+  inject = PureTerm
+  project = \case
+    PureTerm a -> Just a
+    _          -> Nothing
 
 instance Numerical Term :<: Term where
-  inject = PureTerm . Numerical
-  project (PureTerm (Numerical a)) = Just a
-  project _                        = Nothing
+  inject = Inj . Numerical
+  project = \case
+    Inj (Numerical a) -> Just a
+    _                 -> Nothing
 
 instance Num (Term Integer) where
   fromInteger = lit . fromInteger
@@ -97,6 +102,9 @@ instance Num (Term Decimal) where
   abs    = inject .   DecUnaryArithOp Abs
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
+
+lit :: SymWord a => a -> Term a
+lit = PureTerm . Sym . literalS
 
 data UserType = UserType
   deriving (Eq, Ord, Read, Data, Show, HasKind, SymWord)
