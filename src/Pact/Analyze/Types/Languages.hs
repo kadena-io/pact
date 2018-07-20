@@ -359,10 +359,8 @@ deriving instance Eq a   => Eq   (Core Invariant a)
 deriving instance Show a => Show (Core Invariant a)
 
 instance Core Invariant :<: Invariant where
-  inject = PureInvariant
-  project = \case
-    PureInvariant a -> Just a
-    _               -> Nothing
+  inject                    = PureInvariant
+  project (PureInvariant a) = Just a
 
 instance Numerical Invariant :<: Invariant where
   inject = Inj . Numerical

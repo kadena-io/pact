@@ -11,7 +11,7 @@ import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Types      hiding (tableName)
+import           Pact.Analyze.Types
 
 evalNumerical
   :: (Analyzer m, S :<: TermOf m)
