@@ -10,7 +10,7 @@ import qualified Data.Text          as T
 
 import           Pact.Types.Lang    (Info, tShow)
 
-import           Pact.Analyze.Types hiding (tableName)
+import           Pact.Analyze.Types
 
 data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType Schema

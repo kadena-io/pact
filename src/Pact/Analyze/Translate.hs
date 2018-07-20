@@ -718,7 +718,7 @@ runTranslation info pactArgs body = do
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
     runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $
-      (flip runStateT (TranslateState [] 0 nextVarId) $
-        (runReaderT
+      flip runStateT (TranslateState [] 0 nextVarId) $
+        runReaderT
           (unTranslateM (translateBody body))
-          (info, mkTranslateEnv args)))
+          (info, mkTranslateEnv args)

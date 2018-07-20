@@ -10,7 +10,7 @@ import           Data.Map.Strict         (Map)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Pure
 import           Pact.Analyze.Eval.Types
-import           Pact.Analyze.Types      hiding (tableName)
+import           Pact.Analyze.Types
 
 -- TODO Change SVal to AVal (allowing objects), update analyzer
 newtype InvariantCheck a = InvariantCheck
