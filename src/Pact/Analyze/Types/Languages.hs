@@ -13,11 +13,14 @@ module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
   , EInvariant
   , EProp
+  , ETerm
+  , Core(..)
   , Invariant(..)
   , Prop(..)
   , PropSpecific(..)
-  , Core(..)
+  , Term(..)
 
+  , lit
   , mkDecimal
 
   , pattern ILiteral
@@ -42,12 +45,13 @@ module Pact.Analyze.Types.Languages
 import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               (%))
+                                               SymWord, (%))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
+import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Util
@@ -381,3 +385,83 @@ pattern ILiteral a = PureInvariant (Lit a)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)
+
+type ETerm = Existential Term
+
+data Term ret where
+  PureTerm        :: Core Term a -> Term a
+
+  -- In principle, this should be a pure term, however, the analyze monad needs
+  -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
+  -- `Symbolic` in its stack.
+  --
+  -- TODO(joel): In principle this could be pure and applied to all the
+  -- languages. Unfortunately, we can't add this to props because `Query` has
+  -- `Symbolic` in its stack, so it can't do an `ite`.
+  IfThenElse      :: Term Bool -> Term a -> Term a -> Term a
+
+  -- Variable binding
+  Let             :: Text -> VarId -> ETerm -> Term a -> Term a
+
+  -- Control flow
+  Sequence        :: ETerm     -> Term a ->           Term a
+
+  -- Conditional transaction abort
+  Enforce         :: Term Bool -> Term Bool
+
+  -- Keyset access
+  ReadKeySet      :: Term String -> Term KeySet
+  KsAuthorized    :: TagId -> Term KeySet -> Term Bool
+  NameAuthorized  :: TagId -> Term String -> Term Bool
+
+  -- Table access
+  Read            :: TagId -> TableName -> Schema      -> Term String -> Term Object
+  Write           :: TagId -> TableName -> Term String -> Term Object -> Term String
+
+  PactVersion     :: Term String
+
+  Format          :: Term String         -> [ETerm]     -> Term String
+  FormatTime      :: Term String         -> Term Time   -> Term String
+  ParseTime       :: Maybe (Term String) -> Term String -> Term Time
+  Hash            :: ETerm                              -> Term String
+
+deriving instance Show a => Show (Term a)
+deriving instance Show ETerm
+deriving instance Show a => Show (Core Term a)
+
+instance S :<: Term where
+  inject = PureTerm . Sym
+  project = \case
+    PureTerm (Sym a) -> Just a
+    _                -> Nothing
+
+instance Core Term :<: Term where
+  inject = PureTerm
+  project = \case
+    PureTerm a -> Just a
+    _          -> Nothing
+
+instance Numerical Term :<: Term where
+  inject = Inj . Numerical
+  project = \case
+    Inj (Numerical a) -> Just a
+    _                 -> Nothing
+
+instance Num (Term Integer) where
+  fromInteger = lit . fromInteger
+  (+)    = inject ... IntArithOp Add
+  (*)    = inject ... IntArithOp Mul
+  abs    = inject .   IntUnaryArithOp Abs
+  signum = inject .   IntUnaryArithOp Signum
+  negate = inject .   IntUnaryArithOp Negate
+
+instance Num (Term Decimal) where
+  fromInteger = lit . mkDecimal . fromInteger
+  (+)    = inject ... DecArithOp Add
+  (*)    = inject ... DecArithOp Mul
+  abs    = inject .   DecUnaryArithOp Abs
+  signum = inject .   DecUnaryArithOp Signum
+  negate = inject .   DecUnaryArithOp Negate
+
+lit :: SymWord a => a -> Term a
+lit = PureTerm . Sym . literalS

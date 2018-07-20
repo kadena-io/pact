@@ -8,7 +8,6 @@ module Pact.Analyze.Types
   , module Pact.Analyze.Types.Model
   , module Pact.Analyze.Types.Numerical
   , module Pact.Analyze.Types.Shared
-  , module Pact.Analyze.Types.Term
 
   , Check(..)
   , Float(float)
@@ -38,7 +37,6 @@ import           Pact.Analyze.Types.Languages
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
-import           Pact.Analyze.Types.Term
 
 data Quantifier
   = Forall' VarId Text QType
