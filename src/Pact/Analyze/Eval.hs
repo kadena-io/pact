@@ -1,4 +1,5 @@
-{-# language LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Eval
   ( module Pact.Analyze.Eval.Invariant
   , module Pact.Analyze.Eval.Numerical
@@ -15,24 +16,25 @@ module Pact.Analyze.Eval
 
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (view, (<&>), (^.))
-import           Control.Monad.Except        (ExceptT)
+import           Control.Monad.Except        (ExceptT, throwError)
 import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (runRWST))
 import           Control.Monad.Trans.Class   (lift)
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic)
+import           Data.String                 (fromString)
 
 import           Pact.Types.Lang             (Info)
 
 import           Pact.Analyze.Errors
+import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Eval.Prop
-import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Term
-import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
 analyzeCheck :: Check -> Query (S Bool)
@@ -82,8 +84,12 @@ runAnalysis'
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
 runAnalysis' query tables tm tags info = do
   let act    = evalETerm tm >>= \res -> tagResult res >> pure res
-      aEnv   = mkAnalyzeEnv tables tags info
       state0 = mkInitialAnalyzeState tables
+
+  aEnv <- case mkAnalyzeEnv tables tags info of
+    Just env -> pure env
+    Nothing  -> throwError $ AnalyzeFailure info $ fromString $
+      "Unable to make analyze env (couldn't translate schema)"
 
   (funResult, state1, ()) <- hoist generalize $
     runRWST (runAnalyze act) aEnv state0

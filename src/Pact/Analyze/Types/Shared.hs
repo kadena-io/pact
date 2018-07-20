@@ -304,15 +304,11 @@ newtype Schema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
-varIdColumns :: ColumnMap a -> Map VarId a
-varIdColumns (ColumnMap m) = varIdColumns' (Map.mapKeys
-  (\(ColumnName name) -> T.pack name) m)
-
-varIdColumns' :: Map Text a -> Map VarId a
-varIdColumns' m =
+varIdColumns :: Map Text a -> Map Text VarId
+varIdColumns m =
   let sortedList = sortBy (compare `on` fst) (Map.toList m)
       reindexedList =
-        zipWith (\index (_name, val) -> (index, val)) [0..] sortedList
+        zipWith (\index (name, _) -> (name, index)) [0..] sortedList
   in Map.fromList reindexedList
 
 -- | Given args representing the columns of a schema, this function gives a

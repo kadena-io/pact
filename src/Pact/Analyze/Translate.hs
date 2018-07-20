@@ -203,14 +203,17 @@ withNewVarId varNode varName action = do
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
 unionPreferring = Map.union
 
-maybeTranslateType :: Pact.Type Pact.UserType -> Maybe EType
-maybeTranslateType =
-  let handleUserType :: Pact.UserType -> Maybe QType
-      handleUserType (Pact.Schema _ _ fields _) =
-        fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
-          \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
+maybeTranslateUserType :: Pact.UserType -> Maybe QType
+maybeTranslateUserType (Pact.Schema _ _ fields _) =
+  fmap (EObjectTy . Schema) $ sequence $ Map.fromList $ fields <&>
+    \(Pact.Arg name ty _info) -> (name, maybeTranslateType ty)
 
-  in maybeTranslateType' handleUserType >=> downcastQType
+maybeTranslateUserType' :: Pact.UserType -> Maybe EType
+maybeTranslateUserType' = maybeTranslateUserType >=> downcastQType
+
+maybeTranslateType :: Pact.Type Pact.UserType -> Maybe EType
+maybeTranslateType
+  = maybeTranslateType' maybeTranslateUserType >=> downcastQType
 
 -- A helper to translate types that doesn't know how to handle user types
 -- itself
