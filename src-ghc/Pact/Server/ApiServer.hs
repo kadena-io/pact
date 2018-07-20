@@ -89,7 +89,7 @@ sendBatch public = do
   when (null cmds) $ die "Empty Batch"
   crs <- forM cmds $ \c -> do
     cr@(_,Command{..}) <- buildCmdRpc c
-    liftIO $ print cr
+    --liftIO $ print cr
     case eitherDecodeStrict' _cmdPayload of
       Left e -> die $ "JSON payload decode failed: " ++ show e
       Right (Payload{..} :: Payload (PactRPC T.Text)) -> case (public,_pAddress) of

@@ -13,4 +13,4 @@ persistDir: tests/test-log
 pragmas: []
 
 # verbose: provide log output
-verbose: True
+verbose: False
