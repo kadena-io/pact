@@ -375,7 +375,7 @@ inferPreProp preProp = case preProp of
   PreApp SStringLength [str] ->
     ESimple TInt . PStrLength <$> checkPreProp TStr str
 
-  PreApp "mod" [a, b] -> do
+  PreApp SModulus [a, b] -> do
     it <- PNumerical ... ModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
     pure $ ESimple TInt it
   PreApp (textToRoundingLikeOp -> Just op) [a] ->

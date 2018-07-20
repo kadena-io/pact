@@ -39,6 +39,7 @@ data Feature
   | FBankersRound
   | FCeilingRound
   | FFloorRound
+  | FModulus
   -- * Logical operators
   | FGreaterThan
   | FLessThan
@@ -357,6 +358,20 @@ doc FFloorRound = Doc
         ]
         (TyCon int)
   ]
+doc FModulus = Doc
+  "mod"
+  InvAndProp
+  "Integer modulus"
+  [ Usage
+      "(mod x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon int)
+        , ("y", TyCon int)
+        ]
+        (TyCon int)
+  ]
 
 -- Logical operators
 
@@ -642,6 +657,7 @@ PAT(SAbsoluteValue, FAbsoluteValue)
 PAT(SBankersRound, FBankersRound)
 PAT(SCeilingRound, FCeilingRound)
 PAT(SFloorRound, FFloorRound)
+PAT(SModulus, FModulus)
 PAT(SGreaterThan, FGreaterThan)
 PAT(SLessThan, FLessThan)
 PAT(SGreaterThanOrEqual, FGreaterThanOrEqual)
