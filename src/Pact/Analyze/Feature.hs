@@ -46,7 +46,9 @@ data Feature
   -- * Property-specific features
   | FUniversalQuantification
   | FExistentialQuantification
-  | FAbort
+  | FTransactionAborts
+  | FTransactionSucceeds
+  | FFunctionResult
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -528,14 +530,33 @@ doc FExistentialQuantification = Doc
         ]
         r
   ]
-doc FAbort = Doc
+doc FTransactionAborts = Doc
   "abort"
   PropOnly
-  "Whether the transaction aborts. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' assume transaction success."
+  "Whether the transaction aborts. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
   [ Usage
       "abort"
       Map.empty
       (Sym (TyCon bool))
+  ]
+doc FTransactionSucceeds = Doc
+  "success"
+  PropOnly
+  "Whether the transaction succeeds. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
+  [ Usage
+      "abort"
+      Map.empty
+      (Sym (TyCon bool))
+  ]
+doc FFunctionResult = Doc
+  "result"
+  PropOnly
+  "The return value of the function under test"
+  [ let r = TyVar $ TypeVar "r"
+    in Usage
+      "result"
+      (Map.fromList [("r", AnyType)])
+      (Sym r)
   ]
 
 allFeatures :: [Feature]
@@ -594,4 +615,6 @@ PAT(SLogicalNegation, FLogicalNegation)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
-PAT(SAbort, FAbort)
+PAT(STransactionAborts, FTransactionAborts)
+PAT(STransactionSucceeds, FTransactionSucceeds)
+PAT(SFunctionResult, FFunctionResult)

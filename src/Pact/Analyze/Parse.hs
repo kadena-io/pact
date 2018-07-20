@@ -255,10 +255,10 @@ expToPreProp = \case
 
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
-  EAtom' SAbort    -> pure PreAbort
-  EAtom' "success" -> pure PreSuccess
-  EAtom' "result"  -> pure PreResult
-  EAtom' var       -> mkVar var
+  EAtom' STransactionAborts   -> pure PreAbort
+  EAtom' STransactionSucceeds -> pure PreSuccess
+  EAtom' SFunctionResult      -> pure PreResult
+  EAtom' var                  -> mkVar var
 
   exp -> throwErrorIn exp "expected property"
 
@@ -335,7 +335,7 @@ inferPreProp preProp = case preProp of
   PreSuccess      -> pure (ESimple TBool (PropSpecific Success))
 
   -- identifiers
-  PreResult       -> inferVar 0 "result" (PropSpecific Result)
+  PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
   PreVar vid name -> inferVar vid name (PureProp (Var vid name))
 
   -- quantifiers
