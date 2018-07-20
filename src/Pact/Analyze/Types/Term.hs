@@ -30,7 +30,7 @@ import           Pact.Analyze.Util
 type ETerm = Existential Term
 
 data Term ret where
-  PureTerm        :: PureTerm Term a -> Term a
+  PureTerm        :: Core Term a -> Term a
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
@@ -68,7 +68,7 @@ data Term ret where
 
 deriving instance Show a => Show (Term a)
 deriving instance Show ETerm
-deriving instance Show a => Show (PureTerm Term a)
+deriving instance Show a => Show (Core Term a)
 
 instance S :<: Term where
   inject = PureTerm . Sym
