@@ -522,7 +522,7 @@ checkPreProp ty preProp
 
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
-  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> do
+  (TDecimal, PreApp opSym@(textToArithOp -> Just op) [a, b]) -> do
     a' <- inferPreProp a
     b' <- inferPreProp b
     case (a', b') of
@@ -533,7 +533,7 @@ checkPreProp ty preProp
       (ESimple TInt aprop, ESimple TDecimal bprop) ->
         pure $ PNumerical $ IntDecArithOp op aprop bprop
       (_, _) -> throwErrorIn preProp $
-        "unexpected argument types for (+): " <>
+        "unexpected argument types for (" <> opSym <> "): " <>
         userShow (existentialType a') <> " and " <>
         userShow (existentialType b')
   (TInt, PreApp (textToArithOp -> Just op) [a, b])
