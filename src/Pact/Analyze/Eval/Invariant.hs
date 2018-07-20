@@ -21,9 +21,9 @@ newtype InvariantCheck a = InvariantCheck
     MonadReader (Located (Map VarId AVal)))
 
 instance Analyzer InvariantCheck where
-  type TermOf InvariantCheck  = Invariant
-  eval  (PureInvariant tm) = evalPure tm
-  evalO (PureInvariant tm) = evalPureO tm
+  type TermOf InvariantCheck = Invariant
+  eval  (PureInvariant tm)   = evalPure tm
+  evalO (PureInvariant tm)   = evalPureO tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
