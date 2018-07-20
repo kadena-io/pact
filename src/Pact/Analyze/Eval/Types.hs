@@ -446,7 +446,6 @@ symArrayAt (S _ symKey) = lens getter setter
     setter :: array k v -> SBV v -> array k v
     setter arr = writeArray arr symKey
 
-
 nameAuthorized
   :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
   => S KeySetName
