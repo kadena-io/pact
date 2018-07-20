@@ -10,8 +10,7 @@
 
 module Pact.Analyze.Types.Term where
 
-import           Data.Data                    (Data)
-import           Data.SBV                     (HasKind, SymWord)
+import           Data.SBV                     (SymWord)
 import           Data.Text                    (Text)
 import           Prelude                      hiding (Float)
 
@@ -105,6 +104,3 @@ instance Num (Term Decimal) where
 
 lit :: SymWord a => a -> Term a
 lit = PureTerm . Sym . literalS
-
-data UserType = UserType
-  deriving (Eq, Ord, Read, Data, Show, HasKind, SymWord)
