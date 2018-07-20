@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MonadFailDesugaring        #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE MultiWayIf                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
@@ -12,10 +13,10 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative(empty))
+import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (at, cons, makeLenses, makePrisms,
-                                             view, (%~), (<&>), (?~), (^.),
-                                             (^?), (.~), _1, _2)
+                                             view, (%~), (.~), (<&>), (?~),
+                                             (^.), (^?), _1, _2)
 import           Control.Monad              (MonadPlus (mzero), (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))

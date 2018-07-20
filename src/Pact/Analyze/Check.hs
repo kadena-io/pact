@@ -1,10 +1,11 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE Rank2Types          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
 
 module Pact.Analyze.Check
   ( verifyModule
@@ -24,12 +25,11 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (Prism', imap, ifoldr, ifoldrM,
+import           Control.Lens              (Prism', ifoldr, ifoldrM, imap,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed,
-                                            (<&>), (^.), (^?), (^@..), (?~),
-                                            _1, _2, _Just)
-import           Control.Monad             ((>=>), join, void)
+                                            traverseOf, traversed, (<&>), (?~),
+                                            (^.), (^?), (^@..), _1, _2, _Just)
+import           Control.Monad             (join, void, (>=>))
 import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
                                             catchError, runExceptT, throwError,
                                             withExcept, withExceptT)
@@ -55,7 +55,7 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Code(Code), Info(Info), eParsed,
+import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
                                             mMetas, mName, renderInfo,
                                             renderParsed, tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
@@ -66,13 +66,13 @@ import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable,
-                                            _tlInfo), UserType (_utFields,
-                                            _utName), runTC, tcFailures)
+                                            TopLevel (TopFun, TopTable, _tlInfo),
+                                            UserType (_utFields, _utName),
+                                            runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
 
-import           Pact.Analyze.Eval         hiding (invariants)
 import           Pact.Analyze.Errors
+import           Pact.Analyze.Eval         hiding (invariants)
 import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
@@ -237,7 +237,7 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 
     showKsn :: S KeySetName -> Text
     showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
-      Nothing -> "[unknown]"
+      Nothing               -> "[unknown]"
       Just (KeySetName ksn) -> "'" <> ksn
 
     showAuth :: TagId -> Located (SBV Bool) -> Text

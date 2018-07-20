@@ -11,10 +11,10 @@
 
 module Pact.Analyze.Types.Term where
 
-import           Data.Data          (Data)
-import           Data.SBV           (HasKind, SymWord)
-import           Data.Text          (Text)
-import           Prelude            hiding (Float)
+import           Data.Data                    (Data)
+import           Data.SBV                     (HasKind, SymWord)
+import           Data.Text                    (Text)
+import           Prelude                      hiding (Float)
 
 import           Pact.Analyze.Types.Languages
 import           Pact.Analyze.Types.Model
