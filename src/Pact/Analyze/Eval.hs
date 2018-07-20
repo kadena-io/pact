@@ -5,7 +5,7 @@ module Pact.Analyze.Eval
   , module Pact.Analyze.Eval.Prop
   , module Pact.Analyze.Eval.Core
   , module Pact.Analyze.Eval.Term
-  , module Pact.Analyze.Eval.Types
+  , module Pact.Analyze.Types.Eval
   , analyzeCheck
   , analyzeInvariants
   , runInvariantAnalysis
@@ -31,7 +31,7 @@ import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Eval.Prop
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Term
-import           Pact.Analyze.Eval.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
