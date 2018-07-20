@@ -58,12 +58,12 @@ import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
 import           Pact.Analyze.Util
 
-#define EQ_EXISTENTIAL(tm)                               \
-instance Eq (Existential tm) where                       \
-  ESimple ta ia == ESimple tb ib = case typeEq ta tb of {  \
-    Just Refl -> ia == ib;                               \
-    Nothing   -> False};                                 \
-  EObject sa pa == EObject sb pb = sa == sb && pa == pb; \
+#define EQ_EXISTENTIAL(tm)                                \
+instance Eq (Existential tm) where                        \
+  ESimple ta ia == ESimple tb ib = case typeEq ta tb of { \
+    Just Refl -> ia == ib;                                \
+    Nothing   -> False};                                  \
+  EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
 #define SHOW_EXISTENTIAL(tm)                                         \
@@ -80,10 +80,13 @@ class sub :<: sup where
   inject  :: sub a -> sup a
   project :: sup a -> Maybe (sub a)
 
+instance Functor f => f :<: f where
+  inject  = id
+  project = Just
+
 pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
-
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
 --
@@ -188,13 +191,6 @@ data PropSpecific a where
 deriving instance Eq a => Eq (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
 
-instance PropSpecific :<: Prop where
-  inject = PropSpecific
-  project = \case
-    PropSpecific a -> Just a
-    _              -> Nothing
-
-
 data Core t a where
   Lit :: a -> Core t a
   -- | Injects a symbolic value into the language
@@ -266,10 +262,23 @@ instance S :<: Prop where
     PureProp (Sym a) -> Just a
     _                -> Nothing
 
+instance PropSpecific :<: Prop where
+  inject = PropSpecific
+  project = \case
+    PropSpecific a -> Just a
+    _              -> Nothing
+
+instance Core Prop :<: Prop where
+  inject = PureProp
+  project = \case
+    PureProp a -> Just a
+    _          -> Nothing
+
 instance Numerical Prop :<: Prop where
-  inject = PureProp . Numerical
-  project (PureProp (Numerical a)) = Just a
-  project _                        = Nothing
+  inject = Inj . Numerical
+  project = \case
+    Inj (Numerical a) -> Just a
+    _                 -> Nothing
 
 instance IsString (Prop TableName) where
   fromString = PLit . fromString
@@ -380,10 +389,17 @@ instance UserShow PreProp where
 newtype Invariant a = PureInvariant (Core Invariant a)
   deriving (Show, Eq)
 
+instance Core Invariant :<: Invariant where
+  inject = PureInvariant
+  project = \case
+    PureInvariant a -> Just a
+    _               -> Nothing
+
 instance Numerical Invariant :<: Invariant where
-  inject = PureInvariant . Numerical
-  project (PureInvariant (Numerical a)) = Just a
-  project _                             = Nothing
+  inject = Inj . Numerical
+  project = \case
+    Inj (Numerical a) -> Just a
+    _                 -> Nothing
 
 instance S :<: Invariant where
   inject = PureInvariant . Sym
