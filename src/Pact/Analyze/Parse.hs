@@ -690,7 +690,7 @@ expToInvariant ty exp = case (ty, exp) of
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
       Nothing -> throwErrorIn exp $
-        op' <> " is an invalid operation for keysets (only = or /= allowed)"
+        op' <> " is an invalid operation for keysets (only " <> SEquality <> " or " <> SInequality <> " allowed)"
     ] (throwErrorIn exp "unexpected argument types")
 
   (TBool, EList' (EAtom' op:args))
