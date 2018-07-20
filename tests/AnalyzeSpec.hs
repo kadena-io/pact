@@ -1373,8 +1373,8 @@ spec = describe "analyze" $ do
             Map.fromList [("x", EType TInt), ("y", EType TInt)]
           ety = EType TInt
           litPair = PureProp $ LiteralObject $ Map.fromList
-            [ ("x", ETerm TInt (PLit 0))
-            , ("y", ETerm TInt (PLit 1))
+            [ ("x", ESimple TInt (PLit 0))
+            , ("y", ESimple TInt (PLit 1))
             ]
 
           nestedObj = PureProp $ LiteralObject $
@@ -1389,7 +1389,7 @@ spec = describe "analyze" $ do
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (ETerm TInt (PAt pairSchema (PLit "x") litPair ety))
+        Right (ESimple TInt (PAt pairSchema (PLit "x") litPair ety))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
@@ -1399,7 +1399,7 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (x:string y:string) (= x y))"
         `shouldBe`
         Right
-          (ETerm TBool
+          (ESimple TBool
             (Inj $ Forall (VarId 1) "x" (EType TStr)
               (Inj $ Forall (VarId 2) "y" (EType TStr)
                 (PureProp $ StringComparison Eq
@@ -1456,8 +1456,8 @@ spec = describe "analyze" $ do
 
       textToProp   TBool "abort"   `shouldBe` Right Abort'
       textToProp   TBool "success" `shouldBe` Right Success'
-      inferProp''  "abort"         `shouldBe` Right (ETerm TBool Abort')
-      inferProp''  "success"       `shouldBe` Right (ETerm TBool Success')
+      inferProp''  "abort"         `shouldBe` Right (ESimple TBool Abort')
+      inferProp''  "success"       `shouldBe` Right (ESimple TBool Success')
 
       textToProp'' TBool "result"  `shouldBe` Right Result'
       textToProp'' TInt  "result"  `shouldBe` Right Result'
@@ -1467,7 +1467,7 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (table:table) (not (table-write table)))"
         `shouldBe`
         Right
-          (ETerm TBool
+          (ESimple TBool
             (Inj $ Forall (VarId 1) "table" QTable
               (PNot (Inj $ TableWrite "table"))))
 
@@ -1476,7 +1476,7 @@ spec = describe "analyze" $ do
       inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
         `shouldBe`
         Right
-          (ETerm TBool
+          (ESimple TBool
             (Inj $ Forall (VarId 1) "column" (QColumnOf "table")
               (PNot (Inj $ ColumnWrite "table" "column"))))
 

@@ -362,10 +362,10 @@ evalTerm = \case
   Format formatStr args -> do
     formatStr' <- eval formatStr
     args' <- for args $ \case
-      ETerm TStr  str  -> Left          <$> eval str
-      ETerm TInt  int  -> Right . Left  <$> eval int
-      ETerm TBool bool -> Right . Right <$> eval bool
-      _                -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
+      ESimple TStr  str  -> Left          <$> eval str
+      ESimple TInt  int  -> Right . Left  <$> eval int
+      ESimple TBool bool -> Right . Right <$> eval bool
+      _                  -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just concreteStr -> case format concreteStr args' of
@@ -398,15 +398,15 @@ evalTerm = \case
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
-      ETerm TStr tm -> eval tm <&> unliteralS >>= \case
+      ESimple TStr tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
-      ETerm TInt tm -> eval tm <&> unliteralS >>= \case
+      ESimple TInt tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just int -> pure $ sHash $ toStrict $ Aeson.encode int
-      ETerm TBool tm -> eval tm <&> unliteralS >>= \case
+      ESimple TBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
 
@@ -414,10 +414,10 @@ evalTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      ETerm TDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
+      ESimple TDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
-      ETerm _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
-      EObject _ _      -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
+      ESimple _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      EObject _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
 
   n -> throwErrorNoLoc $ UnhandledTerm $ tShow n
 
