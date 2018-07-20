@@ -1,6 +1,7 @@
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module Pact.Analyze.Types
   ( module Pact.Analyze.Types.Languages
@@ -26,18 +27,18 @@ module Pact.Analyze.Types
   , pattern TableNameLit
   ) where
 
-import           Control.Lens               (Lens', makeLenses, use, (+=))
-import           Control.Monad.State.Strict (MonadState)
-import           Data.Text                  (Text)
-import           Prelude                    hiding (Float)
+import           Control.Lens                 (Lens', makeLenses, use, (+=))
+import           Control.Monad.State.Strict   (MonadState)
+import           Data.Text                    (Text)
+import           Prelude                      hiding (Float)
 
-import qualified Pact.Types.Typecheck       as TC
+import qualified Pact.Types.Typecheck         as TC
 
-import Pact.Analyze.Types.Languages
-import Pact.Analyze.Types.Model
-import Pact.Analyze.Types.Numerical
-import Pact.Analyze.Types.Shared
-import Pact.Analyze.Types.Term
+import           Pact.Analyze.Types.Languages
+import           Pact.Analyze.Types.Model
+import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.Term
 
 data Quantifier
   = Forall' VarId Text QType

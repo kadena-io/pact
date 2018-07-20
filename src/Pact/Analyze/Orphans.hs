@@ -1,8 +1,8 @@
 {-# options_ghc -fno-warn-orphans #-}
 module Pact.Analyze.Orphans where
 
-import           Control.Applicative        (ZipList (..))
-import           Data.SBV                   (Mergeable(symbolicMerge))
+import           Control.Applicative (ZipList (..))
+import           Data.SBV            (Mergeable (symbolicMerge))
 import           Pact.Types.Info
 
 instance Mergeable a => Mergeable (ZipList a) where

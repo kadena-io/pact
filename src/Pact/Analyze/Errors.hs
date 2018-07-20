@@ -1,16 +1,16 @@
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE OverloadedStrings                 #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Errors where
 
-import qualified Data.SBV.Internals         as SBVI
+import qualified Data.SBV.Internals as SBVI
 import           Data.Semigroup
-import           Data.String                (IsString (fromString))
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
+import           Data.String        (IsString (fromString))
+import           Data.Text          (Text)
+import qualified Data.Text          as T
 
-import           Pact.Types.Lang            (Info, tShow)
+import           Pact.Types.Lang    (Info, tShow)
 
-import           Pact.Analyze.Types         hiding (tableName)
+import           Pact.Analyze.Types hiding (tableName)
 
 data AnalyzeFailureNoLoc
   = AtHasNoRelevantFields EType Schema

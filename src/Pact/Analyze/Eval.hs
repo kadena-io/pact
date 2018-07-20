@@ -7,9 +7,9 @@ module Pact.Analyze.Eval
   , module Pact.Analyze.Eval.Types
   ) where
 
-import Pact.Analyze.Eval.Invariant
-import Pact.Analyze.Eval.Numerical
-import Pact.Analyze.Eval.Prop
-import Pact.Analyze.Eval.Pure
-import Pact.Analyze.Eval.Term
-import Pact.Analyze.Eval.Types
+import           Pact.Analyze.Eval.Invariant
+import           Pact.Analyze.Eval.Numerical
+import           Pact.Analyze.Eval.Prop
+import           Pact.Analyze.Eval.Pure
+import           Pact.Analyze.Eval.Term
+import           Pact.Analyze.Eval.Types

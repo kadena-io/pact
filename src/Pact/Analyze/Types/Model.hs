@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -17,19 +17,18 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Types.Model where
 
-import           Control.Lens               (makeLenses)
-import           Data.Map.Strict            (Map)
-import           Data.SBV                   (SBV, Mergeable(symbolicMerge))
-import           Data.Text                  (Text)
-import           GHC.Natural                (Natural)
-import           Prelude                    hiding (Float)
+import           Control.Lens              (makeLenses)
+import           Data.Map.Strict           (Map)
+import           Data.SBV                  (Mergeable (symbolicMerge), SBV)
+import           Data.Text                 (Text)
+import           GHC.Natural               (Natural)
+import           Prelude                   hiding (Float)
 
-import qualified Pact.Types.Lang            as Pact
-import qualified Pact.Types.Typecheck       as TC
+import qualified Pact.Types.Lang           as Pact
+import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Types.Shared
 
