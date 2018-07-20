@@ -31,7 +31,8 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp)
+import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp,
+                                               PreProp(..))
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util            ((...))

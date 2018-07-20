@@ -10,11 +10,12 @@
 {-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Parse
-  ( expToCheck
+  ( PreProp(..)
+  , TableEnv
+  , expToCheck
   , expToProp
   , expToInvariant
   , inferProp
-  , TableEnv
   ) where
 
 import           Control.Applicative          (Alternative, (<|>))
@@ -50,6 +51,59 @@ import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+
+
+-- @PreProp@ stands between @Exp@ and @Prop@.
+--
+-- The conversion from @Exp@ is light, handled in @expToPreProp@.
+data PreProp
+  -- literals
+  = PreIntegerLit Integer
+  | PreStringLit  Text
+  | PreDecimalLit Decimal
+  | PreTimeLit    Time
+  | PreBoolLit    Bool
+
+  -- identifiers
+  | PreAbort
+  | PreSuccess
+  | PreResult
+  | PreVar     VarId Text
+
+  -- quantifiers
+  | PreForall VarId Text QType PreProp
+  | PreExists VarId Text QType PreProp
+
+  -- applications
+  | PreApp Text [PreProp]
+
+  | PreAt Text PreProp
+  | PreLiteralObject (Map Text PreProp)
+  deriving Eq
+
+instance UserShow PreProp where
+  userShowsPrec prec = \case
+    PreIntegerLit i -> tShow i
+    PreStringLit t  -> tShow t
+    PreDecimalLit d -> tShow d
+    PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
+    PreBoolLit b    -> tShow (Pact.LBool b)
+
+    PreAbort        -> "abort"
+    PreSuccess      -> "success"
+    PreResult       -> "result"
+    PreVar _id name -> name
+
+    PreForall _vid name qty prop ->
+      "(forall (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+    PreExists _vid name qty prop ->
+      "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+    PreApp name applicands -> "(" <> name <> " " <> T.unwords
+      ((map userShow) applicands) <> ")"
+
+    PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
+    PreLiteralObject obj -> userShowsPrec prec obj
+
 
 throwErrorT :: MonadError String m => Text -> m a
 throwErrorT = throwError . T.unpack
