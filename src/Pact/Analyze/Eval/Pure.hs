@@ -247,7 +247,7 @@ evalPureO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  ETerm ty prop   -> do
+  ESimple ty prop -> do
     prop' <- eval prop
     pure (EType ty, mkAVal prop')
   EObject ty prop -> do

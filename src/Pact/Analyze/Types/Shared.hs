@@ -64,12 +64,12 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 
 data Existential (tm :: * -> *) where
-  ETerm   :: SimpleType a => Type a -> tm a      -> Existential tm
+  ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
   EObject ::                 Schema -> tm Object -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
---   ETerm ta ia == ETerm tb ib = case typeEq ta tb of
+--   ESimple ta ia == ESimple tb ib = case typeEq ta tb of
 --     Just Refl -> ia == ib
 --     Nothing   -> False
 --   EObject sa pa == EObject sb pb = sa == sb && pa == pb
@@ -77,11 +77,11 @@ data Existential (tm :: * -> *) where
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential f term = case term of
-  ETerm   ty  term' -> ETerm   ty  (f term')
+  ESimple ty  term' -> ESimple ty  (f term')
   EObject sch term' -> EObject sch (f term')
 
 existentialType :: Existential tm -> EType
-existentialType (ETerm ety _)   = EType ety
+existentialType (ESimple ety _) = EType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
