@@ -27,7 +27,7 @@ module Pact.Analyze.Types.Languages
   , PreProp(..)
   , Prop(..)
   , PropSpecific(..)
-  , PureTerm(..)
+  , Core(..)
 
   , mkDecimal
 
@@ -205,59 +205,59 @@ instance PropSpecific :<: Prop where
     _              -> Nothing
 
 
-data PureTerm t a where
-  Lit :: a -> PureTerm t a
+data Core t a where
+  Lit :: a -> Core t a
   -- | Injects a symbolic value into the language
-  Sym :: S a -> PureTerm t a
+  Sym :: S a -> Core t a
 
   -- | Refers to a function argument, universally/existentially-quantified
   -- variable, or column
-  Var :: VarId -> Text -> PureTerm t a
+  Var :: VarId -> Text -> Core t a
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> PureTerm t String
+  StrConcat :: t String -> t String -> Core t String
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> PureTerm t Integer
+  StrLength :: t String                     -> Core t Integer
 
   -- numeric ops
-  Numerical :: Numerical t a -> PureTerm t a
+  Numerical :: Numerical t a -> Core t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
-  IntAddTime :: t Time -> t Integer -> PureTerm t Time
+  IntAddTime :: t Time -> t Integer -> Core t Time
   -- | Adds a 'Decimal' expression to a 'Time' expression
-  DecAddTime :: t Time -> t Decimal -> PureTerm t Time
+  DecAddTime :: t Time -> t Decimal -> Core t Time
 
   -- comparison. Note that while it's cumbersome to define five different
   -- monomorphized comparisons, the alternative is implementing Eq by hand
   -- here.
 
   -- | A 'ComparisonOp' expression over two 'Integer' expressions
-  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> PureTerm t Bool
+  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> PureTerm t Bool
+  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'Time' expressions
-  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> PureTerm t Bool
+  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t String  -> t String  -> PureTerm t Bool
+  StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
-  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> PureTerm t Bool
+  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
 
-  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> PureTerm t Bool
-  ObjectEqNeq :: EqNeq -> t Object -> t Object -> PureTerm t Bool
+  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
+  ObjectEqNeq :: EqNeq -> t Object -> t Object -> Core t Bool
 
-  At            :: Schema -> t String -> t Object -> EType -> PureTerm t a
+  At            :: Schema -> t String -> t Object -> EType -> Core t a
 
-  LiteralObject :: Map Text (Existential t) -> PureTerm t Object
+  LiteralObject :: Map Text (Existential t) -> Core t Object
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
-  Logical :: LogicalOp -> [t Bool] -> PureTerm t Bool
+  Logical :: LogicalOp -> [t Bool] -> Core t Bool
 
-deriving instance Show a => Show (PureTerm Prop a)
-deriving instance Eq a => Eq (PureTerm Prop a)
+deriving instance Show a => Show (Core Prop a)
+deriving instance Eq a => Eq (Core Prop a)
 
 pattern PLit :: a -> Prop a
 pattern PLit a = PureProp (Lit a)
@@ -267,7 +267,7 @@ pattern PVar vid name = PureProp (Var vid name)
 
 data Prop a
   = PropSpecific (PropSpecific a)
-  | PureProp     (PureTerm Prop a)
+  | PureProp     (Core Prop a)
   deriving (Show, Eq)
 
 instance S :<: Prop where
@@ -387,7 +387,7 @@ instance UserShow PreProp where
 -- * logical operations
 --
 -- The language is stateless.
-newtype Invariant a = PureInvariant (PureTerm Invariant a)
+newtype Invariant a = PureInvariant (Core Invariant a)
   deriving (Show, Eq)
 
 instance Numerical Invariant :<: Invariant where
@@ -405,8 +405,8 @@ type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
 SHOW_EXISTENTIAL(Invariant)
 
-deriving instance Show a => Show (PureTerm Invariant a)
-deriving instance Eq a => Eq (PureTerm Invariant a)
+deriving instance Show a => Show (Core Invariant a)
+deriving instance Eq a => Eq (Core Invariant a)
 
 pattern ILiteral :: a -> Invariant a
 pattern ILiteral a = PureInvariant (Lit a)
