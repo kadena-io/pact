@@ -41,7 +41,7 @@ import qualified Data.Foldable             as Foldable
 import qualified Data.HashMap.Strict       as HM
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (fromMaybe, mapMaybe)
+import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (SBV, SymWord, Symbolic)
 import qualified Data.SBV                  as SBV
@@ -207,7 +207,7 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
     indent = ("  " <>)
 
     showSbv :: (Show a, SymWord a) => SBV a -> Text
-    showSbv sbv = fromMaybe "[symbolic]" $ tShow <$> SBV.unliteral sbv
+    showSbv sbv = maybe "[symbolic]" tShow (SBV.unliteral sbv)
 
     showS :: (Show a, SymWord a) => S a -> Text
     showS = showSbv . _sSbv
@@ -701,7 +701,7 @@ verifyModule modules moduleData = runExceptT $ do
     <- liftEither $ moduleFunChecks tables funTypes
 
   let funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [Located Check]))
-      funChecks' = sequence (fmap sequence funChecks)
+      funChecks' = traverse sequence funChecks
 
       verifyFunProps :: (Ref, [Located Check]) -> IO [CheckResult]
       verifyFunProps = uncurry (verifyFunctionProps tables)

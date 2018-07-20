@@ -8,9 +8,6 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TupleSections              #-}
-{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module Pact.Analyze.Eval.Term where
@@ -57,7 +54,7 @@ import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Pure
 import           Pact.Analyze.Eval.Types
 import           Pact.Analyze.Orphans        ()
-import           Pact.Analyze.Types          hiding (tableName)
+import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 

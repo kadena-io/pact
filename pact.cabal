@@ -69,14 +69,13 @@ library
       Pact.Analyze.Parse
       Pact.Analyze.Patterns
       Pact.Analyze.PrenexNormalize
-      Pact.Analyze.Term
       Pact.Analyze.Translate
       Pact.Analyze.Types
       Pact.Analyze.Types.Languages
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared
-      Pact.Analyze.Types.Terms
+      Pact.Analyze.Types.Term
       Pact.Analyze.Util
       Pact.ApiReq
       Pact.Bench

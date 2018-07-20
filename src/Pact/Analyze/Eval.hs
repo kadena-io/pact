@@ -32,7 +32,7 @@ import           Pact.Analyze.Eval.Prop
 import           Pact.Analyze.Eval.Pure
 import           Pact.Analyze.Eval.Term
 import           Pact.Analyze.Eval.Types
-import           Pact.Analyze.Types          hiding (tableName)
+import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 analyzeCheck :: Check -> Query (S Bool)
