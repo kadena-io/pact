@@ -18,12 +18,7 @@ shouldMatch :: HM.HashMap RequestKey ApiResult -> [ApiResultCheck] -> Expectatio
 shouldMatch results checks = mapM_ match checks
   where match ApiResultCheck{..} = do
           let apiRes = HM.lookup _arcReqKey results
-          shouldSatisfyWithArgs apiRes _arcIsFailure _arcExpect 
-
-shouldSatisfyWithArgs :: Maybe ApiResult -> Bool -> Maybe Value -> Expectation 
-shouldSatisfyWithArgs apiRes isFailure expect = do
-  let checkResultWithArgs = checkResult isFailure expect
-  apiRes `shouldSatisfy` checkResultWithArgs
+          checkResult _arcIsFailure _arcExpect apiRes
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
@@ -99,7 +94,7 @@ testCorrectNextStep = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
-
+  
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"

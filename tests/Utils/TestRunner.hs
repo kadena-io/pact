@@ -29,6 +29,7 @@ import Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Data.Aeson
+import Test.Hspec
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Control.Exception as Exception
@@ -58,23 +59,13 @@ data ApiResultCheck = ApiResultCheck
   } deriving (Show, Eq)
 
 runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
-runAll cmds = do
-  result <- Exception.try helper 
-  case result of
-    Left (Exception.SomeException err) -> do
-      putStrLn "Exception occurred --- "
-      putStrLn (show err)
-      return HM.empty
-    Right res -> return res
-
-  where helper = Exception.bracket
-                 (startServer _testConfigFilePath)
-                 stopServer
-                 (const (run cmds))
+runAll cmds = Exception.bracket
+              (startServer _testConfigFilePath)
+               stopServer
+              (const (run cmds))
 
 startServer :: FilePath -> IO (Async (), Async (), Async ())
 startServer configFile = do
-  flushDb
   ((histC, inC, debugFn, port, logDir), (asyncCmd, asyncHist)) <- setupServer configFile
   asyncServer <- async (runApiServer histC inC debugFn port logDir)
   link2 asyncServer asyncCmd
@@ -83,49 +74,35 @@ startServer configFile = do
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
 stopServer (asyncServer, asyncCmd, asyncHist) = do
-   print $ "canceling asyncCmd " ++ (show (asyncThreadId asyncCmd))
    uninterruptibleCancel asyncCmd
-   cmdPoll <- poll asyncCmd
-   print $ "Result of cmdPoll --- " ++ show cmdPoll
-   
-   print $ "canceling asyncHist " ++ (show (asyncThreadId asyncHist))
    uninterruptibleCancel asyncHist
-   histPoll <- poll asyncHist
-   print $ "Result of histPoll --- " ++ show histPoll
+   cancel asyncServer
+   mapM_ checkFinished [asyncServer, asyncCmd, asyncHist]
+   where checkFinished asy = do
+           asyPoll <- poll asy
+           case asyPoll of
+             Nothing -> Exception.evaluate $ error $ ("Thread " ++
+                                                      (show (asyncThreadId asy)) ++
+                                                      " could not be cancelled.")
+             _ -> return ()
           
-   print $ "canceling asyncServer " ++ (show (asyncThreadId asyncServer))
-   uninterruptibleCancel asyncServer
-   serverPoll <- poll asyncServer
-   print $ "Result of serverPoll --- " ++ show serverPoll
-
-   flushDb
-          
-
 run :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 run cmds = do
   sendResp <- doSend $ SubmitBatch cmds
   case sendResp of
-    ApiFailure _ -> do
-      print $ "API FAILURE on send/ --- " ++ (show . last) cmds
-      return HM.empty
+    ApiFailure err -> Exception.evaluate (error err)
     ApiSuccess RequestKeys{..} -> do
       results <- timeout 3000000 (helper _rkRequestKeys)
       case results of
-        Nothing -> do
-          print $ "API SUCCESS with empty map. NOT Retrying --- " ++ (show . last) cmds
-          return HM.empty
+        Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
         Just res -> return res
       
   where helper reqKeys = do
           pollResp <- doPoll $ Poll reqKeys
           case pollResp of
-            ApiFailure _ -> do
-              print $ "API FAILURE on poll/" ++ (show . last) cmds
-              return HM.empty
+            ApiFailure err -> Exception.evaluate (error err)
             ApiSuccess (PollResponses apiResults) -> do
-              if null apiResults then do
-                print $ "API SUCCESS with empty map. Retrying."
-                helper reqKeys
+              if null apiResults then helper reqKeys
               else return apiResults
 
 doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
@@ -146,6 +123,7 @@ doPoll' req = do
   pollResp <- post (_serverPath ++ "poll") (toJSON req)
   asJSON pollResp
 
+
 flushDb :: IO ()
 flushDb = mapM_ deleteIfExists _logFiles 
   where deleteIfExists filename = do
@@ -165,27 +143,27 @@ genKeys = do
 makeCheck :: Command T.Text -> Bool -> Maybe Value -> ApiResultCheck
 makeCheck Command{..} isFailure expect = ApiResultCheck (RequestKey _cmdHash) isFailure expect
 
-checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Bool
+checkResult :: Bool -> Maybe Value -> Maybe ApiResult -> Expectation
 checkResult isFailure expect result =
   case result of
-    Nothing -> False
+    Nothing -> expectationFailure $ show result ++ " should be Just ApiResult"
     Just (ApiResult cmdRes _ _) ->
       case cmdRes of
         Object h -> if isFailure then checkIfFailure h expect
                     else checkIfSuccess h expect
-        _ -> False
+        _ -> expectationFailure $ show cmdRes ++ " should be Object"
 
-checkIfSuccess :: Object -> Maybe Value -> Bool
-checkIfSuccess h Nothing = HM.lookup (T.pack "status") h == (Just . String . T.pack) "success"
-checkIfSuccess h (Just expect) = isSuccess && isMatch
-  where isSuccess = HM.lookup (T.pack "status") h == (Just . String . T.pack) "success"
-        isMatch = HM.lookup (T.pack "data") h == Just (toJSON expect)
+checkIfSuccess :: Object -> Maybe Value -> Expectation
+checkIfSuccess h Nothing = HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
+checkIfSuccess h (Just expect) = do 
+  HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
+  HM.lookup (T.pack "data") h `shouldBe` Just (toJSON expect)
 
-checkIfFailure :: Object -> Maybe Value -> Bool
-checkIfFailure h Nothing = HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure"
-checkIfFailure h (Just expect) = isFailure && isMatch
-  where isFailure = HM.lookup (T.pack "status") h == (Just . String . T.pack) "failure"
-        isMatch = HM.lookup (T.pack "detail") h == Just (toJSON expect)
+checkIfFailure :: Object -> Maybe Value -> Expectation
+checkIfFailure h Nothing = HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "failure"
+checkIfFailure h (Just expect) = do
+  HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "failure"
+  HM.lookup (T.pack "detail") h `shouldBe` Just (toJSON expect)
 
 
 
