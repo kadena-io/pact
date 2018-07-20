@@ -1,12 +1,15 @@
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 module Pact.Analyze.Eval.Types where
 
 import           Control.Applicative          (ZipList (..))
@@ -20,14 +23,14 @@ import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
 import           Data.Monoid                  ((<>))
 import           Data.SBV                     (Boolean (true), HasKind,
-                                               Mergeable (symbolicMerge), SBV,
-                                               SBool,
+                                               Mergeable, SBV, SBool,
                                                SymArray (readArray, writeArray),
                                                SymWord, Symbolic, false,
                                                uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           GHC.Generics                 (Generic)
 
 import           Pact.Types.Lang              (Info)
 import           Pact.Types.Runtime           (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
@@ -117,17 +120,9 @@ data SymbolicCells
     , _scKsValues      :: ColumnMap (SFunArray RowKey KeySet)
     -- TODO: opaque blobs
     }
-  deriving (Show)
+  deriving (Generic, Show)
 
--- Implemented by-hand until 8.2, when we have DerivingStrategies
-instance Mergeable SymbolicCells where
-  symbolicMerge force test
-    (SymbolicCells a b c d e f)
-    (SymbolicCells a' b' c' d' e' f')
-    = SymbolicCells (m a a') (m b b') (m c c') (m d d') (m e e') (m f f')
-    where
-      m :: Mergeable a => ColumnMap a -> ColumnMap a -> ColumnMap a
-      m = symbolicMerge force test
+deriving instance Mergeable SymbolicCells
 
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
@@ -155,31 +150,9 @@ data LatticeAnalyzeState
     -- enforcement of the keyset.
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
     }
-  deriving (Show)
+  deriving (Generic, Show)
 
--- Implemented by-hand until 8.2, when we have DerivingStrategies
-instance Mergeable LatticeAnalyzeState where
-  symbolicMerge force test
-    (LatticeAnalyzeState
-      success  tsInvariants  tsRead  tsWritten  intCellDeltas  decCellDeltas
-      intColDeltas  decColDeltas  cells  rsRead  rsWritten  csEnforced  csWritten)
-    (LatticeAnalyzeState
-      success' tsInvariants' tsRead' tsWritten' intCellDeltas' decCellDeltas'
-      intColDeltas' decColDeltas' cells' rsRead' rsWritten' csEnforced' csWritten')
-        = LatticeAnalyzeState
-          (symbolicMerge force test success       success')
-          (symbolicMerge force test tsInvariants  tsInvariants')
-          (symbolicMerge force test tsRead        tsRead')
-          (symbolicMerge force test tsWritten     tsWritten')
-          (symbolicMerge force test intCellDeltas intCellDeltas')
-          (symbolicMerge force test decCellDeltas decCellDeltas')
-          (symbolicMerge force test intColDeltas  intColDeltas')
-          (symbolicMerge force test decColDeltas  decColDeltas')
-          (symbolicMerge force test cells         cells')
-          (symbolicMerge force test rsRead        rsRead')
-          (symbolicMerge force test rsWritten     rsWritten')
-          (symbolicMerge force test csEnforced    csEnforced')
-          (symbolicMerge force test csWritten     csWritten')
+deriving instance Mergeable LatticeAnalyzeState
 
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
