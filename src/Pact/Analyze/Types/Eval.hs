@@ -30,6 +30,7 @@ import           Data.SBV                     (Boolean (true), HasKind,
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
+import           Data.Traversable             (for)
 import           GHC.Generics                 (Generic)
 
 import           Pact.Types.Lang              (Info)
@@ -41,10 +42,10 @@ import qualified Pact.Types.Typecheck         as Pact
 import           Pact.Analyze.Errors
 import           Pact.Analyze.LegacySFunArray (SFunArray, mkSFunArray)
 import           Pact.Analyze.Orphans         ()
+import           Pact.Analyze.Translate       (maybeTranslateUserType')
 import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
-
 
 class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   type TermOf m   :: * -> *
@@ -59,13 +60,14 @@ data AnalyzeEnv
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
     , _invariants  :: !(TableMap [Located (Invariant Bool)])
+    , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !ModelTags
     , _aeInfo      :: !Info
     }
   deriving Show
 
-mkAnalyzeEnv :: [Table] -> ModelTags -> Info -> AnalyzeEnv
-mkAnalyzeEnv tables tags info =
+mkAnalyzeEnv :: [Table] -> ModelTags -> Info -> Maybe AnalyzeEnv
+mkAnalyzeEnv tables tags info = do
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
@@ -76,7 +78,15 @@ mkAnalyzeEnv tables tags info =
       argMap :: Map VarId AVal
       argMap = view (located._2._2) <$> _mtArgs tags
 
-  in AnalyzeEnv argMap keySets' keySetAuths invariants' tags info
+  columnIds <- for tables $ \(Table tname ut _) -> do
+    case maybeTranslateUserType' ut of
+      Just (EObjectTy (Schema schema)) -> Just
+        (TableName (T.unpack tname), varIdColumns schema)
+      _ -> Nothing
+
+  let columnIds' = TableMap (Map.fromList columnIds)
+
+  pure $ AnalyzeEnv argMap keySets' keySetAuths invariants' columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
