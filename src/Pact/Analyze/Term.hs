@@ -8,10 +8,11 @@
 
 module Pact.Analyze.Term where
 
-import           Data.Data         (Data)
-import           Data.Map.Strict   (Map)
-import           Data.SBV          (HasKind, SymWord)
-import           Data.Text         (Text)
+import           Data.Data          (Data)
+import           Data.Map.Strict    (Map)
+import           Data.SBV           (HasKind, SymWord)
+import           Data.SBV.Control   (SMTValue)
+import           Data.Text          (Text)
 
 import           Pact.Analyze.Types
 
@@ -22,13 +23,17 @@ import           Pact.Analyze.Types
 
 data ETerm where
   -- TODO: remove Show (add constraint c?)
-  ETerm   :: (Show a, SymWord a) => Term a      -> Type a -> ETerm
-  EObject ::                        Term Object -> Schema -> ETerm
+  ETerm   :: (Show a, SymWord a, SMTValue a) => Term a      -> Type a -> ETerm
+  EObject ::                                    Term Object -> Schema -> ETerm
 
 mapETerm :: (forall a. Term a -> Term a) -> ETerm -> ETerm
 mapETerm f term = case term of
   ETerm term' ty    -> ETerm (f term') ty
   EObject term' sch -> EObject (f term') sch
+
+etermEType :: ETerm -> EType
+etermEType (ETerm _ ety)   = EType ety
+etermEType (EObject _ sch) = EObjectTy sch
 
 data Term ret where
   -- Literals
@@ -39,8 +44,8 @@ data Term ret where
   LiteralObject  :: Map Text (EType, ETerm)   -> Term Object
 
   -- Variable binding
-  Let            :: Text -> UniqueId -> ETerm -> Term a -> Term a
-  Var            :: Text -> UniqueId                    -> Term a
+  Let            :: Text -> VarId -> ETerm -> Term a -> Term a
+  Var            :: Text -> VarId                    -> Term a
 
   -- Control flow
   IfThenElse     :: Term Bool -> Term a -> Term a -> Term a
@@ -51,17 +56,16 @@ data Term ret where
 
   -- Keyset access
   ReadKeySet      :: Term String -> Term KeySet
-  KsAuthorized    :: Term KeySet -> Term Bool
-  NameAuthorized  :: Term String -> Term Bool
+  KsAuthorized    :: TagId -> Term KeySet -> Term Bool
+  NameAuthorized  :: TagId -> Term String -> Term Bool
 
   -- At holds the schema of the object it's accessing. We do this so we can
   -- determine statically which fields can be accessed.
   At             :: Schema -> Term String -> Term Object -> EType -> Term a
 
   -- Table access
-  Read           :: TableName -> Schema      -> Term String ->           Term Object
-  ReadCols       :: TableName -> Schema      -> Term String -> [Text] -> Term Object
-  Write          :: TableName -> Term String -> Term Object ->           Term String
+  Read           :: TagId -> TableName -> Schema      -> Term String -> Term Object
+  Write          :: TagId -> TableName -> Term String -> Term Object -> Term String
 
   -- Arithmetic ops
   --
@@ -103,6 +107,8 @@ data Term ret where
   AddTime         :: Term Time -> ETerm -> Term Time
 
   Comparison      :: (Show a, SymWord a) => ComparisonOp -> Term a -> Term a -> Term Bool
+
+  ObjectEqNeq     :: EqNeq -> Term Object -> Term Object -> Term Bool
 
   Logical         :: LogicalOp -> [Term Bool] -> Term Bool
 
