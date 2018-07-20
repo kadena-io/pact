@@ -255,7 +255,7 @@ expToPreProp = \case
 
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
-  EAtom' "abort"   -> pure PreAbort
+  EAtom' SAbort    -> pure PreAbort
   EAtom' "success" -> pure PreSuccess
   EAtom' "result"  -> pure PreResult
   EAtom' var       -> mkVar var

@@ -46,6 +46,7 @@ data Feature
   -- * Property-specific features
   | FUniversalQuantification
   | FExistentialQuantification
+  | FAbort
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -58,12 +59,15 @@ data Constraint
   | AnyType
   deriving (Show)
 
+data FormType
+  = Fun (Maybe Bindings) [(Var, Type)] Type
+  | Sym Type
+  deriving (Show)
+
 data Usage
   = Usage { _usageTemplate    :: Text
           , _usageConstraints :: Map TypeVar Constraint
-          , _usageBindings    :: Maybe Bindings
-          , _usageArgTypes    :: [(Var, Type)]
-          , _usageRetType     :: Type
+          , _usageFormType    :: FormType
           }
   deriving (Show)
 
@@ -124,11 +128,12 @@ doc FAddition = Doc
     in Usage
       "(+ x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        a
   ]
 doc FSubtraction = Doc
   "-"
@@ -138,11 +143,12 @@ doc FSubtraction = Doc
     in Usage
       "(- x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        a
   ]
 doc FMultiplication = Doc
   "*"
@@ -152,11 +158,12 @@ doc FMultiplication = Doc
     in Usage
       "(* x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        a
   ]
 doc FDivision = Doc
   "/"
@@ -166,11 +173,12 @@ doc FDivision = Doc
     in Usage
       "(/ x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        a
   ]
 doc FExponentiation = Doc
   "^"
@@ -180,10 +188,11 @@ doc FExponentiation = Doc
     in Usage
       "(^ x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
       a
   ]
 doc FLogarithm = Doc
@@ -194,11 +203,12 @@ doc FLogarithm = Doc
     in Usage
       "(log b x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("b", a)
-      , ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("b", a)
+        , ("x", a)
+        ]
+        a
   ]
 doc FNumericNegation = Doc
   "-"
@@ -208,10 +218,11 @@ doc FNumericNegation = Doc
     in Usage
       "(- x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        ]
+        a
   ]
 doc FSquareRoot = Doc
   "sqrt"
@@ -221,10 +232,11 @@ doc FSquareRoot = Doc
     in Usage
       "(sqrt x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        ]
+        a
   ]
 doc FNaturalLogarithm = Doc
   "ln"
@@ -234,10 +246,11 @@ doc FNaturalLogarithm = Doc
     in Usage
       "(ln x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        ]
+        a
   ]
 doc FExponential = Doc
   "exp"
@@ -247,10 +260,11 @@ doc FExponential = Doc
     in Usage
       "(exp x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        ]
+        a
   ]
 doc FAbsoluteValue = Doc
   "abs"
@@ -260,10 +274,11 @@ doc FAbsoluteValue = Doc
     in Usage
       "(abs x)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      ]
-      a
+      $ Fun
+        Nothing
+        [ ("x", a)
+        ]
+        a
   ]
 doc FBankersRound = Doc
   "round"
@@ -272,18 +287,20 @@ doc FBankersRound = Doc
   [ Usage
       "(round x)"
       Map.empty
-      Nothing
-      [ ("x", TyCon dec)
-      ]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x", TyCon dec)
+        ]
+        (TyCon int)
   , Usage
       "(round x)"
       Map.empty
-      Nothing
-      [ ("x",    TyCon dec)
-      , ("prec", TyCon int)
-      ]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x",    TyCon dec)
+        , ("prec", TyCon int)
+        ]
+        (TyCon int)
   ]
 doc FCeilingRound = Doc
   "ceiling"
@@ -292,17 +309,19 @@ doc FCeilingRound = Doc
   [ Usage
       "(ceiling x)"
       Map.empty
-      Nothing
-      [ ("x", TyCon dec)]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x", TyCon dec)]
+        (TyCon int)
   , Usage
       "(ceiling x)"
       Map.empty
-      Nothing
-      [ ("x",    TyCon dec)
-      , ("prec", TyCon int)
-      ]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x",    TyCon dec)
+        , ("prec", TyCon int)
+        ]
+        (TyCon int)
   ]
 doc FFloorRound = Doc
   "floor"
@@ -311,17 +330,19 @@ doc FFloorRound = Doc
   [ Usage
       "(floor x)"
       Map.empty
-      Nothing
-      [ ("x", TyCon dec)]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x", TyCon dec)]
+        (TyCon int)
   , Usage
       "(floor x)"
       Map.empty
-      Nothing
-      [ ("x",    TyCon dec)
-      , ("prec", TyCon int)
-      ]
-      (TyCon int)
+      $ Fun
+        Nothing
+        [ ("x",    TyCon dec)
+        , ("prec", TyCon int)
+        ]
+        (TyCon int)
   ]
 
 -- Logical operators
@@ -334,11 +355,12 @@ doc FGreaterThan = Doc
     in Usage
       "(> x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FLessThan = Doc
   "<"
@@ -348,11 +370,12 @@ doc FLessThan = Doc
     in Usage
       "(< x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FGreaterThanOrEqual = Doc
   ">="
@@ -362,11 +385,12 @@ doc FGreaterThanOrEqual = Doc
     in Usage
       "(>= x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FLessThanOrEqual = Doc
   "<="
@@ -376,11 +400,12 @@ doc FLessThanOrEqual = Doc
     in Usage
       "(<= x y)"
       (Map.fromList [("a", OneOf [int, dec])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FEquality = Doc
   "="
@@ -390,11 +415,12 @@ doc FEquality = Doc
     in Usage
       "(= x y)"
       (Map.fromList [("a", OneOf [int, dec, str, time, bool, obj, ks])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FInequality = Doc
   "!="
@@ -404,11 +430,12 @@ doc FInequality = Doc
     in Usage
       "(!= x y)"
       (Map.fromList [("a", OneOf [int, dec, str, time, bool, obj, ks])])
-      Nothing
-      [ ("x", a)
-      , ("y", a)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("y", a)
+        ]
+        (TyCon bool)
   ]
 doc FLogicalConjunction = Doc
   "and"
@@ -417,11 +444,12 @@ doc FLogicalConjunction = Doc
   [ Usage
       "(and x y)"
       Map.empty
-      Nothing
-      [ ("x", TyCon bool)
-      , ("y", TyCon bool)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", TyCon bool)
+        , ("y", TyCon bool)
+        ]
+        (TyCon bool)
   ]
 doc FLogicalDisjunction = Doc
   "or"
@@ -430,11 +458,12 @@ doc FLogicalDisjunction = Doc
   [ Usage
       "(or x y)"
       Map.empty
-      Nothing
-      [ ("x", TyCon bool)
-      , ("y", TyCon bool)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", TyCon bool)
+        , ("y", TyCon bool)
+        ]
+        (TyCon bool)
   ]
 doc FLogicalNegation = Doc
   "not"
@@ -443,10 +472,11 @@ doc FLogicalNegation = Doc
   [ Usage
       "(not x)"
       Map.empty
-      Nothing
-      [ ("x", TyCon bool)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("x", TyCon bool)
+        ]
+        (TyCon bool)
   ]
 
 -- Object features
@@ -458,11 +488,12 @@ doc FObjectProjection = Doc
   [ Usage
       "(at k o)"
       Map.empty
-      Nothing
-      [ ("k", TyCon str)
-      , ("o", TyCon obj)
-      ]
-      (TyCon bool)
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        , ("o", TyCon obj)
+        ]
+        (TyCon bool)
   ]
 
 -- TODO: string concat and length
@@ -477,10 +508,11 @@ doc FUniversalQuantification = Doc
     in Usage
       "(forall (x:string) y)"
       (Map.fromList [("a", AnyType), ("r", AnyType)])
-      (Just $ BindVar "a")
-      [ ("y", r)
-      ]
-      r
+      $ Fun
+        (Just $ BindVar "a")
+        [ ("y", r)
+        ]
+        r
   ]
 doc FExistentialQuantification = Doc
   "exists"
@@ -490,10 +522,20 @@ doc FExistentialQuantification = Doc
     in Usage
       "(exists (x:string) y)"
       (Map.fromList [("a", AnyType), ("r", AnyType)])
-      (Just $ BindVar "a")
-      [ ("y", r)
-      ]
-      r
+      $ Fun
+        (Just $ BindVar "a")
+        [ ("y", r)
+        ]
+        r
+  ]
+doc FAbort = Doc
+  "abort"
+  PropOnly
+  "Whether the transaction aborts. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' assume transaction success."
+  [ Usage
+      "abort"
+      Map.empty
+      (Sym (TyCon bool))
   ]
 
 allFeatures :: [Feature]
@@ -552,3 +594,4 @@ PAT(SLogicalNegation, FLogicalNegation)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
+PAT(SAbort, FAbort)
