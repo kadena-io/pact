@@ -45,11 +45,11 @@ import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Eval.Core
-import           Pact.Analyze.Types.Eval
+import           Pact.Analyze.Eval.Invariant
 import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
 
@@ -165,9 +165,12 @@ ksAuthorized sKs = do
       pure ()
   fmap sansProv $ readArray <$> view ksAuths <*> pure (_sSbv sKs)
 
+reindex :: Map Text VarId -> Map Text AVal -> Map VarId AVal
+reindex varMap = Map.mapKeys (varMap Map.!)
+
 applyInvariants
   :: TableName
-  -> Map VarId AVal
+  -> Map Text AVal
   -- ^ Mapping from the fields in this table to the @SVal@ holding that field
   --   in this context.
   -> ([S Bool] -> Analyze ())
@@ -175,18 +178,20 @@ applyInvariants
   --   is an assertion of what it would take for the invariant to be true in
   --   this context.
   -> Analyze ()
-applyInvariants tn sValFields addInvariants = do
+applyInvariants tn aValFields addInvariants = do
   mInvariants <- view (invariants . at tn)
-  case mInvariants of
-    Nothing -> pure ()
-    Just invariants' -> do
+  mColumnIds  <- view (aeColumnIds . at tn)
+  case (mInvariants, mColumnIds) of
+    (Just invariants', Just columnIds) -> do
+      let aValFields' = reindex columnIds aValFields
       invariants'' <- for invariants' $ \(Located info invariant) ->
         case runReaderT (unInvariantCheck (eval invariant))
-                        (Located info sValFields) of
+                        (Located info aValFields') of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
           Right inv -> pure inv
       addInvariants invariants''
+    _ -> pure ()
 
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
@@ -225,7 +230,7 @@ evalTermO = \case
 
       pure (fieldType, av)
 
-    applyInvariants tn (snd <$> varIdColumns' aValFields) (mapM_ addConstraint)
+    applyInvariants tn (snd <$> aValFields) (mapM_ addConstraint)
 
     pure $ Object aValFields
 
@@ -270,7 +275,7 @@ evalTerm = \case
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk
 
-    mValFields <- iforM obj' $ \colName (fieldType, aval') -> do
+    aValFields <- iforM obj' $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
       tagAccessCell mtWrites tid colName aval'
@@ -303,17 +308,13 @@ evalTerm = \case
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
-          pure (Just aval')
+          pure aval'
 
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
         AnObj obj'' -> throwErrorNoLoc $ AValUnexpectedlyObj obj''
         OpaqueVal   -> throwErrorNoLoc OpaqueValEncountered
-
-
-    let aValFields :: Map VarId AVal
-        aValFields = Map.mapMaybe id (varIdColumns' mValFields)
 
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
