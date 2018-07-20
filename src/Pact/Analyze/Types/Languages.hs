@@ -14,7 +14,6 @@ module Pact.Analyze.Types.Languages
   , EInvariant
   , EProp
   , Invariant(..)
-  , PreProp(..)
   , Prop(..)
   , PropSpecific(..)
   , Core(..)
@@ -44,15 +43,10 @@ import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
                                                (%))
-import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
-import qualified Data.Text                    as T
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
-
-import qualified Pact.Types.Lang              as Pact
-import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
@@ -88,35 +82,84 @@ pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
 
--- @PreProp@ stands between @Exp@ and @Prop@.
+
+-- | Core terms.
 --
--- The conversion from @Exp@ is light, handled in @expToPreProp@.
-data PreProp
-  -- literals
-  = PreIntegerLit Integer
-  | PreStringLit  Text
-  | PreDecimalLit Decimal
-  | PreTimeLit    Time
-  | PreBoolLit    Bool
+-- These are the expressions shared by all three languages ('Prop',
+-- 'Invariant', and 'Term'). Another way of thinking about this type is the
+-- pure subset of any of then languages. This happens to coincide with all of
+-- the invariant language, but properties and terms have more constructions.
+--
+-- This consists of:
+--
+-- * comparisons
+--   - { <, >, <=, >= } apply to { integer, decimal, string, time }
+--   - { =, != } apply to { integer, decimal, string, time, bool, keyset }
+-- * literals
+-- * variables
+-- * logical operations
+-- * string length and concatenation
+-- * 'add-time'
+-- * 'at'
+data Core t a where
+  Lit :: a -> Core t a
+  -- | Injects a symbolic value into the language
+  Sym :: S a -> Core t a
 
-  -- identifiers
-  | PreAbort
-  | PreSuccess
-  | PreResult
-  | PreVar     VarId Text
+  -- | Refers to a function argument, universally/existentially-quantified
+  -- variable, or column
+  Var :: VarId -> Text -> Core t a
 
-  -- quantifiers
-  | PreForall VarId Text QType PreProp
-  | PreExists VarId Text QType PreProp
+  -- string ops
+  -- | The concatenation of two 'String' expressions
+  StrConcat :: t String -> t String -> Core t String
+  -- | The length of a 'String' expression
+  StrLength :: t String                     -> Core t Integer
 
-  -- applications
-  | PreApp Text [PreProp]
+  -- numeric ops
+  Numerical :: Numerical t a -> Core t a
 
-  | PreAt Text PreProp
-  | PreLiteralObject (Map Text PreProp)
-  deriving Eq
+  -- Time
+  -- | Adds an 'Integer' expression to a 'Time' expression
+  IntAddTime :: t Time -> t Integer -> Core t Time
+  -- | Adds a 'Decimal' expression to a 'Time' expression
+  DecAddTime :: t Time -> t Decimal -> Core t Time
+
+  -- comparison. Note that while it's cumbersome to define five different
+  -- monomorphized comparisons, the alternative is implementing Eq by hand
+  -- here.
+
+  -- | A 'ComparisonOp' expression over two 'Integer' expressions
+  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> Core t Bool
+  -- | A 'ComparisonOp' expression over two 'Decimal' expressions
+  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> Core t Bool
+  -- | A 'ComparisonOp' expression over two 'Time' expressions
+  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
+  -- | A 'ComparisonOp' expression over two 'String' expressions
+  StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
+  -- | A 'ComparisonOp' expression over two 'Bool' expressions
+  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
+
+  KeySetEqNeq   :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
+  ObjectEqNeq   :: EqNeq -> t Object -> t Object -> Core t Bool
+
+  At            :: Schema -> t String -> t Object -> EType -> Core t a
+
+  LiteralObject :: Map Text (Existential t) -> Core t Object
+
+  -- boolean ops
+  -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
+  -- for NOT, and two operands for AND or OR.
+  Logical :: LogicalOp -> [t Bool] -> Core t Bool
+
+deriving instance Eq a   => Eq   (Core Prop a)
+deriving instance Show a => Show (Core Prop a)
 
 
+-- | Property-specific constructions.
+--
+-- This encompasses every construction that can appear in a 'Prop' that's not
+-- in 'Core'.
 data PropSpecific a where
 
   -- TX success/failure
@@ -188,68 +231,9 @@ data PropSpecific a where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> PropSpecific Bool
 
-deriving instance Eq a => Eq (PropSpecific a)
+deriving instance Eq a   => Eq   (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
 
-data Core t a where
-  Lit :: a -> Core t a
-  -- | Injects a symbolic value into the language
-  Sym :: S a -> Core t a
-
-  -- | Refers to a function argument, universally/existentially-quantified
-  -- variable, or column
-  Var :: VarId -> Text -> Core t a
-
-  -- string ops
-  -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> Core t String
-  -- | The length of a 'String' expression
-  StrLength :: t String                     -> Core t Integer
-
-  -- numeric ops
-  Numerical :: Numerical t a -> Core t a
-
-  -- Time
-  -- | Adds an 'Integer' expression to a 'Time' expression
-  IntAddTime :: t Time -> t Integer -> Core t Time
-  -- | Adds a 'Decimal' expression to a 'Time' expression
-  DecAddTime :: t Time -> t Decimal -> Core t Time
-
-  -- comparison. Note that while it's cumbersome to define five different
-  -- monomorphized comparisons, the alternative is implementing Eq by hand
-  -- here.
-
-  -- | A 'ComparisonOp' expression over two 'Integer' expressions
-  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> Core t Bool
-  -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> Core t Bool
-  -- | A 'ComparisonOp' expression over two 'Time' expressions
-  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
-  -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
-  -- | A 'ComparisonOp' expression over two 'Bool' expressions
-  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
-
-  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
-  ObjectEqNeq :: EqNeq -> t Object -> t Object -> Core t Bool
-
-  At            :: Schema -> t String -> t Object -> EType -> Core t a
-
-  LiteralObject :: Map Text (Existential t) -> Core t Object
-
-  -- boolean ops
-  -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
-  -- for NOT, and two operands for AND or OR.
-  Logical :: LogicalOp -> [t Bool] -> Core t Bool
-
-deriving instance Show a => Show (Core Prop a)
-deriving instance Eq a => Eq (Core Prop a)
-
-pattern PLit :: a -> Prop a
-pattern PLit a = PureProp (Lit a)
-
-pattern PVar :: VarId -> Text -> Prop t
-pattern PVar vid name = PureProp (Var vid name)
 
 data Prop a
   = PropSpecific (PropSpecific a)
@@ -285,6 +269,39 @@ instance IsString (Prop TableName) where
 
 instance IsString (Prop ColumnName) where
   fromString = PLit . fromString
+
+instance Boolean (Prop Bool) where
+  true      = PLit True
+  false     = PLit False
+  bnot p    = PureProp $ Logical NotOp [p]
+  p1 &&& p2 = PAnd p1 p2
+  p1 ||| p2 = POr  p1 p2
+
+instance Num (Prop Integer) where
+  fromInteger = PLit . fromInteger
+  (+)         = inject ... IntArithOp Add
+  (*)         = inject ... IntArithOp Mul
+  abs         = inject .   IntUnaryArithOp Abs
+  signum      = inject .   IntUnaryArithOp Signum
+  negate      = inject .   IntUnaryArithOp Negate
+
+instance Num (Prop Decimal) where
+  fromInteger = PLit . mkDecimal . fromInteger
+  (+)         = inject ... DecArithOp Add
+  (*)         = inject ... DecArithOp Mul
+  abs         = inject .   DecUnaryArithOp Abs
+  signum      = inject .   DecUnaryArithOp Signum
+  negate      = inject .   DecUnaryArithOp Negate
+
+type EProp = Existential Prop
+EQ_EXISTENTIAL(Prop)
+SHOW_EXISTENTIAL(Prop)
+
+pattern PLit :: a -> Prop a
+pattern PLit a = PureProp (Lit a)
+
+pattern PVar :: VarId -> Text -> Prop t
+pattern PVar vid name = PureProp (Var vid name)
 
 pattern PNumerical :: Numerical Prop t -> Prop t
 pattern PNumerical x = PureProp (Numerical x)
@@ -322,72 +339,20 @@ pattern POr a b = PureProp (Logical OrOp [a, b])
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = PureProp (Logical NotOp [a])
 
-type EProp = Existential Prop
-EQ_EXISTENTIAL(Prop)
-SHOW_EXISTENTIAL(Prop)
-
-instance Boolean (Prop Bool) where
-  true      = PLit True
-  false     = PLit False
-  bnot p    = PureProp $ Logical NotOp [p]
-  p1 &&& p2 = PAnd p1 p2
-  p1 ||| p2 = POr  p1 p2
-
-instance Num (Prop Integer) where
-  fromInteger = PLit . fromInteger
-  (+)         = inject ... IntArithOp Add
-  (*)         = inject ... IntArithOp Mul
-  abs         = inject .   IntUnaryArithOp Abs
-  signum      = inject .   IntUnaryArithOp Signum
-  negate      = inject .   IntUnaryArithOp Negate
-
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
   mantissa % 10 ^ places
 
-instance Num (Prop Decimal) where
-  fromInteger = PLit . mkDecimal . fromInteger
-  (+)         = inject ... DecArithOp Add
-  (*)         = inject ... DecArithOp Mul
-  abs         = inject .   DecUnaryArithOp Abs
-  signum      = inject .   DecUnaryArithOp Signum
-  negate      = inject .   DecUnaryArithOp Negate
 
-instance UserShow PreProp where
-  userShowsPrec prec = \case
-    PreIntegerLit i -> tShow i
-    PreStringLit t  -> tShow t
-    PreDecimalLit d -> tShow d
-    PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
-    PreBoolLit b    -> tShow (Pact.LBool b)
-
-    PreAbort        -> "abort"
-    PreSuccess      -> "success"
-    PreResult       -> "result"
-    PreVar _id name -> name
-
-    PreForall _vid name qty prop ->
-      "(forall (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
-    PreExists _vid name qty prop ->
-      "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
-    PreApp name applicands -> "(" <> name <> " " <> T.unwords
-      ((map userShow) applicands) <> ")"
-
-    PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
-    PreLiteralObject obj -> userShowsPrec prec obj
-
--- The schema invariant language consists of:
+-- | The schema invariant language.
 --
--- * comparisons
---   - { <, >, <=, >= } apply to { integer, decimal, string, time }
---   - { =, != } apply to { integer, decimal, string, time, bool, keyset }
--- * literals
--- * variables
--- * logical operations
---
--- The language is stateless.
+-- This language is pure / stateless. It includes exactly the same
+-- constructions as 'Core'.
 newtype Invariant a = PureInvariant (Core Invariant a)
   deriving (Show, Eq)
+
+deriving instance Eq a   => Eq   (Core Invariant a)
+deriving instance Show a => Show (Core Invariant a)
 
 instance Core Invariant :<: Invariant where
   inject = PureInvariant
@@ -410,9 +375,6 @@ instance S :<: Invariant where
 type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
 SHOW_EXISTENTIAL(Invariant)
-
-deriving instance Show a => Show (Core Invariant a)
-deriving instance Eq a => Eq (Core Invariant a)
 
 pattern ILiteral :: a -> Invariant a
 pattern ILiteral a = PureInvariant (Lit a)
