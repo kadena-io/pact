@@ -70,15 +70,15 @@ import           Pact.Analyze.Util
 
 #define EQ_EXISTENTIAL(tm)                               \
 instance Eq (Existential tm) where                       \
-  ETerm ta ia == ETerm tb ib = case typeEq ta tb of {    \
+  ESimple ta ia == ESimple tb ib = case typeEq ta tb of {  \
     Just Refl -> ia == ib;                               \
     Nothing   -> False};                                 \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb; \
   _ == _ = False;
 
-#define SHOW_EXISTENTIAL(tm)                                       \
-instance Show (Existential tm) where                               \
-  show (ETerm ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"; \
+#define SHOW_EXISTENTIAL(tm)                                         \
+instance Show (Existential tm) where                                 \
+  show (ESimple ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"; \
   show (EObject ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")";
 
 

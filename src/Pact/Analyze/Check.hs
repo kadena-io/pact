@@ -328,7 +328,7 @@ allocModelTags args locatedTm tagAllocs = ModelTags
 
     allocResult :: Symbolic (Located TVal)
     allocResult = sequence $ locatedTm <&> \case
-      ETerm ty _ ->
+      ESimple ty _ ->
         let ety = EType ty
         in (ety,) <$> allocAVal ety
       EObject sch _ ->
