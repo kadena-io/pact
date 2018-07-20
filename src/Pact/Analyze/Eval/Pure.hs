@@ -127,7 +127,7 @@ evalObjectEqNeq op xT yT = do
 
 evalPure
   :: (Analyzer m, SymWord a)
-  => PureTerm (TermOf m) a -> m (S a)
+  => Core (TermOf m) a -> m (S a)
 evalPure (Lit a)                    = pure (literalS a)
 evalPure (Sym s)                    = pure s
 evalPure (StrConcat p1 p2)          = (.++) <$> eval p1 <*> eval p2
@@ -227,7 +227,7 @@ evalAtO colNameT objT = do
 
 evalPureO
   :: Analyzer m
-  => PureTerm (TermOf m) Object -> m Object
+  => Core (TermOf m) Object -> m Object
 evalPureO (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalPureO (At _schema colNameT objT _retType) = evalAtO colNameT objT
 evalPureO (Var vid name) = do
