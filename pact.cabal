@@ -75,7 +75,6 @@ library
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared
-      Pact.Analyze.Types.Term
       Pact.Analyze.Util
       Pact.ApiReq
       Pact.Bench
