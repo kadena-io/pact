@@ -19,7 +19,7 @@ import qualified Data.Text                   as T
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Types          hiding (tableName)
+import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
 
