@@ -15,6 +15,14 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.String (IsString)
 
+--
+-- NOTE: that in the current factoring, there can be multiple features that
+-- share the same symbol -- this is one form of overloading. The "other form"
+-- is the more boring instance where e.g. rounding functions have >1 signature
+-- and so >1 "Usage". This must be taken into account when we render
+-- user-facing docs from this information.
+--
+
 data Feature
   -- * Numeric operators
   = FAddition
@@ -41,8 +49,11 @@ data Feature
   | FLogicalConjunction
   | FLogicalDisjunction
   | FLogicalNegation
-  -- * Object features
+  -- * Object operators
   | FObjectProjection
+  -- * String operators
+  | FStringLength
+  | FStringConcatenation
   -- * Property-specific features
   | FUniversalQuantification
   | FExistentialQuantification
@@ -498,7 +509,35 @@ doc FObjectProjection = Doc
         (TyCon bool)
   ]
 
--- TODO: string concat and length
+-- String featuers
+
+doc FStringLength = Doc
+  "str-length"
+  InvAndProp -- TODO: double-check that this is true
+  "String length"
+  [ Usage
+      "(str-length s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        ]
+        (TyCon int)
+  ]
+doc FStringConcatenation = Doc
+  "+"
+  InvAndProp
+  "String concatenation"
+  [ Usage
+      "(+ s t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        , ("t", TyCon str)
+        ]
+        (TyCon str)
+  ]
 
 -- Property-specific features
 
@@ -613,6 +652,8 @@ PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SObjectProjection, FObjectProjection)
+PAT(SStringLength, FStringLength)
+PAT(SStringConcatenation, FStringConcatenation)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
 PAT(STransactionAborts, FTransactionAborts)

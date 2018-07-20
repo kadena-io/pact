@@ -372,7 +372,7 @@ inferPreProp preProp = case preProp of
   -- applications:
   --
   -- Function types are inferred; arguments are checked.
-  PreApp "str-length" [str] ->
+  PreApp SStringLength [str] ->
     ESimple TInt . PStrLength <$> checkPreProp TStr str
 
   PreApp "mod" [a, b] -> do
@@ -520,7 +520,7 @@ checkPreProp ty preProp
       EObject ty' _prop -> typeError preProp ty ty'
   | otherwise = case (ty, preProp) of
 
-  (TStr, PreApp "+" [a, b])
+  (TStr, PreApp SStringConcatenation [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
   (TDecimal, PreApp opSym@(textToArithOp -> Just op) [a, b]) -> do
     a' <- inferPreProp a
@@ -657,9 +657,9 @@ expToInvariant ty exp = case (ty, exp) of
   (_, ELiteral _ _)                   ->
     throwErrorIn exp "literal of unexpected type"
 
-  (TInt, EList' [EAtom' "str-length", str])
+  (TInt, EList' [EAtom' SStringLength, str])
     -> PureInvariant . StrLength <$> expToInvariant TStr str
-  (TStr, EList' [EAtom' "+", a, b]) -> PureInvariant ... StrConcat
+  (TStr, EList' [EAtom' SStringConcatenation, a, b]) -> PureInvariant ... StrConcat
     <$> expToInvariant TStr a <*> expToInvariant TStr b
 
   (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
