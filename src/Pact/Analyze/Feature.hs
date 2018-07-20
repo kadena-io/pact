@@ -1,7 +1,7 @@
-{-# LANGUAGE CPP                #-}
-{-# LANGUAGE PatternSynonyms    #-}
-{-# LANGUAGE ViewPatterns       #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Features, availability, and documentation
@@ -16,24 +16,36 @@ import Data.Set (Set)
 import Data.String (IsString)
 
 data Feature
+  -- * Numeric operators
   = FAddition
   | FSubtraction
   | FMultiplication
   | FDivision
   | FExponentiation
   | FLogarithm
-  | FNegation
+  | FNumericNegation
   | FSquareRoot
   | FNaturalLogarithm
   | FExponential
   | FAbsoluteValue
+  | FBankersRound
+  | FCeilingRound
+  | FFloorRound
+  -- * Logical operators
   | FGreaterThan
   | FLessThan
   | FGreaterThanOrEqual
   | FLessThanOrEqual
   | FEquality
   | FInequality
-  | FRound
+  | FLogicalConjunction
+  | FLogicalDisjunction
+  | FLogicalNegation
+  -- * Object features
+  | FObjectProjection
+  -- * Property-specific features
+  | FUniversalQuantification
+  | FExistentialQuantification
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -41,9 +53,15 @@ data Availability
   | InvAndProp
   deriving (Eq, Ord, Show)
 
+data Constraint
+  = OneOf [ConcreteType]
+  | AnyType
+  deriving (Show)
+
 data Usage
   = Usage { _usageTemplate    :: Text
-          , _usageConstraints :: Map TypeVar [ConcreteType]
+          , _usageConstraints :: Map TypeVar Constraint
+          , _usageBindings    :: Maybe Bindings
           , _usageArgTypes    :: [(Var, Type)]
           , _usageRetType     :: Type
           }
@@ -80,6 +98,11 @@ data Type
   | TyVar TypeVar
   deriving (Show)
 
+data Bindings
+  = BindVar TypeVar
+  | BindObject
+  deriving (Show)
+
 int, dec, str, time, bool, obj, ks :: ConcreteType
 int  = "integer"
 dec  = "decimal"
@@ -90,6 +113,9 @@ obj  = "object"
 ks   = "keyset"
 
 doc :: Feature -> Doc
+
+-- Numeric operators
+
 doc FAddition = Doc
   "+"
   InvAndProp
@@ -97,9 +123,11 @@ doc FAddition = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(+ x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       a
   ]
 doc FSubtraction = Doc
@@ -109,9 +137,11 @@ doc FSubtraction = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(- x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       a
   ]
 doc FMultiplication = Doc
@@ -121,9 +151,11 @@ doc FMultiplication = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(* x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       a
   ]
 doc FDivision = Doc
@@ -133,9 +165,11 @@ doc FDivision = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(/ x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       a
   ]
 doc FExponentiation = Doc
@@ -145,9 +179,11 @@ doc FExponentiation = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(^ x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       a
   ]
 doc FLogarithm = Doc
@@ -157,20 +193,24 @@ doc FLogarithm = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(log b x)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("b", a)
-      , ("x", a)]
+      , ("x", a)
+      ]
       a
   ]
-doc FNegation = Doc
+doc FNumericNegation = Doc
   "-"
   InvAndProp
   "Negation of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(- x)"
-      (Map.fromList [("a", [int, dec])])
-      [("x", a)]
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
+      [ ("x", a)
+      ]
       a
   ]
 doc FSquareRoot = Doc
@@ -180,8 +220,10 @@ doc FSquareRoot = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(sqrt x)"
-      (Map.fromList [("a", [int, dec])])
-      [("x", a)]
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
+      [ ("x", a)
+      ]
       a
   ]
 doc FNaturalLogarithm = Doc
@@ -191,8 +233,10 @@ doc FNaturalLogarithm = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(ln x)"
-      (Map.fromList [("a", [int, dec])])
-      [("x", a)]
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
+      [ ("x", a)
+      ]
       a
   ]
 doc FExponential = Doc
@@ -202,8 +246,10 @@ doc FExponential = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(exp x)"
-      (Map.fromList [("a", [int, dec])])
-      [("x", a)]
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
+      [ ("x", a)
+      ]
       a
   ]
 doc FAbsoluteValue = Doc
@@ -213,10 +259,73 @@ doc FAbsoluteValue = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(abs x)"
-      (Map.fromList [("a", [int, dec])])
-      [("x", a)]
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
+      [ ("x", a)
+      ]
       a
   ]
+doc FBankersRound = Doc
+  "round"
+  InvAndProp
+  "Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal."
+  [ Usage
+      "(round x)"
+      Map.empty
+      Nothing
+      [ ("x", TyCon dec)
+      ]
+      (TyCon int)
+  , Usage
+      "(round x)"
+      Map.empty
+      Nothing
+      [ ("x",    TyCon dec)
+      , ("prec", TyCon int)
+      ]
+      (TyCon int)
+  ]
+doc FCeilingRound = Doc
+  "ceiling"
+  InvAndProp
+  "Rounds the decimal `x` up to the next integer, or to `prec` precision as decimal."
+  [ Usage
+      "(ceiling x)"
+      Map.empty
+      Nothing
+      [ ("x", TyCon dec)]
+      (TyCon int)
+  , Usage
+      "(ceiling x)"
+      Map.empty
+      Nothing
+      [ ("x",    TyCon dec)
+      , ("prec", TyCon int)
+      ]
+      (TyCon int)
+  ]
+doc FFloorRound = Doc
+  "floor"
+  InvAndProp
+  "Rounds the decimal `x` down to the previous integer, or to `prec` precision as decimal."
+  [ Usage
+      "(floor x)"
+      Map.empty
+      Nothing
+      [ ("x", TyCon dec)]
+      (TyCon int)
+  , Usage
+      "(floor x)"
+      Map.empty
+      Nothing
+      [ ("x",    TyCon dec)
+      , ("prec", TyCon int)
+      ]
+      (TyCon int)
+  ]
+
+-- Logical operators
+
 doc FGreaterThan = Doc
   ">"
   InvAndProp
@@ -224,9 +333,11 @@ doc FGreaterThan = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(> x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
 doc FLessThan = Doc
@@ -236,9 +347,11 @@ doc FLessThan = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(< x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
 doc FGreaterThanOrEqual = Doc
@@ -248,9 +361,11 @@ doc FGreaterThanOrEqual = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(>= x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
 doc FLessThanOrEqual = Doc
@@ -260,9 +375,11 @@ doc FLessThanOrEqual = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(<= x y)"
-      (Map.fromList [("a", [int, dec])])
+      (Map.fromList [("a", OneOf [int, dec])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
 doc FEquality = Doc
@@ -272,9 +389,11 @@ doc FEquality = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(= x y)"
-      (Map.fromList [("a", [int, dec, str, time, bool, obj, ks])])
+      (Map.fromList [("a", OneOf [int, dec, str, time, bool, obj, ks])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
 doc FInequality = Doc
@@ -284,26 +403,97 @@ doc FInequality = Doc
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(!= x y)"
-      (Map.fromList [("a", [int, dec, str, time, bool, obj, ks])])
+      (Map.fromList [("a", OneOf [int, dec, str, time, bool, obj, ks])])
+      Nothing
       [ ("x", a)
-      , ("y", a)]
+      , ("y", a)
+      ]
       (TyCon bool)
   ]
-doc FRound = Doc
-  "round"
+doc FLogicalConjunction = Doc
+  "and"
   InvAndProp
-  "Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal."
+  "Short-circuiting logical conjunction"
   [ Usage
-      "(round x)"
+      "(and x y)"
       Map.empty
-      [ ("x", TyCon dec)]
-      (TyCon int)
-  , Usage
-      "(round x)"
+      Nothing
+      [ ("x", TyCon bool)
+      , ("y", TyCon bool)
+      ]
+      (TyCon bool)
+  ]
+doc FLogicalDisjunction = Doc
+  "or"
+  InvAndProp
+  "Short-circuiting logical disjunction"
+  [ Usage
+      "(or x y)"
       Map.empty
-      [ ("x",    TyCon dec)
-      , ("prec", TyCon int)]
-      (TyCon int)
+      Nothing
+      [ ("x", TyCon bool)
+      , ("y", TyCon bool)
+      ]
+      (TyCon bool)
+  ]
+doc FLogicalNegation = Doc
+  "not"
+  InvAndProp
+  "Logical negation"
+  [ Usage
+      "(not x)"
+      Map.empty
+      Nothing
+      [ ("x", TyCon bool)
+      ]
+      (TyCon bool)
+  ]
+
+-- Object features
+
+doc FObjectProjection = Doc
+  "at"
+  InvAndProp
+  "Object projection"
+  [ Usage
+      "(at k o)"
+      Map.empty
+      Nothing
+      [ ("k", TyCon str)
+      , ("o", TyCon obj)
+      ]
+      (TyCon bool)
+  ]
+
+-- TODO: string concat and length
+
+-- Property-specific features
+
+doc FUniversalQuantification = Doc
+  "forall"
+  PropOnly
+  "Bind a universally-quantified variable"
+  [ let r = TyVar $ TypeVar "r"
+    in Usage
+      "(forall (x:string) y)"
+      (Map.fromList [("a", AnyType), ("r", AnyType)])
+      (Just $ BindVar "a")
+      [ ("y", r)
+      ]
+      r
+  ]
+doc FExistentialQuantification = Doc
+  "exists"
+  PropOnly
+  "Bind an existentially-quantified variable"
+  [ let r = TyVar $ TypeVar "r"
+    in Usage
+      "(exists (x:string) y)"
+      (Map.fromList [("a", AnyType), ("r", AnyType)])
+      (Just $ BindVar "a")
+      [ ("y", r)
+      ]
+      r
   ]
 
 allFeatures :: [Feature]
@@ -342,15 +532,23 @@ PAT(SMultiplication, FMultiplication)
 PAT(SDivision, FDivision)
 PAT(SExponentiation, FExponentiation)
 PAT(SLogarithm, FLogarithm)
-PAT(SNegation, FNegation)
+PAT(SNumericNegation, FNumericNegation)
 PAT(SSquareRoot, FSquareRoot)
 PAT(SNaturalLogarithm, FNaturalLogarithm)
 PAT(SExponential, FExponential)
 PAT(SAbsoluteValue, FAbsoluteValue)
+PAT(SBankersRound, FBankersRound)
+PAT(SCeilingRound, FCeilingRound)
+PAT(SFloorRound, FFloorRound)
 PAT(SGreaterThan, FGreaterThan)
 PAT(SLessThan, FLessThan)
 PAT(SGreaterThanOrEqual, FGreaterThanOrEqual)
 PAT(SLessThanOrEqual, FLessThanOrEqual)
 PAT(SEquality, FEquality)
 PAT(SInequality, FInequality)
-PAT(SRound, FRound)
+PAT(SLogicalConjunction, FLogicalConjunction)
+PAT(SLogicalDisjunction, FLogicalDisjunction)
+PAT(SLogicalNegation, FLogicalNegation)
+PAT(SObjectProjection, FObjectProjection)
+PAT(SUniversalQuantification, FUniversalQuantification)
+PAT(SExistentialQuantification, FExistentialQuantification)

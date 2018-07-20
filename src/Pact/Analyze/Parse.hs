@@ -130,7 +130,7 @@ textToArithOp = \case
 
 textToUnaryArithOp :: Text -> Maybe UnaryArithOp
 textToUnaryArithOp = \case
-  SNegation         -> Just Negate
+  SNumericNegation  -> Just Negate
   SSquareRoot       -> Just Sqrt
   SNaturalLogarithm -> Just Ln
   SExponential      -> Just Exp
@@ -156,24 +156,24 @@ textToEqNeq = \case
 
 textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
 textToRoundingLikeOp = \case
-  SRound    -> Just Round
-  "ceiling" -> Just Ceiling
-  "floor"   -> Just Floor
-  _         -> Nothing
+  SBankersRound -> Just Round
+  SCeilingRound -> Just Ceiling
+  SFloorRound   -> Just Floor
+  _             -> Nothing
 
 textToLogicalOp :: Text -> Maybe LogicalOp
 textToLogicalOp = \case
-  "and" -> Just AndOp
-  "or"  -> Just OrOp
-  "not" -> Just NotOp
-  _     -> Nothing
+  SLogicalConjunction -> Just AndOp
+  SLogicalDisjunction -> Just OrOp
+  SLogicalNegation    -> Just NotOp
+  _                   -> Nothing
 
 textToQuantifier
   :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
 textToQuantifier = \case
-  "forall" -> Just PreForall
-  "exists" -> Just PreExists
-  _        -> Nothing
+  SUniversalQuantification   -> Just PreForall
+  SExistentialQuantification -> Just PreExists
+  _                          -> Nothing
 
 stringLike :: Exp -> Maybe Text
 stringLike = \case
@@ -243,9 +243,9 @@ expToPreProp = \case
       body'
       bindings'
 
-  EList' [EAtom' "at", stringLike -> Just objIx, obj]
+  EList' [EAtom' SObjectProjection, stringLike -> Just objIx, obj]
     -> PreAt objIx <$> expToPreProp obj
-  exp@(EList' [EAtom' "at", _, _]) -> throwErrorIn exp
+  exp@(EList' [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
   Pact.EObject bindings _parsed -> do
     bindings' <- for bindings $ \(key, body) -> case stringLike key of
