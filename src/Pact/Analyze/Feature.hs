@@ -1,7 +1,8 @@
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE ViewPatterns      #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP                #-}
+{-# LANGUAGE PatternSynonyms    #-}
+{-# LANGUAGE ViewPatterns       #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Features, availability, and documentation
 module Pact.Analyze.Feature where
@@ -12,6 +13,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
+import Data.String (IsString)
 
 data Feature
   = FAddition
@@ -40,9 +42,10 @@ data Availability
   deriving (Eq, Ord, Show)
 
 data Usage
-  = Usage { _usageTemplate :: Text
-          , _usageRetType  :: Text
-          , _usageArgTypes :: [(Text, Text)]
+  = Usage { _usageTemplate    :: Text
+          , _usageConstraints :: Map TypeVar [ConcreteType]
+          , _usageArgTypes    :: [(Var, Type)]
+          , _usageRetType     :: Type
           }
   deriving (Show)
 
@@ -60,7 +63,24 @@ symbol = _docSymbol . doc
 availability :: Feature -> Availability
 availability = _docAvailability . doc
 
-int, dec, str, time, bool, obj, ks :: Text
+newtype Var
+  = Var Text
+  deriving (Show, IsString)
+
+newtype ConcreteType
+  = ConcreteType Text
+  deriving (Show, IsString)
+
+newtype TypeVar
+  = TypeVar Text
+  deriving (Eq, Ord, Show, IsString)
+
+data Type
+  = TyCon ConcreteType
+  | TyVar TypeVar
+  deriving (Show)
+
+int, dec, str, time, bool, obj, ks :: ConcreteType
 int  = "integer"
 dec  = "decimal"
 str  = "string"
@@ -74,110 +94,217 @@ doc FAddition = Doc
   "+"
   InvAndProp
   "Addition of integers and decimals."
-  [ Usage "(+ x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(+ x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      a
+  ]
 doc FSubtraction = Doc
   "-"
   InvAndProp
   "Subtraction of integers and decimals."
-  [ Usage "(- x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(- x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      a
+  ]
 doc FMultiplication = Doc
   "*"
   InvAndProp
   "Multiplication of integers and decimals."
-  [ Usage "(* x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(* x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      a
+  ]
 doc FDivision = Doc
   "/"
   InvAndProp
   "Division of integers and decimals."
-  [ Usage "(/ x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(/ x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      a
+  ]
 doc FExponentiation = Doc
   "^"
   InvAndProp
   "Exponentiation of integers and decimals."
-  [ Usage "(^ x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(^ x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      a
+  ]
 doc FLogarithm = Doc
   "log"
   InvAndProp
   "Logarithm of `x` base `b`."
-  [ Usage "(log b x)" ty [("b", ty), ("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(log b x)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("b", a)
+      , ("x", a)]
+      a
+  ]
 doc FNegation = Doc
   "-"
   InvAndProp
   "Negation of integers and decimals."
-  [ Usage "(- x)" ty [("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(- x)"
+      (Map.fromList [("a", [int, dec])])
+      [("x", a)]
+      a
+  ]
 doc FSquareRoot = Doc
   "sqrt"
   InvAndProp
   "Square root of integers and decimals."
-  [ Usage "(sqrt x)" ty [("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(sqrt x)"
+      (Map.fromList [("a", [int, dec])])
+      [("x", a)]
+      a
+  ]
 doc FNaturalLogarithm = Doc
   "ln"
   InvAndProp
   "Logarithm of integers and decimals base e."
-  [ Usage "(ln x)" ty [("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(ln x)"
+      (Map.fromList [("a", [int, dec])])
+      [("x", a)]
+      a
+  ]
 doc FExponential = Doc
   "exp"
   InvAndProp
   "Exponential of integers and decimals. e raised to the integer or decimal `x`."
-  [ Usage "(exp x)" ty [("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(exp x)"
+      (Map.fromList [("a", [int, dec])])
+      [("x", a)]
+      a
+  ]
 doc FAbsoluteValue = Doc
   "abs"
   InvAndProp
   "Absolute value of integers and decimals."
-  [ Usage "(abs x)" ty [("x", ty)]
-  | ty <- [int, dec] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(abs x)"
+      (Map.fromList [("a", [int, dec])])
+      [("x", a)]
+      a
+  ]
 doc FGreaterThan = Doc
   ">"
   InvAndProp
   "True if `x` > `y`"
-  [ Usage "(> x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(> x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FLessThan = Doc
   "<"
   InvAndProp
   "True if `x` < `y`"
-  [ Usage "(< x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(< x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FGreaterThanOrEqual = Doc
   ">="
   InvAndProp
   "True if `x` >= `y`"
-  [ Usage "(>= x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(>= x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FLessThanOrEqual = Doc
   "<="
   InvAndProp
   "True if `x` <= `y`"
-  [ Usage "(<= x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(<= x y)"
+      (Map.fromList [("a", [int, dec])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FEquality = Doc
   "="
   InvAndProp
   "True if `x` = `y`"
-  [ Usage "(= x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time, bool, obj, ks] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(= x y)"
+      (Map.fromList [("a", [int, dec, str, time, bool, obj, ks])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FInequality = Doc
   "!="
   InvAndProp
   "True if `x` != `y`"
-  [ Usage "(!= x y)" ty [("x", ty), ("y", ty)]
-  | ty <- [int, dec, str, time, bool, obj, ks] ]
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(!= x y)"
+      (Map.fromList [("a", [int, dec, str, time, bool, obj, ks])])
+      [ ("x", a)
+      , ("y", a)]
+      (TyCon bool)
+  ]
 doc FRound = Doc
   "round"
   InvAndProp
   "Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal."
-  [ Usage "(round x)" int [("x", dec)]
-  , Usage "(round x)" int [("x", dec), ("prec", int)] ]
+  [ Usage
+      "(round x)"
+      Map.empty
+      [ ("x", TyCon dec)]
+      (TyCon int)
+  , Usage
+      "(round x)"
+      Map.empty
+      [ ("x",    TyCon dec)
+      , ("prec", TyCon int)]
+      (TyCon int)
+  ]
 
 allFeatures :: [Feature]
 allFeatures = enumFrom minBound

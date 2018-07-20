@@ -47,7 +47,7 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (str, obj, ks)
+import           Pact.Analyze.Feature         hiding (Type, Var, str, obj, ks)
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
