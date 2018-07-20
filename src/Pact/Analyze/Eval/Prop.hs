@@ -21,7 +21,7 @@ import qualified Data.Text                 as T
 import           Data.Traversable          (for)
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval.Pure
+import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Types
 import           Pact.Analyze.Orphans      ()
 import           Pact.Analyze.Types        hiding (tableName)
@@ -89,12 +89,12 @@ getLitColName _         = throwErrorNoLoc "TODO: column quantification"
 
 
 evalProp :: SymWord a => Prop a -> Query (S a)
-evalProp (PureProp tm)    = evalPure tm
+evalProp (PureProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
 
 evalPropO :: Prop Object -> Query Object
-evalPropO (PureProp a)          = evalPureO a
+evalPropO (PureProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 
 

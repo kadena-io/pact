@@ -46,7 +46,7 @@ import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Invariant
-import           Pact.Analyze.Eval.Pure
+import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Types
 import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
@@ -193,7 +193,7 @@ evalETerm tm = snd <$> evalExistential tm
 
 evalTermO :: Term Object -> Analyze Object
 evalTermO = \case
-  PureTerm a -> evalPureO a
+  PureTerm a -> evalCoreO a
 
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
@@ -246,7 +246,7 @@ evalTermO = \case
 
 evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
-  PureTerm a -> evalPure a
+  PureTerm a -> evalCore a
 
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond

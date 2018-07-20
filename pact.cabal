@@ -59,7 +59,7 @@ library
       Pact.Analyze.Eval.Invariant
       Pact.Analyze.Eval.Numerical
       Pact.Analyze.Eval.Prop
-      Pact.Analyze.Eval.Pure
+      Pact.Analyze.Eval.Core
       Pact.Analyze.Eval.Term
       Pact.Analyze.Eval.Types
       Pact.Analyze.Check
