@@ -19,7 +19,8 @@ module Utils.TestRunner
   , pactWithSameNameYield
   ) where
 
-import Pact.Server.Server
+import Pact.Server.Server (setupServer)
+import Pact.Server.ApiServer (runApiServer)
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
@@ -30,11 +31,13 @@ import Crypto.Ed25519.Pure
 import Data.Aeson
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
+import qualified Control.Exception as Exception
 import Control.Concurrent.Async
 import Control.Monad
 import Control.Lens
 import Network.Wreq
 import System.Directory
+import System.Timeout
 import NeatInterpolation (text)
 
 testDir, _testLogDir, _testConfigFilePath, _testPort, _serverPath :: String
@@ -56,16 +59,74 @@ data ApiResultCheck = ApiResultCheck
 
 runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 runAll cmds = do
-  withAsync (serve _testConfigFilePath) $ \_ -> do
-    sendResp <- doSend $ SubmitBatch cmds
-    case sendResp of
-      ApiFailure _ -> return HM.empty
-      ApiSuccess RequestKeys{..} -> do
-        pollResp <- doPoll $ Poll _rkRequestKeys
-        case pollResp of
-          ApiFailure _ -> return HM.empty
-          ApiSuccess (PollResponses apiResults) -> do
-            return apiResults
+  result <- Exception.try helper 
+  case result of
+    Left (Exception.SomeException err) -> do
+      putStrLn "Exception occurred --- "
+      putStrLn (show err)
+      return HM.empty
+    Right res -> return res
+
+  where helper = Exception.bracket
+                 (startServer _testConfigFilePath)
+                 stopServer
+                 (const (run cmds))
+
+startServer :: FilePath -> IO (Async (), Async (), Async ())
+startServer configFile = do
+  flushDb
+  ((histC, inC, debugFn, port, logDir), (asyncCmd, asyncHist)) <- setupServer configFile
+  asyncServer <- async (runApiServer histC inC debugFn port logDir)
+  link2 asyncServer asyncCmd
+  link2 asyncServer asyncHist
+  return (asyncServer, asyncCmd, asyncHist)
+
+stopServer :: (Async (), Async (), Async ()) -> IO ()
+stopServer (asyncServer, asyncCmd, asyncHist) = do
+   print $ "canceling asyncCmd " ++ (show (asyncThreadId asyncCmd))
+   uninterruptibleCancel asyncCmd
+   cmdPoll <- poll asyncCmd
+   print $ "Result of cmdPoll --- " ++ show cmdPoll
+   
+   print $ "canceling asyncHist " ++ (show (asyncThreadId asyncHist))
+   uninterruptibleCancel asyncHist
+   histPoll <- poll asyncHist
+   print $ "Result of histPoll --- " ++ show histPoll
+          
+   print $ "canceling asyncServer " ++ (show (asyncThreadId asyncServer))
+   uninterruptibleCancel asyncServer
+   serverPoll <- poll asyncServer
+   print $ "Result of serverPoll --- " ++ show serverPoll
+
+   flushDb
+          
+
+run :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+run cmds = do
+  sendResp <- doSend $ SubmitBatch cmds
+  case sendResp of
+    ApiFailure _ -> do
+      print $ "API FAILURE on send/ --- " ++ (show . last) cmds
+      return HM.empty
+    ApiSuccess RequestKeys{..} -> do
+      results <- timeout 3000000 (helper _rkRequestKeys)
+      case results of
+        Nothing -> do
+          print $ "API SUCCESS with empty map. NOT Retrying --- " ++ (show . last) cmds
+          return HM.empty
+        Just res -> return res
+      
+  where helper reqKeys = do
+          pollResp <- doPoll $ Poll reqKeys
+          case pollResp of
+            ApiFailure _ -> do
+              print $ "API FAILURE on poll/" ++ (show . last) cmds
+              return HM.empty
+            ApiSuccess (PollResponses apiResults) -> do
+              if null apiResults then do
+                print $ "API SUCCESS with empty map. Retrying."
+                helper reqKeys
+              else return apiResults
 
 doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
 doSend req = do
@@ -86,7 +147,7 @@ doPoll' req = do
   asJSON pollResp
 
 flushDb :: IO ()
-flushDb = mapM_ deleteIfExists _logFiles
+flushDb = mapM_ deleteIfExists _logFiles 
   where deleteIfExists filename = do
           let fp = _testLogDir ++ filename
           isFile <- doesFileExist fp

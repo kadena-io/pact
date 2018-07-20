@@ -14,10 +14,11 @@
 
 module Pact.Server.Server
   ( serve
+  , setupServer
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.Async (async, link)
+import Control.Concurrent.Async (async, link, Async(..))
 import Control.Monad
 import Control.Monad.State
 import Control.Exception
@@ -54,6 +55,9 @@ data Config = Config {
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
 
+type ServerSetup = (HistoryChannel, InboundPactChan, (String -> IO ()), Int, FilePath)
+type ServerThreads = (Async (), Async ())
+
 usage :: String
 usage =
   "Config file is YAML format with the following properties: \n\
@@ -67,6 +71,13 @@ usage =
 
 serve :: FilePath -> IO ()
 serve configFile = do
+  ((histC, inC, debugFn, port, logDir), (asyncCmd, asyncHist)) <- setupServer configFile
+  link asyncCmd   -- Must be individually killed with uninterruptibleCancel
+  link asyncHist  -- Must be individually killed with uninterruptibleCancel
+  runApiServer histC inC debugFn port logDir
+
+setupServer :: FilePath -> IO ((ServerSetup, ServerThreads))
+setupServer configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -79,9 +90,12 @@ serve configFile = do
           (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
           _entity
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
-  link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
-  link =<< async (runHistoryService histConf Nothing)
-  runApiServer histC inC debugFn (fromIntegral _port) _logDir
+  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
+  asyncHist <- async (runHistoryService histConf Nothing)
+  
+  let setup = (histC, inC, debugFn, (fromIntegral _port), _logDir)
+  let threads = (asyncCmd, asyncHist)
+  return (setup, threads)
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do
