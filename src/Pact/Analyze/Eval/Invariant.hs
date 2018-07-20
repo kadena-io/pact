@@ -8,7 +8,7 @@ import           Control.Monad.Reader    (MonadReader, ReaderT)
 import           Data.Map.Strict         (Map)
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval.Pure
+import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Types
 import           Pact.Analyze.Types
 
@@ -22,8 +22,8 @@ newtype InvariantCheck a = InvariantCheck
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
-  eval  (PureInvariant tm)   = evalPure tm
-  evalO (PureInvariant tm)   = evalPureO tm
+  eval  (PureInvariant tm)   = evalCore tm
+  evalO (PureInvariant tm)   = evalCoreO tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err
