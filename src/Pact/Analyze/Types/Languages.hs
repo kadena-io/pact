@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -50,19 +50,19 @@ module Pact.Analyze.Types.Languages
   , pattern PVar
   ) where
 
-import qualified Data.Decimal               as Decimal
-import           Data.Map.Strict            (Map)
-import           Data.SBV                   (Boolean (bnot, false, true, (&&&),
-                                             (|||)), (%))
-import           Data.Semigroup             ((<>))
-import           Data.String                (IsString (..))
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Typeable              ((:~:) (Refl))
-import           Prelude                    hiding (Float)
+import qualified Data.Decimal                 as Decimal
+import           Data.Map.Strict              (Map)
+import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
+                                               (%))
+import           Data.Semigroup               ((<>))
+import           Data.String                  (IsString (..))
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
+import           Data.Typeable                ((:~:) (Refl))
+import           Prelude                      hiding (Float)
 
-import qualified Pact.Types.Lang            as Pact
-import           Pact.Types.Util            (tShow)
+import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared

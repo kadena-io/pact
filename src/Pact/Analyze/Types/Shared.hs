@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveFunctor              #-}
@@ -17,50 +17,50 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Types.Shared where
 
-import           Control.Lens               (At (at), Index, Iso, Iso', IxValue,
-                                             Ixed (ix), Lens', both, from, iso,
-                                             lens, makeLenses, makePrisms, over,
-                                             view, (%~), (&))
-import           Data.Aeson                 (FromJSON, ToJSON)
-import           Data.AffineSpace           ((.+^), (.-.))
-import           Data.Data                  (Data)
-import           Data.Function              (on)
-import           Data.List                  (sortBy)
-import           Data.Map.Strict            (Map)
-import qualified Data.Map.Strict            as Map
-import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
-                                             EqSymbolic, HasKind, Int64,
-                                             Kind (KString, KUnbounded),
-                                             Mergeable (symbolicMerge),
-                                             OrdSymbolic, Provable (forAll),
-                                             SBV,
-                                             SDivisible (sDivMod, sQuotRem),
-                                             SymWord, Symbolic, forAll_,
-                                             forSome, forSome_, fromBool,
-                                             isConcrete, ite, kindOf, literal,
-                                             oneIf, sFromIntegral,
-                                             sRealToSInteger, unliteral,
-                                             (.<), (.==))
-import           Data.SBV.Control           (SMTValue (..))
-import qualified Data.SBV.Internals         as SBVI
-import qualified Data.SBV.String            as SBV
-import           Data.Semigroup             ((<>))
-import qualified Data.Set                   as Set
-import           Data.String                (IsString (..))
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Thyme                 (UTCTime, microseconds)
-import           Data.Typeable              ((:~:) (Refl))
-import           Prelude                    hiding (Float)
+import           Control.Lens                 (At (at), Index, Iso, Iso',
+                                               IxValue, Ixed (ix), Lens', both,
+                                               from, iso, lens, makeLenses,
+                                               makePrisms, over, view, (%~),
+                                               (&))
+import           Data.Aeson                   (FromJSON, ToJSON)
+import           Data.AffineSpace             ((.+^), (.-.))
+import           Data.Data                    (Data)
+import           Data.Function                (on)
+import           Data.List                    (sortBy)
+import           Data.Map.Strict              (Map)
+import qualified Data.Map.Strict              as Map
+import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
+                                               EqSymbolic, HasKind, Int64,
+                                               Kind (KString, KUnbounded),
+                                               Mergeable (symbolicMerge),
+                                               OrdSymbolic, Provable (forAll),
+                                               SBV,
+                                               SDivisible (sDivMod, sQuotRem),
+                                               SymWord, Symbolic, forAll_,
+                                               forSome, forSome_, fromBool,
+                                               isConcrete, ite, kindOf, literal,
+                                               oneIf, sFromIntegral,
+                                               sRealToSInteger, unliteral, (.<),
+                                               (.==))
+import           Data.SBV.Control             (SMTValue (..))
+import qualified Data.SBV.Internals           as SBVI
+import qualified Data.SBV.String              as SBV
+import           Data.Semigroup               ((<>))
+import qualified Data.Set                     as Set
+import           Data.String                  (IsString (..))
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
+import           Data.Thyme                   (UTCTime, microseconds)
+import           Data.Typeable                ((:~:) (Refl))
+import           Prelude                      hiding (Float)
 
-import qualified Pact.Types.Lang            as Pact
-import           Pact.Types.Util            (AsString, tShow)
+import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Orphans       ()
+import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 
 data Existential (tm :: * -> *) where

@@ -1,13 +1,14 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TupleSections     #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Parse
   ( expToCheck
@@ -18,30 +19,30 @@ module Pact.Analyze.Parse
   ) where
 
 import           Control.Applicative          (Alternative, (<|>))
-import           Control.Lens                 (at, ix, makeLenses, view,
-                                               (^.), (^..), (&), (?~), (%~),
-                                               (^?))
+import           Control.Lens                 (at, ix, makeLenses, view, (%~),
+                                               (&), (?~), (^.), (^..), (^?))
 import           Control.Monad                (when)
-import           Control.Monad.Except         (MonadError(throwError))
-import           Control.Monad.Reader         (ReaderT, ask, local, runReaderT, asks)
+import           Control.Monad.Except         (MonadError (throwError))
+import           Control.Monad.Reader         (ReaderT, ask, asks, local,
+                                               runReaderT)
 import           Control.Monad.State.Strict   (StateT, evalStateT)
 import           Data.Foldable                (asum, find)
-import           Data.Maybe                   (isJust)
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
+import           Data.Maybe                   (isJust)
 import           Data.Semigroup               ((<>))
-import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
+import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
-import           Data.Type.Equality           ((:~:)(Refl))
+import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (exp)
 
-import           Pact.Types.Lang              hiding (KeySet, KeySetName,
-                                               SchemaVar, TKeySet, TableName,
-                                               Type, EObject)
+import           Pact.Types.Lang              hiding (EObject, KeySet,
+                                               KeySetName, SchemaVar, TKeySet,
+                                               TableName, Type)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
@@ -129,9 +130,9 @@ stringLike = \case
 type TableEnv = TableMap (ColumnMap EType)
 
 data PropCheckEnv = PropCheckEnv
-  { _varTys            :: Map VarId QType
-  , _tableEnv          :: TableEnv
-  , _quantifiedTables  :: Set TableName
+  { _varTys           :: Map VarId QType
+  , _tableEnv         :: TableEnv
+  , _quantifiedTables :: Set TableName
   -- , _quantifiedColumns :: Set ColumnName
   }
 

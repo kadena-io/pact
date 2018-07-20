@@ -1,10 +1,10 @@
-{-# language FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Pact.Analyze.Util where
 
-import qualified Data.Default              as Default
-import           Pact.Types.Lang           (Info(_iInfo), Parsed)
-import           Pact.Types.Typecheck      (AST(_aNode), Node(_aId), _tiInfo)
+import qualified Data.Default         as Default
+import           Pact.Types.Lang      (Info (_iInfo), Parsed)
+import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
 (<$$>) :: (Functor f, Functor g) => (a -> b) -> f (g a) -> f (g b)
 (<$$>) = fmap . fmap

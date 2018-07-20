@@ -10,10 +10,10 @@ module Pact.Analyze.LegacySFunArray
   , mkSFunArray
   ) where
 
-import Control.Monad.Reader (ask)
-import Control.Monad.IO.Class (liftIO)
-import Data.SBV hiding (SFunArray)
-import Data.SBV.Internals (registerKind)
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Reader   (ask)
+import           Data.SBV               hiding (SFunArray)
+import           Data.SBV.Internals     (registerKind)
 
 -- | Declare a new functional symbolic array. Note that a read from an uninitialized cell will result in an error.
 declNewSFunArray :: forall a b. (HasKind a, HasKind b) => Maybe String -> Symbolic (SFunArray a b)
