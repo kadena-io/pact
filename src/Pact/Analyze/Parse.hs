@@ -21,7 +21,7 @@ module Pact.Analyze.Parse
 import           Control.Applicative          (Alternative, (<|>))
 import           Control.Lens                 (at, ix, makeLenses, view, (%~),
                                                (&), (?~), (^.), (^..), (^?))
-import           Control.Monad                (when)
+import           Control.Monad                (unless)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (ReaderT, ask, asks, local,
                                                runReaderT)
@@ -206,13 +206,13 @@ expToPreProp = \case
   EAtom' "result"  -> pure PreResult
   EAtom' var       -> mkVar var
 
-  exp -> throwErrorIn exp $ "expected property"
+  exp -> throwErrorIn exp "expected property"
 
   where propBindings :: [Exp] -> PropParse [(VarId, Text, QType)]
         propBindings [] = pure []
         -- we require a type annotation
         propBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
-          = throwErrorIn exp $
+          = throwErrorIn exp
             "type annotation required for all property bindings."
         propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
           nameTy <- case maybeTranslateType' (const Nothing) ty of
@@ -515,7 +515,7 @@ expectTableExists :: Prop TableName -> PropCheck ()
 expectTableExists (PLit tn) = do
   quantified <- view $ quantifiedTables . at tn
   defined    <- view $ tableEnv . at tn
-  when (not (isJust quantified || isJust defined)) $
+  unless (isJust quantified || isJust defined) $
     throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
 expectTableExists _ = error "table name must be concrete at this point"
 
@@ -648,8 +648,8 @@ expToInvariant ty exp = case (ty, exp) of
       (NotOp, [a])    -> pure (ILogicalOp NotOp [a])
       _ -> throwErrorIn exp $ "logical op with wrong number of args: " <> op
 
-  (_, ESymbol {})      -> throwErrorIn exp $ "illegal invariant form"
-  (_, EAtom {})        -> throwErrorIn exp $ "illegal invariant form"
-  (_, EList {})        -> throwErrorIn exp $ "illegal invariant form"
-  (_, Pact.EObject {}) -> throwErrorIn exp $ "illegal invariant form"
-  (_, EBinding {})     -> throwErrorIn exp $ "illegal invariant form"
+  (_, ESymbol {})      -> throwErrorIn exp "illegal invariant form"
+  (_, EAtom {})        -> throwErrorIn exp "illegal invariant form"
+  (_, EList {})        -> throwErrorIn exp "illegal invariant form"
+  (_, Pact.EObject {}) -> throwErrorIn exp "illegal invariant form"
+  (_, EBinding {})     -> throwErrorIn exp "illegal invariant form"
