@@ -1,12 +1,11 @@
-
-(module cp 'cp-module-admin
+(module cp 'module-admin
 
   "Commercial paper demonstration smart contract."
 
-  (use cash
-   "b9d80d448ae26b966098cdf41b82fac26f8b4575312de2aa7a181cc31bd75399bed5b37c7062a0c4a39d1654501f32e636b4d699ce17e6e1a856fc0e5cd675c5")
-  (use orders
-   "00e031d8abcab35ff3dc9f5e17d1bc55a3af1e7bcd235b88295390a6771fcae70e29f5fc0582b723d8ffa6673d05587aab9864de5443ffcc55c300db5524f3f5")
+  (use mpid)
+  (use cash)
+  (use orders)
+
 
   (defschema cp-asset
     ticker:string
@@ -29,10 +28,13 @@
 
   (deftable cp-inventory:{inventory})
 
+
   (defun issue (issuer cusip ticker future-value discount-rate
                 days-to-maturity par date)
 
-    "ISSUER issues CUSIP, computing discount, cost, settlement date"
+    "ISSUER issues CUSIP, computing discount, cost, settlement date."
+
+    (enforce-mpid-auth issuer)
 
     (enforce (> future-value 0.0) "Valid future-value")
 
@@ -69,6 +71,10 @@
   )
 
 
+  (defun calculate-discount (future-value discount-rate days-to-maturity)
+    (* future-value
+      (* (/ discount-rate 100.0)
+         (/ days-to-maturity 360.0))))
 
   (defun inventory-key (owner:string cusip:string)
     "Make composite key from OWNER and CUSIP"
@@ -77,12 +83,13 @@
 
   (defun issue-inventory (owner cusip qty price date)
     "Issue inventory for CUSIP recording QTY and PRICE held by OWNER"
-    (insert cp-inventory (inventory-key owner cusip)
-      {
-        "qty": qty,
-        "price": price,
-        "date": date
-      })
+    (let ((k (enforce-mpid-auth owner)))
+      (insert cp-inventory (inventory-key owner cusip)
+        {
+          "qty": qty,
+          "price": price,
+          "date": date
+          }))
   )
 
 
@@ -97,6 +104,8 @@
         { "qty" := owner-owned,
           "price" := owner-price
         }
+
+        (enforce-mpid-auth owner)
 
         (enforce (>= owner-owned qty) "Owner has inventory")
         (enforce (= owner-price price) "Price matches inventory")
@@ -117,11 +126,6 @@
   )
 
 
-  (defun calculate-discount (future-value discount-rate days-to-maturity)
-    (* future-value
-      (* (/ discount-rate 100.0)
-         (/ days-to-maturity 360.0))))
-
 
   (defun fill-order-transfer (order-id seller date)
     "Fill new order ORDER-ID"
@@ -137,7 +141,7 @@
       (update-order-status order-id ORDER_FILLED date))
   )
 
-  (defun settle-order (order-id cusip buyer seller date)
+  (defun settle-order (order-id buyer seller date)
     "Open settlement, with payment and status update"
     (bind (with-order-status order-id ORDER_FILLED) {
       "price" := price
@@ -172,35 +176,39 @@
     (read cp-inventory (inventory-key owner cusip)))
 
   ;; scenario1
-  (defpact issue-order-fill-settle (agent-entity trader-entity
+  (defpact issue-order-fill-settle (
                       agent trader cusip ticker future-value discount-rate
                       days-to-maturity par order-id date)
     ;; 0: issuance
-    (step agent-entity
+    (step
       (issue agent cusip ticker future-value discount-rate
              days-to-maturity par date))
     ;; 1: new order
-    (step-with-rollback trader-entity
+    (step-with-rollback
       (new-order order-id cusip trader agent 1
           (at "cost" (read-cp-master cusip)) "USD" date)
       ;;rollback
       (cancel-order order-id date))
 
     ;; 2: fill
-    (step agent-entity
+    (step
       (fill-order-transfer order-id agent date))
 
     ;; 3: pay
-    (step-with-rollback trader-entity
+    (step-with-rollback
       (settle-order-buyer order-id trader date)
       ;;rollback
       (refund-order order-id trader date))
 
     ;; 4: settle
-    (step agent-entity
+    (step
       (settle-order-seller order-id agent date))
 
   )
+
+  (defun read-cp-master (ticker) (read cp-master ticker))
+
+  (defun read-cp-inventory (inv-key) (read cp-inventory inv-key))
 
 )
 
