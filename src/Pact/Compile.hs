@@ -142,12 +142,10 @@ doMetaBody exp  = case exp of
   body              -> Just (pure Nothing, body)
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
-doModule (EAtom n Nothing Nothing _ : ELiteral (LString k) _ : es) li ai =
+doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
   handleModule n k es li ai 
-
-doModule (EAtom n Nothing Nothing _ : ESymbol k _ : es) li ai =
+doModule (EAtom n Nothing Nothing _:ELiteral (LString k) _:es) li ai =
   handleModule n k es li ai 
-
 doModule _ li _ = syntaxError li "Invalid module definition"
 
 handleModule :: Text -> Text -> [Exp] -> Info -> Info -> Compile (Term Name)
