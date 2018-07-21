@@ -150,7 +150,8 @@ doModule (EAtom n Nothing Nothing _ : ESymbol k _ : es) li ai =
 
 doModule _ li _ = syntaxError li "Invalid module definition"
 
-handleModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
+handleModule :: Text -> Text -> [Exp] -> Info -> Info -> Compile (Term Name)
+handleModule n k es li ai =  
   case es of
     MetaBodyExp meta body -> mkModule body =<< meta
     _ -> syntaxError ai "Empty module"
