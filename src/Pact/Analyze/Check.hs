@@ -25,8 +25,9 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (Prism', ifoldr, ifoldrM, imap,
                                             itraversed, ix, toListOf,
-                                            traverseOf, traversed, (<&>), (?~),
-                                            (^.), (^?), (^@..), _1, _2, _Just)
+                                            traverseOf, traversed, view, (<&>),
+                                            (?~), (^.), (^?), (^@..), _1, _2,
+                                            _Just)
 import           Control.Monad             (join, void, (>=>))
 import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
                                             catchError, runExceptT, throwError,
@@ -176,7 +177,7 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showModel :: Model -> Text
-showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
+showModel (Model args (ModelTags vars reads' writes auths res) ksProvs) =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
       , indent <$> fmapToList showVar args
@@ -266,35 +267,34 @@ showModel (Model (ModelTags args vars reads' writes auths res) ksProvs) =
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
 
-allocModelTags :: [Arg] -> Located ETerm -> [TagAllocation] -> Symbolic ModelTags
-allocModelTags args locatedTm tagAllocs = ModelTags
-    <$> allocArgs
-    <*> allocVars
+alloc :: SymWord a => Symbolic (SBV a)
+alloc = SBV.free_
+
+allocSchema :: Schema -> Symbolic Object
+allocSchema (Schema fieldTys) = Object <$>
+  for fieldTys (\ety -> (ety,) <$> allocAVal ety)
+
+allocAVal :: EType -> Symbolic AVal
+allocAVal = \case
+  EObjectTy schema -> AnObj <$> allocSchema schema
+  EType (_ :: Type t) -> mkAVal . sansProv <$>
+    (alloc :: Symbolic (SBV t))
+
+allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Text, TVal)))
+allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
+  let info = node ^. TC.aId . TC.tiInfo
+  av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
+  pure (vid, Located info (nm, (ety, av)))
+
+allocModelTags :: Located ETerm -> [TagAllocation] -> Symbolic ModelTags
+allocModelTags locatedTm tagAllocs = ModelTags
+    <$> allocVars
     <*> allocReads
     <*> allocWrites
     <*> allocAuths
     <*> allocResult
 
   where
-    alloc :: SymWord a => Symbolic (SBV a)
-    alloc = SBV.free_
-
-    allocSchema :: Schema -> Symbolic Object
-    allocSchema (Schema fieldTys) = Object <$>
-      for fieldTys (\ety -> (ety,) <$> allocAVal ety)
-
-    allocAVal :: EType -> Symbolic AVal
-    allocAVal = \case
-      EObjectTy schema -> AnObj <$> allocSchema schema
-      EType (_ :: Type t) -> mkAVal . sansProv <$>
-        (alloc :: Symbolic (SBV t))
-
-    allocArgs :: Symbolic (Map VarId (Located (Text, TVal)))
-    allocArgs = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
-      let info = node ^. TC.aId . TC.tiInfo
-      av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
-      pure (vid, Located info (nm, (ety, av)))
-
     allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
     allocVars = fmap Map.fromList $
       for (toListOf (traverse._AllocVarTag) tagAllocs) $
@@ -336,7 +336,7 @@ allocModelTags args locatedTm tagAllocs = ModelTags
 -- symbolic 'Model'.
 saturateModel :: Model -> SBV.Query Model
 saturateModel =
-    traverseOf (modelTags.mtArgs.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelArgs.traversed.located._2)        fetchTVal   >=>
     traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
     traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
@@ -417,6 +417,10 @@ inNewAssertionStack act = do
     push = lift $ SBV.push 1
     pop  = lift $ SBV.pop 1
 
+-- Produces args for analysis from model args
+analysisArgs :: Map VarId (Located (Text, TVal)) -> Map VarId AVal
+analysisArgs = fmap (view (located._2._2))
+
 verifyFunctionInvariants'
   :: Info
   -> [Table]
@@ -428,9 +432,10 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      tags <- lift $ allocModelTags args (Located funInfo tm) tagAllocs
+      modelArgs' <- lift $ allocArgs args
+      tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
       resultsTable <- withExceptT analyzeToCheckFailure $
-        runInvariantAnalysis tables tm tags funInfo
+        runInvariantAnalysis tables (analysisArgs modelArgs') tm tags funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
@@ -440,7 +445,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
-                resultQuery goal $ Model tags ksProvs
+                resultQuery goal $ Model modelArgs' tags ksProvs
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -478,12 +483,13 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
         withExcept translateToCheckFailure $
           runTranslation funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        tags <- lift $ allocModelTags args (Located funInfo tm) tagAllocs
+        modelArgs' <- lift $ allocArgs args
+        tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
         AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
-          runPropertyAnalysis check tables tm tags funInfo
+          runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
         void $ lift $ SBV.output prop
         hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model tags ksProvs
+          resultQuery goal $ Model modelArgs' tags ksProvs
 
   where
     goal :: Goal

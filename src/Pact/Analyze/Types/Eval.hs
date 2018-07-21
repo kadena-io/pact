@@ -15,7 +15,7 @@ module Pact.Analyze.Types.Eval where
 import           Control.Applicative          (ZipList (..))
 import           Control.Lens                 (Lens', at, ifoldl, ix, lens,
                                                makeLenses, singular, view, (&),
-                                               (<&>), (?~), _2)
+                                               (<&>), (?~))
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
@@ -66,17 +66,14 @@ data AnalyzeEnv
     }
   deriving Show
 
-mkAnalyzeEnv :: [Table] -> ModelTags -> Info -> Maybe AnalyzeEnv
-mkAnalyzeEnv tables tags info = do
+mkAnalyzeEnv :: [Table] -> Map VarId AVal -> ModelTags -> Info -> Maybe AnalyzeEnv
+mkAnalyzeEnv tables args tags info = do
   let keySets'    = mkFreeArray "keySets"
       keySetAuths = mkFreeArray "keySetAuths"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
           (TableName (T.unpack tname), someInvariants)
-
-      argMap :: Map VarId AVal
-      argMap = view (located._2._2) <$> _mtArgs tags
 
   columnIds <- for tables $ \(Table tname ut _) -> do
     case maybeTranslateUserType' ut of
@@ -86,7 +83,7 @@ mkAnalyzeEnv tables tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv argMap keySets' keySetAuths invariants' columnIds' tags info
+  pure $ AnalyzeEnv args keySets' keySetAuths invariants' columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier

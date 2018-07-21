@@ -45,9 +45,7 @@ newtype TagId
 
 data ModelTags
   = ModelTags
-    { _mtArgs   :: Map VarId (Located (Text, TVal))
-    -- ^ one per input to the function
-    , _mtVars   :: Map VarId (Located (Text, TVal))
+    { _mtVars   :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
     , _mtReads  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
@@ -63,8 +61,13 @@ data ModelTags
 
 data Model
   = Model
-    { _modelTags    :: ModelTags
+    { _modelArgs    :: Map VarId (Located (Text, TVal))
+    -- ^ one free value per input the function; allocatd post-translation.
+    , _modelTags    :: ModelTags
+    -- ^ free values to be constrained to equal values during analysis;
+    -- allocated post-translation.
     , _modelKsProvs :: Map TagId Provenance
+    -- ^ keyset 'Provenance's from analysis
     }
   deriving (Eq, Show)
 
