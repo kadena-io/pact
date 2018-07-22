@@ -143,6 +143,13 @@ doMetaBody exp  = case exp of
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
+  handleModule n k es li ai 
+doModule (EAtom n Nothing Nothing _:ELiteral (LString k) _:es) li ai =
+  handleModule n k es li ai 
+doModule _ li _ = syntaxError li "Invalid module definition"
+
+handleModule :: Text -> Text -> [Exp] -> Info -> Info -> Compile (Term Name)
+handleModule n k es li ai =  
   case es of
     MetaBodyExp meta body -> mkModule body =<< meta
     _ -> syntaxError ai "Empty module"
@@ -176,7 +183,6 @@ doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =
               (Module modName (KeySetName k) docs code modHash blessed)
               (abstract (const Nothing) (TList bd TyAny li)) li
 
-doModule _ li _ = syntaxError li "Invalid module definition"
 
 currentModule :: Info -> Compile (ModuleName,Hash)
 currentModule i = use csModule >>= \m -> case m of
