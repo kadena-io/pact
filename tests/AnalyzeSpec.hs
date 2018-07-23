@@ -561,21 +561,17 @@ spec = describe "analyze" $ do
 
     in expectPass code $ Valid (Inj Result :: Prop Bool)
 
-  --
-  -- TODO: blocking on https://github.com/kadena-io/pact/issues/167
-  --
-  -- describe "object-inequality" $
-  --   let code =
-  --         [text|
-  --           (defun test:bool ()
-  --             (let ((acct1:object{account} {"balance": 10})
-  --                   (acct2:object{account} {"balance": 5}))
-  --               (and (!= acct1 acct2)
-  --                    (!= acct2 acct1)
-  --                    )))
-  --         |]
-  --
-  --   in expectPass code $ Valid (Inj Result :: Prop Bool)
+  describe "object-inequality" $
+    let code =
+          [text|
+            (defun test:bool ()
+              (let ((acct1:object{account} {"balance": 10})
+                    (acct2:object{account} {"balance": 5}))
+                (and (!= acct1 acct2)
+                     (!= acct2 acct1))))
+          |]
+
+    in expectPass code $ Valid (Inj Result :: Prop Bool)
 
   describe "table-read" $ do
     let code =
