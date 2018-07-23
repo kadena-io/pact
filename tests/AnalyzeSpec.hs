@@ -554,12 +554,13 @@ spec = describe "analyze" $ do
   describe "object-equality" $
     let code =
           [text|
-            (defun test:bool ()
-              (let ((acct1:object{account} {"balance": 10}))
-                (= acct1 acct1)))
+            (defun test:bool (a:object{account})
+              (meta ""
+                (property (and result (= a a))))
+              (= a a))
           |]
 
-    in expectPass code $ Valid (Inj Result :: Prop Bool)
+    in expectVerified code
 
   describe "object-inequality" $
     let code =
