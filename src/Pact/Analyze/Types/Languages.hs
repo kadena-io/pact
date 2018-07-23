@@ -51,6 +51,8 @@ import           Data.Text                    (Text)
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
+import           Pact.Types.Persistence       (WriteType)
+
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
@@ -415,8 +417,8 @@ data Term ret where
   NameAuthorized  :: TagId -> Term String -> Term Bool
 
   -- Table access
-  Read            :: TagId -> TableName -> Schema      -> Term String -> Term Object
-  Write           :: TagId -> TableName -> Term String -> Term Object -> Term String
+  Read            ::              TagId -> TableName -> Schema -> Term String ->                Term Object
+  Write           :: WriteType -> TagId -> TableName -> Schema -> Term String -> Term Object -> Term String
 
   PactVersion     :: Term String
 

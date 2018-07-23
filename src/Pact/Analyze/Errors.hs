@@ -2,13 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Errors where
 
-import qualified Data.SBV.Internals as SBVI
+import qualified Data.SBV.Internals     as SBVI
 import           Data.Semigroup
-import           Data.String        (IsString (fromString))
-import           Data.Text          (Text)
-import qualified Data.Text          as T
+import           Data.String            (IsString (fromString))
+import           Data.Text              (Text)
+import qualified Data.Text              as T
 
-import           Pact.Types.Lang    (Info, tShow)
+import qualified Pact.Types.Persistence as Pact
+import           Pact.Types.Lang        (Info, tShow)
 
 import           Pact.Analyze.Types
 
@@ -29,6 +30,7 @@ data AnalyzeFailureNoLoc
   | OpaqueValEncountered
   | VarNotInScope Text VarId
   | UnsupportedObjectInDbCell
+  | InvalidDbWrite Pact.WriteType Schema Object
   -- For cases we don't handle yet:
   | UnhandledTerm Text
   deriving (Eq, Show)
@@ -60,6 +62,7 @@ describeAnalyzeFailureNoLoc = \case
     --
     OpaqueValEncountered -> "We encountered an opaque value in analysis. This would be either a JSON value or a type variable. We can't prove properties of these values."
     UnsupportedObjectInDbCell -> "We encountered the use of an object in a DB cell, which we don't yet support. " <> pleaseReportThis
+    InvalidDbWrite writeType sch obj -> "invalid " <> tShow writeType <> " of " <> tShow obj <> " to DB row with schema " <> tShow sch
 
   where
     foundUnsupported :: Text -> Text

@@ -8,11 +8,11 @@
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (At (at), Lens', iforM, preview,
-                                              use, view, (%=), (%~), (&), (+=),
-                                              (.=), (.~), (<&>), (?~), (^.),
-                                              (^?), _1, _2, _Just)
-import           Control.Monad               (void)
+import           Control.Lens                (At (at), Lens', iforM, iforM_,
+                                              preview, use, view, (%=), (%~),
+                                              (&), (+=), (.=), (.~), (<&>),
+                                              (?~), (^.), (^?), _1, _2, _Just)
+import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
                                               runExcept)
@@ -40,6 +40,7 @@ import           Data.Traversable            (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
+import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
@@ -249,6 +250,26 @@ evalTermO = \case
       Just False -> evalTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
+validateWrite :: Pact.WriteType -> Schema -> Object -> Analyze ()
+validateWrite writeType sch@(Schema sm) obj@(Object om) = do
+  -- For now we lump our three cases together:
+  --   1. write field not in schema
+  --   2. object and schema types don't match
+  --   3. unexpected partial write
+  let invalid = throwErrorNoLoc $ InvalidDbWrite writeType sch obj
+
+  iforM_ om $ \field (ety, _av) ->
+    case field `Map.lookup` sm of
+      Nothing -> invalid
+      Just ety'
+        | ety /= ety' -> invalid
+        | otherwise   -> pure ()
+
+  let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
+
+  when (requiresFullWrite && Map.size om /= Map.size sm) $
+    invalid
+
 evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
   PureTerm a -> evalCore a
@@ -264,18 +285,15 @@ evalTerm = \case
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
-  --
-  -- TODO: we might want to eventually support checking each of the semantics
-  -- of Pact.Types.Runtime's WriteType.
-  --
-  Write tid tn rowKey obj -> do
-    Object obj' <- evalTermO obj
+  Write writeType tid tn schema rowKey objT -> do
+    obj@(Object fields) <- evalTermO objT
+    validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
     tableWritten tn .= true
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk
 
-    aValFields <- iforM obj' $ \colName (fieldType, aval') -> do
+    aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
       tagAccessCell mtWrites tid colName aval'
@@ -313,8 +331,8 @@ evalTerm = \case
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
-        AnObj obj'' -> throwErrorNoLoc $ AValUnexpectedlyObj obj''
-        OpaqueVal   -> throwErrorNoLoc OpaqueValEncountered
+        AnObj obj' -> throwErrorNoLoc $ AValUnexpectedlyObj obj'
+        OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))

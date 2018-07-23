@@ -34,14 +34,16 @@ import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
+import           System.Locale              (defaultTimeLocale)
+
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
                                              Type (..))
 import qualified Pact.Types.Lang            as Pact
+import qualified Pact.Types.Persistence     as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
-import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
@@ -619,10 +621,16 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do
-    ESimple TStr row'     <- translateNode row
+    ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
     tid                 <- tagWrite node schema
-    pure $ ESimple TStr $ Write tid (TableName (T.unpack tn)) row' obj'
+    let writeType = case name of
+          "insert" -> Pact.Insert
+          "update" -> Pact.Update
+          "write"  -> Pact.Write
+          _        -> error "impossible due to containing pattern match"
+    pure $ ESimple TStr $
+      Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond

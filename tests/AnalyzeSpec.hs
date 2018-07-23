@@ -612,6 +612,21 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
+    --
+    -- TODO: actually, this can fail when the key already exists! this is wrong:
+    --
+    expectPass code $ Valid (Inj Success)
+
+  describe "table-write.insert.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
+
+            (defun test:string ()
+              (insert tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-write.update" $ do
     let code =
@@ -624,6 +639,20 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
+  describe "table-write.update.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
+
+            (defun test:string ()
+              (update tokens "stu" {}))
+          |]
+    --
+    -- TODO: actually, this can fail when the key does not yet exist! this is wrong:
+    --
+    expectPass code $ Valid (Inj Success)
+
   describe "table-write.write" $ do
     let code =
           [text|
@@ -634,6 +663,17 @@ spec = describe "analyze" $ do
               (write tokens "stu" {"balance": 5}))
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
+
+  describe "table-write.write.partial" $ do
+    let code =
+          [text|
+            (defschema token-row balance:integer)
+            (deftable tokens:{token-row})
+
+            (defun test:string ()
+              (write tokens "stu" {}))
+          |]
+    expectFail code $ Satisfiable (Inj Success)
 
   describe "table-write.conditional" $ do
     let code =
