@@ -35,7 +35,7 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
    ConstVal(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
@@ -580,3 +580,4 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
+makeLenses ''Module

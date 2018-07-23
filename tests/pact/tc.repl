@@ -115,7 +115,10 @@
   (defun fails-return-type:bool (x:integer)
     (if (< x 10) 10 x))
 
-  )
+  (defun tc-obj-eq (a:object{account})
+    (= a a))
+
+)
 
 (create-table persons)
 

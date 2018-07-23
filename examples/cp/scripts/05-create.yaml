@@ -1,0 +1,12 @@
+data:
+  "agent-keyset": ["f880a433d6e2a13a32b6169030f56245efdd8c1b8a5027e9ce98a88e886bef27"]
+  "trader-keyset": ["b4abc21dc4545e4edab0be77945b814ed4e6707e7546bee925a4ed0630caa463"]
+code: |-
+  (let ((t1 (time "2016-09-01T11:00:00Z")))
+  (cash.create-account "agent" "USD" 0.0 t1 (read-keyset "agent-keyset"))
+  (cash.create-account "trader" "USD" 100000.0 t1 (read-keyset "trader-keyset"))
+  (cp.create-mpid "agent" (read-keyset "agent-keyset"))
+  (cp.create-mpid "trader" (read-keyset "trader-keyset")))
+keyPairs:
+  - public: acda99515bb9a27e054898e1632626db92a5379d3e62867a60eaba783e017fe0
+    secret: f894d9adb39cdb525ac1707ebedf2a1f401c21f2f2709e4ebafc4af72a18094e

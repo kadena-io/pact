@@ -371,9 +371,19 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        results <- liftIO $ verifyModule modules md
-        setop $ TcErrors $ fmap (Text.unpack . describeCheckResult) $
-          toListOf (traverse . each) results
+        modResult <- liftIO $ verifyModule modules md
+        -- TODO: build describeModuleResult
+        case modResult of
+          Left (ModuleParseFailures failures)  -> setop $ TcErrors $
+            fmap (Text.unpack . describeParseFailure) $ failures
+          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors $
+            pure $ Text.unpack $ describeCheckFailure checkFailure
+          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors $ pure $
+            Text.unpack $ msg <> ": " <> tShow ty
+          Right (ModuleChecks propResults invariantResults) -> setop $ TcErrors $
+            let propResults'      = propResults      ^.. traverse . each
+                invariantResults' = invariantResults ^.. traverse . traverse . each
+            in Text.unpack . describeCheckResult <$> propResults' <> invariantResults'
 
         return (tStr "")
 
