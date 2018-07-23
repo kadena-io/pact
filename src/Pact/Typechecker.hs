@@ -49,6 +49,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 import Data.String
 import Data.List
 import Data.Monoid
+import Data.Maybe (isJust)
 
 
 import Pact.Types.Typecheck
@@ -541,8 +542,15 @@ unifyTypes l r = case (l,r) of
           Just (Left uc) -> Just $ vWrap $ TyVar $ v { _tvConstraint = uc }
           Just (Right uc) -> Just $ sWrap $ TyVar $ sv { _tvConstraint = uc }
           Nothing -> Nothing
-        (TypeVar _ ac,_) | null ac || s `elem` ac -> Just useS
+        (TypeVar _ ac,_) | checkConstraints s ac -> Just useS
         _ -> Nothing
+
+-- | check for unification of (non-var) type against constraints
+checkConstraints :: Eq n => Type n -> [Type n] -> Bool
+checkConstraints _ [] = True
+checkConstraints ty constrs = foldl' check False constrs where
+  check r con = r || isJust (unifyTypes ty con)
+
 
 -- | Attempt to unify identifying which input "won", or specialize the first type.
 unifyConstraints :: Eq n => [Type n] -> [Type n] -> Maybe (Either [Type n] [Type n])
