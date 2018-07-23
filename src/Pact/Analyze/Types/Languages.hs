@@ -144,10 +144,12 @@ data Core t a where
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
   BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
 
-  KeySetEqNeq   :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
-  ObjectEqNeq   :: EqNeq -> t Object -> t Object -> Core t Bool
+  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
+  ObjectEqNeq :: EqNeq -> t Object -> t Object -> Core t Bool
 
-  At            :: Schema -> t String -> t Object -> EType -> Core t a
+  At :: Schema -> t String -> t Object -> EType -> Core t a
+
+  ObjectMerge :: t Object -> t Object -> Core t Object
 
   LiteralObject :: Map Text (Existential t) -> Core t Object
 

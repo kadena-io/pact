@@ -598,6 +598,14 @@ translateNode astNode = astContext astNode $ case astNode of
             pure $ ESimple TStr $ PureTerm $ StrConcat a' b'
           _ -> mzero
 
+        mkObjMerge :: TranslateM ETerm
+        mkObjMerge = case (fn, args) of
+          ("+", [a, b]) -> do
+            EObject s1 o1 <- translateNode a
+            EObject s2 o2 <- translateNode b
+            pure $ EObject (s1 <> s2) $ PureTerm $ ObjectMerge o1 o2
+          _ -> mzero
+
         mkMod :: TranslateM ETerm
         mkMod = case (fn, args) of
           ("mod", [a, b]) -> do
@@ -607,7 +615,7 @@ translateNode astNode = astContext astNode $ case astNode of
           _ -> mzero
 
     in asum [mkMod, mkArith, mkComparison, mkKeySetEqNeq, mkObjEqNeq,
-         mkLogical, mkConcat]
+         mkLogical, mkConcat, mkObjMerge]
 
   AST_NFun node name [ShortTableName tn, row, obj]
     | name `elem` ["insert", "update", "write"] -> do

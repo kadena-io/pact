@@ -51,6 +51,7 @@ instance Float Object where
     STANDARD_INSTANCES
     PureProp Numerical{} -> vacuousMatch "numerical can't be Object"
     PureProp LiteralObject{} -> ([], p)
+    PureProp ObjectMerge{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of

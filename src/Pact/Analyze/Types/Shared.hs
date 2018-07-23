@@ -292,6 +292,12 @@ newtype Object
   = Object (Map Text TVal)
   deriving (Eq, Show)
 
+instance Monoid Object where
+  mempty = Object Map.empty
+
+  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
+  Object m1 `mappend` Object m2 = Object $ m1 <> m2
+
 objFields :: Lens' Object (Map Text TVal)
 objFields = lens getter setter
   where
@@ -301,6 +307,12 @@ objFields = lens getter setter
 newtype Schema
   = Schema (Map Text EType)
   deriving (Show, Eq)
+
+instance Monoid Schema where
+  mempty = Schema Map.empty
+
+  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
+  Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.

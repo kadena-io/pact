@@ -128,25 +128,26 @@ evalObjectEqNeq op xT yT = do
 evalCore
   :: (Analyzer m, SymWord a)
   => Core (TermOf m) a -> m (S a)
-evalCore (Lit a)                    = pure (literalS a)
-evalCore (Sym s)                    = pure s
-evalCore (StrConcat p1 p2)          = (.++) <$> eval p1 <*> eval p2
-evalCore (StrLength p)              = over s2Sbv SBV.length <$> eval p
-evalCore (Numerical a)              = evalNumerical a
-evalCore (IntAddTime time secs)     = evalIntAddTime time secs
-evalCore (DecAddTime time secs)     = evalDecAddTime time secs
-evalCore (IntegerComparison op x y) = evalComparisonOp op x y
-evalCore (DecimalComparison op x y) = evalComparisonOp op x y
-evalCore (TimeComparison op x y)    = evalComparisonOp op x y
-evalCore (StringComparison op x y)  = evalComparisonOp op x y
-evalCore (BoolComparison op x y)    = evalComparisonOp op x y
-evalCore (ObjectEqNeq op x y)       = evalObjectEqNeq  op x y
-evalCore (KeySetEqNeq      op x y)  = evalEqNeq        op x y
-evalCore (Logical op props)         = evalLogicalOp op props
-evalCore (At schema colNameT objT retType)
-  = evalAt schema colNameT objT retType
-evalCore LiteralObject {}
-  = error "literal object can't be an argument to evalCore"
+evalCore (Lit a)                           = pure (literalS a)
+evalCore (Sym s)                           = pure s
+evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
+evalCore (StrLength p)                     = over s2Sbv SBV.length <$> eval p
+evalCore (Numerical a)                     = evalNumerical a
+evalCore (IntAddTime time secs)            = evalIntAddTime time secs
+evalCore (DecAddTime time secs)            = evalDecAddTime time secs
+evalCore (IntegerComparison op x y)        = evalComparisonOp op x y
+evalCore (DecimalComparison op x y)        = evalComparisonOp op x y
+evalCore (TimeComparison op x y)           = evalComparisonOp op x y
+evalCore (StringComparison op x y)         = evalComparisonOp op x y
+evalCore (BoolComparison op x y)           = evalComparisonOp op x y
+evalCore (ObjectEqNeq op x y)              = evalObjectEqNeq  op x y
+evalCore (KeySetEqNeq      op x y)         = evalEqNeq        op x y
+evalCore (Logical op props)                = evalLogicalOp op props
+evalCore (At schema colNameT objT retType) = evalAt schema colNameT objT retType
+evalCore (ObjectMerge _ _)                 =
+  error "object merge can not produce a simple value"
+evalCore LiteralObject {}                  =
+  error "literal object can't be an argument to evalCore"
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -202,7 +203,6 @@ evalAt schema@(Schema schemaFields) colNameT objT retType = do
     firstVal
     relevantFields'
 
-
 evalAtO
   :: forall m
    . Analyzer m
@@ -230,6 +230,7 @@ evalCoreO
   => Core (TermOf m) Object -> m Object
 evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
 evalCoreO (At _schema colNameT objT _retType) = evalAtO colNameT objT
+evalCoreO (ObjectMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
 evalCoreO (Var vid name) = do
   mVal <- getVar vid
   case mVal of

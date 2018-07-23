@@ -574,6 +574,20 @@ spec = describe "analyze" $ do
 
     in expectPass code $ Valid (Inj Result :: Prop Bool)
 
+  describe "merging-objects" $
+    let code =
+          [text|
+            (defschema person name:string age:integer)
+
+            (defun test:object{person} ()
+              (meta ""
+                (property (= {"name": "brian", "age": 100} result) ))
+
+              ; merge is left-biased
+              (+ {"age": 100} {"age": 1, "name": "brian"}))
+          |]
+    in expectVerified code
+
   describe "table-read" $ do
     let code =
           [text|
