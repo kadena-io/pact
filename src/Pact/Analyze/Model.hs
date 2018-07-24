@@ -33,10 +33,6 @@ import           Data.Traversable          (for)
 import           Pact.Types.Runtime        (tShow)
 import qualified Pact.Types.Typecheck      as TC
 
--- TODO: these types should move:
-import           Pact.Analyze.Translate    (TagAllocation, _AllocVarTag,
-                                            _AllocReadTag, _AllocWriteTag,
-                                            _AllocAuthTag)
 import           Pact.Analyze.Types
 
 alloc :: SymWord a => Symbolic (SBV a)

@@ -14,9 +14,9 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, cons, makeLenses, makePrisms,
-                                             view, (%~), (.~), (<&>), (?~),
-                                             (^.), (^?), _1, _2)
+import           Control.Lens               (at, cons, makeLenses, view, (%~),
+                                             (.~), (<&>), (?~), (^.), (^?), _1,
+                                             _2)
 import           Control.Monad              (MonadPlus (mzero), (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -117,13 +117,6 @@ mkTranslateEnv = foldl'
   (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
   Map.empty
 
-data TagAllocation
-  = AllocReadTag (Located (TagId, Schema))
-  | AllocWriteTag (Located (TagId, Schema))
-  | AllocAuthTag (Located TagId)
-  | AllocVarTag (Located (VarId, Text, EType))
-  deriving Show
-
 data TranslateState
   = TranslateState
     { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
@@ -131,7 +124,6 @@ data TranslateState
     , _tsNextVarId :: VarId
     }
 
-makePrisms ''TagAllocation
 makeLenses ''TranslateFailure
 makeLenses ''TranslateState
 

@@ -6,7 +6,7 @@
 
 module Pact.Analyze.Types.Model where
 
-import           Control.Lens              (makeLenses)
+import           Control.Lens              (makeLenses, makePrisms)
 import           Data.Map.Strict           (Map)
 import           Data.SBV                  (SBV)
 import           Data.Text                 (Text)
@@ -28,6 +28,13 @@ data Arg = Arg
 newtype TagId
   = TagId Natural
   deriving (Num, Show, Ord, Eq)
+
+data TagAllocation
+  = AllocReadTag (Located (TagId, Schema))
+  | AllocWriteTag (Located (TagId, Schema))
+  | AllocAuthTag (Located TagId)
+  | AllocVarTag (Located (VarId, Text, EType))
+  deriving Show
 
 data ModelTags
   = ModelTags
@@ -63,5 +70,6 @@ data Goal
 
 deriving instance Eq Goal
 
+makePrisms ''TagAllocation
 makeLenses ''ModelTags
 makeLenses ''Model
