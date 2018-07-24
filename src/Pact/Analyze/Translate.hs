@@ -647,7 +647,7 @@ translateNode astNode = astContext astNode $ case astNode of
 
         mkConcat :: TranslateM ETerm
         mkConcat = case (fn, args) of
-          ("+", [a, b]) -> do
+          (SStringConcatenation, [a, b]) -> do
             ESimple TStr a' <- translateNode a
             ESimple TStr b' <- translateNode b
             pure $ ESimple TStr $ PureTerm $ StrConcat a' b'
@@ -663,7 +663,7 @@ translateNode astNode = astContext astNode $ case astNode of
 
         mkMod :: TranslateM ETerm
         mkMod = case (fn, args) of
-          ("mod", [a, b]) -> do
+          (SModulus, [a, b]) -> do
             ESimple TInt a' <- translateNode a
             ESimple TInt b' <- translateNode b
             pure $ ESimple TInt $ inject $ ModOp a' b'
