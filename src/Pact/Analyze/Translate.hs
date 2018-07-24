@@ -601,7 +601,7 @@ translateNode astNode = astContext astNode $ case astNode of
             ESimple tyA a' <- translateNode a
             ESimple tyB b' <- translateNode b
             if
-              | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^"]
+              | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^", "log"]
                 -> let opFromName = \case
                          ("+" :: Text) -> Add
                          "-"           -> Sub
