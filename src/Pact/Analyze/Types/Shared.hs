@@ -180,12 +180,12 @@ data LogicalOp
   = AndOp -- ^ Conjunction
   | OrOp  -- ^ Disjunction
   | NotOp -- ^ Negation
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data EqNeq
   = Eq'  -- ^ Equal
   | Neq' -- ^ Not equal
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -194,7 +194,7 @@ data ComparisonOp
   | Lte -- ^ Less than or equal to
   | Eq  -- ^ Equal
   | Neq -- ^ Not equal
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field

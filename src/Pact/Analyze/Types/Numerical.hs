@@ -23,7 +23,7 @@ data ArithOp
   | Div -- ^ Division
   | Pow -- ^ Exponentiation
   | Log -- ^ Logarithm
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- integer -> integer
 -- decimal -> decimal
@@ -36,7 +36,7 @@ data UnaryArithOp
 
   | Signum -- ^ Sign of a number; implemented only for the sake of the Num
            -- instance.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- decimal -> integer -> decimal
 -- decimal -> decimal
@@ -45,7 +45,7 @@ data RoundingLikeOp
             -- rounded to the nearest even.
   | Ceiling -- ^ Round to the next integer
   | Floor   -- ^ Round to the previous integer
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Arithmetic ops
 --

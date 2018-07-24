@@ -16,11 +16,23 @@ module Pact.Analyze.Parse
   , expToProp
   , expToInvariant
   , inferProp
+
+  -- | 'Text' / Op prisms
+  , toOp
+  , toText
+  , arithOpP
+  , unaryArithOpP
+  , comparisonOpP
+  , eqNeqP
+  , roundingLikeOpP
+  , logicalOpP
   ) where
 
 import           Control.Applicative          (Alternative, (<|>))
-import           Control.Lens                 (at, ix, makeLenses, view, (%~),
-                                               (&), (?~), (^.), (^..), (^?))
+import           Control.Lens                 (Prism', at, ix, makeLenses,
+                                               preview, prism', review, view,
+                                               (%~), (&), (?~), (^.), (^..),
+                                               (^?))
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (ReaderT, ask, asks, local,
@@ -37,6 +49,7 @@ import           Data.String                  (fromString)
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Traversable             (for)
+import           Data.Tuple                   (swap)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (exp)
 
@@ -47,12 +60,11 @@ import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Typecheck         (UserType)
 import           Pact.Types.Util              (tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, Var, str, obj, ks)
+import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
 --
@@ -118,55 +130,70 @@ throwErrorIn exp text = throwError $ T.unpack $
 asum' :: (Foldable t, Alternative f) => t (f a) -> f a -> f a
 asum' foldable fallback = asum foldable <|> fallback
 
-textToArithOp :: Text -> Maybe ArithOp
-textToArithOp = \case
-  SAddition       -> Just Add
-  SSubtraction    -> Just Sub
-  SMultiplication -> Just Mul
-  SDivision       -> Just Div
-  SExponentiation -> Just Pow
-  SLogarithm      -> Just Log
-  _               -> Nothing
+mkOpNamePrism :: Ord op => [(Text, op)] -> Prism' Text op
+mkOpNamePrism table =
+  let mapForward = Map.fromList table
+      lookupForward name = Map.lookup name mapForward
 
-textToUnaryArithOp :: Text -> Maybe UnaryArithOp
-textToUnaryArithOp = \case
-  SNumericNegation  -> Just Negate
-  SSquareRoot       -> Just Sqrt
-  SNaturalLogarithm -> Just Ln
-  SExponential      -> Just Exp
-  SAbsoluteValue    -> Just Abs
+      mapReverse = Map.fromList (fmap swap table)
+      lookupReverse op = mapReverse Map.! op
+  in prism' lookupReverse lookupForward
+
+toOp :: Prism' Text op -> Text -> Maybe op
+toOp = preview
+
+toText :: Prism' Text op -> op -> Text
+toText = review
+
+arithOpP :: Prism' Text ArithOp
+arithOpP = mkOpNamePrism
+  [ (SAddition,       Add)
+  , (SSubtraction,    Sub)
+  , (SMultiplication, Mul)
+  , (SDivision,       Div)
+  , (SExponentiation, Pow)
+  , (SLogarithm,      Log)
+  ]
+
+unaryArithOpP :: Prism' Text UnaryArithOp
+unaryArithOpP = mkOpNamePrism
+  [ (SNumericNegation,  Negate)
+  , (SSquareRoot,       Sqrt)
+  , (SNaturalLogarithm, Ln)
+  , (SExponential,      Exp)
+  , (SAbsoluteValue,    Abs)
   -- explicitly no signum
-  _                 -> Nothing
+  ]
 
-textToComparisonOp :: Text -> Maybe ComparisonOp
-textToComparisonOp = \case
-  SGreaterThan        -> Just Gt
-  SLessThan           -> Just Lt
-  SGreaterThanOrEqual -> Just Gte
-  SLessThanOrEqual    -> Just Lte
-  SEquality           -> Just Eq
-  SInequality         -> Just Neq
-  _                   -> Nothing
+comparisonOpP :: Prism' Text ComparisonOp
+comparisonOpP = mkOpNamePrism
+  [ (SGreaterThan,        Gt)
+  , (SLessThan,           Lt)
+  , (SGreaterThanOrEqual, Gte)
+  , (SLessThanOrEqual,    Lte)
+  , (SEquality,           Eq)
+  , (SInequality,         Neq)
+  ]
 
-textToEqNeq :: Text -> Maybe EqNeq
-textToEqNeq = \case
-  SEquality   -> Just Eq'
-  SInequality -> Just Neq'
-  _           -> Nothing
+eqNeqP :: Prism' Text EqNeq
+eqNeqP = mkOpNamePrism
+  [ (SEquality,   Eq')
+  , (SInequality, Neq')
+  ]
 
-textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
-textToRoundingLikeOp = \case
-  SBankersRound -> Just Round
-  SCeilingRound -> Just Ceiling
-  SFloorRound   -> Just Floor
-  _             -> Nothing
+roundingLikeOpP :: Prism' Text RoundingLikeOp
+roundingLikeOpP = mkOpNamePrism
+  [ (SBankersRound, Round)
+  , (SCeilingRound, Ceiling)
+  , (SFloorRound,   Floor)
+  ]
 
-textToLogicalOp :: Text -> Maybe LogicalOp
-textToLogicalOp = \case
-  SLogicalConjunction -> Just AndOp
-  SLogicalDisjunction -> Just OrOp
-  SLogicalNegation    -> Just NotOp
-  _                   -> Nothing
+logicalOpP :: Prism' Text LogicalOp
+logicalOpP = mkOpNamePrism
+  [ (SLogicalConjunction, AndOp)
+  , (SLogicalDisjunction, OrOp)
+  , (SLogicalNegation,    NotOp)
+  ]
 
 textToQuantifier
   :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
@@ -307,8 +334,8 @@ inferrable = \case
   -- we can infer all functions (as is typical bidirectionally), except for
   -- some overloaded ones.
   PreApp f _
-    | Just _ <- textToArithOp f      -> False
-    | Just _ <- textToUnaryArithOp f -> False
+    | Just _ <- toOp arithOpP f      -> False
+    | Just _ <- toOp unaryArithOpP f -> False
     | otherwise                      -> True
   _                                  -> True
 
@@ -378,9 +405,9 @@ inferPreProp preProp = case preProp of
   PreApp SModulus [a, b] -> do
     it <- PNumerical ... ModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
     pure $ ESimple TInt it
-  PreApp (textToRoundingLikeOp -> Just op) [a] ->
+  PreApp (toOp roundingLikeOpP -> Just op) [a] ->
     ESimple TInt . PNumerical . RoundingLikeOp1 op <$> checkPreProp TDecimal a
-  PreApp (textToRoundingLikeOp -> Just op) [a, b] -> do
+  PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
     pure $ ESimple TDecimal (PNumerical it)
   PreApp "add-time" [a, b] -> do
@@ -392,7 +419,7 @@ inferPreProp preProp = case preProp of
       _                    -> throwErrorIn b $
         "expected integer or decimal, found " <> userShow (existentialType b')
 
-  PreApp op'@(textToComparisonOp -> Just op) [a, b] -> do
+  PreApp op'@(toOp comparisonOpP -> Just op) [a, b] -> do
     a' <- inferPreProp a
     b' <- inferPreProp b
     let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop Bool)
@@ -412,10 +439,10 @@ inferPreProp preProp = case preProp of
           TStr     -> ret (PureProp .... StringComparison) aProp bProp
           TAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
-          TKeySet  -> case textToEqNeq op' of
+          TKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-      (EObject _ aProp, EObject _ bProp) -> case textToEqNeq op' of
+      (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
           Just eqNeq -> pure $ ESimple TBool $ PureProp $ ObjectEqNeq eqNeq aProp bProp
           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
       (_, _) -> throwErrorIn preProp $
@@ -423,7 +450,7 @@ inferPreProp preProp = case preProp of
         userShow (existentialType a') <> " and " <>
         userShow (existentialType b') <> ")"
 
-  PreApp op'@(textToLogicalOp -> Just op) args -> do
+  PreApp op'@(toOp logicalOpP -> Just op) args -> do
     ESimple TBool <$> case (op, args) of
       (NotOp, [a])    -> PNot <$> checkPreProp TBool a
       (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
@@ -522,7 +549,7 @@ checkPreProp ty preProp
 
   (TStr, PreApp SStringConcatenation [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
-  (TDecimal, PreApp opSym@(textToArithOp -> Just op) [a, b]) -> do
+  (TDecimal, PreApp opSym@(toOp arithOpP -> Just op) [a, b]) -> do
     a' <- inferPreProp a
     b' <- inferPreProp b
     case (a', b') of
@@ -536,11 +563,11 @@ checkPreProp ty preProp
         "unexpected argument types for (" <> opSym <> "): " <>
         userShow (existentialType a') <> " and " <>
         userShow (existentialType b')
-  (TInt, PreApp (textToArithOp -> Just op) [a, b])
+  (TInt, PreApp (toOp arithOpP -> Just op) [a, b])
     -> PNumerical ... IntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
-  (TDecimal, PreApp (textToUnaryArithOp -> Just op) [a])
+  (TDecimal, PreApp (toOp unaryArithOpP -> Just op) [a])
     -> PNumerical . DecUnaryArithOp op <$> checkPreProp TDecimal a
-  (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
+  (TInt, PreApp (toOp unaryArithOpP -> Just op) [a])
     -> PNumerical . IntUnaryArithOp op <$> checkPreProp TInt a
 
   _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
@@ -662,19 +689,19 @@ expToInvariant ty exp = case (ty, exp) of
   (TStr, EList' [EAtom' SStringConcatenation, a, b]) -> PureInvariant ... StrConcat
     <$> expToInvariant TStr a <*> expToInvariant TStr b
 
-  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
+  (TDecimal, EList' [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum'
     [ Inj ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
     , Inj ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
     , Inj ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
     ] (throwErrorIn exp "unexpected argument types")
-  (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
+  (TInt, EList' [EAtom' (toOp arithOpP -> Just op), a, b])
     -> Inj ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
-  (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
+  (TDecimal, EList' [EAtom' (toOp unaryArithOpP -> Just op), a])
     -> Inj . DecUnaryArithOp op <$> expToInvariant TDecimal a
-  (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
+  (TInt, EList' [EAtom' (toOp unaryArithOpP -> Just op), a])
     -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
 
-  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
+  (TBool, EList' [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum'
     [ PureInvariant ... IntegerComparison op
       <$> expToInvariant TInt a     <*> expToInvariant TInt b
     , PureInvariant ... DecimalComparison op
@@ -685,7 +712,7 @@ expToInvariant ty exp = case (ty, exp) of
       <$> expToInvariant TBool a    <*> expToInvariant TBool b
     , PureInvariant ... StringComparison op
       <$> expToInvariant TStr a     <*> expToInvariant TStr b
-    , case textToEqNeq op' of
+    , case toOp eqNeqP op' of
       Just eqNeq -> PureInvariant ... KeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
@@ -694,7 +721,7 @@ expToInvariant ty exp = case (ty, exp) of
     ] (throwErrorIn exp "unexpected argument types")
 
   (TBool, EList' (EAtom' op:args))
-    | Just op' <- textToLogicalOp op -> do
+    | Just op' <- toOp logicalOpP op -> do
     operands' <- traverse (expToInvariant TBool) args
     case (op', operands') of
       (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
