@@ -14,24 +14,24 @@ module Pact.Analyze.Model
   , showModel
   ) where
 
-import           Control.Lens              (Prism', ifoldr, imap, toListOf,
-                                            traverseOf, traversed, (<&>), (?~),
-                                            (^.), _1, _2)
-import           Control.Monad             ((>=>))
-import qualified Data.Foldable             as Foldable
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Monoid               ((<>))
-import           Data.SBV                  (SBV, SymWord, Symbolic)
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Control          as SBV
-import qualified Data.SBV.Internals        as SBVI
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
+import           Control.Lens         (Prism', ifoldr, imap, toListOf,
+                                       traverseOf, traversed, (<&>), (?~),
+                                       (^.), _1, _2)
+import           Control.Monad        ((>=>))
+import qualified Data.Foldable        as Foldable
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
+import           Data.Monoid          ((<>))
+import           Data.SBV             (SBV, SymWord, Symbolic)
+import qualified Data.SBV             as SBV
+import qualified Data.SBV.Control     as SBV
+import qualified Data.SBV.Internals   as SBVI
+import           Data.Text            (Text)
+import qualified Data.Text            as T
+import           Data.Traversable     (for)
 
-import           Pact.Types.Runtime        (tShow)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Types.Runtime   (tShow)
+import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Types
 
