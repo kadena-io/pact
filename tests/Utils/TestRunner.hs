@@ -20,7 +20,6 @@ module Utils.TestRunner
   ) where
 
 import Pact.Server.Server (setupServer)
-import Pact.Server.ApiServer (runApiServer)
 import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
@@ -66,8 +65,8 @@ runAll cmds = Exception.bracket
 
 startServer :: FilePath -> IO (Async (), Async (), Async ())
 startServer configFile = do
-  ((histC, inC, debugFn, port, logDir), (asyncCmd, asyncHist)) <- setupServer configFile
-  asyncServer <- async (runApiServer histC inC debugFn port logDir)
+  (runServer, asyncCmd, asyncHist) <- setupServer configFile
+  asyncServer <- async (runServer)
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
   return (asyncServer, asyncCmd, asyncHist)

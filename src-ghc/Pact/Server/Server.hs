@@ -55,9 +55,6 @@ data Config = Config {
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
 
-type ServerSetup = (HistoryChannel, InboundPactChan, (String -> IO ()), Int, FilePath)
-type ServerThreads = (Async (), Async ())
-
 usage :: String
 usage =
   "Config file is YAML format with the following properties: \n\
@@ -71,12 +68,12 @@ usage =
 
 serve :: FilePath -> IO ()
 serve configFile = do
-  ((histC, inC, debugFn, port, logDir), (asyncCmd, asyncHist)) <- setupServer configFile
+  (runServer, asyncCmd, asyncHist) <- setupServer configFile
   link asyncCmd   -- Must be individually killed with uninterruptibleCancel
   link asyncHist  -- Must be individually killed with uninterruptibleCancel
-  runApiServer histC inC debugFn port logDir
+  runServer
 
-setupServer :: FilePath -> IO ((ServerSetup, ServerThreads))
+setupServer :: FilePath -> IO ((IO (), Async (), Async ()))
 setupServer configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
@@ -92,10 +89,8 @@ setupServer configFile = do
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   asyncHist <- async (runHistoryService histConf Nothing)
-  
-  let setup = (histC, inC, debugFn, (fromIntegral _port), _logDir)
-  let threads = (asyncCmd, asyncHist)
-  return (setup, threads)
+  let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
+  return (runServer,asyncCmd, asyncHist)
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do
