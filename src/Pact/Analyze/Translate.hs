@@ -580,20 +580,18 @@ translateNode astNode = astContext astNode $ case astNode of
           _ -> throwMalformedComp
 
         mkLogical :: TranslateM ETerm
-        mkLogical = case args of
-          [a] -> do
-            ESimple TBool a' <- translateNode a
-            case fn of
-              "not" -> pure $ ESimple TBool $ PureTerm $ Logical NotOp [a']
-              _     -> throwMalformedComp
-          [a, b] -> do
-            ESimple TBool a' <- translateNode a
-            ESimple TBool b' <- translateNode b
-            case fn of
-              "and" -> pure $ ESimple TBool $ PureTerm $ Logical AndOp [a', b']
-              "or"  -> pure $ ESimple TBool $ PureTerm $ Logical OrOp [a', b']
-              _     -> throwError' $ MalformedLogicalOp fn args
-          _ -> throwError' $ MalformedLogicalOp fn args
+        mkLogical = do
+          let throwMalformed :: forall a. TranslateM a
+              throwMalformed = throwError' $ MalformedLogicalOp fn args
+
+          terms <- traverse translateNode args
+          op <- maybe throwMalformed pure $ toOp logicalOpP fn
+          case (op, terms) of
+            (NotOp, [ESimple TBool a]) -> pure $
+              ESimple TBool $ PureTerm $ Logical op [a]
+            (_, [ESimple TBool a, ESimple TBool b]) -> pure $
+              ESimple TBool $ PureTerm $ Logical op [a, b]
+            _ -> throwMalformed
 
         mkArith :: TranslateM ETerm
         mkArith = case args of
