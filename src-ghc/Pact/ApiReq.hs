@@ -21,7 +21,9 @@ module Pact.ApiReq
      KeyPair(..)
     ,ApiReq(..)
     ,apiReq
-    ,mkApiReqExec
+    ,mkApiReq
+    ,mkExec
+    ,mkCont
     ) where
 
 import Control.Monad.State.Strict
@@ -57,6 +59,11 @@ instance ToJSON KeyPair where toJSON = lensyToJSON 3
 instance FromJSON KeyPair where parseJSON = lensyParseJSON 3
 
 data ApiReq = ApiReq {
+  _ylType :: Maybe String,
+  _ylTxId :: Maybe TxId,
+  _ylStep :: Maybe Int,
+  _ylRollback :: Maybe Bool,
+  _ylResume :: Maybe Value,
   _ylData :: Maybe Value,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe String,
@@ -71,20 +78,27 @@ instance FromJSON ApiReq where parseJSON = lensyParseJSON 3
 
 apiReq :: FilePath -> Bool -> IO ()
 apiReq fp local = do
-  (_,exec) <- mkApiReqExec fp
+  (_,exec) <- mkApiReq fp
   if local then
     BSL.putStrLn $ encode exec
     else
     BSL.putStrLn $ encode $ SubmitBatch [exec]
   return ()
 
-mkApiReqExec :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
-mkApiReqExec fp = do
+mkApiReq :: FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReq fp = do
   ar@ApiReq {..} <- either (dieAR . show) return =<<
                  liftIO (Y.decodeFileEither fp)
-  oldCwd <- getCurrentDirectory
-  liftIO $ setCurrentDirectory (takeDirectory fp)
-  (code,cdata) <- (`finally` liftIO (setCurrentDirectory oldCwd)) $ do
+  case _ylType of
+    Just "exec" -> mkApiReqExec ar fp
+    Just "cont" -> mkApiReqCont ar fp
+    Nothing     -> mkApiReqExec ar fp -- Default
+    _      -> dieAR "Expected a valid message type: either 'exec' or 'cont'"
+
+
+mkApiReqExec :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqExec ar@ApiReq{..} fp = do
+  (code,cdata) <- withCurrentDirectory (takeDirectory fp) $ do
     code <- case (_ylCodeFile,_ylCode) of
       (Nothing,Just c) -> return c
       (Just f,Nothing) -> liftIO (readFile f)
@@ -96,13 +110,12 @@ mkApiReqExec fp = do
                           eitherDecode
       (Nothing,Nothing) -> return Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-    return (code,cdata)
+    return (code,cdata)  
   addy <- case (_ylTo,_ylFrom) of
     (Just t,Just f) -> return $ Just (Address f (S.fromList t))
     (Nothing,Nothing) -> return Nothing
     _ -> dieAR "Must specify to AND from if specifying addresses"
   ((ar,code,cdata,addy),) <$> mkExec code cdata addy _ylKeyPairs _ylNonce
-
 
 mkExec :: String -> Value -> Maybe Address -> [KeyPair] -> Maybe String -> IO (Command Text)
 mkExec code mdata addy kps ridm = do
@@ -113,6 +126,46 @@ mkExec code mdata addy kps ridm = do
     addy
     (pack $ show rid)
     (Exec (ExecMsg (pack code) mdata))
+
+mkApiReqCont :: ApiReq -> FilePath -> IO ((ApiReq,String,Value,Maybe Address),Command Text)
+mkApiReqCont ar@ApiReq{..} fp = do
+  txId <- case _ylTxId of
+    Just t  -> return t
+    Nothing -> dieAR "Expected a 'txid' entry"
+    
+  step <- case _ylStep of
+    Just s  -> return s
+    Nothing -> dieAR "Expected a 'step' entry"
+    
+  rollback <- case _ylRollback of
+    Just r  -> return r
+    Nothing -> dieAR "Expected a 'rollback' entry"
+
+  cdata <- withCurrentDirectory (takeDirectory fp) $ do
+    case (_ylDataFile,_ylData) of
+      (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
+      (Just f,Nothing) -> liftIO (BSL.readFile f) >>=
+                          either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
+                          eitherDecode
+      (Nothing,Nothing) -> return Null
+      _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither" 
+  addy <- case (_ylTo,_ylFrom) of
+    (Just t,Just f) -> return $ Just (Address f (S.fromList t))
+    (Nothing,Nothing) -> return Nothing
+    _ -> dieAR "Must specify to AND from if specifying addresses"
+
+  ((ar,"",cdata,addy),) <$> mkCont txId step rollback cdata addy _ylKeyPairs _ylNonce
+
+mkCont :: TxId -> Int -> Bool  -> Value -> Maybe Address -> [KeyPair]
+  -> Maybe String -> IO (Command Text)
+mkCont txid step rollback mdata addy kps ridm = do
+  rid <- maybe (show <$> getCurrentTime) return ridm
+  return $ decodeUtf8 <$>
+    mkCommand
+    (map (\KeyPair {..} -> (ED25519,_kpSecret,_kpPublic)) kps)
+    addy
+    (pack $ show rid)
+    (Continuation (ContMsg txid step rollback mdata) :: (PactRPC ContMsg))
 
 dieAR :: String -> IO a
 dieAR errMsg = throwM . userError $ "Failure reading request yaml. Yaml file keys: \n\

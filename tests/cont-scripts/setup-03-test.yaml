@@ -1,0 +1,15 @@
+# Provides mock module for running two-party-escrow tests
+code: |-
+  (module test 'k
+    (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
+    (defun run-escrow (deb cred) (accounts.two-party-escrow deb cred 2.00 TIMEOUT))
+    (defun reset-time () (system.set-system-time (time "2017-01-01T12:00:00Z")))
+    (defun get-balance (acct) (at "balance" (accounts.read-account-user acct)))
+  )
+  "test module loaded"
+data:
+  accounts-admin-keyset: ["ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"]
+keyPairs:
+  - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+    secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+nonce: setup-step03
