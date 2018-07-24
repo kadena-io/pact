@@ -58,6 +58,19 @@ import           Pact.Types.Util              (AsString, tShow)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 
+data Located a
+  = Located
+    { _location :: Pact.Info
+    , _located  :: a
+    }
+  deriving (Eq, Functor, Foldable, Traversable)
+
+deriving instance Show a => Show (Located a)
+
+instance Mergeable a => Mergeable (Located a) where
+  symbolicMerge f t (Located i a) (Located i' a') =
+    Located (symbolicMerge f t i i') (symbolicMerge f t a a')
+
 data Existential (tm :: * -> *) where
   ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
   EObject ::                 Schema -> tm Object -> Existential tm
@@ -587,6 +600,7 @@ instance UserShow Schema where
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
 
+makeLenses ''Located
 makePrisms ''AVal
 makeLenses ''ColumnMap
 makeLenses ''Object
