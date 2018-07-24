@@ -246,7 +246,7 @@ data WriteType =
   -- | Update an existing row, or insert a new row if not found.
   --   Requires complete row value, enforced by pact runtime.
   Write
-  deriving (Eq,Show)
+  deriving (Eq,Ord,Show)
 
 
 

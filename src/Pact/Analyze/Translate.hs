@@ -119,6 +119,15 @@ logicalOpP = mkOpNamePrism
   , (SLogicalNegation,    NotOp)
   ]
 
+-- NOTE: we don't yet use symbols here because Feature (currently?) only
+-- handles properties and invariants.
+writeTypeP :: Prism' Text Pact.WriteType
+writeTypeP = mkOpNamePrism
+  [ ("insert", Pact.Insert)
+  , ("update", Pact.Update)
+  , ("write",  Pact.Write)
+  ]
+
 -- * Translation types
 
 data TranslateFailure = TranslateFailure
@@ -672,16 +681,10 @@ translateNode astNode = astContext astNode $ case astNode of
     in asum [mkMod, mkArith, mkComparison, mkKeySetEqNeq, mkObjEqNeq,
          mkLogical, mkConcat, mkObjMerge]
 
-  AST_NFun node name [ShortTableName tn, row, obj]
-    | name `elem` ["insert", "update", "write"] -> do
+  AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
     tid                 <- tagWrite node schema
-    let writeType = case name of
-          "insert" -> Pact.Insert
-          "update" -> Pact.Update
-          "write"  -> Pact.Write
-          _        -> error "impossible due to containing pattern match"
     pure $ ESimple TStr $
       Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 
