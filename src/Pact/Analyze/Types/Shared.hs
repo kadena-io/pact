@@ -53,10 +53,11 @@ import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
-import           Pact.Types.Util              (AsString, tShow)
+import           Pact.Types.Util              (AsString)
 
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.UserShow
 
 data Located a
   = Located
@@ -83,10 +84,14 @@ data Existential (tm :: * -> *) where
 --   EObject sa pa == EObject sb pb = sa == sb && pa == pb
 --   _ == _ = False
 
-mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
-mapExistential f term = case term of
+transformExistential
+  :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
+transformExistential f term = case term of
   ESimple ty  term' -> ESimple ty  (f term')
   EObject sch term' -> EObject sch (f term')
+
+mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
+mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
@@ -423,7 +428,7 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 -- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a)
+type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a)
 
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
@@ -486,13 +491,16 @@ newtype VarId
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
+instance UserShow Any where
+  userShowsPrec _ Any = "*"
+
 instance HasKind Any
 instance SymWord Any
 instance SMTValue Any
 
 newtype KeySet
   = KeySet Integer
-  deriving (Eq, Ord, Data, Show, Read)
+  deriving (Eq, Ord, Data, Show, Read, UserShow)
 
 instance SymWord KeySet where
   mkSymWord = SBVI.genMkSymVar KUnbounded
@@ -528,12 +536,6 @@ typeEq TAny     TAny     = Just Refl
 typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
-class UserShow a where
-  userShowsPrec :: Int -> a -> Text
-
-  userShowList :: [a] -> Text
-  userShowList as = "[" <> T.intercalate ", " (userShow <$> as) <> "]"
-
 instance UserShow (Type a) where
   userShowsPrec _ = \case
     TInt     -> "integer"
@@ -543,18 +545,6 @@ instance UserShow (Type a) where
     TDecimal -> "decimal"
     TKeySet  -> "keyset"
     TAny     -> "*"
-
-instance UserShow ArithOp where
-  userShowsPrec _d = \case
-    Add -> "+"
-    Sub -> "-"
-    Mul -> "*"
-    Div -> "/"
-    Pow -> "^"
-    Log -> "log"
-
-instance UserShow Pact.Exp where
-  userShowsPrec _ = tShow
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
@@ -588,17 +578,9 @@ instance UserShow TableName where
 instance UserShow ColumnName where
   userShowsPrec _ (ColumnName cn) = T.pack cn
 
-instance UserShow a => UserShow (Map Text a) where
-  userShowsPrec _ m =
-    let go result k a = result <> ", " <> k <> ": " <> userShow a
-    in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
-
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where
   userShowsPrec d (Schema schema) = userShowsPrec d schema
-
-userShow :: UserShow a => a -> Text
-userShow = userShowsPrec 0
 
 makeLenses ''Located
 makePrisms ''AVal

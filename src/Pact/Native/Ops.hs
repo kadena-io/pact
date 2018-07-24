@@ -14,8 +14,15 @@
 
 
 module Pact.Native.Ops
-    (opDefs)
-    where
+    ( opDefs
+    , modDef
+    , addDef
+    , subDef
+    , mulDef
+    , divDef, powDef, logDef
+    , sqrtDef, lnDef, expDef, absDef
+    , roundDef, ceilDef, floorDef
+    ) where
 
 
 import Data.Decimal
@@ -28,6 +35,31 @@ import Pact.Types.Runtime
 
 import Pact.Eval
 
+modDef, addDef, subDef, mulDef, divDef, powDef, logDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef :: NativeDef
+
+modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger) "X modulo Y. `(mod 13 8)`"
+addDef = defRNative "+" plus plusTy
+     "Add numbers, concatenate strings/lists, or merge objects. \
+     \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
+     \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
+subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
+     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
+mulDef = defRNative "*" (binop' (*) (*)) coerceBinNum
+     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
+divDef = defRNative "/" divide' coerceBinNum
+     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
+powDef = defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
+logDef = defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
+
+sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
+lnDef = defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
+expDef = defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
+absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
+     "Absolute value of X. `(abs (- 10 23))`"
+
+roundDef = defTrunc "round" "Performs Banker's rounding" round
+ceilDef = defTrunc "ceiling" "Rounds up" ceiling
+floorDef = defTrunc "floor" "Rounds down" floor
 
 opDefs :: NativeModule
 opDefs = ("Operators",
@@ -51,39 +83,47 @@ opDefs = ("Operators",
       "`(not? (> 20) 15)`")
 
 
-    ,defRNative "-" minus (coerceBinNum <> unaryNumTys)
-     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
-    ,defRNative "+" plus plusTy
-     "Add numbers, concatenate strings/lists, or merge objects. \
-     \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
-     \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
-    ,defRNative "*" (binop' (*) (*)) coerceBinNum
-     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
-    ,defRNative "/" divide' coerceBinNum
-     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
-    ,defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
-    ,defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
-    ,defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger) "X modulo Y. `(mod 13 8)`"
-    ,defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
-    ,defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
-    ,defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
-    ,defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
-     "Absolute value of X. `(abs (- 10 23))`"
-    ,defTrunc "round" "Performs Banker's rounding" round
-    ,defTrunc "ceiling" "Rounds up" ceiling
-    ,defTrunc "floor" "Rounds down" floor
+    , addDef
+    , subDef
+    , mulDef
+    , divDef
+    , powDef
+    , logDef
+
+    ,modDef
+    ,sqrtDef
+    , lnDef
+    , expDef
+    , absDef
+    , roundDef
+    , ceilDef
+    , floorDef
     ])
     where eqTy = binTy tTyBool eqA eqA
           eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
                            TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
-          numA = numV "a"
           r = mkTyVar "r" []
-          numV a = mkTyVar a [tTyInteger,tTyDecimal]
-          coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
-          unaryNumTys = unaryTy numA numA
-          plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
-          plusTy = coerceBinNum <> binTy plusA plusA plusA
-          unopTy = unaryTy numA numA
+
+unopTy :: FunTypes n
+unopTy = unaryTy numA numA
+
+numA :: Type n
+numA = numV "a"
+
+numV :: TypeVarName -> Type n
+numV a = mkTyVar a [tTyInteger,tTyDecimal]
+
+unaryNumTys :: FunTypes n
+unaryNumTys = unaryTy numA numA
+
+coerceBinNum :: FunTypes n
+coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
+
+plusA :: Type n
+plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
+
+plusTy :: FunTypes n
+plusTy = coerceBinNum <> binTy plusA plusA plusA
 
 defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>

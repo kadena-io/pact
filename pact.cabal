@@ -77,6 +77,7 @@ library
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
       Pact.ApiReq
       Pact.Bench
@@ -203,6 +204,9 @@ test-suite hspec
               , bytestring
               , mtl
               , text
+              , hedgehog
+              , hw-hspec-hedgehog
+              , intervals
   if !impl(ghcjs)
     build-depends:
         neat-interpolation

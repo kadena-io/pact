@@ -1,9 +1,14 @@
 {-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE LambdaCase  #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Types.Numerical where
 
 import           Data.SBV (AlgReal)
+import qualified Data.Text as T
+
+import Pact.Analyze.Types.UserShow
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
@@ -25,6 +30,16 @@ data ArithOp
   | Log -- ^ Logarithm
   deriving (Show, Eq, Ord)
 
+instance UserShow ArithOp where
+  -- TODO: use prism
+  userShowsPrec _ = \case
+    Add -> "+"
+    Sub -> "-"
+    Mul -> "*"
+    Div -> "/"
+    Pow -> "^"
+    Log -> "log"
+
 -- integer -> integer
 -- decimal -> decimal
 data UnaryArithOp
@@ -38,6 +53,15 @@ data UnaryArithOp
            -- instance.
   deriving (Show, Eq, Ord)
 
+instance UserShow UnaryArithOp where
+  userShowsPrec _ = \case
+    Negate -> "-"
+    Sqrt   -> "sqrt"
+    Ln     -> "ln"
+    Exp    -> "exp"
+    Abs    -> "abs"
+    Signum -> "signum"
+
 -- decimal -> integer -> decimal
 -- decimal -> decimal
 data RoundingLikeOp
@@ -46,6 +70,12 @@ data RoundingLikeOp
   | Ceiling -- ^ Round to the next integer
   | Floor   -- ^ Round to the previous integer
   deriving (Show, Eq, Ord)
+
+instance UserShow RoundingLikeOp where
+  userShowsPrec _ = \case
+    Round   -> "round"
+    Ceiling -> "ceiling"
+    Floor   -> "floor"
 
 -- | Arithmetic ops
 --
@@ -80,6 +110,19 @@ data Numerical t a where
   ModOp           :: t Integer      -> t Integer ->              Numerical t Integer
   RoundingLikeOp1 :: RoundingLikeOp -> t Decimal ->              Numerical t Integer
   RoundingLikeOp2 :: RoundingLikeOp -> t Decimal -> t Integer -> Numerical t Decimal
+
+instance (UserShow (t Integer), UserShow (t Decimal))
+  => UserShow (Numerical t a) where
+  userShowsPrec _ = parens . T.unwords . \case
+    DecArithOp op a b      -> [userShow op, userShow a, userShow b]
+    IntArithOp op a b      -> [userShow op, userShow a, userShow b]
+    DecUnaryArithOp op a   -> [userShow op, userShow a]
+    IntUnaryArithOp op a   -> [userShow op, userShow a]
+    DecIntArithOp op a b   -> [userShow op, userShow a, userShow b]
+    IntDecArithOp op a b   -> [userShow op, userShow a, userShow b]
+    ModOp a b              -> ["mod", userShow a, userShow b]
+    RoundingLikeOp1 op a   -> [userShow op, userShow a]
+    RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 
 deriving instance (Show (t Decimal), Show (t Integer), Show a) => Show (Numerical t a)
 deriving instance (Eq (t Decimal), Eq (t Integer), Eq a) => Eq (Numerical t a)
