@@ -89,20 +89,23 @@ instance UserShow PreProp where
     PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
     PreBoolLit b    -> tShow (Pact.LBool b)
 
-    PreAbort        -> "abort"
-    PreSuccess      -> "success"
-    PreResult       -> "result"
+    PreAbort        -> STransactionAborts
+    PreSuccess      -> STransactionSucceeds
+    PreResult       -> SFunctionResult
     PreVar _id name -> name
 
     PreForall _vid name qty prop ->
-      "(forall (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+      "(" <> SUniversalQuantification <> " (" <> name <> ":" <> userShow qty <>
+        ") " <> userShow prop <> ")"
     PreExists _vid name qty prop ->
-      "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
-    PreApp name applicands -> "(" <> name <> " " <> T.unwords
-      ((map userShow) applicands) <> ")"
-
-    PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
-    PreLiteralObject obj -> userShowsPrec prec obj
+      "(" <> SExistentialQuantification <> " (" <> name <> ":" <>
+        userShow qty <> ") " <> userShow prop <> ")"
+    PreApp name applicands ->
+      "(" <> name <> " " <> T.unwords ((map userShow) applicands) <> ")"
+    PreAt objIx obj ->
+      "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+    PreLiteralObject obj ->
+      userShowsPrec prec obj
 
 
 throwErrorT :: MonadError String m => Text -> m a
@@ -348,8 +351,8 @@ inferPreProp preProp = case preProp of
             -> Prop a -> Prop a -> PropCheck EProp
         ret c aProp bProp = pure $ ESimple TBool $ c op aProp bProp
         eqNeqMsg :: Text -> Text
-        eqNeqMsg nouns = nouns
-                      <> " only support equality (=) / inequality (!=) checks"
+        eqNeqMsg nouns = nouns <> " only support equality (" <> SEquality <>
+          ") / inequality (" <> SInequality <> ") checks"
     case (a', b') of
       (ESimple aTy aProp, ESimple bTy bProp) -> case typeEq aTy bTy of
         Nothing -> typeError preProp aTy bTy
@@ -639,7 +642,8 @@ expToInvariant ty exp = case (ty, exp) of
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
       Nothing -> throwErrorIn exp $
-        op' <> " is an invalid operation for keysets (only " <> SEquality <> " or " <> SInequality <> " allowed)"
+        op' <> " is an invalid operation for keysets (only " <> SEquality <>
+        " or " <> SInequality <> " allowed)"
     ] (throwErrorIn exp "unexpected argument types")
 
   (TBool, EList' (EAtom' op:args))
