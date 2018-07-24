@@ -22,6 +22,7 @@ module Pact.Analyze.Types.Languages
 
   , lit
   , mkDecimal
+  , unMkDecimal
 
   , pattern ILiteral
   , pattern ILogicalOp
@@ -46,16 +47,19 @@ import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
                                                SymWord, (%))
+import           Data.Semigroup ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
 import           Pact.Types.Persistence       (WriteType)
+import           Pact.Types.Util (tShow)
 
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
+import Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
 #define EQ_EXISTENTIAL(tm)                                \
@@ -158,6 +162,13 @@ data Core t a where
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t Bool] -> Core t Bool
+
+instance (UserShow a, UserShow (t a), UserShow (t Integer), UserShow (t Decimal))
+  => UserShow (Core t a) where
+  userShowsPrec d = \case
+    Lit a        -> userShowsPrec d a
+    Sym s        -> tShow s
+    Numerical tm -> userShowsPrec d tm
 
 deriving instance Eq a   => Eq   (Core Prop a)
 deriving instance Show a => Show (Core Prop a)
@@ -346,9 +357,15 @@ pattern POr a b = CoreProp (Logical OrOp [a, b])
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = CoreProp (Logical NotOp [a])
 
+-- TODO: iso
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
   mantissa % 10 ^ places
+
+unMkDecimal :: Decimal -> Decimal.Decimal
+unMkDecimal algReal = case Decimal.eitherFromRational (toRational algReal) of
+  Left err -> error err
+  Right dec -> dec
 
 
 -- | The schema invariant language.
@@ -438,6 +455,14 @@ data Term ret where
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
   Hash            :: ETerm                              -> Term String
 
+instance UserShow a => UserShow (Term a) where
+  userShowsPrec _ = \case
+    CoreTerm tm -> userShow tm
+
+instance UserShow ETerm where
+  userShowsPrec _ = \case
+    ESimple ty tm -> parens $ userShow tm <> ": " <> userShow ty
+
 deriving instance Eq a   => Eq (Term a)
 deriving instance Eq a   => Eq (Core Term a)
 deriving instance Show a => Show (Term a)
@@ -478,4 +503,4 @@ instance Num (Term Decimal) where
   negate = inject .   DecUnaryArithOp Negate
 
 lit :: SymWord a => a -> Term a
-lit = CoreTerm . Sym . literalS
+lit = CoreTerm . Lit

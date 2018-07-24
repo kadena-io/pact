@@ -10,7 +10,7 @@
 module AnalyzeSpec (spec) where
 
 import           Control.Lens                 (at, findOf, ix, matching, (&),
-                                               (.~), (^.), (^..), _2, _Left)
+                                               (.~), (^.), (^..), _Left)
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
@@ -1222,6 +1222,16 @@ spec = describe "analyze" $ do
           |]
     in expectPass code $ Valid $ bnot Abort'
 
+  describe "big round" $
+    let code =
+          [text|
+            (defun test:bool ()
+              (let ((x:decimal 5230711750420325051373061834485335325985428731552400523071175042032505137306183448533532598542873155240052307117504203250513730.618344853353259854287315524005230711750420325051373061834485335325985428731552400523071175042032505137306183448533532598542873155240052307117504203250513730618344853353259854287315524005230711750420325051373061834485335325985428731552400523071175042032505)
+                    (y:integer 840827029663))
+              (enforce (= (round x y) x))))
+          |]
+    in expectPass code $ Valid $ bnot Abort'
+
   describe "arith" $
     let code =
           [text|
@@ -1327,6 +1337,11 @@ spec = describe "analyze" $ do
                 (enforce (= (floor -100.15234 2) -100.16) "")
                 (enforce (= (round -100.15234 2) -100.15) "")
                 (enforce (= (ceiling -100.15234 2) -100.15) "")
+
+                (enforce (=
+                  (* 0.0000000000000000000000000000000000000000000000000000000000000000000000000000001
+                     0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001)
+                  0) "this is one digit from significant")
               ))
           |]
     in expectPass code $ Valid $ bnot Abort'
