@@ -14,9 +14,10 @@
 module Pact.Analyze.Translate where
 
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, cons, makeLenses, view, (%~),
-                                             (.~), (<&>), (?~), (^.), (^?), _1,
-                                             _2)
+import           Control.Lens               (Prism', at, cons, makeLenses,
+                                             preview, prism', review, view,
+                                             (%~), (.~), (<&>), (?~), (^.),
+                                             (^?), _1, _2)
 import           Control.Monad              (MonadPlus (mzero), (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -33,6 +34,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
+import           Data.Tuple                 (swap)
 import           Data.Type.Equality         ((:~:) (Refl))
 import           System.Locale              (defaultTimeLocale)
 
@@ -49,6 +51,75 @@ import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+
+-- * 'Text'/op prisms
+
+mkOpNamePrism :: Ord op => [(Text, op)] -> Prism' Text op
+mkOpNamePrism table =
+  let mapForward = Map.fromList table
+      lookupForward name = Map.lookup name mapForward
+
+      mapReverse = Map.fromList (fmap swap table)
+      lookupReverse op = mapReverse Map.! op
+  in prism' lookupReverse lookupForward
+
+toOp :: Prism' Text op -> Text -> Maybe op
+toOp = preview
+
+toText :: Prism' Text op -> op -> Text
+toText = review
+
+arithOpP :: Prism' Text ArithOp
+arithOpP = mkOpNamePrism
+  [ (SAddition,       Add)
+  , (SSubtraction,    Sub)
+  , (SMultiplication, Mul)
+  , (SDivision,       Div)
+  , (SExponentiation, Pow)
+  , (SLogarithm,      Log)
+  ]
+
+unaryArithOpP :: Prism' Text UnaryArithOp
+unaryArithOpP = mkOpNamePrism
+  [ (SNumericNegation,  Negate)
+  , (SSquareRoot,       Sqrt)
+  , (SNaturalLogarithm, Ln)
+  , (SExponential,      Exp)
+  , (SAbsoluteValue,    Abs)
+  -- explicitly no signum
+  ]
+
+comparisonOpP :: Prism' Text ComparisonOp
+comparisonOpP = mkOpNamePrism
+  [ (SGreaterThan,        Gt)
+  , (SLessThan,           Lt)
+  , (SGreaterThanOrEqual, Gte)
+  , (SLessThanOrEqual,    Lte)
+  , (SEquality,           Eq)
+  , (SInequality,         Neq)
+  ]
+
+eqNeqP :: Prism' Text EqNeq
+eqNeqP = mkOpNamePrism
+  [ (SEquality,   Eq')
+  , (SInequality, Neq')
+  ]
+
+roundingLikeOpP :: Prism' Text RoundingLikeOp
+roundingLikeOpP = mkOpNamePrism
+  [ (SBankersRound, Round)
+  , (SCeilingRound, Ceiling)
+  , (SFloorRound,   Floor)
+  ]
+
+logicalOpP :: Prism' Text LogicalOp
+logicalOpP = mkOpNamePrism
+  [ (SLogicalConjunction, AndOp)
+  , (SLogicalDisjunction, OrOp)
+  , (SLogicalNegation,    NotOp)
+  ]
+
+-- * Translation types
 
 data TranslateFailure = TranslateFailure
   { _translateFailureInfo :: !Info
@@ -146,6 +217,8 @@ instance MonadFail TranslateM where
   fail s = do
     info <- view _1
     throwError (TranslateFailure info (MonadFailure s))
+
+-- * Translation
 
 -- | Call when entering a node to set the current context
 nodeContext :: Node -> TranslateM a -> TranslateM a
