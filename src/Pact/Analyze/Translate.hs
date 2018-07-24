@@ -544,14 +544,7 @@ translateNode astNode = astContext astNode $ case astNode of
             [a, b] -> do
               ESimple ta a' <- translateNode a
               ESimple tb b' <- translateNode b
-              op <- case fn of
-                ">"  -> pure Gt
-                "<"  -> pure Lt
-                ">=" -> pure Gte
-                "<=" -> pure Lte
-                "="  -> pure Eq
-                "!=" -> pure Neq
-                _    -> throwMalformedComp
+              op <- maybe throwMalformedComp pure $ toOp comparisonOpP fn
               case (ta, tb) of
                 (TInt, TInt) -> pure $
                   ESimple TBool $ PureTerm $ IntegerComparison op a' b'
@@ -573,10 +566,7 @@ translateNode astNode = astContext astNode $ case astNode of
           [a, b] -> do
             ESimple TKeySet a' <- translateNode a
             ESimple TKeySet b' <- translateNode b
-            op <- case fn of
-              "="  -> pure Eq'
-              "!=" -> pure Neq'
-              _    -> throwMalformedComp
+            op <- maybe throwMalformedComp pure $ toOp eqNeqP fn
             pure $ ESimple TBool $ PureTerm $ KeySetEqNeq op a' b'
           _ -> throwMalformedComp
 
@@ -585,10 +575,7 @@ translateNode astNode = astContext astNode $ case astNode of
           [a, b] -> do
             EObject _ a' <- translateNode a
             EObject _ b' <- translateNode b
-            op <- case fn of
-              "="  -> pure Eq'
-              "!=" -> pure Neq'
-              _    -> throwMalformedComp
+            op <- maybe throwMalformedComp pure $ toOp eqNeqP fn
             pure $ ESimple TBool $ PureTerm $ ObjectEqNeq op a' b'
           _ -> throwMalformedComp
 
