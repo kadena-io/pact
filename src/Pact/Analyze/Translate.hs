@@ -535,34 +535,38 @@ translateNode astNode = astContext astNode $ case astNode of
     -> pure $ ESimple TTime $ lit (mkTime timeLit')
 
   AST_NFun_Basic fn args ->
-    let mkComparison :: TranslateM ETerm
-        mkComparison = case args of
-          [a, b] -> do
-            ESimple ta a' <- translateNode a
-            ESimple tb b' <- translateNode b
-            op <- case fn of
-              ">"  -> pure Gt
-              "<"  -> pure Lt
-              ">=" -> pure Gte
-              "<=" -> pure Lte
-              "="  -> pure Eq
-              "!=" -> pure Neq
-              _    -> throwError' $ MalformedComparison fn args
-            case (ta, tb) of
-              (TInt, TInt)         -> pure $
-                ESimple TBool $ PureTerm $ IntegerComparison op a' b'
-              (TDecimal, TDecimal) -> pure $
-                ESimple TBool $ PureTerm $ DecimalComparison op a' b'
-              (TTime, TTime)       -> pure $
-                ESimple TBool $ PureTerm $ TimeComparison op a' b'
-              (TStr, TStr)         -> pure $
-                ESimple TBool $ PureTerm $ StringComparison op a' b'
-              (TBool, TBool)       -> pure $
-                ESimple TBool $ PureTerm $ BoolComparison op a' b'
-              (_, _) -> case typeEq ta tb of
-                Just Refl -> throwError' $ MalformedComparison fn args
-                _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
-          _ -> throwError' $ MalformedComparison fn args
+    let throwMalformedComp :: forall a. TranslateM a
+        throwMalformedComp = throwError' $ MalformedComparison fn args
+
+        mkComparison :: TranslateM ETerm
+        mkComparison =
+          case args of
+            [a, b] -> do
+              ESimple ta a' <- translateNode a
+              ESimple tb b' <- translateNode b
+              op <- case fn of
+                ">"  -> pure Gt
+                "<"  -> pure Lt
+                ">=" -> pure Gte
+                "<=" -> pure Lte
+                "="  -> pure Eq
+                "!=" -> pure Neq
+                _    -> throwMalformedComp
+              case (ta, tb) of
+                (TInt, TInt) -> pure $
+                  ESimple TBool $ PureTerm $ IntegerComparison op a' b'
+                (TDecimal, TDecimal) -> pure $
+                  ESimple TBool $ PureTerm $ DecimalComparison op a' b'
+                (TTime, TTime) -> pure $
+                  ESimple TBool $ PureTerm $ TimeComparison op a' b'
+                (TStr, TStr) -> pure $
+                  ESimple TBool $ PureTerm $ StringComparison op a' b'
+                (TBool, TBool) -> pure $
+                  ESimple TBool $ PureTerm $ BoolComparison op a' b'
+                (_, _) -> case typeEq ta tb of
+                  Just Refl -> throwMalformedComp
+                  _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
+            _ -> throwMalformedComp
 
         mkKeySetEqNeq :: TranslateM ETerm
         mkKeySetEqNeq = case args of
@@ -572,9 +576,9 @@ translateNode astNode = astContext astNode $ case astNode of
             op <- case fn of
               "="  -> pure Eq'
               "!=" -> pure Neq'
-              _    -> throwError' $ MalformedComparison fn args
+              _    -> throwMalformedComp
             pure $ ESimple TBool $ PureTerm $ KeySetEqNeq op a' b'
-          _ -> throwError' $ MalformedComparison fn args
+          _ -> throwMalformedComp
 
         mkObjEqNeq :: TranslateM ETerm
         mkObjEqNeq = case args of
@@ -584,9 +588,9 @@ translateNode astNode = astContext astNode $ case astNode of
             op <- case fn of
               "="  -> pure Eq'
               "!=" -> pure Neq'
-              _    -> throwError' $ MalformedComparison fn args
+              _    -> throwMalformedComp
             pure $ ESimple TBool $ PureTerm $ ObjectEqNeq op a' b'
-          _ -> throwError' $ MalformedComparison fn args
+          _ -> throwMalformedComp
 
         mkLogical :: TranslateM ETerm
         mkLogical = case args of
@@ -594,7 +598,7 @@ translateNode astNode = astContext astNode $ case astNode of
             ESimple TBool a' <- translateNode a
             case fn of
               "not" -> pure $ ESimple TBool $ PureTerm $ Logical NotOp [a']
-              _     -> throwError' $ MalformedComparison fn args
+              _     -> throwMalformedComp
           [a, b] -> do
             ESimple TBool a' <- translateNode a
             ESimple TBool b' <- translateNode b
