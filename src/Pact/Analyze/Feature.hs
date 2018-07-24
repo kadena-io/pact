@@ -52,6 +52,7 @@ data Feature
   | FLogicalNegation
   -- * Object operators
   | FObjectProjection
+  | FObjectMerge
   -- * String operators
   | FStringLength
   | FStringConcatenation
@@ -524,6 +525,21 @@ doc FObjectProjection = Doc
         (TyCon bool)
   ]
 
+doc FObjectMerge = Doc
+  "+"
+  InvAndProp
+  "Object merge"
+  [ Usage
+      "(+ x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon obj)
+        , ("y", TyCon obj)
+        ]
+        (TyCon obj)
+  ]
+
 -- String featuers
 
 doc FStringLength = Doc
@@ -668,6 +684,7 @@ PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SObjectProjection, FObjectProjection)
+PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)
 PAT(SUniversalQuantification, FUniversalQuantification)

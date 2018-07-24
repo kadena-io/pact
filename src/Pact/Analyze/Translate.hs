@@ -45,6 +45,7 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
+import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -594,7 +595,7 @@ translateNode astNode = astContext astNode $ case astNode of
 
         mkObjMerge :: TranslateM ETerm
         mkObjMerge = case (fn, args) of
-          ("+", [a, b]) -> do
+          (SObjectMerge, [a, b]) -> do
             EObject s1 o1 <- translateNode a
             EObject s2 o2 <- translateNode b
             pure $ EObject (s1 <> s2) $ PureTerm $ ObjectMerge o1 o2
