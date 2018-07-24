@@ -389,6 +389,8 @@ pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
 pattern ILogicalOp op args = PureInvariant (Logical op args)
 
 type ETerm = Existential Term
+EQ_EXISTENTIAL(Term)
+SHOW_EXISTENTIAL(Term)
 
 data Term ret where
   PureTerm        :: Core Term a -> Term a
@@ -427,8 +429,9 @@ data Term ret where
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
   Hash            :: ETerm                              -> Term String
 
+deriving instance Eq a   => Eq (Term a)
+deriving instance Eq a   => Eq (Core Term a)
 deriving instance Show a => Show (Term a)
-deriving instance Show ETerm
 deriving instance Show a => Show (Core Term a)
 
 instance S :<: Term where
