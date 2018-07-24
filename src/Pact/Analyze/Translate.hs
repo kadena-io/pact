@@ -13,7 +13,7 @@
 
 module Pact.Analyze.Translate where
 
-import           Control.Applicative        (Alternative (empty))
+import           Control.Applicative        ((<|>), Alternative (empty))
 import           Control.Lens               (Prism', at, cons, makeLenses,
                                              preview, prism', review, view,
                                              (%~), (.~), (<&>), (?~), (^.),
@@ -594,58 +594,56 @@ translateNode astNode = astContext astNode $ case astNode of
             _ -> throwMalformed
 
         mkArith :: TranslateM ETerm
-        mkArith = case args of
-          [a, b] -> do
-            ESimple tyA a' <- translateNode a
-            ESimple tyB b' <- translateNode b
-            if
-              | fn `Set.member` Set.fromList ["+", "-", "*", "/", "^", "log"]
-                -> let opFromName = \case
-                         ("+" :: Text) -> Add
-                         "-"           -> Sub
-                         "*"           -> Mul
-                         "/"           -> Div
-                         "^"           -> Pow
-                         "log"         -> Log
-                         _             -> error "impossible"
-                 in case (tyA, tyB) of
-                   (TInt, TInt)         -> pure $
-                     ESimple TInt     $ inject $ IntArithOp (opFromName fn) a' b'
-                   (TDecimal, TDecimal) -> pure $
-                     ESimple TDecimal $ inject $ DecArithOp (opFromName fn) a' b'
-                   (TInt, TDecimal)     -> pure $
-                     ESimple TDecimal $ inject $ IntDecArithOp (opFromName fn) a' b'
-                   (TDecimal, TInt)     -> pure $
-                     ESimple TDecimal $ inject $ DecIntArithOp (opFromName fn) a' b'
-                   _ -> throwError' $ MalformedArithOp fn args
-              | otherwise -> case (tyA, tyB, fn) of
-                (TDecimal, TInt, "round")   -> pure $
-                  ESimple TDecimal $ inject $ RoundingLikeOp2 Round a' b'
-                (TDecimal, TInt, "ceiling") -> pure $
-                  ESimple TDecimal $ inject $ RoundingLikeOp2 Ceiling a' b'
-                (TDecimal, TInt, "floor")   -> pure $
-                  ESimple TDecimal $ inject $ RoundingLikeOp2 Floor a' b'
-                _ -> throwError' $ MalformedArithOp fn args
-          [a] -> do
-            ESimple ty a' <- translateNode a
-            case (fn, ty) of
-              ("-",    TInt) -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Negate a'
-              ("sqrt", TInt) -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Sqrt a'
-              ("ln",   TInt) -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Ln a'
-              ("exp",  TInt) -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Exp a'
-              ("abs",  TInt) -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Abs a'
+        mkArith = do
+          let throwMalformed :: forall a. TranslateM a
+              throwMalformed = throwError' $ MalformedArithOp fn args
 
-              ("-",    TDecimal) -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Negate a'
-              ("sqrt", TDecimal) -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Sqrt a'
-              ("ln",   TDecimal) -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Ln a'
-              ("exp",  TDecimal) -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Exp a'
-              ("abs",  TDecimal) -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Abs a'
+              mArithOp = toOp arithOpP fn
+              mRoundOp = toOp roundingLikeOpP fn
+              mUnaryOp = toOp unaryArithOpP fn
 
-              ("round",   TDecimal) -> pure $ ESimple TInt $ inject $ RoundingLikeOp1 Round a'
-              ("ceiling", TDecimal) -> pure $ ESimple TInt $ inject $ RoundingLikeOp1 Ceiling a'
-              ("floor",   TDecimal) -> pure $ ESimple TInt $ inject $ RoundingLikeOp1 Floor a'
-              _         -> throwError' $ MalformedArithOp fn args
-          _ -> throwError' $ MalformedArithOp fn args
+          terms <- traverse translateNode args
+
+          case terms of
+            [ESimple tyA a, ESimple tyB b] ->
+              case fmap Left mArithOp <|> fmap Right mRoundOp of
+                Nothing -> throwMalformed
+                Just (Left op) ->
+                  case (tyA, tyB) of
+                    (TInt, TInt) -> pure $
+                      ESimple TInt $ inject $ IntArithOp op a b
+                    (TDecimal, TDecimal) -> pure $
+                      ESimple TDecimal $ inject $ DecArithOp op a b
+                    (TInt, TDecimal) -> pure $
+                      ESimple TDecimal $ inject $ IntDecArithOp op a b
+                    (TDecimal, TInt) -> pure $
+                      ESimple TDecimal $ inject $ DecIntArithOp op a b
+                    _ -> throwMalformed
+                Just (Right op) ->
+                  case (tyA, tyB, op) of
+                    (TDecimal, TInt, Round) -> pure $
+                      ESimple TDecimal $ inject $ RoundingLikeOp2 op a b
+                    (TDecimal, TInt, Ceiling) -> pure $
+                      ESimple TDecimal $ inject $ RoundingLikeOp2 op a b
+                    (TDecimal, TInt, Floor) -> pure $
+                      ESimple TDecimal $ inject $ RoundingLikeOp2 op a b
+                    _ -> throwMalformed
+            [ESimple tyA a] ->
+              case fmap Left mUnaryOp <|> fmap Right mRoundOp of
+                Nothing -> throwMalformed
+                Just (Left op) ->
+                  case tyA of
+                    TInt -> pure $
+                      ESimple TInt $ inject $ IntUnaryArithOp op a
+                    TDecimal -> pure $
+                      ESimple TDecimal $ inject $ DecUnaryArithOp op a
+                    _ -> throwMalformed
+                Just (Right op) ->
+                  case tyA of
+                    TDecimal ->
+                      pure $ ESimple TInt $ inject $ RoundingLikeOp1 op a
+                    _ -> throwMalformed
+            _ -> throwMalformed
 
         mkConcat :: TranslateM ETerm
         mkConcat = case (fn, args) of
