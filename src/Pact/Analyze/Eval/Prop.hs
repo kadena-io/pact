@@ -72,7 +72,7 @@ expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
 
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn
-getLitTableName (PureProp (Var vid name)) = do
+getLitTableName (CoreProp (Var vid name)) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
     Nothing -> throwErrorNoLoc $ fromString $
@@ -80,7 +80,7 @@ getLitTableName (PureProp (Var vid name)) = do
     Just tn -> pure tn
 getLitTableName (PropSpecific Result)
   = throwErrorNoLoc "Function results can't be table names"
-getLitTableName PureProp{} = throwErrorNoLoc "Pure values can't be table names"
+getLitTableName CoreProp{} = throwErrorNoLoc "Core values can't be table names"
 
 
 getLitColName :: Prop ColumnName -> Query ColumnName
@@ -89,12 +89,12 @@ getLitColName _         = throwErrorNoLoc "TODO: column quantification"
 
 
 evalProp :: SymWord a => Prop a -> Query (S a)
-evalProp (PureProp tm)    = evalCore tm
+evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
 
 evalPropO :: Prop Object -> Query Object
-evalPropO (PureProp a)          = evalCoreO a
+evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 
 

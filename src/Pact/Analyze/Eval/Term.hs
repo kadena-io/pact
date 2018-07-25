@@ -199,7 +199,7 @@ evalETerm tm = snd <$> evalExistential tm
 
 evalTermO :: Term Object -> Analyze Object
 evalTermO = \case
-  PureTerm a -> evalCoreO a
+  CoreTerm a -> evalCoreO a
 
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
@@ -272,7 +272,7 @@ validateWrite writeType sch@(Schema sm) obj@(Object om) = do
 
 evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
-  PureTerm a -> evalCore a
+  CoreTerm a -> evalCore a
 
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond

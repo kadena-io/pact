@@ -288,7 +288,7 @@ inferPreProp preProp = case preProp of
 
   -- identifiers
   PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
-  PreVar vid name -> inferVar vid name (PureProp (Var vid name))
+  PreVar vid name -> inferVar vid name (CoreProp (Var vid name))
 
   -- quantifiers
   (viewQ -> Just (q, vid, name, ty', p)) -> do
@@ -319,7 +319,7 @@ inferPreProp preProp = case preProp of
   PreLiteralObject obj -> do
     obj' <- traverse inferPreProp obj
     let schema = Schema $ fmap existentialType obj'
-    pure $ EObject schema $ PureProp $ LiteralObject obj'
+    pure $ EObject schema $ CoreProp $ LiteralObject obj'
 
   -- applications:
   --
@@ -357,18 +357,18 @@ inferPreProp preProp = case preProp of
       (ESimple aTy aProp, ESimple bTy bProp) -> case typeEq aTy bTy of
         Nothing -> typeError preProp aTy bTy
         Just Refl -> case aTy of
-          TInt     -> ret (PureProp .... IntegerComparison) aProp bProp
-          TDecimal -> ret (PureProp .... DecimalComparison) aProp bProp
-          TTime    -> ret (PureProp .... TimeComparison) aProp bProp
-          TBool    -> ret (PureProp .... BoolComparison) aProp bProp
-          TStr     -> ret (PureProp .... StringComparison) aProp bProp
+          TInt     -> ret (CoreProp .... IntegerComparison) aProp bProp
+          TDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
+          TTime    -> ret (CoreProp .... TimeComparison) aProp bProp
+          TBool    -> ret (CoreProp .... BoolComparison) aProp bProp
+          TStr     -> ret (CoreProp .... StringComparison) aProp bProp
           TAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
       (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
-          Just eqNeq -> pure $ ESimple TBool $ PureProp $ ObjectEqNeq eqNeq aProp bProp
+          Just eqNeq -> pure $ ESimple TBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
       (_, _) -> throwErrorIn preProp $
         "can't compare primitive types with objects (found " <>
@@ -587,12 +587,12 @@ expToInvariant ty exp = case (ty, exp) of
     schemaTys <- ask
     case find (\(arg, _vid) -> arg ^. aName == varName) schemaTys of
       Just (Pact.Arg _name (TyPrim primTy) _info, vid) -> case (ty, primTy) of
-        (TInt,     TyInteger) -> pure (PureInvariant (Var vid varName))
-        (TDecimal, TyDecimal) -> pure (PureInvariant (Var vid varName))
-        (TTime,    TyTime)    -> pure (PureInvariant (Var vid varName))
-        (TStr,     TyString)  -> pure (PureInvariant (Var vid varName))
-        (TBool,    TyBool)    -> pure (PureInvariant (Var vid varName))
-        (TKeySet,  TyKeySet)  -> pure (PureInvariant (Var vid varName))
+        (TInt,     TyInteger) -> pure (CoreInvariant (Var vid varName))
+        (TDecimal, TyDecimal) -> pure (CoreInvariant (Var vid varName))
+        (TTime,    TyTime)    -> pure (CoreInvariant (Var vid varName))
+        (TStr,     TyString)  -> pure (CoreInvariant (Var vid varName))
+        (TBool,    TyBool)    -> pure (CoreInvariant (Var vid varName))
+        (TKeySet,  TyKeySet)  -> pure (CoreInvariant (Var vid varName))
         (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
@@ -610,8 +610,8 @@ expToInvariant ty exp = case (ty, exp) of
     throwErrorIn exp "literal of unexpected type"
 
   (TInt, EList' [EAtom' SStringLength, str])
-    -> PureInvariant . StrLength <$> expToInvariant TStr str
-  (TStr, EList' [EAtom' SStringConcatenation, a, b]) -> PureInvariant ... StrConcat
+    -> CoreInvariant . StrLength <$> expToInvariant TStr str
+  (TStr, EList' [EAtom' SStringConcatenation, a, b]) -> CoreInvariant ... StrConcat
     <$> expToInvariant TStr a <*> expToInvariant TStr b
 
   (TDecimal, EList' [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum'
@@ -627,18 +627,18 @@ expToInvariant ty exp = case (ty, exp) of
     -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
 
   (TBool, EList' [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum'
-    [ PureInvariant ... IntegerComparison op
+    [ CoreInvariant ... IntegerComparison op
       <$> expToInvariant TInt a     <*> expToInvariant TInt b
-    , PureInvariant ... DecimalComparison op
+    , CoreInvariant ... DecimalComparison op
       <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , PureInvariant ... TimeComparison op
+    , CoreInvariant ... TimeComparison op
       <$> expToInvariant TTime a    <*> expToInvariant TTime b
-    , PureInvariant ... BoolComparison op
+    , CoreInvariant ... BoolComparison op
       <$> expToInvariant TBool a    <*> expToInvariant TBool b
-    , PureInvariant ... StringComparison op
+    , CoreInvariant ... StringComparison op
       <$> expToInvariant TStr a     <*> expToInvariant TStr b
     , case toOp eqNeqP op' of
-      Just eqNeq -> PureInvariant ... KeySetEqNeq eqNeq
+      Just eqNeq -> CoreInvariant ... KeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
       Nothing -> throwErrorIn exp $

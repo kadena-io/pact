@@ -22,8 +22,8 @@ newtype InvariantCheck a = InvariantCheck
 
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
-  eval  (PureInvariant tm)   = evalCore tm
-  evalO (PureInvariant tm)   = evalCoreO tm
+  eval  (CoreInvariant tm)   = evalCore tm
+  evalO (CoreInvariant tm)   = evalCoreO tm
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err

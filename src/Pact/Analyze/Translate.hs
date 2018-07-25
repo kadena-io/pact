@@ -312,7 +312,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
         _ -> nodeContext varNode $ throwError' $ NonStringLitInBinding colAst
 
   bindingId <- genVarId
-  let freshVar = PureTerm $ Var bindingId "binding"
+  let freshVar = CoreTerm $ Var bindingId "binding"
 
   let translateLet :: Term a -> Term a
       translateLet innerBody = Let "binding" bindingId rhsT $
@@ -323,9 +323,9 @@ translateObjBinding bindingsA schema bodyA rhsT = do
             in Let varName vid
               (case varType of
                  EType ty ->
-                   ESimple ty  (PureTerm (At schema colTerm freshVar varType))
+                   ESimple ty  (CoreTerm (At schema colTerm freshVar varType))
                  EObjectTy sch ->
-                   EObject sch (PureTerm (At schema colTerm freshVar varType)))
+                   EObject sch (CoreTerm (At schema colTerm freshVar varType)))
               body)
           innerBody
           bindings
@@ -367,8 +367,8 @@ translateNode astNode = astContext astNode $ case astNode of
     Just (varName, vid) <- view (_2 . at node)
     ty      <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'        -> ESimple ty'    $ PureTerm $ Var vid varName
-      EObjectTy schema -> EObject schema $ PureTerm $ Var vid varName
+      EType ty'        -> ESimple ty'    $ CoreTerm $ Var vid varName
+      EObjectTy schema -> EObject schema $ CoreTerm $ Var vid varName
 
   -- Int
   AST_NegativeLit l -> case l of
@@ -388,9 +388,9 @@ translateNode astNode = astContext astNode $ case astNode of
     EType ty <- translateType (_aTy node)
     case ty of
       TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Negate $
-        PureTerm $ Var vid name
+        CoreTerm $ Var vid name
       TDecimal -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Negate $
-        PureTerm $ Var vid name
+        CoreTerm $ Var vid name
       _        -> throwError' $ BadNegationType astNode
 
   AST_Enforce _ cond -> do
@@ -477,15 +477,15 @@ translateNode astNode = astContext astNode $ case astNode of
               op <- maybe throwMalformedComp pure $ toOp comparisonOpP fn
               case (ta, tb) of
                 (TInt, TInt) -> pure $
-                  ESimple TBool $ PureTerm $ IntegerComparison op a' b'
+                  ESimple TBool $ CoreTerm $ IntegerComparison op a' b'
                 (TDecimal, TDecimal) -> pure $
-                  ESimple TBool $ PureTerm $ DecimalComparison op a' b'
+                  ESimple TBool $ CoreTerm $ DecimalComparison op a' b'
                 (TTime, TTime) -> pure $
-                  ESimple TBool $ PureTerm $ TimeComparison op a' b'
+                  ESimple TBool $ CoreTerm $ TimeComparison op a' b'
                 (TStr, TStr) -> pure $
-                  ESimple TBool $ PureTerm $ StringComparison op a' b'
+                  ESimple TBool $ CoreTerm $ StringComparison op a' b'
                 (TBool, TBool) -> pure $
-                  ESimple TBool $ PureTerm $ BoolComparison op a' b'
+                  ESimple TBool $ CoreTerm $ BoolComparison op a' b'
                 (_, _) -> case typeEq ta tb of
                   Just Refl -> throwMalformedComp
                   _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
@@ -497,7 +497,7 @@ translateNode astNode = astContext astNode $ case astNode of
             ESimple TKeySet a' <- translateNode a
             ESimple TKeySet b' <- translateNode b
             op <- maybe throwMalformedComp pure $ toOp eqNeqP fn
-            pure $ ESimple TBool $ PureTerm $ KeySetEqNeq op a' b'
+            pure $ ESimple TBool $ CoreTerm $ KeySetEqNeq op a' b'
           _ -> throwMalformedComp
 
         mkObjEqNeq :: TranslateM ETerm
@@ -506,7 +506,7 @@ translateNode astNode = astContext astNode $ case astNode of
             EObject _ a' <- translateNode a
             EObject _ b' <- translateNode b
             op <- maybe throwMalformedComp pure $ toOp eqNeqP fn
-            pure $ ESimple TBool $ PureTerm $ ObjectEqNeq op a' b'
+            pure $ ESimple TBool $ CoreTerm $ ObjectEqNeq op a' b'
           _ -> throwMalformedComp
 
         mkLogical :: TranslateM ETerm
@@ -518,9 +518,9 @@ translateNode astNode = astContext astNode $ case astNode of
           op <- maybe throwMalformed pure $ toOp logicalOpP fn
           case (op, terms) of
             (NotOp, [ESimple TBool a]) -> pure $
-              ESimple TBool $ PureTerm $ Logical op [a]
+              ESimple TBool $ CoreTerm $ Logical op [a]
             (_, [ESimple TBool a, ESimple TBool b]) -> pure $
-              ESimple TBool $ PureTerm $ Logical op [a, b]
+              ESimple TBool $ CoreTerm $ Logical op [a, b]
             _ -> throwMalformed
 
         mkArith :: TranslateM ETerm
@@ -580,7 +580,7 @@ translateNode astNode = astContext astNode $ case astNode of
           (SStringConcatenation, [a, b]) -> do
             ESimple TStr a' <- translateNode a
             ESimple TStr b' <- translateNode b
-            pure $ ESimple TStr $ PureTerm $ StrConcat a' b'
+            pure $ ESimple TStr $ CoreTerm $ StrConcat a' b'
           _ -> mzero
 
         mkObjMerge :: TranslateM ETerm
@@ -588,7 +588,7 @@ translateNode astNode = astContext astNode $ case astNode of
           (SObjectMerge, [a, b]) -> do
             EObject s1 o1 <- translateNode a
             EObject s2 o2 <- translateNode b
-            pure $ EObject (s1 <> s2) $ PureTerm $ ObjectMerge o1 o2
+            pure $ EObject (s1 <> s2) $ CoreTerm $ ObjectMerge o1 o2
           _ -> mzero
 
         mkMod :: TranslateM ETerm
@@ -641,9 +641,9 @@ translateNode astNode = astContext astNode $ case astNode of
 
       case ty of
         TInt ->
-          pure $ ESimple TTime $ PureTerm $ IntAddTime time' seconds'
+          pure $ ESimple TTime $ CoreTerm $ IntAddTime time' seconds'
         TDecimal ->
-          pure $ ESimple TTime $ PureTerm $ DecAddTime time' seconds'
+          pure $ ESimple TTime $ CoreTerm $ DecAddTime time' seconds'
         _ -> throwError' $ MonadFailure $
           "Unexpected type for seconds in add-time " ++ show ty
 
@@ -672,8 +672,8 @@ translateNode astNode = astContext astNode $ case astNode of
     ESimple TStr colName' <- translateNode colName
     ty <- translateType (_aTy node)
     pure $ case ty of
-      EType ty'         -> ESimple ty'     $ PureTerm $ At schema colName' obj' ty
-      EObjectTy schema' -> EObject schema' $ PureTerm $ At schema colName' obj' ty
+      EType ty'         -> ESimple ty'     $ CoreTerm $ At schema colName' obj' ty
+      EObjectTy schema' -> EObject schema' $ CoreTerm $ At schema colName' obj' ty
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -684,7 +684,7 @@ translateNode astNode = astContext astNode $ case astNode of
       v' <- translateNode v
       pure (k', v')
     schema <- translateSchema (_aTy node)
-    pure $ EObject schema $ PureTerm $ LiteralObject $ Map.fromList kvs'
+    pure $ EObject schema $ CoreTerm $ LiteralObject $ Map.fromList kvs'
 
   ast -> throwError' $ UnexpectedNode ast
 

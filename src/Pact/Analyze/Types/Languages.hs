@@ -245,13 +245,13 @@ deriving instance Show a => Show (PropSpecific a)
 
 data Prop a
   = PropSpecific (PropSpecific a)
-  | PureProp     (Core Prop a)
+  | CoreProp     (Core Prop a)
   deriving (Show, Eq)
 
 instance S :<: Prop where
-  inject = PureProp . Sym
+  inject = CoreProp . Sym
   project = \case
-    PureProp (Sym a) -> Just a
+    CoreProp (Sym a) -> Just a
     _                -> Nothing
 
 instance PropSpecific :<: Prop where
@@ -261,9 +261,9 @@ instance PropSpecific :<: Prop where
     _              -> Nothing
 
 instance Core Prop :<: Prop where
-  inject = PureProp
+  inject = CoreProp
   project = \case
-    PureProp a -> Just a
+    CoreProp a -> Just a
     _          -> Nothing
 
 instance Numerical Prop :<: Prop where
@@ -281,7 +281,7 @@ instance IsString (Prop ColumnName) where
 instance Boolean (Prop Bool) where
   true      = PLit True
   false     = PLit False
-  bnot p    = PureProp $ Logical NotOp [p]
+  bnot p    = CoreProp $ Logical NotOp [p]
   p1 &&& p2 = PAnd p1 p2
   p1 ||| p2 = POr  p1 p2
 
@@ -306,46 +306,46 @@ EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
 pattern PLit :: a -> Prop a
-pattern PLit a = PureProp (Lit a)
+pattern PLit a = CoreProp (Lit a)
 
 pattern PVar :: VarId -> Text -> Prop t
-pattern PVar vid name = PureProp (Var vid name)
+pattern PVar vid name = CoreProp (Var vid name)
 
 pattern PNumerical :: Numerical Prop t -> Prop t
-pattern PNumerical x = PureProp (Numerical x)
+pattern PNumerical x = CoreProp (Numerical x)
 
 pattern PStrConcat :: Prop String -> Prop String -> Prop String
-pattern PStrConcat x y = PureProp (StrConcat x y)
+pattern PStrConcat x y = CoreProp (StrConcat x y)
 
 pattern PIntAddTime :: Prop Time -> Prop Integer -> Prop Time
-pattern PIntAddTime x y = PureProp (IntAddTime x y)
+pattern PIntAddTime x y = CoreProp (IntAddTime x y)
 
 pattern PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
-pattern PDecAddTime x y = PureProp (DecAddTime x y)
+pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 
 pattern PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
-pattern PAt a b c d = PureProp (At a b c d)
+pattern PAt a b c d = CoreProp (At a b c d)
 
 pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
-pattern PKeySetEqNeq op x y = PureProp (KeySetEqNeq op x y)
+pattern PKeySetEqNeq op x y = CoreProp (KeySetEqNeq op x y)
 
 pattern PObjectEqNeq :: EqNeq -> Prop Object -> Prop Object -> Prop Bool
-pattern PObjectEqNeq op x y = PureProp (ObjectEqNeq op x y)
+pattern PObjectEqNeq op x y = CoreProp (ObjectEqNeq op x y)
 
 pattern PLogical :: LogicalOp -> [Prop Bool] -> Prop Bool
-pattern PLogical op args = PureProp (Logical op args)
+pattern PLogical op args = CoreProp (Logical op args)
 
 pattern PStrLength :: Prop String -> Prop Integer
-pattern PStrLength str = PureProp (StrLength str)
+pattern PStrLength str = CoreProp (StrLength str)
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
-pattern PAnd a b = PureProp (Logical AndOp [a, b])
+pattern PAnd a b = CoreProp (Logical AndOp [a, b])
 
 pattern POr :: Prop Bool -> Prop Bool -> Prop Bool
-pattern POr a b = PureProp (Logical OrOp [a, b])
+pattern POr a b = CoreProp (Logical OrOp [a, b])
 
 pattern PNot :: Prop Bool -> Prop Bool
-pattern PNot a = PureProp (Logical NotOp [a])
+pattern PNot a = CoreProp (Logical NotOp [a])
 
 mkDecimal :: Decimal.Decimal -> Decimal
 mkDecimal (Decimal.Decimal places mantissa) = fromRational $
@@ -356,15 +356,15 @@ mkDecimal (Decimal.Decimal places mantissa) = fromRational $
 --
 -- This language is pure / stateless. It includes exactly the same
 -- constructions as 'Core'.
-newtype Invariant a = PureInvariant (Core Invariant a)
+newtype Invariant a = CoreInvariant (Core Invariant a)
   deriving (Show, Eq)
 
 deriving instance Eq a   => Eq   (Core Invariant a)
 deriving instance Show a => Show (Core Invariant a)
 
 instance Core Invariant :<: Invariant where
-  inject                    = PureInvariant
-  project (PureInvariant a) = Just a
+  inject                    = CoreInvariant
+  project (CoreInvariant a) = Just a
 
 instance Numerical Invariant :<: Invariant where
   inject = Inj . Numerical
@@ -373,9 +373,9 @@ instance Numerical Invariant :<: Invariant where
     _                 -> Nothing
 
 instance S :<: Invariant where
-  inject = PureInvariant . Sym
+  inject = CoreInvariant . Sym
   project = \case
-    PureInvariant (Sym a) -> Just a
+    CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
 type EInvariant = Existential Invariant
@@ -383,17 +383,17 @@ EQ_EXISTENTIAL(Invariant)
 SHOW_EXISTENTIAL(Invariant)
 
 pattern ILiteral :: a -> Invariant a
-pattern ILiteral a = PureInvariant (Lit a)
+pattern ILiteral a = CoreInvariant (Lit a)
 
 pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
-pattern ILogicalOp op args = PureInvariant (Logical op args)
+pattern ILogicalOp op args = CoreInvariant (Logical op args)
 
 type ETerm = Existential Term
 EQ_EXISTENTIAL(Term)
 SHOW_EXISTENTIAL(Term)
 
 data Term ret where
-  PureTerm        :: Core Term a -> Term a
+  CoreTerm        :: Core Term a -> Term a
 
   -- In principle, this should be a pure term, however, the analyze monad needs
   -- to be `Mergeable`. `Analyze` is, but `Query` isn't, due to having
@@ -435,15 +435,15 @@ deriving instance Show a => Show (Term a)
 deriving instance Show a => Show (Core Term a)
 
 instance S :<: Term where
-  inject = PureTerm . Sym
+  inject = CoreTerm . Sym
   project = \case
-    PureTerm (Sym a) -> Just a
+    CoreTerm (Sym a) -> Just a
     _                -> Nothing
 
 instance Core Term :<: Term where
-  inject = PureTerm
+  inject = CoreTerm
   project = \case
-    PureTerm a -> Just a
+    CoreTerm a -> Just a
     _          -> Nothing
 
 instance Numerical Term :<: Term where
@@ -469,4 +469,4 @@ instance Num (Term Decimal) where
   negate = inject .   DecUnaryArithOp Negate
 
 lit :: SymWord a => a -> Term a
-lit = PureTerm . Sym . literalS
+lit = CoreTerm . Sym . literalS
