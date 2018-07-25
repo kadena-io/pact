@@ -57,12 +57,15 @@ data Feature
   | FLogicalConjunction
   | FLogicalDisjunction
   | FLogicalNegation
+  | FLogicalImplication
   -- * Object operators
   | FObjectProjection
   | FObjectMerge
   -- * String operators
   | FStringLength
   | FStringConcatenation
+  -- * Time operators
+  | FTemporalAddition
   -- * Property-specific features
   | FUniversalQuantification
   | FExistentialQuantification
@@ -514,6 +517,20 @@ doc FLogicalNegation = Doc
         ]
         (TyCon bool)
   ]
+doc FLogicalImplication = Doc
+  "when"
+  InvAndProp
+  "Logical implication. Equivalent to `(or (not x) y)`."
+  [ Usage
+      "(when x y)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", TyCon bool)
+        , ("y", TyCon bool)
+        ]
+        (TyCon bool)
+  ]
 
 -- Object features
 
@@ -547,7 +564,7 @@ doc FObjectMerge = Doc
         (TyCon obj)
   ]
 
--- String featuers
+-- String features
 
 doc FStringLength = Doc
   "str-length"
@@ -575,6 +592,24 @@ doc FStringConcatenation = Doc
         , ("t", TyCon str)
         ]
         (TyCon str)
+  ]
+
+-- Temporal features
+
+doc FTemporalAddition = Doc
+  "add-time"
+  InvAndProp
+  "Add seconds to a time"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(add-time t s)"
+      (Map.fromList [("a", OneOf [int, dec])])
+      $ Fun
+        Nothing
+        [ ("t", TyCon time)
+        , ("s", a)
+        ]
+        (TyCon time)
   ]
 
 -- Property-specific features
@@ -690,10 +725,12 @@ PAT(SInequality, FInequality)
 PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
+PAT(SLogicalImplication, FLogicalImplication)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)
+PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
 PAT(STransactionAborts, FTransactionAborts)
@@ -765,9 +802,12 @@ logicalOpP = mkOpNamePrism
   [ (SLogicalConjunction, AndOp)
   , (SLogicalDisjunction, OrOp)
   , (SLogicalNegation,    NotOp)
+  -- NOTE: that we don't include logical implication here, which only exists in
+  -- the invariant and property languages (not term), and is desugared to a
+  -- combination of negation and disjunction during parsing.
   ]
 
--- NOTE: we don't yet use symbols here because Feature (currently?) only
+-- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
 -- handles properties and invariants.
 writeTypeP :: Prism' Text Pact.WriteType
 writeTypeP = mkOpNamePrism

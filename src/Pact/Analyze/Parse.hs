@@ -335,7 +335,7 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
     pure $ ESimple TDecimal (PNumerical it)
-  PreApp "add-time" [a, b] -> do
+  PreApp STemporalAddition [a, b] -> do
     a' <- checkPreProp TTime a
     b' <- inferPreProp b
     case b' of
@@ -383,7 +383,7 @@ inferPreProp preProp = case preProp of
       _               -> throwErrorIn preProp $
         op' <> " applied to wrong number of arguments"
 
-  PreApp "when" [a, b] -> do
+  PreApp SLogicalImplication [a, b] -> do
     propNotA <- PNot <$> checkPreProp TBool a
     ESimple TBool . POr propNotA <$> checkPreProp TBool b
 
