@@ -44,7 +44,8 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
-import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time)
+import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time,
+                                                    col)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util

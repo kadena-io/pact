@@ -72,6 +72,11 @@ data Feature
   | FTransactionAborts
   | FTransactionSucceeds
   | FFunctionResult
+  | FTableWritten
+  | FTableRead
+  | FCellDelta
+  | FColumnDelta
+  | FRowRead
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -132,7 +137,7 @@ data Bindings
   | BindObject
   deriving (Show)
 
-int, dec, str, time, bool, obj, ks :: ConcreteType
+int, dec, str, time, bool, obj, ks, tbl, col :: ConcreteType
 int  = "integer"
 dec  = "decimal"
 str  = "string"
@@ -140,6 +145,8 @@ time = "time"
 bool = "bool"
 obj  = "object"
 ks   = "keyset"
+tbl  = "table"
+col  = "column"
 
 doc :: Feature -> Doc
 
@@ -670,6 +677,92 @@ doc FFunctionResult = Doc
       (Map.fromList [("r", AnyType)])
       (Sym r)
   ]
+doc FTableWritten = Doc
+  "table-written"
+  PropOnly
+  "Whether a table is written in the function under analysis"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(table-written t)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        ]
+        (TyCon bool)
+  ]
+doc FTableRead = Doc
+  "table-read"
+  PropOnly
+  "Whether a table is read in the function under analysis"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(table-read t)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        ]
+        (TyCon bool)
+  ]
+doc FCellDelta = Doc
+  "cell-delta"
+  PropOnly
+  "The difference in a cell's value before and after the transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+        c = TyVar $ TypeVar "c"
+    in Usage
+      "(cell-delta t c r)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        , ("c", OneOf [int, dec])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        , ("r", TyCon str)
+        ]
+        c
+  ]
+doc FColumnDelta = Doc
+  "column-delta"
+  PropOnly
+  "The difference in a column's total summed value before and after the transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+        c = TyVar $ TypeVar "c"
+    in Usage
+      "(column-delta t c)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        , ("c", OneOf [int, dec])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        ]
+        c
+  ]
+doc FRowRead = Doc
+  "row-read"
+  PropOnly
+  "Whether a row is read in the function under analysis"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-read t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon bool)
+  ]
 
 allFeatures :: [Feature]
 allFeatures = enumFrom minBound
@@ -736,6 +829,11 @@ PAT(SExistentialQuantification, FExistentialQuantification)
 PAT(STransactionAborts, FTransactionAborts)
 PAT(STransactionSucceeds, FTransactionSucceeds)
 PAT(SFunctionResult, FFunctionResult)
+PAT(STableWritten, FTableWritten)
+PAT(STableRead, FTableRead)
+PAT(SCellDelta, FCellDelta)
+PAT(SColumnDelta, FColumnDelta)
+PAT(SRowRead, FRowRead)
 
 -- * 'Text'/op prisms
 

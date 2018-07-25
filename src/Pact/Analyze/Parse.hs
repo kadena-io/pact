@@ -387,11 +387,11 @@ inferPreProp preProp = case preProp of
     propNotA <- PNot <$> checkPreProp TBool a
     ESimple TBool . POr propNotA <$> checkPreProp TBool b
 
-  PreApp "table-written" [tn] -> do
+  PreApp STableWritten [tn] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableWrite tn'))
-  PreApp "table-read" [tn] -> do
+  PreApp STableRead [tn] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableRead tn'))
@@ -404,7 +404,7 @@ inferPreProp preProp = case preProp of
   -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
   --   -> pure (ColumnRead tn cn)
 
-  PreApp "cell-delta" [tn, cn, rk] -> do
+  PreApp SCellDelta [tn, cn, rk] -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
@@ -416,7 +416,7 @@ inferPreProp preProp = case preProp of
           _   <- expectColumnType tn' cn' TDecimal
           ESimple TDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp TStr rk
       ]
-  PreApp "column-delta" [tn, cn] -> do
+  PreApp SColumnDelta [tn, cn] -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
@@ -428,7 +428,7 @@ inferPreProp preProp = case preProp of
           _   <- expectColumnType tn' cn' TDecimal
           pure $ ESimple TDecimal (PropSpecific (DecColumnDelta tn' cn'))
       ]
-  PreApp "row-read" [tn, rk] -> do
+  PreApp SRowRead [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowRead tn' <$> checkPreProp TStr rk
