@@ -77,6 +77,7 @@ data Feature
   | FCellDelta
   | FColumnDelta
   | FRowRead
+  | FRowWritten
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -763,6 +764,21 @@ doc FRowRead = Doc
         ]
         (TyCon bool)
   ]
+doc FRowWritten = Doc
+  "row-written"
+  PropOnly
+  "Whether a row is written in the function under analysis"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-written t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon bool)
+  ]
 
 allFeatures :: [Feature]
 allFeatures = enumFrom minBound
@@ -834,6 +850,7 @@ PAT(STableRead, FTableRead)
 PAT(SCellDelta, FCellDelta)
 PAT(SColumnDelta, FColumnDelta)
 PAT(SRowRead, FRowRead)
+PAT(SRowWritten, FRowWritten)
 
 -- * 'Text'/op prisms
 
