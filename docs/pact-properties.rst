@@ -309,7 +309,7 @@ following properties:
    is written
 -  ``(table-read 'accounts)`` - that any cell of the table ``accounts``
    is read
--  ``(row-write 'accounts k)`` - that the row keyed by the variable
+-  ``(row-written 'accounts k)`` - that the row keyed by the variable
    ``k`` is written
 -  ``(row-read 'accounts k)`` - that the row keyed by the variable ``k``
    is read
@@ -365,7 +365,7 @@ Universal and existential quantification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In examples like ``(row-enforced 'accounts 'ks key)`` or
-``(row-write 'accounts key)`` above, we’ve so far only referred to
+``(row-written 'accounts key)`` above, we’ve so far only referred to
 function arguments by the use of the variable named ``key``. But what if
 we wanted to talk about all possible rows that will be written, if
 function doesn’t simply update a single row keyed by an input to the
@@ -378,7 +378,7 @@ In such a situation we could use universal quantification to talk about
 
     (properties
       [(forall (key:string)
-         (when (row-write 'accounts key)
+         (when (row-written 'accounts key)
            (row-enforced 'accounts 'ks key)))])
 
 This property says that for any possible row written by the function,

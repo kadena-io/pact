@@ -436,10 +436,7 @@ inferPreProp preProp = case preProp of
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowReadCount tn' <$> checkPreProp TStr rk
-  --
-  -- TODO: should be "row-written"
-  --
-  PreApp "row-write" [tn, rk] -> do
+  PreApp "row-written" [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowWrite tn' <$> checkPreProp TStr rk
