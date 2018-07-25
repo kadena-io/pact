@@ -601,7 +601,7 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj $ TableRead "tokens"
     expectPass code $ Valid $ bnot $ Inj $ TableRead "other"
 
-  describe "table-write.insert" $ do
+  describe "table-written.insert" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -617,7 +617,7 @@ spec = describe "analyze" $ do
     --
     expectPass code $ Valid (Inj Success)
 
-  describe "table-write.insert.partial" $ do
+  describe "table-written.insert.partial" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -628,7 +628,7 @@ spec = describe "analyze" $ do
           |]
     expectFail code $ Satisfiable (Inj Success)
 
-  describe "table-write.update" $ do
+  describe "table-written.update" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -639,7 +639,7 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
-  describe "table-write.update.partial" $ do
+  describe "table-written.update.partial" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -653,7 +653,7 @@ spec = describe "analyze" $ do
     --
     expectPass code $ Valid (Inj Success)
 
-  describe "table-write.write" $ do
+  describe "table-written.write" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -664,7 +664,7 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $ Inj $ TableWrite "tokens"
 
-  describe "table-write.write.partial" $ do
+  describe "table-written.write.partial" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -675,7 +675,7 @@ spec = describe "analyze" $ do
           |]
     expectFail code $ Satisfiable (Inj Success)
 
-  describe "table-write.conditional" $ do
+  describe "table-written.conditional" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -690,7 +690,7 @@ spec = describe "analyze" $ do
     expectPass code $ Satisfiable $ bnot $ Inj $ TableWrite "tokens"
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
 
-  describe "table-write.conditional" $ do
+  describe "table-written.conditional" $ do
     let code =
           [text|
             (defschema token-row balance:integer)
@@ -1525,7 +1525,7 @@ spec = describe "analyze" $ do
       textToProp'' TStr  "result"  `shouldBe` Right Result'
 
     it "parses quantified tables" $ do
-      inferProp'' "(forall (table:table) (not (table-write table)))"
+      inferProp'' "(forall (table:table) (not (table-written table)))"
         `shouldBe`
         Right
           (ESimple TBool
@@ -1571,7 +1571,7 @@ spec = describe "analyze" $ do
             (defun test1:integer ()
               (meta "don't touch a table"
                 (properties [
-                  (forall (table:table) (not (table-write table)))
+                  (forall (table:table) (not (table-written table)))
                   (forall (table:table) (not (table-read table)))
                 ])
               )
@@ -1580,7 +1580,7 @@ spec = describe "analyze" $ do
             (defun test2:string ()
               (meta "write a table"
                 (properties [
-                  (exists (table:table) (table-write table))
+                  (exists (table:table) (table-written table))
                   (forall (table:table) (not (table-read table)))
                 ])
               )
@@ -1589,7 +1589,7 @@ spec = describe "analyze" $ do
             (defun test3:object{simple-schema} ()
               (meta "read a table"
                 (properties [
-                  (forall (table:table) (not (table-write table)))
+                  (forall (table:table) (not (table-written table)))
                   (exists (table:table) (table-read table))
                 ])
               )

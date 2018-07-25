@@ -284,7 +284,7 @@ example" and the section on "universal and existential quantification" below.
 To describe database table access, the property language has the following
 properties:
 
-- `(table-write 'accounts)` - that any cell of the table `accounts` is written
+- `(table-written 'accounts)` - that any cell of the table `accounts` is written
 - `(table-read 'accounts)` - that any cell of the table `accounts` is read
 - `(row-write 'accounts k)` - that the row keyed by the variable `k` is written
 - `(row-read 'accounts k)` - that the row keyed by the variable `k` is read

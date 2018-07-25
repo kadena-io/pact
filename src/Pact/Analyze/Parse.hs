@@ -387,10 +387,7 @@ inferPreProp preProp = case preProp of
     propNotA <- PNot <$> checkPreProp TBool a
     ESimple TBool . POr propNotA <$> checkPreProp TBool b
 
-  --
-  -- TODO: should be "table-written"
-  --
-  PreApp "table-write" [tn] -> do
+  PreApp "table-written" [tn] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableWrite tn'))

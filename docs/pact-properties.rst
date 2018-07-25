@@ -305,7 +305,7 @@ Database access
 To describe database table access, the property language has the
 following properties:
 
--  ``(table-write 'accounts)`` - that any cell of the table ``accounts``
+-  ``(table-written 'accounts)`` - that any cell of the table ``accounts``
    is written
 -  ``(table-read 'accounts)`` - that any cell of the table ``accounts``
    is read
