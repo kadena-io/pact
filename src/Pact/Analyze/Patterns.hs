@@ -5,9 +5,7 @@
 
 module Pact.Analyze.Patterns where
 
-import           Data.Monoid          ((<>))
-import           Data.Set             (Set)
-import qualified Data.Set             as Set
+import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
@@ -18,23 +16,18 @@ import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Ta
                                        PrimValue (PrimLit), Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
 
-comparisonOperators, logicalOperators, arithOperators :: Set Text
-comparisonOperators = Set.fromList [">", "<", ">=", "<=", "=", "!="]
-logicalOperators    = Set.fromList ["and", "or", "not"]
-arithOperators      = Set.fromList
-  ["+", "-", "*", "/", "abs", "^", "sqrt", "mod", "log", "ln", "exp", "abs",
-  "round", "ceiling", "floor"]
+import           Pact.Analyze.Feature
 
-isComparison, isLogical, isArith :: Text -> Bool
-isComparison s = Set.member s comparisonOperators
-isLogical    s = Set.member s logicalOperators
-isArith      s = Set.member s arithOperators
-
-ofBasicOperators :: Text -> Either Text Text
-ofBasicOperators s = if isBasic then Right s else Left s
+ofBasicOp :: Text -> Maybe Text
+ofBasicOp s = if isBasicOp then Just s else Nothing
   where
-    isBasic = Set.member s
-      (comparisonOperators <> logicalOperators <> arithOperators)
+    isBasicOp
+      =  s == SModulus
+      || isJust (toOp arithOpP s)
+      || isJust (toOp unaryArithOpP s)
+      || isJust (toOp comparisonOpP s)
+      || isJust (toOp logicalOpP s)
+      || isJust (toOp roundingLikeOpP s)
 
 -- helper patterns
 pattern NativeFunc :: forall a. Text -> Fun a
@@ -67,8 +60,7 @@ pattern AST_NFun :: forall a. a -> Text -> [AST a] -> AST a
 pattern AST_NFun node fn args <- App node (NativeFunc fn) args
 
 pattern AST_NFun_Basic :: forall a. Text -> [AST a] -> AST a
-pattern AST_NFun_Basic fn args <-
-  AST_NFun _ (ofBasicOperators -> Right fn) args
+pattern AST_NFun_Basic fn args <- AST_NFun _ (ofBasicOp -> Just fn) args
 
 pattern AST_If :: forall a. a -> AST a -> AST a -> AST a -> AST a
 pattern AST_If node cond then' else' <-
