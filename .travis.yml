@@ -1,243 +1,28 @@
-# This is the complex Travis configuration, which is intended for use
-# on open source libraries which need compatibility across multiple GHC
-# versions, must work with cabal-install, and should be
-# cross-platform. For more information and other options, see:
-#
-# https://docs.haskellstack.org/en/stable/travis_ci/
-#
-# Copy these contents into the root directory of your Github project in a file
-# named .travis.yml
-
-# Use new container infrastructure to enable caching
-sudo: false
-
-# Choose a lightweight base image; we provide our own build tools.
-language: c
-
-# Caching so the next build will be fast too.
+os:
+- osx
+language: nix
+sudo: required
 cache:
   directories:
-  - $HOME/.ghc
-  - $HOME/.cabal
-  - $HOME/.stack
-
-# The different configurations we want to test. We have BUILD=cabal which uses
-# cabal-install, and BUILD=stack which uses Stack. More documentation on each
-# of those below.
-#
-# We set the compiler values here to tell Travis to use a different
-# cache file per set of arguments.
-#
-# If you need to have different apt packages for each combination in the
-# matrix, you can use a line such as:
-#     addons: {apt: {packages: [libfcgi-dev,libgmp-dev]}}
-matrix:
-  include:
-  # We grab the appropriate GHC and cabal-install versions from hvr's PPA. See:
-  # https://github.com/hvr/multi-ghc-travis
-  #- env: BUILD=cabal GHCVER=7.0.4 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #  compiler: ": #GHC 7.0.4"
-  #  addons: {apt: {packages: [cabal-install-1.16,ghc-7.0.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  #- env: BUILD=cabal GHCVER=7.2.2 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #  compiler: ": #GHC 7.2.2"
-  #  addons: {apt: {packages: [cabal-install-1.16,ghc-7.2.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=7.4.2 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 7.4.2"
-  #   addons: {apt: {packages: [cabal-install-1.16,ghc-7.4.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=7.6.3 CABALVER=1.16 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 7.6.3"
-  #   addons: {apt: {packages: [cabal-install-1.16,ghc-7.6.3,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=7.8.4 CABALVER=1.18 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 7.8.4"
-  #   addons: {apt: {packages: [cabal-install-1.18,ghc-7.8.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=7.10.3 CABALVER=1.22 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 7.10.3"
-  #   addons: {apt: {packages: [cabal-install-1.22,ghc-7.10.3,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=8.0.1 CABALVER=1.24 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 8.0.1"
-  #   addons: {apt: {packages: [cabal-install-1.24,ghc-8.0.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-
-  # Build with the newest GHC and cabal-install. This is an accepted failure,
-  # see below.
-  # - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC HEAD"
-  #   addons: {apt: {packages: [cabal-install-head,ghc-head,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-
-  # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
-  # variable, such as using --stack-yaml to point to a different file.
-
-  #  removing this build to focus on mac for now
-
-
-  # - env: BUILD=stack ARGS="--resolver lts-2"
-  #   compiler: ": #stack 7.8.4"
-  #   addons: {apt: {packages: [libgmp-dev]}}
-  #
-  # - env: BUILD=stack ARGS="--resolver lts-3"
-  #   compiler: ": #stack 7.10.2"
-  #   addons: {apt: {packages: [libgmp-dev]}}
-  #
-  # - env: BUILD=stack ARGS="--resolver lts-6"
-  #   compiler: ": #stack 7.10.3"
-  #   addons: {apt: {packages: [libgmp-dev]}}
-  #
-  # - env: BUILD=stack ARGS="--resolver lts-7"
-  #   compiler: ": #stack 8.0.1"
-  #   addons: {apt: {packages: [libgmp-dev]}}
-  #
-  # # Nightly builds are allowed to fail
-  # - env: BUILD=stack ARGS="--resolver nightly"
-  #   compiler: ": #stack nightly"
-  #   addons: {apt: {packages: [libgmp-dev]}}
-
-  # OSX Build El Cap
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default osx default (el cap)"
-    os: osx
-    addons:
-      artifacts:
-        paths:
-          - .stack-work/dist/x86_64-osx/Cabal-1.24.2.0/build/pact/pact
-
-  # Linux build
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default linux"
-    addons:
-      apt: {packages: [libgmp-dev]}
-      artifacts:
-        paths:
-          - .stack-work/dist/x86_64-linux/Cabal-1.24.2.0/build/pact/pact
-
-
-
-  # OSX Build Yosemite
-  # - env: BUILD=stack ARGS=""
-  #   compiler: ": #stack default osx (yosemite)"
-  #   os: osx
-  #   osx_image: xcode7.1
-  #   addons:
-  #     artifacts:
-  #       paths:
-  #         - .stack-work/dist/x86_64-osx/Cabal-1.22.5.0/build/Pact/pact
-
-  # Travis includes an OS X which is incompatible with GHC 7.8.4
-  #- env: BUILD=stack ARGS="--resolver lts-2"
-  #  compiler: ": #stack 7.8.4 osx"
-  #  os: osx
-
-  # - env: BUILD=stack ARGS="--resolver lts-3"
-  #   compiler: ": #stack 7.10.2 osx"
-  #   os: osx
-  #
-  # - env: BUILD=stack ARGS="--resolver lts-6"
-  #   compiler: ": #stack 7.10.3 osx"
-  #   os: osx
-  #
-  # - env: BUILD=stack ARGS="--resolver lts-7"
-  #   compiler: ": #stack 8.0.1 osx"
-  #   os: osx
-  #
-  # - env: BUILD=stack ARGS="--resolver nightly"
-  #   compiler: ": #stack nightly osx"
-  #   os: osx
-
-  allow_failures: []
-  # - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-  # - env: BUILD=stack ARGS="--resolver nightly"
-
-before_install:
-# Using compiler above sets CC to an invalid value, so unset it
-- unset CC
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*ubuntu.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
-    echo "Linux Z3 $Z3";
-  fi
-# https://github.com/travis-ci/travis-ci/issues/6307
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-    curl -sSL https://rvm.io/mpapis.asc | gpg --import -;
-    rvm get stable;
-    export Z3=`wget -q -O- http://github.com/Z3Prover/bin/raw/master/nightly | grep 'z3.*x64.*osx.*.zip<' | awk '{print $7}' | awk -F= '{print $2}' | awk -F\" '{print $2}'`;
-    echo "OS X Z3 $Z3";
-  fi
-- export Z3Base=`basename $Z3 .zip`
-- wget --quiet -L -O z3.zip http://github.com/Z3Prover/bin/raw/master/nightly/`basename $Z3`
-- unzip -q z3.zip -d z3_downloaded
-- /bin/rm z3.zip
-- export PATH=$PATH:$PWD/z3_downloaded/$Z3Base/bin
-- z3 --version
-
-# We want to always allow newer versions of packages when building on GHC HEAD
-- CABALARGS=""
-- if [ "x$GHCVER" = "xhead" ]; then CABALARGS=--allow-newer; fi
-
-# Download and unpack the stack executable
-- export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
-- mkdir -p ~/.local/bin
-- |
-  if [ `uname` = "Darwin" ]
-  then
-    travis_retry curl --insecure -L https://www.stackage.org/stack/osx-x86_64 | tar xz --strip-components=1 --include '*/stack' -C ~/.local/bin
-  else
-    travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-  fi
-
-  # Use the more reliable S3 mirror of Hackage
-  mkdir -p $HOME/.cabal
-  echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
-  echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
-
-  if [ "$CABALVER" != "1.16" ]
-  then
-    echo 'jobs: $ncpus' >> $HOME/.cabal/config
-  fi
-
-install:
-- echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
-- if [ -f configure.ac ]; then autoreconf -i; fi
-- |
-  set -ex
-  case "$BUILD" in
-    stack)
-      stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
-      ;;
-    cabal)
-      cabal --version
-      travis_retry cabal update
-
-      # Get the list of packages from the stack.yaml file
-      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
-
-      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
-      ;;
-  esac
-  set +ex
-
+  - "/nix/"
+  timeout: 1000
+before_script:
+- sudo mount -o remount,exec,size=4G,mode=755 /run/user || true
+- sudo mkdir -p /etc/nix
+- echo "trusted-users = root $USER" | sudo tee -a /etc/nix/nix.conf
+- sudo launchctl kickstart -k system/org.nixos.nix-daemon || true
+- echo "substituters = https://nixcache.reflex-frp.org https://cache.nixos.org/" |
+  sudo tee -a /etc/nix/nix.conf
+- echo "trusted-public-keys = ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI=
+  cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" | sudo tee -a /etc/nix/nix.conf
+- cat /etc/nix/nix.conf
+- whoami
 script:
-- |
-  set -ex
-  case "$BUILD" in
-    stack)
-      stack build --no-terminal --test --ghc-options="-Werror" $ARGS
-      stack exec -- bench +RTS -K1k
-      ;;
-    cabal)
-      cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
-
-      ORIGDIR=$(pwd)
-      for dir in $PACKAGES
-      do
-        cd $dir
-        cabal check || [ "$CABALVER" == "1.16" ]
-        cabal sdist
-        PKGVER=$(cabal info . | awk '{print $2;exit}')
-        SRC_TGZ=$PKGVER.tar.gz
-        cd dist
-        tar zxfv "$SRC_TGZ"
-        cd "$PKGVER"
-        cabal configure --enable-tests
-        cabal build
-        cd $ORIGDIR
-      done
-      ;;
-  esac
-  set +ex
+- nix-env -iA cachix -f https://github.com/NixOS/nixpkgs/tarball/db557aab7b690f5e0e3348459f2e4dc8fd0d9298
+- cachix use pact
+- cachix push pact --watch-store&
+- nix-build -j2
+- cachix push pact result || true
+env:
+  global:
+    secure: Ar317DmV1LsI9D/U6Cc8h6zOebtyKMaElyHpFzI3SFqF0pQuA+m4n3ZLu2qr11yBXMisxr+5dZb2Bi3b/Bx0TS5KJ15UbsaBCGpdOoIomM/fQX6SemciB65Gs+g0+8n3PIn7L9JCHWuebeNo44DUgCaQ46caV/F5L4jF7AD89D/ny1PKaowvTjdxpI/PbWzjAAkGgw4NSebCfx31MZncEpN3pm/KiiP7VqZ9hGUegB2cqnIMOZRMmYarOY5VmzxuFaw2xJI85rm1ZFFh6+6xO93pQZY+AFtc+UB1oLLn0wVVW+DHla76TvaoXy3+IR/mQhfqLpVtlxK+X0RCjsGJwco6Kh1ki+zM/NNeB0R9mYZVBk7expAsddqAgU63XyUUPiMehNEgtKNBkyJ55pHpVwRyfhor+sMdGZiHlK/ZU+SvV9wO0jYjakWjUtp/GnDRRbA9gXp9Zhx3zeCuB7zgoxrs4PM6zIVom1GYgA7Gfqm6VxetfClNwbw/AXetHHENPcWHEYMINdeVh3aYa65WYlfs20LSQhefwGAuHfEQDTz46D6UpA8BCu3hduEMnPxS2oF28SGj3QJ9oc4bAWICYWWDHItGGh5t7eiHiRFw1Em0eEGxdguR3xYh85Z1OaZ4EhDV59rl5hSoAcDpQ3KCp4XZz9UwIzELzI1rz3IUpFQ=
