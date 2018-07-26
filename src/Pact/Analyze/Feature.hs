@@ -575,11 +575,11 @@ doc FObjectMerge = Doc
 -- String features
 
 doc FStringLength = Doc
-  "str-length"
+  "length"
   InvAndProp -- TODO: double-check that this is true
   "String length"
   [ Usage
-      "(str-length s)"
+      "(length s)"
       Map.empty
       $ Fun
         Nothing
