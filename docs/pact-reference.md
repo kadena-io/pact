@@ -257,10 +257,13 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 ```
 
 
-### Request YAML file format
-The Request yaml takes the following keys:
+### Request YAML file format {#request-yaml}
+Request yaml files takes two forms. An *execution* Request yaml file describes transaction code and 
+data. Meanwhile, a *continuation* Request yaml file describes continuing or rolling back [pacts](#pacts). 
 
-```
+The execution Request yaml takes the following keys:
+
+```yaml
   code: Transaction code
   codeFile: Transaction code file
   data: JSON transaction data
@@ -274,6 +277,23 @@ The Request yaml takes the following keys:
   to: entity names for addressing private messages
 ```
 
+The continuation Request yaml takes the following keys:
+
+```yaml
+  type: "cont"
+  txId: Integer transaction id of pact
+  step: Integer next step of a pact
+  rollback: Boolean for rollingback a pact
+  data: JSON transaction data
+  dataFile: JSON transaction data file
+  keyPairs: list of key pairs for signing (use pact -g to generate): [
+    public: base 16 public key
+    secret: base 16 secret key
+    ]
+  nonce: optional request nonce, will use current time if not provided
+  from: entity name for addressing private messages
+  to: entity names for addressing private messages
+```
 
 
 
@@ -780,20 +800,21 @@ has entity indicators and others do not, this results in an error at load time.
 ### Public Pacts
 Public pacts are comprised of steps that can only execute in strict sequence. Any enforcement of who can execute a step
 happens within the code of the step expression. All steps are "manually" initiated by some participant
-in the transaction with RESUME commands sent into the blockchain.
+in the transaction with CONTINUATION commands sent into the blockchain.
 
 ### Private Pacts
 Private pacts are comprised of steps that execute in sequence where each step only executes on entity
 nodes as selected by the provided 'entity' argument in the step; other entity nodes "skip" the step.
 Private pacts are executed automatically by the blockchain platform after the initial step is sent
-in, with the executing entity's node automatically sending the RESUME command for the next step.
+in, with the executing entity's node automatically sending the CONTINUATION command for the next step.
 
 ### Failures, Rollbacks and Cancels
 
 Failure handling is dramatically different in public and private pacts.
 
 In public pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
-this step with a partipant sending in a CANCEL message before the next step is executed. Failures
+this step with a partcipant sending in a CANCEL message before the next step is executed. Once the last
+step of a pact has been executed, the pact will be finished and cannot be rolled back. Failures
 in public steps are no different than a failure in a non-pact transaction: all changes are rolled back.
 Pacts can therefore only be canceled explicitly and should be modeled to offer all necessary cancel options.
 
@@ -822,7 +843,8 @@ Pacts
 can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
 and [pact-state](#pact-state) repl functions to simulate pact executions.
 
-It is not possible yet (as of Pact 2.3.0) to simulate pact execution in the pact server API.
+It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml) 
+yaml files into API requests.  
 
 Dependency Management
 ---
