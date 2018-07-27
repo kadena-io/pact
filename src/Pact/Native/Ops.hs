@@ -22,6 +22,7 @@ module Pact.Native.Ops
     , divDef, powDef, logDef
     , sqrtDef, lnDef, expDef, absDef
     , roundDef, ceilDef, floorDef
+    , gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     ) where
 
 
@@ -61,16 +62,26 @@ roundDef = defTrunc "round" "Performs Banker's rounding" round
 ceilDef = defTrunc "ceiling" "Rounds up" ceiling
 floorDef = defTrunc "floor" "Rounds down" floor
 
+gtDef, ltDef, gteDef, lteDef, eqDef, neqDef :: NativeDef
+gtDef = defCmp ">" (cmp (== GT))
+ltDef = defCmp "<" (cmp (== LT))
+gteDef = defCmp ">=" (cmp (`elem` [GT,EQ]))
+lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
+eqDef = defRNative "=" (eq id) eqTy
+  "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
+neqDef = defRNative "!=" (eq not) eqTy
+  "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
+
+eqTy :: FunTypes n
+eqTy = binTy tTyBool eqA eqA
+
+eqA :: Type n
+eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
+  TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
+
 opDefs :: NativeModule
 opDefs = ("Operators",
-    [defCmp ">" (cmp (== GT))
-    ,defCmp "<" (cmp (== LT))
-    ,defCmp ">=" (cmp (`elem` [GT,EQ]))
-    ,defCmp "<=" (cmp (`elem` [LT,EQ]))
-    ,defRNative "=" (eq id) eqTy
-     "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
-    ,defRNative "!=" (eq not) eqTy
-     "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
+    [gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
     ,defLogic "or" (||) True
     ,defLogic "and" (&&) False
     ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
@@ -99,10 +110,7 @@ opDefs = ("Operators",
     , ceilDef
     , floorDef
     ])
-    where eqTy = binTy tTyBool eqA eqA
-          eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                           TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
-          r = mkTyVar "r" []
+    where r = mkTyVar "r" []
 
 unopTy :: FunTypes n
 unopTy = unaryTy numA numA

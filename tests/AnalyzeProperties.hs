@@ -88,6 +88,9 @@ genUnaryArithOp = Gen.element [Negate, Abs] -- Sqrt, Ln, Exp, Signum
 genRoundingLikeOp :: MonadGen m => m RoundingLikeOp
 genRoundingLikeOp = Gen.element [Round, Ceiling, Floor]
 
+genComparisonOp :: MonadGen m => m ComparisonOp
+genComparisonOp = Gen.element [Gt, Lt, Gte, Lte, Eq, Neq]
+
 type ECore = Existential (Core Analyze.Term)
 
 -- TODO: we might want to generalize this to a union of open intervals
@@ -149,7 +152,7 @@ genCore (SizedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore (SizedDecimal size)) $ \(ESimple TDecimal x) -> do
     op <- genRoundingLikeOp
     pure $ ESimple TInt $ Numerical $ RoundingLikeOp1 op (Inj x)
-  , Gen.subtermM (genCore (SizedString 1000)) $ \(ESimple TStr x) ->
+  , Gen.subtermM (genCore strSize) $ \(ESimple TStr x) ->
     pure $ ESimple TInt $ StrLength (Inj x)
   ]
 genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
@@ -193,13 +196,40 @@ genCore (SizedString len) = Gen.recursive Gen.choice [
         \(ESimple TStr x) (ESimple TStr y) ->
           pure $ ESimple TStr $ StrConcat (Inj x) (Inj y)
   ]
+genCore SizedBool = Gen.recursive Gen.choice [
+    ESimple TBool . Lit <$> Gen.bool
+  ] [
+    do op <- genComparisonOp
+       Gen.subtermM2 (genCore intSize) (genCore intSize) $
+         \(ESimple TInt x) (ESimple TInt y) ->
+           pure $ ESimple TBool $ IntegerComparison op (Inj x) (Inj y)
+  , do op <- genComparisonOp
+       Gen.subtermM2 (genCore decSize) (genCore decSize) $
+         \(ESimple TDecimal x) (ESimple TDecimal y) ->
+           pure $ ESimple TBool $ DecimalComparison op (Inj x) (Inj y)
+
+    -- TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
+
+  , do op <- genComparisonOp
+       Gen.subtermM2 (genCore strSize) (genCore strSize) $
+         \(ESimple TStr x) (ESimple TStr y) ->
+           pure $ ESimple TBool $ StringComparison op (Inj x) (Inj y)
+  , do op <- genComparisonOp
+       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
+         \(ESimple TBool x) (ESimple TBool y) ->
+           pure $ ESimple TBool $ BoolComparison op (Inj x) (Inj y)
+  ]
 genCore SizedTime = undefined
-genCore SizedBool = undefined
+
+intSize, decSize, strSize :: SizedType
+intSize = SizedInt     (0 +/- 1e25)
+decSize = SizedDecimal (0 +/- 1e25)
+strSize = SizedString  1000
 
 genTerm :: MonadGen m => m ETerm
 genTerm = Gen.choice
-  [ transformExistential Inj <$> genCore (SizedInt     (0 +/- 1e25))
-  , transformExistential Inj <$> genCore (SizedDecimal (0 +/- 1e25))
+  [ transformExistential Inj <$> genCore intSize
+  , transformExistential Inj <$> genCore decSize
   ]
 
 arithOpToDef :: ArithOp -> NativeDef
@@ -225,6 +255,16 @@ roundingLikeOpToDef = \case
   Round   -> roundDef
   Ceiling -> ceilDef
   Floor   -> floorDef
+
+comparisonOpToDef :: ComparisonOp -> NativeDef
+comparisonOpToDef = \case
+  Gt -> gtDef
+  Lt -> ltDef
+  Gte -> gteDef
+  Lte -> lteDef
+  Eq -> eqDef
+  Neq -> neqDef
+
 
 toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
 toPact = \case
@@ -288,6 +328,12 @@ toPact = \case
     x' <- toPact $ ESimple TStr x
     y' <- toPact $ ESimple TStr y
     let (_, defTm) = addDef
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TBool (Inj (IntegerComparison op x y)) -> do
+    x' <- toPact $ ESimple TInt x
+    y' <- toPact $ ESimple TInt y
+    let (_, defTm) = comparisonOpToDef op
     Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
 
   ESimple TInt     (PureTerm (Lit x))
