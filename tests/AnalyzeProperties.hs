@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module AnalyzeProperties where
 
 import           Bound                       (closed)
@@ -132,110 +134,124 @@ unaryArithSize op size = case op of
   Exp    -> undefined
   Signum -> undefined
 
-genCore :: MonadGen m => SizedType -> m ECore
+mkInt :: MonadGen m => Core Analyze.Term Integer -> m ETerm
+mkInt = pure . ESimple TInt . Inj
+
+mkDec :: MonadGen m => Numerical Analyze.Term Decimal -> m ETerm
+mkDec = pure . ESimple TDecimal . Inj . Numerical
+
+class Extract a where
+  extract :: ETerm -> Analyze.Term a
+
+instance Extract Integer where
+  extract = \case
+    ESimple TInt x -> x
+    other -> error (show other)
+
+instance Extract Decimal where
+  extract = \case
+    ESimple TDecimal x -> x
+    other -> error (show other)
+
+instance Extract String where
+  extract = \case
+    ESimple TStr x -> x
+    other -> error (show other)
+
+instance Extract Bool where
+  extract = \case
+    ESimple TBool x -> x
+    other -> error (show other)
+
+instance Extract Time where
+  extract = \case
+    ESimple TTime x -> x
+    other -> error (show other)
+
+genCore :: MonadGen m => SizedType -> m ETerm
 genCore (SizedInt size) = Gen.recursive Gen.choice [
-    ESimple TInt . Lit <$> genInteger size
+    ESimple TInt . PureTerm . Lit <$> genInteger size
   ] [
     Gen.subtermM2 (genCore (SizedInt size)) (genCore (SizedInt (1 ... 1e3))) $
-      \(ESimple TInt x) (ESimple TInt y) ->
-      pure $ ESimple TInt $ Numerical $ ModOp (Inj x) (Inj y)
-  , do
-       op <- genArithOp
+      \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
+  , do op <- genArithOp
        let (size1, size2) = arithSize op size
        Gen.subtermM2 (genCore (SizedInt size1)) (genCore (SizedInt size2)) $
-         \(ESimple TInt x) (ESimple TInt y) -> do
-           pure $ ESimple TInt $ Numerical $ IntArithOp op (Inj x) (Inj y)
-  , do
-       op <- genUnaryArithOp
+         \x y -> mkInt $ Numerical $ IntArithOp op (extract x) (extract y)
+  , do op <- genUnaryArithOp
        let size' = unaryArithSize op size
-       Gen.subtermM (genCore (SizedInt size')) $ \(ESimple TInt x) ->
-         pure $ ESimple TInt $ Numerical $ IntUnaryArithOp op (Inj x)
-  , Gen.subtermM (genCore (SizedDecimal size)) $ \(ESimple TDecimal x) -> do
+       Gen.subtermM (genCore (SizedInt size')) $
+         mkInt . Numerical . IntUnaryArithOp op . extract
+  , Gen.subtermM (genCore (SizedDecimal size)) $ \x -> do
     op <- genRoundingLikeOp
-    pure $ ESimple TInt $ Numerical $ RoundingLikeOp1 op (Inj x)
-  , Gen.subtermM (genCore strSize) $ \(ESimple TStr x) ->
-    pure $ ESimple TInt $ StrLength (Inj x)
+    mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
+  , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
 genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
-    ESimple TDecimal . Lit <$> genDecimal size
+    ESimple TDecimal . PureTerm . Lit <$> genDecimal size
   ] [
-    do
-       op <- genArithOp
+    do op <- genArithOp
        let (size1, size2) = arithSize op size
        Gen.subtermM2 (genCore (SizedDecimal size1)) (genCore (SizedDecimal size2)) $
-         \(ESimple TDecimal x) (ESimple TDecimal y) ->
-         pure $ ESimple TDecimal $ Numerical $ DecArithOp op (Inj x) (Inj y)
+         \x y -> mkDec $ DecArithOp op (extract x) (extract y)
   , do
        op <- genUnaryArithOp
        let size' = unaryArithSize op size
-       Gen.subtermM (genCore (SizedDecimal size')) $ \(ESimple TDecimal x) ->
-         pure $ ESimple TDecimal $ Numerical $ DecUnaryArithOp op (Inj x)
-  , do
-       op <- genArithOp
+       Gen.subtermM (genCore (SizedDecimal size')) $
+         mkDec . DecUnaryArithOp op . extract
+  , do op <- genArithOp
        let (size1, size2) = arithSize op size
        Gen.subtermM2 (genCore (SizedDecimal size1)) (genCore (SizedInt size2)) $
-         \(ESimple TDecimal x) (ESimple TInt y) ->
-           pure $ ESimple TDecimal $ Numerical $ DecIntArithOp op (Inj x) (Inj y)
+         \x y -> mkDec $ DecIntArithOp op (extract x) (extract y)
   , do
        op <- genArithOp
        let (size1, size2) = arithSize op size
        Gen.subtermM2 (genCore (SizedInt size1)) (genCore (SizedDecimal size2)) $
-         \(ESimple TInt x) (ESimple TDecimal y) ->
-           pure $ ESimple TDecimal $ Numerical $ IntDecArithOp op (Inj x) (Inj y)
-  , Gen.subtermM2 (genCore sizeD) (genCore (SizedInt (0 +/- 255))) $
-      \(ESimple TDecimal x) (ESimple TInt y) -> do
-        op <- genRoundingLikeOp
-        pure $ ESimple TDecimal $ Numerical $ RoundingLikeOp2 op (Inj x) (Inj y)
+         \x y -> mkDec $ IntDecArithOp op (extract x) (extract y)
+  , Gen.subtermM2 (genCore sizeD) (genCore (SizedInt (0 +/- 255))) $ \x y -> do
+      op <- genRoundingLikeOp
+      mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
 genCore (SizedString len) = Gen.recursive Gen.choice [
     -- TODO: use unicodeAll?
-    ESimple TStr . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
+    ESimple TStr . PureTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
     Gen.subtermM2
       (genCore (SizedString (len `div` 2)))
-      (genCore (SizedString (len `div` 2))) $
-        \(ESimple TStr x) (ESimple TStr y) ->
-          pure $ ESimple TStr $ StrConcat (Inj x) (Inj y)
+      (genCore (SizedString (len `div` 2))) $ \x y ->
+        pure $ ESimple TStr $ Inj $ StrConcat (extract x) (extract y)
   ]
 genCore SizedBool = Gen.recursive Gen.choice [
-    ESimple TBool . Lit <$> Gen.bool
+    ESimple TBool . PureTerm . Lit <$> Gen.bool
   ] [
     do op <- genComparisonOp
-       Gen.subtermM2 (genCore intSize) (genCore intSize) $
-         \(ESimple TInt x) (ESimple TInt y) ->
-           pure $ ESimple TBool $ IntegerComparison op (Inj x) (Inj y)
+       Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y ->
+         pure $ ESimple TBool $ Inj $ IntegerComparison op (extract x) (extract y)
   , do op <- genComparisonOp
-       Gen.subtermM2 (genCore decSize) (genCore decSize) $
-         \(ESimple TDecimal x) (ESimple TDecimal y) ->
-           pure $ ESimple TBool $ DecimalComparison op (Inj x) (Inj y)
+       Gen.subtermM2 (genCore decSize) (genCore decSize) $ \x y ->
+         pure $ ESimple TBool $ Inj $ DecimalComparison op (extract x) (extract y)
   , do op <- genComparisonOp
-       Gen.subtermM2 (genCore SizedTime) (genCore SizedTime) $
-         \(ESimple TTime x) (ESimple TTime y) ->
-           pure $ ESimple TBool $ TimeComparison op (Inj x) (Inj y)
+       Gen.subtermM2 (genCore SizedTime) (genCore SizedTime) $ \x y ->
+         pure $ ESimple TBool $ Inj $ TimeComparison op (extract x) (extract y)
   , do op <- genComparisonOp
-       Gen.subtermM2 (genCore strSize) (genCore strSize) $
-         \(ESimple TStr x) (ESimple TStr y) ->
-           pure $ ESimple TBool $ StringComparison op (Inj x) (Inj y)
+       Gen.subtermM2 (genCore strSize) (genCore strSize) $ \x y ->
+         pure $ ESimple TBool $ Inj $ StringComparison op (extract x) (extract y)
   , do op <- Gen.element [Eq, Neq]
-       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
-         \(ESimple TBool x) (ESimple TBool y) ->
-           pure $ ESimple TBool $ BoolComparison op (Inj x) (Inj y)
+       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $ \x y ->
+         pure $ ESimple TBool $ Inj $ BoolComparison op (extract x) (extract y)
   , do op <- Gen.element [AndOp, OrOp]
-       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
-         \(ESimple TBool x) (ESimple TBool y) ->
-           pure $ ESimple TBool $ Logical op [Inj x, Inj y]
-  , Gen.subtermM (genCore SizedBool) $ \(ESimple TBool x) ->
-      pure $ ESimple TBool $ Logical NotOp [Inj x]
+       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $ \x y ->
+         pure $ ESimple TBool $ Inj $ Logical op [extract x, extract y]
+  , Gen.subtermM (genCore SizedBool) $ \x ->
+      pure $ ESimple TBool $ Inj $ Logical NotOp [extract x]
   ]
 genCore SizedTime = Gen.recursive Gen.choice [
-    ESimple TTime . Lit <$> Gen.enumBounded -- Gen.int64
+    ESimple TTime . PureTerm . Lit <$> Gen.enumBounded -- Gen.int64
   ] [
-    do Gen.subtermM2 (genCore SizedTime) (genCore (SizedInt 1e9)) $
-         \(ESimple TTime x) (ESimple TInt y) ->
-           pure $ ESimple TTime $ IntAddTime (Inj x) (Inj y)
-  , do Gen.subtermM2 (genCore SizedTime) (genCore (SizedDecimal 1e9)) $
-         \(ESimple TTime x) (ESimple TDecimal y) ->
-           pure $ ESimple TTime $ DecAddTime (Inj x) (Inj y)
+    Gen.subtermM2 (genCore SizedTime) (genCore (SizedInt 1e9)) $ \x y ->
+      pure $ ESimple TTime $ Inj $ IntAddTime (extract x) (extract y)
+  , Gen.subtermM2 (genCore SizedTime) (genCore (SizedDecimal 1e9)) $ \x y ->
+      pure $ ESimple TTime $ Inj $ DecAddTime (extract x) (extract y)
   ]
 
 intSize, decSize, strSize :: SizedType
@@ -245,11 +261,11 @@ strSize = SizedString  1000
 
 genTerm :: MonadGen m => m ETerm
 genTerm = Gen.choice
-  [ transformExistential Inj <$> genCore intSize
-  , transformExistential Inj <$> genCore decSize
-  , transformExistential Inj <$> genCore strSize
-  , transformExistential Inj <$> genCore SizedBool
-  , transformExistential Inj <$> genCore SizedTime
+  [ genCore intSize
+  , genCore decSize
+  , genCore strSize
+  , genCore SizedBool
+  , genCore SizedTime
   ]
 
 toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
@@ -467,23 +483,39 @@ prop_evaluation = property $ do
       -- see note [EmptyInterval]
       `catch` (\(_e :: EmptyInterval)  -> discard)
 
+prop_round_trip_type :: Property
+prop_round_trip_type = property $ do
+  ety@(EType ty) <- forAll genType
+  maybeTranslateType (reverseTranslateType ty) === Just ety
+
+prop_round_trip_term :: Property
+prop_round_trip_term = property $ (do
+  etm@(ESimple ty _tm) <- forAll genTerm
+
+  etm' <- lift $ runMaybeT $
+    (toAnalyze (reverseTranslateType ty) <=< toPact') etm
+  etm' === Just etm)
+    `catch` (\(_e :: EmptyInterval)  -> discard)
+
 spec :: Spec
 spec = describe "analyze properties" $ do
   -- We first check that our translation of types works in both directions.
   -- This is a pre-requisite to...
-  it "should round-trip types" $ require $ property $ do
-    ety@(EType ty) <- forAll genType
-    maybeTranslateType (reverseTranslateType ty) === Just ety
+  it "should round-trip types" $ require prop_round_trip_type
 
   -- We check that we can translate terms in both directions. This is a
   -- pre-requisite to...
-  it "should round-trip terms" $ require $ property $ (do
-    etm@(ESimple ty _tm) <- forAll genTerm
-    etm' <- lift $ runMaybeT $
-      (toAnalyze (reverseTranslateType ty) <=< toPact') etm
-    etm' === Just etm)
-      `catch` (\(_e :: EmptyInterval)  -> discard)
+  it "should round-trip terms" $ require prop_round_trip_term
 
   -- We should be able to evaluate a term both normally and symbolically, and
   -- get the same result in both places.
   it "should evaluate to the same" $ require prop_evaluation
+
+-- Usually we run via `spec`, but these are useful for running tests
+-- sequentially (so logs from different threads don't clobber each other)
+sequentialChecks :: IO Bool
+sequentialChecks = checkSequential $ Group "checks"
+  [ ("prop_round_trip_type", prop_round_trip_type)
+  , ("prop_round_trip_term", prop_round_trip_term)
+  , ("prop_evaluation", prop_evaluation)
+  ]
