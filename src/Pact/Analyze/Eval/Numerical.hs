@@ -26,7 +26,7 @@ evalNumerical (ModOp x y)              = evalModOp x y
 evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
 evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
--- | Implementation of decimal division.
+-- | Implementation of decimal arithmetic.
 --
 -- The key is this quote from "Data.Decimal":
 --
@@ -34,13 +34,8 @@ evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 -- exponent e is an unsigned Word8. Hence the smallest value that can be
 -- represented is 10^-255."
 --
--- Thus in this implementation, we shift left 255 decimal digits, drop the
--- remainder, then shift back right.
-decDiv :: S Decimal -> S Decimal -> S Decimal
-decDiv x y = dropRemainder $ (x / y)
-  -- let digitShift = 10 ^ (255 :: Int)
-  -- in (/ digitShift) $ fromIntegralS $ decRound $ (x / y) * digitShift
-
+-- Thus in this implementation, after any decimal arithmetic operation, we
+-- shift left 255 decimal digits, drop the remainder, then shift back right.
 dropRemainder :: S Decimal -> S Decimal
 dropRemainder =
   let digitShift = 10 ^ (255 :: Int)
