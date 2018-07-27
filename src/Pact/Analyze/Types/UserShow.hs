@@ -25,6 +25,9 @@ userShow = userShowsPrec 0
 parens :: Text -> Text
 parens t = "(" <> t <> ")"
 
+parenList :: [Text] -> Text
+parenList = parens . T.unwords
+
 instance UserShow Integer where
   userShowsPrec _ = tShow
 

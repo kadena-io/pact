@@ -6,7 +6,6 @@
 module Pact.Analyze.Types.Numerical where
 
 import           Data.SBV (AlgReal)
-import qualified Data.Text as T
 
 import Pact.Analyze.Types.UserShow
 
@@ -113,7 +112,7 @@ data Numerical t a where
 
 instance (UserShow (t Integer), UserShow (t Decimal))
   => UserShow (Numerical t a) where
-  userShowsPrec _ = parens . T.unwords . \case
+  userShowsPrec _ = parenList . \case
     DecArithOp op a b      -> [userShow op, userShow a, userShow b]
     IntArithOp op a b      -> [userShow op, userShow a, userShow b]
     DecUnaryArithOp op a   -> [userShow op, userShow a]

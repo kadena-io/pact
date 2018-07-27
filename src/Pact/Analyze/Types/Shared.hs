@@ -187,10 +187,21 @@ data LogicalOp
   | NotOp -- ^ Negation
   deriving (Show, Eq, Ord)
 
+instance UserShow LogicalOp where
+  userShowsPrec _ = \case
+    AndOp -> "and"
+    OrOp  -> "or"
+    NotOp -> "not"
+
 data EqNeq
   = Eq'  -- ^ Equal
   | Neq' -- ^ Not equal
   deriving (Show, Eq, Ord)
+
+instance UserShow EqNeq where
+  userShowsPrec _ = \case
+    Eq'  -> "="
+    Neq' -> "!="
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -200,6 +211,15 @@ data ComparisonOp
   | Eq  -- ^ Equal
   | Neq -- ^ Not equal
   deriving (Show, Eq, Ord)
+
+instance UserShow ComparisonOp where
+  userShowsPrec _ = \case
+    Gt  -> ">"
+    Lt  -> "<"
+    Gte -> ">="
+    Lte -> "<="
+    Eq  -> "="
+    Neq -> "!="
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
