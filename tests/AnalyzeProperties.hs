@@ -170,7 +170,7 @@ instance Extract Time where
 
 genCore :: MonadGen m => SizedType -> m ETerm
 genCore (SizedInt size) = Gen.recursive Gen.choice [
-    ESimple TInt . PureTerm . Lit <$> genInteger size
+    ESimple TInt . CoreTerm . Lit <$> genInteger size
   ] [
     Gen.subtermM2 (genCore (SizedInt size)) (genCore (SizedInt (1 ... 1e3))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
@@ -188,7 +188,7 @@ genCore (SizedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
 genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
-    ESimple TDecimal . PureTerm . Lit <$> genDecimal size
+    ESimple TDecimal . CoreTerm . Lit <$> genDecimal size
   ] [
     do op <- genArithOp
        let (size1, size2) = arithSize op size
@@ -214,7 +214,7 @@ genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
   ]
 genCore (SizedString len) = Gen.recursive Gen.choice [
     -- TODO: use unicodeAll?
-    ESimple TStr . PureTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
+    ESimple TStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
     Gen.subtermM2
       (genCore (SizedString (len `div` 2)))
@@ -222,7 +222,7 @@ genCore (SizedString len) = Gen.recursive Gen.choice [
         pure $ ESimple TStr $ Inj $ StrConcat (extract x) (extract y)
   ]
 genCore SizedBool = Gen.recursive Gen.choice [
-    ESimple TBool . PureTerm . Lit <$> Gen.bool
+    ESimple TBool . CoreTerm . Lit <$> Gen.bool
   ] [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y ->
@@ -246,7 +246,7 @@ genCore SizedBool = Gen.recursive Gen.choice [
       pure $ ESimple TBool $ Inj $ Logical NotOp [extract x]
   ]
 genCore SizedTime = Gen.recursive Gen.choice [
-    ESimple TTime . PureTerm . Lit <$> Gen.enumBounded -- Gen.int64
+    ESimple TTime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
   ] [
     Gen.subtermM2 (genCore SizedTime) (genCore (SizedInt 1e9)) $ \x y ->
       pure $ ESimple TTime $ Inj $ IntAddTime (extract x) (extract y)
@@ -327,15 +327,15 @@ toPact = \case
   ESimple TBool (Inj (Logical op args)) ->
     mkApp (logicalOpToDef op) (ESimple TBool <$> args)
 
-  ESimple TInt     (PureTerm (Lit x))
+  ESimple TInt     (CoreTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
-  ESimple TDecimal (PureTerm (Lit x))
+  ESimple TDecimal (CoreTerm (Lit x))
     -> Just $ TLiteral (LDecimal (unMkDecimal x)) dummyInfo
-  ESimple TStr     (PureTerm (Lit x))
+  ESimple TStr     (CoreTerm (Lit x))
     -> Just $ TLiteral (LString (T.pack x)) dummyInfo
-  ESimple TBool    (PureTerm (Lit x))
+  ESimple TBool    (CoreTerm (Lit x))
     -> Just $ TLiteral (LBool x) dummyInfo
-  ESimple TTime    (PureTerm (Lit x))
+  ESimple TTime    (CoreTerm (Lit x))
     -> Just $ TLiteral (LTime (unMkTime x)) dummyInfo
 
   tm -> error $ "TODO: toPact " ++ show tm
@@ -449,7 +449,7 @@ prop_evaluation = property $ do
       -- evaluate via pact, convert to analyze term
       (pactVal, _) <- liftIO $ runEval evalState evalEnv (reduce pactTm)
       Just pactVal' <- pure $ closed pactVal
-      Just (ESimple ty' (PureTerm (Lit pactVal''))) <- lift $ runMaybeT $
+      Just (ESimple ty' (CoreTerm (Lit pactVal''))) <- lift $ runMaybeT $
         toAnalyze (reverseTranslateType ty) pactVal'
 
       -- evaluate via analyze

@@ -467,7 +467,7 @@ data Term ret where
 
 instance UserShow a => UserShow (Term a) where
   userShowsPrec _ = \case
-    PureTerm tm -> userShow tm
+    CoreTerm tm -> userShow tm
 
 instance UserShow ETerm where
   userShowsPrec _ = \case
