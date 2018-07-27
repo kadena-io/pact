@@ -18,8 +18,9 @@
 module Pact.Native
     (natives
     ,nativeDefs
-    ,moduleToMap)
-    where
+    ,moduleToMap
+    ,lengthDef
+    ) where
 
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
@@ -70,6 +71,13 @@ moduleToMap :: NativeModule -> M.HashMap Name Ref
 moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
 
 
+lengthDef :: NativeDef
+lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
+ "Compute length of X, which can be a list, a string, or an object.\
+ \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
+
+listA :: Type n
+listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
 
 langDefs :: NativeModule
 langDefs =
@@ -118,9 +126,7 @@ langDefs =
      "Compose X and Y, such that X operates on VALUE, and Y on the results of X. \
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
-     ,defRNative "length" length' (funType tTyInteger [("x",listA)])
-     "Compute length of X, which can be a list, a string, or an object.\
-     \`(length [1 2 3])` `(length \"abcdefgh\")` `(length { \"a\": 1, \"b\": 2 })`"
+     ,lengthDef
 
     ,defRNative "take" take' takeDrop
      "Take COUNT values from LIST (or string), or entries having keys in KEYS from OBJECT. If COUNT is negative, take from end. \
@@ -218,7 +224,6 @@ langDefs =
           row = mkSchemaVar "row"
           yieldv = TySchema TyObject (mkSchemaVar "y")
           obj = tTyObject (mkSchemaVar "o")
-          listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
           listStringA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString]
           takeDrop = funType listStringA [("count",tTyInteger),("list",listStringA)] <>
                      funType obj [("keys",TyList tTyString),("object",obj)]
