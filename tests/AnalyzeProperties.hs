@@ -252,155 +252,64 @@ genTerm = Gen.choice
   , transformExistential Inj <$> genCore SizedTime
   ]
 
-arithOpToDef :: ArithOp -> NativeDef
-arithOpToDef = \case
-  Add -> addDef
-  Sub -> subDef
-  Mul -> mulDef
-  Div -> divDef
-  Pow -> powDef
-  Log -> logDef
-
-unaryArithOpToDef :: UnaryArithOp -> NativeDef
-unaryArithOpToDef = \case
-  Negate -> subDef
-  Sqrt   -> sqrtDef
-  Ln     -> lnDef
-  Exp    -> expDef
-  Abs    -> absDef
-  Signum -> undefined
-
-roundingLikeOpToDef :: RoundingLikeOp -> NativeDef
-roundingLikeOpToDef = \case
-  Round   -> roundDef
-  Ceiling -> ceilDef
-  Floor   -> floorDef
-
-comparisonOpToDef :: ComparisonOp -> NativeDef
-comparisonOpToDef = \case
-  Gt  -> gtDef
-  Lt  -> ltDef
-  Gte -> gteDef
-  Lte -> lteDef
-  Eq  -> eqDef
-  Neq -> neqDef
-
-logicalOpToDef :: LogicalOp -> NativeDef
-logicalOpToDef = \case
-  AndOp -> andDef
-  OrOp  -> orDef
-  NotOp -> notDef
-
 toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
 toPact = \case
-  ESimple TDecimal (Inj (DecArithOp op x y)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    y' <- toPact $ ESimple TDecimal y
-    let (_, defTm) = arithOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TDecimal (Inj (DecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
 
-  ESimple TDecimal (Inj (DecUnaryArithOp op x)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    let (_, defTm) = unaryArithOpToDef op
-    Just $ TApp (liftTerm defTm) [x'] dummyInfo
+  ESimple TDecimal (Inj (DecUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [ESimple TDecimal x]
 
-  ESimple TInt (Inj (IntArithOp op x y)) -> do
-    x' <- toPact $ ESimple TInt x
-    y' <- toPact $ ESimple TInt y
-    let (_, defTm) = arithOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TInt (Inj (IntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple TInt x, ESimple TInt y]
 
-  ESimple TInt (Inj (IntUnaryArithOp op x)) -> do
-    x' <- toPact $ ESimple TInt x
-    let (_, defTm) = unaryArithOpToDef op
-    Just $ TApp (liftTerm defTm) [x'] dummyInfo
+  ESimple TInt (Inj (IntUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [ESimple TInt x]
 
-  ESimple TInt (Inj (RoundingLikeOp1 op x)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    let (_, defTm) = roundingLikeOpToDef op
-    Just $ TApp (liftTerm defTm) [x'] dummyInfo
+  ESimple TInt (Inj (RoundingLikeOp1 op x)) ->
+    mkApp (roundingLikeOpToDef op) [ESimple TDecimal x]
 
-  ESimple TDecimal (Inj (RoundingLikeOp2 op x y)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    y' <- toPact $ ESimple TInt y
-    let (_, defTm) = roundingLikeOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TDecimal (Inj (RoundingLikeOp2 op x y)) ->
+    mkApp (roundingLikeOpToDef op) [ESimple TDecimal x, ESimple TInt y]
 
-  ESimple TDecimal (Inj (DecIntArithOp op x y)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    y' <- toPact $ ESimple TInt y
-    let (_, defTm) = arithOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TDecimal (Inj (DecIntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TInt y]
 
-  ESimple TDecimal (Inj (IntDecArithOp op x y)) -> do
-    x' <- toPact $ ESimple TInt x
-    y' <- toPact $ ESimple TDecimal y
-    let (_, defTm) = arithOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TDecimal (Inj (IntDecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple TInt x, ESimple TDecimal y]
 
-  ESimple TInt (Inj (ModOp x y)) -> do
-    x' <- toPact $ ESimple TInt x
-    y' <- toPact $ ESimple TInt y
-    let (_, modTm) = modDef
-    Just $ TApp (liftTerm modTm) [x', y'] dummyInfo
+  ESimple TInt (Inj (ModOp x y)) ->
+    mkApp modDef [ESimple TInt x, ESimple TInt y]
 
-  ESimple TInt (Inj (StrLength x)) -> do
-    x' <- toPact $ ESimple TStr x
-    let (_, defTm) = lengthDef
-    Just $ TApp (liftTerm defTm) [x'] dummyInfo
+  ESimple TInt (Inj (StrLength x)) ->
+    mkApp lengthDef [ESimple TStr x]
 
-  ESimple TStr (Inj (StrConcat x y)) -> do
-    x' <- toPact $ ESimple TStr x
-    y' <- toPact $ ESimple TStr y
-    let (_, defTm) = addDef
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TStr (Inj (StrConcat x y)) ->
+    mkApp addDef [ESimple TStr x, ESimple TStr y]
 
-  ESimple TBool (Inj (IntegerComparison op x y)) -> do
-    x' <- toPact $ ESimple TInt x
-    y' <- toPact $ ESimple TInt y
-    let (_, defTm) = comparisonOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TBool (Inj (IntegerComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple TInt x, ESimple TInt y]
 
-  ESimple TBool (Inj (DecimalComparison op x y)) -> do
-    x' <- toPact $ ESimple TDecimal x
-    y' <- toPact $ ESimple TDecimal y
-    let (_, defTm) = comparisonOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TBool (Inj (DecimalComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
 
-  ESimple TBool (Inj (StringComparison op x y)) -> do
-    x' <- toPact $ ESimple TStr x
-    y' <- toPact $ ESimple TStr y
-    let (_, defTm) = comparisonOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TBool (Inj (StringComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple TStr x, ESimple TStr y]
 
-  ESimple TBool (Inj (BoolComparison op x y)) -> do
-    x' <- toPact $ ESimple TBool x
-    y' <- toPact $ ESimple TBool y
-    let (_, defTm) = comparisonOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TBool (Inj (BoolComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple TBool x, ESimple TBool y]
 
-  ESimple TBool (Inj (TimeComparison op x y)) -> do
-    x' <- toPact $ ESimple TTime x
-    y' <- toPact $ ESimple TTime y
-    let (_, defTm) = comparisonOpToDef op
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TBool (Inj (TimeComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple TTime x, ESimple TTime y]
 
-  ESimple TTime (Inj (IntAddTime x y)) -> do
-    x' <- toPact $ ESimple TTime x
-    y' <- toPact $ ESimple TInt y
-    let (_, defTm) = defAddTime
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TTime (Inj (IntAddTime x y)) ->
+    mkApp defAddTime [ESimple TTime x, ESimple TInt y]
 
-  ESimple TTime (Inj (DecAddTime x y)) -> do
-    x' <- toPact $ ESimple TTime x
-    y' <- toPact $ ESimple TDecimal y
-    let (_, defTm) = defAddTime
-    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+  ESimple TTime (Inj (DecAddTime x y)) ->
+    mkApp defAddTime [ESimple TTime x, ESimple TDecimal y]
 
-  ESimple TBool (Inj (Logical op args)) -> do
-    args' <- traverse (toPact . ESimple TBool) args
-    let (_, defTm) = logicalOpToDef op
-    Just $ TApp (liftTerm defTm) args' dummyInfo
+  ESimple TBool (Inj (Logical op args)) ->
+    mkApp (logicalOpToDef op) (ESimple TBool <$> args)
 
   ESimple TInt     (PureTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
@@ -413,7 +322,52 @@ toPact = \case
   ESimple TTime    (PureTerm (Lit x))
     -> Just $ TLiteral (LTime (unMkTime x)) dummyInfo
 
-  _ -> error "TODO"
+  tm -> error $ "TODO: toPact " ++ show tm
+
+  where
+    mkApp :: NativeDef -> [ETerm] -> Maybe (Pact.Term Pact.Ref)
+    mkApp (_, defTm) args = do
+      args' <- traverse toPact args
+      Just $ TApp (liftTerm defTm) args' dummyInfo
+
+    arithOpToDef :: ArithOp -> NativeDef
+    arithOpToDef = \case
+      Add -> addDef
+      Sub -> subDef
+      Mul -> mulDef
+      Div -> divDef
+      Pow -> powDef
+      Log -> logDef
+
+    unaryArithOpToDef :: UnaryArithOp -> NativeDef
+    unaryArithOpToDef = \case
+      Negate -> subDef
+      Sqrt   -> sqrtDef
+      Ln     -> lnDef
+      Exp    -> expDef
+      Abs    -> absDef
+      Signum -> undefined
+
+    roundingLikeOpToDef :: RoundingLikeOp -> NativeDef
+    roundingLikeOpToDef = \case
+      Round   -> roundDef
+      Ceiling -> ceilDef
+      Floor   -> floorDef
+
+    comparisonOpToDef :: ComparisonOp -> NativeDef
+    comparisonOpToDef = \case
+      Gt  -> gtDef
+      Lt  -> ltDef
+      Gte -> gteDef
+      Lte -> lteDef
+      Eq  -> eqDef
+      Neq -> neqDef
+
+    logicalOpToDef :: LogicalOp -> NativeDef
+    logicalOpToDef = \case
+      AndOp -> andDef
+      OrOp  -> orDef
+      NotOp -> notDef
 
 toPact' :: Applicative m => ETerm -> MaybeT m (Pact.Term Pact.Ref)
 toPact' = MaybeT . pure . toPact
