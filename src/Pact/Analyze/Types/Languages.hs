@@ -167,12 +167,22 @@ data Core t a where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t Bool] -> Core t Bool
 
-instance (UserShow a, UserShow (t a), UserShow (t Integer), UserShow (t Decimal))
+instance (UserShow a, UserShow (t a), UserShow (t Integer), UserShow (t Decimal), UserShow (t Time))
   => UserShow (Core t a) where
   userShowsPrec d = \case
     Lit a        -> userShowsPrec d a
     Sym s        -> tShow s
+    StrConcat x y -> parenList ["+", userShow x, userShow y]
+    StrLength _str -> parenList ["length", "TODO"]
     Numerical tm -> userShowsPrec d tm
+    IntAddTime x y -> parenList ["add-time", userShow x, userShow y]
+    DecAddTime x y -> parenList ["add-time", userShow x, userShow y]
+    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    StringComparison op _x _y  -> parenList [userShow op, "TODO", "TODO"]
+    BoolComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    Logical op args       -> parenList $ userShow op : fmap userShow args
 
 deriving instance Eq a   => Eq   (Core Prop a)
 deriving instance Show a => Show (Core Prop a)
