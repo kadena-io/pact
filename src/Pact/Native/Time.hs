@@ -13,8 +13,9 @@
 --
 
 module Pact.Native.Time
-    (timeDefs)
-    where
+    (timeDefs
+    , defAddTime
+    ) where
 
 import Control.Monad
 import Prelude
@@ -31,6 +32,14 @@ import Pact.Native.Internal
 timedoc :: Text
 timedoc = "See [\"Time Formats\" docs](#time-formats) for supported formats."
 
+defAddTime :: NativeDef
+defAddTime = defRNative "add-time" addTime
+  ( funType tTyTime [("time", tTyTime),("seconds", tTyDecimal)]
+  <> funType tTyTime [("time", tTyTime),("seconds", tTyInteger)]
+  )
+  $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
+  <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
+
 timeDefs :: NativeModule
 timeDefs = ("Time", timeDef)
   where
@@ -44,12 +53,7 @@ timeDefs = ("Time", timeDef)
             (funType tTyTime [("format", tTyString),("utcval", tTyString)])
             $ "Construct time from UTCVAL using FORMAT. " <> timedoc
             <> "`(parse-time \"%F\" \"2016-09-12\")`"
-        , defRNative "add-time" addTime
-            ( funType tTyTime [("time", tTyTime),("seconds", tTyDecimal)]
-            <> funType tTyTime [("time", tTyTime),("seconds", tTyInteger)]
-            )
-            $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
-            <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
+        , defAddTime
         , defRNative "diff-time" diffTime
             (funType tTyDecimal [("time1", tTyTime),("time2", tTyTime)])
             $ "Compute difference between TIME1 and TIME2 in seconds. "

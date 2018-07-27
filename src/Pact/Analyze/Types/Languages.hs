@@ -147,6 +147,9 @@ data Core t a where
   -- | A 'ComparisonOp' expression over two 'String' expressions
   StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
+  --
+  -- note: this is more broad than the set ({=, !=}) of comparisons pact
+  -- supports on bools.
   BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
 
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool

@@ -49,6 +49,7 @@ import           Pact.Analyze.Util           (dummyInfo)
 import           Pact.Eval                   (liftTerm, reduce)
 import           Pact.Native (lengthDef)
 import           Pact.Native.Ops
+import           Pact.Native.Time
 import           Pact.Repl                   (initPureEvalEnv)
 import           Pact.Typechecker            (typecheckTopLevel)
 import           Pact.Types.Exp              (Literal (..))
@@ -207,19 +208,29 @@ genCore SizedBool = Gen.recursive Gen.choice [
        Gen.subtermM2 (genCore decSize) (genCore decSize) $
          \(ESimple TDecimal x) (ESimple TDecimal y) ->
            pure $ ESimple TBool $ DecimalComparison op (Inj x) (Inj y)
-
-    -- TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
-
+  , do op <- genComparisonOp
+       Gen.subtermM2 (genCore SizedTime) (genCore SizedTime) $
+         \(ESimple TTime x) (ESimple TTime y) ->
+           pure $ ESimple TBool $ TimeComparison op (Inj x) (Inj y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore strSize) (genCore strSize) $
          \(ESimple TStr x) (ESimple TStr y) ->
            pure $ ESimple TBool $ StringComparison op (Inj x) (Inj y)
-  , do op <- genComparisonOp
+  , do op <- Gen.element [Eq, Neq]
        Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
          \(ESimple TBool x) (ESimple TBool y) ->
            pure $ ESimple TBool $ BoolComparison op (Inj x) (Inj y)
   ]
-genCore SizedTime = undefined
+genCore SizedTime = Gen.recursive Gen.choice [
+    ESimple TTime . Lit <$> Gen.enumBounded -- Gen.int64
+  ] [
+    do Gen.subtermM2 (genCore SizedTime) (genCore (SizedInt 1e9)) $
+         \(ESimple TTime x) (ESimple TInt y) ->
+           pure $ ESimple TTime $ IntAddTime (Inj x) (Inj y)
+  , do Gen.subtermM2 (genCore SizedTime) (genCore (SizedDecimal 1e9)) $
+         \(ESimple TTime x) (ESimple TDecimal y) ->
+           pure $ ESimple TTime $ DecAddTime (Inj x) (Inj y)
+  ]
 
 intSize, decSize, strSize :: SizedType
 intSize = SizedInt     (0 +/- 1e25)
@@ -230,6 +241,9 @@ genTerm :: MonadGen m => m ETerm
 genTerm = Gen.choice
   [ transformExistential Inj <$> genCore intSize
   , transformExistential Inj <$> genCore decSize
+  , transformExistential Inj <$> genCore strSize
+  , transformExistential Inj <$> genCore SizedBool
+  , transformExistential Inj <$> genCore SizedTime
   ]
 
 arithOpToDef :: ArithOp -> NativeDef
@@ -336,12 +350,52 @@ toPact = \case
     let (_, defTm) = comparisonOpToDef op
     Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
 
+  ESimple TBool (Inj (DecimalComparison op x y)) -> do
+    x' <- toPact $ ESimple TDecimal x
+    y' <- toPact $ ESimple TDecimal y
+    let (_, defTm) = comparisonOpToDef op
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TBool (Inj (StringComparison op x y)) -> do
+    x' <- toPact $ ESimple TStr x
+    y' <- toPact $ ESimple TStr y
+    let (_, defTm) = comparisonOpToDef op
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TBool (Inj (BoolComparison op x y)) -> do
+    x' <- toPact $ ESimple TBool x
+    y' <- toPact $ ESimple TBool y
+    let (_, defTm) = comparisonOpToDef op
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TBool (Inj (TimeComparison op x y)) -> do
+    x' <- toPact $ ESimple TTime x
+    y' <- toPact $ ESimple TTime y
+    let (_, defTm) = comparisonOpToDef op
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TTime (Inj (IntAddTime x y)) -> do
+    x' <- toPact $ ESimple TTime x
+    y' <- toPact $ ESimple TInt y
+    let (_, defTm) = defAddTime
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TTime (Inj (DecAddTime x y)) -> do
+    x' <- toPact $ ESimple TTime x
+    y' <- toPact $ ESimple TDecimal y
+    let (_, defTm) = defAddTime
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
   ESimple TInt     (PureTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
   ESimple TDecimal (PureTerm (Lit x))
     -> Just $ TLiteral (LDecimal (unMkDecimal x)) dummyInfo
   ESimple TStr     (PureTerm (Lit x))
     -> Just $ TLiteral (LString (T.pack x)) dummyInfo
+  ESimple TBool    (PureTerm (Lit x))
+    -> Just $ TLiteral (LBool x) dummyInfo
+  ESimple TTime    (PureTerm (Lit x))
+    -> Just $ TLiteral (LTime (unMkTime x)) dummyInfo
 
   _ -> error "TODO"
 
@@ -431,11 +485,14 @@ prop_evaluation = property $ do
       -- future work here is to make sure that if one side throws, the other
       -- does as well.
       `catch` (\(DivideByZero :: ArithException) -> discard)
-      `catch` (\((PactError EvalError _ _ msg) :: PactError) ->
-        if "Division by 0" `T.isPrefixOf` msg ||
-           "Negative precision not allowed" `T.isPrefixOf` msg
-        then discard
-        else footnote (T.unpack msg) >> failure)
+      `catch` (\((PactError err _ _ msg) :: PactError) ->
+        case err of
+          EvalError ->
+            if "Division by 0" `T.isPrefixOf` msg ||
+               "Negative precision not allowed" `T.isPrefixOf` msg
+            then discard
+            else footnote (T.unpack msg) >> failure
+          _ -> footnote (T.unpack msg) >> failure)
 
       -- see note [EmptyInterval]
       `catch` (\(_e :: EmptyInterval)  -> discard)
