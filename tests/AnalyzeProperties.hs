@@ -47,6 +47,7 @@ import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
+import           Pact.Native (lengthDef)
 import           Pact.Native.Ops
 import           Pact.Repl                   (initPureEvalEnv)
 import           Pact.Typechecker            (typecheckTopLevel)
@@ -99,7 +100,7 @@ type NumSize = Interval Double
 data SizedType where
   SizedInt     :: NumSize -> SizedType
   SizedDecimal :: NumSize -> SizedType
-  SizedString  ::            SizedType
+  SizedString  :: Int     -> SizedType
   SizedTime    ::            SizedType
   SizedBool    ::            SizedType
 
@@ -148,6 +149,8 @@ genCore (SizedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore (SizedDecimal size)) $ \(ESimple TDecimal x) -> do
     op <- genRoundingLikeOp
     pure $ ESimple TInt $ Numerical $ RoundingLikeOp1 op (Inj x)
+  , Gen.subtermM (genCore (SizedString 1000)) $ \(ESimple TStr x) ->
+    pure $ ESimple TInt $ StrLength (Inj x)
   ]
 genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
     ESimple TDecimal . Lit <$> genDecimal size
@@ -180,7 +183,16 @@ genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
         op <- genRoundingLikeOp
         pure $ ESimple TDecimal $ Numerical $ RoundingLikeOp2 op (Inj x) (Inj y)
   ]
-genCore SizedString = undefined
+genCore (SizedString len) = Gen.recursive Gen.choice [
+    -- TODO: use unicodeAll?
+    ESimple TStr . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
+  ] [
+    Gen.subtermM2
+      (genCore (SizedString (len `div` 2)))
+      (genCore (SizedString (len `div` 2))) $
+        \(ESimple TStr x) (ESimple TStr y) ->
+          pure $ ESimple TStr $ StrConcat (Inj x) (Inj y)
+  ]
 genCore SizedTime = undefined
 genCore SizedBool = undefined
 
@@ -267,10 +279,24 @@ toPact = \case
     let (_, modTm) = modDef
     Just $ TApp (liftTerm modTm) [x', y'] dummyInfo
 
+  ESimple TInt (Inj (StrLength x)) -> do
+    x' <- toPact $ ESimple TStr x
+    let (_, defTm) = lengthDef
+    Just $ TApp (liftTerm defTm) [x'] dummyInfo
+
+  ESimple TStr (Inj (StrConcat x y)) -> do
+    x' <- toPact $ ESimple TStr x
+    y' <- toPact $ ESimple TStr y
+    let (_, defTm) = addDef
+    Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
   ESimple TInt     (PureTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
   ESimple TDecimal (PureTerm (Lit x))
     -> Just $ TLiteral (LDecimal (unMkDecimal x)) dummyInfo
+  ESimple TStr     (PureTerm (Lit x))
+    -> Just $ TLiteral (LString (T.pack x)) dummyInfo
+
   _ -> error "TODO"
 
 toPact' :: Applicative m => ETerm -> MaybeT m (Pact.Term Pact.Ref)
@@ -359,7 +385,7 @@ prop_evaluation = property $ do
       -- future work here is to make sure that if one side throws, the other
       -- does as well.
       `catch` (\(DivideByZero :: ArithException) -> discard)
-      `catch` (\((PactError EvalError _ _ msg) :: PactError)      ->
+      `catch` (\((PactError EvalError _ _ msg) :: PactError) ->
         if "Division by 0" `T.isPrefixOf` msg ||
            "Negative precision not allowed" `T.isPrefixOf` msg
         then discard
@@ -370,6 +396,14 @@ prop_evaluation = property $ do
 
 spec :: Spec
 spec = describe "analyze properties" $ do
+  -- We first check that our translation of types works in both directions.
+  -- This is a pre-requisite to...
+  it "should round-trip types" $ require $ property $ do
+    ety@(EType ty) <- forAll genType
+    maybeTranslateType (reverseTranslateType ty) === Just ety
+
+  -- We check that we can translate terms in both directions. This is a
+  -- pre-requisite to...
   it "should round-trip terms" $ require $ property $ (do
     etm@(ESimple ty _tm) <- forAll genTerm
     etm' <- lift $ runMaybeT $
@@ -377,8 +411,6 @@ spec = describe "analyze properties" $ do
     etm' === Just etm)
       `catch` (\(_e :: EmptyInterval)  -> discard)
 
-  it "should round-trip types" $ require $ property $ do
-    ety@(EType ty) <- forAll genType
-    maybeTranslateType (reverseTranslateType ty) === Just ety
-
+  -- We should be able to evaluate a term both normally and symbolically, and
+  -- get the same result in both places.
   it "should evaluate to the same" $ require prop_evaluation
