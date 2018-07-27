@@ -227,6 +227,7 @@ test-suite hspec
       , crypto-api
       , wreq
   other-modules:
+                AnalyzeProperties
                 AnalyzeSpec
                 Blake2Spec
                 KeysetSpec
