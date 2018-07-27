@@ -15,10 +15,8 @@
 
 module Pact.Native.Ops
     ( opDefs
-    , modDef
-    , addDef
-    , subDef
-    , mulDef
+    , orDef, andDef, notDef
+    , modDef, addDef, subDef, mulDef
     , divDef, powDef, logDef
     , sqrtDef, lnDef, expDef, absDef
     , roundDef, ceilDef, floorDef
@@ -36,7 +34,7 @@ import Pact.Types.Runtime
 
 import Pact.Eval
 
-modDef, addDef, subDef, mulDef, divDef, powDef, logDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef :: NativeDef
+modDef, addDef, subDef, mulDef, divDef, powDef, logDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef, orDef, andDef, notDef :: NativeDef
 
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger) "X modulo Y. `(mod 13 8)`"
 addDef = defRNative "+" plus plusTy
@@ -79,36 +77,23 @@ eqA :: Type n
 eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
   TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
 
+orDef = defLogic "or" (||) True
+andDef = defLogic "and" (&&) False
+notDef = defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
+
 opDefs :: NativeModule
 opDefs = ("Operators",
-    [gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
-    ,defLogic "or" (||) True
-    ,defLogic "and" (&&) False
-    ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
-
-    ,liftLogic "or?" (||) "or" True
+    [liftLogic "or?" (||) "or" True
     ,liftLogic "and?" (&&) "and" False
     ,defNative "not?" liftNot
      (funType tTyBool [("app",logicLam r),("value",r)])
      ("Apply logical 'not' to the results of applying VALUE to APP. " <>
       "`(not? (> 20) 15)`")
 
-
-    , addDef
-    , subDef
-    , mulDef
-    , divDef
-    , powDef
-    , logDef
-
-    ,modDef
-    ,sqrtDef
-    , lnDef
-    , expDef
-    , absDef
-    , roundDef
-    , ceilDef
-    , floorDef
+    ,orDef, andDef, notDef
+    ,gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
+    ,addDef, subDef, mulDef, divDef, powDef, logDef
+    ,modDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef
     ])
     where r = mkTyVar "r" []
 

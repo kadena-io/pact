@@ -220,6 +220,12 @@ genCore SizedBool = Gen.recursive Gen.choice [
        Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
          \(ESimple TBool x) (ESimple TBool y) ->
            pure $ ESimple TBool $ BoolComparison op (Inj x) (Inj y)
+  , do op <- Gen.element [AndOp, OrOp]
+       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $
+         \(ESimple TBool x) (ESimple TBool y) ->
+           pure $ ESimple TBool $ Logical op [Inj x, Inj y]
+  , Gen.subtermM (genCore SizedBool) $ \(ESimple TBool x) ->
+      pure $ ESimple TBool $ Logical NotOp [Inj x]
   ]
 genCore SizedTime = Gen.recursive Gen.choice [
     ESimple TTime . Lit <$> Gen.enumBounded -- Gen.int64
@@ -272,13 +278,18 @@ roundingLikeOpToDef = \case
 
 comparisonOpToDef :: ComparisonOp -> NativeDef
 comparisonOpToDef = \case
-  Gt -> gtDef
-  Lt -> ltDef
+  Gt  -> gtDef
+  Lt  -> ltDef
   Gte -> gteDef
   Lte -> lteDef
-  Eq -> eqDef
+  Eq  -> eqDef
   Neq -> neqDef
 
+logicalOpToDef :: LogicalOp -> NativeDef
+logicalOpToDef = \case
+  AndOp -> andDef
+  OrOp  -> orDef
+  NotOp -> notDef
 
 toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
 toPact = \case
@@ -385,6 +396,11 @@ toPact = \case
     y' <- toPact $ ESimple TDecimal y
     let (_, defTm) = defAddTime
     Just $ TApp (liftTerm defTm) [x', y'] dummyInfo
+
+  ESimple TBool (Inj (Logical op args)) -> do
+    args' <- traverse (toPact . ESimple TBool) args
+    let (_, defTm) = logicalOpToDef op
+    Just $ TApp (liftTerm defTm) args' dummyInfo
 
   ESimple TInt     (PureTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
