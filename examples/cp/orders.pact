@@ -1,4 +1,6 @@
-(module orders 'cp-module-admin
+(module orders 'module-admin
+
+  (use mpid)
 
   (defschema order
     cusip:string
@@ -20,6 +22,7 @@
 
   (defun new-order (order-id cusip buyer seller qty price ccy date)
     "Create new order ORDER-ID"
+    (enforce-mpid-auth buyer)
     (insert orders order-id {
         "cusip": cusip,
         "buyer": buyer,

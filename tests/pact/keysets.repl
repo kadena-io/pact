@@ -1,9 +1,9 @@
 
 (begin-tx)
 (env-data { "kall": ["a" "b" "c"] })
-(define-keyset 'k (sig-keyset))
+(define-keyset "k" (sig-keyset))
 (define-keyset 'kall (read-keyset "kall"))
-(module keysets 'k
+(module keysets "k"
   (defschema sch value:bool)
   (deftable tbl:{sch})
   (defun keys-3 (count matched) (>= matched 3))

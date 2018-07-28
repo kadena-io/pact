@@ -82,7 +82,6 @@ instance Ord Info where
   Info Nothing <= _ = True
   _ <= Info Nothing = False
 
-
 instance Default Info where def = Info Nothing
 
 

@@ -1,0 +1,12 @@
+# To use, first load mock system module, then load accounts.
+# Command line:
+# $ pact -a examples/accounts/mock-system.yaml | curl -d @- http://localhost:8080/api/v1/send
+# $ pact -a examples/accounts/accounts.yaml | curl -d @- http://localhost:8080/api/v1/send
+
+codeFile: ../../examples/accounts/accounts.pact
+data:
+  accounts-admin-keyset: ["ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"]
+keyPairs:
+  - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+    secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+nonce: setup-step02

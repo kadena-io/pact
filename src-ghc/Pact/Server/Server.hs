@@ -14,10 +14,11 @@
 
 module Pact.Server.Server
   ( serve
+  , setupServer
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.Async (async, link)
+import Control.Concurrent.Async (async, link, Async(..))
 import Control.Monad
 import Control.Monad.State
 import Control.Exception
@@ -67,6 +68,13 @@ usage =
 
 serve :: FilePath -> IO ()
 serve configFile = do
+  (runServer, asyncCmd, asyncHist) <- setupServer configFile
+  link asyncCmd   -- Must be individually killed with uninterruptibleCancel
+  link asyncHist  -- Must be individually killed with uninterruptibleCancel
+  runServer
+
+setupServer :: FilePath -> IO ((IO (), Async (), Async ()))
+setupServer configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
       putStrLn usage
@@ -79,9 +87,10 @@ serve configFile = do
           (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
           _entity
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
-  link =<< async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
-  link =<< async (runHistoryService histConf Nothing)
-  runApiServer histC inC debugFn (fromIntegral _port) _logDir
+  asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
+  asyncHist <- async (runHistoryService histConf Nothing)
+  let runServer = runApiServer histC inC debugFn (fromIntegral _port) _logDir
+  return (runServer,asyncCmd, asyncHist)
 
 initFastLogger :: IO (String -> IO ())
 initFastLogger = do

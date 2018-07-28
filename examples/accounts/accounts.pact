@@ -217,7 +217,6 @@
       )
       a))
 
-
 )
 
 (create-table accounts)

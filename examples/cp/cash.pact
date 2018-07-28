@@ -1,16 +1,18 @@
-(module cash 'cp-module-admin
+(module cash 'module-admin
 
   (defschema entry
     ccy:string
     balance:decimal
     change:decimal
-    date:time)
+    date:time
+    keyset:keyset)
 
   (deftable cash:{entry})
 
   (defun debit (id amount date)
     "Debit ID for AMOUNT, checking balance for available funds"
-    (with-read cash id { "balance":= balance }
+    (with-read cash id { "balance":= balance, "keyset" := ks}
+      (enforce-keyset ks)
       (enforce (>= balance amount) "Insufficient funds")
       (update cash id {
         "balance": (- balance amount),
@@ -35,13 +37,15 @@
     (debit payor amount date)
     (credit payee amount date))
 
-  (defun create-account (id ccy amount date)
+  (defun create-account (id ccy amount date ks)
     "Create account ID for CCY and fund with AMOUNT"
+    (enforce-keyset 'operate-admin)
     (insert cash id {
       "ccy": ccy,
       "balance": amount,
       "change": amount,
-      "date": date })
+      "date": date,
+      "keyset": ks })
   )
 
   (defun read-account (id) (read cash id))

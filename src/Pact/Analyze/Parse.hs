@@ -1,91 +1,124 @@
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Parse
-  ( expToCheck
+  ( PreProp(..)
+  , TableEnv
+  , expToCheck
   , expToProp
   , expToInvariant
-  , textToArithOp
-  , textToComparisonOp
-  , textToLogicalOp
+  , inferProp
   ) where
 
-import           Control.Lens         (at, view, (^.))
-import           Control.Monad.Except (mzero, throwError)
-import           Control.Monad.Gen    (GenT, gen, runGenTFrom)
-import           Control.Monad.Reader (ReaderT, ask, local, runReaderT)
-import           Control.Monad.Trans  (lift)
-import           Data.Foldable        (asum, find)
-import           Data.Map             (Map)
-import qualified Data.Map             as Map
-import           Data.Text            (Text)
-import qualified Data.Text            as T
-import           Prelude              hiding (exp)
+import           Control.Applicative          (Alternative, (<|>))
+import           Control.Lens                 (at, ix, makeLenses, view, (%~),
+                                               (&), (?~), (^.), (^..), (^?))
+import           Control.Monad                (unless)
+import           Control.Monad.Except         (MonadError (throwError))
+import           Control.Monad.Reader         (ReaderT, ask, asks, local,
+                                               runReaderT)
+import           Control.Monad.State.Strict   (StateT, evalStateT)
+import           Data.Foldable                (asum, find)
+import           Data.Map                     (Map)
+import qualified Data.Map                     as Map
+import           Data.Maybe                   (isJust)
+import           Data.Semigroup               ((<>))
+import           Data.Set                     (Set)
+import qualified Data.Set                     as Set
+import           Data.String                  (fromString)
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
+import           Data.Traversable             (for)
+import           Data.Type.Equality           ((:~:) (Refl))
+import           Prelude                      hiding (exp)
 
-import           Pact.Types.Lang      hiding (KeySet, KeySetName, SchemaVar,
-                                       TKeySet, TableName, Type)
-import qualified Pact.Types.Lang      as Pact
-import           Pact.Types.Typecheck (UserType)
+import           Pact.Types.Lang              hiding (EObject, KeySet,
+                                               KeySetName, SchemaVar, TKeySet,
+                                               TableName, Type)
+import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Typecheck         (UserType)
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.PrenexNormalize
+import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
+import           Pact.Analyze.Util
 
-textToArithOp :: Text -> Maybe ArithOp
-textToArithOp = \case
-  "+"   -> Just Add
-  "-"   -> Just Sub
-  "*"   -> Just Mul
-  "/"   -> Just Div
-  "^"   -> Just Pow
-  "log" -> Just Log
-  _     -> Nothing
 
-textToUnaryArithOp :: Text -> Maybe UnaryArithOp
-textToUnaryArithOp = \case
-  "-"    -> Just Negate
-  "sqrt" -> Just Sqrt
-  "ln"   -> Just Ln
-  "exp"  -> Just Exp
-  "abs"  -> Just Abs
-  -- explicitly no signum
-  _      -> Nothing
+-- @PreProp@ stands between @Exp@ and @Prop@.
+--
+-- The conversion from @Exp@ is light, handled in @expToPreProp@.
+data PreProp
+  -- literals
+  = PreIntegerLit Integer
+  | PreStringLit  Text
+  | PreDecimalLit Decimal
+  | PreTimeLit    Time
+  | PreBoolLit    Bool
 
-textToComparisonOp :: Text -> Maybe ComparisonOp
-textToComparisonOp = \case
-  ">"  -> Just Gt
-  "<"  -> Just Lt
-  ">=" -> Just Gte
-  "<=" -> Just Lte
-  "="  -> Just Eq
-  "!=" -> Just Neq
-  _    -> Nothing
+  -- identifiers
+  | PreAbort
+  | PreSuccess
+  | PreResult
+  | PreVar     VarId Text
 
-textToEqNeq :: Text -> Maybe EqNeq
-textToEqNeq = \case
-  "="  -> Just Eq'
-  "!=" -> Just Neq'
-  _    -> Nothing
+  -- quantifiers
+  | PreForall VarId Text QType PreProp
+  | PreExists VarId Text QType PreProp
 
-textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
-textToRoundingLikeOp = \case
-  "round"   -> Just Round
-  "ceiling" -> Just Ceiling
-  "floor"   -> Just Floor
-  _         -> Nothing
+  -- applications
+  | PreApp Text [PreProp]
 
-textToLogicalOp :: Text -> Maybe LogicalOp
-textToLogicalOp = \case
-  "and" -> Just AndOp
-  "or"  -> Just OrOp
-  "not" -> Just NotOp
-  _     -> Nothing
+  | PreAt Text PreProp
+  | PreLiteralObject (Map Text PreProp)
+  deriving Eq
+
+instance UserShow PreProp where
+  userShowsPrec prec = \case
+    PreIntegerLit i -> tShow i
+    PreStringLit t  -> tShow t
+    PreDecimalLit d -> tShow d
+    PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
+    PreBoolLit b    -> tShow (Pact.LBool b)
+
+    PreAbort        -> "abort"
+    PreSuccess      -> "success"
+    PreResult       -> "result"
+    PreVar _id name -> name
+
+    PreForall _vid name qty prop ->
+      "(forall (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+    PreExists _vid name qty prop ->
+      "(exists (" <> name <> ":" <> userShow qty <> ") " <> userShow prop <> ")"
+    PreApp name applicands -> "(" <> name <> " " <> T.unwords
+      ((map userShow) applicands) <> ")"
+
+    PreAt objIx obj      -> "(at '" <> objIx <> " " <> userShow obj <> ")"
+    PreLiteralObject obj -> userShowsPrec prec obj
+
+
+throwErrorT :: MonadError String m => Text -> m a
+throwErrorT = throwError . T.unpack
+
+-- TODO(joel): add location info
+throwErrorIn :: (MonadError String m, UserShow a) => a -> Text -> m b
+throwErrorIn exp text = throwError $ T.unpack $
+  "in " <> userShow exp <> ", " <> text
+
+-- | Just 'asum' with a fallback
+asum' :: (Foldable t, Alternative f) => t (f a) -> f a -> f a
+asum' foldable fallback = asum foldable <|> fallback
 
 textToQuantifier
-  :: Text -> Maybe (UniqueId -> Text -> Ty -> PreProp -> PreProp)
+  :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
 textToQuantifier = \case
   "forall" -> Just PreForall
   "exists" -> Just PreExists
@@ -97,19 +130,37 @@ stringLike = \case
   ELitString str -> Just str
   _              -> Nothing
 
-pattern TableLit :: TableName -> PreProp
-pattern TableLit tn <- PreStringLit (TableName . T.unpack -> tn)
+type TableEnv = TableMap (ColumnMap EType)
 
-pattern ColumnLit :: ColumnName -> PreProp
-pattern ColumnLit tn <- PreStringLit (ColumnName . T.unpack -> tn)
+data PropCheckEnv = PropCheckEnv
+  { _varTys           :: Map VarId QType
+  , _tableEnv         :: TableEnv
+  , _quantifiedTables :: Set TableName
+  -- , _quantifiedColumns :: Set ColumnName
+  }
 
--- TODO: Maybe -> Either
-type PropParse = ReaderT (Map Text UniqueId) (GenT UniqueId Maybe)
+type PropParse = ReaderT (Map Text VarId) (StateT VarId (Either String))
+type PropCheck = ReaderT PropCheckEnv (Either String)
 
--- TODO: Maybe -> Either
-type PropCheck = ReaderT (Map UniqueId EType) Maybe
+type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
-type InvariantParse = ReaderT [Pact.Arg UserType] (Either String)
+makeLenses ''PropCheckEnv
+
+parseTableName :: PreProp -> PropCheck (Prop TableName)
+parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
+parseTableName (PreVar vid name) = do
+  varTy <- view (varTys . at vid)
+  case varTy of
+    Just QTable -> pure (fromString (T.unpack name))
+    _           -> throwError $ T.unpack $
+      "invalid table name: " <> name
+parseTableName bad = throwError $ T.unpack $
+  "invalid table name: " <> userShow bad
+
+parseColumnName :: PreProp -> PropCheck (Prop ColumnName)
+parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
+parseColumnName bad = throwError $ T.unpack $
+  "invalid table name: " <> userShow bad
 
 -- The conversion from @Exp@ to @PreProp@
 --
@@ -134,12 +185,22 @@ expToPreProp = \case
   EList' [EAtom' (textToQuantifier -> Just q), EList' bindings, body] -> do
     bindings' <- propBindings bindings
     let theseBindingsMap = Map.fromList $
-          fmap (\(uid, name, _ty) -> (name, uid)) bindings'
+          fmap (\(vid, name, _ty) -> (name, vid)) bindings'
     body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
     pure $ foldr
-      (\(uid, name, ty) accum -> q uid name ty accum)
+      (\(vid, name, ty) accum -> q vid name ty accum)
       body'
       bindings'
+
+  EList' [EAtom' "at", stringLike -> Just objIx, obj]
+    -> PreAt objIx <$> expToPreProp obj
+  exp@(EList' [EAtom' "at", _, _]) -> throwErrorIn exp
+    "Property object access must use a static string or symbol"
+  Pact.EObject bindings _parsed -> do
+    bindings' <- for bindings $ \(key, body) -> case stringLike key of
+      Just key' -> (key',) <$> expToPreProp body
+      Nothing   -> throwErrorIn key "static key required"
+    pure $ PreLiteralObject $ Map.fromList bindings'
 
   EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
@@ -148,222 +209,438 @@ expToPreProp = \case
   EAtom' "result"  -> pure PreResult
   EAtom' var       -> mkVar var
 
-  _ -> noParse
+  exp -> throwErrorIn exp "expected property"
 
-  where propBindings :: [Exp] -> PropParse [(UniqueId, Text, Ty)]
+  where propBindings :: [Exp] -> PropParse [(VarId, Text, QType)]
         propBindings [] = pure []
         -- we require a type annotation
-        propBindings (EAtom _name _qual Nothing _parsed:_exps) = noParse
-        propBindings (EAtom name _qual (Just ty) _parsed:exps) = do
-          nameTy <- case ty of
-            TyPrim TyString -> do
-              uid <- gen
-              pure (uid, name, Ty (Rep @String))
-            _               -> noParse
+        propBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
+          = throwErrorIn exp
+            "type annotation required for all property bindings."
+        propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
+          nameTy <- case maybeTranslateType' (const Nothing) ty of
+            Just ty' -> do
+              vid <- genVarId
+              pure (vid, name, ty')
+            -- This is challenging because `ty : Pact.Type TypeName`, but
+            -- `maybeTranslateType` handles `Pact.Type UserType`.
+            Nothing -> throwErrorIn exp
+              "currently objects can't be quantified in properties (issue 139)"
           (nameTy:) <$> propBindings exps
-        propBindings _ = noParse
-
-        noParse :: PropParse a
-        noParse = lift (lift Nothing)
+        propBindings exp = throwErrorT $
+          "in " <> userShowList exp <> ", unexpected binding form"
 
         mkVar :: Text -> PropParse PreProp
         mkVar var = do
-          mUid <- view (at var)
-          case mUid of
-            Nothing  -> noParse
-            Just uid -> pure (PreVar uid var)
+          mVid <- view (at var)
+          case mVid of
+            Nothing  -> throwErrorT $
+              "couldn't find property variable " <> var
+            Just vid -> pure (PreVar vid var)
 
-checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
-checkPreProp ty preProp = case (ty, preProp) of
+-- helper view pattern for checking quantifiers
+viewQ :: PreProp -> Maybe
+  ( VarId -> Text -> QType -> Prop Bool -> PropSpecific Bool
+  , VarId
+  , Text
+  , QType
+  , PreProp
+  )
+viewQ = \case
+  PreForall vid name ty' p -> Just (Forall, vid, name, ty', p)
+  PreExists vid name ty' p -> Just (Exists, vid, name, ty', p)
+  _                        -> Nothing
+
+inferrable :: PreProp -> Bool
+inferrable = \case
+  -- we can infer all functions (as is typical bidirectionally), except for
+  -- some overloaded ones.
+  PreApp f _
+    | Just _ <- textToArithOp f      -> False
+    | Just _ <- textToUnaryArithOp f -> False
+    | otherwise                      -> True
+  _                                  -> True
+
+inferVar :: VarId -> Text -> (forall a. Prop a) -> PropCheck EProp
+inferVar vid name prop = do
+  varTy <- view (varTys . at vid)
+  case varTy of
+    Nothing -> throwErrorT $
+      "couldn't find property variable " <> name
+    Just (EType varTy')     -> pure (ESimple varTy' prop)
+    Just (EObjectTy schema) -> pure (EObject schema prop)
+    Just QTable             -> error "Table names cannot be vars"
+    Just QColumnOf{}        -> error "Column names cannot be vars"
+
+inferPreProp :: PreProp -> PropCheck EProp
+inferPreProp preProp = case preProp of
   -- literals
-  (TDecimal, PreDecimalLit a) -> pure (PLit a)
-  (TInt, PreIntegerLit a)     -> pure (PLit a)
-  (TStr, PreStringLit a)      -> pure (PLit (T.unpack a))
-  (TTime, PreTimeLit a)       -> pure (PLit a)
-  (TBool, PreBoolLit a)       -> pure (PLit a)
+  PreDecimalLit a -> pure (ESimple TDecimal (PLit a))
+  PreIntegerLit a -> pure (ESimple TInt (PLit a))
+  PreStringLit a  -> pure (ESimple TStr (PLit (T.unpack a)))
+  PreTimeLit a    -> pure (ESimple TTime (PLit a))
+  PreBoolLit a    -> pure (ESimple TBool (PLit a))
+  PreAbort        -> pure (ESimple TBool (PropSpecific Abort))
+  PreSuccess      -> pure (ESimple TBool (PropSpecific Success))
 
   -- identifiers
-  (TBool, PreAbort)    -> pure Abort
-  (TBool, PreSuccess)  -> pure Success
-  (_, PreResult)       -> pure Result
-  (_, PreVar uid name) -> pure (PVar uid name)
+  PreResult       -> inferVar 0 "result" (PropSpecific Result)
+  PreVar vid name -> inferVar vid name (PureProp (Var vid name))
 
   -- quantifiers
-  (a, PreForall uid name ty' p) -> Forall uid name ty' <$> checkPreProp a p
-  (a, PreExists uid name ty' p) -> Exists uid name ty' <$> checkPreProp a p
+  (viewQ -> Just (q, vid, name, ty', p)) -> do
+    let quantifyTable = case ty' of
+          QTable -> Set.insert (TableName (T.unpack name))
+          _      -> id
+    let modEnv env = env & varTys . at vid  ?~ ty'
+                         & quantifiedTables %~ quantifyTable
 
-  -- TODO: PreAt / PAt
+    ESimple TBool . PropSpecific . q vid name ty'
+      <$> local modEnv (checkPreProp TBool p)
 
-  -- applications
-  (TInt, PreApp "str-length" [str]) -> PStrLength <$> checkPreProp TStr str
+  PreAt objIx obj -> do
+    obj' <- inferPreProp obj
+    case obj' of
+      ESimple ty _ -> throwErrorIn preProp $
+        "expected object (with key " <> tShow objIx <> ") but found type " <>
+        userShow ty
+      EObject objSchema@(Schema tyMap) objProp -> case tyMap ^? ix objIx of
+        Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
+        Just ety@(EType ty) -> pure $ ESimple
+          ty
+          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+        Just ety@(EObjectTy schemaTy) -> pure $ EObject
+          schemaTy
+          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+
+  PreLiteralObject obj -> do
+    obj' <- traverse inferPreProp obj
+    let schema = Schema $ fmap existentialType obj'
+    pure $ EObject schema $ PureProp $ LiteralObject obj'
+
+  -- applications:
+  --
+  -- Function types are inferred; arguments are checked.
+  PreApp "str-length" [str] ->
+    ESimple TInt . PStrLength <$> checkPreProp TStr str
+
+  PreApp "mod" [a, b] -> do
+    it <- PNumerical ... ModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
+    pure $ ESimple TInt it
+  PreApp (textToRoundingLikeOp -> Just op) [a] ->
+    ESimple TInt . PNumerical . RoundingLikeOp1 op <$> checkPreProp TDecimal a
+  PreApp (textToRoundingLikeOp -> Just op) [a, b] -> do
+    it <- RoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
+    pure $ ESimple TDecimal (PNumerical it)
+  PreApp "add-time" [a, b] -> do
+    a' <- checkPreProp TTime a
+    b' <- inferPreProp b
+    case b' of
+      ESimple TInt     b'' -> pure $ ESimple TTime $ PIntAddTime a' b''
+      ESimple TDecimal b'' -> pure $ ESimple TTime $ PDecAddTime a' b''
+      _                    -> throwErrorIn b $
+        "expected integer or decimal, found " <> userShow (existentialType b')
+
+  PreApp op'@(textToComparisonOp -> Just op) [a, b] -> do
+    a' <- inferPreProp a
+    b' <- inferPreProp b
+    let ret :: (ComparisonOp -> Prop a -> Prop a -> Prop Bool)
+            -> Prop a -> Prop a -> PropCheck EProp
+        ret c aProp bProp = pure $ ESimple TBool $ c op aProp bProp
+        eqNeqMsg :: Text -> Text
+        eqNeqMsg nouns = nouns
+                      <> " only support equality (=) / inequality (!=) checks"
+    case (a', b') of
+      (ESimple aTy aProp, ESimple bTy bProp) -> case typeEq aTy bTy of
+        Nothing -> typeError preProp aTy bTy
+        Just Refl -> case aTy of
+          TInt     -> ret (PureProp .... IntegerComparison) aProp bProp
+          TDecimal -> ret (PureProp .... DecimalComparison) aProp bProp
+          TTime    -> ret (PureProp .... TimeComparison) aProp bProp
+          TBool    -> ret (PureProp .... BoolComparison) aProp bProp
+          TStr     -> ret (PureProp .... StringComparison) aProp bProp
+          TAny     -> throwErrorIn preProp $
+            "cannot compare objects of type " <> userShow aTy
+          TKeySet  -> case textToEqNeq op' of
+            Just eqNeq -> pure $ ESimple TBool $ PKeySetEqNeq eqNeq aProp bProp
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
+      (EObject _ aProp, EObject _ bProp) -> case textToEqNeq op' of
+          Just eqNeq -> pure $ ESimple TBool $ PureProp $ ObjectEqNeq eqNeq aProp bProp
+          Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
+      (_, _) -> throwErrorIn preProp $
+        "can't compare primitive types with objects (found " <>
+        userShow (existentialType a') <> " and " <>
+        userShow (existentialType b') <> ")"
+
+  PreApp op'@(textToLogicalOp -> Just op) args -> do
+    ESimple TBool <$> case (op, args) of
+      (NotOp, [a])    -> PNot <$> checkPreProp TBool a
+      (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
+      (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
+      _               -> throwErrorIn preProp $
+        op' <> " applied to wrong number of arguments"
+
+  PreApp "when" [a, b] -> do
+    propNotA <- PNot <$> checkPreProp TBool a
+    ESimple TBool . POr propNotA <$> checkPreProp TBool b
+
+  --
+  -- TODO: should be "table-written"
+  --
+  PreApp "table-write" [tn] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    pure $ ESimple TBool (PropSpecific (TableWrite tn'))
+  PreApp "table-read" [tn] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    pure $ ESimple TBool (PropSpecific (TableRead tn'))
+
+  --
+  -- NOTE: disabled until implemented on the backend:
+  --
+  -- (TBool, PreApp "column-written" [PLit tn, PLit cn])
+  --   -> pure (ColumnWrite tn cn)
+  -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
+  --   -> pure (ColumnRead tn cn)
+
+  PreApp "cell-delta" [tn, cn, rk] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    asum
+      [ do
+          _   <- expectColumnType tn' cn' TInt
+          ESimple TInt . PropSpecific . IntCellDelta tn' cn' <$> checkPreProp TStr rk
+      , do
+          _   <- expectColumnType tn' cn' TDecimal
+          ESimple TDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp TStr rk
+      ]
+  PreApp "column-delta" [tn, cn] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    asum
+      [ do
+          _   <- expectColumnType tn' cn' TInt
+          pure $ ESimple TInt (PropSpecific (IntColumnDelta tn' cn'))
+      , do
+          _   <- expectColumnType tn' cn' TDecimal
+          pure $ ESimple TDecimal (PropSpecific (DecColumnDelta tn' cn'))
+      ]
+  PreApp "row-read" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    ESimple TBool . PropSpecific . RowRead tn' <$> checkPreProp TStr rk
+  PreApp "row-read-count" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    ESimple TInt . PropSpecific . RowReadCount tn' <$> checkPreProp TStr rk
+  --
+  -- TODO: should be "row-written"
+  --
+  PreApp "row-write" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    ESimple TBool . PropSpecific . RowWrite tn' <$> checkPreProp TStr rk
+  PreApp "row-write-count" [tn, rk] -> do
+    tn' <- parseTableName tn
+    _   <- expectTableExists tn'
+    ESimple TInt . PropSpecific . RowWriteCount tn' <$> checkPreProp TStr rk
+  PreApp "authorized-by" [PreStringLit ks]
+    -> pure $ ESimple TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
+  PreApp "row-enforced" [tn, cn, rk] -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    _   <- expectColumnType tn' cn' TKeySet
+    ESimple TBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp TStr rk
+
+  _ -> throwErrorIn preProp "could not infer type"
+
+checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
+checkPreProp ty preProp
+  | inferrable preProp = do
+    eprop <- inferPreProp preProp
+    case eprop of
+      ESimple ty' prop -> case typeEq ty ty' of
+        Just Refl -> pure prop
+        Nothing   -> typeError preProp ty ty'
+      EObject ty' _prop -> typeError preProp ty ty'
+  | otherwise = case (ty, preProp) of
+
   (TStr, PreApp "+" [a, b])
     -> PStrConcat <$> checkPreProp TStr a <*> checkPreProp TStr b
-
-  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> asum
-    [ PDecArithOp    op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-    , PDecIntArithOp op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
-    , PIntDecArithOp op <$> checkPreProp TInt a     <*> checkPreProp TDecimal b
-    ]
+  (TDecimal, PreApp (textToArithOp -> Just op) [a, b]) -> do
+    a' <- inferPreProp a
+    b' <- inferPreProp b
+    case (a', b') of
+      (ESimple TDecimal aprop, ESimple TDecimal bprop) ->
+        pure $ PNumerical $ DecArithOp op aprop bprop
+      (ESimple TDecimal aprop, ESimple TInt bprop) ->
+        pure $ PNumerical $ DecIntArithOp op aprop bprop
+      (ESimple TInt aprop, ESimple TDecimal bprop) ->
+        pure $ PNumerical $ IntDecArithOp op aprop bprop
+      (_, _) -> throwErrorIn preProp $
+        "unexpected argument types for (+): " <>
+        userShow (existentialType a') <> " and " <>
+        userShow (existentialType b')
   (TInt, PreApp (textToArithOp -> Just op) [a, b])
-    -> PIntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
+    -> PNumerical ... IntArithOp op <$> checkPreProp TInt a <*> checkPreProp TInt b
   (TDecimal, PreApp (textToUnaryArithOp -> Just op) [a])
-    -> PDecUnaryArithOp op <$> checkPreProp TDecimal a
+    -> PNumerical . DecUnaryArithOp op <$> checkPreProp TDecimal a
   (TInt, PreApp (textToUnaryArithOp -> Just op) [a])
-    -> PIntUnaryArithOp op <$> checkPreProp TInt a
+    -> PNumerical . IntUnaryArithOp op <$> checkPreProp TInt a
 
-  (TInt, PreApp "mod" [a, b])
-    -> PModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
-  (TInt, PreApp (textToRoundingLikeOp -> Just op) [a])
-    -> PRoundingLikeOp1 op <$> checkPreProp TDecimal a
-  (TDecimal, PreApp (textToRoundingLikeOp -> Just op) [a, b])
-    -> PRoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
-  (TTime, PreApp "add-time" [a, b]) -> do
-    a' <- checkPreProp TTime a
-    asum
-      [ PIntAddTime a' <$> checkPreProp TInt b
-      , PDecAddTime a' <$> checkPreProp TDecimal b
-      ]
+  _ -> throwErrorIn preProp $ "type error: expected type " <> userShow ty
 
-  (TBool, PreApp op'@(textToComparisonOp -> Just op) [a, b]) -> asum
-    [ PIntegerComparison op <$> checkPreProp TInt a     <*> checkPreProp TInt b
-    , PDecimalComparison op <$> checkPreProp TDecimal a <*> checkPreProp TDecimal b
-    , PTimeComparison    op <$> checkPreProp TTime a    <*> checkPreProp TTime b
-    , PBoolComparison    op <$> checkPreProp TBool a    <*> checkPreProp TBool b
-    , PStringComparison  op <$> checkPreProp TStr a     <*> checkPreProp TStr b
-    , case textToEqNeq op' of
-      Just eqNeq -> PKeySetEqNeq eqNeq
-        <$> checkPreProp TKeySet a
-        <*> checkPreProp TKeySet b
-      Nothing -> mzero
-    ]
+typeError :: (UserShow a, UserShow b) => PreProp -> a -> b -> PropCheck c
+typeError preProp a b = throwErrorIn preProp $
+  "type error: " <> userShow a <> " vs " <> userShow b
 
-  (TBool, PreApp (textToLogicalOp -> Just op) args) -> case (op, args) of
-    (NotOp, [a])    -> PNot <$> checkPreProp TBool a
-    (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b
-    (OrOp, [a, b])  -> POr  <$> checkPreProp TBool a <*> checkPreProp TBool b
-    _               -> mzero
+expectColumnType
+  :: Prop TableName -> Prop ColumnName -> Type a -> PropCheck ()
+expectColumnType (PLit tn) (PLit cn) expectedTy = do
+  tys <- asks (^.. tableEnv . ix tn . ix cn)
+  case tys of
+    [EType foundTy] -> case typeEq foundTy expectedTy of
+      Nothing   -> throwErrorT $
+        "expected column " <> userShow cn <> " in table " <> userShow tn <>
+        " to have type " <> userShow expectedTy <> ", instead found " <>
+        userShow foundTy
+      Just Refl -> pure ()
+    _ -> throwErrorT $
+      "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
+expectColumnType _ _ _
+  = error "table and column names must be concrete at this point"
 
-  (TBool, PreApp "when" [a, b]) -> do
-    propNotA <- PNot <$> checkPreProp TBool a
-    POr propNotA <$> checkPreProp TBool b
-
-  (TBool, PreApp "table-write" [TableLit tn]) -> pure (TableWrite tn)
-  (TBool, PreApp "table-read" [TableLit tn])  -> pure (TableRead tn)
-  (TBool, PreApp "column-write" [TableLit tn, ColumnLit cn])
-    -> pure (ColumnWrite tn cn)
-  (TBool, PreApp "cell-increase" [TableLit tn, ColumnLit cn])
-    -> pure (CellIncrease tn cn)
-  (TInt, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
-    -> IntCellDelta tn cn <$> checkPreProp TStr rk
-  (TDecimal, PreApp "cell-delta" [TableLit tn, ColumnLit cn, rk])
-    -> DecCellDelta tn cn <$> checkPreProp TStr rk
-  (TInt, PreApp "column-delta" [TableLit tn, ColumnLit cn])
-    -> pure (IntColumnDelta tn cn)
-  (TDecimal, PreApp "column-delta" [TableLit tn, ColumnLit cn])
-    -> pure (DecColumnDelta tn cn)
-  (TBool, PreApp "row-read" [TableLit tn, rk])
-    -> RowRead tn <$> checkPreProp TStr rk
-  (TBool, PreApp "row-write" [TableLit tn, rk])
-    -> RowWrite tn <$> checkPreProp TStr rk
-  (TBool, PreApp "authorized-by" [PreStringLit ks])
-    -> pure (KsNameAuthorized (KeySetName ks))
-  (TBool, PreApp "row-enforced" [TableLit tn, ColumnLit cn, rk])
-    -> RowEnforced tn cn <$> checkPreProp TStr rk
-
-  _ -> mzero
+expectTableExists :: Prop TableName -> PropCheck ()
+expectTableExists (PLit tn) = do
+  quantified <- view $ quantifiedTables . at tn
+  defined    <- view $ tableEnv . at tn
+  unless (isJust quantified || isJust defined) $
+    throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
+expectTableExists _ = error "table name must be concrete at this point"
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
---
--- TODO: the one property this can't parse yet is PAt because it includes an
--- EType.
---
 expToCheck
-  :: UniqueId
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
   -- ^ ID to start issuing from
-  -> Map Text UniqueId
-  -- ^ Environment mapping names to unique IDs
-  -> Map UniqueId EType
-  -- ^ Environment mapping unique IDs to their types
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
   -> Exp
   -- ^ Exp to convert
-  -> Maybe Check
-expToCheck genStart nameEnv idEnv body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
-  typedBody    <- runReaderT (checkPreProp TBool preTypedBody) idEnv
+  -> Either String Check
+expToCheck tableEnv' genStart nameEnv idEnv body = do
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  typedBody <- runReaderT (checkPreProp TBool preTypedBody) env
   pure $ PropertyHolds $ prenexConvert typedBody
 
 expToProp
-  :: UniqueId
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
   -- ^ ID to start issuing from
-  -> Map Text UniqueId
-  -- ^ Environment mapping names to unique IDs
-  -> Map UniqueId EType
-  -- ^ Environment mapping unique IDs to their types
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
   -> Type a
   -- ^ Expected prop type
   -> Exp
   -- ^ Exp to convert
-  -> Maybe (Prop a)
-expToProp genStart nameEnv idEnv ty body = do
-  preTypedBody <- runGenTFrom genStart (runReaderT (expToPreProp body) nameEnv)
-  runReaderT (checkPreProp ty preTypedBody) idEnv
+  -> Either String (Prop a)
+expToProp tableEnv' genStart nameEnv idEnv ty body = do
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  runReaderT (checkPreProp ty preTypedBody) env
+
+inferProp
+  :: TableEnv
+  -- ^ Tables and schemas in scope
+  -> VarId
+  -- ^ ID to start issuing from
+  -> Map Text VarId
+  -- ^ Environment mapping names to var IDs
+  -> Map VarId EType
+  -- ^ Environment mapping var IDs to their types
+  -> Exp
+  -- ^ Exp to convert
+  -> Either String EProp
+inferProp tableEnv' genStart nameEnv idEnv body = do
+  preTypedBody <- evalStateT (runReaderT (expToPreProp body) nameEnv) genStart
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  runReaderT (inferPreProp preTypedBody) env
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
-  (_, EAtom' var) -> do
+  (_, EAtom' varName) -> do
     schemaTys <- ask
-    case find (\arg -> arg ^. aName == var) schemaTys of
-      Just (Pact.Arg _name (TyPrim primTy) _info) -> case (ty, primTy) of
-        (TInt,     TyInteger) -> pure (IVar var)
-        (TDecimal, TyDecimal) -> pure (IVar var)
-        (TTime,    TyTime)    -> pure (IVar var)
-        (TStr,     TyString)  -> pure (IVar var)
-        (TBool,    TyBool)    -> pure (IVar var)
-        (TKeySet,  TyKeySet)  -> pure (IVar var)
-        (_,        TyValue)   -> throwError
+    case find (\(arg, _vid) -> arg ^. aName == varName) schemaTys of
+      Just (Pact.Arg _name (TyPrim primTy) _info, vid) -> case (ty, primTy) of
+        (TInt,     TyInteger) -> pure (PureInvariant (Var vid varName))
+        (TDecimal, TyDecimal) -> pure (PureInvariant (Var vid varName))
+        (TTime,    TyTime)    -> pure (PureInvariant (Var vid varName))
+        (TStr,     TyString)  -> pure (PureInvariant (Var vid varName))
+        (TBool,    TyBool)    -> pure (PureInvariant (Var vid varName))
+        (TKeySet,  TyKeySet)  -> pure (PureInvariant (Var vid varName))
+        (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
-        (_,        _)         -> throwError $
-          "found variable " ++ show var ++ " of type " ++ show primTy ++
-          " where " ++ show ty ++ " was expected"
-      _ -> throwError $ "couldn't find column named " ++ show var
+        (_,        _)         -> throwErrorIn exp $
+          "found variable " <> varName <> " of type " <> tShow primTy <>
+          " where " <> userShow ty <> " was expected"
+      _ -> throwErrorT $ "couldn't find column named " <> varName
 
-  (TDecimal, ELiteral (LDecimal d) _) -> pure (IDecimalLiteral (mkDecimal d))
-  (TInt, ELiteral (LInteger i) _)     -> pure (IIntLiteral i)
-  (TStr, stringLike -> Just s)        -> pure (IStringLiteral s)
+  (TDecimal, ELiteral (LDecimal d) _) -> pure (ILiteral (mkDecimal d))
+  (TInt, ELiteral (LInteger i) _)     -> pure (ILiteral i)
+  (TStr, stringLike -> Just s)        -> pure (ILiteral (T.unpack s))
   (TStr, ELiteral (LString _) _)      -> error "impossible (handled by stringLike)"
-  (TTime, ELiteral (LTime t) _)       -> pure (ITimeLiteral (mkTime t))
-  (TBool, ELiteral (LBool b) _)       -> pure (IBoolLiteral b)
-  (_, ELiteral _ _)                   -> throwError "literal of unexpected type"
+  (TTime, ELiteral (LTime t) _)       -> pure (ILiteral (mkTime t))
+  (TBool, ELiteral (LBool b) _)       -> pure (ILiteral b)
+  (_, ELiteral _ _)                   ->
+    throwErrorIn exp "literal of unexpected type"
 
-  (TInt, EList' [EAtom' "str-length", str]) -> IStrLength <$> expToInvariant TStr str
-  (TStr, EList' [EAtom' "+", a, b])
-    -> IStrConcat <$> expToInvariant TStr a <*> expToInvariant TStr b
+  (TInt, EList' [EAtom' "str-length", str])
+    -> PureInvariant . StrLength <$> expToInvariant TStr str
+  (TStr, EList' [EAtom' "+", a, b]) -> PureInvariant ... StrConcat
+    <$> expToInvariant TStr a <*> expToInvariant TStr b
 
-  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum
-    [ IDecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , IDecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
-    , IIntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
-    ]
+  (TDecimal, EList' [EAtom' (textToArithOp -> Just op), a, b]) -> asum'
+    [ Inj ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , Inj ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
+    , Inj ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
+    ] (throwErrorIn exp "unexpected argument types")
   (TInt, EList' [EAtom' (textToArithOp -> Just op), a, b])
-    -> IIntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
+    -> Inj ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
   (TDecimal, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> IDecUnaryArithOp op <$> expToInvariant TDecimal a
+    -> Inj . DecUnaryArithOp op <$> expToInvariant TDecimal a
   (TInt, EList' [EAtom' (textToUnaryArithOp -> Just op), a])
-    -> IIntUnaryArithOp op <$> expToInvariant TInt a
+    -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
 
-  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum
-    [ IIntComparison op     <$> expToInvariant TInt a     <*> expToInvariant TInt b
-    , IDecimalComparison op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , ITimeComparison op    <$> expToInvariant TTime a    <*> expToInvariant TTime b
-    , IBoolComparison op    <$> expToInvariant TBool a    <*> expToInvariant TBool b
-    , IStringComparison op  <$> expToInvariant TStr a     <*> expToInvariant TStr b
+  (TBool, EList' [EAtom' op'@(textToComparisonOp -> Just op), a, b]) -> asum'
+    [ PureInvariant ... IntegerComparison op
+      <$> expToInvariant TInt a     <*> expToInvariant TInt b
+    , PureInvariant ... DecimalComparison op
+      <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+    , PureInvariant ... TimeComparison op
+      <$> expToInvariant TTime a    <*> expToInvariant TTime b
+    , PureInvariant ... BoolComparison op
+      <$> expToInvariant TBool a    <*> expToInvariant TBool b
+    , PureInvariant ... StringComparison op
+      <$> expToInvariant TStr a     <*> expToInvariant TStr b
     , case textToEqNeq op' of
-      Just eqNeq -> IKeySetEqNeq eqNeq
+      Just eqNeq -> PureInvariant ... KeySetEqNeq eqNeq
         <$> expToInvariant TKeySet a
         <*> expToInvariant TKeySet b
-      Nothing -> mzero
-    ]
+      Nothing -> throwErrorIn exp $
+        op' <> " is an invalid operation for keysets (only = or /= allowed)"
+    ] (throwErrorIn exp "unexpected argument types")
 
   (TBool, EList' (EAtom' op:args))
     | Just op' <- textToLogicalOp op -> do
@@ -372,10 +649,10 @@ expToInvariant ty exp = case (ty, exp) of
       (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
       (OrOp, [a, b])  -> pure (ILogicalOp OrOp [a, b])
       (NotOp, [a])    -> pure (ILogicalOp NotOp [a])
-      _ -> throwError $ "logical op with wrong number of args: " ++ T.unpack op
+      _ -> throwErrorIn exp $ "logical op with wrong number of args: " <> op
 
-  (_, ESymbol {})  -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EAtom {})    -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EList {})    -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EObject {})  -> throwError $ "illegal invariant form: " ++ show exp
-  (_, EBinding {}) -> throwError $ "illegal invariant form: " ++ show exp
+  (_, ESymbol {})      -> throwErrorIn exp "illegal invariant form"
+  (_, EAtom {})        -> throwErrorIn exp "illegal invariant form"
+  (_, EList {})        -> throwErrorIn exp "illegal invariant form"
+  (_, Pact.EObject {}) -> throwErrorIn exp "illegal invariant form"
+  (_, EBinding {})     -> throwErrorIn exp "illegal invariant form"
