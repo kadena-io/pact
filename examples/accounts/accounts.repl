@@ -14,7 +14,7 @@
 (begin-tx)
 (load "accounts.pact")
 (commit-tx)
-(typecheck 'accounts)
+(verify 'accounts)
 (expect "test const evaluation" "ref" accounts.PACT_REF)
 (env-data { "123-keyset": { "keys" : ["user123"], "pred": "keys-all" },
              "456-keyset": { "keys": ["user456"], "pred": "keys-any" } })

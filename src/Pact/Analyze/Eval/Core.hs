@@ -29,7 +29,7 @@ import           Pact.Analyze.Util
 -- uses a 64-bit count of microseconds since the MJD epoch. So, our symbolic
 -- representation is naturally a 64-bit integer.
 --
--- The effect from a Pact-user's point of view is that we stores 6 digits to
+-- The effect from a Pact-user's point of view is that we store 6 digits to
 -- the right of the decimal point in times (even though we don't print
 -- sub-second precision by default...).
 --
@@ -86,12 +86,12 @@ evalComparisonOp op xT yT = do
     Eq  -> x .== y
     Neq -> x ./= y
 
-evalLogicalOp
+evalLogicalOp'
   :: (Analyzer m, Boolean (S a), Show a, SymWord a)
   => LogicalOp
   -> [TermOf m a]
   -> m (S a)
-evalLogicalOp op terms = do
+evalLogicalOp' op terms = do
   symBools <- traverse eval terms
   case (op, symBools) of
     (AndOp, [a, b]) -> pure $ a &&& b

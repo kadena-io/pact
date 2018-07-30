@@ -55,8 +55,8 @@ import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
                                             renderParsed, tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
-                                            Term (TDef, TSchema, TTable),
-                                            asString, tShow)
+                                            Term (TConst, TDef, TSchema,
+                                            TTable), asString, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -348,10 +348,11 @@ moduleTables modules (_mod, modRefs) = ExceptT $ do
   pure $ if null failures then Right tables' else Left (concat failures)
 
 -- Get the set (HashMap) of refs to functions in this module.
-moduleFunRefs :: ModuleData -> HM.HashMap Text Ref
-moduleFunRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
-  Ref (TDef {}) -> True
-  _             -> False
+moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
+moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
+  Ref (TDef {})   -> True
+  Ref (TConst {}) -> True
+  _               -> False
 
 moduleFunChecks
   :: [Table]
@@ -486,11 +487,11 @@ verifyModule
 verifyModule modules moduleData = runExceptT $ do
   tables <- withExceptT ModuleParseFailures $ moduleTables modules moduleData
 
-  let funRefs :: HM.HashMap Text Ref
-      funRefs = moduleFunRefs moduleData
+  let typecheckedRefs :: HM.HashMap Text Ref
+      typecheckedRefs = moduleTypecheckableRefs moduleData
 
-  -- For each ref, if it typechecks as a function (which it should), keep its
-  -- signature.
+  -- For each ref, if it typechecks as a function (it'll be either a function
+  -- or a constant), keep its signature.
   --
   (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
     (\name ref accum -> do
@@ -501,7 +502,7 @@ verifyModule modules moduleData = runExceptT $ do
         _ -> accum
     )
     HM.empty
-    funRefs
+    typecheckedRefs
 
   (funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [Located Check]))
     <- liftEither $ moduleFunChecks tables funTypes
@@ -517,7 +518,7 @@ verifyModule modules moduleData = runExceptT $ do
     Right funChecks'' -> pure funChecks''
 
   funChecks''' <- lift $ traverse verifyFunProps funChecks''
-  invariantChecks <- for funRefs $ \ref -> do
+  invariantChecks <- for typecheckedRefs $ \ref -> do
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants tables ref
 

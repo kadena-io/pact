@@ -297,6 +297,17 @@ spec = describe "analyze" $ do
 
     expectFail code $ Valid $ bnot (Inj (KsNameAuthorized "different-ks")) ==> Abort'
 
+  -- just a sanity check -- we can't prove much until we can talk about
+  -- read-decimal in properties
+  describe "read-decimal" $ do
+    let code =
+          [text|
+            (defun test:decimal ()
+              (read-decimal "foo"))
+          |]
+    expectPass code $ Satisfiable $ CoreProp $ DecimalComparison Eq (Inj Result) 0
+    expectPass code $ Satisfiable $ CoreProp $ DecimalComparison Eq (Inj Result) 1
+
   describe "enforce-keyset.row-level.read" $ do
     let code =
           [text|
@@ -477,6 +488,107 @@ spec = describe "analyze" $ do
     expectFail code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
       Inj (RowWrite "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
+
+  describe "enforce-one.1" $ do
+    let code =
+          [text|
+        (defun test:bool (systime:time timeout:time)
+          (enforce-one
+            "Cancel can only be effected by creditor, or debitor after timeout"
+            [(enforce-keyset 'ck)
+             (and (enforce (>= systime timeout) "Timeout expired")
+                  (enforce-keyset 'dk))]))
+          |]
+
+    let systime = PVar 1 "systime"
+        timeout = PVar 2 "timeout"
+    expectPass code $ Valid $ Inj Success ==>
+      POr
+        (Inj (KsNameAuthorized "ck"))
+        (PAnd
+          (Inj (TimeComparison Gte systime timeout))
+          (Inj (KsNameAuthorized "dk")))
+
+  describe "enforce-one.2" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce false)
+             (enforce true)]))
+          |]
+
+    expectPass code $ Valid $ Inj Success
+
+  describe "enforce-one.3" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce false)
+             (enforce false)]))
+          |]
+
+    expectPass code $ Valid $ PNot $ Inj Success
+
+  describe "enforce-one.4" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(enforce true)
+             (and (enforce true)
+                  (enforce false))]))
+          |]
+
+    expectPass code $ Valid $ Inj Success
+
+  -- This one is a little subtle. Even though the `or` would evaluate to
+  -- `true`, one of its `enforce`s threw, so it fails.
+  describe "enforce-one.5" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(or (enforce false)
+                 (enforce true))]))
+          |]
+
+    expectPass code $ Valid $ PNot $ Inj Success
+
+  -- This one is also subtle. `or` short-circuits so the second `enforce` never
+  -- throws.
+  describe "enforce-one.5" $ do
+    let code =
+          [text|
+        (defun test:bool ()
+          (enforce-one ""
+            [(or (enforce true)
+                 (enforce false))]))
+          |]
+
+    expectPass code $ Valid $ Inj Success
+
+  describe "logical short-circuiting" $ do
+    describe "and" $ do
+      let code =
+            [text|
+          (defun test:bool (x: bool)
+            (and x (enforce false)))
+            |]
+
+      expectPass code $ Valid $ PVar 1 "x" ==> PNot (Inj Success)
+      expectPass code $ Valid $ PNot (PVar 1 "x") ==> (Inj Success)
+
+    describe "or" $ do
+      let code =
+            [text|
+          (defun test:bool (x: bool)
+            (or x (enforce false)))
+            |]
+
+      expectPass code $ Valid $ PVar 1 "x" ==> Inj Success
+      expectPass code $ Valid $ PNot (PVar 1 "x") ==> PNot (Inj Success)
 
   describe "table-read.multiple-read" $
     let code =

@@ -30,7 +30,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite)
+                                              bOr, constrain, false, ite)
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -64,11 +64,25 @@ instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
   evalO            = evalTermO
+  evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
 
+
+evalTermLogicalOp
+  :: LogicalOp
+  -> [Term Bool]
+  -> Analyze (S Bool)
+evalTermLogicalOp AndOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (eval b) (pure false)
+evalTermLogicalOp OrOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (pure true) (eval b)
+evalTermLogicalOp NotOp [a] = bnot <$> eval a
+evalTermLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
@@ -278,9 +292,23 @@ evalTerm = \case
     testPasses <- evalTerm cond
     iteS testPasses (evalTerm then') (evalTerm else')
 
+  -- TODO: check that the body of enforce is pure
   Enforce cond -> do
     cond' <- evalTerm cond
     succeeds %= (&&& cond')
+    pure true
+
+  EnforceOne conds -> do
+    initSucceeds <- use succeeds
+
+    successRecord <- for conds $ \cond -> do
+      succeeds .= true
+      _ <- evalTerm cond
+      use succeeds
+
+    let anySucceeded = bOr successRecord
+    succeeds .= (initSucceeds &&& anySucceeded)
+
     pure true
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
@@ -351,6 +379,7 @@ evalTerm = \case
       evalTerm body
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> evalTerm str
+  ReadDecimal str -> resolveDecimal =<< evalTerm str
 
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT

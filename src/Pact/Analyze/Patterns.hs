@@ -11,7 +11,7 @@ import           Data.Text            (Text)
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (BindType (BindLet, BindSchema),
                                        Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Table),
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
                                        Fun (FDefun, FNative), Named, Node,
                                        PrimValue (PrimLit), Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
@@ -77,9 +77,25 @@ pattern AST_ReadKeyset :: forall a. AST a -> AST a
 pattern AST_ReadKeyset name <-
   App _node (NativeFunc "read-keyset") [name]
 
+pattern AST_ReadDecimal :: forall a. AST a -> AST a
+pattern AST_ReadDecimal name <-
+  App _node (NativeFunc "read-decimal") [name]
+
+pattern AST_ReadInteger :: forall a. AST a -> AST a
+pattern AST_ReadInteger name <-
+  App _node (NativeFunc "read-integer") [name]
+
+pattern AST_ReadMsg :: forall a. AST a -> AST a
+pattern AST_ReadMsg name <-
+  App _node (NativeFunc "read-msg") [name]
+
 pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
+
+pattern AST_EnforceOne :: forall a. [AST a] -> AST a
+pattern AST_EnforceOne enforces <-
+  App _node (NativeFunc "enforce-one") [_, List _ enforces]
 
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-
@@ -157,3 +173,6 @@ pattern AST_At node colName obj <- App node (NativeFunc "at") [colName, obj]
 
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
+
+pattern AST_Step :: AST a
+pattern AST_Step <- Step _ _ _ _

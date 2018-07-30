@@ -411,10 +411,16 @@ data Term ret where
   Sequence        :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
-  Enforce         :: Term Bool -> Term Bool
+  Enforce         :: Term Bool   -> Term Bool
+  EnforceOne      :: [Term Bool] -> Term Bool
+
+  -- Reading from environment
+  ReadKeySet      :: Term String -> Term KeySet
+  ReadDecimal     :: Term String -> Term Decimal
+
+  -- TODO: ReadInteger, ReadMsg
 
   -- Keyset access
-  ReadKeySet      :: Term String -> Term KeySet
   KsAuthorized    :: TagId -> Term KeySet -> Term Bool
   NameAuthorized  :: TagId -> Term String -> Term Bool
 
