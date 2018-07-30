@@ -321,7 +321,7 @@ reduceApp TDef {..} as ai = do
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs <$> _tMeta)
+      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_dmDocs _tMeta)
   appCall fa ai as $ fmap (g,) $ do
     case _tDefType of
       Defun -> reduceBody bod'

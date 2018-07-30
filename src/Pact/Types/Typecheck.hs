@@ -29,7 +29,7 @@ module Pact.Types.Typecheck
     TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
-    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,
+    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlDocModel,tlDoc,
     Special (..),
     Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
@@ -166,25 +166,25 @@ instance Pretty PrimValue where
 data TopLevel t =
   TopFun {
     _tlFun :: Fun t,
-    _tlMeta :: Maybe Meta
+    _tlDocModel :: DocModel
     } |
   TopConst {
     _tlInfo :: Info,
     _tlName :: Text,
     _tlType :: Type UserType,
     _tlConstVal :: AST t,
-    _tlMeta :: Maybe Meta
+    _tlDoc :: Maybe Text
     } |
   TopTable {
     _tlInfo :: Info,
     _tlName :: Text,
     _tlType :: Type UserType,
-    _tlMeta :: Maybe Meta
+    _tlDocModel :: DocModel
   } |
   TopUserType {
     _tlInfo :: Info,
     _tlUserType :: UserType,
-    _tlMeta :: Maybe Meta
+    _tlDoc :: Maybe Text
   }
   deriving (Eq,Functor,Foldable,Traversable,Show)
 instance Pretty t => Pretty (TopLevel t) where

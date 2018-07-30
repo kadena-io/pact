@@ -23,7 +23,7 @@
 
 module Pact.Types.Term
  (
-   Meta(..),mDocs,mMetas,
+   DocModel(..),dmDocs,dmModel,
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
@@ -88,22 +88,14 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Exp
 
-data Meta = Meta
-  { _mDocs :: !Text
-  , _mMetas :: !(M.Map Text Exp)
-  } deriving (Eq,Generic)
-instance NFData Meta
-instance Ord Meta where
-  Meta ad am `compare` Meta bd bm = (ad,M.keys am) `compare` (bd,M.keys bm)
-instance Show Meta where
-  show Meta {..} = case M.toList _mMetas of
-    [] -> show _mDocs
-    ms -> "(" ++ show _mDocs ++ " " ++
-      unwords ((`map` ms) $ \(k,v) ->
-          "(" ++ show k ++ " " ++ show v ++ ")")
-      ++ ")"
-instance ToJSON Meta where
-  toJSON Meta {..} = object [ "docs" .= _mDocs, "metas" .= toJSON (show <$> _mMetas) ]
+
+data DocModel = DocModel
+  { _dmDocs  :: !(Maybe Text)     -- ^ docs
+  , _dmModel :: !(M.Map Text Exp) -- ^ model
+  } deriving (Eq, Show, Generic)
+instance ToJSON DocModel where
+  toJSON DocModel {..} = object
+    [ "docs" .= _dmDocs, "model" .= toJSON (show <$> _dmModel) ]
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 
@@ -218,7 +210,7 @@ instance Show TableName where show (TableName s) = show s
 data Module = Module {
     _mName :: !ModuleName
   , _mKeySet :: !KeySetName
-  , _mMeta :: !(Maybe Meta)
+  , _mMeta :: !DocModel
   , _mCode :: !Code
   , _mHash :: !Hash
   , _mBlessed :: !(HS.HashSet Hash)
@@ -229,12 +221,13 @@ instance Show Module where
 instance ToJSON Module where
   toJSON Module {..} = object $
     ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed ]
-    ++ maybe [] (return . ("meta" .=)) _mMeta
+    -- TODO: write this properly
+    ++ (return . ("meta" .=)) _mMeta
 -- | TODO when we figure out how/if we're storing modules in the database we can
 -- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure Nothing {- o .:? "meta" -} <*>
+    o .: "name" <*> o .: "keyset" <*> pure (DocModel Nothing M.empty) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
@@ -270,7 +263,7 @@ data Term n =
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tMeta :: !(Maybe Meta)
+    , _tMeta :: !DocModel
     , _tInfo :: !Info
     } |
     TNative {
@@ -284,7 +277,7 @@ data Term n =
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !ModuleName
     , _tConstVal :: !(ConstVal (Term n))
-    , _tMeta :: !(Maybe Meta)
+    , _tMeta :: !DocModel
     , _tInfo :: !Info
     } |
     TApp {
@@ -310,7 +303,7 @@ data Term n =
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !ModuleName
-    , _tMeta :: !(Maybe Meta)
+    , _tMeta :: !DocModel
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
     } |
@@ -346,7 +339,7 @@ data Term n =
     , _tModule :: ModuleName
     , _tHash :: !Hash
     , _tTableType :: !(Type (Term n))
-    , _tMeta :: !(Maybe Meta)
+    , _tMeta :: !DocModel
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -357,11 +350,11 @@ instance Show n => Show (Term n) where
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
-      show _tFunType ++ maybeDelim " " _tMeta ++ ")"
+      show _tFunType ++ " " ++ show _tMeta ++ ")"
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
-      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ maybeDelim " " _tMeta ++ ")"
+      "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ " " ++ show _tMeta ++ ")"
     show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show (unscope b) ++ " " ++ show c ++ ")"
@@ -376,10 +369,10 @@ instance Show n => Show (Term n) where
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
     show TSchema {..} =
       "(TSchema " ++ asString' _tModule ++ "." ++ asString' _tSchemaName ++ " " ++
-      show _tFields ++ maybeDelim " " _tMeta ++ ")"
+      show _tFields ++ " " ++ show _tMeta ++ ")"
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
-      ++ maybeDelim " " _tMeta ++ ")"
+      ++ " " ++ show _tMeta ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -579,5 +572,5 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 makeLenses ''Term
 makeLenses ''FunApp
-makeLenses ''Meta
+makeLenses ''DocModel
 makeLenses ''Module

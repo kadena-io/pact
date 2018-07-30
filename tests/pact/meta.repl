@@ -1,28 +1,27 @@
 (define-keyset 'k (sig-keyset))
 
 (module mod 'k
-  (meta "this defines mod"
-   (property (do (crazy stuff))))
+  @doc   "this defines mod"
+  @model (property (do (crazy stuff)))
 
   (defun foo ()
-    (meta "foo the town"
-     (example (foo)))
+    @doc "foo the town"
     1)
 
   (defun foobar ()
-    "docstrings work without meta"
+    "docstrings work without @doc"
     2)
 
-  (defconst BAR 1 (meta "barring disbelief" (anything 1)))
+  (defconst BAR 1 @doc "barring disbelief")
 
-  (defconst BAZ 2 "docstrings work without meta")
+  (defconst BAZ 2 "docstrings work without @doc")
 
   (defschema schema
-    (meta "a schema" (property stuff)))
+    @doc "a schema" @model (property stuff))
 
   (defschema schema2
     "a schema")
 
-  (deftable tbl (meta "a table" (baz quux)))
+  (deftable tbl @doc "a table" @model (baz quux))
   (deftable tbl2 "a table")
 )

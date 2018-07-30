@@ -13,13 +13,13 @@
 
 
   (defschema account
-    (meta "Row type for accounts table."
-      (invariant (>= balance 0.0)))
-     balance:decimal
-     amount:decimal
-     ccy:string
-     auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
-     )
+    @doc   "Row type for accounts table."
+    @model (invariant (>= balance 0.0))
+    balance:decimal
+    amount:decimal
+    ccy:string
+    auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
+    )
 
   (deftable accounts:{account}
     "Main table for accounts module.")
@@ -39,8 +39,8 @@
     ))
 
   (defun transfer (src:string dest:string amount:decimal)
-    (meta "transfer AMOUNT from SRC to DEST"
-      (property (= (column-delta 'accounts 'balance) 0.0)))
+    @doc   "transfer AMOUNT from SRC to DEST"
+    @model (property (= (column-delta 'accounts 'balance) 0.0))
     (debit src amount)
     (credit dest amount))
 
@@ -56,12 +56,13 @@
       ))
 
   (defun read-account-admin (id)
-    (meta "Read data for account ID, admin version"
+    @doc "Read data for account ID, admin version"
+    @model
       (property
         (when
           (not (authorized-by 'accounts-admin-keyset))
           abort)
-        ))
+        )
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 

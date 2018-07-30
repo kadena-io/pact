@@ -776,14 +776,14 @@ mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrev t
   TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
     traverse toUserType (_aType _tConstArg) <*>
-    toAST (_cvRaw _tConstVal) <*> pure _tMeta
+    toAST (_cvRaw _tConstVal) <*> pure (_dmDocs _tMeta)
 mkTop t@TTable {..} = do
   debug $ "===== Table: " ++ abbrev t
   TopTable _tInfo (asString _tModule <> "." <> asString _tTableName) <$>
     traverse toUserType _tTableType <*> pure _tMeta
 mkTop t@TSchema {..} = do
   debug $ "===== Schema: " ++ abbrev t
-  TopUserType _tInfo <$> toUserType' t <*> pure _tMeta
+  TopUserType _tInfo <$> toUserType' t <*> pure (_dmDocs _tMeta)
 mkTop t = die (_tInfo t) $ "Invalid top-level term: " ++ abbrev t
 
 
