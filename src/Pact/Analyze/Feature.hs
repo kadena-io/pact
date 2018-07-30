@@ -78,6 +78,10 @@ data Feature
   | FColumnDelta
   | FRowRead
   | FRowWritten
+  | FRowReadCount
+  | FRowWriteCount
+  | FAuthorizedBy
+  | FRowEnforced
   deriving (Eq, Ord, Show, Bounded, Enum)
 
 data Availability
@@ -779,6 +783,69 @@ doc FRowWritten = Doc
         ]
         (TyCon bool)
   ]
+doc FRowReadCount = Doc
+  "row-read-count"
+  PropOnly
+  "The number of times a row is read during a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-read-count t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon int)
+  ]
+doc FRowWriteCount = Doc
+  "row-write-count"
+  PropOnly
+  "The number of times a row is written during a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-write-count t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon int)
+  ]
+doc FAuthorizedBy = Doc
+  "authorized-by"
+  PropOnly
+  "Whether the named keyset is enforced by the function under analysis"
+  [ Usage
+      "(authorized-by k)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        ]
+        (TyCon bool)
+  ]
+doc FRowEnforced = Doc
+  "row-enforced"
+  PropOnly
+  "Whether the keyset in the row is enforced by the function under analysis"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(row-enforced t c r)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        , ("r", TyCon str)
+        ]
+        (TyCon bool)
+  ]
 
 allFeatures :: [Feature]
 allFeatures = enumFrom minBound
@@ -851,6 +918,10 @@ PAT(SCellDelta, FCellDelta)
 PAT(SColumnDelta, FColumnDelta)
 PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
+PAT(SRowReadCount, FRowReadCount)
+PAT(SRowWriteCount, FRowWriteCount)
+PAT(SAuthorizedBy, FAuthorizedBy)
+PAT(SRowEnforced, FRowEnforced)
 
 -- * 'Text'/op prisms
 

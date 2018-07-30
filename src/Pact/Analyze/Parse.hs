@@ -432,7 +432,7 @@ inferPreProp preProp = case preProp of
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowRead tn' <$> checkPreProp TStr rk
-  PreApp "row-read-count" [tn, rk] -> do
+  PreApp SRowReadCount [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowReadCount tn' <$> checkPreProp TStr rk
@@ -440,13 +440,13 @@ inferPreProp preProp = case preProp of
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowWrite tn' <$> checkPreProp TStr rk
-  PreApp "row-write-count" [tn, rk] -> do
+  PreApp SRowWriteCount [tn, rk] -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowWriteCount tn' <$> checkPreProp TStr rk
-  PreApp "authorized-by" [PreStringLit ks]
+  PreApp SAuthorizedBy [PreStringLit ks]
     -> pure $ ESimple TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
-  PreApp "row-enforced" [tn, cn, rk] -> do
+  PreApp SRowEnforced [tn, cn, rk] -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
