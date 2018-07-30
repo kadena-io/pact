@@ -182,7 +182,7 @@ executable bench
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
-  
+
 test-suite hspec
   type: exitcode-stdio-1.0
   main-is: hspec.hs
@@ -203,8 +203,6 @@ test-suite hspec
               , bytestring
               , mtl
               , text
-              , hedgehog
-              , hw-hspec-hedgehog
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
