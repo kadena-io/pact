@@ -107,9 +107,13 @@ When running pact-serve with persistence enabled, the server automatically repla
 Building
 ---
 
-To build, you'll need a working [Haskell Stack install](https://docs.haskellstack.org/en/stable/README/#how-to-install) . After which, building is as simple as 'stack build'.
+Building Pact used to require a working [Haskell Stack install](https://docs.haskellstack.org/en/stable/README/#how-to-install) . After which, building is as simple as 'stack build'.
 
 To install for use with Atom and the command line, issue 'stack install' and then either add `$HOME/.local/bin` to your path, or symlink `$HOME/.local/bin/pact` somewhere in your PATH.
+
+NOTE: We are currently transitioning to Nix build infrastructure.  Stack builds
+still work right now, but you should start transitioning to Nix using the
+instructions below.
 
 Building with Nix / NixOS
 ---
@@ -158,6 +162,23 @@ You can also build with stack inside this shell as follows:
 
 ```
 $ stack --stack-yaml stack-nix.yaml build
+```
+
+### Hoogle Documentation
+
+Nix has out-of-the-box Hoogle integration.  It allows you to run a local
+Hoogle server with docs for all of the project dependencies.  This is really
+nice for two reasons:
+
+1. You know you're getting correct docs for the exact versions of the packages
+   you are depending on.
+
+2. You don't have to have an internet connection to access them.
+
+To start the hoogle server, run this command from the project root directory.
+
+```
+nix-shell -p 'with import ./. {}; ghc.ghcWithHoogle (p: [p.proj])' --run 'hoogle server --local'
 ```
 
 License
