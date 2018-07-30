@@ -399,9 +399,9 @@ inferPreProp preProp = case preProp of
   --
   -- NOTE: disabled until implemented on the backend:
   --
-  -- (TBool, PreApp "column-written" [PLit tn, PLit cn])
+  -- (TBool, PreApp SColumWritten [PLit tn, PLit cn])
   --   -> pure (ColumnWrite tn cn)
-  -- (TBool, PreApp "column-read" [PLit tn, PLit cn])
+  -- (TBool, PreApp SColumnRead [PLit tn, PLit cn])
   --   -> pure (ColumnRead tn cn)
 
   PreApp SCellDelta [tn, cn, rk] -> do
