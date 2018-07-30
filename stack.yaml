@@ -25,10 +25,4 @@ extra-deps:
 
 flags: {}
 
-ghc-options:
-  # Bump to the old max value for max-pmcheck-iterations (see:
-  # https://ghc.haskell.org/trac/ghc/ticket/11822) to avoid a warning in
-  # Pact.Analyze.Parse, where we use pattern synonyms + view patterns:
-  "$locals": -fmax-pmcheck-iterations=10000000
-
 extra-package-dbs: []

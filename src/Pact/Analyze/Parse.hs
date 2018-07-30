@@ -275,6 +275,17 @@ inferVar vid name prop = do
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
 
+--
+-- NOTE: because we have a lot of cases here and we are using pattern synonyms
+-- in conjunction with view patterns for feature symbols (see
+-- Pact.Analyze.Feature), we use our symbols as values rather than as patterns
+-- (by using a variable @s@ in conjunction with an equality check in a pattern
+-- guard @s == SStringLength@) to avoid triggering GHC's max-pmcheck-iterations
+-- limit for this function.
+--
+-- See GHC ticket 11822 for more details:
+-- https://ghc.haskell.org/trac/ghc/ticket/11822
+--
 inferPreProp :: PreProp -> PropCheck EProp
 inferPreProp preProp = case preProp of
   -- literals
@@ -324,10 +335,10 @@ inferPreProp preProp = case preProp of
   -- applications:
   --
   -- Function types are inferred; arguments are checked.
-  PreApp SStringLength [str] ->
+  PreApp s [str] | s == SStringLength ->
     ESimple TInt . PStrLength <$> checkPreProp TStr str
 
-  PreApp SModulus [a, b] -> do
+  PreApp s [a, b] | s == SModulus -> do
     it <- PNumerical ... ModOp <$> checkPreProp TInt a <*> checkPreProp TInt b
     pure $ ESimple TInt it
   PreApp (toOp roundingLikeOpP -> Just op) [a] ->
@@ -335,7 +346,7 @@ inferPreProp preProp = case preProp of
   PreApp (toOp roundingLikeOpP -> Just op) [a, b] -> do
     it <- RoundingLikeOp2 op <$> checkPreProp TDecimal a <*> checkPreProp TInt b
     pure $ ESimple TDecimal (PNumerical it)
-  PreApp STemporalAddition [a, b] -> do
+  PreApp s [a, b] | s == STemporalAddition -> do
     a' <- checkPreProp TTime a
     b' <- inferPreProp b
     case b' of
@@ -383,15 +394,15 @@ inferPreProp preProp = case preProp of
       _               -> throwErrorIn preProp $
         op' <> " applied to wrong number of arguments"
 
-  PreApp SLogicalImplication [a, b] -> do
+  PreApp s [a, b] | s == SLogicalImplication -> do
     propNotA <- PNot <$> checkPreProp TBool a
     ESimple TBool . POr propNotA <$> checkPreProp TBool b
 
-  PreApp STableWritten [tn] -> do
+  PreApp s [tn] | s == STableWritten -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableWrite tn'))
-  PreApp STableRead [tn] -> do
+  PreApp s [tn] | s == STableRead -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableRead tn'))
@@ -404,7 +415,7 @@ inferPreProp preProp = case preProp of
   -- (TBool, PreApp SColumnRead [PLit tn, PLit cn])
   --   -> pure (ColumnRead tn cn)
 
-  PreApp SCellDelta [tn, cn, rk] -> do
+  PreApp s [tn, cn, rk] | s == SCellDelta -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
@@ -416,7 +427,7 @@ inferPreProp preProp = case preProp of
           _   <- expectColumnType tn' cn' TDecimal
           ESimple TDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp TStr rk
       ]
-  PreApp SColumnDelta [tn, cn] -> do
+  PreApp s [tn, cn] | s == SColumnDelta -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
@@ -428,25 +439,25 @@ inferPreProp preProp = case preProp of
           _   <- expectColumnType tn' cn' TDecimal
           pure $ ESimple TDecimal (PropSpecific (DecColumnDelta tn' cn'))
       ]
-  PreApp SRowRead [tn, rk] -> do
+  PreApp s [tn, rk] | s == SRowRead -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowRead tn' <$> checkPreProp TStr rk
-  PreApp SRowReadCount [tn, rk] -> do
+  PreApp s [tn, rk] | s == SRowReadCount -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowReadCount tn' <$> checkPreProp TStr rk
-  PreApp SRowWritten [tn, rk] -> do
+  PreApp s [tn, rk] | s == SRowWritten -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TBool . PropSpecific . RowWrite tn' <$> checkPreProp TStr rk
-  PreApp SRowWriteCount [tn, rk] -> do
+  PreApp s [tn, rk] | s == SRowWriteCount -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowWriteCount tn' <$> checkPreProp TStr rk
-  PreApp SAuthorizedBy [PreStringLit ks]
-    -> pure $ ESimple TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
-  PreApp SRowEnforced [tn, cn, rk] -> do
+  PreApp s [PreStringLit ks] | s == SAuthorizedBy ->
+    pure $ ESimple TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
+  PreApp s [tn, cn, rk] | s == SRowEnforced -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
     _   <- expectTableExists tn'
