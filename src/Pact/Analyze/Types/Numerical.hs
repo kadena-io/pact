@@ -1,13 +1,13 @@
 {-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE LambdaCase  #-}
 {-# LANGUAGE GADTs              #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Types.Numerical where
 
-import           Data.SBV (AlgReal)
+import           Data.SBV                    (AlgReal)
 
-import Pact.Analyze.Types.UserShow
+import           Pact.Analyze.Types.UserShow
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal

@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NumDecimals         #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE NumDecimals          #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE PatternSynonyms      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 module AnalyzeProperties where
 
 import           Bound                       (closed)
@@ -49,7 +49,7 @@ import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
-import           Pact.Native (lengthDef)
+import           Pact.Native                 (lengthDef)
 import           Pact.Native.Ops
 import           Pact.Native.Time
 import           Pact.Repl                   (initPureEvalEnv)
@@ -59,7 +59,7 @@ import           Pact.Types.Native           (NativeDef)
 import           Pact.Types.Runtime          (PactError (..),
                                               PactErrorType (EvalError),
                                               runEval)
-import           Pact.Types.Term             (Term(TApp, TLiteral, TConst))
+import           Pact.Types.Term             (Term (TApp, TConst, TLiteral))
 import qualified Pact.Types.Term             as Pact
 import qualified Pact.Types.Type             as Pact
 import qualified Pact.Types.Typecheck        as Pact
@@ -109,6 +109,8 @@ data SizedType where
   SizedString  :: Int     -> SizedType
   SizedTime    ::            SizedType
   SizedBool    ::            SizedType
+  SizedKeySet  ::            SizedType
+  -- TODO: objects
 
 -- sizedLog :: NumSize -> (NumSize, NumSize)
 -- sizedLog size =
@@ -168,6 +170,8 @@ instance Extract Time where
     ESimple TTime x -> x
     other -> error (show other)
 
+-- TODO: Var, objects
+-- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => SizedType -> m ETerm
 genCore (SizedInt size) = Gen.recursive Gen.choice [
     ESimple TInt . CoreTerm . Lit <$> genInteger size
@@ -253,12 +257,36 @@ genCore SizedTime = Gen.recursive Gen.choice [
   , Gen.subtermM2 (genCore SizedTime) (genCore (SizedDecimal 1e9)) $ \x y ->
       pure $ ESimple TTime $ Inj $ DecAddTime (extract x) (extract y)
   ]
+genCore SizedKeySet = ESimple TKeySet . CoreTerm . Lit . KeySet
+  <$> genInteger (0 ... 100)
 
 intSize, decSize, strSize :: SizedType
 intSize = SizedInt     (0 +/- 1e25)
 decSize = SizedDecimal (0 +/- 1e25)
 strSize = SizedString  1000
 
+-- TODO
+-- generic:
+-- # IfThenElse
+-- # Let
+-- # Sequence
+-- bool:
+-- # Enforce / EnforceOne
+-- # *Authorized
+-- object:
+-- # Read
+-- string:
+-- # Write
+-- # PactVersion
+-- # Format
+-- # FormatTime
+-- # Hash
+-- time:
+-- # ParseTime
+-- keyset:
+-- # ReadKeySet
+-- decimal:
+-- # ReadDecimal
 genTerm :: MonadGen m => m ETerm
 genTerm = Gen.choice
   [ genCore intSize
@@ -266,7 +294,28 @@ genTerm = Gen.choice
   , genCore strSize
   , genCore SizedBool
   , genCore SizedTime
+  -- , genCore SizedKeySet
+  -- , genTermSpecific SizedBool
   ]
+
+genTermSpecific :: MonadGen m => SizedType -> m ETerm
+genTermSpecific SizedBool          = undefined
+  -- Enforce
+  -- EnforceOne
+  -- KsAuthorized
+  -- NameAuthorized
+  -- Let
+  -- Sequence
+  -- IfThenElse
+genTermSpecific (SizedString _len) = undefined
+  -- Write
+  -- PactVersion
+  -- Format
+  -- FormatTime
+  -- Hash
+  -- Let
+  -- Sequence
+  -- IfThenElse
 
 toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
 toPact = \case
@@ -337,6 +386,9 @@ toPact = \case
     -> Just $ TLiteral (LBool x) dummyInfo
   ESimple TTime    (CoreTerm (Lit x))
     -> Just $ TLiteral (LTime (unMkTime x)) dummyInfo
+
+  ESimple TKeySet  (CoreTerm (Lit _x))
+    -> error "how do we translate keysets?"
 
   tm -> error $ "TODO: toPact " ++ show tm
 
@@ -432,7 +484,9 @@ reverseTranslateType = \case
 
 genType :: MonadGen m => m EType
 genType = Gen.element
-  [ EType TInt, EType TDecimal, EType TBool, EType TStr, EType TTime ]
+  [ EType TInt, EType TDecimal, EType TBool, EType TStr, EType TTime
+  -- , EType TKeySet
+  ]
 
 describeAnalyzeFailure :: AnalyzeFailure -> String
 describeAnalyzeFailure (AnalyzeFailure info err) = unlines

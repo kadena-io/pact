@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
@@ -47,19 +47,19 @@ import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
                                                SymWord, (%))
-import           Data.Semigroup ((<>))
+import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
 import           Pact.Types.Persistence       (WriteType)
-import           Pact.Types.Util (tShow)
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
-import Pact.Analyze.Types.UserShow
+import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
 #define EQ_EXISTENTIAL(tm)                                \
@@ -377,7 +377,7 @@ mkDecimal (Decimal.Decimal places mantissa) = fromRational $
 
 unMkDecimal :: Decimal -> Decimal.Decimal
 unMkDecimal algReal = case Decimal.eitherFromRational (toRational algReal) of
-  Left err -> error err
+  Left err  -> error err
   Right dec -> dec
 
 
