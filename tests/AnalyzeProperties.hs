@@ -124,17 +124,17 @@ arithSize op size = case op of
   Sub -> (size, size)
   Mul -> (sqrt size, sqrt size)
   Div -> (size, size)
-  Pow -> undefined
-  Log -> undefined
+  Pow -> error "not yet implemented: we don't symbolically interpret this operator"
+  Log -> error "not yet implemented: we don't symbolically interpret this operator"
 
 unaryArithSize :: UnaryArithOp -> NumSize -> NumSize
 unaryArithSize op size = case op of
   Negate -> - size
   Sqrt   -> size ** 2
   Abs    -> size -- ?
-  Ln     -> undefined
-  Exp    -> undefined
-  Signum -> undefined
+  Ln     -> error "not yet implemented: we don't symbolically interpret this operator"
+  Exp    -> error "not yet implemented: we don't symbolically interpret this operator"
+  Signum -> error "not yet implemented: we don't symbolically interpret this operator"
 
 mkInt :: MonadGen m => Core Analyze.Term Integer -> m ETerm
 mkInt = pure . ESimple TInt . Inj
@@ -414,7 +414,7 @@ toPact = \case
       Ln     -> lnDef
       Exp    -> expDef
       Abs    -> absDef
-      Signum -> undefined
+      Signum -> error "not yet implemented: we don't generate this operator"
 
     roundingLikeOpToDef :: RoundingLikeOp -> NativeDef
     roundingLikeOpToDef = \case
