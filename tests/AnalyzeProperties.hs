@@ -219,7 +219,6 @@ genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
 genCore (SizedString len) = Gen.recursive Gen.choice [
-    -- TODO: use unicodeAll?
     ESimple TStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
     Gen.subtermM2
