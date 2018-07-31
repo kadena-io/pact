@@ -142,6 +142,8 @@ mkInt = pure . ESimple TInt . Inj
 mkDec :: MonadGen m => Numerical Analyze.Term Decimal -> m ETerm
 mkDec = pure . ESimple TDecimal . Inj . Numerical
 
+-- | When we know what type we'll be receiving from an existential we can
+-- unsafely extract it.
 class Extract a where
   extract :: ETerm -> Analyze.Term a
 
