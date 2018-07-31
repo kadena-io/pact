@@ -57,6 +57,7 @@ import           Prelude                      hiding (Float)
 import           Pact.Types.Persistence       (WriteType)
 import           Pact.Types.Util              (tShow)
 
+import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
@@ -257,23 +258,25 @@ data Prop a
 
 instance UserShow a => UserShow (PropSpecific a) where
   userShowsPrec _d = \case
-    Abort                   -> "abort"
-    Success                 -> "success"
-    Result                  -> "result"
-    Forall _ var ty x       -> parenList ["forall", parens (var <> ":" <> userShow ty), userShow x]
-    Exists _ var ty x       -> parenList ["exists", parens (var <> ":" <> userShow ty), userShow x]
-    TableWrite tab          -> parenList ["table-write", userShow tab]
-    TableRead  tab          -> parenList ["table-read", userShow tab]
+    Abort                   -> STransactionAborts
+    Success                 -> STransactionSucceeds
+    Result                  -> SFunctionResult
+    Forall _ var ty x       -> parenList
+      [SUniversalQuantification, parens (var <> ":" <> userShow ty), userShow x]
+    Exists _ var ty x       -> parenList
+      [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShow x]
+    TableWrite tab          -> parenList [STableWritten, userShow tab]
+    TableRead  tab          -> parenList [STableRead, userShow tab]
     ColumnWrite tab col     -> parenList ["column-write", userShow tab, userShow col]
     ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
-    IntCellDelta tab col rk -> parenList ["int-cell-delta", userShow tab, userShow col, userShow rk]
-    DecCellDelta tab col rk -> parenList ["dec-cell-delta", userShow tab, userShow col, userShow rk]
-    IntColumnDelta tab col  -> parenList ["int-column-delta", userShow tab, userShow col]
-    DecColumnDelta tab col  -> parenList ["dec-column-delta", userShow tab, userShow col]
-    RowRead tab rk          -> parenList ["row-read", userShow tab, userShow rk]
-    RowReadCount tab rk     -> parenList ["row-read-count", userShow tab, userShow rk]
-    RowWrite tab rk         -> parenList ["row-write", userShow tab, userShow rk]
-    RowWriteCount tab rk    -> parenList ["row-write-count", userShow tab, userShow rk]
+    IntCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
+    DecCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
+    IntColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
+    DecColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
+    RowRead tab rk          -> parenList [SRowRead, userShow tab, userShow rk]
+    RowReadCount tab rk     -> parenList [SRowReadCount, userShow tab, userShow rk]
+    RowWrite tab rk         -> parenList [SRowWritten, userShow tab, userShow rk]
+    RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
 
 instance UserShow a => UserShow (Prop a) where
   userShowsPrec d = \case
@@ -285,11 +288,11 @@ instance UserShow a => UserShow (Core Prop a) where
   userShowsPrec d = \case
     Lit a                    -> userShowsPrec d a
     Sym s                    -> tShow s
-    StrConcat x y            -> parenList ["+", userShow x, userShow y]
-    StrLength str            -> parenList ["length", userShow str]
+    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
+    StrLength str            -> parenList [SStringLength, userShow str]
     Numerical tm             -> userShowsPrec d tm
-    IntAddTime x y           -> parenList ["add-time", userShow x, userShow y]
-    DecAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
     DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
     TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
@@ -499,11 +502,11 @@ instance UserShow a => UserShow (Core Term a) where
   userShowsPrec d = \case
     Lit a                    -> userShowsPrec d a
     Sym s                    -> tShow s
-    StrConcat x y            -> parenList ["+", userShow x, userShow y]
-    StrLength str            -> parenList ["length", userShow str]
+    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
+    StrLength str            -> parenList [SStringLength, userShow str]
     Numerical tm             -> userShowsPrec d tm
-    IntAddTime x y           -> parenList ["add-time", userShow x, userShow y]
-    DecAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
     DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
     TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
