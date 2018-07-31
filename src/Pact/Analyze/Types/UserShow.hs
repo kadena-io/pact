@@ -45,6 +45,9 @@ instance UserShow String where
 instance UserShow Int64 where
   userShowsPrec _ = tShow
 
+instance UserShow Text where
+  userShowsPrec _ = tShow
+
 instance UserShow a => UserShow (Map Text a) where
   userShowsPrec _ m =
     let go result k a = result <> ", " <> k <> ": " <> userShow a

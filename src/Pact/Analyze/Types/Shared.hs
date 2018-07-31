@@ -53,7 +53,7 @@ import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
-import           Pact.Types.Util              (AsString)
+import           Pact.Types.Util              (AsString, tShow)
 
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
@@ -330,6 +330,9 @@ newtype Object
   = Object (Map Text TVal)
   deriving (Eq, Show)
 
+instance UserShow Object where
+  userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
+
 instance Monoid Object where
   mempty = Object Map.empty
 
@@ -374,6 +377,12 @@ data AVal
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
+
+instance UserShow AVal where
+  userShowsPrec _ = \case
+    AVal _ sVal -> tShow sVal
+    AnObj obj   -> userShow obj
+    OpaqueVal   -> "[opaque]"
 
 instance EqSymbolic Object where
   Object fields .== Object fields' =

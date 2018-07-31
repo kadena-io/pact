@@ -50,6 +50,7 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
 import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
+import qualified Data.Text                    as Text
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
@@ -167,23 +168,6 @@ data Core t a where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t Bool] -> Core t Bool
 
-instance (UserShow a, UserShow (t a), UserShow (t Integer), UserShow (t Decimal), UserShow (t Time))
-  => UserShow (Core t a) where
-  userShowsPrec d = \case
-    Lit a                     -> userShowsPrec d a
-    Sym s                     -> tShow s
-    StrConcat x y             -> parenList ["+", userShow x, userShow y]
-    StrLength _str            -> parenList ["length", "TODO"]
-    Numerical tm              -> userShowsPrec d tm
-    IntAddTime x y            -> parenList ["add-time", userShow x, userShow y]
-    DecAddTime x y            -> parenList ["add-time", userShow x, userShow y]
-    IntegerComparison op x y  -> parenList [userShow op, userShow x, userShow y]
-    DecimalComparison op x y  -> parenList [userShow op, userShow x, userShow y]
-    TimeComparison op x y     -> parenList [userShow op, userShow x, userShow y]
-    StringComparison op _x _y -> parenList [userShow op, "TODO", "TODO"]
-    BoolComparison op x y     -> parenList [userShow op, userShow x, userShow y]
-    Logical op args           -> parenList $ userShow op : fmap userShow args
-
 deriving instance Eq a   => Eq   (Core Prop a)
 deriving instance Show a => Show (Core Prop a)
 
@@ -271,6 +255,48 @@ data Prop a
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
   deriving (Show, Eq)
+
+instance UserShow a => UserShow (PropSpecific a) where
+  userShowsPrec _d = \case
+    Abort                   -> "abort"
+    Success                 -> "success"
+    Result                  -> "result"
+    Forall _ var ty x       -> parenList ["forall", parens (var <> ":" <> userShow ty), userShow x]
+    Exists _ var ty x       -> parenList ["exists", parens (var <> ":" <> userShow ty), userShow x]
+    TableWrite tab          -> parenList ["table-write", userShow tab]
+    TableRead  tab          -> parenList ["table-read", userShow tab]
+    ColumnWrite tab col     -> parenList ["column-write", userShow tab, userShow col]
+    ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
+    IntCellDelta tab col rk -> parenList ["int-cell-delta", userShow tab, userShow col, userShow rk]
+    DecCellDelta tab col rk -> parenList ["dec-cell-delta", userShow tab, userShow col, userShow rk]
+    IntColumnDelta tab col  -> parenList ["int-column-delta", userShow tab, userShow col]
+    DecColumnDelta tab col  -> parenList ["dec-column-delta", userShow tab, userShow col]
+    RowRead tab rk          -> parenList ["row-read", userShow tab, userShow rk]
+    RowReadCount tab rk     -> parenList ["row-read-count", userShow tab, userShow rk]
+    RowWrite tab rk         -> parenList ["row-write", userShow tab, userShow rk]
+    RowWriteCount tab rk    -> parenList ["row-write-count", userShow tab, userShow rk]
+
+instance UserShow a => UserShow (Prop a) where
+  userShowsPrec d = \case
+    PropSpecific p -> userShowsPrec d p
+    CoreProp     p -> userShowsPrec d p
+
+instance UserShow a => UserShow (Core Prop a) where
+  -- TODO: this is exactly duplicated with `UserShow (Core Term a)`
+  userShowsPrec d = \case
+    Lit a                    -> userShowsPrec d a
+    Sym s                    -> tShow s
+    StrConcat x y            -> parenList ["+", userShow x, userShow y]
+    StrLength str            -> parenList ["length", userShow str]
+    Numerical tm             -> userShowsPrec d tm
+    IntAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    DecAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
+    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    Logical op args          -> parenList $ userShow op : fmap userShow args
 
 instance S :<: Prop where
   inject = CoreProp . Sym
@@ -465,9 +491,50 @@ data Term ret where
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
   Hash            :: ETerm                              -> Term String
 
+instance UserShow a => UserShow (Core Term a) where
+  -- TODO: this is exactly duplicated with `UserShow (Core Prop a)`
+  userShowsPrec d = \case
+    Lit a                    -> userShowsPrec d a
+    Sym s                    -> tShow s
+    StrConcat x y            -> parenList ["+", userShow x, userShow y]
+    StrLength str            -> parenList ["length", userShow str]
+    Numerical tm             -> userShowsPrec d tm
+    IntAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    DecAddTime x y           -> parenList ["add-time", userShow x, userShow y]
+    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
+    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    Logical op args          -> parenList $ userShow op : fmap userShow args
+
 instance UserShow a => UserShow (Term a) where
   userShowsPrec _ = \case
     CoreTerm tm -> userShow tm
+    IfThenElse x y z -> parenList ["if", userShow x, userShow y, userShow z]
+    Let var _ x y    -> parenList ["let", userShow var, userShow x, userShow y]
+    -- TODO(joel): not sure about this one
+    Sequence x y     -> Text.unlines [userShow x, userShow y]
+
+    -- TODO(joel): these two could have messages
+    Enforce x    -> parenList ["enforce", userShow x]
+    EnforceOne x -> parenList ["enforce-one", userShowList x]
+
+    Enforce (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
+    Enforce (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
+    KsAuthorized   _ _
+      -> error "KsAuthorized should only appear inside of an Enforce"
+    NameAuthorized _ _
+      -> error "NameAuthorized should only appear inside of an Enforce"
+
+    Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
+    Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
+    PactVersion          -> parenList ["pact-version"]
+    Format x y           -> parenList ["format", userShow x, userShowList y]
+    FormatTime x y       -> parenList ["format", userShow x, userShow y]
+    ParseTime Nothing y  -> parenList ["parse-time", userShow y]
+    ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
+    Hash x               -> parenList ["hash", userShow x]
 
 instance UserShow ETerm where
   userShowsPrec _ = \case

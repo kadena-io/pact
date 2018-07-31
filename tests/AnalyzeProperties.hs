@@ -33,7 +33,7 @@ import qualified Hedgehog.Gen                as Gen
 import qualified Hedgehog.Range              as Range
 import           Numeric.Interval
 import           Numeric.Interval.Exception  (EmptyInterval)
-import           Test.Hspec                  (Spec, describe, it)
+import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval           (runAnalyze)
@@ -564,6 +564,10 @@ spec = describe "analyze properties" $ do
   -- We should be able to evaluate a term both normally and symbolically, and
   -- get the same result in both places.
   it "should evaluate to the same" $ require prop_evaluation
+
+  it "show round-trip userShow / parse" pending
+
+  it "userShow should have the same result on both the pact and analyze side" pending
 
 -- Usually we run via `spec`, but these are useful for running tests
 -- sequentially (so logs from different threads don't clobber each other)
