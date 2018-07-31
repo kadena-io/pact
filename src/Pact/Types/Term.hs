@@ -220,9 +220,7 @@ instance Show Module where
     "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
 instance ToJSON Module where
   toJSON Module {..} = object $
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed ]
-    -- TODO: write this properly
-    ++ (return . ("meta" .=)) _mMeta
+    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed, "meta" .= _mMeta ]
 -- | TODO when we figure out how/if we're storing modules in the database we can
 -- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where

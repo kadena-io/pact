@@ -22,11 +22,10 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (Prism', ifoldr, ifoldrM, imap,
-                                            itraversed, ix, toListOf,
-                                            traverseOf, traversed, (<&>), (?~),
-                                            (^.), (^?), (^@..), _1, _2)
-import           Control.Monad             (join, void, (>=>))
+import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
+                                            view, (<&>), (^.), (^?), (^@..),
+                                            _1, _2)
+import           Control.Monad             (join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
                                             catchError, runExceptT, throwError,
                                             withExcept, withExceptT)
