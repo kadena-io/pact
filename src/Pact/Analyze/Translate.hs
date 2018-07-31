@@ -686,6 +686,9 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_NFun _ f _
     | f `Set.member` Set.fromList
+      --
+      -- TODO: add symbols these to Feature once implemented.
+      --
       ["map", "make-list", "filter", "reverse", "sort", "take", "fold"]
     -> throwError' $ NoLists astNode
 
