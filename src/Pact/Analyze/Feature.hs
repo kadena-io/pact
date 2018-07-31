@@ -30,8 +30,31 @@ import           Pact.Analyze.Types     hiding (Type, Sym)
 -- user-facing docs from this information.
 --
 
+data Class
+  = CNumerical
+  | CLogical
+  | CObject
+  | CString
+  | CTemporal
+  | CQuantification
+  | CTransactional
+  | CDatabase
+  | CAuthorization
+  deriving (Eq, Ord, Show)
+
+classTitle :: Class -> Text
+classTitle CNumerical = "Numerical"
+classTitle CLogical = "Logical"
+classTitle CObject = "Object"
+classTitle CString = "String"
+classTitle CTemporal = "Temporal"
+classTitle CQuantification = "Quantification"
+classTitle CTransactional = "Transactional"
+classTitle CDatabase = "Database"
+classTitle CAuthorization = "Authorization"
+
 data Feature
-  -- * Numeric operators
+  -- * Numerical operators
   = FAddition
   | FSubtraction
   | FMultiplication
@@ -64,14 +87,16 @@ data Feature
   -- * String operators
   | FStringLength
   | FStringConcatenation
-  -- * Time operators
+  -- * Temporal operators
   | FTemporalAddition
-  -- * Property-specific features
+  -- * Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
+  -- * Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
   | FFunctionResult
+  -- * Database operators
   | FTableWritten
   | FTableRead
   | FCellDelta
@@ -80,6 +105,7 @@ data Feature
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
+  -- * Authorization operators
   | FAuthorizedBy
   | FRowEnforced
   deriving (Eq, Ord, Show, Bounded, Enum)
@@ -92,27 +118,36 @@ data Availability
 data Constraint
   = OneOf [ConcreteType]
   | AnyType
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 data FormType
   = Fun (Maybe Bindings) [(Var, Type)] Type
   | Sym Type
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 data Usage
   = Usage { _usageTemplate    :: Text
           , _usageConstraints :: Map TypeVar Constraint
           , _usageFormType    :: FormType
           }
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
+--
+-- NOTE: if we so chose, this information could provide a good basis for
+-- interactive client-side docs. e.g. a react app, where the user can filter by
+-- availability, class, symbol name, etc.
+--
 data Doc
   = Doc { _docSymbol       :: Text
+        , _docClass        :: Class
         , _docAvailability :: Availability
         , _docDescription  :: Text
         , _docUsages       :: [Usage]
         }
-  deriving (Show)
+  deriving (Eq, Ord, Show)
+
+pattern Feature :: Text -> Class -> Availability -> Text -> [Usage] -> Feature
+pattern Feature s c a d us <- (doc -> Doc s c a d us)
 
 symbol :: Feature -> Text
 symbol = _docSymbol . doc
@@ -120,13 +155,16 @@ symbol = _docSymbol . doc
 availability :: Feature -> Availability
 availability = _docAvailability . doc
 
+class' :: Feature -> Class
+class' = _docClass . doc
+
 newtype Var
   = Var Text
-  deriving (Show, IsString)
+  deriving (Eq, Ord, Show, IsString)
 
 newtype ConcreteType
   = ConcreteType Text
-  deriving (Show, IsString)
+  deriving (Eq, Ord, Show, IsString)
 
 newtype TypeVar
   = TypeVar Text
@@ -135,12 +173,12 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 data Bindings
-  = BindVar TypeVar
+  = BindVar Var Type
   | BindObject
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 int, dec, str, time, bool, obj, ks, tbl, col :: ConcreteType
 int  = "integer"
@@ -159,6 +197,7 @@ doc :: Feature -> Doc
 
 doc FAddition = Doc
   "+"
+  CNumerical
   InvAndProp
   "Addition of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -174,6 +213,7 @@ doc FAddition = Doc
   ]
 doc FSubtraction = Doc
   "-"
+  CNumerical
   InvAndProp
   "Subtraction of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -189,6 +229,7 @@ doc FSubtraction = Doc
   ]
 doc FMultiplication = Doc
   "*"
+  CNumerical
   InvAndProp
   "Multiplication of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -204,6 +245,7 @@ doc FMultiplication = Doc
   ]
 doc FDivision = Doc
   "/"
+  CNumerical
   InvAndProp
   "Division of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -219,6 +261,7 @@ doc FDivision = Doc
   ]
 doc FExponentiation = Doc
   "^"
+  CNumerical
   InvAndProp
   "Exponentiation of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -234,6 +277,7 @@ doc FExponentiation = Doc
   ]
 doc FLogarithm = Doc
   "log"
+  CNumerical
   InvAndProp
   "Logarithm of `x` base `b`."
   [ let a = TyVar $ TypeVar "a"
@@ -249,6 +293,7 @@ doc FLogarithm = Doc
   ]
 doc FNumericNegation = Doc
   "-"
+  CNumerical
   InvAndProp
   "Negation of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -263,6 +308,7 @@ doc FNumericNegation = Doc
   ]
 doc FSquareRoot = Doc
   "sqrt"
+  CNumerical
   InvAndProp
   "Square root of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -277,6 +323,7 @@ doc FSquareRoot = Doc
   ]
 doc FNaturalLogarithm = Doc
   "ln"
+  CNumerical
   InvAndProp
   "Logarithm of integers and decimals base e."
   [ let a = TyVar $ TypeVar "a"
@@ -291,6 +338,7 @@ doc FNaturalLogarithm = Doc
   ]
 doc FExponential = Doc
   "exp"
+  CNumerical
   InvAndProp
   "Exponential of integers and decimals. e raised to the integer or decimal `x`."
   [ let a = TyVar $ TypeVar "a"
@@ -305,6 +353,7 @@ doc FExponential = Doc
   ]
 doc FAbsoluteValue = Doc
   "abs"
+  CNumerical
   InvAndProp
   "Absolute value of integers and decimals."
   [ let a = TyVar $ TypeVar "a"
@@ -319,6 +368,7 @@ doc FAbsoluteValue = Doc
   ]
 doc FBankersRound = Doc
   "round"
+  CNumerical
   InvAndProp
   "Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal."
   [ Usage
@@ -341,6 +391,7 @@ doc FBankersRound = Doc
   ]
 doc FCeilingRound = Doc
   "ceiling"
+  CNumerical
   InvAndProp
   "Rounds the decimal `x` up to the next integer, or to `prec` precision as decimal."
   [ Usage
@@ -351,7 +402,7 @@ doc FCeilingRound = Doc
         [ ("x", TyCon dec)]
         (TyCon int)
   , Usage
-      "(ceiling x)"
+      "(ceiling x prec)"
       Map.empty
       $ Fun
         Nothing
@@ -362,6 +413,7 @@ doc FCeilingRound = Doc
   ]
 doc FFloorRound = Doc
   "floor"
+  CNumerical
   InvAndProp
   "Rounds the decimal `x` down to the previous integer, or to `prec` precision as decimal."
   [ Usage
@@ -372,7 +424,7 @@ doc FFloorRound = Doc
         [ ("x", TyCon dec)]
         (TyCon int)
   , Usage
-      "(floor x)"
+      "(floor x prec)"
       Map.empty
       $ Fun
         Nothing
@@ -383,6 +435,7 @@ doc FFloorRound = Doc
   ]
 doc FModulus = Doc
   "mod"
+  CNumerical
   InvAndProp
   "Integer modulus"
   [ Usage
@@ -400,6 +453,7 @@ doc FModulus = Doc
 
 doc FGreaterThan = Doc
   ">"
+  CLogical
   InvAndProp
   "True if `x` > `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -415,6 +469,7 @@ doc FGreaterThan = Doc
   ]
 doc FLessThan = Doc
   "<"
+  CLogical
   InvAndProp
   "True if `x` < `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -430,6 +485,7 @@ doc FLessThan = Doc
   ]
 doc FGreaterThanOrEqual = Doc
   ">="
+  CLogical
   InvAndProp
   "True if `x` >= `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -445,6 +501,7 @@ doc FGreaterThanOrEqual = Doc
   ]
 doc FLessThanOrEqual = Doc
   "<="
+  CLogical
   InvAndProp
   "True if `x` <= `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -460,6 +517,7 @@ doc FLessThanOrEqual = Doc
   ]
 doc FEquality = Doc
   "="
+  CLogical
   InvAndProp
   "True if `x` = `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -475,6 +533,7 @@ doc FEquality = Doc
   ]
 doc FInequality = Doc
   "!="
+  CLogical
   InvAndProp
   "True if `x` != `y`"
   [ let a = TyVar $ TypeVar "a"
@@ -490,6 +549,7 @@ doc FInequality = Doc
   ]
 doc FLogicalConjunction = Doc
   "and"
+  CLogical
   InvAndProp
   "Short-circuiting logical conjunction"
   [ Usage
@@ -504,6 +564,7 @@ doc FLogicalConjunction = Doc
   ]
 doc FLogicalDisjunction = Doc
   "or"
+  CLogical
   InvAndProp
   "Short-circuiting logical disjunction"
   [ Usage
@@ -518,6 +579,7 @@ doc FLogicalDisjunction = Doc
   ]
 doc FLogicalNegation = Doc
   "not"
+  CLogical
   InvAndProp
   "Logical negation"
   [ Usage
@@ -531,6 +593,7 @@ doc FLogicalNegation = Doc
   ]
 doc FLogicalImplication = Doc
   "when"
+  CLogical
   InvAndProp
   "Logical implication. Equivalent to `(or (not x) y)`."
   [ Usage
@@ -548,6 +611,7 @@ doc FLogicalImplication = Doc
 
 doc FObjectProjection = Doc
   "at"
+  CObject
   InvAndProp
   "Object projection"
   [ Usage
@@ -563,6 +627,7 @@ doc FObjectProjection = Doc
 
 doc FObjectMerge = Doc
   "+"
+  CObject
   InvAndProp
   "Object merge"
   [ Usage
@@ -580,6 +645,7 @@ doc FObjectMerge = Doc
 
 doc FStringLength = Doc
   "length"
+  CString
   InvAndProp -- TODO: double-check that this is true
   "String length"
   [ Usage
@@ -593,6 +659,7 @@ doc FStringLength = Doc
   ]
 doc FStringConcatenation = Doc
   "+"
+  CString
   InvAndProp
   "String concatenation"
   [ Usage
@@ -610,6 +677,7 @@ doc FStringConcatenation = Doc
 
 doc FTemporalAddition = Doc
   "add-time"
+  CTemporal
   InvAndProp
   "Add seconds to a time"
   [ let a = TyVar $ TypeVar "a"
@@ -624,40 +692,52 @@ doc FTemporalAddition = Doc
         (TyCon time)
   ]
 
+--
 -- Property-specific features
+--
+
+-- Quantification features
 
 doc FUniversalQuantification = Doc
   "forall"
+  CQuantification
   PropOnly
   "Bind a universally-quantified variable"
-  [ let r = TyVar $ TypeVar "r"
+  [ let a = TyVar $ TypeVar "a"
+        r = TyVar $ TypeVar "r"
     in Usage
       "(forall (x:string) y)"
       (Map.fromList [("a", AnyType), ("r", AnyType)])
       $ Fun
-        (Just $ BindVar "a")
+        (Just $ BindVar "x" a)
         [ ("y", r)
         ]
         r
   ]
 doc FExistentialQuantification = Doc
   "exists"
+  CQuantification
   PropOnly
   "Bind an existentially-quantified variable"
-  [ let r = TyVar $ TypeVar "r"
+  [ let a = TyVar $ TypeVar "a"
+        r = TyVar $ TypeVar "r"
     in Usage
       "(exists (x:string) y)"
       (Map.fromList [("a", AnyType), ("r", AnyType)])
       $ Fun
-        (Just $ BindVar "a")
+        (Just $ BindVar "x" a)
         [ ("y", r)
         ]
         r
   ]
+
+-- Transactional features
+
 doc FTransactionAborts = Doc
   "abort"
+  CTransactional
   PropOnly
-  "Whether the transaction aborts. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
+  "Whether the transaction aborts. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via `property` implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
   [ Usage
       "abort"
       Map.empty
@@ -665,8 +745,9 @@ doc FTransactionAborts = Doc
   ]
 doc FTransactionSucceeds = Doc
   "success"
+  CTransactional
   PropOnly
-  "Whether the transaction succeeds. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via 'property' implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
+  "Whether the transaction succeeds. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via `property` implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
   [ Usage
       "abort"
       Map.empty
@@ -674,6 +755,7 @@ doc FTransactionSucceeds = Doc
   ]
 doc FFunctionResult = Doc
   "result"
+  CTransactional
   PropOnly
   "The return value of the function under test"
   [ let r = TyVar $ TypeVar "r"
@@ -682,8 +764,12 @@ doc FFunctionResult = Doc
       (Map.fromList [("r", AnyType)])
       (Sym r)
   ]
+
+-- Database features
+
 doc FTableWritten = Doc
   "table-written"
+  CDatabase
   PropOnly
   "Whether a table is written in the function under analysis"
   [ let a = TyVar $ TypeVar "a"
@@ -698,6 +784,7 @@ doc FTableWritten = Doc
   ]
 doc FTableRead = Doc
   "table-read"
+  CDatabase
   PropOnly
   "Whether a table is read in the function under analysis"
   [ let a = TyVar $ TypeVar "a"
@@ -712,6 +799,7 @@ doc FTableRead = Doc
   ]
 doc FCellDelta = Doc
   "cell-delta"
+  CDatabase
   PropOnly
   "The difference in a cell's value before and after the transaction"
   [ let a = TyVar $ TypeVar "a"
@@ -734,6 +822,7 @@ doc FCellDelta = Doc
   ]
 doc FColumnDelta = Doc
   "column-delta"
+  CDatabase
   PropOnly
   "The difference in a column's total summed value before and after the transaction"
   [ let a = TyVar $ TypeVar "a"
@@ -755,6 +844,7 @@ doc FColumnDelta = Doc
   ]
 doc FRowRead = Doc
   "row-read"
+  CDatabase
   PropOnly
   "Whether a row is read in the function under analysis"
   [ let a = TyVar $ TypeVar "a"
@@ -770,6 +860,7 @@ doc FRowRead = Doc
   ]
 doc FRowWritten = Doc
   "row-written"
+  CDatabase
   PropOnly
   "Whether a row is written in the function under analysis"
   [ let a = TyVar $ TypeVar "a"
@@ -785,6 +876,7 @@ doc FRowWritten = Doc
   ]
 doc FRowReadCount = Doc
   "row-read-count"
+  CDatabase
   PropOnly
   "The number of times a row is read during a transaction"
   [ let a = TyVar $ TypeVar "a"
@@ -800,6 +892,7 @@ doc FRowReadCount = Doc
   ]
 doc FRowWriteCount = Doc
   "row-write-count"
+  CDatabase
   PropOnly
   "The number of times a row is written during a transaction"
   [ let a = TyVar $ TypeVar "a"
@@ -813,8 +906,12 @@ doc FRowWriteCount = Doc
         ]
         (TyCon int)
   ]
+
+-- Authorization features
+
 doc FAuthorizedBy = Doc
   "authorized-by"
+  CAuthorization
   PropOnly
   "Whether the named keyset is enforced by the function under analysis"
   [ Usage
@@ -828,6 +925,7 @@ doc FAuthorizedBy = Doc
   ]
 doc FRowEnforced = Doc
   "row-enforced"
+  CAuthorization
   PropOnly
   "Whether the keyset in the row is enforced by the function under analysis"
   [ let a = TyVar $ TypeVar "a"
@@ -847,21 +945,24 @@ doc FRowEnforced = Doc
         (TyCon bool)
   ]
 
-allFeatures :: [Feature]
-allFeatures = enumFrom minBound
+allFeatures :: Set Feature
+allFeatures = Set.fromList $ enumFrom minBound
 
-featuresBy :: Ord a => (Feature -> a) -> Map a (Set Feature)
-featuresBy f = foldl'
-  (\acc feat ->
-    Map.insertWith Set.union (f feat) (Set.singleton feat) acc)
+by :: (Ord a, Ord k) => Set a -> (a -> k) -> Map k (Set a)
+as `by` discrim = foldl'
+  (\acc a ->
+    Map.insertWith Set.union (discrim a) (Set.singleton a) acc)
   Map.empty
-  allFeatures
+  as
 
 availableFeatures :: Map Availability (Set Feature)
-availableFeatures = featuresBy availability
+availableFeatures = allFeatures `by` availability
 
 symbolFeatures :: Map Text (Set Feature)
-symbolFeatures = featuresBy symbol
+symbolFeatures = allFeatures `by` symbol
+
+classFeatures :: Map Class (Set Feature)
+classFeatures = allFeatures `by` class'
 
 -- * Pattern synonyms for matching on symbol names
 
