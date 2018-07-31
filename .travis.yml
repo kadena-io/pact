@@ -23,7 +23,7 @@ script:
 - cachix use pact
 - cachix push pact --watch-store&
 - nix-build -j2
-- cachix push pact result || true
+- cachix push pact $(nix-instantiate) || true
 env:
   global:
     secure: Ar317DmV1LsI9D/U6Cc8h6zOebtyKMaElyHpFzI3SFqF0pQuA+m4n3ZLu2qr11yBXMisxr+5dZb2Bi3b/Bx0TS5KJ15UbsaBCGpdOoIomM/fQX6SemciB65Gs+g0+8n3PIn7L9JCHWuebeNo44DUgCaQ46caV/F5L4jF7AD89D/ny1PKaowvTjdxpI/PbWzjAAkGgw4NSebCfx31MZncEpN3pm/KiiP7VqZ9hGUegB2cqnIMOZRMmYarOY5VmzxuFaw2xJI85rm1ZFFh6+6xO93pQZY+AFtc+UB1oLLn0wVVW+DHla76TvaoXy3+IR/mQhfqLpVtlxK+X0RCjsGJwco6Kh1ki+zM/NNeB0R9mYZVBk7expAsddqAgU63XyUUPiMehNEgtKNBkyJ55pHpVwRyfhor+sMdGZiHlK/ZU+SvV9wO0jYjakWjUtp/GnDRRbA9gXp9Zhx3zeCuB7zgoxrs4PM6zIVom1GYgA7Gfqm6VxetfClNwbw/AXetHHENPcWHEYMINdeVh3aYa65WYlfs20LSQhefwGAuHfEQDTz46D6UpA8BCu3hduEMnPxS2oF28SGj3QJ9oc4bAWICYWWDHItGGh5t7eiHiRFw1Em0eEGxdguR3xYh85Z1OaZ4EhDV59rl5hSoAcDpQ3KCp4XZz9UwIzELzI1rz3IUpFQ=
