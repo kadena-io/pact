@@ -50,6 +50,7 @@ import           Pact.Types.Util            (tShow)
 import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
                                              time)
 import           Pact.Analyze.Patterns
+import           Pact.Analyze.Prisms
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 

@@ -17,6 +17,7 @@ import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, St
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
+import           Pact.Analyze.Prisms
 
 ofBasicOp :: Text -> Maybe Text
 ofBasicOp s = if isBasicOp then Just s else Nothing

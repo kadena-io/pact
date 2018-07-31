@@ -18,10 +18,6 @@ import           Data.String            (IsString)
 import           Data.Text              (Text)
 import           Data.Tuple             (swap)
 
-import qualified Pact.Types.Persistence as Pact
-
-import           Pact.Analyze.Types     hiding (Type, Sym)
-
 --
 -- NOTE: that in the current factoring, there can be multiple features that
 -- share the same symbol -- this is one form of overloading. The "other form"
@@ -1046,65 +1042,3 @@ toOp = preview
 
 toText :: Prism' Text op -> op -> Text
 toText = review
-
-arithOpP :: Prism' Text ArithOp
-arithOpP = mkOpNamePrism
-  [ (SAddition,       Add)
-  , (SSubtraction,    Sub)
-  , (SMultiplication, Mul)
-  , (SDivision,       Div)
-  , (SExponentiation, Pow)
-  , (SLogarithm,      Log)
-  ]
-
-unaryArithOpP :: Prism' Text UnaryArithOp
-unaryArithOpP = mkOpNamePrism
-  [ (SNumericNegation,  Negate)
-  , (SSquareRoot,       Sqrt)
-  , (SNaturalLogarithm, Ln)
-  , (SExponential,      Exp)
-  , (SAbsoluteValue,    Abs)
-  -- explicitly no signum
-  ]
-
-comparisonOpP :: Prism' Text ComparisonOp
-comparisonOpP = mkOpNamePrism
-  [ (SGreaterThan,        Gt)
-  , (SLessThan,           Lt)
-  , (SGreaterThanOrEqual, Gte)
-  , (SLessThanOrEqual,    Lte)
-  , (SEquality,           Eq)
-  , (SInequality,         Neq)
-  ]
-
-eqNeqP :: Prism' Text EqNeq
-eqNeqP = mkOpNamePrism
-  [ (SEquality,   Eq')
-  , (SInequality, Neq')
-  ]
-
-roundingLikeOpP :: Prism' Text RoundingLikeOp
-roundingLikeOpP = mkOpNamePrism
-  [ (SBankersRound, Round)
-  , (SCeilingRound, Ceiling)
-  , (SFloorRound,   Floor)
-  ]
-
-logicalOpP :: Prism' Text LogicalOp
-logicalOpP = mkOpNamePrism
-  [ (SLogicalConjunction, AndOp)
-  , (SLogicalDisjunction, OrOp)
-  , (SLogicalNegation,    NotOp)
-  -- NOTE: that we don't include logical implication here, which only exists in
-  -- the invariant and property languages (not term), and is desugared to a
-  -- combination of negation and disjunction during parsing.
-  ]
-
--- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
--- handles properties and invariants.
-writeTypeP :: Prism' Text Pact.WriteType
-writeTypeP = mkOpNamePrism
-  [ ("insert", Pact.Insert)
-  , ("update", Pact.Update)
-  , ("write",  Pact.Write)
-  ]

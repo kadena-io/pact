@@ -19,6 +19,7 @@ import           Pact.Types.Util          (tShow)
 
 import           Pact.Analyze.Feature     hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.Parse.Types
+import           Pact.Analyze.Prisms
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
