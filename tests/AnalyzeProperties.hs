@@ -1,11 +1,11 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NumDecimals         #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE NumDecimals          #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE PatternSynonyms      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 module AnalyzeProperties where
 
 import           Bound                       (closed)
@@ -49,7 +49,7 @@ import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
-import           Pact.Native (lengthDef)
+import           Pact.Native                 (lengthDef)
 import           Pact.Native.Ops
 import           Pact.Native.Time
 import           Pact.Repl                   (initPureEvalEnv)
@@ -59,7 +59,7 @@ import           Pact.Types.Native           (NativeDef)
 import           Pact.Types.Runtime          (PactError (..),
                                               PactErrorType (EvalError),
                                               runEval)
-import           Pact.Types.Term             (Term(TApp, TLiteral, TConst))
+import           Pact.Types.Term             (Term (TApp, TConst, TLiteral))
 import qualified Pact.Types.Term             as Pact
 import qualified Pact.Types.Type             as Pact
 import qualified Pact.Types.Typecheck        as Pact
@@ -299,7 +299,7 @@ genTerm = Gen.choice
   ]
 
 genTermSpecific :: MonadGen m => SizedType -> m ETerm
-genTermSpecific SizedBool = undefined
+genTermSpecific SizedBool          = undefined
   -- Enforce
   -- EnforceOne
   -- KsAuthorized

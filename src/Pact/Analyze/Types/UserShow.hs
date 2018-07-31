@@ -1,16 +1,16 @@
-{-# language FlexibleInstances #-}
-{-# language OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Pact.Analyze.Types.UserShow where
 
-import Data.SBV (AlgReal, Int64)
-import Data.Semigroup
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Text (Text)
-import qualified Data.Text as T
+import           Data.Map        (Map)
+import qualified Data.Map        as Map
+import           Data.SBV        (AlgReal, Int64)
+import           Data.Semigroup
+import           Data.Text       (Text)
+import qualified Data.Text       as T
 
-import Pact.Types.Exp (Exp)
-import Pact.Types.Util (tShow)
+import           Pact.Types.Exp  (Exp)
+import           Pact.Types.Util (tShow)
 
 class UserShow a where
   userShowsPrec :: Int -> a -> Text
