@@ -178,8 +178,23 @@ nice for two reasons:
 To start the hoogle server, run this command from the project root directory.
 
 ```
-nix-shell -p 'with import ./. {}; ghc.ghcWithHoogle (p: [p.proj])' --run 'hoogle server --local'
+nix-shell -A shells.ghc --run 'hoogle server --local'
 ```
+
+This runs hoogle locally on port 8080.  Running it this way, however, does not
+include haddocks for the pact (or whatever tho local project is).  It only
+includes docs for the dependencies.  To fix this, use the following command
+instead:
+
+```
+nix-shell -p 'with import ./. {}; ghc.ghcWithHoogle (p: [p.pact])' --run 'hoogle server --local'
+```
+
+To use the above command for other projects that use the [`.project`
+function](https://github.com/kadena-io/pact/blob/master/default.nix#L12)
+replace `[p.pact]` with a list of all the locally defined projects to include.
+For example: `[p.backend p.common p.frontend]` for a project that has those
+three separate local packages.
 
 License
 ---
