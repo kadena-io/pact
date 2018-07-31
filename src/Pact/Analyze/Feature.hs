@@ -380,7 +380,7 @@ doc FBankersRound = Doc
         ]
         (TyCon int)
   , Usage
-      "(round x)"
+      "(round x prec)"
       Map.empty
       $ Fun
         Nothing
