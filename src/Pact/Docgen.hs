@@ -1,5 +1,7 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 -- |
 -- Module      :  Pact.Docgen
@@ -12,16 +14,19 @@
 
 module Pact.Docgen where
 
+import           Control.Lens         (ifor_)
 import           Control.Monad
 import           Control.Monad.Catch
+import           Data.Foldable        (for_)
 import           Data.Function
 import           Data.List
 import           Data.Monoid
-import           Data.Text           (replace)
-import qualified Data.Text           as T
+import           Data.Text            (replace)
+import qualified Data.Text            as T
 import           System.IO
-import           Text.Trifecta       hiding (err)
+import           Text.Trifecta        hiding (err)
 
+import qualified Pact.Analyze.Feature as Analyze
 import           Pact.Native
 import           Pact.Repl
 import           Pact.Repl.Lib
@@ -29,7 +34,9 @@ import           Pact.Repl.Types
 import           Pact.Types.Lang
 
 main :: IO ()
-main = withFile "docs/pact-functions.md" WriteMode renderFunctions
+main = do
+  withFile "docs/pact-functions.md"      WriteMode renderFunctions
+  withFile "docs/pact-properties-api.md" WriteMode renderProperties
 
 data ExampleType = Exec | ExecErr | Lit
 
@@ -84,6 +91,72 @@ renderTerm h TNative {..} = do
     _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
   hPutStrLn h ""
 renderTerm _ _ = return ()
+
+renderProperties :: Handle -> IO ()
+renderProperties h = do
+  hPutStrLn h "# Property and Invariant Functions {#properties-and-invariants}"
+  hPutStrLn h ""
+
+  ifor_ Analyze.classFeatures $ \cls features -> do
+    let title = T.unpack $ Analyze.classTitle cls
+    hPutStrLn h $ "## " <> escapeText title <> " operators {#" <> escapeAnchor title <> "}"
+    hPutStrLn h ""
+
+    for_ features $ \feat@(Analyze.Feature (unpack -> sym) _ avail (unpack -> desc) usages) -> do
+      -- NOTE: we use the feature name instead of the anchor-escaped symbol due
+      -- to overloaded symbols.
+      hPutStrLn h $ "### " <> escapeText sym <> " {#" <> show feat <> "}"
+      hPutStrLn h ""
+
+      for_ usages $ \(Analyze.Usage (unpack -> template) constraints formType) -> do
+
+        hPutStrLn h "```lisp"
+        hPutStrLn h template
+        hPutStrLn h "```"
+        hPutStrLn h ""
+
+        -- TODO: potentially move some of this presentation logic elsewhere
+        case formType of
+          Analyze.Sym ty -> do
+            hPutStrLn h  $ "* of type " <> showType ty
+          Analyze.Fun mBindings argTys retTy -> do
+            for_ mBindings $ \case
+              Analyze.BindVar (Analyze.Var (unpack -> var)) (showType -> bTy) ->
+                hPutStrLn h $ "* binds `" <> var <> "` of type " <> bTy
+              Analyze.BindObject ->
+                hPutStrLn h $ "* destructures the provided object"
+            for_ argTys $ \(Analyze.Var (unpack -> arg), showType -> aTy) ->
+              hPutStrLn h $ "* takes `" <> arg <> "` of type " <> aTy
+            hPutStrLn h $ "* produces type " <> showType retTy
+
+        ifor_ constraints $ \(Analyze.TypeVar (unpack -> tv)) constraint ->
+          hPutStrLn h $ "* where _" <> tv <> "_ is "
+                     <> case constraint of
+                          Analyze.AnyType          -> "_any type_"
+                          Analyze.OneOf [ct1, ct2] -> "of type "
+                            <> showConTy ct1 <> " or " <> showConTy ct2
+                          Analyze.OneOf (reverse -> last' : xs) -> "of type "
+                            <> join (fmap ((<> ", ") . showConTy) (reverse xs))
+                            <> " or " <> showConTy last'
+                          Analyze.OneOf _ -> "ERROR"
+        hPutStrLn h ""
+
+      hPutStrLn h desc
+      hPutStrLn h ""
+
+      hPutStrLn h $ "Supported in "
+                 <> case avail of
+                      Analyze.PropOnly   -> "properties only."
+                      Analyze.InvAndProp -> "either invariants or properties."
+      hPutStrLn h ""
+
+  where
+    showConTy :: Analyze.ConcreteType -> String
+    showConTy (Analyze.ConcreteType (unpack -> ct)) = "`" ++ ct ++ "`"
+
+    showType :: Analyze.Type -> String
+    showType (Analyze.TyCon ct) = showConTy ct
+    showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
 
 escapeText :: String -> String
 escapeText n
