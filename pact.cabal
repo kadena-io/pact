@@ -204,8 +204,8 @@ test-suite hspec
               , bytestring
               , mtl
               , text
-              , hedgehog
-              , hw-hspec-hedgehog
+              , hedgehog == 0.6.*
+              , hw-hspec-hedgehog == 0.1.*
               , intervals
   if !impl(ghcjs)
     build-depends:
