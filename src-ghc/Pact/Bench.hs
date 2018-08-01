@@ -28,8 +28,10 @@ import Data.String
 import qualified Data.Map.Strict as M
 import Pact.Persist.MockPersist
 import Pact.Persist
+import Pact.Persist.SQLite
 import Unsafe.Coerce
 import Pact.Gas
+
 
 longStr :: Int -> Text
 longStr n = pack $ "\"" ++ take n (cycle "abcdefghijklmnopqrstuvwxyz") ++ "\""
@@ -112,9 +114,13 @@ main = do
   !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
   !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
   !pureDb <- mkPureEnv neverLog
+  !sqlDb <- mkSQLiteEnv ((newLogger neverLog) "init") True (SQLiteConfig "log/test.sqlite" []) neverLog
   initSchema pureDb
+  initSchema sqlDb
+  !sdbRs <- loadBenchModule sqlDb
   !refStore <- loadBenchModule pureDb
   !benchCmd <- parseCode "(bench.bench)"
+  !queryCmd <- parseCode "(bench.testquery)"
   print =<< runPactExec pureDb refStore benchCmd
   !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
   !mdbRS <- loadBenchModule mockDb
@@ -125,11 +131,14 @@ main = do
   !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
               (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
 
+
   defaultMain [
     benchParse,
     benchCompile parsedExps,
     benchVerify cmds,
     benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
     benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),
-    benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd)
+    benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd),
+    benchNFIO "query" (runPactExec sqlDb sdbRs queryCmd)
+
     ]

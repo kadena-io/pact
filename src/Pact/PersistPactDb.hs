@@ -43,7 +43,7 @@ import Data.Monoid
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding (query)
 import Pact.Persist as P
 import Pact.Types.Logger
 
@@ -145,7 +145,18 @@ pactdb = PactDb
 
  , _getTxLog = \d tid e -> runMVState e $ getLogs d tid
 
+ , _query = \tn f e -> runMVState e $ doQuery tn f
+
  }
+
+doQuery :: TableName -> FilterFun -> MVState p [(RowKey,Columns Persistable)]
+doQuery tn ff = do
+  raw <- doPersist $ \p -> query p (userDataTable tn) Nothing
+  let q (k,v) rs = if ff rk v then (rk,v):rs else rs
+        where rk = RowKey (asString k)
+  return $ foldr q [] raw
+
+
 
 doBegin :: Maybe TxId -> MVState p ()
 doBegin tidm = do

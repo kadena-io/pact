@@ -32,7 +32,7 @@ module Pact.Types.Runtime
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
-   readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
+   readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,query,
    KeyPredBuiltins(..),keyPredBuiltins,
    module Pact.Types.Lang,
    module Pact.Types.Util,
@@ -316,6 +316,9 @@ rollbackTx i = method i $ \db -> _rollbackTx db
 getTxLog :: (IsString k,FromJSON v) => Info -> Domain k v -> TxId -> Eval e [TxLog v]
 getTxLog i d t = method i $ \db -> _getTxLog db d t
 
+query :: Info -> TableName -> FilterFun -> Eval e [(RowKey,Columns Persistable)]
+query i tn f = method i $ \db -> _query db tn f
+
 
 {-# INLINE readRow #-}
 {-# INLINE writeRow #-}
@@ -401,6 +404,7 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
     , _commitTx = diePure
     , _rollbackTx = diePure
     , _getTxLog = \_ _ -> diePure
+    , _query = \_ _ -> diePure
     }
     purity
     _eeHash

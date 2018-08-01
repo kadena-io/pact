@@ -216,13 +216,13 @@ columnsToObject' ty cols (Columns m) = do
 select :: NativeFun e
 select i as@[tbl',cols',app] = do
   cols <- reduce cols' >>= colsToList (argsError' i as)
-  reduce tbl' >>= select' i as (Just cols) app
-select i as@[tbl',app] = reduce tbl' >>= select' i as Nothing app
+  reduce tbl' >>= _select' i as (Just cols) app
+select i as@[tbl',app] = reduce tbl' >>= _select' i as Nothing app
 select i as = argsError' i as
 
-select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
+_select' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
            Term Ref -> Term Name -> Eval e (Gas,Term Name)
-select' i _ cols' app@TApp{} tbl@TTable{} = do
+_select' i _ cols' app@TApp{} tbl@TTable{} = do
     g0 <- computeGas (Right i) $ GSelect cols' app tbl
     guardTable i tbl
     let fi = _faInfo i
@@ -243,7 +243,30 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
                   Just cols -> (:rs) <$> columnsToObject' tblTy cols row
               | otherwise -> return rs
             t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " ++ show t
-select' i as _ _ _ = argsError' i as
+
+_select' i as _ _ _ = argsError' i as
+
+_select'' :: FunApp -> [Term Ref] -> Maybe [(Info,ColumnId)] ->
+           Term Ref -> Term Name -> Eval e (Gas,Term Name)
+_select'' i _ cols' app@TApp{} tbl@TTable{} = do
+    g0 <- computeGas (Right i) $ GSelect cols' app tbl
+    guardTable i tbl
+    let fi = _faInfo i
+        tblTy = _tTableType tbl
+    raw <- query fi (userTable' tbl) (\_ _ -> True)
+    fmap (second (\b -> TList (reverse b) tblTy def)) $ (\f -> foldM f (g0,[]) raw) $ \(gPrev,rs) (_k,row) -> do
+          g <- gasPostRead i gPrev row
+          let obj = columnsToObject tblTy row
+          result <- apply' app [obj]
+          fmap (g,) $ case result of
+            (TLiteral (LBool include) _)
+              | include -> case cols' of
+                  Nothing -> return (obj:rs)
+                  Just cols -> (:rs) <$> columnsToObject' tblTy cols row
+              | otherwise -> return rs
+            t -> evalError (_tInfo app) $ "select: filter returned non-boolean value: " ++ show t
+
+_select'' i as _ _ _ = argsError' i as
 
 
 withDefaultRead :: NativeFun e

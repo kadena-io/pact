@@ -28,7 +28,8 @@ module Pact.Types.Persistence
    WriteType(..),
    Method,
    PactDb(..),
-   TxId(..)
+   TxId(..),
+   FilterFun
    ) where
 
 import Control.Applicative ((<|>))
@@ -266,6 +267,8 @@ instance AsString TxId where asString = pack . show
 -- | Shape of back-end methods: use MVar for state, run in IO.
 type Method e a = MVar e -> IO a
 
+type FilterFun = (RowKey -> Columns Persistable -> Bool)
+
 -- | Fun-record type for Pact back-ends.
 data PactDb e = PactDb {
     -- | Read a domain value at key, throwing an exception if not found.
@@ -292,4 +295,5 @@ data PactDb e = PactDb {
     -- | Get transaction log for table. TxLogs are expected to be user-visible format.
   , _getTxLog :: forall k v . (IsString k,FromJSON v) =>
                  Domain k v -> TxId -> Method e [TxLog v]
+  , _query :: TableName -> FilterFun -> Method e [(RowKey,Columns Persistable)]
 }

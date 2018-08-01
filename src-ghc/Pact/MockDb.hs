@@ -69,6 +69,8 @@ pactdb (MockDb (MockRead r) (MockKeys ks) (MockTxIds tids) (MockGetUserTableInfo
   _rollbackTx = rc ()
   ,
   _getTxLog = gt
+  ,
+  _query = \_t _f -> rc []
 
     }
 

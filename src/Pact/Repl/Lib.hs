@@ -167,6 +167,7 @@ repldb = PactDb {
   , _commitTx = invokeEnv $ _commitTx pactdb
   , _rollbackTx = invokeEnv $ _rollbackTx pactdb
   , _getTxLog = \d t -> invokeEnv $ _getTxLog pactdb d t
+  , _query = \t f -> invokeEnv $ _query pactdb t f
 
 }
 

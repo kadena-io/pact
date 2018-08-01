@@ -4,7 +4,8 @@
 
 (module bench 'bench-admin
 
-  (deftable bench-accounts)
+  (defschema accounts balance:decimal amount:decimal data)
+  (deftable bench-accounts:{accounts})
 
  (defun keys-all (count matched) (= count matched))
 
@@ -64,6 +65,15 @@
  (defun snd (a b) b)
  (defun id (a) a)
 
+ (defun mk-test-acct (i unused)
+   (let ((acct (format "test%d" [i])))
+     (create-account acct)
+     (fund-account acct (+ 1000.0 i))
+     (+ 1 i)))
+
+ (defun testquery ()
+   (length (select bench-accounts (where 'balance (< 99.0)))))
+
 )
 
 (create-table bench-accounts)
@@ -71,3 +81,5 @@
 (create-account "Acct1")
 (fund-account "Acct1" 10000000.0)
 (create-account "Acct2")
+
+(fold (mk-test-acct) 0 (make-list 20000 1))
