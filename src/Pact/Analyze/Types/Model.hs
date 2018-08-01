@@ -33,12 +33,20 @@ newtype Vertex
   = Vertex Natural
   deriving (Num, Enum, Show, Ord, Eq)
 
+data TraceStatement
+  = TraceBinding
+  | TraceEnforce
+  | TraceEnforceKeySet
+  | TraceRead
+  | TraceWrite
+  deriving (Show)
+
 data TagAllocation
   = AllocReadTag (Located (TagId, Schema))
   | AllocWriteTag (Located (TagId, Schema))
   | AllocAuthTag (Located TagId)
   | AllocVarTag (Located (VarId, Text, EType))
-  deriving Show
+  deriving (Show)
 
 data ModelTags
   = ModelTags

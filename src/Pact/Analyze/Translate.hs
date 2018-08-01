@@ -18,7 +18,8 @@ import           Algebra.Graph              (Graph, connect, edge, overlay,
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (at, cons, makeLenses, use, view,
                                              (<&>), (?~), (^.), (^?), (%~),
-                                             (.~), (<&>), (%=), (.=), _1, _2)
+                                             (.~), (<&>), (%=), (.=), (?=), _1,
+                                             _2)
 import           Control.Monad              ((>=>), void)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -115,11 +116,13 @@ mkTranslateEnv = foldl'
 
 data TranslateState
   = TranslateState
-    { _tsTagAllocs  :: [TagAllocation] -- "strict" WriterT isn't; so we use state
-    , _tsNextTagId  :: TagId
-    , _tsNextVarId  :: VarId
-    , _tsGraph      :: Graph Vertex
-    , _tsPathVertex :: Vertex
+    { _tsTagAllocs         :: [TagAllocation] -- "strict" WriterT isn't; so we use state
+    , _tsNextTagId         :: TagId
+    , _tsNextVarId         :: VarId
+    , _tsGraph             :: Graph Vertex
+    , _tsPathVertex        :: Vertex
+    , _tsEdgeStatements    :: Map (Vertex, Vertex) [TraceStatement]
+    , _tsPendingStatements :: [TraceStatement]
     }
 
 makeLenses ''TranslateFailure
@@ -260,23 +263,39 @@ issueVertex = do
   tsPathVertex .= v
   pure (prev, v)
 
+-- | Flushes-out statements accumulated for the current edge of the execution
+-- path.
+flushStatements :: TranslateM [TraceStatement]
+flushStatements = do
+  pathStmts <- use tsPendingStatements
+  tsPendingStatements .= []
+  pure pathStmts
+
+-- | Resets the path head to the supplied Vertex
+resetPath :: Vertex -> TranslateM [TraceStatement]
+resetPath v = do
+  tsPathVertex .= v
+  flushStatements
+
 -- | Extends the previous path head to a new Vertex
 extendPath :: TranslateM Vertex
 extendPath = do
-  (v, v') <- issueVertex
+  e@(v, v') <- issueVertex
   tsGraph %= overlay (edge v v')
+  edgeTrace <- flushStatements
+  tsEdgeStatements.at e ?= edgeTrace
   pure v'
 
--- | Resets the path head to the supplied Vertex
-resetPath :: Vertex -> TranslateM ()
-resetPath = (tsPathVertex .=)
-
 -- | Extends multiple separate paths to a single join point.
-joinPaths :: [Vertex] -> TranslateM Vertex
-joinPaths vs = do
-  (_, v) <- issueVertex
-  tsGraph %= overlay (vertices vs `connect` pure v)
-  pure v
+joinPaths :: [(Vertex, [TraceStatement])] -> TranslateM Vertex
+joinPaths paths = do
+  let (vs, _) = unzip paths
+  (_, v') <- issueVertex
+  tsGraph %= overlay (vertices vs `connect` pure v')
+  _ <- flushStatements
+  for paths $ \(v, edgeTrace) ->
+    tsEdgeStatements.at (v, v') ?= edgeTrace
+  pure v'
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
@@ -640,10 +659,11 @@ translateNode astNode = astContext astNode $ case astNode of
     postTest <- extendPath
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
-    resetPath postTest
+    trueTrace <- resetPath postTest
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
-    void $ joinPaths [postTrue, postFalse]
+    falseTrace <- flushStatements
+    void $ joinPaths [(postTrue, trueTrace), (postFalse, falseTrace)]
     case typeEq ta tb of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' a b
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
@@ -754,11 +774,9 @@ runTranslation info pactArgs body = do
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
     runBodyTranslation args nextVarId =
-      let tagId0      = 0
-          vertex0     = 0
-          graph0      = pure vertex0
+      let vertex0     = 0
+          state0      = TranslateState [] 0 nextVarId (pure vertex0) vertex0 Map.empty []
           translation = translateBody body
                      <* extendPath -- to create a final edge for any statements
-      in fmap (fmap _tsTagAllocs) $
-        flip runStateT (TranslateState [] tagId0 nextVarId graph0 vertex0) $
-          runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
+      in fmap (fmap _tsTagAllocs) $ flip runStateT state0 $
+           runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
