@@ -29,6 +29,10 @@ newtype TagId
   = TagId Natural
   deriving (Num, Show, Ord, Eq)
 
+newtype Vertex
+  = Vertex Natural
+  deriving (Num, Enum, Show, Ord, Eq)
+
 data TagAllocation
   = AllocReadTag (Located (TagId, Schema))
   | AllocWriteTag (Located (TagId, Schema))
