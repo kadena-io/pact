@@ -96,6 +96,8 @@ renderProperties :: Handle -> IO ()
 renderProperties h = do
   hPutStrLn h "# Property and Invariant Functions {#properties-and-invariants}"
   hPutStrLn h ""
+  hPutStrLn h "These are functions available in properties and invariants -- not necessarily in executable Pact code. All of these functions are available in properties, but only a subset are available in invariants. As a general rule, invariants have vocabulary for talking about the shape of data, whereas properties also add vocabulary for talking about function inputs and outputs, and database interactions. Each function also explicitly says whether it's available in just properties, or invariants as well."
+  hPutStrLn h ""
 
   ifor_ Analyze.classFeatures $ \cls features -> do
     let title = T.unpack $ Analyze.classTitle cls
