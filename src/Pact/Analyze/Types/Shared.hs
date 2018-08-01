@@ -173,14 +173,14 @@ type RowKey = String
 
 type Time = Int64
 
-mkTime :: UTCTime -> Time
-mkTime utct = view microseconds (utct .-. toEnum 0)
-
-unMkTime :: Time -> UTCTime
-unMkTime time = toEnum 0 .+^ view (from microseconds) time
-
 timeIso :: Iso' UTCTime Time
 timeIso = iso mkTime unMkTime
+  where
+    mkTime :: UTCTime -> Time
+    mkTime utct = view microseconds (utct .-. toEnum 0)
+
+    unMkTime :: Time -> UTCTime
+    unMkTime time = toEnum 0 .+^ view (from microseconds) time
 
 data LogicalOp
   = AndOp -- ^ Conjunction

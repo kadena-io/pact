@@ -528,15 +528,16 @@ translateNode astNode = astContext astNode $ case astNode of
   -- Int
   AST_NegativeLit l -> case l of
     LInteger i -> pure $ ESimple TInt (inject $ IntUnaryArithOp Negate (lit i))
-    LDecimal d -> pure $ ESimple TDecimal (inject $ DecUnaryArithOp Negate (lit (mkDecimal d)))
+    LDecimal d -> pure $ ESimple TDecimal
+      (inject $ DecUnaryArithOp Negate (lit (fromPact decimalIso d)))
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
     LInteger i -> pure $ ESimple TInt (lit i)
     LBool b    -> pure $ ESimple TBool (lit b)
     LString s  -> pure $ ESimple TStr (lit $ T.unpack s)
-    LDecimal d -> pure $ ESimple TDecimal (lit (mkDecimal d))
-    LTime t    -> pure $ ESimple TTime (lit (mkTime t))
+    LDecimal d -> pure $ ESimple TDecimal (lit (fromPact decimalIso d))
+    LTime t    -> pure $ ESimple TTime (lit (fromPact timeIso t))
 
   AST_NegativeVar node -> do
     Just (name, vid) <- view $ teNodeVars.at node
@@ -664,7 +665,7 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ESimple TTime $ lit (mkTime timeLit')
+    -> pure $ ESimple TTime $ lit (fromPact timeIso timeLit')
 
   AST_NFun_Basic SModulus [a, b] ->  do
     ESimple TInt a' <- translateNode a

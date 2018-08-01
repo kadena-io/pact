@@ -454,7 +454,7 @@ evalTerm = \case
     time'      <- eval time
     case (unliteralS formatStr', unliteralS time') of
       (Just formatStr'', Just time'') -> pure $ literalS $
-        formatTime defaultTimeLocale formatStr'' (unMkTime time'')
+        formatTime defaultTimeLocale formatStr'' (toPact timeIso time'')
       _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
 
   ParseTime mFormatStr timeStr -> do
@@ -466,7 +466,7 @@ evalTerm = \case
       (Just formatStr'', Just timeStr'') ->
         case parseTime defaultTimeLocale formatStr'' timeStr'' of
           Nothing   -> succeeds .= false >> pure 0
-          Just time -> pure $ literalS $ mkTime time
+          Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do

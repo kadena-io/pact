@@ -73,7 +73,7 @@ genDecimal :: MonadGen m => NumSize -> m Decimal
 genDecimal size = do
   places   <- Gen.word8 Range.constantBounded
   mantissa <- genInteger (size * 10 ^ places)
-  pure $ mkDecimal $ Decimal.Decimal places mantissa
+  pure $ fromPact decimalIso $ Decimal.Decimal places mantissa
 
 genInteger :: MonadGen m => NumSize -> m Integer
 genInteger size = Gen.integral $
@@ -318,8 +318,8 @@ genTermSpecific (SizedString _len) = undefined
   -- Sequence
   -- IfThenElse
 
-toPact :: ETerm -> Maybe (Pact.Term Pact.Ref)
-toPact = \case
+toPactTm :: ETerm -> Maybe (Pact.Term Pact.Ref)
+toPactTm = \case
   ESimple TDecimal (Inj (DecArithOp op x y)) ->
     mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
 
@@ -380,23 +380,23 @@ toPact = \case
   ESimple TInt     (CoreTerm (Lit x))
     -> Just $ TLiteral (LInteger x) dummyInfo
   ESimple TDecimal (CoreTerm (Lit x))
-    -> Just $ TLiteral (LDecimal (unMkDecimal x)) dummyInfo
+    -> Just $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
   ESimple TStr     (CoreTerm (Lit x))
     -> Just $ TLiteral (LString (T.pack x)) dummyInfo
   ESimple TBool    (CoreTerm (Lit x))
     -> Just $ TLiteral (LBool x) dummyInfo
   ESimple TTime    (CoreTerm (Lit x))
-    -> Just $ TLiteral (LTime (unMkTime x)) dummyInfo
+    -> Just $ TLiteral (LTime (toPact timeIso x)) dummyInfo
 
   ESimple TKeySet  (CoreTerm (Lit _x))
     -> error "how do we translate keysets?"
 
-  tm -> error $ "TODO: toPact " ++ show tm
+  tm -> error $ "TODO: toPactTm " ++ show tm
 
   where
     mkApp :: NativeDef -> [ETerm] -> Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
-      args' <- traverse toPact args
+      args' <- traverse toPactTm args
       Just $ TApp (liftTerm defTm) args' dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
@@ -438,8 +438,8 @@ toPact = \case
       OrOp  -> orDef
       NotOp -> notDef
 
-toPact' :: Applicative m => ETerm -> MaybeT m (Pact.Term Pact.Ref)
-toPact' = MaybeT . pure . toPact
+toPactTm' :: Applicative m => ETerm -> MaybeT m (Pact.Term Pact.Ref)
+toPactTm' = MaybeT . pure . toPactTm
 
 toAnalyze :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO ETerm
 toAnalyze ty tm = do
@@ -501,7 +501,7 @@ prop_evaluation = property $ do
   etm@(ESimple ty _tm) <- forAll genTerm
 
   -- pact setup
-  let Just pactTm = toPact etm
+  let Just pactTm = toPactTm etm
       evalState = Default.def
   evalEnv <- liftIO initPureEvalEnv
 
@@ -562,7 +562,7 @@ prop_round_trip_term = property $ (do
   etm@(ESimple ty _tm) <- forAll genTerm
 
   etm' <- lift $ runMaybeT $
-    (toAnalyze (reverseTranslateType ty) <=< toPact') etm
+    (toAnalyze (reverseTranslateType ty) <=< toPactTm') etm
   etm' === Just etm)
     `catch` (\(_e :: EmptyInterval)  -> discard)
 
