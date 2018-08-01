@@ -13,11 +13,13 @@
 
 module Pact.Analyze.Translate where
 
+import           Algebra.Graph              (Graph, connect, edge, overlay,
+                                             vertices)
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, cons, makeLenses, view, (<&>),
-                                             (?~), (^.), (^?), (%~), (.~),
-                                             (<&>), _1, _2)
-import           Control.Monad              ((>=>))
+import           Control.Lens               (at, cons, makeLenses, use, view,
+                                             (<&>), (?~), (^.), (^?), (%~),
+                                             (.~), (<&>), (%=), (.=), _1, _2)
+import           Control.Monad              ((>=>), void)
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
@@ -113,9 +115,11 @@ mkTranslateEnv = foldl'
 
 data TranslateState
   = TranslateState
-    { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
-    , _tsNextTagId :: TagId
-    , _tsNextVarId :: VarId
+    { _tsTagAllocs  :: [TagAllocation] -- "strict" WriterT isn't; so we use state
+    , _tsNextTagId  :: TagId
+    , _tsNextVarId  :: VarId
+    , _tsGraph      :: Graph Vertex
+    , _tsPrevVertex :: Vertex
     }
 
 makeLenses ''TranslateFailure
@@ -246,6 +250,33 @@ throwError'
 throwError' err = do
   info <- view _1
   throwError $ TranslateFailure info err
+
+-- | Generates a new Vertex, sets it to the most recent (tsPrevVertex), and
+-- returns the tuple of the previous and this newly-generated Vertex.
+issueVertex :: TranslateM (Vertex, Vertex)
+issueVertex = do
+  prev <- use tsPrevVertex
+  let v = succ prev
+  tsPrevVertex .= v
+  pure (prev, v)
+
+-- | Extends the previous path head to a new Vertex
+extendPath :: TranslateM Vertex
+extendPath = do
+  (v, v') <- issueVertex
+  tsGraph %= overlay (edge v v')
+  pure v'
+
+-- | Resets the path head to the supplied Vertex
+resetPath :: Vertex -> TranslateM ()
+resetPath = (tsPrevVertex .=)
+
+-- | Extends multiple separate paths to a single join point.
+joinPaths :: [Vertex] -> TranslateM Vertex
+joinPaths vs = do
+  (_, v) <- issueVertex
+  tsGraph %= overlay (vertices vs `connect` pure v)
+  pure v
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
@@ -606,8 +637,13 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
-    ESimple ta a        <- translateNode tBranch
-    ESimple tb b        <- translateNode fBranch
+    postTest <- extendPath
+    ESimple ta a <- translateNode tBranch
+    postTrue <- extendPath
+    resetPath postTest
+    ESimple tb b <- translateNode fBranch
+    postFalse <- extendPath
+    void $ joinPaths [postTrue, postFalse]
     case typeEq ta tb of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' a b
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
@@ -717,8 +753,12 @@ runTranslation info pactArgs body = do
 
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
-    runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $
-      flip runStateT (TranslateState [] 0 nextVarId) $
-        runReaderT
-          (unTranslateM (translateBody body))
-          (info, mkTranslateEnv args)
+    runBodyTranslation args nextVarId =
+      let tagId0      = 0
+          vertex0     = 0
+          graph0      = pure vertex0
+          translation = translateBody body
+                     <* extendPath -- to create a final edge for any statements
+      in fmap (fmap _tsTagAllocs) $
+        flip runStateT (TranslateState [] tagId0 nextVarId graph0 vertex0) $
+          runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
