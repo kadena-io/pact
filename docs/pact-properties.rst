@@ -305,8 +305,8 @@ Database access
 To describe database table access, the property language has the
 following properties:
 
--  ``(table-written 'accounts)`` - that any cell of the table ``accounts``
-   is written
+-  ``(table-written 'accounts)`` - that any cell of the table
+   ``accounts`` is written
 -  ``(table-read 'accounts)`` - that any cell of the table ``accounts``
    is read
 -  ``(row-written 'accounts k)`` - that the row keyed by the variable
@@ -411,7 +411,7 @@ amount of a balance across two accounts for the given table:
       balance:integer
       ks:keyset)
 
-    (deftable 'accounts:{account})
+    (deftable accounts:{account})
 
 The following code to transfer a balance between two accounts may look
 correct at first study, but it turns out that there are number of bugs
@@ -424,13 +424,12 @@ an invariant to the table.
       ("Transfer money between accounts"
         (properties [(row-enforced 'accounts 'ks from)]))
 
-      (let ((from-bal (at 'balance (read 'accounts from)))
-            (from-ks  (at 'ks      (read 'accounts from)))
-            (to-bal   (at 'balance (read 'accounts to))))
-        (enforce-keyset from-ks)
-        (enforce (>= from-bal amount) "Insufficient Funds")
-        (update 'accounts from { "balance": (- from-bal amount) })
-        (update 'accounts to   { "balance": (+ to-bal amount) })))
+      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+        (with-read accounts to { 'balance := to-bal }
+          (enforce-keyset from-ks)
+          (enforce (>= from-bal amount) "Insufficient Funds")
+          (update accounts from { "balance": (- from-bal amount) })
+          (update accounts to   { "balance": (+ to-bal amount) }))))
 
 Let’s start by adding an invariant that balances can never drop below
 zero:
@@ -455,16 +454,15 @@ amount! Let’s fix that by enforcing ``(> amount 0)``, and try again:
 
     (defun transfer (from:string to:string amount:integer)
       ("Transfer money between accounts"
-        (properties [(row-enforced 'accounts 'ks from)])
+        (properties [(row-enforced 'accounts 'ks from)]))
 
-      (let ((from-bal (at 'balance (read 'accounts from)))
-            (from-ks  (at 'ks      (read 'accounts from)))
-            (to-bal   (at 'balance (read 'accounts to))))
-        (enforce-keyset from-ks)
-        (enforce (>= from-bal amount) "Insufficient Funds")
-        (enforce (> amount 0)         "Non-positive amount")
-        (update 'accounts from { "balance": (- from-bal amount) })
-        (update 'accounts to   { "balance": (+ to-bal amount) })))
+      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+        (with-read accounts to { 'balance := to-bal }
+          (enforce-keyset from-ks)
+          (enforce (>= from-bal amount) "Insufficient Funds")
+          (enforce (> amount 0)         "Non-positive amount")
+          (update accounts from { "balance": (- from-bal amount) })
+          (update accounts to   { "balance": (+ to-bal amount) }))))
 
 The property checker validates the code at this point, but let’s add
 another property ``(conserves-mass 'accounts 'balance)`` to ensure that
@@ -477,16 +475,15 @@ money:
       ("Transfer money between accounts"
         (properties
           [(row-enforced 'accounts 'ks from)
-           (conserves-mass 'accounts 'balance)])
+           (conserves-mass 'accounts 'balance)]))
 
-      (let ((from-bal (at 'balance (read 'accounts from)))
-            (from-ks  (at 'ks      (read 'accounts from)))
-            (to-bal   (at 'balance (read 'accounts to))))
-        (enforce-keyset from-ks)
-        (enforce (>= from-bal amount) "Insufficient Funds")
-        (enforce (> amount 0)         "Non-positive amount")
-        (update 'accounts from { "balance": (- from-bal amount) })
-        (update 'accounts to   { "balance": (+ to-bal amount) })))
+      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+        (with-read accounts to { 'balance := to-bal }
+          (enforce-keyset from-ks)
+          (enforce (>= from-bal amount) "Insufficient Funds")
+          (enforce (> amount 0)         "Non-positive amount")
+          (update accounts from { "balance": (- from-bal amount) })
+          (update accounts to   { "balance": (+ to-bal amount) }))))
 
 When we run ``verify`` this time, the property checker finds a bug again
 – it’s able to falsify the property when ``from`` and ``to`` are set to
@@ -499,8 +496,8 @@ also set to what we’ll call ``previous-balance``:
 
 .. code:: lisp
 
-    (update 'accounts "alice" { "balance": (- previous-balance amount) })
-    (update 'accounts "alice" { "balance": (+ previous-balance amount) })
+    (update accounts "alice" { "balance": (- previous-balance amount) })
+    (update accounts "alice" { "balance": (+ previous-balance amount) })
 
 In this scenario, we can see that the second ``update`` call will
 completely overwrite the first one, with the value
@@ -516,17 +513,16 @@ prevent this unintended behavior:
       ("Transfer money between accounts"
         (properties
           [(row-enforced 'accounts 'ks from)
-           (conserves-mass 'accounts 'balance)])
+           (conserves-mass 'accounts 'balance)]))
 
-      (let ((from-bal (at 'balance (read 'accounts from)))
-            (from-ks  (at 'ks      (read 'accounts from)))
-            (to-bal   (at 'balance (read 'accounts to))))
-        (enforce-keyset from-ks)
-        (enforce (>= from-bal amount) "Insufficient Funds")
-        (enforce (> amount 0)         "Non-positive amount")
-        (enforce (!= from to)         "Sender is the recipient")
-        (update 'accounts from { "balance": (- from-bal amount) })
-        (update 'accounts to   { "balance": (+ to-bal amount) })))
+      (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
+        (with-read accounts to { 'balance := to-bal }
+          (enforce-keyset from-ks)
+          (enforce (>= from-bal amount) "Insufficient Funds")
+          (enforce (> amount 0)         "Non-positive amount")
+          (enforce (!= from to)         "Sender is the recipient")
+          (update accounts from { "balance": (- from-bal amount) })
+          (update accounts to   { "balance": (+ to-bal amount) }))))
 
 And now we see that finally the property checker verifies that all of
 the following are true:

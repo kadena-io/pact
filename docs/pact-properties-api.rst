@@ -1,8 +1,14 @@
+.. properties-and-invariants:
+
 Property and Invariant Functions
 ================================
 
+.. Numerical:
+
 Numerical operators
 -------------------
+
+.. FAddition:
 
 \+
 ~~
@@ -20,6 +26,8 @@ Addition of integers and decimals.
 
 Supported in either invariants or properties.
 
+.. FSubtraction:
+
 \-
 ~~
 
@@ -35,6 +43,8 @@ Supported in either invariants or properties.
 Subtraction of integers and decimals.
 
 Supported in either invariants or properties.
+
+.. FMultiplication:
 
 \*
 ~~
@@ -52,6 +62,8 @@ Multiplication of integers and decimals.
 
 Supported in either invariants or properties.
 
+.. FDivision:
+
 /
 ~
 
@@ -67,6 +79,8 @@ Supported in either invariants or properties.
 Division of integers and decimals.
 
 Supported in either invariants or properties.
+
+.. FExponentiation:
 
 ^
 ~
@@ -84,6 +98,8 @@ Exponentiation of integers and decimals.
 
 Supported in either invariants or properties.
 
+.. FLogarithm:
+
 log
 ~~~
 
@@ -100,6 +116,8 @@ Logarithm of ``x`` base ``b``.
 
 Supported in either invariants or properties.
 
+.. FNumericNegation:
+
 \-
 ~~
 
@@ -114,6 +132,8 @@ Supported in either invariants or properties.
 Negation of integers and decimals.
 
 Supported in either invariants or properties.
+
+.. FSquareRoot:
 
 sqrt
 ~~~~
@@ -130,6 +150,8 @@ Square root of integers and decimals.
 
 Supported in either invariants or properties.
 
+.. FNaturalLogarithm:
+
 ln
 ~~
 
@@ -144,6 +166,8 @@ ln
 Logarithm of integers and decimals base e.
 
 Supported in either invariants or properties.
+
+.. FExponential:
 
 exp
 ~~~
@@ -161,6 +185,8 @@ Exponential of integers and decimals. e raised to the integer or decimal
 
 Supported in either invariants or properties.
 
+.. FAbsoluteValue:
+
 abs
 ~~~
 
@@ -175,6 +201,8 @@ abs
 Absolute value of integers and decimals.
 
 Supported in either invariants or properties.
+
+.. FBankersRound:
 
 round
 ~~~~~
@@ -194,10 +222,12 @@ round
 -  takes ``prec`` of type ``integer``
 -  produces type ``integer``
 
-Banker's rounding value of decimal ``x`` as integer, or to ``prec``
+Banker’s rounding value of decimal ``x`` as integer, or to ``prec``
 precision as decimal.
 
 Supported in either invariants or properties.
+
+.. FCeilingRound:
 
 ceiling
 ~~~~~~~
@@ -222,6 +252,8 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
+.. FFloorRound:
+
 floor
 ~~~~~
 
@@ -245,6 +277,8 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
+.. FModulus:
+
 mod
 ~~~
 
@@ -260,8 +294,12 @@ Integer modulus
 
 Supported in either invariants or properties.
 
+.. Logical:
+
 Logical operators
 -----------------
+
+.. FGreaterThan:
 
 >
 ~
@@ -279,6 +317,8 @@ True if ``x`` > ``y``
 
 Supported in either invariants or properties.
 
+.. FLessThan:
+
 <
 ~
 
@@ -294,6 +334,8 @@ Supported in either invariants or properties.
 True if ``x`` < ``y``
 
 Supported in either invariants or properties.
+
+.. FGreaterThanOrEqual:
 
 >=
 ~~
@@ -311,6 +353,8 @@ True if ``x`` >= ``y``
 
 Supported in either invariants or properties.
 
+.. FLessThanOrEqual:
+
 <=
 ~~
 
@@ -326,6 +370,8 @@ Supported in either invariants or properties.
 True if ``x`` <= ``y``
 
 Supported in either invariants or properties.
+
+.. FEquality:
 
 =
 ~
@@ -344,6 +390,8 @@ True if ``x`` = ``y``
 
 Supported in either invariants or properties.
 
+.. FInequality:
+
 !=
 ~~
 
@@ -361,6 +409,8 @@ True if ``x`` != ``y``
 
 Supported in either invariants or properties.
 
+.. FLogicalConjunction:
+
 and
 ~~~
 
@@ -375,6 +425,8 @@ and
 Short-circuiting logical conjunction
 
 Supported in either invariants or properties.
+
+.. FLogicalDisjunction:
 
 or
 ~~
@@ -391,6 +443,8 @@ Short-circuiting logical disjunction
 
 Supported in either invariants or properties.
 
+.. FLogicalNegation:
+
 not
 ~~~
 
@@ -404,6 +458,8 @@ not
 Logical negation
 
 Supported in either invariants or properties.
+
+.. FLogicalImplication:
 
 when
 ~~~~
@@ -420,8 +476,12 @@ Logical implication. Equivalent to ``(or (not x) y)``.
 
 Supported in either invariants or properties.
 
+.. Object:
+
 Object operators
 ----------------
+
+.. FObjectProjection:
 
 at
 ~~
@@ -438,6 +498,8 @@ Object projection
 
 Supported in either invariants or properties.
 
+.. FObjectMerge:
+
 \+
 ~~
 
@@ -453,8 +515,12 @@ Object merge
 
 Supported in either invariants or properties.
 
+.. String:
+
 String operators
 ----------------
+
+.. FStringLength:
 
 length
 ~~~~~~
@@ -469,6 +535,8 @@ length
 String length
 
 Supported in either invariants or properties.
+
+.. FStringConcatenation:
 
 \+
 ~~
@@ -485,8 +553,12 @@ String concatenation
 
 Supported in either invariants or properties.
 
+.. Temporal:
+
 Temporal operators
 ------------------
+
+.. FTemporalAddition:
 
 add-time
 ~~~~~~~~
@@ -504,8 +576,12 @@ Add seconds to a time
 
 Supported in either invariants or properties.
 
+.. Quantification:
+
 Quantification operators
 ------------------------
+
+.. FUniversalQuantification:
 
 forall
 ~~~~~~
@@ -524,6 +600,8 @@ Bind a universally-quantified variable
 
 Supported in properties only.
 
+.. FExistentialQuantification:
+
 exists
 ~~~~~~
 
@@ -541,8 +619,12 @@ Bind an existentially-quantified variable
 
 Supported in properties only.
 
+.. Transactional:
+
 Transactional operators
 -----------------------
+
+.. FTransactionAborts:
 
 abort
 ~~~~~
@@ -557,9 +639,11 @@ Whether the transaction aborts. This function is only useful when
 expressing propositions that do not assume transaction success.
 Propositions defined via ``property`` implicitly assume transaction
 success. We will be adding a new mode in which to use this feature in
-the future -- please let us know if you need this functionality.
+the future – please let us know if you need this functionality.
 
 Supported in properties only.
+
+.. FTransactionSucceeds:
 
 success
 ~~~~~~~
@@ -574,9 +658,11 @@ Whether the transaction succeeds. This function is only useful when
 expressing propositions that do not assume transaction success.
 Propositions defined via ``property`` implicitly assume transaction
 success. We will be adding a new mode in which to use this feature in
-the future -- please let us know if you need this functionality.
+the future – please let us know if you need this functionality.
 
 Supported in properties only.
+
+.. FFunctionResult:
 
 result
 ~~~~~~
@@ -592,8 +678,12 @@ The return value of the function under test
 
 Supported in properties only.
 
+.. Database:
+
 Database operators
 ------------------
+
+.. FTableWritten:
 
 table-written
 ~~~~~~~~~~~~~
@@ -610,6 +700,8 @@ Whether a table is written in the function under analysis
 
 Supported in properties only.
 
+.. FTableRead:
+
 table-read
 ~~~~~~~~~~
 
@@ -624,6 +716,8 @@ table-read
 Whether a table is read in the function under analysis
 
 Supported in properties only.
+
+.. FCellDelta:
 
 cell-delta
 ~~~~~~~~~~
@@ -640,9 +734,11 @@ cell-delta
 -  where *b* is of type ``column`` or ``string``
 -  where *c* is of type ``integer`` or ``decimal``
 
-The difference in a cell's value before and after the transaction
+The difference in a cell’s value before and after the transaction
 
 Supported in properties only.
+
+.. FColumnDelta:
 
 column-delta
 ~~~~~~~~~~~~
@@ -658,10 +754,12 @@ column-delta
 -  where *b* is of type ``column`` or ``string``
 -  where *c* is of type ``integer`` or ``decimal``
 
-The difference in a column's total summed value before and after the
+The difference in a column’s total summed value before and after the
 transaction
 
 Supported in properties only.
+
+.. FRowRead:
 
 row-read
 ~~~~~~~~
@@ -679,6 +777,8 @@ Whether a row is read in the function under analysis
 
 Supported in properties only.
 
+.. FRowWritten:
+
 row-written
 ~~~~~~~~~~~
 
@@ -694,6 +794,8 @@ row-written
 Whether a row is written in the function under analysis
 
 Supported in properties only.
+
+.. FRowReadCount:
 
 row-read-count
 ~~~~~~~~~~~~~~
@@ -711,6 +813,8 @@ The number of times a row is read during a transaction
 
 Supported in properties only.
 
+.. FRowWriteCount:
+
 row-write-count
 ~~~~~~~~~~~~~~~
 
@@ -727,8 +831,12 @@ The number of times a row is written during a transaction
 
 Supported in properties only.
 
+.. Authorization:
+
 Authorization operators
 -----------------------
+
+.. FAuthorizedBy:
 
 authorized-by
 ~~~~~~~~~~~~~
@@ -743,6 +851,8 @@ authorized-by
 Whether the named keyset is enforced by the function under analysis
 
 Supported in properties only.
+
+.. FRowEnforced:
 
 row-enforced
 ~~~~~~~~~~~~
