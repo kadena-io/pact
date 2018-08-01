@@ -20,6 +20,7 @@ packages:
 extra-deps:
   - bound-2
   - ed25519-donna-0.1.1
+  - algebraic-graphs-0.1.1.1
 
 flags: {}
 
