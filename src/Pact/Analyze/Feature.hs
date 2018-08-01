@@ -30,7 +30,7 @@ import           Pact.Analyze.Types     hiding (Type, Sym)
 -- user-facing docs from this information.
 --
 
-data Class
+data FeatureClass
   = CNumerical
   | CLogical
   | CObject
@@ -42,7 +42,7 @@ data Class
   | CAuthorization
   deriving (Eq, Ord, Show)
 
-classTitle :: Class -> Text
+classTitle :: FeatureClass -> Text
 classTitle CNumerical = "Numerical"
 classTitle CLogical = "Logical"
 classTitle CObject = "Object"
@@ -139,14 +139,20 @@ data Usage
 --
 data Doc
   = Doc { _docSymbol       :: Text
-        , _docClass        :: Class
+        , _docClass        :: FeatureClass
         , _docAvailability :: Availability
         , _docDescription  :: Text
         , _docUsages       :: [Usage]
         }
   deriving (Eq, Ord, Show)
 
-pattern Feature :: Text -> Class -> Availability -> Text -> [Usage] -> Feature
+pattern Feature
+  :: Text
+  -> FeatureClass
+  -> Availability
+  -> Text
+  -> [Usage]
+  -> Feature
 pattern Feature s c a d us <- (doc -> Doc s c a d us)
 
 symbol :: Feature -> Text
@@ -155,8 +161,8 @@ symbol = _docSymbol . doc
 availability :: Feature -> Availability
 availability = _docAvailability . doc
 
-class' :: Feature -> Class
-class' = _docClass . doc
+featureClass :: Feature -> FeatureClass
+featureClass = _docClass . doc
 
 newtype Var
   = Var Text
@@ -961,8 +967,8 @@ availableFeatures = allFeatures `by` availability
 symbolFeatures :: Map Text (Set Feature)
 symbolFeatures = allFeatures `by` symbol
 
-classFeatures :: Map Class (Set Feature)
-classFeatures = allFeatures `by` class'
+classFeatures :: Map FeatureClass (Set Feature)
+classFeatures = allFeatures `by` featureClass
 
 -- * Pattern synonyms for matching on symbol names
 
