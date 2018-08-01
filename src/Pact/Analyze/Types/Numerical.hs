@@ -1,9 +1,16 @@
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Pact.Analyze.Types.Numerical where
 
-import           Data.SBV (AlgReal)
+import           Control.Lens         (Prism')
+import           Data.SBV             (AlgReal)
+import           Data.Text            (Text)
+
+import           Pact.Analyze.Feature
+import           Pact.Analyze.Types.UserShow
 
 -- Pact uses Data.Decimal which is arbitrary-precision
 type Decimal = AlgReal
@@ -25,6 +32,19 @@ data ArithOp
   | Log -- ^ Logarithm
   deriving (Show, Eq, Ord)
 
+arithOpP :: Prism' Text ArithOp
+arithOpP = mkOpNamePrism
+  [ (SAddition,       Add)
+  , (SSubtraction,    Sub)
+  , (SMultiplication, Mul)
+  , (SDivision,       Div)
+  , (SExponentiation, Pow)
+  , (SLogarithm,      Log)
+  ]
+
+instance UserShow ArithOp where
+  userShowsPrec _ = toText arithOpP
+
 -- integer -> integer
 -- decimal -> decimal
 data UnaryArithOp
@@ -38,6 +58,19 @@ data UnaryArithOp
            -- instance.
   deriving (Show, Eq, Ord)
 
+unaryArithOpP :: Prism' Text UnaryArithOp
+unaryArithOpP = mkOpNamePrism
+  [ (SNumericNegation,  Negate)
+  , (SSquareRoot,       Sqrt)
+  , (SNaturalLogarithm, Ln)
+  , (SExponential,      Exp)
+  , (SAbsoluteValue,    Abs)
+  -- explicitly no signum
+  ]
+
+instance UserShow UnaryArithOp where
+  userShowsPrec _ = toText unaryArithOpP
+
 -- decimal -> integer -> decimal
 -- decimal -> decimal
 data RoundingLikeOp
@@ -46,6 +79,16 @@ data RoundingLikeOp
   | Ceiling -- ^ Round to the next integer
   | Floor   -- ^ Round to the previous integer
   deriving (Show, Eq, Ord)
+
+roundingLikeOpP :: Prism' Text RoundingLikeOp
+roundingLikeOpP = mkOpNamePrism
+  [ (SBankersRound, Round)
+  , (SCeilingRound, Ceiling)
+  , (SFloorRound,   Floor)
+  ]
+
+instance UserShow RoundingLikeOp where
+  userShowsPrec _ = toText roundingLikeOpP
 
 -- | Arithmetic ops
 --
@@ -80,6 +123,19 @@ data Numerical t a where
   ModOp           :: t Integer      -> t Integer ->              Numerical t Integer
   RoundingLikeOp1 :: RoundingLikeOp -> t Decimal ->              Numerical t Integer
   RoundingLikeOp2 :: RoundingLikeOp -> t Decimal -> t Integer -> Numerical t Decimal
+
+instance (UserShow (t Integer), UserShow (t Decimal))
+  => UserShow (Numerical t a) where
+  userShowsPrec _ = parenList . \case
+    DecArithOp op a b      -> [userShow op, userShow a, userShow b]
+    IntArithOp op a b      -> [userShow op, userShow a, userShow b]
+    DecUnaryArithOp op a   -> [userShow op, userShow a]
+    IntUnaryArithOp op a   -> [userShow op, userShow a]
+    DecIntArithOp op a b   -> [userShow op, userShow a, userShow b]
+    IntDecArithOp op a b   -> [userShow op, userShow a, userShow b]
+    ModOp a b              -> ["mod", userShow a, userShow b]
+    RoundingLikeOp1 op a   -> [userShow op, userShow a]
+    RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 
 deriving instance (Show (t Decimal), Show (t Integer), Show a) => Show (Numerical t a)
 deriving instance (Eq (t Decimal), Eq (t Integer), Eq a) => Eq (Numerical t a)

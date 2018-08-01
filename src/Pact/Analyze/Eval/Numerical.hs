@@ -26,6 +26,25 @@ evalNumerical (ModOp x y)              = evalModOp x y
 evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
 evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
+-- | Implementation of decimal arithmetic.
+--
+-- The key is this quote from "Data.Decimal":
+--
+-- "Decimal numbers are represented as m*10^(-e) where m and e are integers. The
+-- exponent e is an unsigned Word8. Hence the smallest value that can be
+-- represented is 10^-255."
+--
+-- Thus in this implementation, after any decimal arithmetic operation, we
+-- shift left 255 decimal digits, drop the remainder, then shift back right.
+dropRemainder :: S Decimal -> S Decimal
+dropRemainder =
+  let digitShift = 10 ^ (255 :: Int)
+  in (/ digitShift) . fromIntegralS . decRound . (* digitShift)
+
+-- round decimals by taking the floor of `x + 0.5`
+decRound :: S Decimal -> S Integer
+decRound = realToIntegerS . (+ 0.5)
+
 evalDecArithOp
   :: Analyzer m
   => ArithOp
@@ -36,10 +55,10 @@ evalDecArithOp op xT yT = do
   x <- eval xT
   y <- eval yT
   case op of
-    Add -> pure $ x + y
-    Sub -> pure $ x - y
-    Mul -> pure $ x * y
-    Div -> pure $ x / y
+    Add -> pure $ dropRemainder $ x + y
+    Sub -> pure $ dropRemainder $ x - y
+    Mul -> pure $ dropRemainder $ x * y
+    Div -> pure $ dropRemainder $ x / y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -70,10 +89,10 @@ evalIntDecArithOp op xT yT = do
   x <- eval xT
   y <- eval yT
   case op of
-    Add -> pure $ fromIntegralS x + y
-    Sub -> pure $ fromIntegralS x - y
-    Mul -> pure $ fromIntegralS x * y
-    Div -> pure $ fromIntegralS x / y
+    Add -> pure $ dropRemainder $ fromIntegralS x + y
+    Sub -> pure $ dropRemainder $ fromIntegralS x - y
+    Mul -> pure $ dropRemainder $ fromIntegralS x * y
+    Div -> pure $ dropRemainder $ fromIntegralS x / y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -87,10 +106,10 @@ evalDecIntArithOp op xT yT = do
   x <- eval xT
   y <- eval yT
   case op of
-    Add -> pure $ x + fromIntegralS y
-    Sub -> pure $ x - fromIntegralS y
-    Mul -> pure $ x * fromIntegralS y
-    Div -> pure $ x / fromIntegralS y
+    Add -> pure $ dropRemainder $ x + fromIntegralS y
+    Sub -> pure $ dropRemainder $ x - fromIntegralS y
+    Mul -> pure $ dropRemainder $ x * fromIntegralS y
+    Div -> pure $ dropRemainder $ x / fromIntegralS y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -116,6 +135,19 @@ evalModOp
   -> m (S Integer)
 evalModOp xT yT = sMod <$> eval xT <*> eval yT
 
+-- Round a real exactly between two integers (_.5) to the nearest even
+banker'sMethod :: S Decimal -> S Integer
+banker'sMethod x =
+  let wholePart      = realToIntegerS x
+      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
+
+  in iteS isExactlyHalf
+    -- nearest even number!
+    (wholePart + oneIfS wholePartIsOdd)
+    -- otherwise we round
+    (decRound x)
+
 evalRoundingLikeOp1
   :: Analyzer m
   => RoundingLikeOp
@@ -136,19 +168,6 @@ evalRoundingLikeOp1 op x = do
     -- where a real exactly between two integers (_.5) is rounded to the
     -- nearest even.
     Round   -> banker'sMethod x'
-
--- Round a real exactly between two integers (_.5) to the nearest even
-banker'sMethod :: S Decimal -> S Integer
-banker'sMethod x =
-  let wholePart      = realToIntegerS x
-      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
-
-  in iteS isExactlyHalf
-    -- nearest even number!
-    (wholePart + oneIfS wholePartIsOdd)
-    -- otherwise we take the floor of `x + 0.5`
-    (realToIntegerS (x + 0.5))
 
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.

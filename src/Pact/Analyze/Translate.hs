@@ -597,6 +597,10 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
 
+  AST_NFun _node "length" [a] -> do
+    ESimple TStr a' <- translateNode a
+    pure $ ESimple TInt $ CoreTerm $ StrLength a'
+
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
