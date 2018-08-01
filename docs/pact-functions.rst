@@ -305,7 +305,7 @@ Obtain current pact build version.
 .. code:: lisp
 
     pact> (pact-version)
-    "2.4.0"
+    "2.4.1"
 
 read-decimal
 ~~~~~~~~~~~~
@@ -1355,6 +1355,36 @@ Clears any previous pact execution state.
 
     (env-entity "my-org")
     (env-entity)
+
+env-gas
+~~~~~~~
+
+*→* ``integer``
+
+*gas* ``integer`` *→* ``string``
+
+Query gas state, or set it to GAS
+
+env-gaslimit
+~~~~~~~~~~~~
+
+*limit* ``integer`` *→* ``string``
+
+Set environment gas limit to LIMIT
+
+env-gasprice
+~~~~~~~~~~~~
+
+*price* ``decimal`` *→* ``string``
+
+Set environment gas price to PRICE
+
+env-gasrate
+~~~~~~~~~~~
+
+*rate* ``integer`` *→* ``string``
+
+Update gas model to charge constant RATE
 
 env-hash
 ~~~~~~~~

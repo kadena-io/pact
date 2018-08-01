@@ -13,6 +13,8 @@ Contents:
 
    pact-reference
 
+   pact-functions
+
    pact-properties
 
-   pact-functions
+   pact-properties-api
