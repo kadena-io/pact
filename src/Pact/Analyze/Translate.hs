@@ -119,7 +119,7 @@ data TranslateState
     , _tsNextTagId  :: TagId
     , _tsNextVarId  :: VarId
     , _tsGraph      :: Graph Vertex
-    , _tsPrevVertex :: Vertex
+    , _tsPathVertex :: Vertex
     }
 
 makeLenses ''TranslateFailure
@@ -251,13 +251,13 @@ throwError' err = do
   info <- view _1
   throwError $ TranslateFailure info err
 
--- | Generates a new Vertex, sets it to the most recent (tsPrevVertex), and
+-- | Generates a new Vertex, sets it to the most recent (tsPathVertex), and
 -- returns the tuple of the previous and this newly-generated Vertex.
 issueVertex :: TranslateM (Vertex, Vertex)
 issueVertex = do
-  prev <- use tsPrevVertex
+  prev <- use tsPathVertex
   let v = succ prev
-  tsPrevVertex .= v
+  tsPathVertex .= v
   pure (prev, v)
 
 -- | Extends the previous path head to a new Vertex
@@ -269,7 +269,7 @@ extendPath = do
 
 -- | Resets the path head to the supplied Vertex
 resetPath :: Vertex -> TranslateM ()
-resetPath = (tsPrevVertex .=)
+resetPath = (tsPathVertex .=)
 
 -- | Extends multiple separate paths to a single join point.
 joinPaths :: [Vertex] -> TranslateM Vertex
