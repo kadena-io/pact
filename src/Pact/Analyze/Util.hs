@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PatternSynonyms  #-}
+{-# LANGUAGE ViewPatterns     #-}
 
 module Pact.Analyze.Util where
 
@@ -52,3 +54,15 @@ dummyInfo = Default.def
 
 vacuousMatch :: String -> a
 vacuousMatch msg = error $ "vacuous match: " ++ msg
+
+-- * ReversedList
+
+newtype ReversedList a
+  = ReversedList [a]
+
+instance Monoid (ReversedList a) where
+  mempty = ReversedList []
+  ReversedList xs `mappend` ReversedList ys = ReversedList $ ys ++ xs
+
+pattern UnreversedList :: [a] -> ReversedList a
+pattern UnreversedList xs <- ReversedList (reverse -> xs)

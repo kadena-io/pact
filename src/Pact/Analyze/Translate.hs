@@ -122,7 +122,7 @@ data TranslateState
     , _tsGraph             :: Graph Vertex
     , _tsPathVertex        :: Vertex
     , _tsEdgeStatements    :: Map (Vertex, Vertex) [TraceStatement]
-    , _tsPendingStatements :: [TraceStatement]
+    , _tsPendingStatements :: ReversedList TraceStatement
     }
 
 makeLenses ''TranslateFailure
@@ -267,8 +267,8 @@ issueVertex = do
 -- path.
 flushStatements :: TranslateM [TraceStatement]
 flushStatements = do
-  pathStmts <- use tsPendingStatements
-  tsPendingStatements .= []
+  UnreversedList pathStmts <- use tsPendingStatements
+  tsPendingStatements .= mempty
   pure pathStmts
 
 -- | Resets the path head to the supplied 'Vertex'
@@ -773,7 +773,7 @@ runTranslation info pactArgs body = do
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
     runBodyTranslation args nextVarId =
       let vertex0     = 0
-          state0      = TranslateState [] 0 nextVarId (pure vertex0) vertex0 Map.empty []
+          state0      = TranslateState [] 0 nextVarId (pure vertex0) vertex0 Map.empty mempty
           translation = translateBody body
                      <* extendPath -- to create a final edge for any statements
       in fmap (fmap _tsTagAllocs) $ flip runStateT state0 $
