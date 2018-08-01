@@ -513,7 +513,7 @@ Supported in properties only.
 ### success {#FTransactionSucceeds}
 
 ```lisp
-abort
+success
 ```
 
 * of type `bool`
