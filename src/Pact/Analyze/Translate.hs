@@ -254,8 +254,8 @@ throwError' err = do
   info <- view _1
   throwError $ TranslateFailure info err
 
--- | Generates a new Vertex, sets it to the most recent (tsPathVertex), and
--- returns the tuple of the previous and this newly-generated Vertex.
+-- | Generates a new 'Vertex', setting it as the head, returning a tuple of the
+-- previous 'Vertex' and this newly-generated one.
 issueVertex :: TranslateM (Vertex, Vertex)
 issueVertex = do
   prev <- use tsPathVertex
@@ -271,13 +271,12 @@ flushStatements = do
   tsPendingStatements .= []
   pure pathStmts
 
--- | Resets the path head to the supplied Vertex
-resetPath :: Vertex -> TranslateM [TraceStatement]
-resetPath v = do
-  tsPathVertex .= v
-  flushStatements
+-- | Resets the path head to the supplied 'Vertex'
+resetPath :: Vertex -> TranslateM ()
+resetPath = (tsPathVertex .=)
 
--- | Extends the previous path head to a new Vertex
+-- | Extends the previous path head to a new 'Vertex', flushing accumulated
+-- statements to 'tsEdgeStatements'.
 extendPath :: TranslateM Vertex
 extendPath = do
   e@(v, v') <- issueVertex
@@ -286,15 +285,15 @@ extendPath = do
   tsEdgeStatements.at e ?= edgeTrace
   pure v'
 
--- | Extends multiple separate paths to a single join point.
-joinPaths :: [(Vertex, [TraceStatement])] -> TranslateM Vertex
-joinPaths paths = do
-  let (vs, _) = unzip paths
+-- | Extends multiple separate paths to a single join point. Assumes that each
+-- vertex was created via 'extendPath' before invocation, and thus
+-- 'tsPendingStatements' is currently empty.
+joinPaths :: [Vertex] -> TranslateM Vertex
+joinPaths vs = do
   (_, v') <- issueVertex
   tsGraph %= overlay (vertices vs `connect` pure v')
-  _ <- flushStatements
-  for paths $ \(v, edgeTrace) ->
-    tsEdgeStatements.at (v, v') ?= edgeTrace
+  for vs $ \v ->
+    tsEdgeStatements.at (v, v') ?= []
   pure v'
 
 translateType
@@ -659,11 +658,10 @@ translateNode astNode = astContext astNode $ case astNode of
     postTest <- extendPath
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
-    trueTrace <- resetPath postTest
+    resetPath postTest
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
-    falseTrace <- flushStatements
-    void $ joinPaths [(postTrue, trueTrace), (postFalse, falseTrace)]
+    void $ joinPaths [postTrue, postFalse]
     case typeEq ta tb of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' a b
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
