@@ -15,7 +15,7 @@
 
 module Pact.Analyze.Types.Shared where
 
-import           Control.Lens                 (At (at), Index, Iso, Iso',
+import           Control.Lens                 (At (at), Index, Iso, Iso', Prism',
                                                IxValue, Ixed (ix), Lens', both,
                                                from, iso, lens, makeLenses,
                                                makePrisms, over, view, (%~),
@@ -55,6 +55,7 @@ import           Prelude                      hiding (Float)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
+import           Pact.Analyze.Feature         hiding (Type, time, obj, ks)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow
@@ -187,21 +188,32 @@ data LogicalOp
   | NotOp -- ^ Negation
   deriving (Show, Eq, Ord)
 
+logicalOpP :: Prism' Text LogicalOp
+logicalOpP = mkOpNamePrism
+  [ (SLogicalConjunction, AndOp)
+  , (SLogicalDisjunction, OrOp)
+  , (SLogicalNegation,    NotOp)
+  -- NOTE: that we don't include logical implication here, which only exists in
+  -- the invariant and property languages (not term), and is desugared to a
+  -- combination of negation and disjunction during parsing.
+  ]
+
 instance UserShow LogicalOp where
-  userShowsPrec _ = \case
-    AndOp -> "and"
-    OrOp  -> "or"
-    NotOp -> "not"
+  userShowsPrec _ = toText logicalOpP
 
 data EqNeq
   = Eq'  -- ^ Equal
   | Neq' -- ^ Not equal
   deriving (Show, Eq, Ord)
 
+eqNeqP :: Prism' Text EqNeq
+eqNeqP = mkOpNamePrism
+  [ (SEquality,   Eq')
+  , (SInequality, Neq')
+  ]
+
 instance UserShow EqNeq where
-  userShowsPrec _ = \case
-    Eq'  -> "="
-    Neq' -> "!="
+  userShowsPrec _ = toText eqNeqP
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -212,14 +224,18 @@ data ComparisonOp
   | Neq -- ^ Not equal
   deriving (Show, Eq, Ord)
 
+comparisonOpP :: Prism' Text ComparisonOp
+comparisonOpP = mkOpNamePrism
+  [ (SGreaterThan,        Gt)
+  , (SLessThan,           Lt)
+  , (SGreaterThanOrEqual, Gte)
+  , (SLessThanOrEqual,    Lte)
+  , (SEquality,           Eq)
+  , (SInequality,         Neq)
+  ]
+
 instance UserShow ComparisonOp where
-  userShowsPrec _ = \case
-    Gt  -> ">"
-    Lt  -> "<"
-    Gte -> ">="
-    Lte -> "<="
-    Eq  -> "="
-    Neq -> "!="
+  userShowsPrec _ = toText comparisonOpP
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field

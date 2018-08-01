@@ -18,6 +18,8 @@ import           Data.String            (IsString)
 import           Data.Text              (Text)
 import           Data.Tuple             (swap)
 
+import qualified Pact.Types.Persistence as Pact
+
 --
 -- NOTE: that in the current factoring, there can be multiple features that
 -- share the same symbol -- this is one form of overloading. The "other form"
@@ -1042,3 +1044,12 @@ toOp = preview
 
 toText :: Prism' Text op -> op -> Text
 toText = review
+
+-- NOTE: we don't (yet?) use symbols here because Feature (currently?) only
+-- handles properties and invariants.
+writeTypeP :: Prism' Text Pact.WriteType
+writeTypeP = mkOpNamePrism
+  [ ("insert", Pact.Insert)
+  , ("update", Pact.Update)
+  , ("write",  Pact.Write)
+  ]

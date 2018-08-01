@@ -5,8 +5,11 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module Pact.Analyze.Types.Numerical where
 
-import           Data.SBV                    (AlgReal)
+import           Control.Lens         (Prism')
+import           Data.SBV             (AlgReal)
+import           Data.Text            (Text)
 
+import           Pact.Analyze.Feature
 import           Pact.Analyze.Types.UserShow
 
 -- Pact uses Data.Decimal which is arbitrary-precision
@@ -29,15 +32,18 @@ data ArithOp
   | Log -- ^ Logarithm
   deriving (Show, Eq, Ord)
 
+arithOpP :: Prism' Text ArithOp
+arithOpP = mkOpNamePrism
+  [ (SAddition,       Add)
+  , (SSubtraction,    Sub)
+  , (SMultiplication, Mul)
+  , (SDivision,       Div)
+  , (SExponentiation, Pow)
+  , (SLogarithm,      Log)
+  ]
+
 instance UserShow ArithOp where
-  -- TODO: use prism
-  userShowsPrec _ = \case
-    Add -> "+"
-    Sub -> "-"
-    Mul -> "*"
-    Div -> "/"
-    Pow -> "^"
-    Log -> "log"
+  userShowsPrec _ = toText arithOpP
 
 -- integer -> integer
 -- decimal -> decimal
@@ -52,14 +58,18 @@ data UnaryArithOp
            -- instance.
   deriving (Show, Eq, Ord)
 
+unaryArithOpP :: Prism' Text UnaryArithOp
+unaryArithOpP = mkOpNamePrism
+  [ (SNumericNegation,  Negate)
+  , (SSquareRoot,       Sqrt)
+  , (SNaturalLogarithm, Ln)
+  , (SExponential,      Exp)
+  , (SAbsoluteValue,    Abs)
+  -- explicitly no signum
+  ]
+
 instance UserShow UnaryArithOp where
-  userShowsPrec _ = \case
-    Negate -> "-"
-    Sqrt   -> "sqrt"
-    Ln     -> "ln"
-    Exp    -> "exp"
-    Abs    -> "abs"
-    Signum -> "signum"
+  userShowsPrec _ = toText unaryArithOpP
 
 -- decimal -> integer -> decimal
 -- decimal -> decimal
@@ -70,11 +80,15 @@ data RoundingLikeOp
   | Floor   -- ^ Round to the previous integer
   deriving (Show, Eq, Ord)
 
+roundingLikeOpP :: Prism' Text RoundingLikeOp
+roundingLikeOpP = mkOpNamePrism
+  [ (SBankersRound, Round)
+  , (SCeilingRound, Ceiling)
+  , (SFloorRound,   Floor)
+  ]
+
 instance UserShow RoundingLikeOp where
-  userShowsPrec _ = \case
-    Round   -> "round"
-    Ceiling -> "ceiling"
-    Floor   -> "floor"
+  userShowsPrec _ = toText roundingLikeOpP
 
 -- | Arithmetic ops
 --
