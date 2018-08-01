@@ -650,7 +650,7 @@ success
 
 .. code:: lisp
 
-    abort
+    success
 
 -  of type ``bool``
 

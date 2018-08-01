@@ -749,7 +749,7 @@ doc FTransactionSucceeds = Doc
   PropOnly
   "Whether the transaction succeeds. This function is only useful when expressing propositions that do not assume transaction success. Propositions defined via `property` implicitly assume transaction success. We will be adding a new mode in which to use this feature in the future -- please let us know if you need this functionality."
   [ Usage
-      "abort"
+      "success"
       Map.empty
       (Sym (TyCon bool))
   ]
