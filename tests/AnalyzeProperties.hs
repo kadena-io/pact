@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE LambdaCase           #-}
@@ -5,30 +6,35 @@
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PatternSynonyms      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE TupleSections #-}
 module AnalyzeProperties where
 
 import           Bound                       (closed)
+import           GHC.Natural               (Natural)
 import           Control.Exception           (ArithException (DivideByZero))
+import Control.Lens hiding ((...), op)
 import           Control.Monad               ((<=<))
 import           Control.Monad.Catch         (catch)
 import           Control.Monad.Except        (runExcept)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Morph         (generalize, hoist)
-import           Control.Monad.Reader        (ReaderT (runReaderT))
+import           Control.Monad.Reader        (ReaderT (runReaderT), MonadReader)
 import           Control.Monad.RWS.Strict    (runRWST)
-import           Control.Monad.State.Strict  (runStateT)
+import           Control.Monad.State.Strict  (runStateT, MonadState)
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe
 import qualified Data.Decimal                as Decimal
 import qualified Data.Default                as Default
+import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (unliteral)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:) (Refl))
 import           HaskellWorks.Hspec.Hedgehog
-import           Hedgehog
+import           Hedgehog hiding (Update)
 import qualified Hedgehog.Gen                as Gen
 import qualified Hedgehog.Range              as Range
 import           Numeric.Interval
@@ -49,20 +55,40 @@ import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
-import           Pact.Native                 (lengthDef)
+import           Pact.Native                 (enforceDef, enforceOneDef, lengthDef, pactVersionDef, formatDef, hashDef, ifDef)
 import           Pact.Native.Ops
 import           Pact.Native.Time
+import           Pact.Native.Keysets
 import           Pact.Repl                   (initPureEvalEnv)
 import           Pact.Typechecker            (typecheckTopLevel)
-import           Pact.Types.Exp              (Literal (..))
+import           Pact.Types.Exp              (Literal (..), Name(Name))
+import           Pact.Types.Persistence (WriteType)
 import           Pact.Types.Native           (NativeDef)
 import           Pact.Types.Runtime          (PactError (..),
                                               PactErrorType (EvalError),
                                               runEval)
-import           Pact.Types.Term             (Term (TApp, TConst, TLiteral))
+import           Pact.Types.Term             (Term (TApp, TConst, TLiteral), Meta(Meta))
 import qualified Pact.Types.Term             as Pact
 import qualified Pact.Types.Type             as Pact
 import qualified Pact.Types.Typecheck        as Pact
+
+import TimeGen
+
+-- import Debug.Trace
+
+data GenEnv = GenEnv
+  { _envTables        :: ![(TableName, Schema)]
+  , _envKeysets       :: ![Pact.KeySet]
+  }
+
+data GenState = GenState
+  { _idGen         :: !TagId
+  , _namedKeysets  :: !(Map String Pact.KeySet)
+  , _namedDecimals :: !(Map String Decimal)
+  } deriving Show
+
+makeLenses ''GenEnv
+makeLenses ''GenState
 
 -- Note [EmptyInterval]: For both genDecimal and genInteger, it's possible that
 -- the range is too small to generate even one number. When this is true,
@@ -172,6 +198,11 @@ instance Extract Time where
     ESimple TTime x -> x
     other -> error (show other)
 
+instance Extract KeySet where
+  extract = \case
+    ESimple TKeySet x -> x
+    other -> error (show other)
+
 -- TODO: Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => SizedType -> m ETerm
@@ -259,7 +290,7 @@ genCore SizedTime = Gen.recursive Gen.choice [
       pure $ ESimple TTime $ Inj $ DecAddTime (extract x) (extract y)
   ]
 genCore SizedKeySet = ESimple TKeySet . CoreTerm . Lit . KeySet
-  <$> genInteger (0 ... 100)
+  <$> genInteger (0 ... 2)
 
 intSize, decSize, strSize :: SizedType
 intSize = SizedInt     (0 +/- 1e25)
@@ -268,58 +299,155 @@ strSize = SizedString  1000
 
 -- TODO
 -- generic:
--- # IfThenElse
 -- # Let
--- # Sequence
--- bool:
--- # Enforce / EnforceOne
--- # *Authorized
 -- object:
 -- # Read
 -- string:
 -- # Write
--- # PactVersion
--- # Format
--- # FormatTime
--- # Hash
 -- time:
 -- # ParseTime
--- keyset:
--- # ReadKeySet
--- decimal:
--- # ReadDecimal
-genTerm :: MonadGen m => m ETerm
-genTerm = Gen.choice
-  [ genCore intSize
-  , genCore decSize
-  , genCore strSize
-  , genCore SizedBool
-  , genCore SizedTime
-  -- , genCore SizedKeySet
-  -- , genTermSpecific SizedBool
+genAnyTerm
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => m ETerm
+genAnyTerm = Gen.choice
+  [ genTerm intSize
+  , genTerm decSize
+  , genTerm strSize
+  , genTerm SizedBool
+  , genTerm SizedTime
+  , genTerm SizedKeySet
   ]
 
-genTermSpecific :: MonadGen m => SizedType -> m ETerm
-genTermSpecific SizedBool          = undefined
-  -- Enforce
-  -- EnforceOne
-  -- KsAuthorized
-  -- NameAuthorized
-  -- Let
-  -- Sequence
-  -- IfThenElse
-genTermSpecific (SizedString _len) = undefined
-  -- Write
-  -- PactVersion
-  -- Format
-  -- FormatTime
-  -- Hash
-  -- Let
-  -- Sequence
-  -- IfThenElse
+genTerm
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => SizedType -> m ETerm
+genTerm size = Gen.choice [genCore size, genTermSpecific size]
 
-toPactTm :: ETerm -> Maybe (Pact.Term Pact.Ref)
+genTermSpecific
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => SizedType -> m ETerm
+genTermSpecific size@SizedInt{} = genTermSpecific' size
+genTermSpecific SizedBool          = Gen.choice
+  [ ESimple TBool . Enforce Nothing . extract <$> genTerm SizedBool
+  , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
+       pure $ ESimple TBool $ EnforceOne $ Right $ fmap (((0, 0),) . extract) xs
+  -- TODO:
+  -- , do tagId <- genTagId
+  --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
+  -- , do tagId <- genTagId
+  --      ESimple TBool . NameAuthorized tagId . extract <$> genTerm strSize
+  , genTermSpecific' SizedBool
+  ]
+genTermSpecific size@(SizedString _len) = Gen.choice
+  -- [ do
+  --      tables <- view envTables
+  --      (table, schema) <- Gen.element tables
+  --      writeType <- genWriteType
+  --      tagId <- genTagId
+  --      Write writeType tagId table schema
+  -- Write
+  [ pure (ESimple TStr PactVersion)
+  , do
+       (str, tms) <- Gen.choice
+         [ do
+              tm <- genAnyTerm
+              pure (lit "{}", [tm])
+         , do
+              tm1 <- genAnyTerm
+              tm2 <- genAnyTerm
+              str <- Gen.element ["{} {}", "{} / {}", "{} - {}"]
+              pure (lit str, [tm1, tm2])
+         , do
+              tm1 <- genAnyTerm
+              tm2 <- genAnyTerm
+              tm3 <- genAnyTerm
+              str <- Gen.element ["{} {} {}", "{} / {} / {}", "{} - {} - {}"]
+              pure (lit str, [tm1, tm2, tm3])
+         ]
+       pure $ ESimple TStr $ Format str tms
+  , do
+       -- just generate literal format strings here so this tests something
+       -- interesting
+       format           <- genFormat
+       ESimple TTime t2 <- genTerm SizedTime
+       pure $ ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
+  , ESimple TStr . Hash <$> genAnyTerm
+  , genTermSpecific' size
+  ]
+genTermSpecific SizedKeySet =
+  ESimple TKeySet . ReadKeySet . lit <$> genKeySetName
+genTermSpecific (SizedDecimal len) =
+  ESimple TKeySet . ReadKeySet . lit <$> genDecimalName len
+genTermSpecific SizedTime = Gen.choice
+  [ do
+       -- We simplify a bit here and
+       format  <- genFormat
+       timeStr <- genTimeOfFormat format
+       pure $ ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
+         lit timeStr
+  , do
+       timeStr <- genTimeOfFormat standardTimeFormat
+       pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
+  ]
+
+genWriteType :: MonadGen m => m WriteType
+genWriteType = Gen.enumBounded
+
+genTagId :: MonadState GenState m => m TagId
+genTagId = do
+  idGen %= succ
+  use idGen
+
+genKeySetName
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => m String
+genKeySetName = do
+  idGen %= succ
+  TagId nat <- use idGen
+  keysets   <- view envKeysets
+  keyset    <- Gen.element keysets
+  let k = show nat
+  namedKeysets . at k ?= keyset
+  pure k
+
+genDecimalName
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => NumSize -> m String
+genDecimalName size = do
+  idGen %= succ
+  TagId nat <- use idGen
+  d         <- genDecimal size
+  let k = show nat
+  namedDecimals . at k ?= d
+  pure k
+
+genNatural :: MonadGen m => Range Natural -> m Natural
+genNatural = Gen.integral
+
+-- Generate a term of a specific type with a generic construct
+-- (Let, Sequence, IfThenElse)
+genTermSpecific'
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  => SizedType -> m ETerm
+genTermSpecific' sizedTy = Gen.choice
+  -- TODO: Let
+  -- [ do
+  --      eTm <- genAnyTerm
+  --      ESimple ty tm <- genTerm sizedTy
+  --      pure $ ESimple ty $ Sequence eTm tm
+  [ do
+       ESimple TBool b <- genTerm SizedBool
+       ESimple tyt1 t1 <- genTerm sizedTy
+       ESimple tyt2 t2 <- genTerm sizedTy
+       case typeEq tyt1 tyt2 of
+         Just Refl -> pure $ ESimple tyt1 $ IfThenElse b (0, t1) (0, t2)
+         Nothing   -> error "t1 and t2 must have the same type"
+  ]
+
+toPactTm :: ETerm -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
 toPactTm = \case
+  -- core terms:
+
   ESimple TDecimal (Inj (DecArithOp op x y)) ->
     mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
 
@@ -378,26 +506,72 @@ toPactTm = \case
     mkApp (logicalOpToDef op) (ESimple TBool <$> args)
 
   ESimple TInt     (CoreTerm (Lit x))
-    -> Just $ TLiteral (LInteger x) dummyInfo
+    -> pure $ TLiteral (LInteger x) dummyInfo
   ESimple TDecimal (CoreTerm (Lit x))
-    -> Just $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
+    -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
   ESimple TStr     (CoreTerm (Lit x))
-    -> Just $ TLiteral (LString (T.pack x)) dummyInfo
+    -> pure $ TLiteral (LString (T.pack x)) dummyInfo
   ESimple TBool    (CoreTerm (Lit x))
-    -> Just $ TLiteral (LBool x) dummyInfo
+    -> pure $ TLiteral (LBool x) dummyInfo
   ESimple TTime    (CoreTerm (Lit x))
-    -> Just $ TLiteral (LTime (toPact timeIso x)) dummyInfo
+    -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
 
-  ESimple TKeySet  (CoreTerm (Lit _x))
-    -> error "how do we translate keysets?"
+  ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
+    keysets <- view (_1 . envKeysets)
+    case keysets ^? ix (fromIntegral x) of
+      Just ks -> pure $ Pact.TKeySet ks dummyInfo
+      Nothing -> error $ "no keysets found at index " ++ show x
+
+  -- term-specific terms:
+  ESimple TBool (Enforce Nothing x)
+    -> mkApp enforceDef [ESimple TBool x]
+  ESimple TBool (EnforceOne Left{})
+    -> mkApp enforceOneDef []
+  ESimple TBool (EnforceOne (Right xs))
+    -> mkApp enforceOneDef (ESimple TBool . snd <$> xs)
+  -- ESimple TBool (KsAuthorized x)
+  -- ESimple TBool (NameAuthorized x)
+
+  ESimple TStr PactVersion -> mkApp pactVersionDef []
+  ESimple TStr (Format x ys)
+    -> mkApp formatDef (ESimple TStr x : ys)
+  ESimple TStr (FormatTime x y)
+    -> mkApp defFormatTime [ESimple TStr x, ESimple TTime y]
+  ESimple TStr (Hash x) -> mkApp hashDef [x]
+
+  ESimple TKeySet (ReadKeySet x) -> mkApp readKeysetDef [ESimple TStr x]
+
+  ESimple TTime (ParseTime Nothing x) ->
+    mkApp parseTimeDef [ESimple TStr x]
+
+  ESimple TTime (ParseTime Nothing x) ->
+    mkApp parseTimeDef [ESimple TStr x]
+
+  ESimple TTime (ParseTime (Just x) y) ->
+    mkApp parseTimeDef [ESimple TStr x, ESimple TStr y]
+
+  -- ESimple ty (Sequence etm tm) -> do
+  --   t1 <- toPactTm etm
+  --   t2 <- toPactTm (ESimple ty tm)
+  --   pure $ TList [t1, t2] (Pact.TyList Pact.TyAny) dummyInfo
+
+--   ESimple ty (Let name _vid etm bodyTm) -> do
+--     t1 <- toPactTm etm
+--     t2 <- toPactTm (ESimple ty bodyTm)
+--     pure $ TBinding [(Pact.Arg name undefined dummyInfo, t1)]
+--       t2 undefined dummyInfo
+
+  ESimple ty (IfThenElse t1 (_, t2) (_, t3)) ->
+    mkApp ifDef [ESimple TBool t1, ESimple ty t2, ESimple ty t3]
 
   tm -> error $ "TODO: toPactTm " ++ show tm
 
   where
-    mkApp :: NativeDef -> [ETerm] -> Maybe (Pact.Term Pact.Ref)
+    mkApp :: NativeDef -> [ETerm]
+      -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
-      Just $ TApp (liftTerm defTm) args' dummyInfo
+      pure $ TApp (liftTerm defTm) args' dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
     arithOpToDef = \case
@@ -438,12 +612,17 @@ toPactTm = \case
       OrOp  -> orDef
       NotOp -> notDef
 
-toPactTm' :: Applicative m => ETerm -> MaybeT m (Pact.Term Pact.Ref)
-toPactTm' = MaybeT . pure . toPactTm
+toPactTm'
+  -- :: Applicative m
+  :: Monad m
+  => (GenEnv, GenState) -> ETerm -> MaybeT m (Pact.Term Pact.Ref)
+toPactTm' envState etm = MaybeT $ do
+  -- traceM $ "in toPactTm', etm = " ++ show etm
+  pure $ runReaderT (toPactTm etm) envState
 
 toAnalyze :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO ETerm
 toAnalyze ty tm = do
-  let cnst = TConst (Pact.Arg "tm" ty dummyInfo) "module" (Pact.CVRaw tm) (Pact.Meta Nothing Nothing) dummyInfo
+  let cnst = TConst (Pact.Arg "tm" ty dummyInfo) "module" (Pact.CVRaw tm) (Meta Nothing Nothing) dummyInfo
       ref = Pact.Ref cnst
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
   (_cTy, ast) <- case maybeConst of
@@ -495,13 +674,33 @@ describeAnalyzeFailure (AnalyzeFailure info err) = unlines
   , T.unpack (describeAnalyzeFailureNoLoc err)
   ]
 
+genAnyTerm' :: Gen (ETerm, GenState)
+genAnyTerm' = runReaderT
+  (runStateT genAnyTerm (GenState 0 Map.empty Map.empty))
+  genEnv
+
+alice, bob :: Pact.PublicKey
+alice = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"
+bob = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
+
+genEnv :: GenEnv
+genEnv = GenEnv
+  [("accounts", Schema $ Map.fromList
+    [ ("balance", EType TInt)
+    , ("name",    EType TStr)
+    ])]
+  [ Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo)
+  , Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo)
+  , Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo)
+  ]
+
 
 prop_evaluation :: Property
 prop_evaluation = property $ do
-  etm@(ESimple ty _tm) <- forAll genTerm
+  (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
 
   -- pact setup
-  let Just pactTm = toPactTm etm
+  let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
       evalState = Default.def
   evalEnv <- liftIO initPureEvalEnv
 
@@ -511,7 +710,7 @@ prop_evaluation = property $ do
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
         -- this 'Located TVal' is never forced so we don't provide it
         undefined Map.empty
-      state0 = mkInitialAnalyzeState tables
+
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
 
   (do
@@ -558,13 +757,14 @@ prop_round_trip_type = property $ do
   maybeTranslateType (reverseTranslateType ty) === Just ety
 
 prop_round_trip_term :: Property
-prop_round_trip_term = property $ (do
-  etm@(ESimple ty _tm) <- forAll genTerm
+prop_round_trip_term = property (do
+  (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
 
   etm' <- lift $ runMaybeT $
-    (toAnalyze (reverseTranslateType ty) <=< toPactTm') etm
+    (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
   etm' === Just etm)
-    `catch` (\(_e :: EmptyInterval)  -> discard)
+    -- XXX
+    -- `catch` (\(_e :: EmptyInterval)  -> discard)
 
 spec :: Spec
 spec = describe "analyze properties" $ do

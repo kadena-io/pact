@@ -20,6 +20,12 @@ module Pact.Native
     ,nativeDefs
     ,moduleToMap
     ,lengthDef
+    ,enforceDef
+    ,enforceOneDef
+    ,pactVersionDef
+    ,formatDef
+    ,hashDef
+    ,ifDef
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
@@ -79,13 +85,45 @@ lengthDef = defRNative "length" length' (funType tTyInteger [("x",listA)])
 listA :: Type n
 listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
 
+enforceDef :: NativeDef
+enforceDef = defNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
+  "Fail transaction with MSG if pure function TEST fails, or returns true. \
+  \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
+
+enforceOneDef :: NativeDef
+enforceOneDef =
+  defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
+  "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
+  \`(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])`"
+
+
+pactVersionDef :: NativeDef
+pactVersionDef =
+  defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
+  "Obtain current pact build version. `(pact-version)`"
+
+
+formatDef :: NativeDef
+formatDef =
+  defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
+  "Interpolate VARS into TEMPLATE using {}. \
+  \`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"
+
+hashDef :: NativeDef
+hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
+  "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
+  \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
+
+ifDef :: NativeDef
+ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
+  "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
+  \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
+
+
 langDefs :: NativeModule
 langDefs =
     ("General",[
-     defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
-     "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
-     \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
-
+     ifDef
     ,defNative "map" map'
      (funType (TyList a) [("app",lam b a),("list",TyList b)])
      "Apply elements in LIST as last arg to APP, returning list of results. \
@@ -144,16 +182,10 @@ langDefs =
      "Index LIST at IDX, or get value with key IDX from OBJECT. \
      \`(at 1 [1 2 3])` `(at \"bar\" { \"foo\": 1, \"bar\": 2 })`"
 
-    ,defNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-     "Fail transaction with MSG if pure function TEST fails, or returns true. \
-     \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
-    ,defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
-     "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
-     \`(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])`"
+    ,enforceDef
+    ,enforceOneDef
 
-    ,defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
-     "Interpolate VARS into TEMPLATE using {}. \
-     \`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"
+    ,formatDef
 
     ,defRNative "pact-id" pactId (funType tTyInteger [])
      "Return ID if called during current pact execution, failing if not."
@@ -187,8 +219,7 @@ langDefs =
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
 
-    ,defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
-     "Obtain current pact build version. `(pact-version)`"
+    ,pactVersionDef
 
     ,defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
@@ -212,13 +243,10 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-    ,defRNative "hash" hash' (funType tTyString [("value",a)])
-     "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
-     \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
+    ,hashDef
 
     ])
-    where a = mkTyVar "a" []
-          b = mkTyVar "b" []
+    where b = mkTyVar "b" []
           c = mkTyVar "c" []
           d = mkTyVar "d" []
           row = mkSchemaVar "row"
@@ -230,6 +258,8 @@ langDefs =
           lam x y = TyFun $ funType' y [("x",x)]
           lam2 x y z = TyFun $ funType' z [("x",x),("y",y)]
 
+a :: Type n
+a = mkTyVar "a" []
 
 if' :: NativeFun e
 if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \cm -> case cm of

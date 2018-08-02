@@ -15,6 +15,8 @@
 module Pact.Native.Time
     (timeDefs
     , defAddTime
+    , defFormatTime
+    , parseTimeDef
     ) where
 
 import Control.Monad
@@ -40,6 +42,18 @@ defAddTime = defRNative "add-time" addTime
   $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
   <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
 
+defFormatTime :: NativeDef
+defFormatTime = defRNative "format-time" formatTime'
+  (funType tTyString [("format", tTyString),("time", tTyTime)])
+  $ "Format TIME using FORMAT. " <> timedoc
+  <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"
+
+parseTimeDef :: NativeDef
+parseTimeDef = defRNative "parse-time" parseTime'
+  (funType tTyTime [("format", tTyString),("utcval", tTyString)])
+  $ "Construct time from UTCVAL using FORMAT. " <> timedoc
+  <> "`(parse-time \"%F\" \"2016-09-12\")`"
+
 timeDefs :: NativeModule
 timeDefs = ("Time", timeDef)
   where
@@ -49,10 +63,7 @@ timeDefs = ("Time", timeDef)
             $ "Construct time from UTCVAL using ISO8601 format ("
             <> pack simpleISO8601 <> "). "
             <> "`(time \"2016-07-22T11:26:35Z\")`"
-        , defRNative "parse-time" parseTime'
-            (funType tTyTime [("format", tTyString),("utcval", tTyString)])
-            $ "Construct time from UTCVAL using FORMAT. " <> timedoc
-            <> "`(parse-time \"%F\" \"2016-09-12\")`"
+        , parseTimeDef
         , defAddTime
         , defRNative "diff-time" diffTime
             (funType tTyDecimal [("time1", tTyTime),("time2", tTyTime)])
@@ -71,10 +82,7 @@ timeDefs = ("Time", timeDef)
             multType
             $ "N days, for use with 'add-time' "
             <> "`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
-        , defRNative "format-time" formatTime'
-            (funType tTyString [("format", tTyString),("time", tTyTime)])
-            $ "Format TIME using FORMAT. " <> timedoc
-            <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"
+        , defFormatTime
         ]
     multType = funType tTyDecimal [("n", tTyDecimal)]
         <> funType tTyDecimal [("n", tTyInteger)]
