@@ -29,6 +29,8 @@ newtype TagId
   = TagId Natural
   deriving (Num, Show, Ord, Eq)
 
+type Edge = (Vertex, Vertex)
+
 newtype Vertex
   = Vertex Natural
   deriving (Num, Enum, Show, Ord, Eq)
