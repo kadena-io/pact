@@ -120,7 +120,7 @@ data TranslateState
     , _tsNextVarId         :: VarId
     , _tsGraph             :: Alga.Graph Vertex
     , _tsPathVertex        :: Vertex
-    , _tsEdgeStatements    :: Map (Vertex, Vertex) [TraceStatement]
+    , _tsEdgeStatements    :: Map Edge [TraceStatement]
     , _tsPendingStatements :: ReversedList TraceStatement
     }
 
@@ -253,9 +253,9 @@ throwError' err = do
   info <- view _1
   throwError $ TranslateFailure info err
 
--- | Generates a new 'Vertex', setting it as the head, returning a tuple of the
--- previous 'Vertex' and this newly-generated one.
-issueVertex :: TranslateM (Vertex, Vertex)
+-- | Generates a new 'Vertex', setting it as the head, returning the
+-- newly-formed 'Edge'.
+issueVertex :: TranslateM Edge
 issueVertex = do
   prev <- use tsPathVertex
   let v = succ prev
