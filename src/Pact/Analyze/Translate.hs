@@ -13,8 +13,7 @@
 
 module Pact.Analyze.Translate where
 
-import           Algebra.Graph              (Graph, connect, edge, overlay,
-                                             vertices)
+import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (at, cons, makeLenses, use, view,
                                              (<&>), (?~), (^.), (^?), (%~),
@@ -119,7 +118,7 @@ data TranslateState
     { _tsTagAllocs         :: [TagAllocation] -- "strict" WriterT isn't; so we use state
     , _tsNextTagId         :: TagId
     , _tsNextVarId         :: VarId
-    , _tsGraph             :: Graph Vertex
+    , _tsGraph             :: Alga.Graph Vertex
     , _tsPathVertex        :: Vertex
     , _tsEdgeStatements    :: Map (Vertex, Vertex) [TraceStatement]
     , _tsPendingStatements :: ReversedList TraceStatement
@@ -280,7 +279,7 @@ resetPath = (tsPathVertex .=)
 extendPath :: TranslateM Vertex
 extendPath = do
   e@(v, v') <- issueVertex
-  tsGraph %= overlay (edge v v')
+  tsGraph %= Alga.overlay (Alga.edge v v')
   edgeTrace <- flushStatements
   tsEdgeStatements.at e ?= edgeTrace
   pure v'
@@ -291,7 +290,7 @@ extendPath = do
 joinPaths :: [Vertex] -> TranslateM Vertex
 joinPaths vs = do
   (_, v') <- issueVertex
-  tsGraph %= overlay (vertices vs `connect` pure v')
+  tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for vs $ \v ->
     tsEdgeStatements.at (v, v') ?= []
   pure v'
