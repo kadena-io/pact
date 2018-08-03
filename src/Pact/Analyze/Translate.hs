@@ -121,7 +121,7 @@ data TranslateState
     , _tsGraph             :: Alga.Graph Vertex
     , _tsPathVertex        :: Vertex
     , _tsEdgeStatements    :: Map Edge [TraceStatement]
-    , _tsPendingStatements :: ReversedList TraceStatement
+    , _tsPendingStatements :: SnocList TraceStatement
     }
 
 makeLenses ''TranslateFailure
@@ -266,7 +266,7 @@ issueVertex = do
 -- path.
 flushStatements :: TranslateM [TraceStatement]
 flushStatements = do
-  UnreversedList pathStmts <- use tsPendingStatements
+  ConsList pathStmts <- use tsPendingStatements
   tsPendingStatements .= mempty
   pure pathStmts
 
