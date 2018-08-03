@@ -27,9 +27,8 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left)
-import           Control.Monad             (join, void)
+                                            (^.), (^?), (^@..), _1, _2, _Just)
+import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -83,8 +82,9 @@ newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
 
 describeVerificationWarnings :: VerificationWarnings -> Text
-describeVerificationWarnings (VerificationWarnings dups) =
-  "Warning: duplicated property definitions for " <> T.intercalate ", " dups
+describeVerificationWarnings (VerificationWarnings dups) = case dups of
+  [] -> ""
+  _  -> "Warning: duplicated property definitions for " <> T.intercalate ", " dups
 
 data CheckSuccess
   = SatisfiedProperty Model
@@ -130,7 +130,7 @@ data ModuleChecks = ModuleChecks
   } deriving (Eq, Show)
 
 data VerificationFailure
-  = ModuleParseFailures [ParseFailure]
+  = ModuleParseFailure ParseFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   deriving Show
@@ -326,7 +326,7 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
 moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
-  -> ExceptT [ParseFailure] IO [Table]
+  -> ExceptT ParseFailure IO [Table]
 moduleTables modules (_mod, modRefs) = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
@@ -349,12 +349,13 @@ moduleTables modules (_mod, modRefs) = do
     invariants <- case schemas ^? ix schemaName.tMeta.dmModel._Just of
       -- no model = no invariants
       Nothing    -> pure []
-      Just model -> liftEither $
+      Just model -> liftEither $ do
         let model'        = expToMapping model
             expInvariants = model' ^? _Just . ix "invariants"
             expInvariant  = model' ^? _Just . ix "invariant"
-        in runExpParserOver "invariants" expInvariants expInvariant $
-             flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
+        exps <- collectExps "invariants" expInvariants expInvariant
+        runExpParserOver exps $
+          flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
     pure $ Table tabName schema invariants
 
@@ -387,7 +388,7 @@ moduleFunChecks
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
   -> HM.HashMap Text Exp
   -> Except VerificationFailure
-       (HM.HashMap Text (Ref, Either [ParseFailure] [Located Check]))
+       (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
 moduleFunChecks tables modTys propDefs = for modTys $
   \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
@@ -431,12 +432,13 @@ moduleFunChecks tables modTys propDefs = for modTys $
   checks <- case defn ^? tMeta . dmModel . _Just of
     -- no model = no properties
     Nothing    -> pure []
-    Just model -> withExcept ModuleParseFailures $ liftEither $
-      let model'     = expToMapping model
+    Just model -> withExcept ModuleParseFailure $ liftEither $ do
+      let model'        = expToMapping model
           expProperties = model' ^? _Just . ix "properties"
           expProperty   = model' ^? _Just . ix "property"
-      in runExpParserOver "properties" expProperties expProperty $
-           expToCheck tableEnv vidStart nameEnv idEnv propDefs
+      exps <- collectExps "properties" expProperties expProperty
+      runExpParserOver exps $
+        expToCheck tableEnv vidStart nameEnv idEnv propDefs
 
   pure (ref, Right checks)
 
@@ -464,20 +466,12 @@ expToInfo exp = Info (Just (Code (tShow exp), exp ^. eParsed))
 -- or successes.
 runExpParserOver
   :: forall t.
-     String
-  -> Maybe Exp
-  -> Maybe Exp
+     [Exp]
   -> (Exp -> Either String t)
-  -> Either [ParseFailure] [Located t]
-runExpParserOver name multiExp singularExp parser =
-  let
-      exps = collectExps name multiExp singularExp
-      parsedList :: Either ParseFailure [Either [ParseFailure] (Located t)]
-      parsedList = exps <&&> \meta -> case parser meta of
-        Left err   -> Left [(meta, err)]
-        Right good -> Right (Located (expToInfo meta) good)
-
-  in join $ fmap sequence $ parsedList & _Left %~ (:[])
+  -> Either ParseFailure [Located t]
+runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
+  Left err   -> Left (meta, err)
+  Right good -> Right (Located (expToInfo meta) good)
 
 verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
@@ -517,7 +511,7 @@ verifyModule
   -> ModuleData                         -- ^ the module we're verifying
   -> IO (Either VerificationFailure ModuleChecks)
 verifyModule modules moduleData = runExceptT $ do
-  tables <- withExceptT ModuleParseFailures $ moduleTables modules moduleData
+  tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
 
   let -- HM.unions is biased towards the start of the list. This module should
       -- shadow the others. Note that load / shadow order of imported modules
@@ -525,7 +519,7 @@ verifyModule modules moduleData = runExceptT $ do
       allModules = moduleData : HM.elems modules
 
   allModulePropDefs <-
-    withExceptT (ModuleParseFailures . (:[])) $ liftEither $
+    withExceptT ModuleParseFailure $ liftEither $
       traverse modulePropDefs allModules
 
   let -- how many times have these names been defined across all in-scope
@@ -557,17 +551,17 @@ verifyModule modules moduleData = runExceptT $ do
     HM.empty
     typecheckedRefs
 
-  (funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [Located Check]))
+  (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
     <- hoist generalize $ moduleFunChecks tables funTypes propDefs
 
-  let funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [Located Check]))
+  let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks
 
       verifyFunProps :: (Ref, [Located Check]) -> IO [CheckResult]
       verifyFunProps = uncurry (verifyFunctionProps tables)
 
   funChecks'' <- case funChecks' of
-    Left errs         -> throwError $ ModuleParseFailures errs
+    Left errs         -> throwError $ ModuleParseFailure errs
     Right funChecks'' -> pure funChecks''
 
   funChecks''' <- lift $ traverse verifyFunProps funChecks''
@@ -592,7 +586,7 @@ verifyCheck moduleData funName check = do
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
 
-  tables <- withExceptT ModuleParseFailures $ moduleTables modules moduleData
+  tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps tables funRef [Located info check]
