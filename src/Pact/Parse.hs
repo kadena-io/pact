@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 -- |
@@ -50,29 +51,29 @@ expr = do
         let len = bytes end - bytes delt
         return $ Parsed delt (fromIntegral len)
   msum
-    [ TF.try (ELiteral <$> token number <*> inf <?> "number")
+    [ TF.try (ELiteral <$> token number <*> inf) <?> "number"
     , ELiteral . LString <$> stringLiteral <*> inf <?> "string"
     , ELiteral <$> bool <*> inf <?> "bool"
     , ESymbol <$> (symbolic '\'' >> ident style) <*> inf <?> "symbol"
     , do
       a <- ident style
       msum
-        [ TF.try $ do
-            t <- typed
-            i <- inf
-            return (EAtom a Nothing (Just t) i) <?> "typed atom"
-        , TF.try $ do
-            q <- qualified
-            i <- inf
-            return (EAtom a (Just q) Nothing i) <?> "qual atom"
-        , do
-             i <- inf
-             return (EAtom a Nothing Nothing i) <?> "bare atom"
+        [ let p = do
+                t <- typed
+                EAtom a Nothing (Just t) <$> inf
+          in TF.try p <?> "typed atom"
+        , let p = do
+                q <- qualified
+                EAtom a (Just q) Nothing <$> inf
+          in TF.try p <?> "qual atom"
+        , EAtom a Nothing Nothing <$> inf <?> "bare atom"
         ]
     , EList <$> parens (many expr) <*> pure Nothing <*> inf <?> "sexp"
     , do
-      is <- TF.try (brackets (many expr) <?> "space-delimited list literal") <|>
-                   (brackets (expr `sepBy` comma) <?> "comma-delimited list literal")
+      is <- msum
+        [ TF.try $ brackets (many expr) <?> "space-delimited list literal"
+        , brackets (expr `sepBy` comma) <?> "comma-delimited list literal"
+        ]
       let lty = case nub (map expPrimTy is) of
                   [Just ty] -> ty
                   _ -> TyAny
@@ -80,11 +81,11 @@ expr = do
       return $ EList is (Just lty) i
     , do
       ps <- pairs
-      let ops = map fst ps
-          kvs = map snd ps
-      if all (== ":") ops then EObject kvs <$> inf
-      else if all (== ":=") ops then EBinding kvs <$> inf
-           else unexpected $ "Mixed binding/object operators: " ++ show ops
+      let (ops, kvs) = unzip ps
+      if
+        | all (== ":") ops  -> EObject kvs <$> inf
+        | all (== ":=") ops -> EBinding kvs <$> inf
+        | otherwise         -> unexpected $ "Mixed binding/object operators: " ++ show ops
     ]
 {-# INLINE expr #-}
 
@@ -141,9 +142,8 @@ tsymbol :: Text -> P String
 tsymbol = symbol . unpack
 
 parseUserSchema :: P (Type TypeName)
-parseUserSchema = braces $ do
-  t <- ident style
-  return (TyUser (fromString t)) <?> "user type"
+parseUserSchema =
+  braces (TyUser . fromString <$> ident style) <?> "user type"
 
 parseSchemaType :: Text -> SchemaType -> P (Type TypeName)
 parseSchemaType tyRep sty =
@@ -178,3 +178,4 @@ _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 
 _parseAccounts :: IO (Result ([Exp],String))
 _parseAccounts = _parseF exprsOnly "examples/accounts/accounts.pact"
+
