@@ -365,10 +365,12 @@ verify i as = case as of
             pure $ Text.unpack $ describeCheckFailure checkFailure
           Left (TypeTranslationFailure msg ty) -> setop $ TcErrors $ pure $
             Text.unpack $ msg <> ": " <> tShow ty
-          Right (ModuleChecks propResults invariantResults) -> setop $ TcErrors $
+          Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
             let propResults'      = propResults      ^.. traverse . each
                 invariantResults' = invariantResults ^.. traverse . traverse . each
-            in Text.unpack . describeCheckResult <$> propResults' <> invariantResults'
+            in fmap Text.unpack $
+                 (describeCheckResult <$> propResults' <> invariantResults') <>
+                 [describeVerificationWarnings warnings]
 
         return (tStr "")
 

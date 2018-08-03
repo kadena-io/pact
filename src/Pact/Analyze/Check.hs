@@ -1,8 +1,10 @@
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
 
 module Pact.Analyze.Check
   ( verifyModule
@@ -10,6 +12,7 @@ module Pact.Analyze.Check
   , describeCheckFailure
   , describeCheckResult
   , describeParseFailure
+  , describeVerificationWarnings
   , showModel
   , CheckFailure(..)
   , CheckFailureNoLoc(..)
@@ -22,17 +25,17 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
-                                            view, (<&>), (^.), (^?), (^@..),
-                                            _1, _2)
+import           Control.Lens              (at, ifoldrM, itraversed, ix,
+                                            traversed, view, (%~), (&), (<&>),
+                                            (^.), (^?), (^@..), _1, _2, _Just,
+                                            _Left)
 import           Control.Monad             (join, void)
-import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
-                                            catchError, runExceptT, throwError,
-                                            withExcept, withExceptT)
+import           Control.Monad.Except      (Except, ExceptT (ExceptT),
+                                            MonadError, catchError, runExceptT,
+                                            throwError, withExcept, withExceptT)
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Either               (lefts, partitionEithers, rights)
 import qualified Data.HashMap.Strict       as HM
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
@@ -50,18 +53,19 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
-                                            mName, renderInfo,
-                                            renderParsed, tMeta, dmModel)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
-                                            Term (TConst, TDef, TSchema,
-                                            TTable), asString, tShow)
+import           Pact.Types.Lang           (Code (Code), Info (Info), dmModel,
+                                            eParsed, mName, renderInfo,
+                                            renderParsed, tMeta)
+import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
+                                            pattern ELitList, Exp, ModuleData,
+                                            ModuleName, Ref (Ref),
+                                            Term (TConst, TDef, TSchema, TTable),
+                                            asString, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable, _tlInfo),
+                                            TopLevel (TopFun, TopTable),
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
@@ -74,6 +78,13 @@ import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
+
+newtype VerificationWarnings = VerificationWarnings [Text]
+  deriving (Eq, Show)
+
+describeVerificationWarnings :: VerificationWarnings -> Text
+describeVerificationWarnings (VerificationWarnings dups) =
+  "Warning: duplicated property definitions for " <> T.intercalate ", " dups
 
 data CheckSuccess
   = SatisfiedProperty Model
@@ -115,6 +126,7 @@ type CheckResult = Either CheckFailure CheckSuccess
 data ModuleChecks = ModuleChecks
   { propertyChecks  :: HM.HashMap Text [CheckResult]
   , invariantChecks :: HM.HashMap Text (TableMap [CheckResult])
+  , moduleWarnings  :: VerificationWarnings
   } deriving (Eq, Show)
 
 data VerificationFailure
@@ -315,7 +327,7 @@ moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
   -> ExceptT [ParseFailure] IO [Table]
-moduleTables modules (_mod, modRefs) = ExceptT $ do
+moduleTables modules (_mod, modRefs) = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
   let tables = flip mapMaybe (modules ^@.. traversed . _2 . itraversed) $ \case
@@ -327,25 +339,34 @@ moduleTables modules (_mod, modRefs) = ExceptT $ do
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
 
-  eitherTables <- for tables $ \(tabName, tab) -> do
-      (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
-        <- runTC 0 False $ typecheckTopLevel (Ref tab)
+  for tables $ \(tabName, tab) -> do
+    (TopTable _info _name (Pact.TyUser schema) _meta, _tcState)
+      <- lift $ runTC 0 False $ typecheckTopLevel (Ref tab)
 
-      let TC.Schema{_utName,_utFields} = schema
-          schemaName = asString _utName
+    let TC.Schema{_utName,_utFields} = schema
+        schemaName = asString _utName
 
-          invariants = schemas ^? ix schemaName.tMeta.dmModel.ix "invariants"
-          invariant  = schemas ^? ix schemaName.tMeta.dmModel.ix "invariant"
+    invariants <- case schemas ^? ix schemaName.tMeta.dmModel._Just of
+      -- no model = no invariants
+      Nothing    -> pure []
+      Just model -> liftEither $
+        let model'        = expToMapping model
+            expInvariants = model' ^? _Just . ix "invariants"
+            expInvariant  = model' ^? _Just . ix "invariant"
+        in runExpParserOver "invariants" expInvariants expInvariant $
+             flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
-          invInfo = runExpParserOver
-            "invariants" invariants invariant $
-            \meta -> runReaderT (expToInvariant TBool meta)
-              (varIdArgs _utFields)
+    pure $ Table tabName schema invariants
 
-      pure $ Table tabName schema <$> invInfo
-
-  let (failures, tables') = partitionEithers eitherTables
-  pure $ if null failures then Right tables' else Left (concat failures)
+parseDefprops :: Exp -> Either ParseFailure [(Text, Exp)]
+parseDefprops (ELitList exps) = traverse parseDefprops' exps where
+  parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
+    -- TODO: property args:
+    -- [ EAtom' propname, EList' _args, body ] -> pure (propname, args, body)
+    [ EAtom' propname,               body ] -> pure (propname, body)
+    _ -> Left (exp, "Invalid property definition")
+  parseDefprops' exp = Left (exp, "expected set of defproperty")
+parseDefprops exp = Left (exp, "expected set of defproperty")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
@@ -354,18 +375,23 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   Ref (TConst {}) -> True
   _               -> False
 
+-- Get the set of properties defined in this module
+modulePropDefs :: ModuleData -> Either ParseFailure (HM.HashMap Text Exp)
+modulePropDefs (Pact.Module{Pact._mMeta=Pact.DocModel _ model}, _modRefs)
+  = case model of
+      Just model' -> HM.fromList <$> parseDefprops model'
+      Nothing     -> Right HM.empty
+
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> Either VerificationFailure
+  -> HM.HashMap Text Exp
+  -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either [ParseFailure] [Located Check]))
-moduleFunChecks tables modTys = for modTys $
+moduleFunChecks tables modTys propDefs = for modTys $
   \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
-  let properties = defn ^? tMeta . dmModel . ix "properties"
-      property   = defn ^? tMeta . dmModel . ix "property"
-
-      -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
+  let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:
       vids = VarId <$> [1..]
 
@@ -402,19 +428,31 @@ moduleFunChecks tables modTys = for modTys $
                   (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
-      checks :: Either [ParseFailure] [Located Check]
-      checks = runExpParserOver "properties" properties property
-        (expToCheck tableEnv vidStart nameEnv idEnv)
+  checks <- case defn ^? tMeta . dmModel . _Just of
+    -- no model = no properties
+    Nothing    -> pure []
+    Just model -> withExcept ModuleParseFailures $ liftEither $
+      let model'     = expToMapping model
+          expProperties = model' ^? _Just . ix "properties"
+          expProperty   = model' ^? _Just . ix "property"
+      in runExpParserOver "properties" expProperties expProperty $
+           expToCheck tableEnv vidStart nameEnv idEnv propDefs
 
-  pure (ref, checks)
+  pure (ref, Right checks)
+
+-- | Given an exp like '(k v)', convert it to a singleton map
+expToMapping :: Exp -> Maybe (Map Text Exp)
+expToMapping (Pact.EList [Pact.EAtom k Nothing Nothing _, v] Nothing _)
+  = Just $ Map.singleton k v
+expToMapping _ = Nothing
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just
 -- collects the properties / invariants in a list.
-collectExps :: String -> Maybe Exp -> Maybe Exp -> Either [(Exp, String)] [Exp]
+collectExps :: String -> Maybe Exp -> Maybe Exp -> Either ParseFailure [Exp]
 collectExps name multiExp singularExp = case multiExp of
   Just (Pact.ELitList exps') -> Right exps'
-  Just exp -> Left [(exp, name ++ " must be a list")]
+  Just exp -> Left (exp, name ++ " must be a list")
   Nothing -> case singularExp of
     Just exp -> Right [exp]
     Nothing  -> Right []
@@ -434,18 +472,12 @@ runExpParserOver
 runExpParserOver name multiExp singularExp parser =
   let
       exps = collectExps name multiExp singularExp
-      parsedList :: Either [ParseFailure] [Either [ParseFailure] (Located t)]
+      parsedList :: Either ParseFailure [Either [ParseFailure] (Located t)]
       parsedList = exps <&&> \meta -> case parser meta of
         Left err   -> Left [(meta, err)]
         Right good -> Right (Located (expToInfo meta) good)
 
-      parsedList' :: [Either [ParseFailure] (Located t)]
-      parsedList' = join <$> sequence parsedList
-
-      failures :: [ParseFailure]
-      failures = join $ lefts parsedList'
-
-  in if null failures then Right (rights parsedList') else Left failures
+  in join $ fmap sequence $ parsedList & _Left %~ (:[])
 
 verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
@@ -472,7 +504,7 @@ verifyFunctionInvariants tables ref = do
       if Set.null failures
       then verifyFunctionInvariants' _fInfo tables _fArgs _fBody
       else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
-    other -> pure $ Left $ CheckFailure (_tlInfo other) (NotAFunction (tShow ref))
+    _ -> pure $ Right $ TableMap Map.empty
 
 -- TODO: use from Control.Monad.Except when on mtl 2.2.2
 liftEither :: MonadError e m => Either e a -> m a
@@ -487,7 +519,28 @@ verifyModule
 verifyModule modules moduleData = runExceptT $ do
   tables <- withExceptT ModuleParseFailures $ moduleTables modules moduleData
 
-  let typecheckedRefs :: HM.HashMap Text Ref
+  let -- HM.unions is biased towards the start of the list. This module should
+      -- shadow the others. Note that load / shadow order of imported modules
+      -- is undefined and in particular not the same as their import order.
+      allModules = moduleData : HM.elems modules
+
+  allModulePropDefs <-
+    withExceptT (ModuleParseFailures . (:[])) $ liftEither $
+      traverse modulePropDefs allModules
+
+  let -- how many times have these names been defined across all in-scope
+      -- modules
+      allModulePropNameDuplicates =
+          HM.keys
+        $ HM.filter (> (1 :: Int))
+        $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
+        $ concatMap HM.keys
+        $ allModulePropDefs
+
+      propDefs :: HM.HashMap Text Exp
+      propDefs = HM.unions allModulePropDefs
+
+      typecheckedRefs :: HM.HashMap Text Ref
       typecheckedRefs = moduleTypecheckableRefs moduleData
 
   -- For each ref, if it typechecks as a function (it'll be either a function
@@ -505,7 +558,7 @@ verifyModule modules moduleData = runExceptT $ do
     typecheckedRefs
 
   (funChecks :: HM.HashMap Text (Ref, Either [ParseFailure] [Located Check]))
-    <- liftEither $ moduleFunChecks tables funTypes
+    <- hoist generalize $ moduleFunChecks tables funTypes propDefs
 
   let funChecks' :: Either [ParseFailure] (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks
@@ -522,7 +575,9 @@ verifyModule modules moduleData = runExceptT $ do
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants tables ref
 
-  pure $ ModuleChecks funChecks''' invariantChecks
+  let warnings = VerificationWarnings allModulePropNameDuplicates
+
+  pure $ ModuleChecks funChecks''' invariantChecks warnings
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
