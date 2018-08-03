@@ -59,25 +59,26 @@ dummyInfo = Default.def
 vacuousMatch :: String -> a
 vacuousMatch msg = error $ "vacuous match: " ++ msg
 
--- * ReversedList
+-- * SnocList
 
-newtype ReversedList a
-  = ReversedList { _reversedList :: [a] }
+newtype SnocList a
+  = SnocList { _snocList :: [a] }
   deriving (Eq, Ord, Show)
 
-instance Monoid (ReversedList a) where
-  mempty = ReversedList []
-  ReversedList xs `mappend` ReversedList ys = ReversedList $ ys ++ xs
+instance Monoid (SnocList a) where
+  mempty = SnocList []
+  SnocList xs `mappend` SnocList ys = SnocList $ ys ++ xs
 
-pattern UnreversedList :: [a] -> ReversedList a
-pattern UnreversedList xs <- ReversedList (reverse -> xs)
+pattern ConsList :: [a] -> SnocList a
+pattern ConsList xs <- SnocList (reverse -> xs)
+  where ConsList xs = SnocList $ reverse xs
 
-makeLenses ''ReversedList
+makeLenses ''SnocList
 
-instance Snoc (ReversedList a) (ReversedList b) a b where
+instance Snoc (SnocList a) (SnocList b) a b where
   _Snoc = prism
-    (\(ReversedList as,a) -> ReversedList (a:as))
-    (\(ReversedList aas) ->
+    (\(SnocList as,a) -> SnocList (a:as))
+    (\(SnocList aas) ->
       case aas of
-        (a:as) -> Right (ReversedList as, a)
-        []     -> Left  (ReversedList []))
+        (a:as) -> Right (SnocList as, a)
+        []     -> Left  (SnocList []))
