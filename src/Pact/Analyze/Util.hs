@@ -1,9 +1,13 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE PatternSynonyms  #-}
-{-# LANGUAGE ViewPatterns     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Util where
 
+import           Control.Lens         (Snoc (_Snoc), makeLenses, prism)
 import qualified Data.Default         as Default
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
@@ -58,7 +62,8 @@ vacuousMatch msg = error $ "vacuous match: " ++ msg
 -- * ReversedList
 
 newtype ReversedList a
-  = ReversedList [a]
+  = ReversedList { _reversedList :: [a] }
+  deriving (Eq, Ord, Show)
 
 instance Monoid (ReversedList a) where
   mempty = ReversedList []
@@ -66,3 +71,13 @@ instance Monoid (ReversedList a) where
 
 pattern UnreversedList :: [a] -> ReversedList a
 pattern UnreversedList xs <- ReversedList (reverse -> xs)
+
+makeLenses ''ReversedList
+
+instance Snoc (ReversedList a) (ReversedList b) a b where
+  _Snoc = prism
+    (\(ReversedList as,a) -> ReversedList (a:as))
+    (\(ReversedList aas) ->
+      case aas of
+        (a:as) -> Right (ReversedList as, a)
+        []     -> Left  (ReversedList []))
