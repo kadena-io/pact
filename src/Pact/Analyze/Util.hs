@@ -62,7 +62,7 @@ vacuousMatch msg = error $ "vacuous match: " ++ msg
 -- * SnocList
 
 newtype SnocList a
-  = SnocList { _snocList :: [a] }
+  = SnocList { _reversed :: [a] }
   deriving (Eq, Ord, Show)
 
 instance Monoid (SnocList a) where
