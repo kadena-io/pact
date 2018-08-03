@@ -45,7 +45,6 @@ import Data.Default
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
-import qualified Data.Map.Strict as M
 
 import Pact.Types.Lang
 import Pact.Parse (exprsOnly,parseExprs)
@@ -108,52 +107,44 @@ mkHash msg h el = case fromText' h of
       Left e -> mkInfo el >>= \i -> syntaxError i $ msg ++ ": bad hash: " ++ e
       Right mh -> return mh
 
-justDocs :: Text -> DocModel
-justDocs docs = DocModel (Just docs) M.empty
-
-mkModel :: Exp -> Compile (M.Map Text Exp)
-mkModel ps = uncurry M.singleton <$> toMetas ps
-  where toMetas (EList' [EAtom' k,v]) = return (k,v)
-        toMetas bad = mkInfo bad >>= \i -> syntaxError i "mkModel: malformed model, expected (atom expression) where atom is one of {property, properties, invariant, invariants}"
-
 -- | A meta-annotation, which includes either form:
 --
 -- * `"docstring"`
 -- * `@doc ...` / `@meta ...`
-pattern MetaExp :: Compile DocModel -> [Exp] -> [Exp]
+pattern MetaExp :: DocModel -> [Exp] -> [Exp]
 pattern MetaExp dm exps <- (doMeta -> (dm, exps))
 
 -- | Consume a meta-block (returning the leftover body).
 --
 -- Helper for 'MetaExp'.
-doMeta :: [Exp] -> (Compile DocModel, [Exp])
+doMeta :: [Exp] -> (DocModel, [Exp])
 doMeta = \case
   -- Either we encounter a plain docstring:
   ELitString docs : exps
-    -> (pure (justDocs docs), exps)
+    -> (DocModel (Just docs) Nothing, exps)
 
   -- ... or some subset of @doc and @model:
   EAtom' "@doc" : ELitString docs : EAtom' "@model" : model : exps
-    -> (DocModel (Just docs) <$> mkModel model, exps)
+    -> (DocModel (Just docs) (Just model), exps)
   EAtom' "@model" : model : EAtom' "@doc" : ELitString docs : exps
-    -> (DocModel (Just docs) <$> mkModel model, exps)
+    -> (DocModel (Just docs) (Just  model), exps)
   EAtom' "@doc" : ELitString docs : exps
-    -> (pure (justDocs docs), exps)
+    -> (DocModel (Just docs) Nothing, exps)
   EAtom' "@model" : model : exps
-    -> (DocModel Nothing <$> mkModel model, exps)
+    -> (DocModel Nothing (Just model), exps)
 
   -- ... or neither:
-  exps -> (pure (DocModel Nothing M.empty), exps)
+  exps -> (DocModel Nothing Nothing, exps)
 
 -- | A (non-empty) body with a possible meta-annotation
-pattern MetaBodyExp :: Compile DocModel -> [Exp] -> [Exp]
+pattern MetaBodyExp :: DocModel -> [Exp] -> [Exp]
 pattern MetaBodyExp meta body <- (doMetaBody -> Just (meta, body))
 
 -- TODO(joel): uncomment when on modern ghc
 -- {-# complete MetaBodyExp, [] #-}
 
 -- | Consume a meta-annotationa and body. Helper for 'MetaBodyExp'.
-doMetaBody :: [Exp] -> Maybe (Compile DocModel, [Exp])
+doMetaBody :: [Exp] -> Maybe (DocModel, [Exp])
 doMetaBody exp  = case exp of
   []                    -> Nothing
   MetaExp docModel body -> Just (docModel, body)
@@ -169,7 +160,7 @@ doModule _ li _ = syntaxError li "Invalid module definition"
 handleModule :: Text -> Text -> [Exp] -> Info -> Info -> Compile (Term Name)
 handleModule n k es li ai =
   case es of
-    MetaBodyExp meta body -> mkModule body =<< meta
+    MetaBodyExp meta body -> mkModule body meta
     _ -> syntaxError ai "Empty module"
     where
       defOnly d = case d of
@@ -211,7 +202,7 @@ doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
     case es of
       (EAtom dn Nothing ty _:EList args Nothing _:MetaBodyExp meta body) ->
-          mkDef dn ty args body =<< meta
+          mkDef dn ty args body meta
       _ -> syntaxError namei "Invalid def"
       where
         mkDef dn ty dargs body ddocs = do
@@ -288,7 +279,7 @@ doLets _ i = syntaxError i "Invalid let declaration"
 doConst :: [Exp] -> Info -> Compile (Term Name)
 doConst es i = case es of
   EAtom dn Nothing ct _ : t : MetaExp dm []
-    -> mkConst dn ct t =<< dm
+    -> mkConst dn ct t dm
   _ -> syntaxError i "Invalid defconst"
   where
     mkConst dn ty v docs = do
@@ -300,7 +291,7 @@ doConst es i = case es of
 doSchema :: [Exp] -> Info -> Compile (Term Name)
 doSchema es i = case es of
   (EAtom utn Nothing Nothing _:MetaBodyExp meta as) ->
-    mkUT utn as =<< meta
+    mkUT utn as meta
   _ -> syntaxError i "Invalid schema definition"
   where
     mkUT utn as docs = do
@@ -312,7 +303,7 @@ doSchema es i = case es of
 
 doTable :: [Exp] -> Info -> Compile (Term Name)
 doTable es i = case es of
-  EAtom tn Nothing ty _ : MetaExp meta [] -> mkT tn ty =<< meta
+  EAtom tn Nothing ty _ : MetaExp meta [] -> mkT tn ty meta
   _ -> syntaxError i "Invalid table definition"
   where
     mkT tn ty docs = do

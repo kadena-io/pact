@@ -99,7 +99,7 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults invariantResults) -> pure $
+        Right (ModuleChecks propResults invariantResults _) -> pure $
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
             _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
@@ -667,8 +667,8 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defun test:bool (a:object{account})
-              (meta ""
-                (property (and result (= a a))))
+              @doc ""
+              @model (property (and result (= a a)))
               (= a a))
           |]
 
@@ -692,8 +692,8 @@ spec = describe "analyze" $ do
             (defschema person name:string age:integer)
 
             (defun test:object{person} ()
-              (meta ""
-                (property (= {"name": "brian", "age": 100} result) ))
+              @doc   ""
+              @model (property (= {"name": "brian", "age": 100} result))
 
               ; merge is left-biased
               (+ {"age": 100} {"age": 1, "name": "brian"}))
@@ -903,7 +903,7 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults invariantResults) -> do
+          Right (ModuleChecks propResults invariantResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
@@ -1472,7 +1472,7 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 ty exp'
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1490,7 +1490,7 @@ spec = describe "analyze" $ do
           -> Either String EProp
         inferProp' env1 env2 tableEnv t = case parseExprs t of
           Right [exp'] ->
-            inferProp tableEnv (VarId (Map.size env1)) env1 env2 exp'
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 

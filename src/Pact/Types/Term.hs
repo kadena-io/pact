@@ -79,7 +79,6 @@ import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
 import Data.Int (Int64)
 import Data.Serialize (Serialize)
 
@@ -90,8 +89,8 @@ import Pact.Types.Exp
 
 
 data DocModel = DocModel
-  { _dmDocs  :: !(Maybe Text)     -- ^ docs
-  , _dmModel :: !(M.Map Text Exp) -- ^ model
+  { _dmDocs  :: !(Maybe Text) -- ^ docs
+  , _dmModel :: !(Maybe Exp)  -- ^ model
   } deriving (Eq, Show, Generic)
 instance ToJSON DocModel where
   toJSON DocModel {..} = object
@@ -225,7 +224,7 @@ instance ToJSON Module where
 -- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure (DocModel Nothing M.empty) {- o .:? "meta" -} <*>
+    o .: "name" <*> o .: "keyset" <*> pure (DocModel Nothing Nothing) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
