@@ -57,8 +57,8 @@ import           Pact.Types.Lang           (Code (Code), Info (Info), dmModel,
                                             eParsed, mName, renderInfo,
                                             renderParsed, tMeta)
 import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
-                                            pattern ELitList, Exp(..), ModuleData,
-                                            ModuleName, Ref (Ref),
+                                            pattern ELitList, Exp (..),
+                                            ModuleData, ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, tShow)
 import qualified Pact.Types.Runtime        as Pact
