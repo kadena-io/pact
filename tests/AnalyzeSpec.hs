@@ -51,7 +51,11 @@ wrap code =
          (defproperty my-column-delta (d:integer) (= (column-delta 'accounts 'balance) d))
          (defproperty conserves-balance (= (column-delta 'accounts 'balance) 0))
          (defproperty conserves-balance2 (my-column-delta 0))
-         (defproperty bad-recursive-prop (d:integer) (bad-recursive-prop d))]
+         ; this hash the same name as the column, but the column name takes
+         ; precedence
+         (defproperty balance (> 0 1))
+         (defproperty bad-recursive-prop bad-recursive-prop)
+         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))]
       (defschema account
         "Row type for accounts table."
          balance:integer
@@ -1837,15 +1841,18 @@ spec = describe "analyze" $ do
     expectFalsified $ code' "(property (my-column-delta 0))"
     expectVerified  $ code' "(property (my-column-delta 1))"
 
-  -- quantified vars and function vars always shadow user-defined property vars
-  -- TODO(joel): make a warning for this
-  describe "user-defined properties / shadowing" $ pure ()
-
   -- user-defined properties can't be recursive
   describe "user-defined properties can't be recursive" $ do
     let code = [text|
           (defun test:string (from:string to:string)
-            @model (property (bad-recursive-prop 0))
+            @model (property bad-recursive-prop)
             "foo")
           |]
     expectFalsified code
+
+    let code' = [text|
+          (defun test:string (from:string to:string)
+            @model (property (bad-recursive-prop2 0))
+            "foo")
+          |]
+    expectFalsified code'

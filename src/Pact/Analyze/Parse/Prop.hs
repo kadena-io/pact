@@ -198,11 +198,14 @@ inferPreProp preProp = case preProp of
   PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
   PreVar vid name -> inferVar vid name (CoreProp (Var vid name))
   PropDefVar name -> do
-    defn        <- view $ localVars . at name
-    definedProp <- view (definedProps . at name)
+    defn        <- view $ localVars    . at name
+    definedProp <- view $ definedProps . at name
     case defn of
       Nothing    -> case definedProp of
-        Just (DefinedProperty [] definedProp') -> inferPreProp definedProp'
+        -- clear this definition so it can't call itself
+        Just (DefinedProperty [] definedProp') ->
+          local (definedProps . at name .~ Nothing) $
+            inferPreProp definedProp'
         Just _ -> throwErrorT $
           name <> " expects arguments but wasn't provided any"
         Nothing -> throwErrorT $ "couldn't find property variable " <> name
@@ -381,6 +384,9 @@ inferPreProp preProp = case preProp of
           throwErrorIn preProp "wrong number of arguments"
         propArgs <- for (zip args argTys) $ \(arg, (name, EType ty)) ->
           (name,) . ESimple ty <$> checkPreProp ty arg
+
+        -- inline the function, removing it from `definedProps` so it can't
+        -- recursively call itself.
         local (localVars %~ HM.union (HM.fromList propArgs)) $
           local (definedProps . at fName .~ Nothing) $
             inferPreProp body
