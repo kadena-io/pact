@@ -16,6 +16,21 @@ module Pact.Analyze.Parse.Prop
   , parseBindings
   ) where
 
+-- Note [Inlining]:
+--
+-- The ASTs that the property analysis system receives from Pact are inlined,
+-- so the analysis system has never had a need to represent functions. Though
+-- we never had a need for functions in terms, we now have them, with
+-- user-defined functions, in properties. The most obvious place to evaluate
+-- functions would be in `eval`, however, this complicates the evaluation
+-- system in a way that doesn't make sense for invariants and terms. That's why
+-- we've chosen to inline functions at checking/inference -time.
+--
+-- When we hit the site of a defined property application (in 'inferPreProp'),
+-- we check each argument before inlining them into the body. Note this is in a
+-- bidirectional style, so the application is inferred while each argument is
+-- checked.
+
 import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
                                                (?~), (^..), (^?))
 import           Control.Monad                (unless, when)
@@ -374,7 +389,7 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' TKeySet
     ESimple TBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp TStr rk
 
-  -- inline property definitions
+  -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
     defn <- view $ definedProps . at fName
     case defn of
