@@ -580,21 +580,6 @@ expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
   PropertyHolds . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv propDefs TBool body
 
-parseToPreProp
-  :: Traversable t
-  => VarId
-  -> t (DefinedProperty Exp)
-  -> Map Text VarId
-  -> Exp
-  -> Either String (PreProp, t (DefinedProperty PreProp))
-parseToPreProp genStart propDefs nameEnv body
-  = (`evalStateT` genStart) $
-    (`runReaderT` nameEnv) $ do
-      body'     <- expToPreProp body
-      propDefs' <- for propDefs $ \(DefinedProperty args argBody) ->
-        DefinedProperty args <$> expToPreProp argBody
-      pure (body', propDefs')
-
 expToProp
   :: TableEnv
   -- ^ Tables and schemas in scope
@@ -612,7 +597,7 @@ expToProp
   -> Either String (Prop a)
 expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
   (preTypedBody, preTypedPropDefs)
-    <- parseToPreProp genStart propDefs nameEnv body
+    <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
         preTypedPropDefs HM.empty
   runReaderT (checkPreProp ty preTypedBody) env
@@ -633,10 +618,24 @@ inferProp
   -> Either String EProp
 inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
   (preTypedBody, preTypedPropDefs)
-    <- parseToPreProp genStart propDefs nameEnv body
+    <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
         preTypedPropDefs HM.empty
   runReaderT (inferPreProp preTypedBody) env
+
+parseToPreProp
+  :: Traversable t
+  => VarId
+  -> Map Text VarId
+  -> t (DefinedProperty Exp)
+  -> Exp
+  -> Either String (PreProp, t (DefinedProperty PreProp))
+parseToPreProp genStart nameEnv propDefs body =
+  (`evalStateT` genStart) $ (`runReaderT` nameEnv) $ do
+    body'     <- expToPreProp body
+    propDefs' <- for propDefs $ \(DefinedProperty args argBody) ->
+      DefinedProperty args <$> expToPreProp argBody
+    pure (body', propDefs')
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
