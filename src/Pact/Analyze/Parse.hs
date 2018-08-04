@@ -16,6 +16,7 @@ module Pact.Analyze.Parse
   , expToProp
   , expToInvariant
   , inferProp
+  , parseBindings
   ) where
 
 import           Control.Applicative          ((<|>))
@@ -193,7 +194,7 @@ expToPreProp = \case
   ELiteral (LBool b) _    -> pure (PreBoolLit b)
 
   EList' [EAtom' (textToQuantifier -> Just q), EList' bindings, body] -> do
-    bindings' <- propBindings bindings
+    bindings' <- parseBindings (\name ty -> (, name, ty) <$> genVarId) bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(vid, name, _ty) -> (name, vid)) bindings'
     body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
@@ -217,35 +218,33 @@ expToPreProp = \case
   EAtom' STransactionAborts   -> pure PreAbort
   EAtom' STransactionSucceeds -> pure PreSuccess
   EAtom' SFunctionResult      -> pure PreResult
-  EAtom' var                  -> mkVar var
+  EAtom' var                  -> do
+    mVid <- view (at var)
+    pure $ case mVid of
+      Just vid -> PreVar vid var
+      Nothing  -> PropDefVar var
 
   exp -> throwErrorIn exp "expected property"
 
-  where propBindings :: [Exp] -> PropParse [(VarId, Text, QType)]
-        propBindings [] = pure []
-        -- we require a type annotation
-        propBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
-          = throwErrorIn exp
-            "type annotation required for all property bindings."
-        propBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
-          nameTy <- case maybeTranslateType' (const Nothing) ty of
-            Just ty' -> do
-              vid <- genVarId
-              pure (vid, name, ty')
-            -- This is challenging because `ty : Pact.Type TypeName`, but
-            -- `maybeTranslateType` handles `Pact.Type UserType`.
-            Nothing -> throwErrorIn exp
-              "currently objects can't be quantified in properties (issue 139)"
-          (nameTy:) <$> propBindings exps
-        propBindings exp = throwErrorT $
-          "in " <> userShowList exp <> ", unexpected binding form"
-
-        mkVar :: Text -> PropParse PreProp
-        mkVar var = do
-          mVid <- view (at var)
-          pure $ case mVid of
-            Just vid -> PreVar vid var
-            Nothing  -> PropDefVar var
+parseBindings
+  :: MonadError String m
+  => (Text -> QType -> m binding) -> [Exp] -> m [binding]
+parseBindings mkBinding = \case
+  [] -> pure []
+  -- we require a type annotation
+  exp@(EAtom _name _qual Nothing _parsed):_exps -> throwErrorIn exp
+    "type annotation required for all property bindings."
+  exp@(EAtom name _qual (Just ty) _parsed):exps -> do
+    -- This is challenging because `ty : Pact.Type TypeName`, but
+    -- `maybeTranslateType` handles `Pact.Type UserType`. We use `const
+    -- Nothing` to punt on user types.
+    nameTy <- case maybeTranslateType' (const Nothing) ty of
+      Just ty' -> mkBinding name ty'
+      Nothing  -> throwErrorIn exp
+        "currently objects can't be quantified in properties (issue 139)"
+    (nameTy:) <$> parseBindings mkBinding exps
+  exp -> throwErrorT $
+    "in " <> userShowList exp <> ", unexpected binding form"
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe

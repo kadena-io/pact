@@ -27,7 +27,8 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just)
+                                            (^.), (^?), (^@..), _1, _2, _Just,
+                                            _Left)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -73,7 +74,8 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval         hiding (invariants)
 import           Pact.Analyze.Model        (allocArgs, allocModelTags,
                                             saturateModel, showModel)
-import           Pact.Analyze.Parse        (expToCheck, expToInvariant)
+import           Pact.Analyze.Parse        (expToCheck, expToInvariant,
+                                            parseBindings)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -363,29 +365,13 @@ parseDefprops :: Exp -> Either ParseFailure [(Text, DefinedProperty Exp)]
 parseDefprops (ELitList exps) = traverse parseDefprops' exps where
   parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, EList' args, body ] -> do
-      args' <- parseBindings args
+      args' <- parseBindings (curry Right) args & _Left %~ (exp,)
       pure (propname, DefinedProperty args' body)
     [ EAtom' propname,              body ] ->
       pure (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
   parseDefprops' exp = Left (exp, "expected set of defproperty")
 parseDefprops exp = Left (exp, "expected set of defproperty")
-
-parseBindings :: [Exp] -> Either ParseFailure [(Text, QType)]
-parseBindings [] = Right []
--- we require a type annotation
-parseBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
-  = Left (exp, "type annotation required for all property bindings.")
-parseBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
-  -- This is challenging because `ty : Pact.Type TypeName`, but
-  -- `maybeTranslateType` handles `Pact.Type UserType`. We use `const Nothing`
-  -- to punt on user types.
-  nameTy <- case maybeTranslateType' (const Nothing) ty of
-    Just ty' -> Right (name, ty')
-    Nothing ->
-      Left (exp, "currently objects can't be quantified in properties (issue 139)")
-  (nameTy:) <$> parseBindings exps
-parseBindings (exp:_exps) = Left (exp, "unexpected binding form")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
