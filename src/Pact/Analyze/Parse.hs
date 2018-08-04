@@ -226,6 +226,7 @@ expToPreProp = \case
 
   exp -> throwErrorIn exp "expected property"
 
+-- | Parse a set of bindings like '(x:integer y:string)'
 parseBindings
   :: MonadError String m
   => (Text -> QType -> m binding) -> [Exp] -> m [binding]

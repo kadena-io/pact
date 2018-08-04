@@ -361,6 +361,10 @@ moduleTables modules (_mod, modRefs) = do
 
     pure $ Table tabName schema invariants
 
+-- | Parse a property definition like
+--
+-- * '(defproperty foo (> 1 0))'
+-- * '(defproperty foo (a:integer b:integer) (> a b))'
 parseDefprops :: Exp -> Either ParseFailure [(Text, DefinedProperty Exp)]
 parseDefprops (ELitList exps) = traverse parseDefprops' exps where
   parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
