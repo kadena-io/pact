@@ -10,7 +10,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
--- Module      :  Pact.Types.Runtime
+-- Module      :  Pact.Types.Persistence
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Stuart Popejoy <stuart@kadena.io>
@@ -57,7 +57,7 @@ import Pact.Types.Util (AsString(..))
 -- | Min, max values that Javascript doesn't mess up.
 --
 --   http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html
---   "The integer part of the Number type in Javascript is safe in [-253 .. 253] (253 = 9 007 199 254 740 992).
+--   "The integer part of the Number type in Javascript is safe in [-2^53 .. 2^53] (253 = 9 007 199 254 740 992).
 --    Beyond this there will be precision loss on the least significant numbers."
 jsIntegerBounds :: (Integer, Integer)
 jsIntegerBounds = (-9007199254740991,9007199254740991)
