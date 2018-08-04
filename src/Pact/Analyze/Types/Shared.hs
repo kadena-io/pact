@@ -600,6 +600,11 @@ instance UserShow Schema where
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
 
+data DefinedProperty a = DefinedProperty
+  { propertyArgs :: [(Text, QType)]
+  , propertyBody :: a
+  } deriving Show
+
 makeLenses ''Located
 makePrisms ''AVal
 makeLenses ''ColumnMap

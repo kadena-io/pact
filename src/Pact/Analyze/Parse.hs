@@ -18,11 +18,11 @@ module Pact.Analyze.Parse
   , inferProp
   ) where
 
-import           Control.Applicative          (Alternative, (<|>))
+import           Control.Applicative          ((<|>))
 import           Control.Lens                 (at, ix, makeLenses, view, (%~),
                                                (&), (.~), (?~), (^.), (^..),
                                                (^?))
-import           Control.Monad                (unless)
+import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (ReaderT, ask, asks, local,
                                                runReaderT)
@@ -71,6 +71,7 @@ data PreProp
   | PreSuccess
   | PreResult
   | PreVar     VarId Text
+  | PropDefVar       Text
 
   -- quantifiers
   | PreForall VarId Text QType PreProp
@@ -95,6 +96,7 @@ instance UserShow PreProp where
     PreSuccess      -> STransactionSucceeds
     PreResult       -> SFunctionResult
     PreVar _id name -> name
+    PropDefVar name -> name
 
     PreForall _vid name qty prop ->
       "(" <> SUniversalQuantification <> " (" <> name <> ":" <> userShow qty <>
@@ -118,10 +120,6 @@ throwErrorIn :: (MonadError String m, UserShow a) => a -> Text -> m b
 throwErrorIn exp text = throwError $ T.unpack $
   "in " <> userShow exp <> ", " <> text
 
--- | Just 'asum' with a fallback
-asum' :: (Foldable t, Alternative f) => t (f a) -> f a -> f a
-asum' foldable fallback = asum foldable <|> fallback
-
 textToQuantifier
   :: Text -> Maybe (VarId -> Text -> QType -> PreProp -> PreProp)
 textToQuantifier = \case
@@ -142,19 +140,21 @@ data PropCheckEnv = PropCheckEnv
   , _tableEnv         :: TableEnv
   , _quantifiedTables :: Set TableName
   -- , _quantifiedColumns :: Set ColumnName
+
+  -- User-defined properties
+  , _definedProps     :: HM.HashMap Text (DefinedProperty PreProp)
+
+  -- Vars bound within a user-defined property
+  , _localVars        :: HM.HashMap Text EProp
   }
 
-data ParseEnv = ParseEnv
-  { _quantifiedVars :: Map Text VarId
-  , _definedVars    :: HM.HashMap Text Exp
-  }
+type ParseEnv = Map Text VarId
 
 type PropParse      = ReaderT ParseEnv (StateT VarId (Either String))
 type PropCheck      = ReaderT PropCheckEnv (Either String)
 type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
 makeLenses ''PropCheckEnv
-makeLenses ''ParseEnv
 
 parseTableName :: PreProp -> PropCheck (Prop TableName)
 parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
@@ -196,8 +196,7 @@ expToPreProp = \case
     bindings' <- propBindings bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(vid, name, _ty) -> (name, vid)) bindings'
-    body'     <- local (& quantifiedVars %~ Map.union theseBindingsMap)
-      (expToPreProp body)
+    body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
     pure $ foldr
       (\(vid, name, ty) accum -> q vid name ty accum)
       body'
@@ -218,7 +217,7 @@ expToPreProp = \case
   EAtom' STransactionAborts   -> pure PreAbort
   EAtom' STransactionSucceeds -> pure PreSuccess
   EAtom' SFunctionResult      -> pure PreResult
-  EAtom' var                  -> lookupVar var
+  EAtom' var                  -> mkVar var
 
   exp -> throwErrorIn exp "expected property"
 
@@ -241,27 +240,12 @@ expToPreProp = \case
         propBindings exp = throwErrorT $
           "in " <> userShowList exp <> ", unexpected binding form"
 
-        lookupVar :: Text -> PropParse PreProp
-        lookupVar var =
-          let fromDefn = do
-                defn <- view (definedVars . at var)
-                case defn of
-                -- Note: we remove this definition from the environment as we
-                -- continue. This has the effect of inlining the definition and
-                -- removing it from the environment. This is a slight layering
-                -- violation but will do for now.
-                  Just exp -> local (& definedVars . at var .~ Nothing)
-                    (expToPreProp exp)
-                  Nothing -> throwErrorT $
-                    "couldn't find property variable " <> var
-              fromQuantified = do
-                mUid <- view (quantifiedVars . at var)
-                case mUid of
-                  Just uid -> pure (PreVar uid var)
-                  Nothing  -> throwErrorT $
-                    "couldn't find property variable " <> var
-
-          in fromDefn <|> fromQuantified
+        mkVar :: Text -> PropParse PreProp
+        mkVar var = do
+          mVid <- view (at var)
+          pure $ case mVid of
+            Just vid -> PreVar vid var
+            Nothing  -> PropDefVar var
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
@@ -290,8 +274,7 @@ inferVar :: VarId -> Text -> (forall a. Prop a) -> PropCheck EProp
 inferVar vid name prop = do
   varTy <- view (varTys . at vid)
   case varTy of
-    Nothing -> throwErrorT $
-      "couldn't find property variable " <> name
+    Nothing -> throwErrorT $ "couldn't find property variable " <> name
     Just (EType varTy')     -> pure (ESimple varTy' prop)
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
@@ -322,6 +305,16 @@ inferPreProp preProp = case preProp of
   -- identifiers
   PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
   PreVar vid name -> inferVar vid name (CoreProp (Var vid name))
+  PropDefVar name -> do
+    defn        <- view $ localVars . at name
+    definedProp <- view (definedProps . at name)
+    case defn of
+      Nothing    -> case definedProp of
+        Just (DefinedProperty [] definedProp') -> inferPreProp definedProp'
+        Just _ -> throwErrorT $
+          name <> " expects arguments but wasn't provided any"
+        Nothing -> throwErrorT $ "couldn't find property variable " <> name
+      Just defn' -> pure defn'
 
   -- quantifiers
   (viewQ -> Just (q, vid, name, ty', p)) -> do
@@ -486,7 +479,22 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' TKeySet
     ESimple TBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp TStr rk
 
-  _ -> throwErrorIn preProp "could not infer type"
+  -- inline property definitions
+  PreApp fName args -> do
+    defn <- view $ definedProps . at fName
+    case defn of
+      Nothing -> throwErrorIn preProp $ "couldn't find property named " <> fName
+      Just (DefinedProperty argTys body) -> do
+        when (length args /= length argTys) $
+          throwErrorIn preProp "wrong number of arguments"
+        propArgs <- for (zip args argTys) $ \(arg, (name, EType ty)) ->
+          (name,) . ESimple ty <$> checkPreProp ty arg
+        local (localVars %~ HM.union (HM.fromList propArgs)) $
+          local (definedProps . at fName .~ Nothing) $
+            inferPreProp body
+
+  _ -> vacuousMatch
+    "PreForall / PreExists are handled via the viewQ view pattern"
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp
@@ -563,7 +571,7 @@ expToCheck
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text Exp
+  -> HM.HashMap Text (DefinedProperty Exp)
   -- ^ Defined props in the environment
   -> Exp
   -- ^ Exp to convert
@@ -571,6 +579,21 @@ expToCheck
 expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
   PropertyHolds . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv propDefs TBool body
+
+parseToPreProp
+  :: Traversable t
+  => VarId
+  -> t (DefinedProperty Exp)
+  -> Map Text VarId
+  -> Exp
+  -> Either String (PreProp, t (DefinedProperty PreProp))
+parseToPreProp genStart propDefs nameEnv body
+  = (`evalStateT` genStart) $
+    (`runReaderT` nameEnv) $ do
+      body'     <- expToPreProp body
+      propDefs' <- for propDefs $ \(DefinedProperty args argBody) ->
+        DefinedProperty args <$> expToPreProp argBody
+      pure (body', propDefs')
 
 expToProp
   :: TableEnv
@@ -581,17 +604,17 @@ expToProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text Exp
+  -> HM.HashMap Text (DefinedProperty Exp)
   -- ^ Defined props in the environment
   -> Type a
   -> Exp
   -- ^ Exp to convert
   -> Either String (Prop a)
 expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
-  preTypedBody <- evalStateT
-    (runReaderT (expToPreProp body) (ParseEnv nameEnv propDefs))
-    genStart
+  (preTypedBody, preTypedPropDefs)
+    <- parseToPreProp genStart propDefs nameEnv body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+        preTypedPropDefs HM.empty
   runReaderT (checkPreProp ty preTypedBody) env
 
 inferProp
@@ -603,16 +626,16 @@ inferProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text Exp
+  -> HM.HashMap Text (DefinedProperty Exp)
   -- ^ Defined props in the environment
   -> Exp
   -- ^ Exp to convert
   -> Either String EProp
 inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
-  preTypedBody <- evalStateT
-    (runReaderT (expToPreProp body) (ParseEnv nameEnv propDefs))
-    genStart
+  (preTypedBody, preTypedPropDefs)
+    <- parseToPreProp genStart propDefs nameEnv body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+        preTypedPropDefs HM.empty
   runReaderT (inferPreProp preTypedBody) env
 
 expToInvariant :: Type a -> Exp -> InvariantParse (Invariant a)
@@ -648,11 +671,11 @@ expToInvariant ty exp = case (ty, exp) of
   (TStr, EList' [EAtom' SStringConcatenation, a, b]) -> CoreInvariant ... StrConcat
     <$> expToInvariant TStr a <*> expToInvariant TStr b
 
-  (TDecimal, EList' [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum'
+  (TDecimal, EList' [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum
     [ Inj ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
     , Inj ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
     , Inj ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
-    ] (throwErrorIn exp "unexpected argument types")
+    ] <|> throwErrorIn exp "unexpected argument types"
   (TInt, EList' [EAtom' (toOp arithOpP -> Just op), a, b])
     -> Inj ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
   (TDecimal, EList' [EAtom' (toOp unaryArithOpP -> Just op), a])
@@ -660,7 +683,7 @@ expToInvariant ty exp = case (ty, exp) of
   (TInt, EList' [EAtom' (toOp unaryArithOpP -> Just op), a])
     -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
 
-  (TBool, EList' [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum'
+  (TBool, EList' [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum
     [ CoreInvariant ... IntegerComparison op
       <$> expToInvariant TInt a     <*> expToInvariant TInt b
     , CoreInvariant ... DecimalComparison op
@@ -678,7 +701,7 @@ expToInvariant ty exp = case (ty, exp) of
       Nothing -> throwErrorIn exp $
         op' <> " is an invalid operation for keysets (only " <> SEquality <>
         " or " <> SInequality <> " allowed)"
-    ] (throwErrorIn exp "unexpected argument types")
+    ] <|> throwErrorIn exp "unexpected argument types"
 
   (TBool, EList' (EAtom' op:args))
     | Just op' <- toOp logicalOpP op -> do

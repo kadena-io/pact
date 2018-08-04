@@ -56,7 +56,7 @@ import           Pact.Types.Lang           (Code (Code), Info (Info), dmModel,
                                             eParsed, mName, renderInfo,
                                             renderParsed, tMeta)
 import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
-                                            pattern ELitList, Exp, ModuleData,
+                                            pattern ELitList, Exp(..), ModuleData,
                                             ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, tShow)
@@ -359,15 +359,33 @@ moduleTables modules (_mod, modRefs) = do
 
     pure $ Table tabName schema invariants
 
-parseDefprops :: Exp -> Either ParseFailure [(Text, Exp)]
+parseDefprops :: Exp -> Either ParseFailure [(Text, DefinedProperty Exp)]
 parseDefprops (ELitList exps) = traverse parseDefprops' exps where
   parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
-    -- TODO: property args:
-    -- [ EAtom' propname, EList' _args, body ] -> pure (propname, args, body)
-    [ EAtom' propname,               body ] -> pure (propname, body)
+    [ EAtom' propname, EList' args, body ] -> do
+      args' <- parseBindings args
+      pure (propname, DefinedProperty args' body)
+    [ EAtom' propname,              body ] ->
+      pure (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
   parseDefprops' exp = Left (exp, "expected set of defproperty")
 parseDefprops exp = Left (exp, "expected set of defproperty")
+
+parseBindings :: [Exp] -> Either ParseFailure [(Text, QType)]
+parseBindings [] = Right []
+-- we require a type annotation
+parseBindings (exp@(EAtom _name _qual Nothing _parsed):_exps)
+  = Left (exp, "type annotation required for all property bindings.")
+parseBindings (exp@(EAtom name _qual (Just ty) _parsed):exps) = do
+  -- This is challenging because `ty : Pact.Type TypeName`, but
+  -- `maybeTranslateType` handles `Pact.Type UserType`. We use `const Nothing`
+  -- to punt on user types.
+  nameTy <- case maybeTranslateType' (const Nothing) ty of
+    Just ty' -> Right (name, ty')
+    Nothing ->
+      Left (exp, "currently objects can't be quantified in properties (issue 139)")
+  (nameTy:) <$> parseBindings exps
+parseBindings (exp:_exps) = Left (exp, "unexpected binding form")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
@@ -377,7 +395,8 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   _               -> False
 
 -- Get the set of properties defined in this module
-modulePropDefs :: ModuleData -> Either ParseFailure (HM.HashMap Text Exp)
+modulePropDefs
+  :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty Exp))
 modulePropDefs (Pact.Module{Pact._mMeta=Pact.DocModel _ model}, _modRefs)
   = case model of
       Just model' -> HM.fromList <$> parseDefprops model'
@@ -386,7 +405,7 @@ modulePropDefs (Pact.Module{Pact._mMeta=Pact.DocModel _ model}, _modRefs)
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text Exp
+  -> HM.HashMap Text (DefinedProperty Exp)
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
 moduleFunChecks tables modTys propDefs = for modTys $
@@ -531,7 +550,7 @@ verifyModule modules moduleData = runExceptT $ do
         $ concatMap HM.keys
         $ allModulePropDefs
 
-      propDefs :: HM.HashMap Text Exp
+      propDefs :: HM.HashMap Text (DefinedProperty Exp)
       propDefs = HM.unions allModulePropDefs
 
       typecheckedRefs :: HM.HashMap Text Ref
