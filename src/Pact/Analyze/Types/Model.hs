@@ -35,20 +35,13 @@ newtype Vertex
   = Vertex Natural
   deriving (Num, Enum, Show, Ord, Eq)
 
-data TraceStatement
-  = TraceBinding
-  | TraceEnforce
-  | TraceEnforceKeySet
-  | TraceRead
-  | TraceWrite
+data TraceEvent
+  = TraceRead (Located (TagId, Schema))
+  | TraceWrite (Located (TagId, Schema))
+  | TraceEnforce (Located TagId)
+  | TraceBind (Located (VarId, Text, EType))
   deriving (Show)
 
-data TagAllocation
-  = AllocReadTag (Located (TagId, Schema))
-  | AllocWriteTag (Located (TagId, Schema))
-  | AllocAuthTag (Located TagId)
-  | AllocVarTag (Located (VarId, Text, EType))
-  deriving (Show)
 
 data ModelTags
   = ModelTags
@@ -84,6 +77,6 @@ data Goal
 
 deriving instance Eq Goal
 
-makePrisms ''TagAllocation
+makePrisms ''TraceEvent
 makeLenses ''ModelTags
 makeLenses ''Model

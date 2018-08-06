@@ -243,12 +243,12 @@ verifyFunctionInvariants'
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
-    (args, tm, tagAllocs) <- hoist generalize $
+    (args, tm, events) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       modelArgs' <- lift $ allocArgs args
-      tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
+      tags <- lift $ allocModelTags (Located funInfo tm) events
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis tables (analysisArgs modelArgs') tm tags funInfo
 
@@ -294,12 +294,12 @@ verifyFunctionProperty
   -> IO (Either CheckFailure CheckSuccess)
 verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
     runExceptT $ do
-      (args, tm, tagAllocs) <- hoist generalize $
+      (args, tm, events) <- hoist generalize $
         withExcept translateToCheckFailure $
           runTranslation funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
-        tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
+        tags <- lift $ allocModelTags (Located funInfo tm) events
         AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
         void $ lift $ SBV.output prop
