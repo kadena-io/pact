@@ -54,8 +54,8 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocModelTags :: Located ETerm -> [TagAllocation] -> Symbolic ModelTags
-allocModelTags locatedTm tagAllocs = ModelTags
+allocModelTags :: Located ETerm -> [TraceEvent] -> Symbolic ModelTags
+allocModelTags locatedTm events = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
@@ -65,7 +65,7 @@ allocModelTags locatedTm tagAllocs = ModelTags
   where
     allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
     allocVars = fmap Map.fromList $
-      for (toListOf (traverse._AllocVarTag) tagAllocs) $
+      for (toListOf (traverse._TraceBind) events) $
         \(Located info (vid, nm, ety)) ->
           allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
 
@@ -73,23 +73,23 @@ allocModelTags locatedTm tagAllocs = ModelTags
     allocRowKey = sansProv <$> alloc
 
     allocAccesses
-      :: Prism' TagAllocation (Located (TagId, Schema))
+      :: Prism' TraceEvent (Located (TagId, Schema))
       -> Symbolic (Map TagId (Located (S RowKey, Object)))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) tagAllocs) $ \(Located info (tid, schema)) -> do
+      for (toListOf (traverse.p) events) $ \(Located info (tid, schema)) -> do
         srk <- allocRowKey
         obj <- allocSchema schema
         pure (tid, Located info (srk, obj))
 
     allocReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocReads = allocAccesses _AllocReadTag
+    allocReads = allocAccesses _TraceRead
 
     allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
-    allocWrites = allocAccesses _AllocWriteTag
+    allocWrites = allocAccesses _TraceWrite
 
     allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocAuths = fmap Map.fromList $
-      for (toListOf (traverse._AllocAuthTag) tagAllocs) $ \(Located info tid) ->
+      for (toListOf (traverse._TraceEnforce) events) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
 
     allocResult :: Symbolic (Located TVal)

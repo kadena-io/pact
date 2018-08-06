@@ -115,13 +115,13 @@ mkTranslateEnv = foldl'
 
 data TranslateState
   = TranslateState
-    { _tsTagAllocs         :: [TagAllocation] -- "strict" WriterT isn't; so we use state
+    { _tsTraceEvents       :: [TraceEvent] -- TODO: replace with edge -> events
     , _tsNextTagId         :: TagId
     , _tsNextVarId         :: VarId
     , _tsGraph             :: Alga.Graph Vertex
     , _tsPathVertex        :: Vertex
-    , _tsEdgeStatements    :: Map Edge [TraceStatement]
-    , _tsPendingStatements :: SnocList TraceStatement
+    , _tsEdgeEvents        :: Map Edge [TraceEvent]
+    , _tsPendingEvents     :: SnocList TraceEvent
     }
 
 makeLenses ''TranslateFailure
@@ -156,39 +156,39 @@ nodeContext node = local (_1 .~ nodeToInfo node)
 astContext :: AST Node -> TranslateM a -> TranslateM a
 astContext ast = local (_1 .~ astToInfo ast)
 
-writeTagAlloc :: TagAllocation -> TranslateM ()
-writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
+emitTraceEvent :: TraceEvent -> TranslateM ()
+emitTraceEvent event = modify' $ tsTraceEvents %~ cons event
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
 
 tagDbAccess
-  :: (Located (TagId, Schema) -> TagAllocation)
+  :: (Located (TagId, Schema) -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
-tagDbAccess mkTagAlloc node schema = do
+tagDbAccess mkEvent node schema = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ mkTagAlloc $ Located info (tid, schema)
+  emitTraceEvent $ mkEvent $ Located info (tid, schema)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
-tagRead = tagDbAccess AllocReadTag
+tagRead = tagDbAccess TraceRead
 
 tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess AllocWriteTag
+tagWrite = tagDbAccess TraceWrite
 
 tagAuth :: Node -> TranslateM TagId
 tagAuth node = do
   tid <- genTagId
   let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocAuthTag $ Located info tid
+  emitTraceEvent $ TraceEnforce $ Located info tid
   pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
-tagVarBinding info nm ety vid = writeTagAlloc $
-  AllocVarTag (Located info (vid, nm, ety))
+tagVarBinding info nm ety vid = emitTraceEvent $
+  TraceBind (Located info (vid, nm, ety))
 
 withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
 withNewVarId varNode varName action = do
@@ -262,37 +262,36 @@ issueVertex = do
   tsPathVertex .= v
   pure (prev, v)
 
--- | Flushes-out statements accumulated for the current edge of the execution
--- path.
-flushStatements :: TranslateM [TraceStatement]
-flushStatements = do
-  ConsList pathStmts <- use tsPendingStatements
-  tsPendingStatements .= mempty
-  pure pathStmts
+-- | Flushes-out events accumulated for the current edge of the execution path.
+flushEvents :: TranslateM [TraceEvent]
+flushEvents = do
+  ConsList pathEvents <- use tsPendingEvents
+  tsPendingEvents .= mempty
+  pure pathEvents
 
 -- | Resets the path head to the supplied 'Vertex'
 resetPath :: Vertex -> TranslateM ()
 resetPath = (tsPathVertex .=)
 
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
--- statements to 'tsEdgeStatements'.
+-- events to 'tsEdgeEvents.
 extendPath :: TranslateM Vertex
 extendPath = do
   e@(v, v') <- issueVertex
   tsGraph %= Alga.overlay (Alga.edge v v')
-  edgeTrace <- flushStatements
-  tsEdgeStatements.at e ?= edgeTrace
+  edgeTrace <- flushEvents
+  tsEdgeEvents.at e ?= edgeTrace
   pure v'
 
 -- | Extends multiple separate paths to a single join point. Assumes that each
 -- vertex was created via 'extendPath' before invocation, and thus
--- 'tsPendingStatements' is currently empty.
+-- 'tsPendingEvents is currently empty.
 joinPaths :: [Vertex] -> TranslateM Vertex
 joinPaths vs = do
   (_, v') <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for vs $ \v ->
-    tsEdgeStatements.at (v, v') ?= []
+    tsEdgeEvents.at (v, v') ?= []
   pure v'
 
 translateType
@@ -753,11 +752,11 @@ runTranslation
   :: Info
   -> [Named Node]
   -> [AST Node]
-  -> Except TranslateFailure ([Arg], ETerm, [TagAllocation])
+  -> Except TranslateFailure ([Arg], ETerm, [TraceEvent])
 runTranslation info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
-    (tm, tagAllocs) <- runBodyTranslation args translationVid
-    pure (args, tm, tagAllocs)
+    (tm, traceEvents) <- runBodyTranslation args translationVid
+    pure (args, tm, traceEvents)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -769,11 +768,11 @@ runTranslation info pactArgs body = do
         (VarId 1)
 
     runBodyTranslation
-      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
+      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TraceEvent])
     runBodyTranslation args nextVarId =
       let vertex0     = 0
           state0      = TranslateState [] 0 nextVarId (pure vertex0) vertex0 Map.empty mempty
           translation = translateBody body
-                     <* extendPath -- to create a final edge for any statements
-      in fmap (fmap _tsTagAllocs) $ flip runStateT state0 $
+                     <* extendPath -- to create a final edge for any events
+      in fmap (fmap _tsTraceEvents) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
