@@ -119,9 +119,16 @@ data TranslateState
     , _tsNextTagId         :: TagId
     , _tsNextVarId         :: VarId
     , _tsGraph             :: Alga.Graph Vertex
+      -- ^ The execution graph we've built so far. This is expanded upon as we
+      -- translate an entire function.
     , _tsPathVertex        :: Vertex
+      -- ^ The "latest" vertex/current path of the graph. This starts out as
+      -- the single initial vertex. it splits into two if we hit a conditional,
+      -- and rejoins afterwards.
     , _tsEdgeEvents        :: Map Edge [TraceEvent]
+      -- ^ Events added to each new 'Edge' upon creating a new 'Vertex'.
     , _tsPendingEvents     :: SnocList TraceEvent
+      -- ^ Events being accumulated until created of the next 'Vertex'.
     }
 
 makeLenses ''TranslateFailure
