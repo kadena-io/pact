@@ -71,7 +71,7 @@
 
   (defun fund-account (address amount)
     (enforce-keyset 'accounts-admin-keyset)
-    (enforce (>= amount 0.0))
+    (enforce (>= amount 0.0) "amount must be non-negative")
     (update accounts address
             { "balance": amount
             , "amount": amount }
@@ -92,7 +92,7 @@
 
  (defun credit (acct amount)
    "Credit AMOUNT to ACCT balance"
-   (enforce (>= amount 0.0))
+   (enforce (>= amount 0.0) "amount must be non-negative")
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct
