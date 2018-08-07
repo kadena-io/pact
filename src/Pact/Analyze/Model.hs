@@ -18,7 +18,7 @@ module Pact.Analyze.Model
 import           Control.Lens         (Prism', ifoldr, imap, toListOf,
                                        traverseOf, traversed, (<&>), (?~),
                                        (^.), _1, _2)
-import           Control.Monad        ((>=>))
+import           Control.Monad        ((>=>), when)
 import qualified Data.Foldable        as Foldable
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -107,10 +107,19 @@ allocModelTags locatedTm graph = ModelTags
       EObject sch _ ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
+    -- NOTE: the root path we manually set to true. translation only emits the
+    -- start of "subpaths" on either side of a conditional. the root path is
+    -- always trivially reachable, because it corresponds to the start of a
+    -- program.
     allocPaths :: Symbolic (Map TagId (SBV Bool))
-    allocPaths = fmap Map.fromList $
-      for (toListOf (traverse._TracePathStart) events) $ \tid ->
-        (tid,) <$> alloc
+    allocPaths = do
+      let rootPath = _egRootPath graph
+          paths    = rootPath : toListOf (traverse._TraceSubpathStart) events
+      fmap Map.fromList $
+        for paths $ \tid -> do
+          sbool <- alloc
+          when (tid == rootPath) $ SBV.constrain sbool
+          pure (tid, sbool)
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
