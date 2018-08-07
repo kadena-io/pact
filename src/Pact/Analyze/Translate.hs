@@ -116,28 +116,28 @@ mkTranslateEnv = foldl'
 
 data TranslateState
   = TranslateState
-    { _tsNextTagId         :: TagId
-    , _tsNextVarId         :: VarId
-    , _tsGraph             :: Alga.Graph Vertex
+    { _tsNextTagId     :: TagId
+    , _tsNextVarId     :: VarId
+    , _tsGraph         :: Alga.Graph Vertex
       -- ^ The execution graph we've built so far. This is expanded upon as we
       -- translate an entire function.
-    , _tsPathVertex        :: Vertex
+    , _tsPathHead      :: Vertex
       -- ^ The "latest" vertex/current path of the graph. This starts out as
       -- the single initial vertex. it splits into two if we hit a conditional,
       -- and rejoins afterwards.
-    , _tsEdgeEvents        :: Map Edge [TraceEvent]
+    , _tsEdgeEvents    :: Map Edge [TraceEvent]
       -- ^ Events added to each new 'Edge' upon creating a new 'Vertex' which
       -- closes/completes the 'Edge'.
-    , _tsPendingEvents     :: SnocList TraceEvent
+    , _tsPendingEvents :: SnocList TraceEvent
       -- ^ Events being accumulated until the creation of the next 'Vertex'.
-    , _tsCurrentCheckpoint :: TagId
-      -- ^ Checkpoint to be associated with the 'Edge' formed by the creation
-      -- of the next 'Vertex'.
-    , _tsCheckpointEdges   :: Map TagId [Edge]
-      -- ^ Graph edges corresponding to a given execution "checkpoint".
-      -- Checkpoints are emitted at the start of an execution trace, and at
-      -- the beginning of either side of a conditional. After a conditional,
-      -- we resume the use of the checkpoint from before the conditional.
+    , _tsCurrentPath   :: TagId
+      -- ^ Path to be associated with the 'Edge' formed by the creation of the
+      -- next 'Vertex'.
+    , _tsPathEdges     :: Map TagId [Edge]
+      -- ^ Graph edges corresponding to a given execution "path".
+      -- 'TracePathStart's are emitted once for each path: at the start of an
+      -- execution trace, and at the beginning of either side of a conditional.
+      -- After a conditional, we resume the path from before the conditional.
       -- Either side of a conditional will contain a minimum of two edges:
       -- splitting away from the other branch, and then rejoining back to the
       -- other branch at the join point. The following program:
@@ -167,12 +167,11 @@ data TranslateState
       --      \ / \ _/
       --        \./
       --
-      --  We track all of the edges for each checkpoint so that we can
-      --  determine the subset of edges on the graph that form the upper bound
-      --  for the edges that are reached during a particular execution trace.
-      --  We say "upper bound" here because some traces will not execute
-      --  entirely to the end of the program due to the use of e.g. @enforce@
-      --  and @enforce-keyset@.
+      --  We track all of the edges for each path so that we can determine the
+      --  subset of edges on the graph that form the upper bound for the edges
+      --  that are reached during a particular execution trace. We say "upper
+      --  bound" here because some traces will not execute entirely to the end
+      --  of the program due to the use of e.g. @enforce@ and @enforce-keyset@.
     }
 
 makeLenses ''TranslateFailure
@@ -216,14 +215,14 @@ genTagId = genId tsNextTagId
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
 
-emitCheckpoint :: TagId -> TranslateM ()
-emitCheckpoint = emit . TraceCheckpoint
+emitPathStart :: TagId -> TranslateM ()
+emitPathStart = emit . TracePathStart
 
-createCheckpoint :: TranslateM TagId
-createCheckpoint = do
+createSubpath :: TranslateM TagId
+createSubpath = do
   tid <- genTagId
-  tsCurrentCheckpoint .= tid
-  emitCheckpoint tid
+  tsCurrentPath .= tid
+  emitPathStart tid
   pure tid
 
 tagDbAccess
@@ -318,9 +317,9 @@ throwError' err = do
 -- newly-formed 'Edge'. Does *not* add this new 'Vertex' to the graph.
 issueVertex :: TranslateM Edge
 issueVertex = do
-  prev <- use tsPathVertex
+  prev <- use tsPathHead
   let v = succ prev
-  tsPathVertex .= v
+  tsPathHead .= v
   pure (prev, v)
 
 -- | Flushes-out events accumulated for the current edge of the execution path.
@@ -330,9 +329,9 @@ flushEvents = do
   tsPendingEvents .= mempty
   pure pathEvents
 
-addCheckpointEdge :: TagId -> Edge -> TranslateM ()
-addCheckpointEdge checkpoint e =
-  tsCheckpointEdges.at checkpoint %= pure . cons e . fromMaybe []
+addPathEdge :: TagId -> Edge -> TranslateM ()
+addPathEdge path e =
+  tsPathEdges.at path %= pure . cons e . fromMaybe []
 
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents.
@@ -342,23 +341,22 @@ extendPath = do
   tsGraph %= Alga.overlay (Alga.edge v v')
   edgeTrace <- flushEvents
   tsEdgeEvents.at e ?= edgeTrace
-  cp <- use tsCurrentCheckpoint
-  addCheckpointEdge cp e
+  path <- use tsCurrentPath
+  addPathEdge path e
   pure v'
 
--- | Extends multiple separate paths to a single join point, where each
--- 'Vertex' is associated with the checkpoint for its branch. Assumes that each
--- vertex was created via 'extendPath' before invocation, and thus
+-- | Extends multiple separate paths to a single join point. Assumes that each
+-- 'Vertex' was created via 'extendPath' before invocation, and thus
 -- 'tsPendingEvents' is currently empty.
 joinPaths :: [(Vertex, TagId)] -> TranslateM ()
 joinPaths branches = do
   let vs = fst $ unzip branches
   (_, v') <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
-  for_ branches $ \(v, checkpoint) -> do
+  for_ branches $ \(v, path) -> do
     let rejoinEdge = (v, v')
     tsEdgeEvents.at rejoinEdge ?= []
-    addCheckpointEdge checkpoint rejoinEdge
+    addPathEdge path rejoinEdge
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
@@ -719,19 +717,19 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
-    preTestCp <- use tsCurrentCheckpoint
+    preTestPath <- use tsCurrentPath
     postTest <- extendPath
-    trueCp <- createCheckpoint
+    truePath <- createSubpath
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
-    tsPathVertex .= postTest -- reset to before true branch
-    falseCp <- createCheckpoint
+    tsPathHead .= postTest -- reset to before true branch
+    falsePath <- createSubpath
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
-    joinPaths [(postTrue, trueCp), (postFalse, falseCp)]
-    tsCurrentCheckpoint .= preTestCp -- reset to before conditional
+    joinPaths [(postTrue, truePath), (postFalse, falsePath)]
+    tsCurrentPath .= preTestPath -- reset to before conditional
     case typeEq ta tb of
-      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (trueCp, a) (falseCp, b)
+      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
@@ -823,7 +821,7 @@ mkExecutionGraph vertex0 st = ExecutionGraph
     vertex0
     (_tsGraph st)
     (_tsEdgeEvents st)
-    (_tsCheckpointEdges st)
+    (_tsPathEdges st)
 
 runTranslation
   :: Info
@@ -847,13 +845,13 @@ runTranslation info pactArgs body = do
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
-      let vertex0     = 0
-          checkpoint0 = 0
-          nextTagId   = succ checkpoint0
-          graph0      = pure vertex0
-          state0      = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty checkpoint0 Map.empty
+      let vertex0   = 0
+          path0     = 0
+          nextTagId = succ path0
+          graph0    = pure vertex0
+          state0    = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty path0 Map.empty
           translation = do
-            emitCheckpoint checkpoint0
+            emitPathStart path0
             term <- translateBody body
             extendPath -- form the final edge for any remaining events
             pure term
