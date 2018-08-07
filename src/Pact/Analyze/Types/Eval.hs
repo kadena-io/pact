@@ -151,6 +151,7 @@ deriving instance Mergeable SymbolicCells
 data LatticeAnalyzeState
   = LatticeAnalyzeState
     { _lasSucceeds            :: SBV Bool
+    , _lasPurelyReachable     :: SBV Bool
     --
     -- TODO: instead of having a single boolean here, we should probably use
     --       finer-grained tracking, so that we can test whether a single
@@ -212,6 +213,7 @@ mkInitialAnalyzeState :: [Table] -> AnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
+        , _lasPurelyReachable     = true
         , _lasMaintainsInvariants = mkMaintainsInvariants
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
@@ -319,8 +321,42 @@ class HasAnalyzeEnv a where
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
+-- | Whether the program will successfully run to completion without aborting.
 succeeds :: Lens' AnalyzeState (S Bool)
 succeeds = latticeState.lasSucceeds.sbv2S
+
+-- | Whether execution will reach a given point in the program according to
+-- conditionals, *without taking transaction failures into account*. This is
+-- used to determine which linear execution path through an 'ExecutionGraph' is
+-- taken by a concrete run of the program. By not taking transaction failures
+-- into account, we ensure that our 'ExecutionGraph' has a single component
+-- amongst the edges we call "reachable". If we were to naively use 'succeeds'
+-- instead of this separate construct, the following program would yield an
+-- incomplete graph:
+--
+--     (defun test (x:bool)
+--       (if x (enforce false) (enforce false)))
+--
+-- This program yields a graph with six edges: one initial edge which splits at
+-- the conditional, two on either side of the conditional (branching out and
+-- rejoining back to one another), and one final edge after the conditional:
+--
+--        .
+--       / x
+--     ->   ->
+--       \.x
+--
+-- The initial and final edges would both belong to the "root path" and
+-- therefore be trivially reachable, the "branch-out" edges would be reachable,
+-- and neither of the "rejoin" edges would reachable. If we only consider the
+-- graph formed by reachable edges, we now have 2 components.
+--
+-- We prefer to give a single-component reachable graph to model reporting, and
+-- let that code consider 'TraceEnforce' 'TraceEvent's on its own to determine
+-- where linear execution aborts for a concrete program trace.
+--
+purelyReachable :: Lens' AnalyzeState (S Bool)
+purelyReachable = latticeState.lasPurelyReachable.sbv2S
 
 maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
