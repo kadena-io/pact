@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -109,7 +110,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
              )
 
 tagAccessKey
-  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> S RowKey
   -> Analyze ()
@@ -124,7 +125,7 @@ tagAccessKey lens' tid srk = do
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
 tagAccessCell
-  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> Text
   -> AVal

@@ -1,5 +1,7 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Pact.Analyze.Eval
   ( module Pact.Analyze.Eval.Invariant
   , module Pact.Analyze.Eval.Numerical
@@ -81,7 +83,7 @@ runAnalysis'
   -> [Table]
   -> Map VarId AVal
   -> ETerm
-  -> ModelTags
+  -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
 runAnalysis' query tables args tm tags info = do
@@ -109,7 +111,7 @@ runPropertyAnalysis
   -> [Table]
   -> Map VarId AVal
   -> ETerm
-  -> ModelTags
+  -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
 runPropertyAnalysis check tables args tm tags info =
@@ -120,7 +122,7 @@ runInvariantAnalysis
   :: [Table]
   -> Map VarId AVal
   -> ETerm
-  -> ModelTags
+  -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
 runInvariantAnalysis tables args tm tags info =

@@ -1,6 +1,8 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveTraversable          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
@@ -52,7 +54,11 @@ data ExecutionGraph
     , _egPathEdges     :: Map TagId [Edge]
     }
 
-data ModelTags
+data Concreteness
+  = Concrete
+  | Symbolic
+
+data ModelTags (c :: Concreteness)
   = ModelTags
     { _mtVars   :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
@@ -72,11 +78,11 @@ data ModelTags
     }
   deriving (Eq, Show)
 
-data Model
+data Model (c :: Concreteness)
   = Model
     { _modelArgs    :: Map VarId (Located (Text, TVal))
     -- ^ one free value per input the function; allocatd post-translation.
-    , _modelTags    :: ModelTags
+    , _modelTags    :: ModelTags c
     -- ^ free values to be constrained to equal values during analysis;
     -- allocated post-translation.
     , _modelKsProvs :: Map TagId Provenance

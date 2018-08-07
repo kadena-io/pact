@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -88,14 +89,14 @@ describeVerificationWarnings (VerificationWarnings dups) = case dups of
   _  -> "Warning: duplicated property definitions for " <> T.intercalate ", " dups
 
 data CheckSuccess
-  = SatisfiedProperty Model
+  = SatisfiedProperty (Model 'Concrete)
   | ProvedTheorem
   deriving (Eq, Show)
 
 type ParseFailure = (Exp, String)
 
 data SmtFailure
-  = Invalid Model
+  = Invalid (Model 'Concrete)
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | UnexpectedFailure SBV.SMTException
@@ -190,8 +191,8 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 --
 
 resultQuery
-  :: Goal                                      -- ^ are we in sat or valid mode?
-  -> Model                                     -- ^ unsaturated/symbolic model
+  :: Goal
+  -> Model 'Symbolic
   -> ExceptT SmtFailure SBV.Query CheckSuccess
 resultQuery goal model0 = do
   satResult <- lift SBV.checkSat

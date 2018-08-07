@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE Rank2Types          #-}
@@ -54,7 +55,7 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocModelTags :: Located ETerm -> ExecutionGraph -> Symbolic ModelTags
+allocModelTags :: Located ETerm -> ExecutionGraph -> Symbolic (ModelTags 'Symbolic)
 allocModelTags locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
@@ -113,7 +114,7 @@ allocModelTags locatedTm graph = ModelTags
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
-showModel :: Model -> Text
+showModel :: Model c -> Text
 showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
@@ -202,7 +203,7 @@ showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
 
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
-saturateModel :: Model -> SBV.Query Model
+saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
 saturateModel =
     traverseOf (modelArgs.traversed.located._2)        fetchTVal   >=>
     traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
