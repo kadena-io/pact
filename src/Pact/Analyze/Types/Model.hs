@@ -54,17 +54,20 @@ data ExecutionGraph
 
 data ModelTags
   = ModelTags
-    { _mtVars   :: Map VarId (Located (Text, TVal))
+    { _mtVars        :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
-    , _mtReads  :: Map TagId (Located (S RowKey, Object))
+    , _mtReads       :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
-    , _mtWrites :: Map TagId (Located (S RowKey, Object))
+    , _mtWrites      :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each write, in traversal order
-    , _mtAuths  :: Map TagId (Located (SBV Bool))
+    , _mtAuths       :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that this
     -- includes all (enforce ks) and (enforce-keyset "ks") calls.
-    , _mtResult :: Located TVal
+    , _mtResult      :: Located TVal
     -- ^ return value of the function being checked
+    , _mtCheckpoints :: Map TagId (SBV Bool)
+    -- ^ one at the start of the program, on either side of the branches of a
+    -- conditional, and after the branches of a conditional rejoin one another.
     }
   deriving (Eq, Show)
 
