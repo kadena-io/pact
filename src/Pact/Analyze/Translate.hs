@@ -210,11 +210,14 @@ genTagId = genId tsNextTagId
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
 
-tagCheckpoint :: TranslateM TagId
-tagCheckpoint = do
+emitCheckpoint :: TagId -> TranslateM ()
+emitCheckpoint = emit . TraceCheckpoint
+
+createCheckpoint :: TranslateM TagId
+createCheckpoint = do
   tid <- genTagId
   tsCurrentCheckpoint .= tid
-  emit $ TraceCheckpoint tid
+  emitCheckpoint tid
   pure tid
 
 tagDbAccess
@@ -715,11 +718,11 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
     postTest <- extendPath
-    trueCp <- tagCheckpoint
+    trueCp <- createCheckpoint
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
     resetPath postTest
-    falseCp <- tagCheckpoint
+    falseCp <- createCheckpoint
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
     joinPaths [(postTrue, trueCp), (postFalse, falseCp)]
@@ -846,7 +849,10 @@ runTranslation info pactArgs body = do
           nextTagId   = succ checkpoint0
           graph0      = pure vertex0
           state0      = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty checkpoint0 Map.empty
-          -- NOTE: This @extendPath@ forms the final edge for remaining events:
-          translation = translateBody body <* extendPath
+          translation = do
+            emitCheckpoint checkpoint0
+            term <- translateBody body
+            extendPath -- form the final edge for any remaining events
+            pure term
       in fmap (fmap $ mkExecutionGraph vertex0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
