@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -69,12 +70,17 @@ data AnalyzeEnv
     , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
     , _invariants  :: !(TableMap [Located (Invariant Bool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
-    , _aeModelTags :: !ModelTags
+    , _aeModelTags :: !(ModelTags 'Symbolic)
     , _aeInfo      :: !Info
     }
   deriving Show
 
-mkAnalyzeEnv :: [Table] -> Map VarId AVal -> ModelTags -> Info -> Maybe AnalyzeEnv
+mkAnalyzeEnv
+  :: [Table]
+  -> Map VarId AVal
+  -> ModelTags 'Symbolic
+  -> Info
+  -> Maybe AnalyzeEnv
 mkAnalyzeEnv tables args tags info = do
   let keySets'    = mkFreeArray "envKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
