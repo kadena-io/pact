@@ -43,12 +43,13 @@ data TraceEvent
   | TraceWrite (Located (TagId, Schema))
   | TraceEnforce (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
-  | TracePathStart TagId
+  | TraceSubpathStart TagId
   deriving (Show)
 
 data ExecutionGraph
   = ExecutionGraph
     { _egInitialVertex :: Vertex
+    , _egRootPath      :: TagId
     , _egGraph         :: Alga.Graph Vertex
     , _egEdgeEvents    :: Map Edge [TraceEvent]
     , _egPathEdges     :: Map TagId [Edge]

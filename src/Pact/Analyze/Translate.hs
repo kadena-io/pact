@@ -215,14 +215,11 @@ genTagId = genId tsNextTagId
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
 
-emitPathStart :: TagId -> TranslateM ()
-emitPathStart = emit . TracePathStart
-
 createSubpath :: TranslateM TagId
 createSubpath = do
   tid <- genTagId
   tsCurrentPath .= tid
-  emitPathStart tid
+  emit $ TraceSubpathStart tid
   pure tid
 
 tagDbAccess
@@ -816,9 +813,10 @@ translateNode astNode = astContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
-mkExecutionGraph :: Vertex -> TranslateState -> ExecutionGraph
-mkExecutionGraph vertex0 st = ExecutionGraph
+mkExecutionGraph :: Vertex -> TagId -> TranslateState -> ExecutionGraph
+mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     vertex0
+    rootPath
     (_tsGraph st)
     (_tsEdgeEvents st)
     (_tsPathEdges st)
@@ -850,10 +848,7 @@ runTranslation info pactArgs body = do
           nextTagId = succ path0
           graph0    = pure vertex0
           state0    = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty path0 Map.empty
-          translation = do
-            emitPathStart path0
-            term <- translateBody body
-            extendPath -- form the final edge for any remaining events
-            pure term
-      in fmap (fmap $ mkExecutionGraph vertex0) $ flip runStateT state0 $
+          translation = translateBody body
+                     <* extendPath -- form final edge for any remaining events
+      in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
