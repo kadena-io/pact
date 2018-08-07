@@ -135,38 +135,44 @@ data TranslateState
       -- of the next 'Vertex'.
     , _tsCheckpointEdges   :: Map TagId [Edge]
       -- ^ Graph edges corresponding to a given execution "checkpoint".
-      -- Checkpoints are emitted (1) at the start of an execution trace, (2) at
-      -- the beginning of either side of a conditional, and (3) at a "join
-      -- point" after a conditional. For cases (1) and (3), the checkpoint will
-      -- correspond to a single graph edge. For case (2), either side of the
-      -- conditional will each correspond to two edges, four in total:
+      -- Checkpoints are emitted at the start of an execution trace, and at
+      -- the beginning of either side of a conditional. After a conditional,
+      -- we resume the use of the checkpoint from before the conditional.
+      -- Either side of a conditional will contain a minimum of two edges:
       -- splitting away from the other branch, and then rejoining back to the
-      -- other branch at the join point. For the following diagram, note six
-      -- edges formed about a conditional (where /, \, and - are edges):
-      --         .
-      --        / \
-      --      ->   ->
-      --        \./
+      -- other branch at the join point. The following program:
       --
-      -- One edge leading into the conditional, two for each branch, and a
-      -- final edge where the two branches have rejoined one another. We must
-      -- have two edges for each branch so that we can unambiguously talk about
-      -- either branch in our graph representation, where we only one permit
-      -- one edge in a given direction between two vertices.
+      --     (defun test ()
+      --       (if true 1 2))
+      --
+      -- will result in the following diagram, with six total edges (where /,
+      -- \, and - are edges):
+      --        .
+      --       / \
+      --     ->   ->
+      --       \./
+      --
+      -- The initial edge leading into the conditional, two for each branch,
+      -- and a final edge after the two branches have rejoined one another. We
+      -- must have two edges for each branch so that we can unambiguously talk
+      -- about either branch in our graph representation, where we only one
+      -- permit one edge in a given direction between two vertices.
       --
       -- Also note that in the presence of nested conditionals, these
-      -- branch-out and rejoin edges will not be contiguous in the graph on the
-      -- side of the outer conditional which contains the nested conditional:
-      --         ......
-      --       _/  .   \_
-      --        \ / \ _/
-      --          \./
+      -- "branch-out" and "rejoin" edges will not be contiguous in the graph on
+      -- the side of the outer conditional which contains the nested
+      -- conditional:
+      --       ......
+      --     _/  .   \_
+      --      \ / \ _/
+      --        \./
       --
       --  We track all of the edges for each checkpoint so that we can
       --  determine the subset of edges on the graph that form the upper bound
-      --  for the edges that are hit during a particular execution trace. We
-      --  say "upper bound" here because some traces will not execute entirely
-      --  to the end of the program due to e.g. @enforce@ and @enforce-keyset@.
+      --  for the edges that are reached during a particular execution trace.
+      --  We say "upper bound" here because some traces will not execute
+      --  entirely to the end of the program due to the use of e.g. @enforce@
+      --  and @enforce-keyset@.
     }
 
 makeLenses ''TranslateFailure
@@ -323,10 +329,6 @@ flushEvents = do
   ConsList pathEvents <- use tsPendingEvents
   tsPendingEvents .= mempty
   pure pathEvents
-
--- | Resets the path head to the supplied 'Vertex'
-resetPath :: Vertex -> TranslateM ()
-resetPath = (tsPathVertex .=)
 
 addCheckpointEdge :: TagId -> Edge -> TranslateM ()
 addCheckpointEdge checkpoint e =
@@ -717,18 +719,19 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
+    preTestCp <- use tsCurrentCheckpoint
     postTest <- extendPath
     trueCp <- createCheckpoint
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
-    resetPath postTest
+    tsPathVertex .= postTest -- reset to before true branch
     falseCp <- createCheckpoint
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
     joinPaths [(postTrue, trueCp), (postFalse, falseCp)]
-    postCp <- tagCheckpoint
+    tsCurrentCheckpoint .= preTestCp -- reset to before conditional
     case typeEq ta tb of
-      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (trueCp, a) (falseCp, b) postCp
+      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (trueCp, a) (falseCp, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion

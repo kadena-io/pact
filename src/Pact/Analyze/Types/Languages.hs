@@ -402,7 +402,7 @@ data Term ret where
   -- TODO(joel): In principle this could be pure and applied to all the
   -- languages. Unfortunately, we can't add this to props because `Query` has
   -- `Symbolic` in its stack, so it can't do an `ite`.
-  IfThenElse      :: Term Bool -> (TagId, Term a) -> (TagId, Term a) -> TagId -> Term a
+  IfThenElse      :: Term Bool -> (TagId, Term a) -> (TagId, Term a) -> Term a
 
   -- Variable binding
   Let             :: Text -> VarId -> ETerm -> Term a -> Term a
