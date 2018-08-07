@@ -15,20 +15,21 @@ module Pact.Analyze.Translate where
 
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, cons, makeLenses, use, view,
-                                             (<&>), (?~), (^.), (^?), (%~),
-                                             (.~), (<&>), (%=), (.=), (?=), _1,
-                                             _2)
-import           Control.Monad              ((>=>), void)
+import           Control.Lens               (at, makeLenses, cons, snoc, use,
+                                             view, (<&>), (?~), (^.), (^?),
+                                             (%~), (.~), (<&>), (%=), (.=),
+                                             (?=), _1, _2)
+import           Control.Monad              ((>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
                                              runStateT)
-import           Data.Foldable              (foldl')
+import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
+import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
@@ -115,8 +116,7 @@ mkTranslateEnv = foldl'
 
 data TranslateState
   = TranslateState
-    { _tsTraceEvents       :: [TraceEvent] -- TODO: replace with edge -> events
-    , _tsNextTagId         :: TagId
+    { _tsNextTagId         :: TagId
     , _tsNextVarId         :: VarId
     , _tsGraph             :: Alga.Graph Vertex
       -- ^ The execution graph we've built so far. This is expanded upon as we
@@ -126,9 +126,47 @@ data TranslateState
       -- the single initial vertex. it splits into two if we hit a conditional,
       -- and rejoins afterwards.
     , _tsEdgeEvents        :: Map Edge [TraceEvent]
-      -- ^ Events added to each new 'Edge' upon creating a new 'Vertex'.
+      -- ^ Events added to each new 'Edge' upon creating a new 'Vertex' which
+      -- closes/completes the 'Edge'.
     , _tsPendingEvents     :: SnocList TraceEvent
-      -- ^ Events being accumulated until created of the next 'Vertex'.
+      -- ^ Events being accumulated until the creation of the next 'Vertex'.
+    , _tsCurrentCheckpoint :: TagId
+      -- ^ Checkpoint to be associated with the 'Edge' formed by the creation
+      -- of the next 'Vertex'.
+    , _tsCheckpointEdges   :: Map TagId [Edge]
+      -- ^ Graph edges corresponding to a given execution "checkpoint".
+      -- Checkpoints are emitted (1) at the start of an execution trace, (2) at
+      -- the beginning of either side of a conditional, and (3) at a "join
+      -- point" after a conditional. For cases (1) and (3), the checkpoint will
+      -- correspond to a single graph edge. For case (2), either side of the
+      -- conditional will each correspond to two edges, four in total:
+      -- splitting away from the other branch, and then rejoining back to the
+      -- other branch at the join point. For the following diagram, note six
+      -- edges formed about a conditional (where /, \, and - are edges):
+      --         .
+      --        / \
+      --      ->   ->
+      --        \./
+      --
+      -- One edge leading into the conditional, two for each branch, and a
+      -- final edge where the two branches have rejoined one another. We must
+      -- have two edges for each branch so that we can unambiguously talk about
+      -- either branch in our graph representation, where we only one permit
+      -- one edge in a given direction between two vertices.
+      --
+      -- Also note that in the presence of nested conditionals, these
+      -- branch-out and rejoin edges will not be contiguous in the graph on the
+      -- side of the outer conditional which contains the nested conditional:
+      --         ......
+      --       _/  .   \_
+      --        \ / \ _/
+      --          \./
+      --
+      --  We track all of the edges for each checkpoint so that we can
+      --  determine the subset of edges on the graph that form the upper bound
+      --  for the edges that are hit during a particular execution trace. We
+      --  say "upper bound" here because some traces will not execute entirely
+      --  to the end of the program due to e.g. @enforce@ and @enforce-keyset@.
     }
 
 makeLenses ''TranslateFailure
@@ -163,11 +201,21 @@ nodeContext node = local (_1 .~ nodeToInfo node)
 astContext :: AST Node -> TranslateM a -> TranslateM a
 astContext ast = local (_1 .~ astToInfo ast)
 
-emitTraceEvent :: TraceEvent -> TranslateM ()
-emitTraceEvent event = modify' $ tsTraceEvents %~ cons event
+emit :: TraceEvent -> TranslateM ()
+emit event = modify' $ tsPendingEvents %~ flip snoc event
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
+
+nodeInfo :: Node -> Info
+nodeInfo node = node ^. aId . Pact.tiInfo
+
+tagCheckpoint :: TranslateM TagId
+tagCheckpoint = do
+  tid <- genTagId
+  tsCurrentCheckpoint .= tid
+  emit $ TraceCheckpoint tid
+  pure tid
 
 tagDbAccess
   :: (Located (TagId, Schema) -> TraceEvent)
@@ -176,8 +224,7 @@ tagDbAccess
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  let info = node ^. aId . Pact.tiInfo
-  emitTraceEvent $ mkEvent $ Located info (tid, schema)
+  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
@@ -189,13 +236,11 @@ tagWrite = tagDbAccess TraceWrite
 tagAuth :: Node -> TranslateM TagId
 tagAuth node = do
   tid <- genTagId
-  let info = node ^. aId . Pact.tiInfo
-  emitTraceEvent $ TraceEnforce $ Located info tid
+  emit $ TraceEnforce $ Located (nodeInfo node) tid
   pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
-tagVarBinding info nm ety vid = emitTraceEvent $
-  TraceBind (Located info (vid, nm, ety))
+tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))
 
 withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
 withNewVarId varNode varName action = do
@@ -261,7 +306,7 @@ throwError' err = do
   throwError $ TranslateFailure info err
 
 -- | Generates a new 'Vertex', setting it as the head, returning the
--- newly-formed 'Edge'.
+-- newly-formed 'Edge'. Does *not* add this new 'Vertex' to the graph.
 issueVertex :: TranslateM Edge
 issueVertex = do
   prev <- use tsPathVertex
@@ -280,6 +325,10 @@ flushEvents = do
 resetPath :: Vertex -> TranslateM ()
 resetPath = (tsPathVertex .=)
 
+addCheckpointEdge :: TagId -> Edge -> TranslateM ()
+addCheckpointEdge checkpoint e =
+  tsCheckpointEdges.at checkpoint %= pure . cons e . fromMaybe []
+
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
 -- events to 'tsEdgeEvents.
 extendPath :: TranslateM Vertex
@@ -288,18 +337,23 @@ extendPath = do
   tsGraph %= Alga.overlay (Alga.edge v v')
   edgeTrace <- flushEvents
   tsEdgeEvents.at e ?= edgeTrace
+  cp <- use tsCurrentCheckpoint
+  addCheckpointEdge cp e
   pure v'
 
--- | Extends multiple separate paths to a single join point. Assumes that each
+-- | Extends multiple separate paths to a single join point, where each
+-- 'Vertex' is associated with the checkpoint for its branch. Assumes that each
 -- vertex was created via 'extendPath' before invocation, and thus
--- 'tsPendingEvents is currently empty.
-joinPaths :: [Vertex] -> TranslateM Vertex
-joinPaths vs = do
+-- 'tsPendingEvents' is currently empty.
+joinPaths :: [(Vertex, TagId)] -> TranslateM ()
+joinPaths branches = do
+  let vs = fst $ unzip branches
   (_, v') <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
-  for vs $ \v ->
-    tsEdgeEvents.at (v, v') ?= []
-  pure v'
+  for_ branches $ \(v, checkpoint) -> do
+    let rejoinEdge = (v, v')
+    tsEdgeEvents.at rejoinEdge ?= []
+    addCheckpointEdge checkpoint rejoinEdge
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
@@ -661,14 +715,17 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
     postTest <- extendPath
+    trueCp <- tagCheckpoint
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
     resetPath postTest
+    falseCp <- tagCheckpoint
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
-    void $ joinPaths [postTrue, postFalse]
+    joinPaths [(postTrue, trueCp), (postFalse, falseCp)]
+    postCp <- tagCheckpoint
     case typeEq ta tb of
-      Just Refl -> pure $ ESimple ta $ IfThenElse cond' a b
+      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (trueCp, a) (falseCp, b) postCp
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
@@ -755,15 +812,22 @@ translateNode astNode = astContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
+mkExecutionGraph :: Vertex -> TranslateState -> ExecutionGraph
+mkExecutionGraph vertex0 st = ExecutionGraph
+    vertex0
+    (_tsGraph st)
+    (_tsEdgeEvents st)
+    (_tsCheckpointEdges st)
+
 runTranslation
   :: Info
   -> [Named Node]
   -> [AST Node]
-  -> Except TranslateFailure ([Arg], ETerm, [TraceEvent])
+  -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
 runTranslation info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
-    (tm, traceEvents) <- runBodyTranslation args translationVid
-    pure (args, tm, traceEvents)
+    (tm, graph) <- runBodyTranslation args translationVid
+    pure (args, tm, graph)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
@@ -775,11 +839,14 @@ runTranslation info pactArgs body = do
         (VarId 1)
 
     runBodyTranslation
-      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TraceEvent])
+      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
       let vertex0     = 0
-          state0      = TranslateState [] 0 nextVarId (pure vertex0) vertex0 Map.empty mempty
-          translation = translateBody body
-                     <* extendPath -- to create a final edge for any events
-      in fmap (fmap _tsTraceEvents) $ flip runStateT state0 $
+          checkpoint0 = 0
+          nextTagId   = succ checkpoint0
+          graph0      = pure vertex0
+          state0      = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty checkpoint0 Map.empty
+          -- NOTE: This @extendPath@ forms the final edge for remaining events:
+          translation = translateBody body <* extendPath
+      in fmap (fmap $ mkExecutionGraph vertex0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (info, mkTranslateEnv args)

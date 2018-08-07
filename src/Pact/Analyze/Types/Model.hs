@@ -6,6 +6,7 @@
 
 module Pact.Analyze.Types.Model where
 
+import qualified Algebra.Graph             as Alga
 import           Control.Lens              (makeLenses, makePrisms)
 import           Data.Map.Strict           (Map)
 import           Data.SBV                  (SBV)
@@ -27,7 +28,7 @@ data Arg = Arg
 
 newtype TagId
   = TagId Natural
-  deriving (Num, Show, Ord, Eq)
+  deriving (Num, Enum, Show, Ord, Eq)
 
 type Edge = (Vertex, Vertex)
 
@@ -40,8 +41,16 @@ data TraceEvent
   | TraceWrite (Located (TagId, Schema))
   | TraceEnforce (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
+  | TraceCheckpoint TagId
   deriving (Show)
 
+data ExecutionGraph
+  = ExecutionGraph
+    { _egInitialVertex     :: Vertex
+    , _egGraph             :: Alga.Graph Vertex
+    , _egEdgeEvents        :: Map Edge [TraceEvent]
+    , _egCheckpointEdges   :: Map TagId [Edge]
+    }
 
 data ModelTags
   = ModelTags
@@ -78,5 +87,6 @@ data Goal
 deriving instance Eq Goal
 
 makePrisms ''TraceEvent
+makeLenses ''ExecutionGraph
 makeLenses ''ModelTags
 makeLenses ''Model
