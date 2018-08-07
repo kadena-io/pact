@@ -61,7 +61,7 @@ allocModelTags locatedTm graph = ModelTags
     <*> allocWrites
     <*> allocAuths
     <*> allocResult
-    <*> allocCheckpoints
+    <*> allocPaths
 
   where
     -- For the purposes of symbolic value allocation, we just grab all of the
@@ -106,15 +106,15 @@ allocModelTags locatedTm graph = ModelTags
       EObject sch _ ->
         (EObjectTy sch,) . AnObj <$> allocSchema sch
 
-    allocCheckpoints :: Symbolic (Map TagId (SBV Bool))
-    allocCheckpoints = fmap Map.fromList $
-      for (toListOf (traverse._TraceCheckpoint) events) $ \tid ->
+    allocPaths :: Symbolic (Map TagId (SBV Bool))
+    allocPaths = fmap Map.fromList $
+      for (toListOf (traverse._TracePathStart) events) $ \tid ->
         (tid,) <$> alloc
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showModel :: Model -> Text
-showModel (Model args (ModelTags vars reads' writes auths res _cps) ksProvs) =
+showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
       , indent <$> fmapToList showVar args
