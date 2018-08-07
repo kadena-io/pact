@@ -71,7 +71,6 @@ instance Analyzer Analyze where
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
 
-
 evalTermLogicalOp
   :: LogicalOp
   -> [Term Bool]
@@ -151,6 +150,17 @@ tagAuth tid mKsProv sb = do
     Just sbv -> do
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= mKsProv
+
+tagSubpathStart :: TagId -> Analyze ()
+tagSubpathStart tid = do
+  mTag <- preview $ aeModelTags.mtPaths.at tid._Just
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing  -> pure ()
+    Just sbv -> do
+      sb <- use purelyReachable
+      addConstraint $ sansProv $ sbv .== _sSbv sb
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -258,11 +268,11 @@ evalTermO = \case
 
   Sequence eterm objT -> evalETerm eterm *> evalTermO objT
 
-  IfThenElse cond (_thenPath, then') (_elsePath, else') -> do
+  IfThenElse cond (thenPath, then') (elsePath, else') -> do
     testPasses <- evalTerm cond
     case unliteralS testPasses of
-      Just True  -> evalTermO then'
-      Just False -> evalTermO else'
+      Just True  -> tagSubpathStart thenPath *> evalTermO then'
+      Just False -> tagSubpathStart elsePath *> evalTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
 validateWrite :: Pact.WriteType -> Schema -> Object -> Analyze ()
@@ -289,9 +299,11 @@ evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
   CoreTerm a -> evalCore a
 
-  IfThenElse cond (_thenPath, then') (_elsePath, else') -> do
+  IfThenElse cond (thenPath, then') (elsePath, else') -> do
     testPasses <- evalTerm cond
-    iteS testPasses (evalTerm then') (evalTerm else')
+    iteS testPasses
+      (tagSubpathStart thenPath *> evalTerm then')
+      (tagSubpathStart elsePath *> evalTerm else')
 
   -- TODO: check that the body of enforce is pure
   Enforce cond -> do
