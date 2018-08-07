@@ -54,8 +54,8 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocModelTags :: Located ETerm -> [TraceEvent] -> Symbolic ModelTags
-allocModelTags locatedTm events = ModelTags
+allocModelTags :: Located ETerm -> ExecutionGraph -> Symbolic ModelTags
+allocModelTags locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
@@ -63,6 +63,11 @@ allocModelTags locatedTm events = ModelTags
     <*> allocResult
 
   where
+    -- For the purposes of symbolic value allocation, we just grab all of the
+    -- events from the graph indiscriminately:
+    events :: [TraceEvent]
+    events = toListOf (egEdgeEvents.traverse.traverse) graph
+
     allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
     allocVars = fmap Map.fromList $
       for (toListOf (traverse._TraceBind) events) $

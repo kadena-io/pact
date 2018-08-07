@@ -257,7 +257,7 @@ evalTermO = \case
 
   Sequence eterm objT -> evalETerm eterm *> evalTermO objT
 
-  IfThenElse cond then' else' -> do
+  IfThenElse cond (_thenCp, then') (_elseCp, else') _postCp -> do
     testPasses <- evalTerm cond
     case unliteralS testPasses of
       Just True  -> evalTermO then'
@@ -288,7 +288,7 @@ evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
   CoreTerm a -> evalCore a
 
-  IfThenElse cond then' else' -> do
+  IfThenElse cond (_thenCp, then') (_elseCp, else') _postCp -> do
     testPasses <- evalTerm cond
     iteS testPasses (evalTerm then') (evalTerm else')
 
