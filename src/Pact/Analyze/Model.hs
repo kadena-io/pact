@@ -123,7 +123,7 @@ allocModelTags locatedTm graph = ModelTags
 
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
-showModel :: Model c -> Text
+showModel :: Model 'Concrete -> Text
 showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
@@ -153,7 +153,7 @@ showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
     indent = ("  " <>)
 
     showSbv :: (Show a, SymWord a) => SBV a -> Text
-    showSbv sbv = maybe "[symbolic]" tShow (SBV.unliteral sbv)
+    showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
 
     showS :: (Show a, SymWord a) => S a -> Text
     showS = showSbv . _sSbv
