@@ -15,14 +15,17 @@ module Pact.Analyze.Model
   , showModel
   ) where
 
-import           Control.Lens         (Prism', ifoldr, imap, toListOf,
-                                       traverseOf, traversed, (<&>), (?~),
-                                       (^.), _1, _2)
+import           Control.Lens         (Prism', filtered, ifoldr, imap, isn't,
+                                       toListOf, traverseOf, traversed, (<&>),
+                                       (?~), (^.), _1, _2)
 import           Control.Monad        ((>=>), when)
+import           Data.Bool            (bool)
 import qualified Data.Foldable        as Foldable
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
 import           Data.Monoid          ((<>))
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
 import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
@@ -121,10 +124,46 @@ allocModelTags locatedTm graph = ModelTags
           when (tid == rootPath) $ SBV.constrain sbool
           pure (tid, sbool)
 
+linearizedTrace :: Model 'Concrete -> [TraceEvent]
+linearizedTrace model = toListOf
+    (traverse.traverse.filtered (isn't _TraceSubpathStart))
+    reachableEdgeEvents
+
+  where
+    -- NOTE: 'Map' is ordered, so our @(Vertex, Vertex)@ 'Edge' representation
+    -- over monotonically increasing 'Vertex's across the execution graph
+    -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
+    -- are ordered, so we now have a linear trace of events.
+    reachableEdgeEvents :: Map Edge [TraceEvent]
+    reachableEdgeEvents = restrictKeys edgeEvents reachableEdges
+
+    -- TODO: use Map.restrictKeys once using containers >= 0.5.8
+    restrictKeys :: Ord k => Map k a -> Set k -> Map k a
+    restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
+
+    edgeEvents :: Map Edge [TraceEvent]
+    edgeEvents = model ^. modelExecutionGraph.egEdgeEvents
+
+    reachableEdges :: Set Edge
+    reachableEdges = Set.fromList . concat $
+      restrictKeys pathEdges reachablePaths
+
+    pathEdges :: Map TagId [Edge]
+    pathEdges = model ^. modelExecutionGraph.egPathEdges
+
+    reachablePaths :: Set TagId
+    reachablePaths = Map.foldlWithKey'
+      (\paths path sbool -> maybe
+        (error "impossible: found symbolic value in concrete model")
+        (bool paths (Set.insert path paths))
+        (SBV.unliteral sbool))
+      Set.empty
+      (model ^. modelTags.mtPaths)
+
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showModel :: Model 'Concrete -> Text
-showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs) =
+showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs _graph) =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
       , indent <$> fmapToList showVar args

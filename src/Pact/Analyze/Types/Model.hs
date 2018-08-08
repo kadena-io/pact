@@ -44,7 +44,7 @@ data TraceEvent
   | TraceEnforce (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
   | TraceSubpathStart TagId
-  deriving (Show)
+  deriving (Eq, Show)
 
 data ExecutionGraph
   = ExecutionGraph
@@ -54,6 +54,7 @@ data ExecutionGraph
     , _egEdgeEvents    :: Map Edge [TraceEvent]
     , _egPathEdges     :: Map TagId [Edge]
     }
+  deriving (Eq, Show)
 
 data Concreteness
   = Concrete
@@ -81,13 +82,16 @@ data ModelTags (c :: Concreteness)
 
 data Model (c :: Concreteness)
   = Model
-    { _modelArgs    :: Map VarId (Located (Text, TVal))
+    { _modelArgs           :: Map VarId (Located (Text, TVal))
     -- ^ one free value per input the function; allocatd post-translation.
-    , _modelTags    :: ModelTags c
+    , _modelTags           :: ModelTags c
     -- ^ free values to be constrained to equal values during analysis;
     -- allocated post-translation.
-    , _modelKsProvs :: Map TagId Provenance
+    , _modelKsProvs        :: Map TagId Provenance
     -- ^ keyset 'Provenance's from analysis
+    , _modelExecutionGraph :: ExecutionGraph
+    -- ^ execution graph corresponding to the program for reporting linearized
+    -- traces
     }
   deriving (Eq, Show)
 
