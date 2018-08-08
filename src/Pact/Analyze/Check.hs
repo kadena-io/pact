@@ -261,7 +261,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
-                resultQuery goal $ Model modelArgs' tags ksProvs
+                resultQuery goal $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -305,7 +305,7 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
           runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
         void $ lift $ SBV.output prop
         hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model modelArgs' tags ksProvs
+          resultQuery goal $ Model modelArgs' tags ksProvs graph
 
   where
     goal :: Goal
