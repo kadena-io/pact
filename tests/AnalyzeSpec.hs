@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
@@ -23,6 +24,7 @@ import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
 import           Test.Hspec                   (Spec, describe, expectationFailure, it, runIO,
                                                shouldBe, shouldSatisfy, pendingWith)
+import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
@@ -86,6 +88,13 @@ data TestFailure
   | VerificationFailure VerificationFailure
   deriving Show
 
+userShowTestFailure :: TestFailure -> String
+userShowTestFailure = \case
+  TestCheckFailure cf    -> T.unpack (describeCheckFailure cf)
+  NoTestModule           -> "example is missing a module named 'test'"
+  ReplError err          -> "ReplError: " ++ err
+  VerificationFailure vf -> "VerificationFailure: " ++ show vf
+
 --
 -- TODO: use ExceptT
 --
@@ -131,10 +140,15 @@ runCheck code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
+handlePositiveTestResult :: Maybe TestFailure -> IO ()
+handlePositiveTestResult = \case
+  Nothing -> pure ()
+  Just tf -> HUnit.assertFailure $ userShowTestFailure tf
+
 expectVerified :: Text -> Spec
 expectVerified code = do
   res <- runIO $ runVerification $ wrap code
-  it "passes in-code checks" $ res `shouldSatisfy` isNothing
+  it "passes in-code checks" $ handlePositiveTestResult res
 
 expectFalsified :: Text -> Spec
 expectFalsified code = do
@@ -145,7 +159,7 @@ expectPass :: Text -> Check -> Spec
 -- TODO(joel): use expectNothing when it's available
 expectPass code check = do
   res <- runIO $ runCheck (wrap code) check
-  it (show check) $ res `shouldSatisfy` isNothing
+  it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
