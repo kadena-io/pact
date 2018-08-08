@@ -4,6 +4,7 @@
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
@@ -11,13 +12,15 @@
 module Pact.Analyze.Model
   ( allocArgs
   , allocModelTags
+  , linearizedTrace
   , saturateModel
   , showModel
   ) where
 
-import           Control.Lens         (Prism', filtered, ifoldr, imap, isn't,
-                                       toListOf, traverseOf, traversed, (<&>),
-                                       (?~), (^.), _1, _2)
+import           Control.Lens         (Lens', Prism', at, filtered, ifoldr, imap, isn't,
+                                       to, toListOf, traverseOf, traversed, (<&>),
+                                       (?~), (^.), (^?), _1, _2, _Just)
+import           Control.Lens.Indexed (FunctorWithIndex)
 import           Control.Monad        ((>=>), when)
 import           Data.Bool            (bool)
 import qualified Data.Foldable        as Foldable
@@ -124,18 +127,34 @@ allocModelTags locatedTm graph = ModelTags
           when (tid == rootPath) $ SBV.constrain sbool
           pure (tid, sbool)
 
-linearizedTrace :: Model 'Concrete -> [TraceEvent]
-linearizedTrace model = toListOf
-    (traverse.traverse.filtered (isn't _TraceSubpathStart))
-    reachableEdgeEvents
+linearizedTrace :: Model 'Concrete -> ExecutionTrace
+linearizedTrace model = foldr
+    (\event trace@(ExecutionTrace futureEvents mRes) ->
+      case event of
+        TraceSubpathStart _ ->
+          trace
+        TraceEnforce (_located -> tid) ->
+          case model ^? modelTags.mtAuths.at tid._Just.located.to SBV.unliteral._Just of
+            Nothing -> error "impossible: missing enforce tag, or symbolic value"
+            Just False ->
+              ExecutionTrace [event] Nothing
+            Just True ->
+              ExecutionTrace (event : futureEvents) mRes
+        _ ->
+          ExecutionTrace (event : futureEvents) mRes
+      )
+    (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
+    fullTrace
 
   where
     -- NOTE: 'Map' is ordered, so our @(Vertex, Vertex)@ 'Edge' representation
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
-    -- are ordered, so we now have a linear trace of events.
-    reachableEdgeEvents :: Map Edge [TraceEvent]
-    reachableEdgeEvents = restrictKeys edgeEvents reachableEdges
+    -- are ordered, so we now have a linear trace of events. But we still have
+    -- 'TraceSubpath' events, and the possibility of 'TraceEnforce' events
+    -- resulting in transaction failure.
+    fullTrace :: [TraceEvent]
+    fullTrace = concat $ restrictKeys edgeEvents reachableEdges
 
     -- TODO: use Map.restrictKeys once using containers >= 0.5.8
     restrictKeys :: Ord k => Map k a -> Set k -> Map k a

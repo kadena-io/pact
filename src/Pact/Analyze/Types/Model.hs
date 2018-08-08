@@ -95,6 +95,12 @@ data Model (c :: Concreteness)
     }
   deriving (Eq, Show)
 
+data ExecutionTrace
+  = ExecutionTrace
+    { _etEvents :: [TraceEvent]
+    , _etResult :: Maybe TVal   -- successful result or tx abort
+    }
+
 data Goal
   = Satisfaction -- ^ Find satisfying model
   | Validation   -- ^ Prove no invalidating model exists
