@@ -17,8 +17,8 @@ module Pact.Analyze.Model
   , showModel
   ) where
 
-import           Control.Lens         (Lens', Prism', at, filtered, ifoldr, imap, isn't,
-                                       to, toListOf, traverseOf, traversed, (<&>),
+import           Control.Lens         (Lens', Prism', at, ifoldr, imap, to,
+                                       toListOf, traverseOf, traversed, (<&>),
                                        (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Lens.Indexed (FunctorWithIndex)
 import           Control.Monad        ((>=>), when)
