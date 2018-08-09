@@ -283,6 +283,7 @@ saturateModel =
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
     traverseOf (modelTags.mtAuths.traversed.located)   fetchSbv    >=>
     traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
+    traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
     traverseOf (modelKsProvs.traversed)                fetchProv
 
   where
