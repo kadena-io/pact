@@ -130,19 +130,24 @@ allocModelTags locatedTm graph = ModelTags
 linearizedTrace :: Model 'Concrete -> ExecutionTrace
 linearizedTrace model = foldr
     (\event trace@(ExecutionTrace futureEvents mRes) ->
-      case event of
-        TraceSubpathStart _ ->
-          trace
-        TraceEnforce (_located -> tid) ->
-          case model ^? modelTags.mtAuths.at tid._Just.located.to SBV.unliteral._Just of
-            Nothing -> error "impossible: missing enforce tag, or symbolic value"
-            Just False ->
-              ExecutionTrace [event] Nothing
-            Just True ->
-              ExecutionTrace (event : futureEvents) mRes
-        _ ->
-          ExecutionTrace (event : futureEvents) mRes
-      )
+      let includeAndContinue = ExecutionTrace (event : futureEvents) mRes
+          includeAndStop     = ExecutionTrace [event] Nothing
+          skipAndContinue    = trace
+      in case event of
+           TraceSubpathStart _ ->
+             skipAndContinue
+           TraceEnforce (_located -> tid) ->
+             let mPassesEnforce = model ^?
+                   modelTags.mtAuths.at tid._Just.located.to SBV.unliteral._Just
+             in case mPassesEnforce of
+                  Nothing ->
+                    error "impossible: missing enforce tag, or symbolic value"
+                  Just False ->
+                    includeAndStop
+                  Just True ->
+                    includeAndContinue
+           _ ->
+             includeAndContinue)
     (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
     fullTrace
 
