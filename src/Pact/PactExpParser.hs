@@ -1,4 +1,6 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiWayIf                 #-}
@@ -24,17 +26,19 @@ module Pact.PactExpParser
     ,parseSExps
     ) where
 
+import Data.Semigroup
+import Data.Foldable (asum)
 import           Control.Applicative
 import           Control.Comonad      (extract)
 import           Control.Monad
 import qualified Data.Attoparsec.Text as AP
 import           Data.Decimal
-import           Data.Foldable        (asum)
 import           Data.List            hiding (span)
 import           Data.String
 import qualified Data.Text            as T
 import           Text.Trifecta        (Spanned (..))
 import qualified Text.Trifecta        as TF
+import           Text.Trifecta.Delta  (bytes)
 
 import           Pact.SExpParser
 import           Pact.Types.Lang
@@ -43,64 +47,81 @@ import           Pact.Types.SExp
 import           Prelude              hiding (span)
 
 
+toBool :: Text -> Maybe Bool
+toBool = \case
+  "true"  -> Just True
+  "false" -> Just False
+  _       -> Nothing
+
+mkList :: [PactExp] -> Parsed -> PactExp
+mkList exprs' =
+  let lty = case nub (map expPrimTy exprs') of
+        [Just ty] -> ty
+        _         -> TyAny
+  in EList exprs' $ IsLiteralList lty
+
 -- | Main parser for Pact expressions.
 expr :: SExpProcessor PactExp
-expr =
-  let doSymbol = liftParsed $
-        punctuationNoTrailing "'" >> ESymbol <$> prism _Ident
-      doStr = liftParsed $ ELiteral . LString <$> prism _String
-      doTyped = liftParsed $ do
-        a <- prism _Ident
-        EAtom a Nothing . Just <$> typed
-      doQualified = liftParsed $ do
-        a <- prism _IdentNoTrailing
-        _ <- punctuationNoTrailing "."
-        q <- prism _Ident
-        pure $ EAtom a (Just q) Nothing
-      doBareAtom = liftParsed $ do
-        a <- prism _Ident
-        pure $ EAtom a Nothing Nothing
-      doList lit exps = liftParsed $ do
-        exps' <- exps
-        let lty = case nub (map expPrimTy exps') of
-              [Just ty] -> ty
-              _         -> TyAny
-        pure $ EList exps' (lit lty)
-      doPairs = liftParsed $ do
-        ps <- pairs
-        let (ops, kvs) = unzip ps
-        if | all ((== Just ":")  . puncText) ops -> pure $ EObject  kvs
-           | all ((== Just ":=") . puncText) ops -> pure $ EBinding kvs
-           | otherwise -> fail $ "Mixed binding/object operators: " ++ show ops
-      doBool = liftParsed $ do
-        Ident tok _ <- ident "true" <|> ident "false"
-        let b = case tok of
-              "true"  -> True
-              "false" -> False
-              _       -> error "this case is vacuous"
-        pure $ ELiteral (LBool b)
-      doNum = liftParsed $ do
-        num <- prism _Number
-        pure $ case num of
-          Left i  -> ELiteral (LInteger i)
-          Right d -> ELiteral (LDecimal d)
-  in asum
-     [ doSymbol
-     , doStr
-     , doBool
-     , doNum
-     , doTyped
-     , doQualified
-     , doBareAtom
-     , doList (const IsntLiteralList) $ list Paren  $ many expr
-     , doList IsLiteralList           $ list Square $ many expr
-     , doList IsLiteralList           $ list Square $ expr `sepBy` comma
-     , doPairs
-     ]
-{-# INLINE expr #-}
+expr = SExpProcessor $ \case
 
-pairs :: SExpProcessor [(Token, (PactExp, PactExp))]
-pairs = list Curly $
+  -- lists
+  List listTy inner :~ span : input -> retL span input inner $ case listTy of
+    Paren  -> EList <$> many expr <*> pure IsntLiteralList
+    Square -> fmap mkList $ expr `sepBy1` comma <|> many expr
+
+    Curly -> do
+      ps <- pairs
+      let (ops, kvs) = unzip ps
+      if | all (== ":")  ops -> pure $ EObject  kvs
+         | all (== ":=") ops -> pure $ EBinding kvs
+         | otherwise -> fail $ "Mixed binding/object operators: " ++ show ops
+
+  -- token patterns
+  Token (Punctuation "'" NoTrailingSpace) :~ span1
+    : Token (Ident ident' _) :~ span2
+    : input
+    -> ret (span1 <> span2) input $ ESymbol ident'
+
+  Token (String str) :~ span : input
+    -> ret span input $ ELiteral $ LString str
+  Token (Ident bStr _) :~ span : input
+    | Just b <- toBool bStr
+    -> ret span input $ ELiteral $ LBool b
+  Token (Number num) :~ span : input -> ret span input $ case num of
+    Left i  -> ELiteral $ LInteger i
+    Right d -> ELiteral $ LDecimal d
+
+  Token (Ident a NoTrailingSpace) :~ span1
+    : Token (Punctuation "." NoTrailingSpace) :~ span2
+    : Token (Ident q _) :~ span3
+    : input
+    -> ret (span1 <> span2 <> span3) input $ EAtom a (Just q) Nothing
+
+  Token (Ident a _) :~ span : input -> case input of
+    Token (Punctuation ":" _) :~ _ : input' -> asum
+      [ do
+        (input', _, ty) <- unP parseType input'
+        ret span input' $ EAtom a Nothing $ Just ty
+      , ret span input $ EAtom a Nothing Nothing
+      ]
+    _ -> ret span input $ EAtom a Nothing Nothing
+
+  _ -> Nothing
+
+  where
+
+    retL span input inner action = do
+      ([], _span, result) <- unP action inner
+      ret span input result
+
+    ret span input exp = pure (input, Just span, exp (spanToParsed span))
+
+    spanToParsed :: TF.Span -> Parsed
+    spanToParsed (TF.Span start end _bs)
+      = Parsed start $ fromIntegral $ bytes end - bytes start
+
+pairs :: SExpProcessor [(Text, (PactExp, PactExp))]
+pairs =
   let p = do
         k  <- expr
         op <- punctuation ":=" <|> colon
@@ -113,42 +134,42 @@ expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
 expPrimTy ESymbol {}    = Just $ TyPrim TyString
 expPrimTy _             = Nothing
 
-typed :: SExpProcessor (Type TypeName)
-typed = colon *> parseType
-
 parseType :: SExpProcessor (Type TypeName)
-parseType = asum
-  [ do
-       ls <- list Square $ many parseType
-       case ls of
-         [l] -> pure $ TyList l
-         _   -> fail "expected type"
-  , parseUserSchema
-  , parseSchemaType tyObject TyObject
-  , parseSchemaType tyTable TyTable
-  , TyPrim TyInteger <$ ident tyInteger
-  , TyPrim TyDecimal <$ ident tyDecimal
-  , TyPrim TyTime    <$ ident tyTime
-  , TyPrim TyBool    <$ ident tyBool
-  , TyPrim TyString  <$ ident tyString
-  , TyList TyAny     <$ ident tyList
-  , TyPrim TyValue   <$ ident tyValue
-  , TyPrim TyKeySet  <$ ident tyKeySet
-  ]
+parseType = SExpProcessor $ \case
+  List Square ty :~ span : input -> do
+    ([], _, ty') <- unP parseType ty
+    Just (input, Just span, TyList ty')
+  Token (Ident ty _) :~ span : input
+    | Just schemaTy <- schemaPrefix ty
+    -> case input of
+         List Curly _ :~ _ : _ -> do
+           (input, span', userSchema) <- unP parseUserSchema input
+           pure (input, Just span <> span', TySchema schemaTy userSchema)
+         _ -> Just (input, Just span, TySchema schemaTy TyAny)
+  Token (Ident name _) :~ span : input -> (input,Just span,) <$>
+    if
+    | name == tyInteger -> pure $ TyPrim TyInteger
+    | name == tyDecimal -> pure $ TyPrim TyDecimal
+    | name == tyTime    -> pure $ TyPrim TyTime
+    | name == tyBool    -> pure $ TyPrim TyBool
+    | name == tyString  -> pure $ TyPrim TyString
+    | name == tyList    -> pure $ TyList TyAny
+    | name == tyValue   -> pure $ TyPrim TyValue
+    | name == tyKeySet  -> pure $ TyPrim TyKeySet
+    | otherwise         -> Nothing
+  input -> unP parseUserSchema input
+
+  where
+    schemaPrefix ty
+      | ty == tyObject = Just TyObject
+      | ty == tyTable  = Just TyTable
+      | otherwise      = Nothing
 
 parseUserSchema :: SExpProcessor (Type TypeName)
-parseUserSchema = do
-  -- TODO: one?
-  ts <- list Curly $ some $ prism _Ident
-  case ts of
-    [t] -> return $ TyUser $ fromString $ T.unpack t
-    _   -> fail "expected user type"
-
-parseSchemaType :: Text -> SchemaType -> SExpProcessor (Type TypeName)
-parseSchemaType tyRep sty = asum
-  [ ident tyRep >> TySchema sty <$> parseUserSchema
-  , TySchema sty TyAny <$ ident tyRep
-  ]
+parseUserSchema = SExpProcessor $ \case
+  List Curly [ Token (Ident name _) :~ _ ] :~ span : input
+    -> Just (input, Just span, TyUser $ fromString $ T.unpack name)
+  _ -> Nothing
 
 -- | Parse one or more Pact expressions.
 exprs :: SExpProcessor [PactExp]

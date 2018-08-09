@@ -11,17 +11,17 @@ import Pact.Types.Lang
 import Control.Exception
 import Control.Arrow
 import Data.ByteString (ByteString)
-import Data.ByteString.Lazy (toStrict)
+-- import Data.ByteString.Lazy (toStrict)
 import Pact.Types.Command
 import Control.DeepSeq
 import Data.Aeson
 import Pact.Types.Crypto
-import Pact.Types.RPC
+-- import Pact.Types.RPC
 import Pact.Types.Runtime
 import Pact.Interpreter
 import qualified Data.Set as S
 import Data.Default
-import Pact.Types.Logger
+-- import Pact.Types.Logger
 import System.CPUTime
 import Pact.MockDb
 import Data.String
@@ -108,28 +108,28 @@ benchReadValue (TxTable _t) _k = rcp Nothing
 
 main :: IO ()
 main = do
-  !pub <- eitherDie $ fromText' "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
-  !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
-  !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
-  !pureDb <- mkPureEnv neverLog
-  initSchema pureDb
-  !refStore <- loadBenchModule pureDb
-  !benchCmd <- parseCode "(bench.bench)"
-  print =<< runPactExec pureDb refStore benchCmd
-  !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
-  !mdbRS <- loadBenchModule mockDb
-  print =<< runPactExec mockDb mdbRS benchCmd
-  !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
-  !mpdbRS <- loadBenchModule mockPersistDb
-  print =<< runPactExec mockPersistDb mpdbRS benchCmd
-  !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
-              (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
+  -- !pub <- eitherDie $ fromText' "0c99d911059580819c6f39ca5c203364a20dbf0a02b0b415f8ce7b48ba3a5bad"
+  -- !priv <- eitherDie $ fromText' "6c938ed95a8abf99f34a1b5edd376f790a2ea8952413526af91b4c3eb0331b3c"
+  -- !parsedExps <- force <$> mapM (mapM (eitherDie . parseExprs)) exps
+  -- !pureDb <- mkPureEnv neverLog
+  -- initSchema pureDb
+  -- !refStore <- loadBenchModule pureDb
+  -- !benchCmd <- parseCode "(bench.bench)"
+  -- print =<< runPactExec pureDb refStore benchCmd
+  -- !mockDb <- mkMockEnv def { mockRead = MockRead benchRead }
+  -- !mdbRS <- loadBenchModule mockDb
+  -- print =<< runPactExec mockDb mdbRS benchCmd
+  -- !mockPersistDb <- mkMockPersistEnv neverLog def { mockReadValue = MockReadValue benchReadValue }
+  -- !mpdbRS <- loadBenchModule mockPersistDb
+  -- print =<< runPactExec mockPersistDb mpdbRS benchCmd
+  -- !cmds <- return $!! (`fmap` exps) $ fmap $ \t -> mkCommand' [(ED25519,pub,priv)]
+  --             (toStrict $ encode (Payload (Exec (ExecMsg t Null)) "nonce" Nothing))
 
   defaultMain [
-    benchParse,
-    benchCompile parsedExps,
-    benchVerify cmds,
-    benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
-    benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),
-    benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd)
+    benchParse
+    -- benchCompile parsedExps,
+    -- benchVerify cmds,
+    -- benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
+    -- benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),
+    -- benchNFIO "mockpersist" (runPactExec mockPersistDb mpdbRS benchCmd)
     ]

@@ -14,14 +14,13 @@ module Pact.Types.SExp
   , sexp
   , _Number, _String
   , number
-  , puncText
   , sexps
   ) where
 
 import           Control.Applicative
 import           Control.Lens            (makePrisms)
 import           Control.Monad
-import           Data.Char               (digitToInt)
+import           Data.Char               (digitToInt, isDigit)
 import           Data.Decimal            (Decimal, DecimalRaw (Decimal))
 import           Data.Foldable           (asum, foldl')
 import qualified Data.HashSet            as HashSet
@@ -29,6 +28,7 @@ import           Data.String             (fromString)
 import           Data.Text               (Text)
 import           Pact.Types.Parser       (style)
 import           Text.Parser.Token.Style
+import           Text.Parser.LookAhead
 import           Text.Trifecta           hiding (ident)
 
 
@@ -54,7 +54,7 @@ data Token
 
 newtype SExpParser p a = SExpParser { unSExpParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing,
-    CharParsing, DeltaParsing)
+    CharParsing, DeltaParsing, LookAheadParsing)
 
 instance TokenParsing p => TokenParsing (SExpParser p) where
   someSpace   = SExpParser $
@@ -65,20 +65,29 @@ instance TokenParsing p => TokenParsing (SExpParser p) where
   token p     = p <* whiteSpace
 
 type SExpParsing a = forall m.
-  (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => SExpParser m a
+  (Monad m,TokenParsing m,CharParsing m,DeltaParsing m,LookAheadParsing m) => SExpParser m a
 
 sexp :: SExpParsing (Spanned SExp)
-sexp = spanned $ asum
-  [ parens   (List Paren  <$!> many sexp)
-  , braces   (List Curly  <$!> many sexp)
-  , brackets (List Square <$!> many sexp)
-  , try $ Token . Number <$!> number
-  , Token          <$!> ident style
-  , Token          <$!> punctuation
-  , Token . String <$!> stringLiteral
-  ]
+sexp = do
+  c <- lookAhead anyChar
+  spanned $ case c of
+    '('  -> parens   (List Paren  <$!> many sexp)
+    '['  -> brackets (List Square <$!> many sexp)
+    '{'  -> braces   (List Curly  <$!> many sexp)
+    '"'  -> Token . String <$!> stringLiteral
+    '\'' -> Token          <$!> punctuation
+    ','  -> Token          <$!> punctuation
+    '.'  -> Token          <$!> punctuation
+    ':'  -> Token          <$!> punctuation
+    '-'  -> asum
+      [ Token . Number <$!> try number
+      , Token          <$!> ident style
+      ]
+    _
+      | isDigit c -> Token . Number <$!> number
+      | otherwise -> Token          <$!> ident style
 
-sexps :: (TokenParsing m,CharParsing m,DeltaParsing m) => m [Spanned SExp]
+sexps :: (TokenParsing m,CharParsing m,DeltaParsing m,LookAheadParsing m) => m [Spanned SExp]
 sexps = unSExpParser $ whiteSpace *> some sexp <* eof
 
 punctuation :: (TokenParsing m) => m Token
@@ -96,11 +105,11 @@ number = do
   neg <- maybe id (const negate) <$> optional (char '-')
   num <- some digit
   dec <- optional (dot *> some digit)
-  _ <- whiteSpace
+  _   <- whiteSpace
   let strToNum start = foldl' (\x d -> 10*x + toInteger (digitToInt d)) start
   pure $ case dec of
     Nothing -> Left $ neg $ strToNum 0 num
-    Just d -> Right $ Decimal
+    Just d  -> Right $ Decimal
       (fromIntegral (length d))
       (neg (strToNum (strToNum 0 num) d))
 
@@ -121,9 +130,5 @@ trailingSpace = do
   pure $ case spc of
     Just _  -> TrailingSpace
     Nothing -> NoTrailingSpace
-
-puncText :: Token -> Maybe Text
-puncText (Punctuation txt _) = Just txt
-puncText _                   = Nothing
 
 makePrisms ''Token
