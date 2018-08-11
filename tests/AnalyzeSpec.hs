@@ -667,8 +667,8 @@ spec = describe "analyze" $ do
     let code =
           [text|
             (defun test:bool (a:object{account})
-              (meta ""
-                (property (and result (= a a))))
+              @doc ""
+              @model (property (and result (= a a)))
               (= a a))
           |]
 
@@ -692,8 +692,8 @@ spec = describe "analyze" $ do
             (defschema person name:string age:integer)
 
             (defun test:object{person} ()
-              (meta ""
-                (property (= {"name": "brian", "age": 100} result) ))
+              @doc ""
+              @model (property (= {"name": "brian", "age": 100} result))
 
               ; merge is left-biased
               (+ {"age": 100} {"age": 1, "name": "brian"}))

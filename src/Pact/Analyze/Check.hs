@@ -52,7 +52,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
                                             mName, renderInfo,
-                                            renderParsed, tMeta, dmModel)
+                                            renderParsed, tMeta, mModel)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema,
@@ -334,8 +334,8 @@ moduleTables modules (_mod, modRefs) = ExceptT $ do
       let TC.Schema{_utName,_utFields} = schema
           schemaName = asString _utName
 
-          invariants = schemas ^? ix schemaName.tMeta.dmModel.ix "invariants"
-          invariant  = schemas ^? ix schemaName.tMeta.dmModel.ix "invariant"
+          invariants = schemas ^? ix schemaName.tMeta.mModel.ix "invariants"
+          invariant  = schemas ^? ix schemaName.tMeta.mModel.ix "invariant"
 
           invInfo = runExpParserOver
             "invariants" invariants invariant $
@@ -362,8 +362,8 @@ moduleFunChecks
 moduleFunChecks tables modTys = for modTys $
   \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
-  let properties = defn ^? tMeta . dmModel . ix "properties"
-      property   = defn ^? tMeta . dmModel . ix "property"
+  let properties = defn ^? tMeta . mModel . ix "properties"
+      property   = defn ^? tMeta . mModel . ix "property"
 
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:

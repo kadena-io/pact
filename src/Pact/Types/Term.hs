@@ -23,7 +23,7 @@
 
 module Pact.Types.Term
  (
-   DocModel(..),dmDocs,dmModel,
+   Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
@@ -89,13 +89,13 @@ import Pact.Types.Type
 import Pact.Types.Exp
 
 
-data DocModel = DocModel
-  { _dmDocs  :: !(Maybe Text)     -- ^ docs
-  , _dmModel :: !(M.Map Text Exp) -- ^ model
+data Meta = Meta
+  { _mDocs  :: !(Maybe Text)     -- ^ docs
+  , _mModel :: !(M.Map Text Exp) -- ^ model
   } deriving (Eq, Show, Generic)
-instance ToJSON DocModel where
-  toJSON DocModel {..} = object
-    [ "docs" .= _dmDocs, "model" .= toJSON (show <$> _dmModel) ]
+instance ToJSON Meta where
+  toJSON Meta {..} = object
+    [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 
@@ -210,7 +210,7 @@ instance Show TableName where show (TableName s) = show s
 data Module = Module {
     _mName :: !ModuleName
   , _mKeySet :: !KeySetName
-  , _mMeta :: !DocModel
+  , _mMeta :: !Meta
   , _mCode :: !Code
   , _mHash :: !Hash
   , _mBlessed :: !(HS.HashSet Hash)
@@ -225,7 +225,7 @@ instance ToJSON Module where
 -- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure (DocModel Nothing M.empty) {- o .:? "meta" -} <*>
+    o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing M.empty) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
@@ -261,7 +261,7 @@ data Term n =
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tMeta :: !DocModel
+    , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
     TNative {
@@ -275,7 +275,7 @@ data Term n =
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !ModuleName
     , _tConstVal :: !(ConstVal (Term n))
-    , _tMeta :: !DocModel
+    , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
     TApp {
@@ -301,7 +301,7 @@ data Term n =
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !ModuleName
-    , _tMeta :: !DocModel
+    , _tMeta :: !Meta
     , _tFields :: ![Arg (Term n)]
     , _tInfo :: !Info
     } |
@@ -337,7 +337,7 @@ data Term n =
     , _tModule :: ModuleName
     , _tHash :: !Hash
     , _tTableType :: !(Type (Term n))
-    , _tMeta :: !DocModel
+    , _tMeta :: !Meta
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -570,5 +570,5 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 makeLenses ''Term
 makeLenses ''FunApp
-makeLenses ''DocModel
+makeLenses ''Meta
 makeLenses ''Module

@@ -108,8 +108,8 @@ mkHash msg h el = case fromText' h of
       Left e -> mkInfo el >>= \i -> syntaxError i $ msg ++ ": bad hash: " ++ e
       Right mh -> return mh
 
-justDocs :: Text -> DocModel
-justDocs docs = DocModel (Just docs) M.empty
+justDocs :: Text -> Meta
+justDocs docs = Meta (Just docs) M.empty
 
 mkModel :: Exp -> Compile (M.Map Text Exp)
 mkModel ps = uncurry M.singleton <$> toMetas ps
@@ -120,40 +120,42 @@ mkModel ps = uncurry M.singleton <$> toMetas ps
 --
 -- * `"docstring"`
 -- * `@doc ...` / `@meta ...`
-pattern MetaExp :: Compile DocModel -> [Exp] -> [Exp]
+pattern MetaExp :: Compile Meta -> [Exp] -> [Exp]
 pattern MetaExp dm exps <- (doMeta -> (dm, exps))
 
 -- | Consume a meta-block (returning the leftover body).
 --
 -- Helper for 'MetaExp'.
-doMeta :: [Exp] -> (Compile DocModel, [Exp])
+doMeta :: [Exp] -> (Compile Meta, [Exp])
 doMeta = \case
   -- Either we encounter a plain docstring:
   ELitString docs : exps
     -> (pure (justDocs docs), exps)
 
   -- ... or some subset of @doc and @model:
+  --
+  -- TODO: make tag recognition extensible via proper token parsing
   EAtom' "@doc" : ELitString docs : EAtom' "@model" : model : exps
-    -> (DocModel (Just docs) <$> mkModel model, exps)
+    -> (Meta (Just docs) <$> mkModel model, exps)
   EAtom' "@model" : model : EAtom' "@doc" : ELitString docs : exps
-    -> (DocModel (Just docs) <$> mkModel model, exps)
+    -> (Meta (Just docs) <$> mkModel model, exps)
   EAtom' "@doc" : ELitString docs : exps
     -> (pure (justDocs docs), exps)
   EAtom' "@model" : model : exps
-    -> (DocModel Nothing <$> mkModel model, exps)
+    -> (Meta Nothing <$> mkModel model, exps)
 
   -- ... or neither:
-  exps -> (pure (DocModel Nothing M.empty), exps)
+  exps -> (pure (Meta Nothing M.empty), exps)
 
 -- | A (non-empty) body with a possible meta-annotation
-pattern MetaBodyExp :: Compile DocModel -> [Exp] -> [Exp]
+pattern MetaBodyExp :: Compile Meta -> [Exp] -> [Exp]
 pattern MetaBodyExp meta body <- (doMetaBody -> Just (meta, body))
 
 -- TODO(joel): uncomment when on modern ghc
 -- {-# complete MetaBodyExp, [] #-}
 
 -- | Consume a meta-annotationa and body. Helper for 'MetaBodyExp'.
-doMetaBody :: [Exp] -> Maybe (Compile DocModel, [Exp])
+doMetaBody :: [Exp] -> Maybe (Compile Meta, [Exp])
 doMetaBody exp  = case exp of
   []                    -> Nothing
   MetaExp docModel body -> Just (docModel, body)
