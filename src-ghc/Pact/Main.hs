@@ -104,7 +104,7 @@ main = do
             script <- if findScript then locatePactReplScript fp else return Nothing
             case script of
               Just s -> execScript dolog s >>= exitLoad
-              Nothing -> compileOnly fp >>= exitLoad
+              Nothing -> termParseOnly fp >>= exitLoad
         | otherwise -> execScript dolog fp >>= exitLoad
     ORepl -> getMode >>= generalRepl >>= exitEither (const (return ()))
     OGenKey -> genKeys
@@ -134,12 +134,13 @@ locatePactReplScript fp = do
         _ -> return Nothing
 
 
-compileOnly :: String -> IO (Either String [Term Name])
-compileOnly fp = do
+termParseOnly :: String -> IO (Either String [Term Name])
+termParseOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
   src <- readFile fp
   s <- initReplState (Script False fp)
-  (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
+  (`evalStateT` s) $ handleParse pr $ \es ->
+    sequence <$> forM es (\e -> handleTermParse src e (return . Right))
 
 die :: String -> IO b
 die msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure

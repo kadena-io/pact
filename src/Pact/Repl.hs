@@ -136,9 +136,9 @@ parsedCompileEval src r = do
   handleParse r $ \es -> foldM fc (Right (toTerm True)) es
 
 
-handleCompile :: String -> PactExp -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
-handleCompile src exp a =
-    case compile (mkStringInfo src) exp of
+handleTermParse :: String -> PactExp -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
+handleTermParse src exp a =
+    case termParse (mkStringInfo src) exp of
       Right t -> a t
       Left er -> do
           case _iInfo (peInfo er) of
@@ -151,7 +151,7 @@ handleCompile src exp a =
 
 
 compileEval :: String -> PactExp -> Repl (Either String (Term Name))
-compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
+compileEval src exp = handleTermParse src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 
 pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))

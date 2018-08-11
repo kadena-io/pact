@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo              #-}
 {-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -18,6 +19,7 @@ module Pact.Types.SExp
   ) where
 
 import           Control.Applicative
+import           Control.DeepSeq
 import           Control.Lens            (makePrisms)
 import           Control.Monad
 import           Data.Char               (digitToInt, isDigit)
@@ -26,31 +28,41 @@ import           Data.Foldable           (asum, foldl')
 import qualified Data.HashSet            as HashSet
 import           Data.String             (fromString)
 import           Data.Text               (Text)
+import           GHC.Generics
 import           Pact.Types.Parser       (style)
 import           Text.Parser.Token.Style
 import           Text.Parser.LookAhead
 import           Text.Trifecta           hiding (ident)
+import           Text.Trifecta.Delta     (Delta)
 
 
 data BraceType = Curly | Paren | Square
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+instance NFData BraceType
 
 data TrailingSpace
   = TrailingSpace
   | NoTrailingSpace
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+instance NFData TrailingSpace
 
 data SExp
   = List !BraceType ![Spanned SExp]
   | Token !Token
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+instance NFData SExp
 
 data Token
   = Number      !(Either Integer Decimal)
   | Ident       !Text !TrailingSpace
   | Punctuation !Text !TrailingSpace
   | String      !Text
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
+instance NFData Token
+
+instance NFData a => NFData (Spanned a)
+instance NFData Span
+instance NFData Delta
 
 newtype SExpParser p a = SExpParser { unSExpParser :: p a }
   deriving (Functor, Applicative, Alternative, Monad, MonadPlus, Parsing,

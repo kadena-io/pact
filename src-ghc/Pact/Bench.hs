@@ -51,9 +51,9 @@ benchParse = bgroup "parse" $ (`map` exps) $
                Right s -> s
                Left er -> error $ "Pact parse failed: " ++ er
 
-benchCompile :: [(String,[PactExp])] -> Benchmark
-benchCompile es = bgroup "compile" $ (`map` es) $
-  \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
+benchTermParse :: [(String,[PactExp])] -> Benchmark
+benchTermParse es = bgroup "termParse" $ (`map` es) $
+  \(bname,exs) -> bench bname $ nf (map (either (error . show) show . termParse mkEmptyInfo)) exs
 
 benchVerify :: [(String,Command ByteString)] -> Benchmark
 benchVerify cs = bgroup "verify" $ (`map` cs) $
@@ -127,7 +127,7 @@ main = do
 
   defaultMain [
     benchParse
-    -- benchCompile parsedExps,
+    -- benchTermParse parsedExps,
     -- benchVerify cmds,
     -- benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),
     -- benchNFIO "mockdb" (runPactExec mockDb mdbRS benchCmd),

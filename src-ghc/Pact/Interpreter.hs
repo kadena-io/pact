@@ -60,7 +60,7 @@ data EvalResult = EvalResult {
 
 evalExec :: EvalEnv e -> ParsedCode -> IO EvalResult
 evalExec evalEnv ParsedCode {..} = do
-  terms <- throwEither $ compileExps (mkTextInfo _pcCode) _pcExps
+  terms <- throwEither $ multiTermParse (mkTextInfo _pcCode) _pcExps
   interpret evalEnv terms
 
 

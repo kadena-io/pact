@@ -83,13 +83,13 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import           Pact.Types.Info
 import           Pact.Types.PactExp
-import           Pact.Types.Type
+import           Pact.Types.SExp hiding (Token(..))
 import           Pact.Types.Util
 
 
 data Meta = Meta
-  { _mDocs  :: !(Maybe Text)    -- ^ docs
-  , _mModel :: !(Maybe PactExp) -- ^ model
+  { _mDocs  :: !(Maybe Text) -- ^ docs
+  , _mModel :: !(Maybe SExp) -- ^ model
   } deriving (Eq, Show, Generic)
 instance ToJSON Meta where
   toJSON Meta {..} = object

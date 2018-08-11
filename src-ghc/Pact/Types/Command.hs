@@ -54,16 +54,18 @@ import Data.String
 import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
+import Text.Trifecta (Spanned)
 
 
 import GHC.Generics
 import Prelude
 
+import Pact.PactExpParser
 import Pact.Types.Runtime
 import Pact.Types.Orphans ()
 import Pact.Types.Crypto as Base
 import Pact.Types.Hash
-import Pact.PactExpParser
+import Pact.Types.SExp
 import Pact.Types.RPC
 
 data Command a = Command
@@ -124,7 +126,7 @@ instance NFData a => NFData (ProcessedCommand a)
 
 data ParsedCode = ParsedCode {
   _pcCode :: !Text,
-  _pcExps :: ![PactExp]
+  _pcExps :: ![Spanned SExp]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
