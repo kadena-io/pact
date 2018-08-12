@@ -1,16 +1,21 @@
 ;; accounts module, admin keyset, and table
 ; (load "examples/verified-accounts/accounts.repl")
 
-(enforce-pact-version "2.3")
+(enforce-pact-version "2.4.1")
 
 (define-keyset 'accounts-admin-keyset
   (read-keyset "accounts-admin-keyset"))
 
 (module accounts 'accounts-admin-keyset
-  "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
-\  Version: 0.2                                                                \
-\  Author: Stuart Popejoy"
-
+  @doc
+    "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
+\    Version: 0.2                                                                \
+\    Author: Stuart Popejoy"
+  @model
+    [(defproperty conserves-mass
+       (= (column-delta 'accounts 'balance) 0.0))
+     (defproperty auth-required
+       (authorized-by 'accounts-admin-keyset))]
 
   (defschema account
     @doc   "Row type for accounts table."
@@ -40,7 +45,7 @@
 
   (defun transfer (src:string dest:string amount:decimal)
     @doc   "transfer AMOUNT from SRC to DEST"
-    @model (property (= (column-delta 'accounts 'balance) 0.0))
+    @model (property conserves-mass)
     (debit src amount)
     (credit dest amount))
 
@@ -56,13 +61,8 @@
       ))
 
   (defun read-account-admin (id)
-    @doc "Read data for account ID, admin version"
-    @model
-      (property
-        (when
-          (not (authorized-by 'accounts-admin-keyset))
-          abort)
-        )
+    @doc   "Read data for account ID, admin version"
+    @model (property auth-required)
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 

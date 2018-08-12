@@ -45,6 +45,17 @@ wrap code =
     (begin-tx)
     (define-keyset 'ks (read-keyset "keyset"))
     (module test 'ks
+      @model
+        [; (defproperty dec-conserves-mass (t:table c:column) (= (column-delta t c) 0.0))
+         ; (defproperty int-conserves-mass (t:table c:column) (= (column-delta t c) 0))
+         (defproperty my-column-delta (d:integer) (= (column-delta 'accounts 'balance) d))
+         (defproperty conserves-balance (= (column-delta 'accounts 'balance) 0))
+         (defproperty conserves-balance2 (my-column-delta 0))
+         ; this hash the same name as the column, but the column name takes
+         ; precedence
+         (defproperty balance (> 0 1))
+         (defproperty bad-recursive-prop bad-recursive-prop)
+         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))]
       (defschema account
         "Row type for accounts table."
          balance:integer
@@ -99,7 +110,7 @@ runVerification code = do
       results <- verifyModule (HM.fromList [("test", moduleData)]) moduleData
       case results of
         Left failure -> pure $ Just $ VerificationFailure failure
-        Right (ModuleChecks propResults invariantResults) -> pure $
+        Right (ModuleChecks propResults invariantResults _) -> pure $
           case findOf (traverse . traverse) isLeft propResults of
             Just (Left failure) -> Just $ TestCheckFailure failure
             _ -> case findOf (traverse . traverse . traverse) isLeft invariantResults of
@@ -124,6 +135,11 @@ expectVerified :: Text -> Spec
 expectVerified code = do
   res <- runIO $ runVerification $ wrap code
   it "passes in-code checks" $ res `shouldSatisfy` isNothing
+
+expectFalsified :: Text -> Spec
+expectFalsified code = do
+  res <- runIO $ runVerification $ wrap code
+  it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
 -- TODO(joel): use expectNothing when it's available
@@ -692,7 +708,7 @@ spec = describe "analyze" $ do
             (defschema person name:string age:integer)
 
             (defun test:object{person} ()
-              @doc ""
+              @doc   ""
               @model (property (= {"name": "brian", "age": 100} result))
 
               ; merge is left-biased
@@ -903,7 +919,7 @@ spec = describe "analyze" $ do
         case results of
           Left failure -> it "unexpectedly failed verification" $
             expectationFailure $ show failure
-          Right (ModuleChecks propResults invariantResults) -> do
+          Right (ModuleChecks propResults invariantResults _) -> do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
@@ -1472,7 +1488,7 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 ty exp'
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1490,7 +1506,7 @@ spec = describe "analyze" $ do
           -> Either String EProp
         inferProp' env1 env2 tableEnv t = case parseExprs t of
           Right [exp'] ->
-            inferProp tableEnv (VarId (Map.size env1)) env1 env2 exp'
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1794,3 +1810,49 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
+
+  describe "user-defined properties verify" $ do
+    let code = [text|
+          (defun test:string (from:string to:string)
+            @model (properties
+              [ (my-column-delta 0)
+                conserves-balance
+                conserves-balance2
+              ])
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+    expectVerified code
+
+    let code' model = [text|
+          (defun test:string (from:string to:string)
+            @model $model
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                ; (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+    expectFalsified $ code' "(property conserves-balance)"
+    expectFalsified $ code' "(property conserves-balance2)"
+    expectFalsified $ code' "(property (my-column-delta 0))"
+    expectVerified  $ code' "(property (my-column-delta 1))"
+
+  -- user-defined properties can't be recursive
+  describe "user-defined properties can't be recursive" $ do
+    let code = [text|
+          (defun test:string (from:string to:string)
+            @model (property bad-recursive-prop)
+            "foo")
+          |]
+    expectFalsified code
+
+    let code' = [text|
+          (defun test:string (from:string to:string)
+            @model (property (bad-recursive-prop2 0))
+            "foo")
+          |]
+    expectFalsified code'

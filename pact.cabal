@@ -68,6 +68,9 @@ library
       Pact.Analyze.Model
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
+      Pact.Analyze.Parse.Invariant
+      Pact.Analyze.Parse.Prop
+      Pact.Analyze.Parse.Types
       Pact.Analyze.Patterns
       Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate

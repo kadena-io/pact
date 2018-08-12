@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens              (at, view, (&), (?~))
+import           Control.Lens              (at, view, (?~))
 import           Control.Monad.Except      (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader      (MonadReader (local), ReaderT)
 import           Control.Monad.Trans.Class (lift)
@@ -111,7 +111,7 @@ evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
 evalPropSpecific (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
-    local (& qeTableScope . at vid ?~ tableName) (evalProp prop)
+    local (qeTableScope . at vid ?~ tableName) (evalProp prop)
   pure $ foldr (&&&) true bools
 evalPropSpecific (Forall _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"
@@ -123,7 +123,7 @@ evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =
 evalPropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
-    local (& qeTableScope . at vid ?~ tableName) (evalProp prop)
+    local (qeTableScope . at vid ?~ tableName) (evalProp prop)
   pure $ foldr (|||) true bools
 evalPropSpecific (Exists _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"
