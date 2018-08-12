@@ -24,7 +24,7 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (ifoldrM, itraversed, ix, traversed,
                                             view, (<&>), (^.), (^?), (^@..),
-                                            _1, _2, _Just)
+                                            _1, _2)
 import           Control.Monad             (join, void)
 import           Control.Monad.Except      (ExceptT (ExceptT), MonadError,
                                             catchError, runExceptT, throwError,
@@ -51,8 +51,8 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
-                                            mMetas, mName, renderInfo,
-                                            renderParsed, tMeta)
+                                            mName, renderInfo,
+                                            renderParsed, tMeta, mModel)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema,
@@ -334,8 +334,8 @@ moduleTables modules (_mod, modRefs) = ExceptT $ do
       let TC.Schema{_utName,_utFields} = schema
           schemaName = asString _utName
 
-          invariants = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariants"
-          invariant  = schemas ^? ix schemaName.tMeta._Just.mMetas.ix "invariant"
+          invariants = schemas ^? ix schemaName.tMeta.mModel.ix "invariants"
+          invariant  = schemas ^? ix schemaName.tMeta.mModel.ix "invariant"
 
           invInfo = runExpParserOver
             "invariants" invariants invariant $
@@ -362,8 +362,8 @@ moduleFunChecks
 moduleFunChecks tables modTys = for modTys $
   \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
-  let properties = defn ^? tMeta . _Just . mMetas . ix "properties"
-      property   = defn ^? tMeta . _Just . mMetas . ix "property"
+  let properties = defn ^? tMeta . mModel . ix "properties"
+      property   = defn ^? tMeta . mModel . ix "property"
 
       -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
       --       not there yet:
