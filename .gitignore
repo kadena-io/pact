@@ -13,3 +13,4 @@ docs/_build
 log/
 /deleteme.sqllite
 /.pact-history
+/result

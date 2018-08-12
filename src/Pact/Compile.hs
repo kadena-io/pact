@@ -111,44 +111,46 @@ mkHash msg h el = case fromText' h of
 --
 -- * `"docstring"`
 -- * `@doc ...` / `@meta ...`
-pattern MetaExp :: DocModel -> [Exp] -> [Exp]
+pattern MetaExp :: Meta -> [Exp] -> [Exp]
 pattern MetaExp dm exps <- (doMeta -> (dm, exps))
 
 -- | Consume a meta-block (returning the leftover body).
 --
 -- Helper for 'MetaExp'.
-doMeta :: [Exp] -> (DocModel, [Exp])
+doMeta :: [Exp] -> (Meta, [Exp])
 doMeta = \case
   -- Either we encounter a plain docstring:
   ELitString docs : exps
-    -> (DocModel (Just docs) Nothing, exps)
+    -> (Meta (Just docs) Nothing, exps)
 
   -- ... or some subset of @doc and @model:
+  --
+  -- TODO: make tag recognition extensible via proper token parsing
   EAtom' "@doc" : ELitString docs : EAtom' "@model" : model : exps
-    -> (DocModel (Just docs) (Just model), exps)
+    -> (Meta (Just docs) (Just model), exps)
   EAtom' "@model" : model : EAtom' "@doc" : ELitString docs : exps
-    -> (DocModel (Just docs) (Just  model), exps)
+    -> (Meta (Just docs) (Just  model), exps)
   EAtom' "@doc" : ELitString docs : exps
-    -> (DocModel (Just docs) Nothing, exps)
+    -> (Meta (Just docs) Nothing, exps)
   EAtom' "@model" : model : exps
-    -> (DocModel Nothing (Just model), exps)
+    -> (Meta Nothing (Just model), exps)
 
   -- ... or neither:
-  exps -> (DocModel Nothing Nothing, exps)
+  exps -> (Meta Nothing Nothing, exps)
 
 -- | A (non-empty) body with a possible meta-annotation
-pattern MetaBodyExp :: DocModel -> [Exp] -> [Exp]
+pattern MetaBodyExp :: Meta -> [Exp] -> [Exp]
 pattern MetaBodyExp meta body <- (doMetaBody -> Just (meta, body))
 
 -- TODO(joel): uncomment when on modern ghc
 -- {-# complete MetaBodyExp, [] #-}
 
 -- | Consume a meta-annotationa and body. Helper for 'MetaBodyExp'.
-doMetaBody :: [Exp] -> Maybe (DocModel, [Exp])
+doMetaBody :: [Exp] -> Maybe (Meta, [Exp])
 doMetaBody exp  = case exp of
-  []                    -> Nothing
-  MetaExp docModel body -> Just (docModel, body)
-  _                     -> error "the first two patterns are complete"
+  []                -> Nothing
+  MetaExp meta body -> Just (meta, body)
+  _                 -> error "the first two patterns are complete"
 
 doModule :: [Exp] -> Info -> Info -> Compile (Term Name)
 doModule (EAtom n Nothing Nothing _:ESymbol k _:es) li ai =

@@ -29,7 +29,7 @@ module Pact.Types.Typecheck
     TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
-    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlDocModel,tlDoc,
+    TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,
     Special (..),
     Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
@@ -166,7 +166,7 @@ instance Pretty PrimValue where
 data TopLevel t =
   TopFun {
     _tlFun :: Fun t,
-    _tlDocModel :: DocModel
+    _tlMeta :: Meta
     } |
   TopConst {
     _tlInfo :: Info,
@@ -179,7 +179,7 @@ data TopLevel t =
     _tlInfo :: Info,
     _tlName :: Text,
     _tlType :: Type UserType,
-    _tlDocModel :: DocModel
+    _tlMeta :: Meta
   } |
   TopUserType {
     _tlInfo :: Info,

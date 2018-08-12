@@ -169,7 +169,7 @@ pattern AST_ReadCols node tn key columns
   <- App node (NativeFunc "read") [ShortTableName tn, key, List _ columns]
 
 pattern AST_At :: a -> AST a -> AST a -> AST a
-pattern AST_At node colName obj <- App node (NativeFunc "at") [colName, obj]
+pattern AST_At node colName obj <- App node (NativeFunc SObjectProjection) [colName, obj]
 
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs

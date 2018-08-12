@@ -604,11 +604,14 @@ Examples of valid keyset JSON productions:
 
     /* examples of valid keysets */
     {
-      "fully-specified":
-        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" }
+      "fully-specified-with-native-pred":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
+
+      "fully-specified-with-qual-custom":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
 
       "keysonly":
-        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] } /* defaults to "keys-all" pred */
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
 
       "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
     }
@@ -616,11 +619,12 @@ Examples of valid keyset JSON productions:
 Keyset Predicates
 ~~~~~~~~~~~~~~~~~
 
-A keyset predicate references a function by name which will compare the
-public keys in the keyset to the key or keys used to sign the blockchain
-message. The function accepts two arguments, “count” and “matched”,
-where “count” is the number of keys in the keyset and “matched” is how
-many keys on the message signature matched a keyset key.
+A keyset predicate references a function by its (optionally qualified)
+name which will compare the public keys in the keyset to the key or keys
+used to sign the blockchain message. The function accepts two arguments,
+“count” and “matched”, where “count” is the number of keys in the keyset
+and “matched” is how many keys on the message signature matched a keyset
+key.
 
 Support for multiple signatures is the responsibility of the blockchain
 layer, and is a powerful feature for Bitcoin-style “multisig” contracts
@@ -1219,12 +1223,14 @@ Booleans are represented by ``true`` and ``false`` literals.
 Lists
 ~~~~~
 
-List literals are created with brackets. Uniform literal lists are given
-a type in parsing.
+List literals are created with brackets, and optionally separated with
+commas. Uniform literal lists are given a type in parsing.
 
 ::
 
     pact> [1 2 3]
+    [1 2 3]
+    pact> [1,2,3]
     [1 2 3]
     pact> (typeof [1 2 3])
     "[integer]"

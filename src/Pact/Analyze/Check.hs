@@ -53,14 +53,13 @@ import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Code (Code), Info (Info), dmModel,
-                                            eParsed, mName, renderInfo,
-                                            renderParsed, tMeta)
-import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
-                                            pattern ELitList, Exp (..),
-                                            ModuleData, ModuleName, Ref (Ref),
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, tShow)
+import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
+                                            mName, renderInfo,
+                                            renderParsed, tMeta, mModel)
+import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
+                                            Ref (Ref),
+                                            Term (TConst, TDef, TSchema,
+                                            TTable), asString, tShow, pattern ELitList, pattern EAtom', pattern EList')
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -348,7 +347,7 @@ moduleTables modules (_mod, modRefs) = do
     let TC.Schema{_utName,_utFields} = schema
         schemaName = asString _utName
 
-    invariants <- case schemas ^? ix schemaName.tMeta.dmModel._Just of
+    invariants <- case schemas ^? ix schemaName.tMeta.mModel._Just of
       -- no model = no invariants
       Nothing    -> pure []
       Just model -> liftEither $ do
@@ -387,7 +386,7 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 -- Get the set of properties defined in this module
 modulePropDefs
   :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty Exp))
-modulePropDefs (Pact.Module{Pact._mMeta=Pact.DocModel _ model}, _modRefs)
+modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
   = case model of
       Just model' -> HM.fromList <$> parseDefprops model'
       Nothing     -> Right HM.empty
@@ -438,7 +437,7 @@ moduleFunChecks tables modTys propDefs = for modTys $
                   (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
           in (TableName (T.unpack _tableName), colMap)
 
-  checks <- case defn ^? tMeta . dmModel . _Just of
+  checks <- case defn ^? tMeta . mModel . _Just of
     -- no model = no properties
     Nothing    -> pure []
     Just model -> withExcept ModuleParseFailure $ liftEither $ do

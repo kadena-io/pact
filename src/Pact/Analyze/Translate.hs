@@ -686,6 +686,9 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_NFun _ f _
     | f `Set.member` Set.fromList
+      --
+      -- TODO: add symbols these to Feature once implemented.
+      --
       ["map", "make-list", "filter", "reverse", "sort", "take", "fold"]
     -> throwError' $ NoLists astNode
 
@@ -719,53 +722,3 @@ runTranslation info pactArgs body = do
         runReaderT
           (unTranslateM (translateBody body))
           (info, mkTranslateEnv args)
-
-textToArithOp :: Text -> Maybe ArithOp
-textToArithOp = \case
-  "+"   -> Just Add
-  "-"   -> Just Sub
-  "*"   -> Just Mul
-  "/"   -> Just Div
-  "^"   -> Just Pow
-  "log" -> Just Log
-  _     -> Nothing
-
-textToUnaryArithOp :: Text -> Maybe UnaryArithOp
-textToUnaryArithOp = \case
-  "-"    -> Just Negate
-  "sqrt" -> Just Sqrt
-  "ln"   -> Just Ln
-  "exp"  -> Just Exp
-  "abs"  -> Just Abs
-  -- explicitly no signum
-  _      -> Nothing
-
-textToComparisonOp :: Text -> Maybe ComparisonOp
-textToComparisonOp = \case
-  ">"  -> Just Gt
-  "<"  -> Just Lt
-  ">=" -> Just Gte
-  "<=" -> Just Lte
-  "="  -> Just Eq
-  "!=" -> Just Neq
-  _    -> Nothing
-
-textToEqNeq :: Text -> Maybe EqNeq
-textToEqNeq = \case
-  "="  -> Just Eq'
-  "!=" -> Just Neq'
-  _    -> Nothing
-
-textToRoundingLikeOp :: Text -> Maybe RoundingLikeOp
-textToRoundingLikeOp = \case
-  "round"   -> Just Round
-  "ceiling" -> Just Ceiling
-  "floor"   -> Just Floor
-  _         -> Nothing
-
-textToLogicalOp :: Text -> Maybe LogicalOp
-textToLogicalOp = \case
-  "and" -> Just AndOp
-  "or"  -> Just OrOp
-  "not" -> Just NotOp
-  _     -> Nothing
