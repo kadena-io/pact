@@ -1,52 +1,26 @@
 2.5.0
 ---
 Analysis:
-  * Improved feedback when an invalidating model is found. We now display all
-    the argument and variable values, reads, writes, keysets, and function
-    result.
+  * We now display all the argument and variable values, reads, writes, 
+    keysets, and function result for invalidating models.
   * Introduced `row-read-count` and `row-write-count`, specifying the number of
-    times a row is written or read. These generalize `row-read` and
-    `row-write`. An example use case is disallowing writing the same row twice
-    (potentially overwriting data).
-  * Table quantification: it's now possible to quantify over all tables,
-    saying, for example, `(forall (table:table) (not (table-write table)))`, to
-    say that a function doesn't do any writing. In this release you can't yet
-    quantify over columns.
-  * Object literals and `at` now work in properties, eg, `(at 'x { 'x: 0, 'y: 1
-    })` is a convoluted, but valid, way to write `0`. Object comparison with
-    `=` and `!=` also now works.
+    times a row is read or written.
+  * Table quantification: it's now possible to quantify over tables, though in 
+    this release you can't yet quantify over columns.
+  * Object literals and `at` now work in properties. Object comparison with `=`
+    and `!=` also now works.
   * Analysis now typechecks references to tables (ie it knows table schemas and
     the types you can read and write to them) and return types.
   * `verify` now typechecks `defconst`s, so it now checks a superset of
     `typecheck`.
-  * In the past if a function invalidated any invariants, property checking
-    would say "Invalidating model found" and leave it to the user to find out
-    which invariant was invalidated. We now check each invariant individually,
-    and give a separate invalidating model for each invariant.
+  * We now check each invariant individually and give a separate invalidating 
+    model for each invariant.
   * Property parse errors are now less confusing and include location info.
   * `read-decimal` and `enforce-one` are now supported.
-  * Bug fix: Analysis of `and` and `or` now (correctly) short-circuits. This
-    previously caused incorrect analysis when the second argument had a
-    side-effect.
-  * Documentation: the property checking system is now thoroughly documented
-    under "The Pact property checking system" and "Property and Invariant
-    Functions" in the documentation.
-  * New `@model` / `@doc` syntax. Example:
-
-        (defun transfer (src:string dest:string amount:decimal)
-          @doc   "transfer AMOUNT from SRC to DEST"
-          @model (property conserves-mass)
-          (debit src amount)
-          (credit dest amount))
-
-  * `defproperty`. New properties can now be defined at the module level.
-    Example:
-
-        @model
-          [(defproperty conserves-mass
-             (= (column-delta 'accounts 'balance) 0.0))
-           (defproperty auth-required
-             (authorized-by 'accounts-admin-keyset))]
+  * Bug fix: Analysis of `and` and `or` now (correctly) short-circuits.
+  * The property checking system is now included in the documentation.
+  * New `@model` / `@doc` syntax.
+  * `defproperty`: New properties can now be defined at the module level.
 
 2.4.1
 ---
