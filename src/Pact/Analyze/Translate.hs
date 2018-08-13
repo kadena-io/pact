@@ -493,10 +493,6 @@ translateNode astNode = astContext astNode $ case astNode of
         CoreTerm $ Var vid name
       _        -> throwError' $ BadNegationType astNode
 
-  AST_Enforce _ cond -> do
-    ESimple TBool condTerm <- translateNode cond
-    pure $ ESimple TBool $ Enforce condTerm
-
   AST_Format formatStr vars -> do
     ESimple TStr formatStr' <- translateNode formatStr
     vars' <- for vars translateNode
@@ -530,6 +526,10 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_ReadInteger _ -> throwError' $ UnexpectedNode astNode
   AST_ReadMsg _     -> throwError' $ UnexpectedNode astNode
+
+  AST_Enforce _ cond -> do
+    ESimple TBool condTerm <- translateNode cond
+    pure $ ESimple TBool $ Enforce condTerm
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
