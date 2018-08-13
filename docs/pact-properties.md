@@ -56,8 +56,8 @@ transaction has the proper signatures to satisfy the keyset named `admins`:
 
 ```lisp
 (defun read-account (id)
-  ("Read data for account ID"
-    (properties [(authorized-by 'admins)]))
+  @doc   "Read data for account ID"
+  @model (properties [(authorized-by 'admins)])
 
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
@@ -76,8 +76,8 @@ will always maintain the invariant that token balances are greater than zero:
 
 ```lisp
 (defschema tokens
-  ("token schema"
-    (invariants [(> balance 0)]))
+  @doc   "token schema"
+  @model (invariants [(> balance 0)])
 
   username:string
   balance:integer)
@@ -156,8 +156,8 @@ return values can be referred to by the name `result`:
 
 ```lisp
 (defun negate:integer (x:integer)
-  ("negate a number"
-    (properties [(= result (* -1 x))]))
+  @doc   "negate a number"
+  @model (properties [(= result (* -1 x))])
 
   (* x -1))
 ```
@@ -169,8 +169,8 @@ We can also define properties in terms of the standard comparison operators:
 
 ```lisp
 (defun abs:integer (x:integer)
-  ("absolute value"
-    (properties [(>= result 0)]))
+  @doc   "absolute value"
+  @model (properties [(>= result 0)])
 
   (if (< x 0)
     (negate x)
@@ -186,13 +186,13 @@ properties at once:
 
 ```lisp
 (defun negate:integer (x:integer)
-  ("negate a number"
-    (properties
-      [(when (< x 0) (> result 0))
-       (when (> x 0) (< result 0))
-       (and
-         (when (< x 0) (> result 0))
-         (when (> x 0) (< result 0)))])
+  @doc   "negate a number"
+  @model (properties
+    [(when (< x 0) (> result 0))
+     (when (> x 0) (< result 0))
+     (and
+       (when (< x 0) (> result 0))
+       (when (> x 0) (< result 0)))])
 
   (* x -1))
 ```
@@ -205,8 +205,8 @@ means that properties like the following:
 
 ```lisp
 (defun ensured-positive (val:integer)
-  ("halts when passed a non-positive number"
-    (properties [(!= result 0)]))
+  @doc   "halts when passed a non-positive number"
+  @model (properties [(!= result 0)])
 
   (enforce (> val 0) "val is not positive")
   val)
@@ -251,16 +251,16 @@ code path enforces the keyset:
 
 ```lisp
 (defun admins-only (action:string)
-  ("Only admins or super-admins can call this function successfully.
-    (properties
-      [(or (authorized-by 'admins) (authorized-by 'super-admins))
-       (when (== "create" action) (authorized-by 'super-admins))])
+  @doc   "Only admins or super-admins can call this function successfully.
+  @model (properties
+    [(or (authorized-by 'admins) (authorized-by 'super-admins))
+     (when (== "create" action) (authorized-by 'super-admins))])
 
-    (if (== action "create")
-      (create)
-      (if (== action "update")
-        (update)
-        (incorrect-action action)))))
+  (if (== action "create")
+    (create)
+    (if (== action "update")
+      (update)
+      (incorrect-action action))))
 ```
 
 For the common pattern of row-level keyset enforcement, wherein a table might
@@ -374,7 +374,7 @@ of a balance across two accounts for the given table:
 
 ```lisp
 (defschema account
-  "user accounts with balances"
+  @doc "user accounts with balances"
 
   balance:integer
   ks:keyset)
@@ -389,8 +389,8 @@ table.
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties [(row-enforced 'accounts 'ks from)]))
+  @doc   "Transfer money between accounts"
+  @model (properties [(row-enforced 'accounts 'ks from)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -404,8 +404,8 @@ Let's start by adding an invariant that balances can never drop below zero:
 
 ```lisp
 (defschema account
-  ("user accounts with balances"
-    (invariants [(>= balance 0)]))
+  @doc   "user accounts with balances"
+  @model (invariants [(>= balance 0)])
 
   balance:integer
   ks:keyset)
@@ -420,8 +420,8 @@ try again:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties [(row-enforced 'accounts 'ks from)]))
+  @doc   "Transfer money between accounts"
+  @model (properties [(row-enforced 'accounts 'ks from)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -438,10 +438,10 @@ for the function to be used to create or destroy any money:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties
-      [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)]))
+  @doc   "Transfer money between accounts"
+  @model (properties
+    [(row-enforced 'accounts 'ks from)
+     (conserves-mass 'accounts 'balance)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -475,10 +475,10 @@ this unintended behavior:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties
-      [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)]))
+  @doc   "Transfer money between accounts"
+  @model (properties
+    [(row-enforced 'accounts 'ks from)
+     (conserves-mass 'accounts 'balance)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
