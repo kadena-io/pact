@@ -355,6 +355,32 @@ use existential quantification like so:
 For both universal and existential quantification, note that a type annotation
 is required.
 
+### Defining and reusing properties
+
+With `defproperty`, properties can be defined at the module level:
+
+```lisp
+(defmodule accounts
+  @model
+    [(defproperty conserves-mass
+       (= (column-delta 'accounts 'balance) 0.0))
+     (defproperty auth-required
+       (authorized-by 'accounts-admin-keyset))]
+
+  ; ...
+  )
+```
+
+and then used at the function level by referring to the property's name:
+
+```lisp
+(defun read-account (id)
+  @model (property auth-required)
+
+  ; ...
+  )
+```
+
 ## A simple balance transfer example
 
 Let's work through an example where we write a function to transfer some amount
