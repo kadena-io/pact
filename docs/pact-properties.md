@@ -118,35 +118,6 @@ property checking is run by invoking `verify`:
 This will typecheck the code and, if that succeeds, check all invariants and
 properties.
 
-## Expressing schema invariants
-
-Schema invariants are formed by the following BNF grammar:
-
-```
-<comparator>
-  ::= <
-    | <=
-    | =
-    | !=
-    | >=
-    | >
-
-<expr>
-  ::= <column name>
-    | <integer literal>
-    | <decimal literal>
-    | <string literal>
-    | <time literal>
-    | <bool literal>
-    | ( <comparator> <expr> <expr> )
-    | (and <expr> <expr> )
-    | (or <expr> <expr> )
-    | (not <expr> )
-
-<invariants>
-  ::= ( invariants [ <expr> ... ] )
-```
-
 ## Expressing properties
 
 ### Arguments, return values, and standard arithmetic and comparison operators
@@ -218,6 +189,23 @@ At run-time on the blockchain, if an `enforce` call fails, the containing
 transaction is aborted. Because `properties` are only concerned with
 transactions that succeed, the necessary conditions to pass each `enforce` call
 are assumed.
+
+### More comprehensive properties API documentation
+
+For the full listing of functionality available in properties, see the API
+documentation at [Property and Invariant
+Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html).
+
+## Expressing schema invariants
+
+Schema invariants are described by a more restricted subset of the
+functionality available in property definitions -- effectively the functions
+which are not concerned with authorization, DB access, transaction
+success/failure, and function arguments and return values. See the API
+documentation at
+[Property and Invariant
+Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html)
+for the full listing of functions available in invariant definitions.
 
 <!--- *** This second is disabled until we add `valid`/`satisfiable` alternatives to `property`, which currently assumes tx success ***
 
@@ -366,6 +354,32 @@ use existential quantification like so:
 
 For both universal and existential quantification, note that a type annotation
 is required.
+
+### Defining and reusing properties
+
+With `defproperty`, properties can be defined at the module level:
+
+```lisp
+(defmodule accounts
+  @model
+    [(defproperty conserves-mass
+       (= (column-delta 'accounts 'balance) 0.0))
+     (defproperty auth-required
+       (authorized-by 'accounts-admin-keyset))]
+
+  ; ...
+  )
+```
+
+and then used at the function level by referring to the property's name:
+
+```lisp
+(defun read-account (id)
+  @model (property auth-required)
+
+  ; ...
+  )
+```
 
 ## A simple balance transfer example
 
