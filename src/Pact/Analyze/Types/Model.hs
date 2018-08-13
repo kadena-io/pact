@@ -41,7 +41,7 @@ newtype Vertex
 data TraceEvent
   = TraceRead (Located (TagId, Schema))
   | TraceWrite (Located (TagId, Schema))
-  | TraceEnforce (Located TagId)
+  | TraceAuth (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
   | TraceSubpathStart TagId
   deriving (Eq, Show)

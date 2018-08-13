@@ -102,7 +102,7 @@ allocModelTags locatedTm graph = ModelTags
 
     allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
     allocAuths = fmap Map.fromList $
-      for (toListOf (traverse._TraceEnforce) events) $ \(Located info tid) ->
+      for (toListOf (traverse._TraceAuth) events) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
 
     allocResult :: Symbolic (Located TVal)
@@ -136,7 +136,7 @@ linearizedTrace model = foldr
       in case event of
            TraceSubpathStart _ ->
              skipAndContinue
-           TraceEnforce (_located -> tid) ->
+           TraceAuth (_located -> tid) ->
              let mPassesEnforce = model ^?
                    modelTags.mtAuths.at tid._Just.located.to SBV.unliteral._Just
              in case mPassesEnforce of
@@ -269,7 +269,7 @@ showEvent ksProvs tags = \case
       display mtReads tid showRead
     TraceWrite (_located -> (tid, _)) ->
       display mtWrites tid showWrite
-    TraceEnforce (_located -> tid) ->
+    TraceAuth (_located -> tid) ->
       display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)
     TraceBind (_located -> (vid, _, _)) ->
       display mtVars vid showVar
