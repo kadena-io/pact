@@ -222,7 +222,7 @@ updateForOp a = do
     Load fp reset -> do
                   when reset (initReplState mode >>= put >> void useReplLib)
                   (a <$) <$> loadFile fp
-    Export fp tbs -> do
+    Export _ _ -> do
       outStrLn HOut "in updateForOp"
       return (Right a)
     TcErrors es -> forM_ es (outStrLn HErr) >> return (Right a)

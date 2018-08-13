@@ -197,11 +197,19 @@ setop v = setLibState $ set rlsOp v
 setenv :: Show a => Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
+-- | unsafe function to create TableName from TTable.
+userTable' :: Show n => Term n -> TableName
+userTable' TTable {..} = TableName $ asString _tModule <> "_" <> asString _tTableName
+userTable' t = error $ "creating user table from non-TTable: " ++ show t
+
 export :: RNativeFun LibState
 export i [TList tn _ _] =  do
-  let fn = "log/pact.xlsx"
+  let fn = "pact.xlsx"
   tbs <- forM tn $ \t -> case t of
-         (TTable _ _ _ _ _ _) -> return t
+         (TTable {}) -> return t
+         _ -> argsError i tn
+  _ <- forM tn $ \t -> case t of
+         (TTable {}) -> keys (_faInfo i) (userTable' t)
          _ -> argsError i tn
   setop $ Export (unpack fn) tbs
   return (tStr $ "Exporting table(s) to " <> fn)
