@@ -14,13 +14,13 @@ module Pact.Analyze.Model
   , allocModelTags
   , linearizedTrace
   , saturateModel
+  , showEntireModel
   , showModel
   ) where
 
 import           Control.Lens         (Lens', Prism', at, ifoldr, imap, to,
                                        toListOf, traverseOf, traversed, (<&>),
                                        (?~), (^.), (^?), _1, _2, _Just)
-import           Control.Lens.Indexed (FunctorWithIndex)
 import           Control.Monad        ((>=>), when)
 import           Data.Bool            (bool)
 import qualified Data.Foldable        as Foldable
@@ -178,100 +178,155 @@ linearizedTrace model = foldr
     reachablePaths :: Set TagId
     reachablePaths = Map.foldlWithKey'
       (\paths path sbool -> maybe
-        (error "impossible: found symbolic value in concrete model")
+        (error $ "impossible: found symbolic value in concrete model for path " <> show path)
         (bool paths (Set.insert path paths))
         (SBV.unliteral sbool))
       Set.empty
       (model ^. modelTags.mtPaths)
 
--- NOTE: we indent the entire model two spaces so that the atom linter will
--- treat it as one message.
+indent :: Text -> Text
+indent = ("  " <>)
+
+showSbv :: (Show a, SymWord a) => SBV a -> Text
+showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
+
+showS :: (Show a, SymWord a) => S a -> Text
+showS = showSbv . _sSbv
+
+showTVal :: TVal -> Text
+showTVal (ety, av) = case av of
+  OpaqueVal   -> "[opaque]"
+  AnObj obj   -> showObject obj
+  AVal _ sval -> case ety of
+    EObjectTy _ -> error "showModel: impossible object type for AVal"
+    EType (_ :: Type t) -> showSbv (SBVI.SBV sval :: SBV t)
+
+showObject :: Object -> Text
+showObject (Object m) = "{ "
+  <> T.intercalate ", "
+       (ifoldr (\key val acc -> showObjMapping key val : acc) [] m)
+  <> " }"
+
+showObjMapping :: Text -> TVal -> Text
+showObjMapping key val = key <> ": " <> showTVal val
+
+showVar :: Located (Text, TVal) -> Text
+showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
+
+showAccess :: Located (S RowKey, Object) -> Text
+showAccess (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
+
+--
+-- TODO: this should display the table name
+--
+showRead :: Located (S RowKey, Object) -> Text
+showRead (Located _ (srk, obj)) = "read " <> showObject obj <> " for key " <> showS srk
+
+--
+-- TODO: this should display the table name
+--
+showWrite :: Located (S RowKey, Object) -> Text
+showWrite (Located _ (srk, obj)) = "write " <> showObject obj <> " to key " <> showS srk
+
+showKsn :: S KeySetName -> Text
+showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
+  Nothing               -> "[unknown]"
+  Just (KeySetName ksn) -> "'" <> ksn
+
+--
+-- TODO: synthesize auth + ks connections more thoroughly. in this model
+--       report you will see the same keyset number show up in e.g. vars
+--       and reads, with no mention of that ks number under this ks/auths
+--       section:
+--
+showAuth :: Maybe Provenance -> Located (SBV Bool) -> Text
+showAuth mProv lsb = status <> " " <> ksDescription
+  where
+    status = case SBV.unliteral (_located lsb) of
+      Nothing    -> "[ERROR:symbolic auth]"
+      Just True  -> "satisfied"
+      Just False -> "failed to satisfy"
+
+    ksDescription = case mProv of
+      Nothing ->
+        "unknown keyset"
+      Just (FromCell (OriginatingCell (TableName tn) (ColumnName cn) sRk _dirty)) ->
+        "keyset from database at ("
+          <> T.pack tn <> ", "
+          <> "'" <> T.pack cn <> ", "
+          <> showS sRk <> ")"
+      Just (FromNamedKs sKsn) ->
+        "keyset named " <> showKsn sKsn
+      Just (FromInput arg) ->
+        "keyset from argument " <> arg
+
+showResult :: Located TVal -> Text
+showResult = showTVal . _located
+
+showEvent :: Map TagId Provenance -> ModelTags 'Concrete -> TraceEvent -> Text
+showEvent ksProvs tags = \case
+    TraceRead (_located -> (tid, _)) ->
+      display mtReads tid showRead
+    TraceWrite (_located -> (tid, _)) ->
+      display mtWrites tid showWrite
+    TraceEnforce (_located -> tid) ->
+      display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)
+    TraceBind (_located -> (vid, _, _)) ->
+      display mtVars vid showVar
+
+    TraceSubpathStart (TagId tid') ->
+      "[start of subpath " <> tShow tid' <> "]" -- not shown to end-users
+
+  where
+    display :: Ord k => Lens' (ModelTags 'Concrete) (Map k v) -> k -> (v -> Text) -> Text
+    display l ident f = maybe "[ERROR:missing tag]" f $ tags ^. l.at ident
+
 showModel :: Model 'Concrete -> Text
-showModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs _graph) =
+showModel model =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
-      , indent <$> fmapToList showVar args
+      , indent <$> Foldable.toList (showVar <$> (model ^. modelArgs))
       , []
-      , ["Variables:"]
-      , indent <$> fmapToList showVar vars
-      , []
-      , ["Reads:"]
-      , indent <$> fmapToList showAccess reads'
-      , []
-      , ["Writes:"]
-      , indent <$> fmapToList showAccess writes
-      , []
-      , ["Keysets:"]
-      , indent <$> imapToList showAuth auths
+      , ["Program trace:"]
+      , indent <$> fmap showEvent' traceEvents
       , []
       , ["Result:"]
-      , indent <$> [showResult]
+      , [indent $ maybe
+          "Transaction aborted."
+          (\tval -> "Return value: " <> showTVal tval)
+          mRetval
+        ]
       ]
 
   where
-    fmapToList f xs = Foldable.toList $ fmap f xs
-    imapToList f xs = Foldable.toList $ imap f xs
+    ExecutionTrace traceEvents mRetval = linearizedTrace model
 
-    indent :: Text -> Text
-    indent = ("  " <>)
+    showEvent' = showEvent (model ^. modelKsProvs) (model ^. modelTags)
 
-    showSbv :: (Show a, SymWord a) => SBV a -> Text
-    showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
-
-    showS :: (Show a, SymWord a) => S a -> Text
-    showS = showSbv . _sSbv
-
-    showTVal :: TVal -> Text
-    showTVal (ety, av) = case av of
-      OpaqueVal   -> "[opaque]"
-      AnObj obj   -> showObject obj
-      AVal _ sval -> case ety of
-        EObjectTy _ -> error "showModel: impossible object type for AVal"
-        EType (_ :: Type t) -> showSbv (SBVI.SBV sval :: SBV t)
-
-    showObject :: Object -> Text
-    showObject (Object m) = "{ "
-      <> T.intercalate ", "
-           (ifoldr (\key val acc -> showObjMapping key val : acc) [] m)
-      <> " }"
-
-    showObjMapping :: Text -> TVal -> Text
-    showObjMapping key val = key <> ": " <> showTVal val
-
-    showVar :: Located (Text, TVal) -> Text
-    showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
-
-    showAccess :: Located (S RowKey, Object) -> Text
-    showAccess (Located _ (srk, obj)) = showS srk <> " => " <> showObject obj
-
-    showKsn :: S KeySetName -> Text
-    showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
-      Nothing               -> "[unknown]"
-      Just (KeySetName ksn) -> "'" <> ksn
-
-    showAuth :: TagId -> Located (SBV Bool) -> Text
-    showAuth tid lsb = status <> ksDescription
-      where
-        status = case SBV.unliteral (_located lsb) of
-          Nothing    -> "unknown:      "
-          Just True  -> "authorized:   "
-          Just False -> "unauthorized: "
-
-        ksDescription = case tid `Map.lookup` ksProvs of
-          Nothing ->
-            "unknown keyset"
-          Just (FromCell (OriginatingCell (TableName tn) (ColumnName cn) sRk _dirty)) ->
-            "database keyset at ("
-              <> T.pack tn <> ", "
-              <> "'" <> T.pack cn <> ", "
-              <> showS sRk <> ")"
-          Just (FromNamedKs sKsn) ->
-            "named keyset " <> showKsn sKsn
-          Just (FromInput arg) ->
-            "argument " <> arg
-
-    showResult :: Text
-    showResult = showTVal $ _located res
+-- NOTE: we indent the entire model two spaces so that the atom linter will
+-- treat it as one message.
+showEntireModel :: Model 'Concrete -> Text
+showEntireModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs _graph) =
+  T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
+    [ ["Arguments:"]
+    , indent <$> Foldable.toList (showVar <$> args)
+    , []
+    , ["Variables:"]
+    , indent <$> Foldable.toList (showVar <$> vars)
+    , []
+    , ["Reads:"]
+    , indent <$> Foldable.toList (showAccess <$> reads')
+    , []
+    , ["Writes:"]
+    , indent <$> Foldable.toList (showAccess <$> writes)
+    , []
+    , ["Keysets:"]
+    , indent <$> Foldable.toList
+        (imap (\tid a -> showAuth (tid `Map.lookup` ksProvs) a) auths)
+    , []
+    , ["Result:"]
+    , indent <$> [showResult res]
+    ]
 
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
