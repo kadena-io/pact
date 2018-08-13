@@ -241,7 +241,7 @@ tagWrite = tagDbAccess TraceWrite
 tagAuth :: Node -> TranslateM TagId
 tagAuth node = do
   tid <- genTagId
-  emit $ TraceEnforce $ Located (nodeInfo node) tid
+  emit $ TraceAuth $ Located (nodeInfo node) tid
   pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
