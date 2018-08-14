@@ -6,14 +6,13 @@
 
 module Pact.Analyze.Types.Model where
 
-import           Control.Lens              (makeLenses)
+import           Control.Lens              (makeLenses, makePrisms)
 import           Data.Map.Strict           (Map)
-import           Data.SBV                  (Mergeable (symbolicMerge), SBV)
+import           Data.SBV                  (SBV)
 import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)
 
-import qualified Pact.Types.Lang           as Pact
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Types.Shared
@@ -26,28 +25,20 @@ data Arg = Arg
   , argType  :: EType
   }
 
-data Located a
-  = Located
-    { _location :: Pact.Info
-    , _located  :: a
-    }
-  deriving (Eq, Functor, Foldable, Traversable)
-
-deriving instance Show a => Show (Located a)
-
-instance Mergeable a => Mergeable (Located a) where
-  symbolicMerge f t (Located i a) (Located i' a') =
-    Located (symbolicMerge f t i i') (symbolicMerge f t a a')
-
 newtype TagId
   = TagId Natural
   deriving (Num, Show, Ord, Eq)
 
+data TagAllocation
+  = AllocReadTag (Located (TagId, Schema))
+  | AllocWriteTag (Located (TagId, Schema))
+  | AllocAuthTag (Located TagId)
+  | AllocVarTag (Located (VarId, Text, EType))
+  deriving Show
+
 data ModelTags
   = ModelTags
-    { _mtArgs   :: Map VarId (Located (Text, TVal))
-    -- ^ one per input to the function
-    , _mtVars   :: Map VarId (Located (Text, TVal))
+    { _mtVars   :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
     , _mtReads  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
@@ -63,8 +54,13 @@ data ModelTags
 
 data Model
   = Model
-    { _modelTags    :: ModelTags
+    { _modelArgs    :: Map VarId (Located (Text, TVal))
+    -- ^ one free value per input the function; allocatd post-translation.
+    , _modelTags    :: ModelTags
+    -- ^ free values to be constrained to equal values during analysis;
+    -- allocated post-translation.
     , _modelKsProvs :: Map TagId Provenance
+    -- ^ keyset 'Provenance's from analysis
     }
   deriving (Eq, Show)
 
@@ -74,6 +70,6 @@ data Goal
 
 deriving instance Eq Goal
 
-makeLenses ''Located
+makePrisms ''TagAllocation
 makeLenses ''ModelTags
 makeLenses ''Model

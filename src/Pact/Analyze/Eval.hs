@@ -22,6 +22,7 @@ import           Control.Monad.Reader        (runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (runRWST))
 import           Control.Monad.Trans.Class   (lift)
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
+import           Data.Map.Strict             (Map)
 import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic)
 import           Data.String                 (fromString)
 
@@ -78,15 +79,16 @@ runAnalysis'
   :: Functor f
   => Query (f (S Bool))
   -> [Table]
+  -> Map VarId AVal
   -> ETerm
   -> ModelTags
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables tm tags info = do
+runAnalysis' query tables args tm tags info = do
   let act    = evalETerm tm >>= \res -> tagResult res >> pure res
       state0 = mkInitialAnalyzeState tables
 
-  aEnv <- case mkAnalyzeEnv tables tags info of
+  aEnv <- case mkAnalyzeEnv tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString $
       "Unable to make analyze env (couldn't translate schema)"
@@ -105,18 +107,21 @@ runAnalysis' query tables tm tags info = do
 runPropertyAnalysis
   :: Check
   -> [Table]
+  -> Map VarId AVal
   -> ETerm
   -> ModelTags
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables tm tags info =
-  runIdentity <$> runAnalysis' (Identity <$> analyzeCheck check) tables tm tags info
+runPropertyAnalysis check tables args tm tags info =
+  runIdentity <$>
+    runAnalysis' (Identity <$> analyzeCheck check) tables args tm tags info
 
 runInvariantAnalysis
   :: [Table]
+  -> Map VarId AVal
   -> ETerm
   -> ModelTags
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables tm tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables tm tags info
+runInvariantAnalysis tables args tm tags info =
+  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm tags info

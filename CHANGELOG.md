@@ -1,3 +1,27 @@
+2.5.0
+---
+Analysis:
+  * We now display all the argument and variable values, reads, writes, 
+    keysets, and function result for invalidating models.
+  * Introduced `row-read-count` and `row-write-count`, specifying the number of
+    times a row is read or written.
+  * Table quantification: it's now possible to quantify over tables, though in 
+    this release you can't yet quantify over columns.
+  * Object literals and `at` now work in properties. Object comparison with `=`
+    and `!=` also now works.
+  * Analysis now typechecks references to tables (ie it knows table schemas and
+    the types you can read and write to them) and return types.
+  * `verify` now typechecks `defconst`s, so it now checks a superset of
+    `typecheck`.
+  * We now check each invariant individually and give a separate invalidating 
+    model for each invariant.
+  * Property parse errors are now less confusing and include location info.
+  * `read-decimal` and `enforce-one` are now supported.
+  * Bug fix: Analysis of `and` and `or` now (correctly) short-circuits.
+  * The property checking system is now included in the documentation.
+  * New `@model` / `@doc` syntax.
+  * `defproperty`: New properties can now be defined at the module level.
+
 2.4.1
 ---
 * Fix support for property checker in Atom

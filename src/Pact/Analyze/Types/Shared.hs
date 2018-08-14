@@ -58,6 +58,19 @@ import           Pact.Types.Util              (AsString, tShow)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 
+data Located a
+  = Located
+    { _location :: Pact.Info
+    , _located  :: a
+    }
+  deriving (Eq, Functor, Foldable, Traversable)
+
+deriving instance Show a => Show (Located a)
+
+instance Mergeable a => Mergeable (Located a) where
+  symbolicMerge f t (Located i a) (Located i' a') =
+    Located (symbolicMerge f t i i') (symbolicMerge f t a a')
+
 data Existential (tm :: * -> *) where
   ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
   EObject ::                 Schema -> tm Object -> Existential tm
@@ -167,12 +180,12 @@ data LogicalOp
   = AndOp -- ^ Conjunction
   | OrOp  -- ^ Disjunction
   | NotOp -- ^ Negation
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data EqNeq
   = Eq'  -- ^ Equal
   | Neq' -- ^ Not equal
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -181,7 +194,7 @@ data ComparisonOp
   | Lte -- ^ Less than or equal to
   | Eq  -- ^ Equal
   | Neq -- ^ Not equal
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
@@ -292,6 +305,12 @@ newtype Object
   = Object (Map Text TVal)
   deriving (Eq, Show)
 
+instance Monoid Object where
+  mempty = Object Map.empty
+
+  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
+  Object m1 `mappend` Object m2 = Object $ m1 <> m2
+
 objFields :: Lens' Object (Map Text TVal)
 objFields = lens getter setter
   where
@@ -301,6 +320,12 @@ objFields = lens getter setter
 newtype Schema
   = Schema (Map Text EType)
   deriving (Show, Eq)
+
+instance Monoid Schema where
+  mempty = Schema Map.empty
+
+  -- NOTE: left-biased semantics of schemas for Pact's "object merging":
+  Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -575,6 +600,12 @@ instance UserShow Schema where
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
 
+data DefinedProperty a = DefinedProperty
+  { propertyArgs :: [(Text, QType)]
+  , propertyBody :: a
+  } deriving Show
+
+makeLenses ''Located
 makePrisms ''AVal
 makeLenses ''ColumnMap
 makeLenses ''Object

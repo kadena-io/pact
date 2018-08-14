@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens              (at, view, (&), (?~))
+import           Control.Lens              (at, view, (?~))
 import           Control.Monad.Except      (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader      (MonadReader (local), ReaderT)
 import           Control.Monad.Trans.Class (lift)
@@ -42,6 +42,7 @@ instance Analyzer Query where
   type TermOf Query = Prop
   eval           = evalProp
   evalO          = evalPropO
+  evalLogicalOp  = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
@@ -72,7 +73,7 @@ expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
 
 getLitTableName :: Prop TableName -> Query TableName
 getLitTableName (PLit tn) = pure tn
-getLitTableName (PureProp (Var vid name)) = do
+getLitTableName (CoreProp (Var vid name)) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
     Nothing -> throwErrorNoLoc $ fromString $
@@ -80,7 +81,7 @@ getLitTableName (PureProp (Var vid name)) = do
     Just tn -> pure tn
 getLitTableName (PropSpecific Result)
   = throwErrorNoLoc "Function results can't be table names"
-getLitTableName PureProp{} = throwErrorNoLoc "Pure values can't be table names"
+getLitTableName CoreProp{} = throwErrorNoLoc "Core values can't be table names"
 
 
 getLitColName :: Prop ColumnName -> Query ColumnName
@@ -89,12 +90,12 @@ getLitColName _         = throwErrorNoLoc "TODO: column quantification"
 
 
 evalProp :: SymWord a => Prop a -> Query (S a)
-evalProp (PureProp tm)    = evalCore tm
+evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
 
 evalPropO :: Prop Object -> Query Object
-evalPropO (PureProp a)          = evalCoreO a
+evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 
 
@@ -110,7 +111,7 @@ evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
 evalPropSpecific (Forall vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
-    local (& qeTableScope . at vid ?~ tableName) (evalProp prop)
+    local (qeTableScope . at vid ?~ tableName) (evalProp prop)
   pure $ foldr (&&&) true bools
 evalPropSpecific (Forall _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"
@@ -122,7 +123,7 @@ evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =
 evalPropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
-    local (& qeTableScope . at vid ?~ tableName) (evalProp prop)
+    local (qeTableScope . at vid ?~ tableName) (evalProp prop)
   pure $ foldr (|||) true bools
 evalPropSpecific (Exists _vid _name (QColumnOf _tab) _p) =
   throwErrorNoLoc "TODO: column quantification"

@@ -63,9 +63,14 @@ library
       Pact.Analyze.Eval.Term
       Pact.Analyze.Check
       Pact.Analyze.Errors
+      Pact.Analyze.Feature
       Pact.Analyze.LegacySFunArray
+      Pact.Analyze.Model
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
+      Pact.Analyze.Parse.Invariant
+      Pact.Analyze.Parse.Prop
+      Pact.Analyze.Parse.Types
       Pact.Analyze.Patterns
       Pact.Analyze.PrenexNormalize
       Pact.Analyze.Translate
@@ -180,7 +185,7 @@ executable bench
   ghc-options:         -Wall -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
-  
+
 test-suite hspec
   type: exitcode-stdio-1.0
   main-is: hspec.hs

@@ -56,8 +56,8 @@ transaction has the proper signatures to satisfy the keyset named `admins`:
 
 ```lisp
 (defun read-account (id)
-  ("Read data for account ID"
-    (properties [(authorized-by 'admins)]))
+  @doc   "Read data for account ID"
+  @model (properties [(authorized-by 'admins)])
 
   (enforce-admin)
   (read 'accounts id ['balance 'ccy 'amount]))
@@ -76,8 +76,8 @@ will always maintain the invariant that token balances are greater than zero:
 
 ```lisp
 (defschema tokens
-  ("token schema"
-    (invariants [(> balance 0)]))
+  @doc   "token schema"
+  @model (invariants [(> balance 0)])
 
   username:string
   balance:integer)
@@ -118,35 +118,6 @@ property checking is run by invoking `verify`:
 This will typecheck the code and, if that succeeds, check all invariants and
 properties.
 
-## Expressing schema invariants
-
-Schema invariants are formed by the following BNF grammar:
-
-```
-<comparator>
-  ::= <
-    | <=
-    | =
-    | !=
-    | >=
-    | >
-
-<expr>
-  ::= <column name>
-    | <integer literal>
-    | <decimal literal>
-    | <string literal>
-    | <time literal>
-    | <bool literal>
-    | ( <comparator> <expr> <expr> )
-    | (and <expr> <expr> )
-    | (or <expr> <expr> )
-    | (not <expr> )
-
-<invariants>
-  ::= ( invariants [ <expr> ... ] )
-```
-
 ## Expressing properties
 
 ### Arguments, return values, and standard arithmetic and comparison operators
@@ -156,8 +127,8 @@ return values can be referred to by the name `result`:
 
 ```lisp
 (defun negate:integer (x:integer)
-  ("negate a number"
-    (properties [(= result (* -1 x))]))
+  @doc   "negate a number"
+  @model (properties [(= result (* -1 x))])
 
   (* x -1))
 ```
@@ -169,8 +140,8 @@ We can also define properties in terms of the standard comparison operators:
 
 ```lisp
 (defun abs:integer (x:integer)
-  ("absolute value"
-    (properties [(>= result 0)]))
+  @doc   "absolute value"
+  @model (properties [(>= result 0)])
 
   (if (< x 0)
     (negate x)
@@ -186,13 +157,13 @@ properties at once:
 
 ```lisp
 (defun negate:integer (x:integer)
-  ("negate a number"
-    (properties
-      [(when (< x 0) (> result 0))
-       (when (> x 0) (< result 0))
-       (and
-         (when (< x 0) (> result 0))
-         (when (> x 0) (< result 0)))])
+  @doc   "negate a number"
+  @model (properties
+    [(when (< x 0) (> result 0))
+     (when (> x 0) (< result 0))
+     (and
+       (when (< x 0) (> result 0))
+       (when (> x 0) (< result 0)))])
 
   (* x -1))
 ```
@@ -205,8 +176,8 @@ means that properties like the following:
 
 ```lisp
 (defun ensured-positive (val:integer)
-  ("halts when passed a non-positive number"
-    (properties [(!= result 0)]))
+  @doc   "halts when passed a non-positive number"
+  @model (properties [(!= result 0)])
 
   (enforce (> val 0) "val is not positive")
   val)
@@ -218,6 +189,23 @@ At run-time on the blockchain, if an `enforce` call fails, the containing
 transaction is aborted. Because `properties` are only concerned with
 transactions that succeed, the necessary conditions to pass each `enforce` call
 are assumed.
+
+### More comprehensive properties API documentation
+
+For the full listing of functionality available in properties, see the API
+documentation at [Property and Invariant
+Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html).
+
+## Expressing schema invariants
+
+Schema invariants are described by a more restricted subset of the
+functionality available in property definitions -- effectively the functions
+which are not concerned with authorization, DB access, transaction
+success/failure, and function arguments and return values. See the API
+documentation at
+[Property and Invariant
+Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html)
+for the full listing of functions available in invariant definitions.
 
 <!--- *** This second is disabled until we add `valid`/`satisfiable` alternatives to `property`, which currently assumes tx success ***
 
@@ -251,16 +239,16 @@ code path enforces the keyset:
 
 ```lisp
 (defun admins-only (action:string)
-  ("Only admins or super-admins can call this function successfully.
-    (properties
-      [(or (authorized-by 'admins) (authorized-by 'super-admins))
-       (when (== "create" action) (authorized-by 'super-admins))])
+  @doc   "Only admins or super-admins can call this function successfully.
+  @model (properties
+    [(or (authorized-by 'admins) (authorized-by 'super-admins))
+     (when (== "create" action) (authorized-by 'super-admins))])
 
-    (if (== action "create")
-      (create)
-      (if (== action "update")
-        (update)
-        (incorrect-action action)))))
+  (if (== action "create")
+    (create)
+    (if (== action "update")
+      (update)
+      (incorrect-action action))))
 ```
 
 For the common pattern of row-level keyset enforcement, wherein a table might
@@ -284,9 +272,9 @@ example" and the section on "universal and existential quantification" below.
 To describe database table access, the property language has the following
 properties:
 
-- `(table-write 'accounts)` - that any cell of the table `accounts` is written
+- `(table-written 'accounts)` - that any cell of the table `accounts` is written
 - `(table-read 'accounts)` - that any cell of the table `accounts` is read
-- `(row-write 'accounts k)` - that the row keyed by the variable `k` is written
+- `(row-written 'accounts k)` - that the row keyed by the variable `k` is written
 - `(row-read 'accounts k)` - that the row keyed by the variable `k` is read
 
 For more details, see an example in "universal and existential quantification"
@@ -336,7 +324,7 @@ change. So here `1` means an increase of `1` to the column's total sum.
 ### Universal and existential quantification
 
 In examples like `(row-enforced 'accounts 'ks key)` or
-`(row-write 'accounts key)` above, we've so far only referred to function
+`(row-written 'accounts key)` above, we've so far only referred to function
 arguments by the use of the variable named `key`. But what if we wanted to
 talk about all possible rows that will be written, if function doesn't simply
 update a single row keyed by an input to the function?
@@ -347,7 +335,7 @@ such row:
 ```lisp
 (properties
   [(forall (key:string)
-     (when (row-write 'accounts key)
+     (when (row-written 'accounts key)
        (row-enforced 'accounts 'ks key)))])
 ```
 
@@ -367,6 +355,32 @@ use existential quantification like so:
 For both universal and existential quantification, note that a type annotation
 is required.
 
+### Defining and reusing properties
+
+With `defproperty`, properties can be defined at the module level:
+
+```lisp
+(defmodule accounts
+  @model
+    [(defproperty conserves-mass
+       (= (column-delta 'accounts 'balance) 0.0))
+     (defproperty auth-required
+       (authorized-by 'accounts-admin-keyset))]
+
+  ; ...
+  )
+```
+
+and then used at the function level by referring to the property's name:
+
+```lisp
+(defun read-account (id)
+  @model (property auth-required)
+
+  ; ...
+  )
+```
+
 ## A simple balance transfer example
 
 Let's work through an example where we write a function to transfer some amount
@@ -374,7 +388,7 @@ of a balance across two accounts for the given table:
 
 ```lisp
 (defschema account
-  "user accounts with balances"
+  @doc "user accounts with balances"
 
   balance:integer
   ks:keyset)
@@ -389,8 +403,8 @@ table.
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties [(row-enforced 'accounts 'ks from)]))
+  @doc   "Transfer money between accounts"
+  @model (properties [(row-enforced 'accounts 'ks from)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -404,8 +418,8 @@ Let's start by adding an invariant that balances can never drop below zero:
 
 ```lisp
 (defschema account
-  ("user accounts with balances"
-    (invariants [(>= balance 0)]))
+  @doc   "user accounts with balances"
+  @model (invariants [(>= balance 0)])
 
   balance:integer
   ks:keyset)
@@ -420,8 +434,8 @@ try again:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties [(row-enforced 'accounts 'ks from)]))
+  @doc   "Transfer money between accounts"
+  @model (properties [(row-enforced 'accounts 'ks from)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -438,10 +452,10 @@ for the function to be used to create or destroy any money:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties
-      [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)]))
+  @doc   "Transfer money between accounts"
+  @model (properties
+    [(row-enforced 'accounts 'ks from)
+     (conserves-mass 'accounts 'balance)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }
@@ -475,10 +489,10 @@ this unintended behavior:
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
-  ("Transfer money between accounts"
-    (properties
-      [(row-enforced 'accounts 'ks from)
-       (conserves-mass 'accounts 'balance)]))
+  @doc   "Transfer money between accounts"
+  @model (properties
+    [(row-enforced 'accounts 'ks from)
+     (conserves-mass 'accounts 'balance)])
 
   (with-read accounts from { 'balance := from-bal, 'ks := from-ks }
     (with-read accounts to { 'balance := to-bal }

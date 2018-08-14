@@ -18,7 +18,7 @@ import           Pact.Analyze.Util
 -- Unfortunately, the version of GHC we're using doesn't support the COMPLETE
 -- pragma to mark a set of pattern synonyms as complete. Because of this, we
 -- forgo pattern synonyms on the left-hand-side, resulting in some unfortunate
--- patterns, like `PureProp (Numerical (IntArithOp op a b))` (as compared to
+-- patterns, like `CoreProp (Numerical (IntArithOp op a b))` (as compared to
 -- `PIntArithOp op a b`).
 --
 -- Also, in several places we need to mark a `Numerical` pattern as vacuous,
@@ -26,10 +26,10 @@ import           Pact.Analyze.Util
 
 #define STANDARD_INSTANCES                                            \
   PropSpecific Result -> ([], p);                                     \
-  PureProp Var{}      -> ([], p);                                     \
-  PureProp Lit{}      -> ([], p);                                     \
-  PureProp Sym{}      -> ([], p);                                     \
-  PureProp (At schema a b ty) -> PAt schema a <$> float b <*> pure ty;
+  CoreProp Var{}      -> ([], p);                                     \
+  CoreProp Lit{}      -> ([], p);                                     \
+  CoreProp Sym{}      -> ([], p);                                     \
+  CoreProp (At schema a b ty) -> PAt schema a <$> float b <*> pure ty;
 
 instance Float Integer where
   float = floatIntegerQuantifiers
@@ -49,18 +49,19 @@ instance Float Time where
 instance Float Object where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuousMatch "numerical can't be Object"
-    PureProp LiteralObject{} -> ([], p)
+    CoreProp Numerical{} -> vacuousMatch "numerical can't be Object"
+    CoreProp LiteralObject{} -> ([], p)
+    CoreProp ObjectMerge{} -> ([], p)
 
 instance Float KeySet where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuousMatch "numerical can't be KeySet"
+    CoreProp Numerical{} -> vacuousMatch "numerical can't be KeySet"
 
 instance Float Any where
   float p = case p of
     STANDARD_INSTANCES
-    PureProp Numerical{} -> vacuousMatch "numerical can't be Any"
+    CoreProp Numerical{} -> vacuousMatch "numerical can't be Any"
 
 flipQuantifier :: Quantifier -> Quantifier
 flipQuantifier = \case
@@ -71,15 +72,15 @@ floatIntegerQuantifiers :: Prop Integer -> ([Quantifier], Prop Integer)
 floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
-  PureProp (StrLength pStr) -> PStrLength <$> float pStr
+  CoreProp (StrLength pStr) -> PStrLength <$> float pStr
 
-  PureProp (Numerical (IntArithOp op a b))
+  CoreProp (Numerical (IntArithOp op a b))
     -> PNumerical ... IntArithOp      op <$> float a <*> float b
-  PureProp (Numerical (IntUnaryArithOp op a))
+  CoreProp (Numerical (IntUnaryArithOp op a))
     -> PNumerical .   IntUnaryArithOp op <$> float a
-  PureProp (Numerical (ModOp a b))
+  CoreProp (Numerical (ModOp a b))
     -> PNumerical ... ModOp              <$> float a <*> float b
-  PureProp (Numerical (RoundingLikeOp1 op a))
+  CoreProp (Numerical (RoundingLikeOp1 op a))
     -> PNumerical . RoundingLikeOp1 op   <$> float a
   PropSpecific (IntCellDelta tn cn a)
     -> PropSpecific . IntCellDelta tn cn <$> float a
@@ -92,15 +93,15 @@ floatIntegerQuantifiers p = case p of
 floatDecimalQuantifiers :: Prop Decimal -> ([Quantifier], Prop Decimal)
 floatDecimalQuantifiers p = case p of
   STANDARD_INSTANCES
-  PureProp (Numerical (DecArithOp op a b))
+  CoreProp (Numerical (DecArithOp op a b))
     -> PNumerical ... DecArithOp      op <$> float a <*> float b
-  PureProp (Numerical (DecUnaryArithOp op a))
+  CoreProp (Numerical (DecUnaryArithOp op a))
     -> PNumerical .   DecUnaryArithOp op <$> float a
-  PureProp (Numerical (DecIntArithOp op a b))
+  CoreProp (Numerical (DecIntArithOp op a b))
     -> PNumerical ... DecIntArithOp   op <$> float a <*> float b
-  PureProp (Numerical (IntDecArithOp op a b))
+  CoreProp (Numerical (IntDecArithOp op a b))
     -> PNumerical ... IntDecArithOp   op <$> float a <*> float b
-  PureProp (Numerical (RoundingLikeOp2 op a b))
+  CoreProp (Numerical (RoundingLikeOp2 op a b))
     -> PNumerical ... RoundingLikeOp2 op <$> float a <*> float b
   PropSpecific (DecCellDelta tn cn a)
     -> PropSpecific . DecCellDelta tn cn  <$> float a
@@ -109,21 +110,21 @@ floatDecimalQuantifiers p = case p of
 floatStringQuantifiers :: Prop String -> ([Quantifier], Prop String)
 floatStringQuantifiers p = case p of
   STANDARD_INSTANCES
-  PureProp Numerical{} -> vacuousMatch "numerical can't be String"
-  PureProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
+  CoreProp Numerical{} -> vacuousMatch "numerical can't be String"
+  CoreProp (StrConcat s1 s2) -> PStrConcat <$> float s1 <*> float s2
 
 floatTimeQuantifiers :: Prop Time -> ([Quantifier], Prop Time)
 floatTimeQuantifiers p = case p of
   STANDARD_INSTANCES
-  PureProp Numerical{} -> vacuousMatch "numerical can't be Time"
-  PureProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
-  PureProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
+  CoreProp Numerical{} -> vacuousMatch "numerical can't be Time"
+  CoreProp (IntAddTime time int) -> PIntAddTime <$> float time <*> float int
+  CoreProp (DecAddTime time dec) -> PDecAddTime <$> float time <*> float dec
 
 floatBoolQuantifiers :: Prop Bool -> ([Quantifier], Prop Bool)
 floatBoolQuantifiers p = case p of
   STANDARD_INSTANCES
 
-  PureProp Numerical{} -> vacuousMatch "numerical can't be Bool"
+  CoreProp Numerical{} -> vacuousMatch "numerical can't be Bool"
 
   PropSpecific (Forall uid name ty prop) ->
     let (qs, prop') = float prop
@@ -141,23 +142,23 @@ floatBoolQuantifiers p = case p of
   PropSpecific KsNameAuthorized{} -> ([], p)
   PropSpecific RowEnforced{}      -> ([], p)
 
-  PureProp (IntegerComparison op a b)
-    -> PureProp ... IntegerComparison op <$> float a <*> float b
-  PureProp (DecimalComparison op a b)
-    -> PureProp ... DecimalComparison op <$> float a <*> float b
-  PureProp (TimeComparison op a b)
-    -> PureProp ... TimeComparison op <$> float a <*> float b
-  PureProp (StringComparison op a b)
-    -> PureProp ... StringComparison op <$> float a <*> float b
-  PureProp (BoolComparison op a b)
-    -> PureProp ... BoolComparison op <$> float a <*> float b
-  PureProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
-  PureProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
+  CoreProp (IntegerComparison op a b)
+    -> CoreProp ... IntegerComparison op <$> float a <*> float b
+  CoreProp (DecimalComparison op a b)
+    -> CoreProp ... DecimalComparison op <$> float a <*> float b
+  CoreProp (TimeComparison op a b)
+    -> CoreProp ... TimeComparison op <$> float a <*> float b
+  CoreProp (StringComparison op a b)
+    -> CoreProp ... StringComparison op <$> float a <*> float b
+  CoreProp (BoolComparison op a b)
+    -> CoreProp ... BoolComparison op <$> float a <*> float b
+  CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
+  CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
-  PureProp (Logical _ _) -> error ("ill-defined logical op: " ++ show p)
+  CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ show p)
 
   PropSpecific (RowRead  tn pRk) -> PropSpecific . RowRead  tn <$> float pRk
   PropSpecific (RowWrite tn pRk) -> PropSpecific . RowWrite tn <$> float pRk

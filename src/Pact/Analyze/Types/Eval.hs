@@ -15,7 +15,7 @@ module Pact.Analyze.Types.Eval where
 import           Control.Applicative          (ZipList (..))
 import           Control.Lens                 (Lens', at, ifoldl, ix, lens,
                                                makeLenses, singular, view, (&),
-                                               (<&>), (?~), _2)
+                                               (<&>), (?~))
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
@@ -54,11 +54,19 @@ class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
   getVar          :: VarId -> m (Maybe AVal)
 
+  -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
+  -- their monad stack, they can't use `ite`, which we need to use to implement
+  -- short-circuiting ops correctly for (effectful) terms. Though, luckily the
+  -- invariant and prop languages are pure, so we're fine to implement them in
+  -- terms of `|||` / `&&&`.
+  evalLogicalOp   :: LogicalOp -> [TermOf m Bool] -> m (S Bool)
+
 data AnalyzeEnv
   = AnalyzeEnv
     { _aeScope     :: !(Map VarId AVal)              -- used as a stack
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
+    , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
     , _invariants  :: !(TableMap [Located (Invariant Bool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !ModelTags
@@ -66,17 +74,15 @@ data AnalyzeEnv
     }
   deriving Show
 
-mkAnalyzeEnv :: [Table] -> ModelTags -> Info -> Maybe AnalyzeEnv
-mkAnalyzeEnv tables tags info = do
-  let keySets'    = mkFreeArray "keySets"
+mkAnalyzeEnv :: [Table] -> Map VarId AVal -> ModelTags -> Info -> Maybe AnalyzeEnv
+mkAnalyzeEnv tables args tags info = do
+  let keySets'    = mkFreeArray "envKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
+      decimals    = mkFreeArray "envDecimals"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
           (TableName (T.unpack tname), someInvariants)
-
-      argMap :: Map VarId AVal
-      argMap = view (located._2._2) <$> _mtArgs tags
 
   columnIds <- for tables $ \(Table tname ut _) -> do
     case maybeTranslateUserType' ut of
@@ -86,7 +92,8 @@ mkAnalyzeEnv tables tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv argMap keySets' keySetAuths invariants' columnIds' tags info
+  pure $ AnalyzeEnv args keySets' keySetAuths decimals invariants' columnIds'
+    tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -300,6 +307,9 @@ class HasAnalyzeEnv a where
   ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
 
+  envDecimals :: Lens' a (SFunArray String Decimal)
+  envDecimals = analyzeEnv.aeDecimals
+
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
@@ -442,3 +452,11 @@ resolveKeySet
   -> m (S KeySet)
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
+
+-- TODO: switch to lens
+resolveDecimal
+  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  => S String
+  -> m (S Decimal)
+resolveDecimal sDn = fmap sansProv $
+  readArray <$> view envDecimals <*> pure (_sSbv sDn)

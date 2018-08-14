@@ -1,25 +1,30 @@
 ;; accounts module, admin keyset, and table
 ; (load "examples/verified-accounts/accounts.repl")
 
-(enforce-pact-version "2.3")
+(enforce-pact-version "2.4.1")
 
 (define-keyset 'accounts-admin-keyset
   (read-keyset "accounts-admin-keyset"))
 
 (module accounts 'accounts-admin-keyset
-  "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
-\  Version: 0.2                                                                \
-\  Author: Stuart Popejoy"
-
+  @doc
+    "Accounts module demonstrating row-level keysets, private pacts, and escrow. \
+\    Version: 0.2                                                                \
+\    Author: Stuart Popejoy"
+  @model
+    [(defproperty conserves-mass
+       (= (column-delta 'accounts 'balance) 0.0))
+     (defproperty auth-required
+       (authorized-by 'accounts-admin-keyset))]
 
   (defschema account
-    (meta "Row type for accounts table."
-      (invariant (>= balance 0.0)))
-     balance:decimal
-     amount:decimal
-     ccy:string
-     auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
-     )
+    @doc   "Row type for accounts table."
+    @model (invariant (>= balance 0.0))
+    balance:decimal
+    amount:decimal
+    ccy:string
+    auth:string     ;; AUTH_KEYSET for keysets, pact id for pacts
+    )
 
   (deftable accounts:{account}
     "Main table for accounts module.")
@@ -39,8 +44,8 @@
     ))
 
   (defun transfer (src:string dest:string amount:decimal)
-    (meta "transfer AMOUNT from SRC to DEST"
-      (property (= (column-delta 'accounts 'balance) 0.0)))
+    @doc   "transfer AMOUNT from SRC to DEST"
+    @model (property conserves-mass)
     (debit src amount)
     (credit dest amount))
 
@@ -56,12 +61,8 @@
       ))
 
   (defun read-account-admin (id)
-    (meta "Read data for account ID, admin version"
-      (property
-        (when
-          (not (authorized-by 'accounts-admin-keyset))
-          abort)
-        ))
+    @doc   "Read data for account ID, admin version"
+    @model (property auth-required)
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 
@@ -70,7 +71,7 @@
 
   (defun fund-account (address amount)
     (enforce-keyset 'accounts-admin-keyset)
-    (enforce (>= amount 0.0))
+    (enforce (>= amount 0.0) "amount must be non-negative")
     (update accounts address
             { "balance": amount
             , "amount": amount }
@@ -91,7 +92,7 @@
 
  (defun credit (acct amount)
    "Credit AMOUNT to ACCT balance"
-   (enforce (>= amount 0.0))
+   (enforce (>= amount 0.0) "amount must be non-negative")
    (with-read accounts acct
               { "balance":= balance }
      (update accounts acct

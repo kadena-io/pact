@@ -8,11 +8,11 @@
 module Pact.Analyze.Eval.Term where
 
 import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (At (at), Lens', iforM, preview,
-                                              use, view, (%=), (%~), (&), (+=),
-                                              (.=), (.~), (<&>), (?~), (^.),
-                                              (^?), _1, _2, _Just)
-import           Control.Monad               (void)
+import           Control.Lens                (At (at), Lens', iforM, iforM_,
+                                              preview, use, view, (%=), (%~),
+                                              (&), (+=), (.=), (.~), (<&>),
+                                              (?~), (^.), (^?), _1, _2, _Just)
+import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
                                               runExcept)
@@ -30,7 +30,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite)
+                                              bOr, constrain, false, ite)
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -40,6 +40,7 @@ import           Data.Traversable            (for)
 import           System.Locale
 
 import qualified Pact.Types.Hash             as Pact
+import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
 import           Pact.Types.Version          (pactVersion)
@@ -63,11 +64,25 @@ instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
   evalO            = evalTermO
+  evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
 
+
+evalTermLogicalOp
+  :: LogicalOp
+  -> [Term Bool]
+  -> Analyze (S Bool)
+evalTermLogicalOp AndOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (eval b) (pure false)
+evalTermLogicalOp OrOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (pure true) (eval b)
+evalTermLogicalOp NotOp [a] = bnot <$> eval a
+evalTermLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
@@ -198,7 +213,7 @@ evalETerm tm = snd <$> evalExistential tm
 
 evalTermO :: Term Object -> Analyze Object
 evalTermO = \case
-  PureTerm a -> evalCoreO a
+  CoreTerm a -> evalCoreO a
 
   Read tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
@@ -249,33 +264,64 @@ evalTermO = \case
       Just False -> evalTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
+validateWrite :: Pact.WriteType -> Schema -> Object -> Analyze ()
+validateWrite writeType sch@(Schema sm) obj@(Object om) = do
+  -- For now we lump our three cases together:
+  --   1. write field not in schema
+  --   2. object and schema types don't match
+  --   3. unexpected partial write
+  let invalid = throwErrorNoLoc $ InvalidDbWrite writeType sch obj
+
+  iforM_ om $ \field (ety, _av) ->
+    case field `Map.lookup` sm of
+      Nothing -> invalid
+      Just ety'
+        | ety /= ety' -> invalid
+        | otherwise   -> pure ()
+
+  let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
+
+  when (requiresFullWrite && Map.size om /= Map.size sm) $
+    invalid
+
 evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
-  PureTerm a -> evalCore a
+  CoreTerm a -> evalCore a
 
   IfThenElse cond then' else' -> do
     testPasses <- evalTerm cond
     iteS testPasses (evalTerm then') (evalTerm else')
 
+  -- TODO: check that the body of enforce is pure
   Enforce cond -> do
     cond' <- evalTerm cond
     succeeds %= (&&& cond')
     pure true
 
+  EnforceOne conds -> do
+    initSucceeds <- use succeeds
+
+    successRecord <- for conds $ \cond -> do
+      succeeds .= true
+      _ <- evalTerm cond
+      use succeeds
+
+    let anySucceeded = bOr successRecord
+    succeeds .= (initSucceeds &&& anySucceeded)
+
+    pure true
+
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
-  --
-  -- TODO: we might want to eventually support checking each of the semantics
-  -- of Pact.Types.Runtime's WriteType.
-  --
-  Write tid tn rowKey obj -> do
-    Object obj' <- evalTermO obj
+  Write writeType tid tn schema rowKey objT -> do
+    obj@(Object fields) <- evalTermO objT
+    validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
     tableWritten tn .= true
     rowWriteCount tn sRk += 1
     tagAccessKey mtWrites tid sRk
 
-    aValFields <- iforM obj' $ \colName (fieldType, aval') -> do
+    aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
       tagAccessCell mtWrites tid colName aval'
@@ -313,8 +359,8 @@ evalTerm = \case
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
-        AnObj obj'' -> throwErrorNoLoc $ AValUnexpectedlyObj obj''
-        OpaqueVal   -> throwErrorNoLoc OpaqueValEncountered
+        AnObj obj' -> throwErrorNoLoc $ AValUnexpectedlyObj obj'
+        OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
     applyInvariants tn aValFields $ \invariants' ->
       let fs :: ZipList (Located (SBV Bool) -> Located (SBV Bool))
@@ -333,6 +379,7 @@ evalTerm = \case
       evalTerm body
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> evalTerm str
+  ReadDecimal str -> resolveDecimal =<< evalTerm str
 
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT
