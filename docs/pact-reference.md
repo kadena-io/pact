@@ -20,34 +20,71 @@ To start up the server issue `pact -s config.yaml`, with a suitable config.
 The `pact-lang-api` JS library is [available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
 
 
-`cmd` field and "Stringified" Transaction JSON {#cmd-field-and-stringified-transaction-json}
+`cmd` field and Payloads {#cmd-field-and-payloads}
 ---
 
 Transactions sent into the blockchain must be hashed in order to ensure the received command is correct; this is also
 the value that is signed with the required private keys. To ensure the JSON for the transaction matches byte-for-byte
-with the value used to make the hash, the JSON must be *encoded* into the payload as a string (i.e., ["stringified"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)).
+with the value used to make the hash, the JSON must be *encoded* into the payload as a string
+(i.e., ["stringified"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)).
+The `cmd` field supports two types of payloads: the `exec` payload and the `cont` payload.
 
-The [send](#send), [private](#private), and [local](#local) endpoints support the `cmd`
-field to hold the executable code and data of the transaction as an encoded string. The format of the JSON to be
-encoded is as follows.
+### `exec` Payload {#exec-payload}
+
+The `exec` payload holds the executable code and data as encoded strings.
+The [send](#send), [private](#private), and [local](#local) endpoints support this payload type in the `cmd` field.
+The format of the JSON to be encoded is as follows.
 
 ```javascript
 {
   "nonce": "[nonce value, needs to be unique for every call]",
   "payload": {
-    "exec": "[pact code to be executed]",
-    "data": {
-       /* arbitrary user data to accompany code */
+    "exec": {
+      "code": "[pact code to be executed]",
+      "data": {
+        /* arbitrary user data to accompany code */
+      }
     }
   }
 }
 ```
 
 When assembling the message, this JSON should be "stringified" and provided for the `cmd` field.
-If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field is a
-String of encoded, escaped JSON.
+If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field, along 
+with any code supplied, are a String of encoded, escaped JSON.
 
+### `cont` Payload {#cont-payload}
 
+The `cont` payload allows for continuing or rolling back [pacts](#pacts). This payload includes the following fields: the id of the pact involved,
+whether to rollback or continue the pact, the step number, and any step data needed. These payload fields have special constraints:
+
+- The pact id is equivalent to the id of the transaction where the pact was instantiated from.
+
+- Only one pact can be instantiated per transaction.  
+
+- If the pact is being rolled back, the step number must correspond to step that just executed.
+
+- If the pact is being continued, the step number must correspond to one more than the step that just executed.  
+
+Like the `exec` payload fields, the `cont` payload fields must also be encoded as strings. The [send](#send) endpoint
+supports this payload type in the `cmd` field. The format of the JSON to be encoded is as follows.
+
+```javascript
+{
+  "nonce": "[nonce value, needs to be unique for every call]",
+  "payload": {
+    "cont": {
+      "txid": [transaction id where pact instantiated]
+      "rollback": [true or false],
+      "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
+      "data": {
+        /* arbitrary user data to accompany step code */
+      }
+    }
+  }
+}
+```
+ 
 Endpoints
 ---
 
@@ -56,7 +93,7 @@ All endpoints are served from `api/v1`. Thus a `send` call would be sent to (htt
 ### /send
 
 Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
-See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -96,7 +133,7 @@ Response JSON:
 
 Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
 to securely encrypt for only sending and receiving entities to read.
-See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -193,7 +230,7 @@ Response JSON:
 
 Blocking/sync call to send a command for non-transactional execution. In a blockchain
 environment this would be a node-local "dirty read". Any database writes or changes
-to the environment are rolled back. See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+to the environment are rolled back. See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -258,8 +295,8 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 
 
 ### Request YAML file format {#request-yaml}
-Request yaml files takes two forms. An *execution* Request yaml file describes transaction code and 
-data. Meanwhile, a *continuation* Request yaml file describes continuing or rolling back [pacts](#pacts). 
+Request yaml files takes two forms. An *execution* Request yaml file describes the [`exec`](#exec-payload) payload.
+Meanwhile, a *continuation* Request yaml file describes the [`cont`](#cont-payload) payload. 
 
 The execution Request yaml takes the following keys:
 
@@ -778,7 +815,7 @@ Asynchronous Transaction Automation with "Pacts" {#pacts}
 ---
 
 "Pacts" are multi-stage sequential transactions that are defined as a single body of code called
-a [pact](#defpact). Definining a multi-step interaction as a pact ensures that transaction participants will
+a [pact](#defpact). Defining a multi-step interaction as a pact ensures that transaction participants will
 enact an agreed sequence of operations, and offers a special "execution scope" that can be used
 to create and manage data resources only during the lifetime of a given multi-stage interaction.
 
@@ -813,7 +850,7 @@ in, with the executing entity's node automatically sending the CONTINUATION comm
 Failure handling is dramatically different in public and private pacts.
 
 In public pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
-this step with a partcipant sending in a CANCEL message before the next step is executed. Once the last
+this step with a participant sending in a CANCEL message before the next step is executed. Once the last
 step of a pact has been executed, the pact will be finished and cannot be rolled back. Failures
 in public steps are no different than a failure in a non-pact transaction: all changes are rolled back.
 Pacts can therefore only be canceled explicitly and should be modeled to offer all necessary cancel options.
@@ -844,7 +881,7 @@ can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#e
 and [pact-state](#pact-state) repl functions to simulate pact executions.
 
 It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml) 
-yaml files into API requests.  
+yaml files into API requests with a `cont` payload.
 
 Dependency Management
 ---
