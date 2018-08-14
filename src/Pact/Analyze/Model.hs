@@ -37,6 +37,7 @@ import           Data.Text            (Text)
 import qualified Data.Text            as T
 import           Data.Traversable     (for)
 
+import qualified Pact.Types.Info      as Pact
 import           Pact.Types.Runtime   (tShow)
 import qualified Pact.Types.Typecheck as TC
 
@@ -252,14 +253,14 @@ showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
   Nothing               -> "[unknown]"
   Just (KeySetName ksn) -> "'" <> ksn
 
---
--- TODO: print the expression and/or the enforce message
---
 showAssert :: Located (SBV Bool) -> Text
-showAssert lsb = case SBV.unliteral (_located lsb) of
-  Nothing    -> "[ERROR:symbolic assert]"
-  Just True  -> "satisfied assertion"
-  Just False -> "failed to satisfy assertion"
+showAssert (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
+    Nothing    -> "[ERROR:symbolic assert]"
+    Just True  -> "satisfied assertion" <> context
+    Just False -> "failed to satisfy assertion" <> context
+
+  where
+    context = maybe "" (\(Pact.Code code, _) -> ": " <> code) mInfo
 
 --
 -- TODO: synthesize auth + ks connections more thoroughly. in this model
