@@ -238,11 +238,17 @@ tagRead = tagDbAccess TraceRead
 tagWrite :: Node -> Schema -> TranslateM TagId
 tagWrite = tagDbAccess TraceWrite
 
-tagAuth :: Node -> TranslateM TagId
-tagAuth node = do
+tagEnforce :: (Located TagId -> TraceEvent) -> Node -> TranslateM TagId
+tagEnforce mkEvent node = do
   tid <- genTagId
-  emit $ TraceAuth $ Located (nodeInfo node) tid
+  emit $ mkEvent $ Located (nodeInfo node) tid
   pure tid
+
+tagAssert :: Node -> TranslateM TagId
+tagAssert = tagEnforce TraceAssert
+
+tagAuth :: Node -> TranslateM TagId
+tagAuth = tagEnforce TraceAuth
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
 tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))
@@ -529,21 +535,22 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_Enforce _ cond -> do
     ESimple TBool condTerm <- translateNode cond
-    pure $ ESimple TBool $ Enforce condTerm
+    tid <- tagAssert $ cond ^. aNode
+    pure $ ESimple TBool $ Enforce (Just tid) condTerm
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
       ESimple TStr ksnT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ESimple TBool $ Enforce $ NameAuthorized tid ksnT
+      return $ ESimple TBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
       ESimple TKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ESimple TBool $ Enforce (KsAuthorized tid ksT)
+      return $ ESimple TBool $ Enforce Nothing $ KsAuthorized tid ksT
 
   AST_EnforceOne enforces -> do
     tms <- for enforces $ \enforce -> do

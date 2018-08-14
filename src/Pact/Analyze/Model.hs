@@ -66,6 +66,7 @@ allocModelTags locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
+    <*> allocAsserts
     <*> allocAuths
     <*> allocResult
     <*> allocPaths
@@ -100,10 +101,18 @@ allocModelTags locatedTm graph = ModelTags
     allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
     allocWrites = allocAccesses _TraceWrite
 
-    allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
-    allocAuths = fmap Map.fromList $
-      for (toListOf (traverse._TraceAuth) events) $ \(Located info tid) ->
+    allocEnforces
+      :: Prism' TraceEvent (Located TagId)
+      -> Symbolic (Map TagId (Located (SBV Bool)))
+    allocEnforces p = fmap Map.fromList $
+      for (toListOf (traverse.p) events) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
+
+    allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
+    allocAsserts = allocEnforces _TraceAssert
+
+    allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
+    allocAuths = allocEnforces _TraceAuth
 
     allocResult :: Symbolic (Located TVal)
     allocResult = sequence $ locatedTm <&> \case
@@ -133,19 +142,29 @@ linearizedTrace model = foldr
       let includeAndContinue = ExecutionTrace (event : futureEvents) mRes
           includeAndStop     = ExecutionTrace [event] Nothing
           skipAndContinue    = trace
+
+          handleEnforce
+            :: Lens' (ModelTags 'Concrete) (Map TagId (Located (SBV Bool)))
+            -> TagId
+            -> ExecutionTrace
+          handleEnforce l tid  =
+            let mPassesEnforce = model ^?
+                  modelTags.l.at tid._Just.located.to SBV.unliteral._Just
+            in case mPassesEnforce of
+                 Nothing ->
+                   error "impossible: missing enforce tag, or symbolic value"
+                 Just False ->
+                   includeAndStop
+                 Just True ->
+                   includeAndContinue
+
       in case event of
            TraceSubpathStart _ ->
              skipAndContinue
+           TraceAssert (_located -> tid) ->
+             handleEnforce mtAsserts tid
            TraceAuth (_located -> tid) ->
-             let mPassesEnforce = model ^?
-                   modelTags.mtAuths.at tid._Just.located.to SBV.unliteral._Just
-             in case mPassesEnforce of
-                  Nothing ->
-                    error "impossible: missing enforce tag, or symbolic value"
-                  Just False ->
-                    includeAndStop
-                  Just True ->
-                    includeAndContinue
+             handleEnforce mtAuths tid
            _ ->
              includeAndContinue)
     (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
@@ -234,6 +253,15 @@ showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
   Just (KeySetName ksn) -> "'" <> ksn
 
 --
+-- TODO: print the expression and/or the enforce message
+--
+showAssert :: Located (SBV Bool) -> Text
+showAssert lsb = case SBV.unliteral (_located lsb) of
+  Nothing    -> "[ERROR:symbolic assert]"
+  Just True  -> "satisfied assertion"
+  Just False -> "failed to satisfy assertion"
+
+--
 -- TODO: synthesize auth + ks connections more thoroughly. in this model
 --       report you will see the same keyset number show up in e.g. vars
 --       and reads, with no mention of that ks number under this ks/auths
@@ -269,6 +297,8 @@ showEvent ksProvs tags = \case
       display mtReads tid showRead
     TraceWrite (_located -> (tid, _)) ->
       display mtWrites tid showWrite
+    TraceAssert (_located -> tid) ->
+      display mtAsserts tid showAssert
     TraceAuth (_located -> tid) ->
       display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)
     TraceBind (_located -> (vid, _, _)) ->
@@ -306,7 +336,7 @@ showModel model =
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showEntireModel :: Model 'Concrete -> Text
-showEntireModel (Model args (ModelTags vars reads' writes auths res _paths) ksProvs _graph) =
+showEntireModel (Model args (ModelTags vars reads' writes asserts auths res _paths) ksProvs _graph) =
   T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
     [ ["Arguments:"]
     , indent <$> Foldable.toList (showVar <$> args)
@@ -319,6 +349,9 @@ showEntireModel (Model args (ModelTags vars reads' writes auths res _paths) ksPr
     , []
     , ["Writes:"]
     , indent <$> Foldable.toList (showAccess <$> writes)
+    , []
+    , ["Assertions:"]
+    , indent <$> Foldable.toList (showAssert <$> asserts)
     , []
     , ["Keysets:"]
     , indent <$> Foldable.toList
@@ -336,6 +369,7 @@ saturateModel =
     traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
     traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
+    traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
     traverseOf (modelTags.mtAuths.traversed.located)   fetchSbv    >=>
     traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>

@@ -41,6 +41,7 @@ newtype Vertex
 data TraceEvent
   = TraceRead (Located (TagId, Schema))
   | TraceWrite (Located (TagId, Schema))
+  | TraceAssert (Located TagId)
   | TraceAuth (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
   | TraceSubpathStart TagId
@@ -62,18 +63,20 @@ data Concreteness
 
 data ModelTags (c :: Concreteness)
   = ModelTags
-    { _mtVars   :: Map VarId (Located (Text, TVal))
+    { _mtVars    :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
-    , _mtReads  :: Map TagId (Located (S RowKey, Object))
+    , _mtReads   :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each read, in traversal order
-    , _mtWrites :: Map TagId (Located (S RowKey, Object))
+    , _mtWrites  :: Map TagId (Located (S RowKey, Object))
     -- ^ one per each write, in traversal order
-    , _mtAuths  :: Map TagId (Located (SBV Bool))
+    , _mtAsserts :: Map TagId (Located (SBV Bool))
+    -- ^ one per non-keyset enforcement
+    , _mtAuths   :: Map TagId (Located (SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that this
     -- includes all (enforce ks) and (enforce-keyset "ks") calls.
-    , _mtResult :: Located TVal
+    , _mtResult  :: Located TVal
     -- ^ return value of the function being checked
-    , _mtPaths  :: Map TagId (SBV Bool)
+    , _mtPaths   :: Map TagId (SBV Bool)
     -- ^ one at the start of the program, and on either side of the branches of
     -- each conditional. after a conditional, the path from before the
     -- conditional is resumed.

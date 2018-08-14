@@ -138,6 +138,15 @@ tagAccessCell lens' tid fieldName av = do
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
+tagAssert :: TagId -> S Bool -> Analyze ()
+tagAssert tid sb = do
+  mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing  -> pure ()
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
+
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
 tagAuth :: TagId -> Maybe Provenance -> S Bool -> Analyze ()
@@ -306,8 +315,9 @@ evalTerm = \case
       (tagSubpathStart elsePath *> evalTerm else')
 
   -- TODO: check that the body of enforce is pure
-  Enforce cond -> do
+  Enforce mTid cond -> do
     cond' <- evalTerm cond
+    maybe (pure ()) (\tid -> tagAssert tid cond') mTid
     succeeds %= (&&& cond')
     pure true
 
