@@ -88,12 +88,12 @@ supports this payload type in the `cmd` field. The format of the JSON to be enco
 Endpoints
 ---
 
-All endpoints are served from `api/v1`. Thus a `send` call would be sent to (http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send], if running on `localhost:8080`.
+All endpoints are served from `api/v1`. Thus a `send` call would be sent to <http://localhost:8080/api/v1/send>, if running on `localhost:8080`.
 
 ### /send
 
 Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
-See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
+See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -133,7 +133,7 @@ Response JSON:
 
 Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
 to securely encrypt for only sending and receiving entities to read.
-See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
+See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -230,7 +230,7 @@ Response JSON:
 
 Blocking/sync call to send a command for non-transactional execution. In a blockchain
 environment this would be a node-local "dirty read". Any database writes or changes
-to the environment are rolled back. See [`cmd` field format](#cmd-field-and-payloads) regarding the stringified JSON data.
+to the environment are rolled back. See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -295,8 +295,8 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 
 
 ### Request YAML file format {#request-yaml}
-Request yaml files takes two forms. An *execution* Request yaml file describes the [`exec`](#exec-payload) payload.
-Meanwhile, a *continuation* Request yaml file describes the [`cont`](#cont-payload) payload. 
+Request yaml files takes two forms. An *execution* Request yaml file describes the [exec](#exec-payload) payload.
+Meanwhile, a *continuation* Request yaml file describes the [cont](#cont-payload) payload.
 
 The execution Request yaml takes the following keys:
 

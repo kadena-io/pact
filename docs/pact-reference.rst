@@ -69,25 +69,25 @@ String of encoded, escaped JSON.
 
 The ``cont`` payload allows for continuing or rolling back
 `pacts <#pacts>`__. This payload includes the following fields: the id
-of the pact involved, whether to rollback or continue the pact, the
-number of the step involved, and any step data needed. These payload
-fields have special constraints:
+of the pact involved, whether to rollback or continue the pact, the step
+number, and any step data needed. These payload fields have special
+constraints:
 
 -  The pact id is equivalent to the id of the transaction where the pact
    was instantiated from.
 
 -  Only one pact can be instantiated per transaction.
 
--  If the pact is being rolledback, the step number must correspond to
+-  If the pact is being rolled back, the step number must correspond to
    step that just executed.
 
 -  If the pact is being continued, the step number must correspond to
    one more than the step that just executed.
 
-Like the ``exec`` payload, the ``cont`` payload fields must also be
-encoded as strings. The `send <#send>`__ enpoint supports this payload
-type in the ``cmd`` field. The format of the JSON to be encoded is as
-follows.
+Like the ``exec`` payload fields, the ``cont`` payload fields must also
+be encoded as strings. The `send <#send>`__ endpoint supports this
+payload type in the ``cmd`` field. The format of the JSON to be encoded
+is as follows.
 
 .. code:: javascript
 
@@ -97,7 +97,7 @@ follows.
        "cont": {
          "txid": [transaction id where pact instantiated]
          "rollback": [true or false],
-         "step": [step to be continued or rolledback, needs to be integer between 0 and (total number of steps - 1)]
+         "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
          "data": {
            /* arbitrary user data to accompany step code */
          }
@@ -109,15 +109,14 @@ Endpoints
 ---------
 
 All endpoints are served from ``api/v1``. Thus a ``send`` call would be
-sent to
-(http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send],
-if running on ``localhost:8080``.
+sent to http://localhost:8080/api/v1/send, if running on
+``localhost:8080``.
 
 /send
 ~~~~~
 
 Asynchronous submit of one or more *public* (unencrypted) commands to
-the blockchain. See ```cmd`` field format <#cmd-field-and-payloads>`__
+the blockchain. See `cmd field format <#cmd-field-and-payloads>`__
 regarding the stringified JSON data.
 
 Request JSON:
@@ -159,7 +158,7 @@ Response JSON:
 
 Asynchronous submit of one or more *private* commands to the blockchain,
 using supplied address info to securely encrypt for only sending and
-receiving entities to read. See ```cmd`` field
+receiving entities to read. See `cmd field
 format <#cmd-field-and-payloads>`__ regarding the stringified JSON data.
 
 Request JSON:
@@ -261,9 +260,9 @@ Response JSON:
 
 Blocking/sync call to send a command for non-transactional execution. In
 a blockchain environment this would be a node-local “dirty read”. Any
-database writes or changes to the environment are rolled back. See
-```cmd`` field format <#cmd-field-and-payloads>`__ regarding the
-stringified JSON data.
+database writes or changes to the environment are rolled back. See `cmd
+field format <#cmd-field-and-payloads>`__ regarding the stringified JSON
+data.
 
 Request JSON:
 
@@ -335,9 +334,9 @@ Request YAML file format
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 Request yaml files takes two forms. An *execution* Request yaml file
-describes the ```exec`` <#exec-payload>`__ payload. Meanwhile, a
-*continuation* Request yaml file describes the
-```cont`` <#cont-payload>`__ payload.
+describes the `exec <#exec-payload>`__ payload. Meanwhile, a
+*continuation* Request yaml file describes the `cont <#cont-payload>`__
+payload.
 
 The execution Request yaml takes the following keys:
 
@@ -1045,11 +1044,11 @@ Asynchronous Transaction Automation with “Pacts”
 ------------------------------------------------
 
 “Pacts” are multi-stage sequential transactions that are defined as a
-single body of code called a `pact <#defpact>`__. Definining a
-multi-step interaction as a pact ensures that transaction participants
-will enact an agreed sequence of operations, and offers a special
-“execution scope” that can be used to create and manage data resources
-only during the lifetime of a given multi-stage interaction.
+single body of code called a `pact <#defpact>`__. Defining a multi-step
+interaction as a pact ensures that transaction participants will enact
+an agreed sequence of operations, and offers a special “execution scope”
+that can be used to create and manage data resources only during the
+lifetime of a given multi-stage interaction.
 
 Pacts are a form of *coroutine*, which is a function that has multiple
 exit and re-entry points. Pacts are composed of `steps <#step>`__ such
@@ -1095,7 +1094,7 @@ Failures, Rollbacks and Cancels
 Failure handling is dramatically different in public and private pacts.
 
 In public pacts, a rollback expression is specified to indicate that the
-pact can be “cancelled” at this step with a partcipant sending in a
+pact can be “cancelled” at this step with a participant sending in a
 CANCEL message before the next step is executed. Once the last step of a
 pact has been executed, the pact will be finished and cannot be rolled
 back. Failures in public steps are no different than a failure in a
