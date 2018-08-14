@@ -538,8 +538,8 @@ As of Pact 2.3, Pact offers a powerful query mechanism for selecting
 multiple rows from a table. While visually similar to SQL, the
 `select <#select>`__ and `where <#where>`__ operations offer a
 *streaming interface* to a table, where the user provides filter
-functions, and then operates on the rowset as a list datastructure using
-`sort <#sort>`__ and other functions.
+functions, and then operates on the rowset as a list data structure
+using `sort <#sort>`__ and other functions.
 
 .. code:: lisp
 
@@ -551,7 +551,7 @@ functions, and then operates on the rowset as a list datastructure using
        (and? (where 'title (= "Programmer"))
              (where 'salary (< 90000))))))
 
-   ;; the same quert could be performed on a list with 'filter':
+   ;; the same query could be performed on a list with 'filter':
 
    (reverse (sort ['age]
      (filter (and? (where 'title (= "Programmer"))
@@ -589,7 +589,7 @@ Versioned History
 The key-row model is augmented by every change to column values being
 versioned by transaction ID. For example, a table with three columns
 “name”, “age”, and “role” might update “name” in transaction #1, and
-“age” and “role” in transaction #2. Retreiving historical data will
+“age” and “role” in transaction #2. Retrieving historical data will
 return just the change to “name” under transaction 1, and the change to
 “age” and “role” in transaction #2.
 
@@ -636,7 +636,7 @@ function application or const definition. Using this in project repl
 scripts is helpful to aid the developer in adding “just enough types” to
 make the typecheck succeed. Fully successful typecheck is usually a
 matter of providing schemas for all tables, and argument types for
-ancilliary functions that call ambigious or overloaded native functions.
+ancillary functions that call ambiguous or overloaded native functions.
 
 Formal Verification
 ~~~~~~~~~~~~~~~~~~~
@@ -802,7 +802,7 @@ Data Types
 ~~~~~~~~~~
 
 Pact code can be explicitly typed, and is always strongly-typed under
-the hood as the native functions perform strict typechecking as
+the hood as the native functions perform strict type checking as
 indicated in their documented type signatures. language, but does use
 fixed type representations “under the hood” and does no coercion of
 types, so is strongly-typed nonetheless.
@@ -1446,7 +1446,7 @@ bless
 
 Within a module declaration, bless a previous version of that module as
 identified by HASH. See `Dependency
-managment <#dependency-management>`__ for a discussion of the blessing
+management <#dependency-management>`__ for a discussion of the blessing
 mechanism.
 
 .. code:: lisp
@@ -1675,7 +1675,7 @@ references.
 Atoms
 ~~~~~
 
-Atoms are non-reserved barewords starting with a letter or allowed
+Atoms are non-reserved bare words starting with a letter or allowed
 symbol, and containing letters, digits and allowed symbols. Allowed
 symbols are ``%#+-_&$@<>=?*!|/``. Atoms must resolve to a variable bound
 by a `defun <#defun>`__, `defpact <#defpact>`__, `binding <#bindings>`__

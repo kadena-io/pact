@@ -452,7 +452,7 @@ to the Sales table.
 As of Pact 2.3, Pact offers a powerful query mechanism for selecting multiple rows from a table.
 While visually similar to SQL, the [select](#select) and [where](#where) operations offer a
 _streaming interface_ to a table, where the user provides filter functions, and then operates
-on the rowset as a list datastructure using [sort](#sort) and other functions.
+on the rowset as a list data structure using [sort](#sort) and other functions.
 
 ```lisp
 
@@ -463,7 +463,7 @@ on the rowset as a list datastructure using [sort](#sort) and other functions.
     (and? (where 'title (= "Programmer"))
           (where 'salary (< 90000))))))
 
-;; the same quert could be performed on a list with 'filter':
+;; the same query could be performed on a list with 'filter':
 
 (reverse (sort ['age]
   (filter (and? (where 'title (= "Programmer"))
@@ -491,7 +491,7 @@ to ensure *totality* and avoid needless, unsafe control-flow surrounding null va
 
 The key-row model is augmented by every change to column values being versioned by transaction ID.
 For example, a table with three columns "name", "age", and "role" might update "name" in transaction #1,
-and "age" and "role" in transaction #2. Retreiving historical data will return just the change to "name"
+and "age" and "role" in transaction #2. Retrieving historical data will return just the change to "name"
 under transaction 1, and the change to "age" and "role" in transaction #2.
 
 ### Back-ends {#backends}
@@ -525,7 +525,7 @@ With the [typecheck](#typecheck) repl command, the Pact interpreter will analyze
 and attempt to infer types on every variable, function application or const definition.
 Using this in project repl scripts is helpful to aid the developer in adding "just enough types"
 to make the typecheck succeed. Fully successful typecheck is usually a matter of providing
-schemas for all tables, and argument types for ancilliary functions that call ambigious or
+schemas for all tables, and argument types for ancillary functions that call ambiguous or
 overloaded native functions.
 
 ### Formal Verification
@@ -648,7 +648,7 @@ Module-global constant values can be declared with [defconst](#defconst).
 ### Data Types {#datatypes}
 
 Pact code can be explicitly typed, and is always strongly-typed under the hood as the native
-functions perform strict typechecking as indicated in their documented type signatures.
+functions perform strict type checking as indicated in their documented type signatures.
 language, but does use fixed type representations "under the hood"
 and does no coercion of types, so is strongly-typed nonetheless.
 
@@ -883,7 +883,7 @@ and [pact-state](#pact-state) repl functions to simulate pact executions.
 It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml) 
 yaml files into API requests with a `cont` payload.
 
-Dependency Management
+Dependency Management {#dependency-management}
 ---
 Pact supports a number of features to manage a module's dependencies on other Pact modules.
 
@@ -1138,7 +1138,7 @@ by whatever tool recognizes ATOM.
 ```
 
 Within a module declaration, bless a previous version of that module as identified by HASH.
-See [Dependency managment](#dependency-management) for a discussion of the blessing mechanism.
+See [Dependency management](#dependency-management) for a discussion of the blessing mechanism.
 
 ```lisp
 (module provider 'keyset
@@ -1335,7 +1335,7 @@ Expressions may be [literals](#literals), atoms, s-expressions, or references.
 
 ### Atoms {#atom}
 
-Atoms are non-reserved barewords starting with a letter or allowed symbol, and containing letters,
+Atoms are non-reserved bare words starting with a letter or allowed symbol, and containing letters,
 digits and allowed symbols. Allowed symbols are `%#+-_&$@<>=?*!|/`. Atoms must
 resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#bindings) form,
 or to symbols imported into the namespace with [use](#use).
