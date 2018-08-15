@@ -71,7 +71,7 @@ data ModelTags (c :: Concreteness)
     -- ^ one per each write, in traversal order
     , _mtAsserts :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
-    , _mtAuths   :: Map TagId (Located (SBV Bool))
+    , _mtAuths   :: Map TagId (Located (S KeySet, SBV Bool))
     -- ^ one per each enforce/auth check, in traversal order. note that this
     -- includes all (enforce ks) and (enforce-keyset "ks") calls.
     , _mtResult  :: Located TVal
