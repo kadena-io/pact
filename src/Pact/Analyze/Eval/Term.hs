@@ -31,7 +31,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              bOr, constrain, false, ite)
+                                              constrain, false, ite)
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -328,15 +328,20 @@ evalTerm = \case
   EnforceOne conds -> do
     initSucceeds <- use succeeds
 
-    successRecord <- for conds $ \cond -> do
+    attempts <- for conds $ \cond -> do
       succeeds .= true
-      _ <- evalTerm cond
-      use succeeds
+      (,) <$> evalTerm cond <*> use succeeds
 
-    let anySucceeded = bOr successRecord
+    -- Use the result from the first success.
+    let (result, anySucceeded) = foldr
+          (\(res, success) rest ->
+            iteS success (res, true) rest)
+          (true, false)
+          attempts
+
     succeeds .= (initSucceeds &&& anySucceeded)
 
-    pure true
+    pure result
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
