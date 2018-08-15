@@ -20,43 +20,80 @@ To start up the server issue `pact -s config.yaml`, with a suitable config.
 The `pact-lang-api` JS library is [available via npm](https://www.npmjs.com/package/pact-lang-api) for web development.
 
 
-`cmd` field and "Stringified" Transaction JSON {#cmd-field-and-stringified-transaction-json}
+`cmd` field and Payloads {#cmd-field-and-payloads}
 ---
 
 Transactions sent into the blockchain must be hashed in order to ensure the received command is correct; this is also
 the value that is signed with the required private keys. To ensure the JSON for the transaction matches byte-for-byte
-with the value used to make the hash, the JSON must be *encoded* into the payload as a string (i.e., ["stringified"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)).
+with the value used to make the hash, the JSON must be *encoded* into the payload as a string
+(i.e., ["stringified"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)).
+The `cmd` field supports two types of payloads: the `exec` payload and the `cont` payload.
 
-The [send](#send), [private](#private), and [local](#local) endpoints support the `cmd`
-field to hold the executable code and data of the transaction as an encoded string. The format of the JSON to be
-encoded is as follows.
+### `exec` Payload {#exec-payload}
+
+The `exec` payload holds the executable code and data as encoded strings.
+The [send](#send), [private](#private), and [local](#local) endpoints support this payload type in the `cmd` field.
+The format of the JSON to be encoded is as follows.
 
 ```javascript
 {
   "nonce": "[nonce value, needs to be unique for every call]",
   "payload": {
-    "exec": "[pact code to be executed]",
-    "data": {
-       /* arbitrary user data to accompany code */
+    "exec": {
+      "code": "[pact code to be executed]",
+      "data": {
+        /* arbitrary user data to accompany code */
+      }
     }
   }
 }
 ```
 
 When assembling the message, this JSON should be "stringified" and provided for the `cmd` field.
-If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field is a
-String of encoded, escaped JSON.
+If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field, along 
+with any code supplied, are a String of encoded, escaped JSON.
 
+### `cont` Payload {#cont-payload}
 
+The `cont` payload allows for continuing or rolling back [pacts](#pacts). This payload includes the following fields: the id of the pact involved,
+whether to rollback or continue the pact, the step number, and any step data needed. These payload fields have special constraints:
+
+- The pact id is equivalent to the id of the transaction where the pact was instantiated from.
+
+- Only one pact can be instantiated per transaction.  
+
+- If the pact is being rolled back, the step number must correspond to step that just executed.
+
+- If the pact is being continued, the step number must correspond to one more than the step that just executed.  
+
+Like the `exec` payload fields, the `cont` payload fields must also be encoded as strings. The [send](#send) endpoint
+supports this payload type in the `cmd` field. The format of the JSON to be encoded is as follows.
+
+```javascript
+{
+  "nonce": "[nonce value, needs to be unique for every call]",
+  "payload": {
+    "cont": {
+      "txid": [transaction id where pact instantiated]
+      "rollback": [true or false],
+      "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
+      "data": {
+        /* arbitrary user data to accompany step code */
+      }
+    }
+  }
+}
+```
+ 
 Endpoints
 ---
 
-All endpoints are served from `api/v1`. Thus a `send` call would be sent to (http://localhost:8080/api/v1/send)[http://localhost:8080/api/v1/send], if running on `localhost:8080`.
+All endpoints are served from `api/v1`. Thus a `send` call would be sent to <http://localhost:8080/api/v1/send>, if running on `localhost:8080`.
 
 ### /send
 
 Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
-See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -96,7 +133,7 @@ Response JSON:
 
 Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
 to securely encrypt for only sending and receiving entities to read.
-See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -193,7 +230,7 @@ Response JSON:
 
 Blocking/sync call to send a command for non-transactional execution. In a blockchain
 environment this would be a node-local "dirty read". Any database writes or changes
-to the environment are rolled back. See [`cmd` field format](#cmd-field-and-stringified-transaction-json) regarding the stringified JSON data.
+to the environment are rolled back. See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
 
@@ -257,10 +294,13 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 ```
 
 
-### Request YAML file format
-The Request yaml takes the following keys:
+### Request YAML file format {#request-yaml}
+Request yaml files takes two forms. An *execution* Request yaml file describes the [exec](#exec-payload) payload.
+Meanwhile, a *continuation* Request yaml file describes the [cont](#cont-payload) payload.
 
-```
+The execution Request yaml takes the following keys:
+
+```yaml
   code: Transaction code
   codeFile: Transaction code file
   data: JSON transaction data
@@ -274,6 +314,23 @@ The Request yaml takes the following keys:
   to: entity names for addressing private messages
 ```
 
+The continuation Request yaml takes the following keys:
+
+```yaml
+  type: "cont"
+  txId: Integer transaction id of pact
+  step: Integer next step of a pact
+  rollback: Boolean for rollingback a pact
+  data: JSON transaction data
+  dataFile: JSON transaction data file
+  keyPairs: list of key pairs for signing (use pact -g to generate): [
+    public: base 16 public key
+    secret: base 16 secret key
+    ]
+  nonce: optional request nonce, will use current time if not provided
+  from: entity name for addressing private messages
+  to: entity names for addressing private messages
+```
 
 
 
@@ -395,7 +452,7 @@ to the Sales table.
 As of Pact 2.3, Pact offers a powerful query mechanism for selecting multiple rows from a table.
 While visually similar to SQL, the [select](#select) and [where](#where) operations offer a
 _streaming interface_ to a table, where the user provides filter functions, and then operates
-on the rowset as a list datastructure using [sort](#sort) and other functions.
+on the rowset as a list data structure using [sort](#sort) and other functions.
 
 ```lisp
 
@@ -406,7 +463,7 @@ on the rowset as a list datastructure using [sort](#sort) and other functions.
     (and? (where 'title (= "Programmer"))
           (where 'salary (< 90000))))))
 
-;; the same quert could be performed on a list with 'filter':
+;; the same query could be performed on a list with 'filter':
 
 (reverse (sort ['age]
   (filter (and? (where 'title (= "Programmer"))
@@ -434,7 +491,7 @@ to ensure *totality* and avoid needless, unsafe control-flow surrounding null va
 
 The key-row model is augmented by every change to column values being versioned by transaction ID.
 For example, a table with three columns "name", "age", and "role" might update "name" in transaction #1,
-and "age" and "role" in transaction #2. Retreiving historical data will return just the change to "name"
+and "age" and "role" in transaction #2. Retrieving historical data will return just the change to "name"
 under transaction 1, and the change to "age" and "role" in transaction #2.
 
 ### Back-ends {#backends}
@@ -468,7 +525,7 @@ With the [typecheck](#typecheck) repl command, the Pact interpreter will analyze
 and attempt to infer types on every variable, function application or const definition.
 Using this in project repl scripts is helpful to aid the developer in adding "just enough types"
 to make the typecheck succeed. Fully successful typecheck is usually a matter of providing
-schemas for all tables, and argument types for ancilliary functions that call ambigious or
+schemas for all tables, and argument types for ancillary functions that call ambiguous or
 overloaded native functions.
 
 ### Formal Verification
@@ -591,7 +648,7 @@ Module-global constant values can be declared with [defconst](#defconst).
 ### Data Types {#datatypes}
 
 Pact code can be explicitly typed, and is always strongly-typed under the hood as the native
-functions perform strict typechecking as indicated in their documented type signatures.
+functions perform strict type checking as indicated in their documented type signatures.
 language, but does use fixed type representations "under the hood"
 and does no coercion of types, so is strongly-typed nonetheless.
 
@@ -758,7 +815,7 @@ Asynchronous Transaction Automation with "Pacts" {#pacts}
 ---
 
 "Pacts" are multi-stage sequential transactions that are defined as a single body of code called
-a [pact](#defpact). Definining a multi-step interaction as a pact ensures that transaction participants will
+a [pact](#defpact). Defining a multi-step interaction as a pact ensures that transaction participants will
 enact an agreed sequence of operations, and offers a special "execution scope" that can be used
 to create and manage data resources only during the lifetime of a given multi-stage interaction.
 
@@ -780,20 +837,21 @@ has entity indicators and others do not, this results in an error at load time.
 ### Public Pacts
 Public pacts are comprised of steps that can only execute in strict sequence. Any enforcement of who can execute a step
 happens within the code of the step expression. All steps are "manually" initiated by some participant
-in the transaction with RESUME commands sent into the blockchain.
+in the transaction with CONTINUATION commands sent into the blockchain.
 
 ### Private Pacts
 Private pacts are comprised of steps that execute in sequence where each step only executes on entity
 nodes as selected by the provided 'entity' argument in the step; other entity nodes "skip" the step.
 Private pacts are executed automatically by the blockchain platform after the initial step is sent
-in, with the executing entity's node automatically sending the RESUME command for the next step.
+in, with the executing entity's node automatically sending the CONTINUATION command for the next step.
 
 ### Failures, Rollbacks and Cancels
 
 Failure handling is dramatically different in public and private pacts.
 
 In public pacts, a rollback expression is specified to indicate that the pact can be "cancelled" at
-this step with a partipant sending in a CANCEL message before the next step is executed. Failures
+this step with a participant sending in a CANCEL message before the next step is executed. Once the last
+step of a pact has been executed, the pact will be finished and cannot be rolled back. Failures
 in public steps are no different than a failure in a non-pact transaction: all changes are rolled back.
 Pacts can therefore only be canceled explicitly and should be modeled to offer all necessary cancel options.
 
@@ -822,9 +880,10 @@ Pacts
 can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
 and [pact-state](#pact-state) repl functions to simulate pact executions.
 
-It is not possible yet (as of Pact 2.3.0) to simulate pact execution in the pact server API.
+It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml) 
+yaml files into API requests with a `cont` payload.
 
-Dependency Management
+Dependency Management {#dependency-management}
 ---
 Pact supports a number of features to manage a module's dependencies on other Pact modules.
 
@@ -1079,7 +1138,7 @@ by whatever tool recognizes ATOM.
 ```
 
 Within a module declaration, bless a previous version of that module as identified by HASH.
-See [Dependency managment](#dependency-management) for a discussion of the blessing mechanism.
+See [Dependency management](#dependency-management) for a discussion of the blessing mechanism.
 
 ```lisp
 (module provider 'keyset
