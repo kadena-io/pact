@@ -1335,7 +1335,7 @@ Expressions may be [literals](#literals), atoms, s-expressions, or references.
 
 ### Atoms {#atom}
 
-Atoms are non-reserved bare words starting with a letter or allowed symbol, and containing letters,
+Atoms are non-reserved barewords starting with a letter or allowed symbol, and containing letters,
 digits and allowed symbols. Allowed symbols are `%#+-_&$@<>=?*!|/`. Atoms must
 resolve to a variable bound by a [defun](#defun), [defpact](#defpact), [binding](#bindings) form,
 or to symbols imported into the namespace with [use](#use).
