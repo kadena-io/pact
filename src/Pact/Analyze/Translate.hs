@@ -15,10 +15,10 @@ module Pact.Analyze.Translate where
 
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, makeLenses, cons, snoc, use,
-                                             view, (<&>), (?~), (^.), (^?),
-                                             (%~), (.~), (<&>), (%=), (.=),
-                                             (?=), _1, _2)
+import           Control.Lens               (Lens', at, makeLenses, cons, snoc,
+                                             use, view, (<&>), (?~), (^.),
+                                             (^?), (%~), (.~), (<&>), (%=),
+                                             (.=), (?=))
 import           Control.Monad              ((>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -109,10 +109,19 @@ describeTranslateFailureNoLoc = \case
   NoKeys _node  -> "`keys` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
-mkTranslateEnv :: [Arg] -> Map Node (Text, VarId)
-mkTranslateEnv = foldl'
-  (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
-  Map.empty
+data TranslateEnv
+  = TranslateEnv
+    { _teInfo     :: Info
+    , _teNodeVars :: Map Node (Text, VarId)
+    }
+
+mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
+mkTranslateEnv info args = TranslateEnv info nodeVars
+  where
+    nodeVars = foldl'
+      (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
+      Map.empty
+      args
 
 data TranslateState
   = TranslateState
@@ -175,36 +184,45 @@ data TranslateState
     }
 
 makeLenses ''TranslateFailure
+makeLenses ''TranslateEnv
 makeLenses ''TranslateState
 
 instance HasVarId TranslateState where
   varId = tsNextVarId
 
+class HasInfo e where
+  envInfo :: Lens' e Info
+
+instance HasInfo Info where
+  envInfo = id
+
+instance HasInfo TranslateEnv where
+  envInfo = teInfo
+
 newtype TranslateM a
   = TranslateM
-    { unTranslateM :: ReaderT (Info, Map Node (Text, VarId))
+    { unTranslateM :: ReaderT TranslateEnv
                         (StateT TranslateState
                           (Except TranslateFailure))
                         a
     }
-  deriving (Functor, Applicative, Monad,
-    MonadReader (Info, Map Node (Text, VarId)), MonadState TranslateState,
-    MonadError TranslateFailure)
+  deriving (Functor, Applicative, Monad, MonadReader TranslateEnv,
+    MonadState TranslateState, MonadError TranslateFailure)
 
 instance MonadFail TranslateM where
   fail s = do
-    info <- view _1
+    info <- view envInfo
     throwError (TranslateFailure info (MonadFailure s))
 
 -- * Translation
 
 -- | Call when entering a node to set the current context
 nodeContext :: Node -> TranslateM a -> TranslateM a
-nodeContext node = local (_1 .~ nodeToInfo node)
+nodeContext node = local (envInfo .~ nodeToInfo node)
 
 -- | Call when entering an ast node to set the current context
 astContext :: AST Node -> TranslateM a -> TranslateM a
-astContext ast = local (_1 .~ astToInfo ast)
+astContext ast = local (envInfo .~ astToInfo ast)
 
 emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
@@ -256,7 +274,7 @@ tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))
 withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
 withNewVarId varNode varName action = do
   vid <- genVarId
-  local (_2 . at varNode ?~ (varName, vid)) (action vid)
+  local (teNodeVars.at varNode ?~ (varName, vid)) (action vid)
 
 -- Map.union is left-biased. The more explicit name makes this extra clear.
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
@@ -310,10 +328,10 @@ maybeTranslateType' f = \case
   TyFun _          -> empty
 
 throwError'
-  :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
+  :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => TranslateFailureNoLoc -> m a
 throwError' err = do
-  info <- view _1
+  info <- view envInfo
   throwError $ TranslateFailure info err
 
 -- | Generates a new 'Vertex', setting it as the head, returning the
@@ -362,15 +380,19 @@ joinPaths branches = do
     addPathEdge path rejoinEdge
 
 translateType
-  :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
+  :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => Node -> m EType
 translateType node = case _aTy node of
   (maybeTranslateType -> Just ety) -> pure ety
   ty                               -> throwError' $ UnhandledType node ty
 
 translateArg
-  :: (MonadState s m, HasVarId s, MonadError TranslateFailure m,
-      MonadReader (Info, b) m)
+  :: ( MonadState s m
+     , HasVarId s
+     , MonadReader r m
+     , HasInfo r
+     , MonadError TranslateFailure m
+     )
   => Named Node
   -> m Arg
 translateArg (Named nm node _) = do
@@ -388,7 +410,7 @@ translateSchema node = do
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
   []       -> do
-    info <- view _1
+    info <- view envInfo
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
@@ -440,7 +462,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
         (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
 
   fmap (mapExistential translateLet) $
-    local (_2 %~ unionPreferring nodeToNameVid) $
+    local (teNodeVars %~ unionPreferring nodeToNameVid) $
       translateBody bodyA
 
 translateNode :: AST Node -> TranslateM ETerm
@@ -470,7 +492,7 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_InlinedApp body -> translateBody body
 
   AST_Var node -> do
-    Just (varName, vid) <- view (_2 . at node)
+    Just (varName, vid) <- view $ teNodeVars.at node
     ty      <- translateType node
     pure $ case ty of
       EType ty'        -> ESimple ty'    $ CoreTerm $ Var vid varName
@@ -490,7 +512,7 @@ translateNode astNode = astContext astNode $ case astNode of
     LTime t    -> pure $ ESimple TTime (lit (mkTime t))
 
   AST_NegativeVar node -> do
-    Just (name, vid) <- view (_2 . at node)
+    Just (name, vid) <- view $ teNodeVars.at node
     EType ty <- translateType node
     case ty of
       TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Negate $
@@ -844,7 +866,7 @@ runTranslation info pactArgs body = do
       -- Note we add () as a second value in the reader context because some
       -- methods require a reader in a pair.
       runStateT
-        (runReaderT (traverse translateArg pactArgs) (info, ()))
+        (runReaderT (traverse translateArg pactArgs) info)
         (VarId 1)
 
     runBodyTranslation
@@ -858,4 +880,4 @@ runTranslation info pactArgs body = do
           translation = translateBody body
                      <* extendPath -- form final edge for any remaining events
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
-           runReaderT (unTranslateM translation) (info, mkTranslateEnv args)
+           runReaderT (unTranslateM translation) (mkTranslateEnv info args)
