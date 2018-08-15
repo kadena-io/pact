@@ -322,6 +322,9 @@ evalTerm = \case
     succeeds %= (&&& cond')
     pure true
 
+  -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
+  -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
+  -- list.
   EnforceOne conds -> do
     initSucceeds <- use succeeds
 

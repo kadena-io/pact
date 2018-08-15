@@ -548,7 +548,8 @@ spec = describe "analyze" $ do
              (enforce true)]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
 
   describe "enforce-one.3" $ do
     let code =
@@ -559,7 +560,7 @@ spec = describe "analyze" $ do
              (enforce false)]))
           |]
 
-    expectPass code $ Valid $ PNot $ Inj Success
+    expectPass code $ Valid $ PNot Success'
 
   describe "enforce-one.4" $ do
     let code =
@@ -571,7 +572,8 @@ spec = describe "analyze" $ do
                   (enforce false))]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
 
   -- This one is a little subtle. Even though the `or` would evaluate to
   -- `true`, one of its `enforce`s threw, so it fails.
@@ -584,11 +586,11 @@ spec = describe "analyze" $ do
                  (enforce true))]))
           |]
 
-    expectPass code $ Valid $ PNot $ Inj Success
+    expectPass code $ Valid $ PNot Success'
 
   -- This one is also subtle. `or` short-circuits so the second `enforce` never
   -- throws.
-  describe "enforce-one.5" $ do
+  describe "enforce-one.6" $ do
     let code =
           [text|
         (defun test:bool ()
@@ -597,7 +599,24 @@ spec = describe "analyze" $ do
                  (enforce false))]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
+
+  describe "enforce-one.7" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one ""
+                [(enforce false)
+                 (enforce-one "" ; nested enforce-one
+                   [(enforce false)
+                    (enforce true)
+                    (enforce false)])
+                 (enforce false)]))
+          |]
+
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
 
   describe "logical short-circuiting" $ do
     describe "and" $ do
