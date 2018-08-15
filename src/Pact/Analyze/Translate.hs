@@ -238,17 +238,17 @@ tagRead = tagDbAccess TraceRead
 tagWrite :: Node -> Schema -> TranslateM TagId
 tagWrite = tagDbAccess TraceWrite
 
-tagEnforce :: (Located TagId -> TraceEvent) -> Node -> TranslateM TagId
-tagEnforce mkEvent node = do
+tagAssert :: Node -> TranslateM TagId
+tagAssert node = do
   tid <- genTagId
-  emit $ mkEvent $ Located (nodeInfo node) tid
+  emit $ TraceAssert $ Located (nodeInfo node) tid
   pure tid
 
-tagAssert :: Node -> TranslateM TagId
-tagAssert = tagEnforce TraceAssert
-
 tagAuth :: Node -> TranslateM TagId
-tagAuth = tagEnforce TraceAuth
+tagAuth node = do
+  tid <- genTagId
+  emit $ TraceAuth $ Located (nodeInfo node) tid
+  pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
 tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))

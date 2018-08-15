@@ -149,16 +149,17 @@ tagAssert tid sb = do
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
-tagAuth :: TagId -> Maybe Provenance -> S Bool -> Analyze ()
-tagAuth tid mKsProv sb = do
-  mTag <- preview $ aeModelTags.mtAuths.at tid._Just.located
-  case mTag of
+tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
+tagAuth tid sKs sb = do
+  mTup <- preview $ aeModelTags.mtAuths.at tid._Just.located
+  case mTup of
     -- NOTE: ATM we allow a "partial" model. we could also decide to
     -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
-    Just sbv -> do
+    Just (ksTag, sbv) -> do
+      addConstraint $ sansProv $ ksTag .== sKs
       addConstraint $ sansProv $ sbv .== _sSbv sb
-      globalState.gasKsProvenances.at tid .= mKsProv
+      globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
 tagSubpathStart :: TagId -> Analyze ()
 tagSubpathStart tid = do
@@ -407,13 +408,14 @@ evalTerm = \case
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT
     authorized <- ksAuthorized ks
-    tagAuth tid (ks ^. sProv) authorized
+    tagAuth tid ks authorized
     pure authorized
 
   NameAuthorized tid str -> do
     ksn <- symKsName <$> evalTerm str
+    ks <- resolveKeySet ksn
     authorized <- nameAuthorized ksn
-    tagAuth tid (Just $ fromNamedKs ksn) authorized
+    tagAuth tid ks authorized
     pure authorized
 
   PactVersion -> pure $ literalS $ T.unpack pactVersion

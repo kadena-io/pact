@@ -18,21 +18,22 @@ module Pact.Analyze.Model
   , showModel
   ) where
 
-import           Control.Lens         (Lens', Prism', at, ifoldr, imap, to,
-                                       toListOf, traverseOf, traversed, (<&>),
-                                       (?~), (^.), (^?), _1, _2, _Just)
-import           Control.Monad        ((>=>), when)
+import           Control.Lens         (Lens', Prism', Traversal', at, ifoldr,
+                                       imap, to, toListOf, traverseOf,
+                                       traversed, (<&>), (?~), (^.), (^?), _1,
+                                       _2, _Just)
+import           Control.Monad        (when, (>=>))
 import           Data.Bool            (bool)
 import qualified Data.Foldable        as Foldable
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
 import           Data.Monoid          ((<>))
-import           Data.Set             (Set)
-import qualified Data.Set             as Set
 import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
 import           Data.Text            (Text)
 import qualified Data.Text            as T
 import           Data.Traversable     (for)
@@ -84,15 +85,15 @@ allocModelTags locatedTm graph = ModelTags
         \(Located info (vid, nm, ety)) ->
           allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
 
-    allocRowKey :: Symbolic (S RowKey)
-    allocRowKey = sansProv <$> alloc
+    allocS :: SymWord a => Symbolic (S a)
+    allocS = sansProv <$> alloc
 
     allocAccesses
       :: Prism' TraceEvent (Located (TagId, Schema))
       -> Symbolic (Map TagId (Located (S RowKey, Object)))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $ \(Located info (tid, schema)) -> do
-        srk <- allocRowKey
+        srk <- allocS
         obj <- allocSchema schema
         pure (tid, Located info (srk, obj))
 
@@ -102,18 +103,15 @@ allocModelTags locatedTm graph = ModelTags
     allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
     allocWrites = allocAccesses _TraceWrite
 
-    allocEnforces
-      :: Prism' TraceEvent (Located TagId)
-      -> Symbolic (Map TagId (Located (SBV Bool)))
-    allocEnforces p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(Located info tid) ->
+    allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
+    allocAsserts = fmap Map.fromList $
+      for (toListOf (traverse._TraceAssert) events) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
 
-    allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
-    allocAsserts = allocEnforces _TraceAssert
-
-    allocAuths :: Symbolic (Map TagId (Located (SBV Bool)))
-    allocAuths = allocEnforces _TraceAuth
+    allocAuths :: Symbolic (Map TagId (Located (S KeySet, SBV Bool)))
+    allocAuths = fmap Map.fromList $
+      for (toListOf (traverse._TraceAuth) events) $ \(Located info tid) ->
+        (tid,) . Located info <$> ((,) <$> allocS <*> alloc)
 
     allocResult :: Symbolic (Located TVal)
     allocResult = sequence $ locatedTm <&> \case
@@ -145,12 +143,11 @@ linearizedTrace model = foldr
           skipAndContinue    = trace
 
           handleEnforce
-            :: Lens' (ModelTags 'Concrete) (Map TagId (Located (SBV Bool)))
-            -> TagId
+            :: Traversal' (ModelTags 'Concrete) (SBV Bool)
             -> ExecutionTrace
-          handleEnforce l tid  =
-            let mPassesEnforce = model ^?
-                  modelTags.l.at tid._Just.located.to SBV.unliteral._Just
+          handleEnforce tagsBool =
+            let mPassesEnforce =
+                  model ^? modelTags.tagsBool.to (SBV.unliteral)._Just
             in case mPassesEnforce of
                  Nothing ->
                    error "impossible: missing enforce tag, or symbolic value"
@@ -163,9 +160,9 @@ linearizedTrace model = foldr
            TraceSubpathStart _ ->
              skipAndContinue
            TraceAssert (_located -> tid) ->
-             handleEnforce mtAsserts tid
+             handleEnforce $ mtAsserts.at tid._Just.located
            TraceAuth (_located -> tid) ->
-             handleEnforce mtAuths tid
+             handleEnforce $ mtAuths.at tid._Just.located._2
            _ ->
              includeAndContinue)
     (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
@@ -218,7 +215,7 @@ showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
-    EObjectTy _ -> error "showModel: impossible object type for AVal"
+    EObjectTy _         -> error "showModel: impossible object type for AVal"
     EType (_ :: Type t) -> showSbv (SBVI.SBV sval :: SBV t)
 
 showObject :: Object -> Text
@@ -262,32 +259,29 @@ showAssert (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
   where
     context = maybe "" (\(Pact.Code code, _) -> ": " <> code) mInfo
 
---
--- TODO: synthesize auth + ks connections more thoroughly. in this model
---       report you will see the same keyset number show up in e.g. vars
---       and reads, with no mention of that ks number under this ks/auths
---       section:
---
-showAuth :: Maybe Provenance -> Located (SBV Bool) -> Text
-showAuth mProv lsb = status <> " " <> ksDescription
+showAuth :: Maybe Provenance -> Located (S KeySet, SBV Bool) -> Text
+showAuth mProv (_located -> (srk, sbool)) = status <> " " <> ksDescription
   where
-    status = case SBV.unliteral (_located lsb) of
+    status = case SBV.unliteral sbool of
       Nothing    -> "[ERROR:symbolic auth]"
       Just True  -> "satisfied"
       Just False -> "failed to satisfy"
 
+    ks :: Text
+    ks = showS srk
+
     ksDescription = case mProv of
       Nothing ->
-        "unknown keyset"
+        "unknown " <> ks
       Just (FromCell (OriginatingCell (TableName tn) (ColumnName cn) sRk _dirty)) ->
-        "keyset from database at ("
+        ks <> " from database at ("
           <> T.pack tn <> ", "
           <> "'" <> T.pack cn <> ", "
           <> showS sRk <> ")"
       Just (FromNamedKs sKsn) ->
-        "keyset named " <> showKsn sKsn
+        ks <> " named " <> showKsn sKsn
       Just (FromInput arg) ->
-        "keyset from argument " <> arg
+        ks <> " from argument " <> arg
 
 showResult :: Located TVal -> Text
 showResult = showTVal . _located
@@ -371,7 +365,7 @@ saturateModel =
     traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
     traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
-    traverseOf (modelTags.mtAuths.traversed.located)   fetchSbv    >=>
+    traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
     traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
     traverseOf (modelKsProvs.traversed)                fetchProv
@@ -401,6 +395,9 @@ saturateModel =
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
       pure (sRk', obj')
+
+    fetchAuth :: (S KeySet, SBV Bool) -> SBV.Query (S KeySet, SBV Bool)
+    fetchAuth (sKs, sbool) = (,) <$> fetchS sKs <*> fetchSbv sbool
 
     fetchProv :: Provenance -> SBV.Query Provenance
     fetchProv = traverseOf (_FromCell.ocRowKey) fetchS
