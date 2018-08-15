@@ -546,7 +546,7 @@ Keysets and Authorization {#keysets}
 Pact is inspired by Bitcoin scripts to incorporate public-key authorization directly into smart
 contract execution and administration.
 
-### Keyset definition {#keysetdefinition}
+### Keyset definition
 
 Keysets are [defined](#define-keyset) by [reading](#read-keyset) definitions from the message
 payload. Keysets consist of a list of public keys and a *keyset predicate*.
@@ -1500,3 +1500,143 @@ pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
 > (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
 "2016-07-23 13:30:45.001002"
 ```
+
+
+# Database Serialization Format
+
+## IMPORTANT EXPERIMENTAL/BETA WARNING
+
+This section documents the database serialization format starting with Pact 2.4.* versions. However, this
+format is still in BETA as we are only recently starting to work with concrete RDBMS back-ends and deployments
+that directly export this data.
+
+As a result we make NO COMMITMENT TO BACKWARD-COMPATIBILITY of these formats and reserve the right to move
+to improved formats in future versions. API stability in Pact prioritizes client-facing compatibility and
+performance first, with backend export still being an experimental feature.
+
+We do expect these formats to stabilize in the future at which time backward compatibility will be guaranteed.
+
+
+## Key-Value Format with JSON values
+
+Pact stores all values to the backing database in a two-column key-value structure with all values expressed as JSON.
+This approach is motivated by transparency and portability:
+
+_Transparency_: JSON is a human-readable format which allows visual verification of values.
+
+_Portability_: JSON enjoys strong support in nearly every database backend at time of writing (2018). The key-value
+structure allows using even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very straightforward,
+with simple primary key structure. Indexing is not supported or required.
+
+## Pact Datatype Codec
+
+For all supported Pact datatypes, they are encoded into JSON using a special codec that is different than the
+JSON format used in the front-end API, designed for serialization speed and correctness.
+
+### Integer
+
+For non-large integers, values are directly encoded as JSON numbers.
+
+What is considered a "large integer"
+in JSON/Javascript is subject to debate; we use the range `[-2^53 .. 2^53]` as specified
+[here](http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html). For
+large integers, we encode a JSON singleton object with the stringified integer value:
+
+```javascript
+/* small integers are just a number */
+1
+/* large integers are objects */
+{ "_P_int": "123..." /* integer string representation */
+}
+```
+
+### Decimal
+
+Decimals are encoded using _places_ and _mantissa_ following the
+[Haskell Decimal format](https://hackage.haskell.org/package/Decimal-0.5.1/docs/Data-Decimal.html#t:DecimalRaw):
+
+```javascript
+{ "_P_decp": 4     /* decimal places */
+, "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
+}
+```
+
+Note that the mantissa value uses the integer format described above.
+As described in the Decimal docs, the value can be computed as follows:
+
+```
+MANTISSA / (10 ^ PLACES)
+```
+
+### Boolean
+
+Booleans are stored as JSON booleans.
+
+### String
+
+Strings are stored as JSON strings.
+
+### Time
+
+Times are stored in a JSON object capturing a Modified Julian Day value and a day-local microsecond value.
+
+```javascript
+{ "_P_timed": 234 /* "modified julian day value */
+  "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+}
+```
+
+Suggestions for converting MJDs can be found [here](https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc).
+
+### JSON Value/Blob
+
+Raw JSON blobs are encoded unmodified in a container object.
+
+```javascript
+{ "_P_val": { "foo": "bar" } /* unmodified user JSON object */
+}
+```
+
+### Keyset
+
+Keysets store the key list and predicate name in a JSON object.
+
+```javascript
+{ "_P_keys": ["key1","key2"] /* public key string representations */
+, "_P_pred": "keys-all"      /* predicate function name */
+}
+```
+
+## Module (User) Tables
+
+For each module table specified in Pact code, two backend tables are created: the "data table" and the "transaction table".
+
+### Column names
+
+Names for all key value tables are simply **t_key** and **t_value**.
+
+### User Data table
+
+The data table supports CRUD-style access to the current table state.
+
+- **Naming**: `USER_[module]_[table]`.
+- **Key Format**: Keys are text/VARCHARs, and maximum length supported is backend-dependent.
+- **Value format**: JSON object, with user-specified keys and codec-transformed values.
+
+### User Transaction Table
+
+The transaction table logs all updates to the table.
+
+- **Naming**: `TX_[module]_[table]**`
+- **Key Format**: Keys are integers, using backend-specific BIGINT values, reflecting the transaction ID being recorded.
+- **Value format**: JSON array of updates in a particular transaction.
+
+The update format is a JSON object:
+
+```javascript
+{ "table": "name"  /* user-visible table name (not backend table name) */
+, "key": "123"     /* update string key */
+, "value": { ... } /* The new JSON row value. Entire row is captured. */
+```
+
+Note that the JSON row value uses the same encoding as found in the user data table.
