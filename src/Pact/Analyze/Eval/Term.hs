@@ -108,6 +108,12 @@ instance (Mergeable a) => Mergeable (Analyze a) where
              , ()
              )
 
+--
+-- NOTE: for these tagging functions, at the moment we allow a "partial" model.
+--       we could also decide to 'throwError'; right now we simply don't tag in
+--       these cases where a tag is not found.
+--
+
 tagAccessKey
   :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
   -> TagId
@@ -116,8 +122,6 @@ tagAccessKey
 tagAccessKey lens' tid srk = do
   mTup <- preview $ aeModelTags.lens'.at tid._Just.located._1
   case mTup of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing     -> pure ()
     Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
 
@@ -133,8 +137,6 @@ tagAccessCell lens' tid fieldName av = do
   mTag <- preview $
     aeModelTags.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
@@ -142,8 +144,6 @@ tagEnforceTree :: TagId -> S Bool -> Analyze ()
 tagEnforceTree tid sb = do
   mTag <- preview $ aeModelTags.mtEnforceTrees.at tid._Just.located
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
     Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
@@ -151,8 +151,6 @@ tagAssert :: TagId -> S Bool -> Analyze ()
 tagAssert tid sb = do
   mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
     Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
@@ -162,8 +160,6 @@ tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
 tagAuth tid sKs sb = do
   mTup <- preview $ aeModelTags.mtAuths.at tid._Just.located
   case mTup of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
     Just (ksTag, sbv) -> do
       addConstraint $ sansProv $ ksTag .== sKs
@@ -174,8 +170,6 @@ tagSubpathStart :: TagId -> Analyze ()
 tagSubpathStart tid = do
   mTag <- preview $ aeModelTags.mtPaths.at tid._Just
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing  -> pure ()
     Just sbv -> do
       sb <- use purelyReachable
@@ -190,8 +184,6 @@ tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
