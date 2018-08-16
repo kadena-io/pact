@@ -42,12 +42,12 @@ instance NFData c => NFData (PactRPC c)
 instance FromJSON c => FromJSON (PactRPC c) where
     parseJSON =
         withObject "RPC" $ \o ->
-            (Exec <$> o .: "exec") <|> (Continuation <$> o .: "yield")
+            (Exec <$> o .: "exec") <|> (Continuation <$> o .: "cont")
     {-# INLINE parseJSON #-}
 
 instance ToJSON c => ToJSON (PactRPC c) where
     toJSON (Exec p) = object ["exec" .= p]
-    toJSON (Continuation p) = object ["yield" .= p]
+    toJSON (Continuation p) = object ["cont" .= p]
 
 
 

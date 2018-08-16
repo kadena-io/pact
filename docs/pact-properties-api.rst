@@ -1,4 +1,4 @@
-.. properties-and-invariants:
+.. _properties-and-invariants:
 
 Property and Invariant Functions
 ================================
@@ -12,19 +12,19 @@ function inputs and outputs, and database interactions. Each function
 also explicitly says whether it’s available in just properties, or
 invariants as well.
 
-.. Numerical:
+.. _Numerical:
 
 Numerical operators
 -------------------
 
-.. FAddition:
+.. _FAddition:
 
 \+
 ~~
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -35,14 +35,14 @@ Addition of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FSubtraction:
+.. _FSubtraction:
 
 \-
 ~~
 
 .. code:: lisp
 
-    (- x y)
+   (- x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -53,14 +53,14 @@ Subtraction of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FMultiplication:
+.. _FMultiplication:
 
 \*
 ~~
 
 .. code:: lisp
 
-    (* x y)
+   (* x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -71,14 +71,14 @@ Multiplication of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FDivision:
+.. _FDivision:
 
 /
 ~
 
 .. code:: lisp
 
-    (/ x y)
+   (/ x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -89,14 +89,14 @@ Division of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FExponentiation:
+.. _FExponentiation:
 
 ^
 ~
 
 .. code:: lisp
 
-    (^ x y)
+   (^ x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -107,14 +107,14 @@ Exponentiation of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FLogarithm:
+.. _FLogarithm:
 
 log
 ~~~
 
 .. code:: lisp
 
-    (log b x)
+   (log b x)
 
 -  takes ``b`` of type *a*
 -  takes ``x`` of type *a*
@@ -125,14 +125,14 @@ Logarithm of ``x`` base ``b``.
 
 Supported in either invariants or properties.
 
-.. FNumericNegation:
+.. _FNumericNegation:
 
 \-
 ~~
 
 .. code:: lisp
 
-    (- x)
+   (- x)
 
 -  takes ``x`` of type *a*
 -  produces type *a*
@@ -142,14 +142,14 @@ Negation of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FSquareRoot:
+.. _FSquareRoot:
 
 sqrt
 ~~~~
 
 .. code:: lisp
 
-    (sqrt x)
+   (sqrt x)
 
 -  takes ``x`` of type *a*
 -  produces type *a*
@@ -159,14 +159,14 @@ Square root of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FNaturalLogarithm:
+.. _FNaturalLogarithm:
 
 ln
 ~~
 
 .. code:: lisp
 
-    (ln x)
+   (ln x)
 
 -  takes ``x`` of type *a*
 -  produces type *a*
@@ -176,14 +176,14 @@ Logarithm of integers and decimals base e.
 
 Supported in either invariants or properties.
 
-.. FExponential:
+.. _FExponential:
 
 exp
 ~~~
 
 .. code:: lisp
 
-    (exp x)
+   (exp x)
 
 -  takes ``x`` of type *a*
 -  produces type *a*
@@ -194,14 +194,14 @@ Exponential of integers and decimals. e raised to the integer or decimal
 
 Supported in either invariants or properties.
 
-.. FAbsoluteValue:
+.. _FAbsoluteValue:
 
 abs
 ~~~
 
 .. code:: lisp
 
-    (abs x)
+   (abs x)
 
 -  takes ``x`` of type *a*
 -  produces type *a*
@@ -211,21 +211,21 @@ Absolute value of integers and decimals.
 
 Supported in either invariants or properties.
 
-.. FBankersRound:
+.. _FBankersRound:
 
 round
 ~~~~~
 
 .. code:: lisp
 
-    (round x)
+   (round x)
 
 -  takes ``x`` of type ``decimal``
 -  produces type ``integer``
 
 .. code:: lisp
 
-    (round x prec)
+   (round x prec)
 
 -  takes ``x`` of type ``decimal``
 -  takes ``prec`` of type ``integer``
@@ -236,21 +236,21 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
-.. FCeilingRound:
+.. _FCeilingRound:
 
 ceiling
 ~~~~~~~
 
 .. code:: lisp
 
-    (ceiling x)
+   (ceiling x)
 
 -  takes ``x`` of type ``decimal``
 -  produces type ``integer``
 
 .. code:: lisp
 
-    (ceiling x prec)
+   (ceiling x prec)
 
 -  takes ``x`` of type ``decimal``
 -  takes ``prec`` of type ``integer``
@@ -261,21 +261,21 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
-.. FFloorRound:
+.. _FFloorRound:
 
 floor
 ~~~~~
 
 .. code:: lisp
 
-    (floor x)
+   (floor x)
 
 -  takes ``x`` of type ``decimal``
 -  produces type ``integer``
 
 .. code:: lisp
 
-    (floor x prec)
+   (floor x prec)
 
 -  takes ``x`` of type ``decimal``
 -  takes ``prec`` of type ``integer``
@@ -286,14 +286,14 @@ precision as decimal.
 
 Supported in either invariants or properties.
 
-.. FModulus:
+.. _FModulus:
 
 mod
 ~~~
 
 .. code:: lisp
 
-    (mod x y)
+   (mod x y)
 
 -  takes ``x`` of type ``integer``
 -  takes ``y`` of type ``integer``
@@ -303,19 +303,19 @@ Integer modulus
 
 Supported in either invariants or properties.
 
-.. Logical:
+.. _Logical:
 
 Logical operators
 -----------------
 
-.. FGreaterThan:
+.. _FGreaterThan:
 
 >
 ~
 
 .. code:: lisp
 
-    (> x y)
+   (> x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -326,14 +326,14 @@ True if ``x`` > ``y``
 
 Supported in either invariants or properties.
 
-.. FLessThan:
+.. _FLessThan:
 
 <
 ~
 
 .. code:: lisp
 
-    (< x y)
+   (< x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -344,14 +344,14 @@ True if ``x`` < ``y``
 
 Supported in either invariants or properties.
 
-.. FGreaterThanOrEqual:
+.. _FGreaterThanOrEqual:
 
 >=
 ~~
 
 .. code:: lisp
 
-    (>= x y)
+   (>= x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -362,14 +362,14 @@ True if ``x`` >= ``y``
 
 Supported in either invariants or properties.
 
-.. FLessThanOrEqual:
+.. _FLessThanOrEqual:
 
 <=
 ~~
 
 .. code:: lisp
 
-    (<= x y)
+   (<= x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -380,14 +380,14 @@ True if ``x`` <= ``y``
 
 Supported in either invariants or properties.
 
-.. FEquality:
+.. _FEquality:
 
 =
 ~
 
 .. code:: lisp
 
-    (= x y)
+   (= x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -399,14 +399,14 @@ True if ``x`` = ``y``
 
 Supported in either invariants or properties.
 
-.. FInequality:
+.. _FInequality:
 
 !=
 ~~
 
 .. code:: lisp
 
-    (!= x y)
+   (!= x y)
 
 -  takes ``x`` of type *a*
 -  takes ``y`` of type *a*
@@ -418,14 +418,14 @@ True if ``x`` != ``y``
 
 Supported in either invariants or properties.
 
-.. FLogicalConjunction:
+.. _FLogicalConjunction:
 
 and
 ~~~
 
 .. code:: lisp
 
-    (and x y)
+   (and x y)
 
 -  takes ``x`` of type ``bool``
 -  takes ``y`` of type ``bool``
@@ -435,14 +435,14 @@ Short-circuiting logical conjunction
 
 Supported in either invariants or properties.
 
-.. FLogicalDisjunction:
+.. _FLogicalDisjunction:
 
 or
 ~~
 
 .. code:: lisp
 
-    (or x y)
+   (or x y)
 
 -  takes ``x`` of type ``bool``
 -  takes ``y`` of type ``bool``
@@ -452,14 +452,14 @@ Short-circuiting logical disjunction
 
 Supported in either invariants or properties.
 
-.. FLogicalNegation:
+.. _FLogicalNegation:
 
 not
 ~~~
 
 .. code:: lisp
 
-    (not x)
+   (not x)
 
 -  takes ``x`` of type ``bool``
 -  produces type ``bool``
@@ -468,14 +468,14 @@ Logical negation
 
 Supported in either invariants or properties.
 
-.. FLogicalImplication:
+.. _FLogicalImplication:
 
 when
 ~~~~
 
 .. code:: lisp
 
-    (when x y)
+   (when x y)
 
 -  takes ``x`` of type ``bool``
 -  takes ``y`` of type ``bool``
@@ -485,19 +485,19 @@ Logical implication. Equivalent to ``(or (not x) y)``.
 
 Supported in either invariants or properties.
 
-.. Object:
+.. _Object:
 
 Object operators
 ----------------
 
-.. FObjectProjection:
+.. _FObjectProjection:
 
 at
 ~~
 
 .. code:: lisp
 
-    (at k o)
+   (at k o)
 
 -  takes ``k`` of type ``string``
 -  takes ``o`` of type ``object``
@@ -507,14 +507,14 @@ Object projection
 
 Supported in either invariants or properties.
 
-.. FObjectMerge:
+.. _FObjectMerge:
 
 \+
 ~~
 
 .. code:: lisp
 
-    (+ x y)
+   (+ x y)
 
 -  takes ``x`` of type ``object``
 -  takes ``y`` of type ``object``
@@ -524,19 +524,19 @@ Object merge
 
 Supported in either invariants or properties.
 
-.. String:
+.. _String:
 
 String operators
 ----------------
 
-.. FStringLength:
+.. _FStringLength:
 
 length
 ~~~~~~
 
 .. code:: lisp
 
-    (length s)
+   (length s)
 
 -  takes ``s`` of type ``string``
 -  produces type ``integer``
@@ -545,14 +545,14 @@ String length
 
 Supported in either invariants or properties.
 
-.. FStringConcatenation:
+.. _FStringConcatenation:
 
 \+
 ~~
 
 .. code:: lisp
 
-    (+ s t)
+   (+ s t)
 
 -  takes ``s`` of type ``string``
 -  takes ``t`` of type ``string``
@@ -562,19 +562,19 @@ String concatenation
 
 Supported in either invariants or properties.
 
-.. Temporal:
+.. _Temporal:
 
 Temporal operators
 ------------------
 
-.. FTemporalAddition:
+.. _FTemporalAddition:
 
 add-time
 ~~~~~~~~
 
 .. code:: lisp
 
-    (add-time t s)
+   (add-time t s)
 
 -  takes ``t`` of type ``time``
 -  takes ``s`` of type *a*
@@ -585,19 +585,19 @@ Add seconds to a time
 
 Supported in either invariants or properties.
 
-.. Quantification:
+.. _Quantification:
 
 Quantification operators
 ------------------------
 
-.. FUniversalQuantification:
+.. _FUniversalQuantification:
 
 forall
 ~~~~~~
 
 .. code:: lisp
 
-    (forall (x:string) y)
+   (forall (x:string) y)
 
 -  binds ``x`` of type *a*
 -  takes ``y`` of type *r*
@@ -609,14 +609,14 @@ Bind a universally-quantified variable
 
 Supported in properties only.
 
-.. FExistentialQuantification:
+.. _FExistentialQuantification:
 
 exists
 ~~~~~~
 
 .. code:: lisp
 
-    (exists (x:string) y)
+   (exists (x:string) y)
 
 -  binds ``x`` of type *a*
 -  takes ``y`` of type *r*
@@ -628,19 +628,19 @@ Bind an existentially-quantified variable
 
 Supported in properties only.
 
-.. Transactional:
+.. _Transactional:
 
 Transactional operators
 -----------------------
 
-.. FTransactionAborts:
+.. _FTransactionAborts:
 
 abort
 ~~~~~
 
 .. code:: lisp
 
-    abort
+   abort
 
 -  of type ``bool``
 
@@ -652,14 +652,14 @@ the future – please let us know if you need this functionality.
 
 Supported in properties only.
 
-.. FTransactionSucceeds:
+.. _FTransactionSucceeds:
 
 success
 ~~~~~~~
 
 .. code:: lisp
 
-    success
+   success
 
 -  of type ``bool``
 
@@ -671,14 +671,14 @@ the future – please let us know if you need this functionality.
 
 Supported in properties only.
 
-.. FFunctionResult:
+.. _FFunctionResult:
 
 result
 ~~~~~~
 
 .. code:: lisp
 
-    result
+   result
 
 -  of type *r*
 -  where *r* is *any type*
@@ -687,19 +687,19 @@ The return value of the function under test
 
 Supported in properties only.
 
-.. Database:
+.. _Database:
 
 Database operators
 ------------------
 
-.. FTableWritten:
+.. _FTableWritten:
 
 table-written
 ~~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (table-written t)
+   (table-written t)
 
 -  takes ``t`` of type *a*
 -  produces type ``bool``
@@ -709,14 +709,14 @@ Whether a table is written in the function under analysis
 
 Supported in properties only.
 
-.. FTableRead:
+.. _FTableRead:
 
 table-read
 ~~~~~~~~~~
 
 .. code:: lisp
 
-    (table-read t)
+   (table-read t)
 
 -  takes ``t`` of type *a*
 -  produces type ``bool``
@@ -726,14 +726,14 @@ Whether a table is read in the function under analysis
 
 Supported in properties only.
 
-.. FCellDelta:
+.. _FCellDelta:
 
 cell-delta
 ~~~~~~~~~~
 
 .. code:: lisp
 
-    (cell-delta t c r)
+   (cell-delta t c r)
 
 -  takes ``t`` of type *a*
 -  takes ``c`` of type *b*
@@ -747,14 +747,14 @@ The difference in a cell’s value before and after the transaction
 
 Supported in properties only.
 
-.. FColumnDelta:
+.. _FColumnDelta:
 
 column-delta
 ~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (column-delta t c)
+   (column-delta t c)
 
 -  takes ``t`` of type *a*
 -  takes ``c`` of type *b*
@@ -768,14 +768,14 @@ transaction
 
 Supported in properties only.
 
-.. FRowRead:
+.. _FRowRead:
 
 row-read
 ~~~~~~~~
 
 .. code:: lisp
 
-    (row-read t r)
+   (row-read t r)
 
 -  takes ``t`` of type *a*
 -  takes ``r`` of type ``string``
@@ -786,14 +786,14 @@ Whether a row is read in the function under analysis
 
 Supported in properties only.
 
-.. FRowWritten:
+.. _FRowWritten:
 
 row-written
 ~~~~~~~~~~~
 
 .. code:: lisp
 
-    (row-written t r)
+   (row-written t r)
 
 -  takes ``t`` of type *a*
 -  takes ``r`` of type ``string``
@@ -804,14 +804,14 @@ Whether a row is written in the function under analysis
 
 Supported in properties only.
 
-.. FRowReadCount:
+.. _FRowReadCount:
 
 row-read-count
 ~~~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (row-read-count t r)
+   (row-read-count t r)
 
 -  takes ``t`` of type *a*
 -  takes ``r`` of type ``string``
@@ -822,14 +822,14 @@ The number of times a row is read during a transaction
 
 Supported in properties only.
 
-.. FRowWriteCount:
+.. _FRowWriteCount:
 
 row-write-count
 ~~~~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (row-write-count t r)
+   (row-write-count t r)
 
 -  takes ``t`` of type *a*
 -  takes ``r`` of type ``string``
@@ -840,19 +840,19 @@ The number of times a row is written during a transaction
 
 Supported in properties only.
 
-.. Authorization:
+.. _Authorization:
 
 Authorization operators
 -----------------------
 
-.. FAuthorizedBy:
+.. _FAuthorizedBy:
 
 authorized-by
 ~~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (authorized-by k)
+   (authorized-by k)
 
 -  takes ``k`` of type ``string``
 -  produces type ``bool``
@@ -861,14 +861,14 @@ Whether the named keyset is enforced by the function under analysis
 
 Supported in properties only.
 
-.. FRowEnforced:
+.. _FRowEnforced:
 
 row-enforced
 ~~~~~~~~~~~~
 
 .. code:: lisp
 
-    (row-enforced t c r)
+   (row-enforced t c r)
 
 -  takes ``t`` of type *a*
 -  takes ``c`` of type *b*
