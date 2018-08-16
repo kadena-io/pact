@@ -78,9 +78,6 @@ pattern ConsList :: [a] -> SnocList a
 pattern ConsList xs <- SnocList (reverse -> xs)
   where ConsList xs = SnocList $ reverse xs
 
-consList :: SnocList a -> [a]
-consList = Foldable.toList
-
 instance Functor SnocList where
   fmap f (SnocList revXs) = SnocList $ fmap f revXs
 

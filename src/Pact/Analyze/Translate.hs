@@ -15,10 +15,11 @@ module Pact.Analyze.Translate where
 
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (Lens', at, makeLenses, cons, snoc,
-                                             use, view, (<&>), (?~), (^.),
-                                             (^?), (%~), (.~), (<&>), (%=),
-                                             (.=), (?=))
+import           Control.Lens               (Lens', Traversal', at,
+                                             makeLenses, cons, _last,
+                                             snoc, use, view, (<&>), (?~),
+                                             (^.), (^?), (%~), (.~), (<&>),
+                                             (%=), (.=), (?=))
 import           Control.Monad              ((>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -30,13 +31,14 @@ import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe)
-import           Data.Monoid                ((<>))
+import           Data.Monoid                (Endo (Endo, appEndo), (<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
+import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
@@ -111,12 +113,14 @@ describeTranslateFailureNoLoc = \case
 
 data TranslateEnv
   = TranslateEnv
-    { _teInfo     :: Info
-    , _teNodeVars :: Map Node (Text, VarId)
+    { _teInfo         :: Info
+    , _teNodeVars     :: Map Node (Text, VarId)
+    , _teEnforceDepth :: Natural
+    -- ^ how many layers of enforce-one are you on?
     }
 
 mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars
+mkTranslateEnv info args = TranslateEnv info nodeVars 0
   where
     nodeVars = foldl'
       (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
@@ -225,7 +229,14 @@ astContext :: AST Node -> TranslateM a -> TranslateM a
 astContext ast = local (envInfo .~ astToInfo ast)
 
 emit :: TraceEvent -> TranslateM ()
-emit event = modify' $ tsPendingEvents %~ flip snoc event
+emit event = do
+    depth <- view teEnforceDepth
+    modify' $ tsPendingEvents.dig depth %~ flip snoc event
+
+  where
+    dig :: Natural -> Traversal' (SnocList TraceEvent) (SnocList TraceEvent)
+    dig (fromIntegral -> n) =
+      appEndo $ mconcat $ replicate n $ Endo $ _last.treeCases._last
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
@@ -255,6 +266,12 @@ tagRead = tagDbAccess TraceRead
 
 tagWrite :: Node -> Schema -> TranslateM TagId
 tagWrite = tagDbAccess TraceWrite
+
+tagEnforceTree :: Node -> TranslateM TagId
+tagEnforceTree node = do
+  tid <- genTagId
+  emit $ TraceEnforceTree $ Located (nodeInfo node) (tid, mempty)
+  pure tid
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -574,11 +591,13 @@ translateNode astNode = astContext astNode $ case astNode of
       tid <- tagAuth $ ksA ^. aNode
       return $ ESimple TBool $ Enforce Nothing $ KsAuthorized tid ksT
 
-  AST_EnforceOne enforces -> do
-    tms <- for enforces $ \enforce -> do
+  AST_EnforceOne node enforces -> do
+    tid <- tagEnforceTree node
+    tms <- local (teEnforceDepth %~ succ) $ for enforces $ \enforce -> do
+      modify' $ tsPendingEvents._last.treeCases %~ flip snoc mempty
       ESimple TBool enforce' <- translateNode enforce
       pure enforce'
-    return $ ESimple TBool (EnforceOne tms)
+    return $ ESimple TBool $ EnforceOne tid tms
 
   AST_Days days -> do
     ESimple daysTy days' <- translateNode days

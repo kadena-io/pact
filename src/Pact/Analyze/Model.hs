@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
@@ -19,7 +20,7 @@ module Pact.Analyze.Model
   ) where
 
 import           Control.Lens         (Lens', Prism', Traversal', at, ifoldr,
-                                       imap, to, toListOf, traverseOf,
+                                       imap, set, to, toListOf, traverseOf,
                                        traversed, (<&>), (?~), (^.), (^?), _1,
                                        _2, _Just)
 import           Control.Monad        (when, (>=>))
@@ -68,16 +69,28 @@ allocModelTags locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
+    <*> allocEnforceTrees
     <*> allocAsserts
     <*> allocAuths
     <*> allocResult
     <*> allocPaths
 
   where
+    events :: [TraceEvent]
+    events = flatten =<< toplevelEvents
+
+    flatten :: TraceEvent -> [TraceEvent]
+    flatten e@(TraceEnforceTree _) = withoutChildren : flattenedChildren
+      where
+        withoutChildren   = set treeCases mempty e
+        childEvents       = toListOf (treeCases.caseEvents) e
+        flattenedChildren = flatten =<< childEvents
+    flatten e = [e]
+
     -- For the purposes of symbolic value allocation, we just grab all of the
     -- events from the graph indiscriminately:
-    events :: [TraceEvent]
-    events = toListOf (egEdgeEvents.traverse.traverse) graph
+    toplevelEvents :: [TraceEvent]
+    toplevelEvents = toListOf (egEdgeEvents.traverse.traverse) graph
 
     allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
     allocVars = fmap Map.fromList $
@@ -102,6 +115,11 @@ allocModelTags locatedTm graph = ModelTags
 
     allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
     allocWrites = allocAccesses _TraceWrite
+
+    allocEnforceTrees :: Symbolic (Map TagId (Located (SBV Bool)))
+    allocEnforceTrees = fmap Map.fromList $
+      for (toListOf (traverse._TraceEnforceTree) events) $ \(Located info (tid, _)) ->
+        (tid,) . Located info <$> alloc
 
     allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
@@ -142,6 +160,9 @@ linearizedTrace model = foldr
           includeAndStop     = ExecutionTrace [event] Nothing
           skipAndContinue    = trace
 
+          --
+          -- TODO: we need to handle enforce-one, and nested enforce-ones
+          --
           handleEnforce
             :: Traversal' (ModelTags 'Concrete) (SBV Bool)
             -> ExecutionTrace
@@ -157,6 +178,12 @@ linearizedTrace model = foldr
                    includeAndContinue
 
       in case event of
+           TraceEnforceTree (_located -> (tid, _subEvents)) ->
+             --
+             -- TODO: add stopping early amongst child events, for any depth:
+             --
+             handleEnforce $ mtEnforceTrees.at tid._Just.located
+
            TraceSubpathStart _ ->
              skipAndContinue
            TraceAssert (_located -> tid) ->
@@ -173,8 +200,9 @@ linearizedTrace model = foldr
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
     -- are ordered, so we now have a linear trace of events. But we still have
-    -- 'TraceSubpath' events, and the possibility of 'TraceEnforce' events
-    -- resulting in transaction failure.
+    -- 'TraceSubpath' events, and the possibility of 'TraceAssert',
+    -- 'TraceAuth', and 'TraceEnforceTree' events resulting in transaction
+    -- failure.
     fullTrace :: [TraceEvent]
     fullTrace = concat $ restrictKeys edgeEvents reachableEdges
 
@@ -250,6 +278,12 @@ showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
   Nothing               -> "[unknown]"
   Just (KeySetName ksn) -> "'" <> ksn
 
+showEnforceOne :: Located (SBV Bool) -> Text
+showEnforceOne (_located -> sbool) = case SBV.unliteral sbool of
+  Nothing    -> "[ERROR:symbolic enforce-one]"
+  Just True  -> "satisfied one of the following:"
+  Just False -> "failed to satisfy one of the following:"
+
 showAssert :: Located (SBV Bool) -> Text
 showAssert (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
     Nothing    -> "[ERROR:symbolic assert]"
@@ -286,23 +320,29 @@ showAuth mProv (_located -> (srk, sbool)) = status <> " " <> ksDescription
 showResult :: Located TVal -> Text
 showResult = showTVal . _located
 
-showEvent :: Map TagId Provenance -> ModelTags 'Concrete -> TraceEvent -> Text
+showEvent :: Map TagId Provenance -> ModelTags 'Concrete -> TraceEvent -> [Text]
 showEvent ksProvs tags = \case
     TraceRead (_located -> (tid, _)) ->
-      display mtReads tid showRead
+      [display mtReads tid showRead]
     TraceWrite (_located -> (tid, _)) ->
-      display mtWrites tid showWrite
+      [display mtWrites tid showWrite]
+    TraceEnforceTree (_located -> (tid, toListOf caseEvents -> children)) ->
+      display mtEnforceTrees tid showEnforceOne :
+        fmap indent (showEvent' =<< children)
     TraceAssert (_located -> tid) ->
-      display mtAsserts tid showAssert
+      [display mtAsserts tid showAssert]
     TraceAuth (_located -> tid) ->
-      display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)
+      [display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)]
     TraceBind (_located -> (vid, _, _)) ->
-      display mtVars vid showVar
+      [display mtVars vid showVar]
 
     TraceSubpathStart (TagId tid') ->
-      "[start of subpath " <> tShow tid' <> "]" -- not shown to end-users
+      ["[start of subpath " <> tShow tid' <> "]"] -- not shown to end-users
 
   where
+    showEvent' :: TraceEvent -> [Text]
+    showEvent' = showEvent ksProvs tags
+
     display :: Ord k => Lens' (ModelTags 'Concrete) (Map k v) -> k -> (v -> Text) -> Text
     display l ident f = maybe "[ERROR:missing tag]" f $ tags ^. l.at ident
 
@@ -313,7 +353,7 @@ showModel model =
       , indent <$> Foldable.toList (showVar <$> (model ^. modelArgs))
       , []
       , ["Program trace:"]
-      , indent <$> fmap showEvent' traceEvents
+      , indent <$> (showEvent' =<< traceEvents)
       , []
       , ["Result:"]
       , [indent $ maybe
@@ -331,7 +371,7 @@ showModel model =
 -- NOTE: we indent the entire model two spaces so that the atom linter will
 -- treat it as one message.
 showEntireModel :: Model 'Concrete -> Text
-showEntireModel (Model args (ModelTags vars reads' writes asserts auths res _paths) ksProvs _graph) =
+showEntireModel (Model args (ModelTags vars reads' writes trees asserts auths res _paths) ksProvs _graph) =
   T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
     [ ["Arguments:"]
     , indent <$> Foldable.toList (showVar <$> args)
@@ -344,6 +384,9 @@ showEntireModel (Model args (ModelTags vars reads' writes asserts auths res _pat
     , []
     , ["Writes:"]
     , indent <$> Foldable.toList (showAccess <$> writes)
+    , []
+    , ["Enforce Trees:"]
+    , indent <$> Foldable.toList (showAssert <$> trees)
     , []
     , ["Assertions:"]
     , indent <$> Foldable.toList (showAssert <$> asserts)
@@ -360,15 +403,16 @@ showEntireModel (Model args (ModelTags vars reads' writes asserts auths res _pat
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
 saturateModel =
-    traverseOf (modelArgs.traversed.located._2)        fetchTVal   >=>
-    traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
-    traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
-    traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
-    traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
-    traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
-    traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
-    traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
-    traverseOf (modelKsProvs.traversed)                fetchProv
+    traverseOf (modelArgs.traversed.located._2)             fetchTVal   >=>
+    traverseOf (modelTags.mtVars.traversed.located._2)      fetchTVal   >=>
+    traverseOf (modelTags.mtReads.traversed.located)        fetchAccess >=>
+    traverseOf (modelTags.mtWrites.traversed.located)       fetchAccess >=>
+    traverseOf (modelTags.mtEnforceTrees.traversed.located) fetchSbv    >=>
+    traverseOf (modelTags.mtAsserts.traversed.located)      fetchSbv    >=>
+    traverseOf (modelTags.mtAuths.traversed.located)        fetchAuth   >=>
+    traverseOf (modelTags.mtResult.located)                 fetchTVal   >=>
+    traverseOf (modelTags.mtPaths.traversed)                fetchSbv    >=>
+    traverseOf (modelKsProvs.traversed)                     fetchProv
 
   where
     fetchTVal :: TVal -> SBV.Query TVal

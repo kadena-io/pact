@@ -138,6 +138,15 @@ tagAccessCell lens' tid fieldName av = do
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
+tagEnforceTree :: TagId -> S Bool -> Analyze ()
+tagEnforceTree tid sb = do
+  mTag <- preview $ aeModelTags.mtEnforceTrees.at tid._Just.located
+  case mTag of
+    -- NOTE: ATM we allow a "partial" model. we could also decide to
+    -- 'throwError' here; we simply don't tag.
+    Nothing  -> pure ()
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
+
 tagAssert :: TagId -> S Bool -> Analyze ()
 tagAssert tid sb = do
   mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
@@ -325,9 +334,8 @@ evalTerm = \case
   -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
   -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
   -- list.
-  EnforceOne conds -> do
+  EnforceOne tid conds -> do
     initSucceeds <- use succeeds
-
     attempts <- for conds $ \cond -> do
       succeeds .= true
       (,) <$> evalTerm cond <*> use succeeds
@@ -339,8 +347,8 @@ evalTerm = \case
           (true, false)
           attempts
 
+    tagEnforceTree tid anySucceeded
     succeeds .= (initSucceeds &&& anySucceeded)
-
     pure result
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
