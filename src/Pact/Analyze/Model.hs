@@ -155,10 +155,9 @@ allocModelTags locatedTm graph = ModelTags
 
 linearizedTrace :: Model 'Concrete -> ExecutionTrace
 linearizedTrace model = foldr
-    (\event trace@(ExecutionTrace futureEvents mRes) ->
-      let includeAndContinue = ExecutionTrace (event : futureEvents) mRes
-          includeAndStop     = ExecutionTrace [event] Nothing
-          skipAndContinue    = trace
+    (\event (ExecutionTrace futureEvents mRes) ->
+      let continue = ExecutionTrace (event : futureEvents) mRes
+          stop     = ExecutionTrace [event] Nothing
 
           --
           -- TODO: we need to handle enforce-one, and nested enforce-ones
@@ -173,25 +172,21 @@ linearizedTrace model = foldr
                  Nothing ->
                    error "impossible: missing enforce tag, or symbolic value"
                  Just False ->
-                   includeAndStop
+                   stop
                  Just True ->
-                   includeAndContinue
-
+                   continue
       in case event of
            TraceEnforceTree (_located -> (tid, _subEvents)) ->
              --
              -- TODO: add stopping early amongst child events, for any depth:
              --
              handleEnforce $ mtEnforceTrees.at tid._Just.located
-
-           TraceSubpathStart _ ->
-             skipAndContinue
            TraceAssert (_located -> tid) ->
              handleEnforce $ mtAsserts.at tid._Just.located
            TraceAuth (_located -> tid) ->
              handleEnforce $ mtAuths.at tid._Just.located._2
            _ ->
-             includeAndContinue)
+             continue)
     (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
     fullTrace
 
@@ -200,9 +195,8 @@ linearizedTrace model = foldr
     -- over monotonically increasing 'Vertex's across the execution graph
     -- yields a topological sort. Additionally the 'TraceEvent's on each 'Edge'
     -- are ordered, so we now have a linear trace of events. But we still have
-    -- 'TraceSubpath' events, and the possibility of 'TraceAssert',
-    -- 'TraceAuth', and 'TraceEnforceTree' events resulting in transaction
-    -- failure.
+    -- the possibility of 'TraceAssert', 'TraceAuth', and 'TraceEnforceTree'
+    -- events resulting in transaction failure.
     fullTrace :: [TraceEvent]
     fullTrace = concat $ restrictKeys edgeEvents reachableEdges
 
@@ -335,9 +329,8 @@ showEvent ksProvs tags = \case
       [display mtAuths tid (showAuth $ tid `Map.lookup` ksProvs)]
     TraceBind (_located -> (vid, _, _)) ->
       [display mtVars vid showVar]
-
-    TraceSubpathStart (TagId tid') ->
-      ["[start of subpath " <> tShow tid' <> "]"] -- not shown to end-users
+    TraceSubpathStart _ ->
+      [] -- not shown to end-users
 
   where
     showEvent' :: TraceEvent -> [Text]
