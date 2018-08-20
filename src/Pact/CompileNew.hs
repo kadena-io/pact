@@ -34,7 +34,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Arrow
+import Control.Arrow ((&&&))
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -47,6 +47,7 @@ import Data.Text (Text,pack,unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
+import Data.Monoid ((<>))
 
 import Pact.Types.Crypto
 import Pact.Types.ExpNew
@@ -105,11 +106,11 @@ syntaxError i s = throwError [PactError SyntaxError i def (pack s)]
 syntaxError' :: String -> Compile a
 syntaxError' s = currentInfo >>= \e -> syntaxError (eInfo e) s
 
-expected :: String -> Compile a
-expected s = syntaxError' $ "Expected " ++ s
+expected :: Text -> Compile a
+expected s = syntaxError' $ "Expected " ++ (unpack s)
 
-unexpected :: String -> Compile a
-unexpected s = syntaxError' $ "Unexpected " ++ s
+unexpected :: Text -> Compile a
+unexpected s = syntaxError' $ "Unexpected " ++ (unpack s)
 
 
 
@@ -128,7 +129,7 @@ try act = do
   s <- get
   catchError act (\e -> put s >> throwError e)
 
-popA :: String -> Prism' (Exp Info) a -> Compile a
+popA :: Text -> Prism' (Exp Info) a -> Compile a
 popA ty prism = try $ pop >>= \e -> case firstOf prism e of
   Just a -> return a
   Nothing -> expected ty
@@ -148,7 +149,7 @@ list = popA "list" _EList
 sep :: Compile (SeparatorExp Info)
 sep = popA "sep" _ESeparator
 
-lit' :: String -> Prism' Literal a -> Compile a
+lit' :: Text -> Prism' Literal a -> Compile a
 lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
   Just l -> return l
   Nothing -> expected ty
@@ -158,7 +159,7 @@ str = lit' "string" _LString
 
 list' :: ListDelimiter -> Compile (ListExp Info)
 list' d = list >>= \l@ListExp{..} ->
-  if _listDelimiter == d then return l else expected (show d)
+  if _listDelimiter == d then return l else expected (tShow d)
 
 withList :: ListDelimiter -> (ListExp Info -> Compile a) -> Compile a
 withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
@@ -166,12 +167,12 @@ withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
 
 sep' :: Separator -> Compile (SeparatorExp Info)
 sep' s = sep >>= \se@SeparatorExp{..} ->
-  if _sepSeparator == s then return se else expected (show s)
+  if _sepSeparator == s then return se else expected (tShow s)
 
 varAtom :: Compile (Term Name)
 varAtom = try $ do
-  AtomExp{..} <- atom -- TODO reserved
-  when (_atomAtom `elem` reserved) $ unexpected $ "reserved word: " ++ unpack _atomAtom
+  AtomExp{..} <- atom
+  when (_atomAtom `elem` reserved) $ unexpected $ "reserved word: " <> _atomAtom
   n <- case _atomQualifiers of
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> return $ QName (ModuleName q) _atomAtom _atomInfo
@@ -229,25 +230,79 @@ term =
   <|> varAtom
   <|> listLiteral
   <|> objectLiteral
-  <|> withList Parens (const sexp)
+  <|> withList Parens (\_ -> specialForm <|> app) -- TODO binding
 
-sexp :: Compile (Term Name)
-sexp = bareAtom >>= \AtomExp{..} -> case _atomAtom of
+app :: Compile (Term Name)
+app = currentInfo >>= \i -> TApp <$> varAtom <*> (many term <* eof) <*> pure i
+
+specialForm :: Compile (Term Name)
+specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "use" -> doUse
     "let" -> doLet
-    u -> unexpected (unpack u)
+    u -> unexpected u
 
 doLet :: Compile (Term Name)
 doLet = do
   i <- currentInfo
   bindings <- withList Parens $ \_ -> some $ withList Parens $ \_ -> do
-    n <- bareAtom -- TODO types
+    n <- bareAtom
+    ty <- typed <|> freshTyVar
     v <- term
-    return (Arg (_atomAtom n) TyAny (_atomInfo n),v)
+    return (Arg (_atomAtom n) ty (_atomInfo n),v)
   let bNames = map (\(aa,_) -> Name (_aName aa) (_aInfo aa)) bindings
   bs <- abstract (`elemIndex` bNames) <$> doBody
   return $ TBinding bindings bs BindLet i
 
+typed :: Compile (Type (Term Name))
+typed = sep' Colon *> parseType
+
+parseType :: Compile (Type (Term Name))
+parseType = msum
+  [ parseListType
+  , parseUserSchemaType
+  , parseSchemaType tyObject TyObject
+  , parseSchemaType tyTable TyTable
+  , TyPrim TyInteger <$ symbol tyInteger
+  , TyPrim TyDecimal <$ symbol tyDecimal
+  , TyPrim TyTime    <$ symbol tyTime
+  , TyPrim TyBool    <$ symbol tyBool
+  , TyPrim TyString  <$ symbol tyString
+  , TyList TyAny     <$ symbol tyList
+  , TyPrim TyValue   <$ symbol tyValue
+  , TyPrim TyKeySet  <$ symbol tyKeySet
+  ]
+
+parseListType :: Compile (Type (Term Name))
+parseListType = withList Brackets $ \_ -> TyList <$> parseType <* eof
+
+parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
+parseSchemaType tyRep sty = symbol tyRep >>
+  (TySchema sty <$> (parseUserSchemaType <|> pure TyAny))
+
+
+parseUserSchemaType :: Compile (Type (Term Name))
+parseUserSchemaType = withList Braces $ \ListExp{..} -> do
+  AtomExp{..} <- bareAtom
+  return $ TyUser (return $ Name _atomAtom _listInfo)
+
+symbol :: Text -> Compile Text
+symbol s = bareAtom >>= \AtomExp {..} ->
+  if s == _atomAtom then return s else expected ("bareword: " <> s)
+
+
+freshTyVar :: Compile (Type (Term Name))
+freshTyVar = do
+  c <- state (view csFresh &&& over csFresh succ)
+  return $ mkTyVar (cToTV c) []
+
+cToTV :: Int -> TypeVarName
+cToTV n | n < 26 = fromString [toC n]
+        | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
+        | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
+  where toC i = toEnum (fromEnum 'a' + i)
+
+_testCToTV :: Bool
+_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 doBody :: Compile (Term Name)
 doBody = do
@@ -457,23 +512,6 @@ doDef es defType namei i =
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn (fst cm) defType dty db ddocs i
 
-freshTyVar :: Compile (Type (Term Name))
-freshTyVar = do
-  c <- state (view csFresh &&& over csFresh succ)
-  return $ mkTyVar (cToTV c) []
-
-cToTV :: Int -> TypeVarName
-cToTV n | n < 26 = fromString [toC n]
-        | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
-        | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
-  where toC i = toEnum (fromEnum 'a' + i)
-
-_testCToTV :: Bool
-_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
-
-maybeTyVar :: Info -> Maybe (Type TypeName) -> Compile (Type (Term Name))
-maybeTyVar _ Nothing = freshTyVar
-maybeTyVar i (Just t) = return (liftTy i t)
 
 liftTy :: Info -> Type TypeName -> Type (Term Name)
 liftTy i = fmap (return . (`Name` i) . asString)
