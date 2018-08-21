@@ -82,6 +82,7 @@ data CompileState = CompileState
   }
 makeLenses ''CompileState
 
+initState :: Exp Info -> CompileState
 initState e = CompileState 0 Nothing $ Cursor Nothing [e] (eInfo e)
 
 type Compile a = StateT CompileState (Except [PactError]) a
@@ -89,13 +90,13 @@ type Compile a = StateT CompileState (Except [PactError]) a
 reserved :: [Text]
 reserved = T.words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-runCompile :: (Compile a) -> Exp Info -> Either PactError a
-runCompile f e = either (Left . getErr) Right $ runExcept (evalStateT f (initState e))
+runCompile :: (Compile a) -> CompileState -> Either PactError a
+runCompile act s = either (Left . getErr) Right $ runExcept (evalStateT act s)
   where getErr [] = PactError SyntaxError def def "Compile failed"
         getErr as = last as
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
-compile mi e = runCompile term (fmap mi e)
+compile mi e = runCompile term $ initState (fmap mi e)
 
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
@@ -219,24 +220,31 @@ term =
   <|> varAtom
   <|> listLiteral
   <|> objectLiteral
-  <|> withList' Parens (specialForm <|> app)
+  <|> withList' Parens sexp
 
+-- | Handle special forms and apps.
+-- TODO: how to indicate an alternative is final once you're in it,
+-- ie a failure fails the whole compile instead of tries something else.
+-- Special forms (ie `(bless "abc")`) otherwise will alternative over to
+-- apps when they fail, giving confusing errors.
+sexp :: Compile (Term Name)
+sexp = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
+  (_:_) -> app a
+  [] -> case _atomAtom of
+    "use" -> useForm
+    "let" -> letForm
+    "let*" -> letsForm
+    "defconst" -> defconst
+    "step" -> step
+    "step-with-rollback" -> stepWithRollback
+    "bless" -> bless
+    "deftable" -> deftable
+    _ -> app a
 
-specialForm :: Compile (Term Name)
-specialForm = --TODO failures are resulting in apps with reserved words
-  useForm <|>
-  letForm <|>
-  letsForm <|>
-  defconst <|>
-  step <|>
-  stepWithRollback <|>
-  bless <|>
-  deftable
-
-app :: Compile (Term Name)
-app = do
-  i <- currentInfo
-  v <- varAtom
+app :: AtomExp Info -> Compile (Term Name)
+app a = do
+  i <- currentInfo -- note this isn't right, should be sexp info
+  v <- varAtom' a
   body <- some (term <|> bindingForm) <* eof
   return $ TApp v body i
 
@@ -261,8 +269,12 @@ bindingForm = do
 
 varAtom :: Compile (Term Name)
 varAtom = try $ do
-  AtomExp{..} <- atom
+  a@AtomExp{..} <- atom
   when (_atomAtom `elem` reserved) $ unexpected $ "reserved word: " <> _atomAtom
+  varAtom' a
+
+varAtom' :: AtomExp Info -> Compile (Term Name)
+varAtom' AtomExp{..} = do
   n <- case _atomQualifiers of
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> return $ QName (ModuleName q) _atomAtom _atomInfo
@@ -277,9 +289,6 @@ bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
 symbol :: Text -> Compile Text
 symbol s = bareAtom >>= \AtomExp {..} ->
   if s == _atomAtom then return s else expected ("bareword: " <> s)
-
-symbol' :: Text -> Compile ()
-symbol' = void . symbol
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -312,7 +321,6 @@ str' = literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
-  symbol' "deftable"
   i <- currentInfo
   (mn,mh) <- currentModule
   AtomExp{..} <- bareAtom
@@ -324,11 +332,10 @@ deftable = do
 
 
 bless :: Compile (Term Name)
-bless = symbol' "bless" >> TBless <$> hash' <*> currentInfo
+bless = TBless <$> hash' <*> currentInfo
 
 defconst :: Compile (Term Name)
 defconst = do
-  symbol' "defconst"
   i <- currentInfo
   modName <- fst <$> currentModule
   a <- arg
@@ -338,13 +345,11 @@ defconst = do
 
 step :: Compile (Term Name)
 step = do
-  symbol' "step"
   i <- currentInfo
   TStep <$> optional str' <*> term <*> pure Nothing <*> pure i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  symbol' "step-with-rollback"
   i <- currentInfo
   TStep <$> optional str' <*> term <*> (Just <$> term) <*> pure i
 
@@ -356,7 +361,6 @@ letBindings = withList' Parens $
 
 letForm :: Compile (Term Name)
 letForm = do
-  symbol' "let"
   i <- currentInfo
   bindings <- letBindings
   let bNames = map (arg2Name . fst) bindings
@@ -367,7 +371,6 @@ letForm = do
 -- bindings.
 letsForm :: Compile (Term Name)
 letsForm = do
-  symbol' "let*"
   bindings <- letBindings
   let nest (binding:rest) = do
         let bName = [arg2Name (fst binding)]
@@ -380,7 +383,6 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  symbol' "use"
   i <- currentInfo
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> pure i
@@ -786,16 +788,23 @@ runBody bs i = TList <$> runNonEmpty "body" bs i <*> pure TyAny <*> pure i
 -}
 
 _compileAccounts :: IO (Either PactError [Term Name])
-_compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile
+_compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile id
 
-_compile :: TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
-_compile (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
-_compile (TF.Success (a,s)) = return $ mapM (compile (mkStringInfo s)) a
+_compile :: (CompileState -> CompileState) -> TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
+_compile _ (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
+_compile sfun (TF.Success (a,s)) = return $ forM a $ \e -> runCompile term $
+  sfun $ initState (mkStringInfo s <$> e)
 
+-- | run a string as though you were in a module (test deftable, etc)
+_compileStrInModule :: String -> IO [Term Name]
+_compileStrInModule = _compileStr' (\s -> s { _csModule = Just ("mymodule",hash mempty) })
 
 _compileStr :: String -> IO [Term Name]
-_compileStr code = do
-    r <- _compile ((,code) <$> _parseS code)
+_compileStr = _compileStr' id
+
+_compileStr' :: (CompileState -> CompileState) -> String -> IO [Term Name]
+_compileStr' sfun code = do
+    r <- _compile sfun ((,code) <$> _parseS code)
     case r of Left e -> throwIO $ userError (show e)
               Right t -> return t
 
