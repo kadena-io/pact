@@ -221,19 +221,24 @@ term =
   <|> objectLiteral
   <|> withList' Parens (specialForm <|> app)
 
+
+specialForm :: Compile (Term Name)
+specialForm = --TODO failures are resulting in apps with reserved words
+  useForm <|>
+  letForm <|>
+  letsForm <|>
+  defconst <|>
+  step <|>
+  stepWithRollback <|>
+  bless <|>
+  deftable
+
 app :: Compile (Term Name)
 app = do
   i <- currentInfo
   v <- varAtom
   body <- some (term <|> bindingForm) <* eof
   return $ TApp v body i
-
-specialForm :: Compile (Term Name)
-specialForm =
-  useForm <|>
-  letForm <|>
-  letsForm <|>
-  defconst
 
 -- | Bindings (`{ "column" := binding }`) do not explicitly scope the
 -- following body form as a sexp, instead letting the body contents
@@ -283,7 +288,6 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
   return $ TList ls TyAny _listInfo -- TODO capture literal type if any
 
 
-
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
   let pair = do
@@ -298,6 +302,29 @@ literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
   return $ TLiteral _litLiteral _litInfo
 
+literal' :: Text -> Prism' Literal a -> Compile (Term Name)
+literal' ty prism = literal >>= \t@TLiteral{..} -> case firstOf prism _tLiteral of
+  Just _ -> return t
+  Nothing -> expected ty
+
+str' :: Compile (Term Name)
+str' = literal' "string" _LString
+
+deftable :: Compile (Term Name)
+deftable = do
+  symbol' "deftable"
+  i <- currentInfo
+  (mn,mh) <- currentModule
+  AtomExp{..} <- bareAtom
+  ty <- optional (typed >>= \t -> case t of
+                     TyUser {} -> return t
+                     _ -> expected "user type")
+  docs <- optional str
+  return $ TTable (TableName _atomAtom) mn mh (fromMaybe TyAny ty) (Meta docs Nothing) i
+
+
+bless :: Compile (Term Name)
+bless = symbol' "bless" >> TBless <$> hash' <*> currentInfo
 
 defconst :: Compile (Term Name)
 defconst = do
@@ -308,6 +335,19 @@ defconst = do
   doc <- optional str
   v <- term
   return $ TConst a modName (CVRaw v) (Meta doc Nothing) i
+
+step :: Compile (Term Name)
+step = do
+  symbol' "step"
+  i <- currentInfo
+  TStep <$> optional str' <*> term <*> pure Nothing <*> pure i
+
+stepWithRollback :: Compile (Term Name)
+stepWithRollback = do
+  symbol' "step-with-rollback"
+  i <- currentInfo
+  TStep <$> optional str' <*> term <*> (Just <$> term) <*> pure i
+
 
 letBindings :: Compile [(Arg (Term Name),Term Name)]
 letBindings = withList' Parens $
@@ -343,13 +383,12 @@ useForm = do
   symbol' "use"
   i <- currentInfo
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
-  modHash <- optional str
-  h <- forM modHash $ \hashStr -> case fromText' hashStr of
-    Left e -> syntaxError' $ "bad hash: " ++ e
-    Right hv -> return hv
-  return $ TUse (ModuleName modName) h i
+  TUse (ModuleName modName) <$> optional hash' <*> pure i
 
-
+hash' :: Compile Hash
+hash' = str >>= \s -> case fromText' s of
+  Right h -> return h
+  Left e -> syntaxError' $ "bad hash: " ++ e
 
 typedAtom :: Compile (AtomExp Info,Type (Term Name))
 typedAtom = (,) <$> bareAtom <*> (typed <|> freshTyVar)
@@ -393,8 +432,6 @@ parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- bareAtom
   return $ TyUser (return $ Name _atomAtom _listInfo)
-
-
 
 bodyForm :: Compile (Term Name)
 bodyForm = do
