@@ -112,6 +112,27 @@ expected s = syntaxError' $ "Expected " ++ (unpack s)
 unexpected :: Text -> Compile a
 unexpected s = syntaxError' $ "Unexpected " ++ (unpack s)
 
+currentInfo :: Compile Info
+currentInfo = use (csCursor . cInfo)
+
+currentModule :: Compile (ModuleName,Hash)
+currentModule = use csModule >>= \m -> case m of
+  Just cm -> return cm
+  Nothing -> syntaxError' "Must be declared within module"
+
+freshTyVar :: Compile (Type (Term Name))
+freshTyVar = do
+  c <- state (view csFresh &&& over csFresh succ)
+  return $ mkTyVar (cToTV c) []
+
+cToTV :: Int -> TypeVarName
+cToTV n | n < 26 = fromString [toC n]
+        | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
+        | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
+  where toC i = toEnum (fromEnum 'a' + i)
+
+_testCToTV :: Bool
+_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 
 pop :: Compile (Exp Info)
@@ -129,16 +150,37 @@ try act = do
   s <- get
   catchError act (\e -> put s >> throwError e)
 
+eof :: Compile ()
+eof = use (csCursor.cStream) >>= \s -> case s of
+  [] -> return ()
+  _ -> expected "eof"
+
+
 popA :: Text -> Prism' (Exp Info) a -> Compile a
 popA ty prism = try $ pop >>= \e -> case firstOf prism e of
   Just a -> return a
   Nothing -> expected ty
 
+enter :: ListExp Info -> Compile (ListExp Info)
+enter l@ListExp{..} = do
+  csCursor %= \par -> Cursor (Just par) _listList _listInfo
+  return l
+
+exit :: Compile ()
+exit = do
+  child <- use csCursor
+  case _cParent child of
+    Just p -> csCursor .= p
+    Nothing -> unexpected "eof (no parent context)"
+
+sepBy :: Compile a -> Compile b -> Compile [a]
+sepBy p s = go False where
+  go False = (p >>= \t -> (t:) <$> go True) <|> return []
+  go True = (s >> go False) <|> return []
+
+
 atom :: Compile (AtomExp Info)
 atom = popA "atom" _EAtom
-
-currentInfo :: Compile Info
-currentInfo = use (csCursor . cInfo)
 
 lit :: Compile (LiteralExp Info)
 lit = popA "literal" _ELiteral
@@ -164,10 +206,53 @@ list' d = list >>= \l@ListExp{..} ->
 withList :: ListDelimiter -> (ListExp Info -> Compile a) -> Compile a
 withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
 
+withList' :: ListDelimiter -> Compile a -> Compile a
+withList' d = withList d . const
 
 sep' :: Separator -> Compile (SeparatorExp Info)
 sep' s = sep >>= \se@SeparatorExp{..} ->
   if _sepSeparator == s then return se else expected (tShow s)
+
+term :: Compile (Term Name)
+term =
+  literal
+  <|> varAtom
+  <|> listLiteral
+  <|> objectLiteral
+  <|> withList' Parens (specialForm <|> app)
+
+app :: Compile (Term Name)
+app = do
+  i <- currentInfo
+  v <- varAtom
+  body <- some (term <|> bindingForm) <* eof
+  return $ TApp v body i
+
+specialForm :: Compile (Term Name)
+specialForm =
+  useForm <|>
+  letForm <|>
+  letsForm <|>
+  defconst
+
+-- | Bindings (`{ "column" := binding }`) do not explicitly scope the
+-- following body form as a sexp, instead letting the body contents
+-- simply follow, showing up as more args to the containing app. Thus, once a
+-- binding is encountered, all following terms are subsumed into the
+-- binding body, and bound/abstracted etc.
+bindingForm :: Compile (Term Name)
+bindingForm = do
+  let pair = do
+        col <- term
+        a <- sep' ColonEquals *> arg
+        return (a,col)
+  (bindings,bi) <- withList Braces $ \ListExp{..} -> do
+    ps <- (pair `sepBy` sep' Comma) <* eof
+    return (ps,_listInfo)
+  let bNames = map (arg2Name . fst) bindings
+  body <- abstract (`elemIndex` bNames) <$> bodyForm
+  return $ TBinding bindings body (BindSchema TyAny) bi
+
 
 varAtom :: Compile (Term Name)
 varAtom = try $ do
@@ -184,22 +269,12 @@ bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
   (_:_) -> expected "unqualified atom"
   [] -> return a
 
-eof :: Compile ()
-eof = use (csCursor.cStream) >>= \s -> case s of
-  [] -> return ()
-  _ -> expected "eof"
+symbol :: Text -> Compile Text
+symbol s = bareAtom >>= \AtomExp {..} ->
+  if s == _atomAtom then return s else expected ("bareword: " <> s)
 
-enter :: ListExp Info -> Compile (ListExp Info)
-enter l@ListExp{..} = do
-  csCursor %= \par -> Cursor (Just par) _listList _listInfo
-  return l
-
-exit :: Compile ()
-exit = do
-  child <- use csCursor
-  case _cParent child of
-    Just p -> csCursor .= p
-    Nothing -> unexpected "eof (no parent context)"
+symbol' :: Text -> Compile ()
+symbol' = void . symbol
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
@@ -208,50 +283,84 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
   return $ TList ls TyAny _listInfo -- TODO capture literal type if any
 
 
-sepBy :: Compile a -> Compile b -> Compile [a]
-sepBy p s = go False where
-  go False = (p >>= \t -> (t:) <$> go True) <|> return []
-  go True = (s >> go False) <|> return []
 
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
-  ps <- (pair Colon `sepBy` sep' Comma) <* eof
+  let pair = do
+        key <- term
+        val <- sep' Colon *> term
+        return (key,val)
+  ps <- (pair `sepBy` sep' Comma) <* eof
   return $ TObject ps TyAny _listInfo
 
-pair :: Separator -> Compile (Term Name,Term Name)
-pair s = do
-  key <- term
-  val <- sep' s *> term
-  return (key,val)
 
-term :: Compile (Term Name)
-term =
-  (lit >>= \LiteralExp{..} -> return $ TLiteral _litLiteral _litInfo)
-  <|> varAtom
-  <|> listLiteral
-  <|> objectLiteral
-  <|> withList Parens (\_ -> specialForm <|> app) -- TODO binding
+literal :: Compile (Term Name)
+literal = lit >>= \LiteralExp{..} ->
+  return $ TLiteral _litLiteral _litInfo
 
-app :: Compile (Term Name)
-app = currentInfo >>= \i -> TApp <$> varAtom <*> (many term <* eof) <*> pure i
 
-specialForm :: Compile (Term Name)
-specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
-    "use" -> doUse
-    "let" -> doLet
-    u -> unexpected u
-
-doLet :: Compile (Term Name)
-doLet = do
+defconst :: Compile (Term Name)
+defconst = do
+  symbol' "defconst"
   i <- currentInfo
-  bindings <- withList Parens $ \_ -> some $ withList Parens $ \_ -> do
-    n <- bareAtom
-    ty <- typed <|> freshTyVar
-    v <- term
-    return (Arg (_atomAtom n) ty (_atomInfo n),v)
-  let bNames = map (\(aa,_) -> Name (_aName aa) (_aInfo aa)) bindings
-  bs <- abstract (`elemIndex` bNames) <$> doBody
-  return $ TBinding bindings bs BindLet i
+  modName <- fst <$> currentModule
+  a <- arg
+  doc <- optional str
+  v <- term
+  return $ TConst a modName (CVRaw v) (Meta doc Nothing) i
+
+letBindings :: Compile [(Arg (Term Name),Term Name)]
+letBindings = withList' Parens $
+              some $ withList' Parens $
+              (,) <$> arg <*> term
+
+letForm :: Compile (Term Name)
+letForm = do
+  symbol' "let"
+  i <- currentInfo
+  bindings <- letBindings
+  let bNames = map (arg2Name . fst) bindings
+  scope <- abstract (`elemIndex` bNames) <$> bodyForm
+  return $ TBinding bindings scope BindLet i
+
+-- | let* is a macro to nest lets for referencing previous
+-- bindings.
+letsForm :: Compile (Term Name)
+letsForm = do
+  symbol' "let*"
+  bindings <- letBindings
+  let nest (binding:rest) = do
+        let bName = [arg2Name (fst binding)]
+        scope <- abstract (`elemIndex` bName) <$> case rest of
+          [] -> bodyForm
+          _ -> nest rest
+        return $ TBinding [binding] scope BindLet (_aInfo (fst binding))
+      nest [] = error "invalid state"
+  nest bindings
+
+useForm :: Compile (Term Name)
+useForm = do
+  symbol' "use"
+  i <- currentInfo
+  modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
+  modHash <- optional str
+  h <- forM modHash $ \hashStr -> case fromText' hashStr of
+    Left e -> syntaxError' $ "bad hash: " ++ e
+    Right hv -> return hv
+  return $ TUse (ModuleName modName) h i
+
+
+
+typedAtom :: Compile (AtomExp Info,Type (Term Name))
+typedAtom = (,) <$> bareAtom <*> (typed <|> freshTyVar)
+
+arg :: Compile (Arg (Term Name))
+arg = typedAtom >>= \(AtomExp{..},ty) ->
+  return $ Arg _atomAtom ty _atomInfo
+
+arg2Name :: Arg n -> Name
+arg2Name Arg{..} = Name _aName _aInfo
+
 
 typed :: Compile (Type (Term Name))
 typed = sep' Colon *> parseType
@@ -273,7 +382,7 @@ parseType = msum
   ]
 
 parseListType :: Compile (Type (Term Name))
-parseListType = withList Brackets $ \_ -> TyList <$> parseType <* eof
+parseListType = withList' Brackets $ TyList <$> parseType <* eof
 
 parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
@@ -285,40 +394,14 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- bareAtom
   return $ TyUser (return $ Name _atomAtom _listInfo)
 
-symbol :: Text -> Compile Text
-symbol s = bareAtom >>= \AtomExp {..} ->
-  if s == _atomAtom then return s else expected ("bareword: " <> s)
 
 
-freshTyVar :: Compile (Type (Term Name))
-freshTyVar = do
-  c <- state (view csFresh &&& over csFresh succ)
-  return $ mkTyVar (cToTV c) []
-
-cToTV :: Int -> TypeVarName
-cToTV n | n < 26 = fromString [toC n]
-        | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
-        | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
-  where toC i = toEnum (fromEnum 'a' + i)
-
-_testCToTV :: Bool
-_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
-
-doBody :: Compile (Term Name)
-doBody = do
+bodyForm :: Compile (Term Name)
+bodyForm = do
   i <- currentInfo
   bs <- some term <* eof
   return $ TList bs TyAny i
 
-doUse :: Compile (Term Name)
-doUse = do
-  i <- currentInfo
-  modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
-  modHash <- optional str
-  h <- forM modHash $ \hashStr -> case fromText' hashStr of
-    Left e -> syntaxError' $ "bad hash: " ++ e
-    Right hv -> return hv
-  return $ TUse (ModuleName modName) h i
 
 
 {-
@@ -492,10 +575,6 @@ handleModule n k es li ai =
               (abstract (const Nothing) (TList bd TyAny li)) li
 
 
-currentModule :: Info -> Compile (ModuleName,Hash)
-currentModule i = use csModule >>= \m -> case m of
-  Just cm -> return cm
-  Nothing -> syntaxError i "Must be declared within module"
 
 doDef :: [Exp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
