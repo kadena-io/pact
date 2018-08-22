@@ -302,7 +302,8 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
 
       let mangledFunType = mangleFunType (_aId i) orgFunType
       debug $ "Mangled funtype: " ++ show orgFunType ++ " -> " ++ show mangledFunType
-
+      when (length (_ftArgs mangledFunType) /= length argASTs) $
+        die _fInfo $ "Incorrect number of arguments supplied to function: " ++ show mangledFunType 
       -- zip funtype 'Arg's with AST args, and assoc each.
       args <- (\f -> zipWithM f (_ftArgs mangledFunType) argASTs) $ \(Arg _ argTy _) argAST -> case (argTy,argAST) of
         (TyFun lambdaType,partialAST@App{}) -> do
