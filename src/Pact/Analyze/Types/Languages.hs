@@ -88,7 +88,6 @@ pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
 
-
 -- | Core terms.
 --
 -- These are the expressions shared by all three languages ('Prop',
@@ -412,7 +411,11 @@ data Term ret where
 
   -- Conditional transaction abort
   Enforce         :: Maybe TagId -> Term Bool   -> Term Bool -- Only a TagId for an assertion; i.e. not keyset enforcement
-  EnforceOne      :: TagId       -> [Term Bool] -> Term Bool
+  -- Left to be tagged if the list of cases is empty. We do this because we
+  -- need a way to signal a failure due to this particular scenario in model
+  -- reporting. Right _1 to be tagged if the case fails, Right _2 to be tagged
+  -- if the case succeeds:
+  EnforceOne      :: Either TagId [((TagId, TagId), Term Bool)] -> Term Bool
 
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet

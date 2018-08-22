@@ -22,7 +22,8 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify')
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl')
+import           Data.Foldable               (foldl', foldlM)
+import           Data.Functor                (($>))
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -53,7 +54,6 @@ import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
-
 
 newtype Analyze a
   = Analyze
@@ -139,13 +139,6 @@ tagAccessCell lens' tid fieldName av = do
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
-
-tagEnforceTree :: TagId -> S Bool -> Analyze ()
-tagEnforceTree tid sb = do
-  mTag <- preview $ aeModelTags.mtEnforceTrees.at tid._Just.located
-  case mTag of
-    Nothing  -> pure ()
-    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
 tagAssert :: TagId -> S Bool -> Analyze ()
 tagAssert tid sb = do
@@ -323,23 +316,32 @@ evalTerm = \case
     succeeds %= (&&& cond')
     pure true
 
+  EnforceOne (Left tid) -> do
+    tagAssert tid false -- in this case (of an empty list), we always fail.
+    succeeds .= false
+    pure true           -- <- this value doesn't matter.
+
   -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
   -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
   -- list.
-  EnforceOne tid conds -> do
+  EnforceOne (Right conds) -> do
     initSucceeds <- use succeeds
-    attempts <- for conds $ \cond -> do
-      succeeds .= true
-      (,) <$> evalTerm cond <*> use succeeds
 
-    -- Use the result from the first success.
-    let (result, anySucceeded) = foldr
-          (\(res, success) rest ->
-            iteS success (res, true) rest)
-          (true, false)
-          attempts
+    (result, anySucceeded) <- foldlM
+      (\(prevResult, earlierSuccess) ((failTag, passTag), cond) -> do
+        iteS earlierSuccess
+          (pure (prevResult, true))
+          (do
+            succeeds .= true
+            res <- evalTerm cond
+            succeeded <- use succeeds
+            iteS succeeded
+              (tagSubpathStart passTag $> (res, true))
+              (tagSubpathStart failTag $> (res, false))
+          ))
+      (true, false)
+      conds
 
-    tagEnforceTree tid anySucceeded
     succeeds .= (initSucceeds &&& anySucceeded)
     pure result
 
