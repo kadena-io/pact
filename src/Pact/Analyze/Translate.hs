@@ -138,6 +138,7 @@ data TranslateState
       -- ^ The "latest" vertex/current path of the graph. This starts out as
       -- the single initial vertex. it splits into two if we hit a conditional,
       -- and rejoins afterwards.
+    , _tsNextVertex    :: Vertex
     , _tsEdgeEvents    :: Map Edge [TraceEvent]
       -- ^ Events added to each new 'Edge' upon creating a new 'Vertex' which
       -- closes/completes the 'Edge'.
@@ -356,7 +357,8 @@ throwError' err = do
 issueVertex :: TranslateM Edge
 issueVertex = do
   prev <- use tsPathHead
-  let v = succ prev
+  v <- use tsNextVertex
+  tsNextVertex %= succ
   tsPathHead .= v
   pure (prev, v)
 
@@ -372,7 +374,7 @@ addPathEdge path e =
   tsPathEdges.at path %= pure . cons e . fromMaybe []
 
 -- | Extends the previous path head to a new 'Vertex', flushing accumulated
--- events to 'tsEdgeEvents.
+-- events to 'tsEdgeEvents'.
 extendPath :: TranslateM Vertex
 extendPath = do
   e@(v, v') <- issueVertex
@@ -891,11 +893,12 @@ runTranslation info pactArgs body = do
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
-      let vertex0   = 0
-          path0     = 0
-          nextTagId = succ path0
-          graph0    = pure vertex0
-          state0    = TranslateState nextTagId nextVarId graph0 vertex0 Map.empty mempty path0 Map.empty
+      let vertex0    = 0
+          nextVertex = succ vertex0
+          path0      = 0
+          nextTagId  = succ path0
+          graph0     = pure vertex0
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
           translation = translateBody body
                      <* extendPath -- form final edge for any remaining events
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
