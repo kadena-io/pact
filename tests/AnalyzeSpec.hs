@@ -8,7 +8,8 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, (^.), (^..), _Left, _2)
+import           Control.Lens                 (at, findOf, ix, (^.), (^..), _2,
+                                               _Left)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
 import           Data.Either                  (isLeft)
@@ -17,13 +18,16 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)), isConcretely)
-import           Data.SBV.Internals           (SBV(SBV))
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
+                                               isConcretely)
+import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
-import           Test.Hspec                   (Spec, describe, expectationFailure, it, runIO,
-                                               shouldBe, shouldSatisfy, pendingWith)
+import           Test.Hspec                   (Spec, describe,
+                                               expectationFailure, it,
+                                               pendingWith, runIO, shouldBe,
+                                               shouldSatisfy)
 import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
@@ -33,8 +37,8 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp,
-                                               PreProp(..))
+import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
+                                               expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util            ((...))
@@ -969,7 +973,7 @@ spec = describe "analyze" $ do
 
             [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model args (ModelTags _ _ writes _ _ _ _ _) ksProvs _) = model
+            let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
 
             it "should have a negative amount" $ do
               Just (Located _ (_, (_, AVal _prov amount))) <- pure $

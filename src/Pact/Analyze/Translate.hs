@@ -15,12 +15,11 @@ module Pact.Analyze.Translate where
 
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (Lens', Traversal', at,
-                                             makeLenses, cons, _last,
-                                             snoc, use, view, (<&>), (?~),
-                                             (^.), (^?), (%~), (.~), (<&>),
-                                             (%=), (.=), (?=))
-import           Control.Monad              ((>=>))
+import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
+                                             use, view, (%=), (%~), (.=), (.~),
+                                             (<&>), (<&>), (?=), (?~), (^.),
+                                             (^?))
+import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
@@ -31,14 +30,13 @@ import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
 import           Data.Maybe                 (fromMaybe)
-import           Data.Monoid                (Endo (Endo, appEndo), (<>))
+import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
-import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
@@ -49,8 +47,8 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
-import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time,
-                                                    col)
+import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
+                                             time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -113,14 +111,13 @@ describeTranslateFailureNoLoc = \case
 
 data TranslateEnv
   = TranslateEnv
-    { _teInfo         :: Info
-    , _teNodeVars     :: Map Node (Text, VarId)
-    , _teEnforceDepth :: Natural
-    -- ^ how many layers of enforce-one are you on?
+    { _teInfo           :: Info
+    , _teNodeVars       :: Map Node (Text, VarId)
+    , _teRecoverability :: Recoverability
     }
 
 mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars 0
+mkTranslateEnv info args = TranslateEnv info nodeVars mempty
   where
     nodeVars = foldl'
       (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
@@ -149,12 +146,13 @@ data TranslateState
       -- next 'Vertex'.
     , _tsPathEdges     :: Map TagId [Edge]
       -- ^ Graph edges corresponding to a given execution "path".
-      -- 'TracePathStart's are emitted once for each path: at the start of an
-      -- execution trace, and at the beginning of either side of a conditional.
-      -- After a conditional, we resume the path from before the conditional.
-      -- Either side of a conditional will contain a minimum of two edges:
-      -- splitting away from the other branch, and then rejoining back to the
-      -- other branch at the join point. The following program:
+      --
+      -- 'TraceSubpathStart's are emitted once for each path: at the start of
+      -- an execution trace, and at the beginning of either side of a
+      -- conditional.  After a conditional, we resume the path from before the
+      -- conditional.  Either side of a conditional will contain a minimum of
+      -- two edges: splitting away from the other branch, and then rejoining
+      -- back to the other branch at the join point. The following program:
       --
       --     (defun test ()
       --       (if true 1 2))
@@ -181,11 +179,24 @@ data TranslateState
       --      \ / \ _/
       --        \./
       --
-      --  We track all of the edges for each path so that we can determine the
-      --  subset of edges on the graph that form the upper bound for the edges
-      --  that are reached during a particular execution trace. We say "upper
-      --  bound" here because some traces will not execute entirely to the end
-      --  of the program due to the use of e.g. @enforce@ and @enforce-keyset@.
+      -- We track all of the edges for each path so that we can determine the
+      -- subset of edges on the graph that form the upper bound for the edges
+      -- that are reached during a particular execution trace. We say "upper
+      -- bound" here because some traces will not execute entirely to the end
+      -- of the program due to the use of e.g. @enforce@ and @enforce-keyset@.
+      --
+      -- There's one more scenario where we start subpaths: for each of the
+      -- "cases" of an @enforce-one@. Here's an example with three cases:
+      --
+      --     (enforce-one [case-1 case-2 case-3])
+      --
+      --     \____        <- case-1 runs, always
+      --      \___ ._     <- case-2 runs if case-1 fails
+      --       \__        <- case-3 runs if case-2 fails
+      --
+      -- The \ edges correspond to the execution of each case. The _ edges
+      -- correspond to successful exit early due to the lack of a failure.
+      -- Theses three "success" edges all join together at the same vertex.
     }
 
 makeLenses ''TranslateFailure
@@ -230,14 +241,7 @@ astContext :: AST Node -> TranslateM a -> TranslateM a
 astContext ast = local (envInfo .~ astToInfo ast)
 
 emit :: TraceEvent -> TranslateM ()
-emit event = do
-    depth <- view teEnforceDepth
-    modify' $ tsPendingEvents.dig depth %~ flip snoc event
-
-  where
-    dig :: Natural -> Traversal' (SnocList TraceEvent) (SnocList TraceEvent)
-    dig (fromIntegral -> n) =
-      appEndo $ mconcat $ replicate n $ Endo $ _last.treeCases._last
+emit event = modify' $ tsPendingEvents %~ flip snoc event
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
@@ -245,11 +249,15 @@ genTagId = genId tsNextTagId
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
 
-createSubpath :: TranslateM TagId
-createSubpath = do
-  tid <- genTagId
+startSubpath :: TagId -> TranslateM ()
+startSubpath tid = do
   tsCurrentPath .= tid
   emit $ TraceSubpathStart tid
+
+startNewSubpath :: TranslateM TagId
+startNewSubpath = do
+  tid <- genTagId
+  startSubpath tid
   pure tid
 
 tagDbAccess
@@ -268,22 +276,18 @@ tagRead = tagDbAccess TraceRead
 tagWrite :: Node -> Schema -> TranslateM TagId
 tagWrite = tagDbAccess TraceWrite
 
-tagEnforceTree :: Node -> TranslateM TagId
-tagEnforceTree node = do
-  tid <- genTagId
-  emit $ TraceEnforceTree $ Located (nodeInfo node) (tid, mempty)
-  pure tid
-
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
   tid <- genTagId
-  emit $ TraceAssert $ Located (nodeInfo node) tid
+  recov <- view teRecoverability
+  emit $ TraceAssert recov $ Located (nodeInfo node) tid
   pure tid
 
 tagAuth :: Node -> TranslateM TagId
 tagAuth node = do
   tid <- genTagId
-  emit $ TraceAuth $ Located (nodeInfo node) tid
+  recov <- view teRecoverability
+  emit $ TraceAuth recov $ Located (nodeInfo node) tid
   pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
@@ -397,6 +401,9 @@ joinPaths branches = do
     let rejoinEdge = (v, v')
     tsEdgeEvents.at rejoinEdge ?= []
     addPathEdge path rejoinEdge
+
+withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
+withNestedRecoverability r = local $ teRecoverability %~ (<> r)
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -593,13 +600,43 @@ translateNode astNode = astContext astNode $ case astNode of
       tid <- tagAuth $ ksA ^. aNode
       return $ ESimple TBool $ Enforce Nothing $ KsAuthorized tid ksT
 
-  AST_EnforceOne node enforces -> do
-    tid <- tagEnforceTree node
-    tms <- local (teEnforceDepth %~ succ) $ for enforces $ \enforce -> do
-      modify' $ tsPendingEvents._last.treeCases %~ flip snoc mempty
-      ESimple TBool enforce' <- translateNode enforce
-      pure enforce'
-    return $ ESimple TBool $ EnforceOne tid tms
+  AST_EnforceOne node [] -> do
+    -- we just emit an event equivalent to one for `(enforce false)` in this
+    -- case:
+    tid <- tagAssert node
+    return $ ESimple TBool $ EnforceOne $ Left tid
+
+  AST_EnforceOne _ casesA@(_:_) -> do
+    let n = length casesA -- invariant: n > 0
+    preEnforcePath <- use tsCurrentPath
+    pathPairs <- (++)
+        -- For the first n-1 cases, we generate a failure, then success, tag,
+        -- for each possibility after the case runs.
+        <$> replicateM (pred n) ((,) <$> genTagId <*> genTagId)
+        -- For the last case, we generate a single tag for both, to result in a
+        -- fully-connected graph:
+        <*> replicateM 1        (genTagId <&> \tid -> (tid, tid))
+
+    let (failurePaths, successPaths) = unzip pathPairs
+        -- we don't start a new path for the first case -- we *always* run it:
+        newPaths :: [Maybe TagId]
+        newPaths = Nothing : fmap Just (take (pred n) failurePaths)
+
+        recovs :: [Recoverability]
+        recovs = (Recoverable <$> take (pred n) failurePaths)
+              ++ [Unrecoverable]
+
+    (terms, vertices) <- fmap unzip $
+      for (zip3 casesA newPaths recovs) $ \(caseA, mNewPath, recov) -> do
+        maybe (pure ()) startSubpath mNewPath
+        ESimple TBool caseT <- withNestedRecoverability recov $
+          translateNode caseA
+        postVertex <- extendPath
+        pure (caseT, postVertex)
+
+    joinPaths $ zip vertices successPaths
+    tsCurrentPath .= preEnforcePath
+    return $ ESimple TBool $ EnforceOne $ Right $ zip pathPairs terms
 
   AST_Days days -> do
     ESimple daysTy days' <- translateNode days
@@ -705,14 +742,14 @@ translateNode astNode = astContext astNode $ case astNode of
       ESimple ty a' <- translateNode a
       case ty of
         TDecimal -> pure $ ESimple TInt $ inject $ RoundingLikeOp1 op a'
-        _ -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp unaryArithOpP -> Just op) args@[a] -> do
       ESimple ty a' <- translateNode a
       case ty of
-        TInt -> pure $ ESimple TInt $ inject $ IntUnaryArithOp op a'
+        TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp op a'
         TDecimal -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp op a'
-        _ -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn args
 
   --
   -- NOTE: We don't use a feature symbol here because + is overloaded across
@@ -766,11 +803,11 @@ translateNode astNode = astContext astNode $ case astNode of
     ESimple TBool cond' <- translateNode cond
     preTestPath <- use tsCurrentPath
     postTest <- extendPath
-    truePath <- createSubpath
+    truePath <- startNewSubpath
     ESimple ta a <- translateNode tBranch
     postTrue <- extendPath
     tsPathHead .= postTest -- reset to before true branch
-    falsePath <- createSubpath
+    falsePath <- startNewSubpath
     ESimple tb b <- translateNode fBranch
     postFalse <- extendPath
     joinPaths [(postTrue, truePath), (postFalse, falsePath)]
