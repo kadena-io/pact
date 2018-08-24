@@ -157,7 +157,7 @@ litToPrim LBool {} = TyBool
 litToPrim LTime {} = TyTime
 
 data IsLiteralList
-  = IsLiteralList (Type TypeName)
+  = IsLiteralList
   | IsntLiteralList
   deriving (Eq, Generic)
 
@@ -189,7 +189,7 @@ instance NFData PactExp
 pattern EList' :: [PactExp] -> PactExp
 pattern EList' ls <- EList ls IsntLiteralList _
 pattern ELitList :: [PactExp] -> PactExp
-pattern ELitList ls <- EList ls (IsLiteralList _) _
+pattern ELitList ls <- EList ls IsLiteralList _
 pattern EAtom' :: Text -> PactExp
 pattern EAtom' tag <- EAtom tag Nothing Nothing _
 pattern ELitString :: Text -> PactExp
@@ -205,7 +205,7 @@ instance Show PactExp where
     show (ESymbol s _) = '\'':unpack s
     show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
     show (EList ls IsntLiteralList _) = "(" ++ unwords (map show ls) ++ ")"
-    show (EList ls IsLiteralList {} _) = "[" ++ unwords (map show ls) ++ "]"
+    show (EList ls IsLiteralList _) = "[" ++ unwords (map show ls) ++ "]"
     show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
     show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
 

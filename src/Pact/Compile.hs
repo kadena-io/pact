@@ -361,15 +361,28 @@ run e@(EObject bs _i) = do
 run e@(EBinding _ _i) = syntaxError' e "Unexpected binding"
 run e@(ESymbol s _i) = TLiteral (LString s) <$> mkInfo e
 run e@(ELiteral l _i) = TLiteral l <$> mkInfo e
-run e@(EAtom s q t _i) | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
-                    | isNothing t = mkInfo e >>= mkVar s q
-                    | otherwise = syntaxError' e "Invalid typed var"
-run e@(EList els (IsLiteralList lty) _i) = mkInfo e >>= \i -> TList <$> mapM run els <*> pure (liftTy i lty) <*> pure i
+run e@(EAtom s q t _i)
+  | s `elem` reserved = syntaxError' e $ "Unexpected reserved word: " ++ show s
+  | isNothing t = mkInfo e >>= mkVar s q
+  | otherwise = syntaxError' e "Invalid typed var"
+run e@(EList els IsLiteralList _i) = do
+  let lty = case nub (map expPrimTy els) of
+        [Just ty] -> ty
+        _         -> TyAny
+  i <- mkInfo e
+  els' <- mapM run els
+  pure $ TList els' (liftTy i lty) i
 run e = syntaxError' e "Unexpected expression"
 {-# INLINE run #-}
 
+expPrimTy :: PactExp -> Maybe (Type TypeName)
+expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
+expPrimTy ESymbol {}    = Just $ TyPrim TyString
+expPrimTy _             = Nothing
+{-# INLINE expPrimTy #-}
+
 mkVar :: Text -> Maybe Text -> Info -> Compile (Term Name)
-mkVar s q i = TVar <$> pure (maybe (Name s i) (\qn -> QName (ModuleName s) qn i) q) <*> pure i
+mkVar s q i = pure $ TVar (maybe (Name s i) (\qn -> QName (ModuleName s) qn i) q) i
 {-# INLINE mkVar #-}
 
 mapNonEmpty :: String -> (a -> Compile b) -> [a] -> Info -> Compile [b]

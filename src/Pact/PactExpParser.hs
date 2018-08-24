@@ -53,13 +53,6 @@ toBool = \case
   "false" -> Just False
   _       -> Nothing
 
-mkList :: [PactExp] -> Parsed -> PactExp
-mkList exprs' =
-  let lty = case nub (map expPrimTy exprs') of
-        [Just ty] -> ty
-        _         -> TyAny
-  in EList exprs' $ IsLiteralList lty
-
 -- | Main parser for Pact expressions.
 expr :: SExpProcessor PactExp
 expr = SExpProcessor $ \case
@@ -67,7 +60,9 @@ expr = SExpProcessor $ \case
   -- lists
   List listTy inner :~ span : input -> retL span input inner $ case listTy of
     Paren  -> EList <$> many expr <*> pure IsntLiteralList
-    Square -> fmap mkList $ expr `sepBy1` comma <|> many expr
+    Square -> EList
+      <$> (expr `sepBy1` comma <|> many expr)
+      <*> pure IsLiteralList
 
     Curly -> do
       ps <- pairs
@@ -128,11 +123,6 @@ pairs =
         v  <- expr
         return (op, (k, v))
   in p `sepBy` comma
-
-expPrimTy :: PactExp -> Maybe (Type TypeName)
-expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
-expPrimTy ESymbol {}    = Just $ TyPrim TyString
-expPrimTy _             = Nothing
 
 parseType :: SExpProcessor (Type TypeName)
 parseType = SExpProcessor $ \case
