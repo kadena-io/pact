@@ -65,9 +65,10 @@ import Data.Hashable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import Control.DeepSeq
 import qualified Data.Attoparsec.Text as AP
-import Text.Trifecta (try,ident,TokenParsing,(<?>))
+import Text.Trifecta (try,ident,TokenParsing,(<?>), Spanned)
 import Data.Serialize (Serialize)
 
+import Pact.Types.SExp (SExp)
 import Pact.Types.Util
 import Pact.Types.Parser (style, qualified)
 import Pact.Types.Info
@@ -172,7 +173,7 @@ data PactExp =
   -- | Atom, with support for type literals.
   EAtom { _eAtom :: !Text
         , _eQualifier :: !(Maybe Text)
-        , _eType :: !(Maybe (Type TypeName))
+        , _eType :: !(Maybe [Spanned SExp])
         , _eParsed :: !Parsed
         } |
   -- | Lists. '_eLitListType' distinguishes literal lists (`[1 2 3]`) from body forms.

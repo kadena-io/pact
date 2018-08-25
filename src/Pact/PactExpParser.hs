@@ -9,6 +9,7 @@
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE ViewPatterns               #-}
 -- |
 -- Module      :  Pact.PactExpParser
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -26,16 +27,14 @@ module Pact.PactExpParser
     ,parseSExps
     ) where
 
-import Data.Semigroup
-import Data.Foldable (asum)
 import           Control.Applicative
 import           Control.Comonad      (extract)
 import           Control.Monad
 import qualified Data.Attoparsec.Text as AP
 import           Data.Decimal
 import           Data.List            hiding (span)
+import           Data.Semigroup
 import           Data.String
-import qualified Data.Text            as T
 import           Text.Trifecta        (Spanned (..))
 import qualified Text.Trifecta        as TF
 import           Text.Trifecta.Delta  (bytes)
@@ -53,9 +52,19 @@ toBool = \case
   "false" -> Just False
   _       -> Nothing
 
--- | Main parser for Pact expressions.
+-- | Marker for where we allow / disallow annotations to an expression. This
+-- affects whether we try to pick up a trailing colon after an identifier. We
+-- usually allow annotations, but not immediately inside curly braces, because
+-- of objects.
+data AllowAnnot = AllowAnnot | DontAllowAnnot
+  deriving Eq
+
 expr :: SExpProcessor PactExp
-expr = SExpProcessor $ \case
+expr = expr' AllowAnnot
+
+-- | Main parser for Pact expressions.
+expr' :: AllowAnnot -> SExpProcessor PactExp
+expr' allowAnnot = SExpProcessor $ \case
 
   -- lists
   List listTy inner :~ span : input -> retL span input inner $ case listTy of
@@ -93,12 +102,10 @@ expr = SExpProcessor $ \case
     -> ret (span1 <> span2 <> span3) input $ EAtom a (Just q) Nothing
 
   Token (Ident a _) :~ span : input -> case input of
-    Token (Punctuation ":" _) :~ _ : input' -> asum
-      [ do
-        (input', _, ty) <- unP parseType input'
-        ret span input' $ EAtom a Nothing $ Just ty
-      , ret span input $ EAtom a Nothing Nothing
-      ]
+    Token (Punctuation ":" _) :~ _
+      : (viewTy -> Just (sexps, input'))
+      | allowAnnot == AllowAnnot
+      -> ret span input' $ EAtom a Nothing (Just sexps)
     _ -> ret span input $ EAtom a Nothing Nothing
 
   _ -> Nothing
@@ -115,51 +122,25 @@ expr = SExpProcessor $ \case
     spanToParsed (TF.Span start end _bs)
       = Parsed start $ fromIntegral $ bytes end - bytes start
 
+    viewTy = \case
+      t1@(Token (Ident objTab NoTrailingSpace) :~ _)
+        : t2@(List Curly _ :~ _)
+        : input
+        | objTab == "object" || objTab == "table"
+        -> Just ([t1, t2], input)
+      t@(List _ _ :~ _)          : input -> Just ([t], input)
+      t@(Token (Ident _ _) :~ _) : input -> Just ([t], input)
+      _ -> Nothing
+
+
 pairs :: SExpProcessor [(Text, (PactExp, PactExp))]
 pairs =
   let p = do
-        k  <- expr
+        k  <- expr' DontAllowAnnot
         op <- punctuation ":=" <|> colon
-        v  <- expr
+        v  <- expr' DontAllowAnnot
         return (op, (k, v))
   in p `sepBy` comma
-
-parseType :: SExpProcessor (Type TypeName)
-parseType = SExpProcessor $ \case
-  List Square ty :~ span : input -> do
-    ([], _, ty') <- unP parseType ty
-    Just (input, Just span, TyList ty')
-  Token (Ident ty _) :~ span : input
-    | Just schemaTy <- schemaPrefix ty
-    -> case input of
-         List Curly _ :~ _ : _ -> do
-           (input, span', userSchema) <- unP parseUserSchema input
-           pure (input, Just span <> span', TySchema schemaTy userSchema)
-         _ -> Just (input, Just span, TySchema schemaTy TyAny)
-  Token (Ident name _) :~ span : input -> (input,Just span,) <$>
-    if
-    | name == tyInteger -> pure $ TyPrim TyInteger
-    | name == tyDecimal -> pure $ TyPrim TyDecimal
-    | name == tyTime    -> pure $ TyPrim TyTime
-    | name == tyBool    -> pure $ TyPrim TyBool
-    | name == tyString  -> pure $ TyPrim TyString
-    | name == tyList    -> pure $ TyList TyAny
-    | name == tyValue   -> pure $ TyPrim TyValue
-    | name == tyKeySet  -> pure $ TyPrim TyKeySet
-    | otherwise         -> Nothing
-  input -> unP parseUserSchema input
-
-  where
-    schemaPrefix ty
-      | ty == tyObject = Just TyObject
-      | ty == tyTable  = Just TyTable
-      | otherwise      = Nothing
-
-parseUserSchema :: SExpProcessor (Type TypeName)
-parseUserSchema = SExpProcessor $ \case
-  List Curly [ Token (Ident name _) :~ _ ] :~ span : input
-    -> Just (input, Just span, TyUser $ fromString $ T.unpack name)
-  _ -> Nothing
 
 -- | Parse one or more Pact expressions.
 exprs :: SExpProcessor [PactExp]

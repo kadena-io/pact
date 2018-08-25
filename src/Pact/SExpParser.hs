@@ -35,6 +35,11 @@ runP (SExpProcessor p) sexps = case p sexps of
   Just (_, Nothing,               _) -> error "TODO"
   Nothing                            -> NoParse
 
+runP' :: SExpProcessor a -> [Spanned SExp] -> Maybe (Spanned a)
+runP' (SExpProcessor p) sexps = case p sexps of
+  Just ([], Just span, result) -> Just (result :~ span)
+  _                            -> Nothing
+
 instance Applicative SExpProcessor where
   pure a = SExpProcessor $ pure . (,Nothing,a)
   {-# INLINE pure #-}

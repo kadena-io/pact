@@ -17,6 +17,7 @@ import Data.Thyme
 import Data.Thyme.Internal.Micro
 import Data.Decimal
 import qualified Data.Aeson as A
+import Text.Trifecta             (Span)
 import Text.Trifecta.Combinators (DeltaParsing(..))
 import Text.Trifecta.Delta
 import qualified Data.Attoparsec.Text as AP
@@ -45,7 +46,7 @@ instance Serialize A.Value where
     {-# INLINE get #-}
 
 instance NFData Delta
-
+instance NFData Span
 
 -- | Atto DeltaParsing instance provides 'position' only (with no support for
 -- hidden chars like Trifecta).

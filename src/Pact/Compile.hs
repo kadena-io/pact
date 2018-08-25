@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
@@ -28,7 +29,7 @@ import           Bound
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Exception
-import           Control.Lens
+import           Control.Lens                 hiding (List)
 import           Control.Monad
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -37,6 +38,7 @@ import           Data.Default
 import qualified Data.HashSet                 as HS
 import           Data.List
 import           Data.Maybe
+import           Data.Semigroup               ((<>))
 import           Data.String
 import qualified Data.Text                    as T
 import           Data.Text.Encoding           (encodeUtf8)
@@ -46,10 +48,12 @@ import           Text.Trifecta                as TF
 import           Text.Trifecta.Delta          as TF
 
 import           Pact.PactExpParser           (exprsOnly, parseExprs)
+import           Pact.SExpParser              (SExpProcessor(..), runP')
 import           Pact.Types.Hash
 import           Pact.Types.Lang
 import           Pact.Types.Runtime           (PactError (..),
                                                PactErrorType (..))
+import           Pact.Types.SExp              (BraceType(..), SExp(..), Token(..))
 
 type MkInfo = PactExp -> Info
 
@@ -203,14 +207,15 @@ currentModule i = use csModule >>= \m -> case m of
 doDef :: [PactExp] -> DefType -> Info -> Info -> Compile (Term Name)
 doDef es defType namei i =
     case es of
-      (EAtom dn Nothing ty _:EList args IsntLiteralList _:MetaBodyExp meta body) ->
-          mkDef dn ty args body meta
+      (EAtom dn Nothing ty _:EList args IsntLiteralList _:MetaBodyExp meta body) -> do
+        ty' <- parseType i ty
+        mkDef dn ty' args body meta
       _ -> syntaxError namei "Invalid def"
       where
         mkDef dn ty dargs body ddocs = do
           args <- mapM atomVar dargs
           let argsn = map (\aa -> Name (_aName aa) (_aInfo aa)) args
-          dty <- FunType <$> pure args <*> maybeTyVar namei ty
+          dty <- FunType args <$> maybeTyVar namei ty
           cm <- currentModule i
           db <- abstract (`elemIndex` argsn) <$> runBody body i
           return $ TDef dn (fst cm) defType dty db ddocs i
@@ -251,7 +256,8 @@ doStepRollback _ i = syntaxError i "Invalid step-with-rollback definition"
 letPair :: PactExp -> Compile (Arg (Term Name), Term Name)
 letPair e@(EList [k@(EAtom s Nothing ty _),v] IsntLiteralList _) = do
   ki <- mkInfo k
-  (,) <$> (Arg <$> pure s <*> maybeTyVar ki ty <*> mkInfo e) <*> run v
+  ty' <- parseType ki ty
+  (,) <$> (Arg s <$> maybeTyVar ki ty' <*> mkInfo e) <*> run v
 letPair t = syntaxError' t "Invalid let pair"
 
 doLet :: [PactExp] -> Info -> Compile (Term Name)
@@ -287,7 +293,8 @@ doConst es i = case es of
     mkConst dn ty v docs = do
       v' <- run v
       cm <- currentModule i
-      a <- Arg <$> pure dn <*> maybeTyVar i ty <*> pure i
+      ty' <- parseType i ty
+      a <- Arg dn <$> maybeTyVar i ty' <*> pure i
       return $ TConst a (fst cm) (CVRaw v') docs i
 
 doSchema :: [PactExp] -> Info -> Compile (Term Name)
@@ -299,7 +306,10 @@ doSchema es i = case es of
     mkUT utn as docs = do
       cm <- currentModule i
       fs <- forM as $ \a -> case a of
-        EAtom an Nothing ty _ai -> mkInfo a >>= \ai -> Arg an <$> maybeTyVar ai ty <*> pure ai
+        EAtom an Nothing ty _ai -> do
+          ai <- mkInfo a
+          ty' <- parseType i ty
+          Arg an <$> maybeTyVar ai ty' <*> pure ai
         _ -> syntaxError i "Invalid schema field definition"
       return $ TSchema (TypeName utn) (fst cm) docs fs i
 
@@ -310,7 +320,8 @@ doTable es i = case es of
   where
     mkT tn ty docs = do
       cm <- currentModule i
-      tty :: Type (Term Name) <- case ty of
+      ty' <- parseType i ty
+      tty :: Type (Term Name) <- case ty' of
         Just ot@TyUser {} -> return $ liftTy i ot
         Nothing -> return TyAny
         _ -> syntaxError i "Invalid table row type, must be an object type e.g. {myobject}"
@@ -394,8 +405,54 @@ runNonEmpty :: String -> [PactExp] -> Info -> Compile [Term Name]
 runNonEmpty s = mapNonEmpty s run
 {-# INLINE runNonEmpty #-}
 
+parseType :: Info -> Maybe [Spanned SExp] -> Compile (Maybe (Type TypeName))
+parseType _i Nothing = pure Nothing
+parseType i (Just sexp) = case runP' parseType' sexp of
+  Just (ty :~ _) -> pure (Just ty)
+  Nothing        -> syntaxError i "couldn't parse type"
+
+parseType' :: SExpProcessor (Type TypeName)
+parseType' = SExpProcessor $ \case
+  List Square ty :~ s : input -> do
+    ([], _, ty') <- unP parseType' ty
+    Just (input, Just s, TyList ty')
+  Token (Ident ty _) :~ s : input
+    | Just schemaTy <- schemaPrefix ty
+    -> case input of
+         List Curly _ :~ _ : _ -> do
+           (input', span', userSchema) <- unP parseUserSchema input
+           pure (input', Just s <> span', TySchema schemaTy userSchema)
+         _ -> Just (input, Just s, TySchema schemaTy TyAny)
+  Token (Ident name _) :~ s : input -> (input,Just s,) <$>
+    if
+    | name == tyInteger -> pure $ TyPrim TyInteger
+    | name == tyDecimal -> pure $ TyPrim TyDecimal
+    | name == tyTime    -> pure $ TyPrim TyTime
+    | name == tyBool    -> pure $ TyPrim TyBool
+    | name == tyString  -> pure $ TyPrim TyString
+    | name == tyList    -> pure $ TyList TyAny
+    | name == tyValue   -> pure $ TyPrim TyValue
+    | name == tyKeySet  -> pure $ TyPrim TyKeySet
+    | otherwise         -> Nothing
+  input -> unP parseUserSchema input
+
+  where
+    schemaPrefix ty
+      | ty == tyObject = Just TyObject
+      | ty == tyTable  = Just TyTable
+      | otherwise      = Nothing
+
+parseUserSchema :: SExpProcessor (Type TypeName)
+parseUserSchema = SExpProcessor $ \case
+  List Curly [ Token (Ident name _) :~ _ ] :~ s : input
+    -> Just (input, Just s, TyUser $ fromString $ T.unpack name)
+  _ -> Nothing
+
 atomVar :: PactExp -> Compile (Arg (Term Name))
-atomVar e@(EAtom a Nothing ty _i) = mkInfo e >>= \i -> Arg <$> pure a <*> maybeTyVar i ty <*> pure i
+atomVar e@(EAtom a Nothing ty _i) = do
+  i <- mkInfo e
+  ty' <- parseType i ty
+  Arg a <$> maybeTyVar i ty' <*> pure i
 atomVar e = syntaxError' e "Expected unqualified atom"
 {-# INLINE atomVar #-}
 

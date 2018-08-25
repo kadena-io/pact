@@ -51,6 +51,13 @@ loadBadParens = do
         , Token (Number (Left 2))               :~ Span (c 4) (c 5) ""
         ] :~ Span (c 0) (c 6) "")
 
+    parseSExp "{ foo: bar }" `shouldBe` Right
+      (List Curly
+        [ Token (Ident "foo" NoTrailingSpace)   :~ Span (c 2) (c 5) ""
+        , Token (Punctuation ":" TrailingSpace) :~ Span (c 5) (c 7) ""
+        , Token (Ident "bar" TrailingSpace)     :~ Span (c 7) (c 11) ""
+        ] :~ Span (c 0) (c 12) "")
+
     parseSExp "(\"foo\" \"bar\")" `shouldBe`  Right
       (List Paren
         [ Token (String "foo") :~ Span (c 1) (c 7) ""

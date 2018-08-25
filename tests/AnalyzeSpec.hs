@@ -1526,7 +1526,6 @@ spec = describe "analyze" $ do
         singletonTableEnv a b ty = TableMap $ Map.singleton a $
             ColumnMap $ Map.singleton b ty
 
-
     it "infers column-delta" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
       textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
@@ -1663,8 +1662,12 @@ spec = describe "analyze" $ do
               (PNot (Inj $ TableWrite "table"))))
 
     it "parses quantified columns" $ do
-      pendingWith "separate parser for props"
-      inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
+      pendingWith "backend implementation"
+      inferProp'' [text|
+        (forall (table:table)
+          (forall (column:(column-of table))
+            (= 0 (column-delta table column))))
+        |]
         `shouldBe`
         Right
           (ESimple TBool
