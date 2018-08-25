@@ -254,6 +254,7 @@ evalTermO = \case
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
+      columnRead tn cn .= true
       sDirty <- use $ cellWritten tn cn sRk
 
       av <- case fieldType of
@@ -376,6 +377,7 @@ evalTerm = \case
     aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
       cellWritten tn cn sRk .= true
+      columnWritten tn cn   .= true
       tagAccessCell mtWrites tid colName aval'
 
       case aval' of

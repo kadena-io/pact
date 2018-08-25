@@ -137,7 +137,7 @@ floatBoolQuantifiers p = case p of
   PropSpecific Success            -> ([], p)
   PropSpecific TableWrite{}       -> ([], p)
   PropSpecific TableRead{}        -> ([], p)
-  PropSpecific ColumnWrite{}      -> ([], p)
+  PropSpecific ColumnWritten{}    -> ([], p)
   PropSpecific ColumnRead{}       -> ([], p)
   PropSpecific KsNameAuthorized{} -> ([], p)
   PropSpecific RowEnforced{}      -> ([], p)

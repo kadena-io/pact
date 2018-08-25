@@ -56,7 +56,7 @@ data PreProp
 
   | PreAt Text PreProp
   | PreLiteralObject (Map Text PreProp)
-  deriving Eq
+  deriving (Eq, Show)
 
 instance UserShow PreProp where
   userShowsPrec prec = \case
@@ -104,16 +104,16 @@ textToQuantifier = \case
 type TableEnv = TableMap (ColumnMap EType)
 
 data PropCheckEnv = PropCheckEnv
-  { _varTys           :: Map VarId QType
-  , _tableEnv         :: TableEnv
-  , _quantifiedTables :: Set TableName
-  -- , _quantifiedColumns :: Set ColumnName
+  { _varTys            :: Map VarId QType
+  , _tableEnv          :: TableEnv
+  , _quantifiedTables  :: Set TableName
+  , _quantifiedColumns :: Set ColumnName
 
   -- User-defined properties
-  , _definedProps     :: HM.HashMap Text (DefinedProperty PreProp)
+  , _definedProps      :: HM.HashMap Text (DefinedProperty PreProp)
 
   -- Vars bound within a user-defined property
-  , _localVars        :: HM.HashMap Text EProp
+  , _localVars         :: HM.HashMap Text EProp
   }
 
 type ParseEnv = Map Text VarId

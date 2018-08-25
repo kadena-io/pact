@@ -20,7 +20,7 @@ import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust, isNothing)
+import           Data.Maybe                   (fromJust, isJust)
 import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
@@ -43,7 +43,7 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
 import           Pact.Analyze.Check
 import           Pact.Analyze.Eval.Numerical  (banker'sMethod)
 import qualified Pact.Analyze.Model           as Model
-import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
+import           Pact.Analyze.Parse           (PreProp(..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
@@ -1704,7 +1704,6 @@ spec = describe "analyze" $ do
         singletonTableEnv a b ty = TableMap $ Map.singleton a $
             ColumnMap $ Map.singleton b ty
 
-
     it "infers column-delta" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
       textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
@@ -1837,17 +1836,25 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right
           (ESimple TBool
-            (Inj $ Forall (VarId 1) "table" QTable
-              (PNot (Inj $ TableWrite "table"))))
+            $ Inj $ Forall (VarId 1) "table" QTable
+              $ PNot $ Inj $ TableWrite $
+                CoreProp $ Var (VarId 1) "table")
 
     it "parses quantified columns" $ do
-      pendingWith "separate parser for props"
-      inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
+      pendingWith "parsing quantified table names"
+      inferProp'' [text|
+        (forall (table:table)
+          (forall (column:(column-of table))
+            (column-written table column)))
+        |]
         `shouldBe`
         Right
           (ESimple TBool
-            (Inj $ Forall (VarId 1) "column" (QColumnOf "table")
-              (PNot (Inj $ ColumnWrite "table" "column"))))
+            (Inj $ Forall (VarId 1) "table" QTable
+              (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
+                (Inj (ColumnWritten
+                  (CoreProp (Var (VarId 1) "table"))
+                  (CoreProp (Var (VarId 2) "column")))))))
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
@@ -1915,8 +1922,17 @@ spec = describe "analyze" $ do
             (defun test1:integer ()
               @doc   "don't touch a column"
               @model (properties [
-                  (forall (column:(column-of simple-table)) (not (column-write column)))
-                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                  (forall (column:(column-of 'simple-table))
+                    (not (column-written 'simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of 'simple-table))
+                    (column-written 'simple-table column)))
+
+                  (forall (column:(column-of 'simple-table))
+                    (not (column-read 'simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of 'simple-table))
+                    (column-read 'simple-table column)))
                 ])
               1)
 
@@ -1924,8 +1940,17 @@ spec = describe "analyze" $ do
               @doc "write a column"
               @model
                 (properties [
-                  (exists (column:(column-of simple-table)) (column-write column))
-                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                  (exists (column:(column-of 'simple-table))
+                    (column-written 'simple-table column))
+                  ; ^- equisatisfiable -v
+                  (not (forall (column:(column-of 'simple-table))
+                    (not (column-written 'simple-table column))))
+
+                  (forall (column:(column-of 'simple-table))
+                    (not (column-read 'simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of 'simple-table))
+                    (column-read 'simple-table column)))
                 ])
               (insert simple-table "joel" { 'balance : 5 }))
 
@@ -1933,19 +1958,23 @@ spec = describe "analyze" $ do
               @doc   "read a column"
               @model
                 (properties [
-                  (forall (column:(column-of simple-table)) (not (column-write column)))
-                  (exists (column:(column-of simple-table)) (column-read column))
+                  (forall (column:(column-of 'simple-table))
+                    (not (column-written 'simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of 'simple-table))
+                    (column-written 'simple-table column)))
+
+                  (exists (column:(column-of 'simple-table))
+                    (column-read 'simple-table column))
+                  ; ^- equisatisfiable -v
+                  (not (forall (column:(column-of 'simple-table))
+                    (not (column-read 'simple-table column))))
                 ])
-              )
               (read simple-table "joel"))
 
           |]
 
-    -- TODO replace this check with expectVerified after 'pending' is removed
-    res <- runIO $ runVerification $ wrap code
-    it "passes in-code checks" $ do
-      pendingWith "separate parser for props"
-      res `shouldSatisfy` isNothing
+    expectVerified code
 
   describe "UserShow" $
     it "schema looks okay" $ do
