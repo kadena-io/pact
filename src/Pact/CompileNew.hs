@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -28,13 +30,18 @@ where
 
 import qualified Text.Trifecta as TF hiding (expected)
 import qualified Text.Trifecta.Delta as TF
-import Control.Applicative
+import Control.Applicative hiding (some,many)
+import Text.Megaparsec
+import Text.Megaparsec.Char (satisfy)
+import Data.Proxy
+import Data.Void
+import Data.List.NonEmpty (NonEmpty(..),fromList)
 import Data.List
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Arrow ((&&&))
+import Control.Arrow ((&&&),second)
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -47,7 +54,7 @@ import Data.Text (Text,pack,unpack)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
-import Data.Monoid ((<>))
+import Data.Semigroup ((<>))
 
 import Pact.Types.Crypto
 import Pact.Types.ExpNew
@@ -70,39 +77,70 @@ mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $ T.drop (fromIntegral $
 
 data Cursor = Cursor
   { _cParent :: Maybe Cursor
-  , _cStream :: [Exp Info]
-  , _cInfo :: Info }
+  , _cStream :: [Exp Info] }
 makeLenses ''Cursor
-
+instance Default Cursor where def = Cursor def def
 
 data CompileState = CompileState
   { _csFresh :: Int
   , _csModule :: Maybe (ModuleName,Hash)
-  , _csCursor :: Cursor
   }
 makeLenses ''CompileState
+instance Default CompileState where
+  def = CompileState 0 Nothing
 
-initState :: Exp Info -> CompileState
-initState e = CompileState 0 Nothing $ Cursor Nothing [e] (eInfo e)
 
-type Compile a = StateT CompileState (Except [PactError]) a
+-- | copied from Text.Megaparsec.Stream
+defaultAdvance1
+  :: Pos               -- ^ Tab width (unused)
+  -> SourcePos         -- ^ Current position
+  -> t                 -- ^ Current token
+  -> SourcePos         -- ^ Incremented position
+defaultAdvance1 _width (SourcePos n l c) t = npos
+  where
+    c' = unPos c
+    npos = SourcePos n l (c <> pos1)
+{-# INLINE defaultAdvance1 #-}
+
+instance Stream Cursor where
+  type Token Cursor = Exp Info
+  type Tokens Cursor = [Exp Info]
+  tokenToChunk Proxy = pure
+  tokensToChunk Proxy = id
+  chunkToTokens Proxy = id
+  chunkLength Proxy = length
+  chunkEmpty Proxy = null
+  advance1 Proxy = defaultAdvance1
+  advanceN Proxy w = foldl' (defaultAdvance1 w)
+  take1_ Cursor{..} = case _cStream of
+    [] -> Nothing
+    (t:ts) -> Just (t, Cursor _cParent ts)
+  takeN_ n s@Cursor{..}
+    | n <= 0        = Just ([], s)
+    | null _cStream = Nothing
+    | otherwise = Just $ second (Cursor _cParent) $ splitAt n _cStream
+  takeWhile_ f Cursor{..} = second (Cursor _cParent) $ span f _cStream
+
+type Compile a = StateT CompileState (Parsec Void Cursor) a
 
 reserved :: [Text]
 reserved = T.words "use module defun defpact step step-with-rollback true false let let* defconst"
 
-runCompile :: (Compile a) -> CompileState -> Either PactError a
-runCompile act s = either (Left . getErr) Right $ runExcept (evalStateT act s)
-  where getErr [] = PactError SyntaxError def def "Compile failed"
-        getErr as = last as
+runCompile :: (Compile a) -> CompileState -> Exp Info -> Either PactError a
+runCompile act s a = either undefined (Right . fst) $
+  runParser (runStateT act s) "" (Cursor Nothing [a])
+  -- either (Left . getErr) Right $ runExcept (evalStateT act s)
+ --  where getErr [] = PactError SyntaxError def def "Compile failed"
+ --       getErr as = last as
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
-compile mi e = runCompile term $ initState (fmap mi e)
+compile mi e = runCompile term def (fmap mi e)
 
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
 syntaxError :: Info -> String -> Compile a
-syntaxError i s = throwError [PactError SyntaxError i def (pack s)]
+syntaxError i s = failure (Just (Label (fromList s))) def -- throwError [PactError SyntaxError i def (pack s)]
 
 syntaxError' :: String -> Compile a
 syntaxError' s = currentInfo >>= \e -> syntaxError (eInfo e) s
@@ -110,11 +148,13 @@ syntaxError' s = currentInfo >>= \e -> syntaxError (eInfo e) s
 expected :: Text -> Compile a
 expected s = syntaxError' $ "Expected " ++ (unpack s)
 
-unexpected :: Text -> Compile a
-unexpected s = syntaxError' $ "Unexpected " ++ (unpack s)
+
+unexpected' :: Text -> Compile a
+unexpected' s = syntaxError' $ "Unexpected " ++ (unpack s)
+
 
 currentInfo :: Compile Info
-currentInfo = use (csCursor . cInfo)
+currentInfo = return def -- use (csCursor . cInfo)
 
 currentModule :: Compile (ModuleName,Hash)
 currentModule = use csModule >>= \m -> case m of
@@ -136,48 +176,24 @@ _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 
-pop :: Compile (Exp Info)
-pop = do
-  s <- use (csCursor.cStream)
-  case s of
-    [] -> unexpected "eof"
-    (e:es) -> do
-      csCursor.cStream .= es
-      csCursor.cInfo .= eInfo e
-      return e
-
-try :: Compile a -> Compile a
-try act = do
-  s <- get
-  catchError act (\e -> put s >> throwError e)
-
-eof :: Compile ()
-eof = use (csCursor.cStream) >>= \s -> case s of
-  [] -> return ()
-  _ -> expected "eof"
-
-
 popA :: Text -> Prism' (Exp Info) a -> Compile a
-popA ty prism = try $ pop >>= \e -> case firstOf prism e of
-  Just a -> return a
-  Nothing -> expected ty
+popA ty prism = token test Nothing where -- TODO provide default token
+  test i = case firstOf prism i of
+    Just a -> Right a
+    Nothing -> Left (pure (Tokens (i:|[])),def)
 
 enter :: ListExp Info -> Compile (ListExp Info)
 enter l@ListExp{..} = do
-  csCursor %= \par -> Cursor (Just par) _listList _listInfo
+  par <- getInput
+  setInput $ Cursor (Just par) _listList
   return l
 
 exit :: Compile ()
 exit = do
-  child <- use csCursor
+  child <- getInput
   case _cParent child of
-    Just p -> csCursor .= p
-    Nothing -> unexpected "eof (no parent context)"
-
-sepBy :: Compile a -> Compile b -> Compile [a]
-sepBy p s = go False where
-  go False = (p >>= \t -> (t:) <$> go True) <|> return []
-  go True = (s >> go False) <|> return []
+    Just p -> setInput p
+    Nothing -> failure (Just EndOfInput) def
 
 
 atom :: Compile (AtomExp Info)
@@ -270,7 +286,7 @@ bindingForm = do
 varAtom :: Compile (Term Name)
 varAtom = try $ do
   a@AtomExp{..} <- atom
-  when (_atomAtom `elem` reserved) $ unexpected $ "reserved word: " <> _atomAtom
+  when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
   varAtom' a
 
 varAtom' :: AtomExp Info -> Compile (Term Name)
@@ -442,71 +458,6 @@ bodyForm = do
   return $ TList bs TyAny i
 
 
-
-{-
-run :: Exp Info -> Compile (Term Name)
-run e = TLiteral <$> literal e <*> mkInfo e <|>
-  (list Parens e >>= parseSexp) <|>
-  (list Brackets e >>= parseListLiteral) <|>
-  (list Braces e >>= parseObject)
-
-
-literal :: Exp Info -> Compile Literal
-literal (ELiteral l _) = return l
-literal e = expected e "Literal"
-
-separator :: Separator -> Exp Info -> Compile ()
-separator s (ESeparator s' _) | s' == s = return ()
-separator s e  = expected e (show s)
-
-notSeparator :: Exp Info -> Compile (Exp Info)
-notSeparator s@ESeparator {} = unexpected s (show s)
-notSeparator s = return s
-
-list :: ListDelimiter -> Exp Info -> Compile ([Exp Info],Info)
-list d (EList l d' i) | d' == d = return (l,i)
-list d e = expected e $ case d of
-  Parens -> "s-expression"
-  Braces -> "braced list"
-  Brackets -> "bracketed list"
-
-parseObject :: ([Exp Info],Info) -> Compile (Term Name)
-parseObject l@(_,i) = parsePairs Colon l >>= \ps ->
-  TObject <$> mapM (\(a,b) -> (,) <$> run a <*> run b) ps <*> pure TyAny <*> pure i
-
-
-pop :: Info -> [a] -> Compile (a,[a])
-pop i [] = syntaxError i "End of stream"
-pop _i (a:as) = return (a,as)
-
-parsePairs :: Separator -> ([Exp Info],Info) -> Compile [(Exp Info,Exp Info)]
-parsePairs pairSep (ls,i) = go ls False where
-  go [] _ = return []
-  go es False = do
-    (key,es1) <- pop i es
-    (del,es2) <- pop i es1
-    separator pairSep del
-    (val,es3) <- pop i es2
-    ((key,val):) <$> (go es3 True)
-  go es True = do
-    (del,es1) <- pop i es
-    separator Comma del
-    go es1 False
-
-
-parseSexp :: ([Exp Info],Info) -> Compile (Term Name)
-parseSexp (es,i) = fail "doh"
-
-parseListLiteral :: ([Exp Info],Info) -> Compile (Term Name)
-parseListLiteral (ls,i) = TList <$> (doList >>= mapM run) <*> pure TyAny <*> pure i
-  where doList = sepBy (separator Comma) ls <|> mapM notSeparator ls
-
-sepBy :: (a -> Compile ()) -> [a] -> Compile [a]
-sepBy sep es = fst <$> foldM' go ([],False) es
-  where go (rs,False) e = return (e:rs,True)
-        go (rs,True) e = sep e >> return (rs,False)
-
--}
 {-
 doUse :: [Exp] -> Info -> Compile (Term Name)
 doUse as i = case as of
@@ -792,8 +743,8 @@ _compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile id
 
 _compile :: (CompileState -> CompileState) -> TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
 _compile _ (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
-_compile sfun (TF.Success (a,s)) = return $ forM a $ \e -> runCompile term $
-  sfun $ initState (mkStringInfo s <$> e)
+_compile sfun (TF.Success (a,s)) = return $ forM a $ \e ->
+  runCompile term (sfun def) (mkStringInfo s <$> e)
 
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]

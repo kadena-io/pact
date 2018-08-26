@@ -194,7 +194,7 @@ instance ExpInfo Info Info where
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
   , _litInfo :: !i
-  } deriving (Eq,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
 instance ExpInfo i (LiteralExp i) where
   eInfo = _litInfo
@@ -204,7 +204,7 @@ data AtomExp i = AtomExp
   { _atomAtom :: !Text
   , _atomQualifiers :: ![Text]
   , _atomInfo :: i
-  } deriving (Eq,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (AtomExp i) where
   show AtomExp{..} = intercalate "." (map unpack $ _atomQualifiers ++ [_atomAtom])
 instance ExpInfo i (AtomExp i) where
@@ -215,7 +215,7 @@ data ListExp i = ListExp
   { _listList :: ![(Exp i)]
   , _listDelimiter :: !ListDelimiter
   , _listInfo :: !i
-  } deriving (Eq,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (ListExp i) where
   show ListExp{..} =
     enlist _listDelimiter $ \(o,c) ->
@@ -227,7 +227,7 @@ instance NFData i => NFData (ListExp i)
 data SeparatorExp i = SeparatorExp
   { _sepSeparator :: !Separator
   , _sepInfo :: !i
-  } deriving (Eq,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparator
 instance ExpInfo i (SeparatorExp i) where
   eInfo = _sepInfo
@@ -240,7 +240,7 @@ data Exp i =
   EAtom (AtomExp i) |
   EList (ListExp i) |
   ESeparator (SeparatorExp i)
-  deriving (Eq,Generic,Functor,Foldable,Traversable)
+  deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 
 instance NFData i => NFData (Exp i)
 instance ExpInfo i (Exp i) where
