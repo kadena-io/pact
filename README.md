@@ -123,9 +123,13 @@ Building with Nix / NixOS
 3. Set the `binary-caches` and `binary-cache-public-keys` lines as follows:
 
 ```
-binary-caches = https://pact.cachix.org https://nixcache.reflex-frp.org https://cache.nixos.org/
-binary-cache-public-keys = pact.cachix.org-1:cg1bsryGrHnQzqEp52NcHq4mBBL+R25XbR2Q/I/vQ8Y= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+substituters = https://pact.cachix.org https://nixcache.reflex-frp.org https://cache.nixos.org/
+trusted-public-keys = pact.cachix.org-1:cg1bsryGrHnQzqEp52NcHq4mBBL+R25XbR2Q/I/vQ8Y= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
 ```
+
+NOTE: In older versions of Nix, instead of `substituters` and
+`trusted-public-keys`, use `binary-caches` and `binary-cache-public-keys`
+respectively.
 
 4. Restart the nix daemon.
 
