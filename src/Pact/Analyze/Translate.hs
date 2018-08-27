@@ -18,7 +18,7 @@ import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, use, view, (%=), (%~), (.=),
                                              (.~), (<&>), (<&>), (?=), (?~),
-                                             (^.), (^?))
+                                             (^.), (^?), (<>~))
 import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -196,7 +196,7 @@ data TranslateState
       --
       -- The \ edges correspond to the execution of each case. The _ edges
       -- correspond to successful exit early due to the lack of a failure.
-      -- Theses three "success" edges all join together at the same vertex.
+      -- These three "success" edges all join together at the same vertex.
     }
 
 makeLenses ''TranslateFailure
@@ -404,7 +404,7 @@ joinPaths branches = do
     addPathEdge path rejoinEdge
 
 withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
-withNestedRecoverability r = local $ teRecoverability %~ (<> r)
+withNestedRecoverability r = local $ teRecoverability <>~ r
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -921,12 +921,9 @@ runTranslation info pactArgs body = do
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
-    runArgsTranslation =
-      -- Note we add () as a second value in the reader context because some
-      -- methods require a reader in a pair.
-      runStateT
-        (runReaderT (traverse translateArg pactArgs) info)
-        (VarId 1)
+    runArgsTranslation = runStateT
+      (runReaderT (traverse translateArg pactArgs) info)
+      (VarId 1)
 
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)

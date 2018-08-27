@@ -158,13 +158,13 @@ tagAuth tid sKs sb = do
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
-tagSubpathStart :: S Bool -> TagId -> Analyze ()
-tagSubpathStart sb tid = do
+tagSubpathStart :: TagId -> S Bool -> Analyze ()
+tagSubpathStart tid reachable = do
   mTag <- preview $ aeModelTags.mtPaths.at tid._Just
   case mTag of
     Nothing  -> pure ()
     Just sbv -> do
-      addConstraint $ sansProv $ sbv .== _sSbv sb
+      addConstraint $ sansProv $ sbv .== _sSbv reachable
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -273,8 +273,8 @@ evalTermO = \case
   IfThenElse cond (thenPath, then') (elsePath, else') -> do
     reachable <- use purelyReachable
     testPasses <- evalTerm cond
-    tagSubpathStart (reachable &&& testPasses) thenPath
-    tagSubpathStart (reachable &&& bnot testPasses) elsePath
+    tagSubpathStart thenPath $ reachable &&& testPasses
+    tagSubpathStart elsePath $ reachable &&& bnot testPasses
     case unliteralS testPasses of
       Just True  -> evalTermO then'
       Just False -> evalTermO else'
@@ -307,8 +307,8 @@ evalTerm = \case
   IfThenElse cond (thenPath, then') (elsePath, else') -> do
     reachable <- use purelyReachable
     testPasses <- evalTerm cond
-    tagSubpathStart (reachable &&& testPasses) thenPath
-    tagSubpathStart (reachable &&& bnot testPasses) elsePath
+    tagSubpathStart thenPath $ reachable &&& testPasses
+    tagSubpathStart elsePath $ reachable &&& bnot testPasses
     iteS testPasses
       (evalTerm then')
       (evalTerm else')
@@ -332,20 +332,18 @@ evalTerm = \case
     initSucceeds <- use succeeds
 
     (result, anySucceeded) <- foldlM
-      (\(prevResult, earlierSuccess) ((failTag, passTag), cond) -> do
+      (\(prevRes, earlierSuccess) ((failTag, passTag), cond) -> do
         succeeds .= true
         res <- evalTerm cond
         currentSucceeded <- use succeeds
 
         let reachable = bnot earlierSuccess
-        tagSubpathStart (reachable &&& currentSucceeded)      passTag
-        tagSubpathStart (reachable &&& bnot currentSucceeded) failTag
+        tagSubpathStart passTag $ reachable &&& currentSucceeded
+        tagSubpathStart failTag $ reachable &&& bnot currentSucceeded
 
         pure $ iteS earlierSuccess
-          (prevResult, true)
-          (iteS currentSucceeded
-            (res, true)
-            (res, false)))
+          (prevRes, true)
+          (res,     currentSucceeded))
       (true, false)
       conds
 

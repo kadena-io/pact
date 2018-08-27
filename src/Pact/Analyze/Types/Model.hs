@@ -40,7 +40,7 @@ newtype Vertex
   deriving (Num, Enum, Show, Ord, Eq)
 
 data Recoverability
-  -- The path upon which to resume inclusion of events. An alternative here
+  -- | The path upon which to resume inclusion of events. An alternative here
   -- would be to have more edges in the subgraphs formed by @enforce-one@ --
   -- have vertices not just for each case, but additionally one after each
   -- recoverable assert/auth as well, to connect from right after the
@@ -74,6 +74,11 @@ data TraceEvent
   | TraceSubpathStart TagId
   deriving (Eq, Show)
 
+-- | An @ExecutionGraph@ is produced by translation, and contains all
+-- information about where 'TraceEvent's occur in the program. From a
+-- @Model 'Concrete@ (which contains this type), we can produce a linear trace
+-- of events for a concrete execution, in the form of 'ExecutionTrace'. For
+-- more information about how this graph is constructed, see 'TranslateState'.
 data ExecutionGraph
   = ExecutionGraph
     { _egInitialVertex :: Vertex
@@ -99,8 +104,8 @@ data ModelTags (c :: Concreteness)
     , _mtAsserts :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
     , _mtAuths   :: Map TagId (Located (S KeySet, SBV Bool))
-    -- ^ one per each enforce/auth check. note that this includes all
-    -- @(enforce ks)@ and @(enforce-keyset "ks")@ calls.
+    -- ^ one per each authorization check. note that this includes uses of
+    -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
     , _mtResult  :: Located TVal
     -- ^ return value of the function being checked
     , _mtPaths   :: Map TagId (SBV Bool)
@@ -126,6 +131,8 @@ data Model (c :: Concreteness)
     }
   deriving (Eq, Show)
 
+-- | A linearized trace of 'TraceEvent's, derived from a @Model 'Concrete@.
+-- This is used for presentation purposes.
 data ExecutionTrace
   = ExecutionTrace
     { _etEvents :: [TraceEvent]
