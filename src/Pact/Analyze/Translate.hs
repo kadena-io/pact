@@ -16,9 +16,9 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             use, view, (%=), (%~), (.=), (.~),
-                                             (<&>), (<&>), (?=), (?~), (^.),
-                                             (^?))
+                                             to, use, view, (%=), (%~), (.=),
+                                             (.~), (<&>), (<&>), (?=), (?~),
+                                             (^.), (^?))
 import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -29,7 +29,7 @@ import           Control.Monad.State.Strict (MonadState, StateT, modify',
 import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
-import           Data.Maybe                 (fromMaybe)
+import           Data.Maybe                 (fromMaybe, isNothing)
 import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
@@ -356,15 +356,14 @@ throwError' err = do
   info <- view envInfo
   throwError $ TranslateFailure info err
 
--- | Generates a new 'Vertex', setting it as the head, returning the
--- newly-formed 'Edge'. Does *not* add this new 'Vertex' to the graph.
-issueVertex :: TranslateM Edge
+-- | Generates a new 'Vertex', setting it as the head. Does *not* add this new
+-- 'Vertex' to the graph.
+issueVertex :: TranslateM Vertex
 issueVertex = do
-  prev <- use tsPathHead
   v <- use tsNextVertex
   tsNextVertex %= succ
   tsPathHead .= v
-  pure (prev, v)
+  pure v
 
 -- | Flushes-out events accumulated for the current edge of the execution path.
 flushEvents :: TranslateM [TraceEvent]
@@ -381,11 +380,13 @@ addPathEdge path e =
 -- events to 'tsEdgeEvents'.
 extendPath :: TranslateM Vertex
 extendPath = do
-  e@(v, v') <- issueVertex
+  path <- use tsCurrentPath
+  v    <- use tsPathHead
+  v'   <- issueVertex
   tsGraph %= Alga.overlay (Alga.edge v v')
   edgeTrace <- flushEvents
+  let e = (v, v')
   tsEdgeEvents.at e ?= edgeTrace
-  path <- use tsCurrentPath
   addPathEdge path e
   pure v'
 
@@ -395,11 +396,12 @@ extendPath = do
 joinPaths :: [(Vertex, TagId)] -> TranslateM ()
 joinPaths branches = do
   let vs = fst $ unzip branches
-  (_, v') <- issueVertex
+  v' <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for_ branches $ \(v, path) -> do
+    isNewPath <- use $ tsPathEdges.at path.to isNothing
     let rejoinEdge = (v, v')
-    tsEdgeEvents.at rejoinEdge ?= []
+    tsEdgeEvents.at rejoinEdge ?= [TraceSubpathStart path | isNewPath]
     addPathEdge path rejoinEdge
 
 withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
