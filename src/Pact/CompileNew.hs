@@ -31,7 +31,7 @@ where
 import qualified Text.Trifecta as TF hiding (expected)
 import qualified Text.Trifecta.Delta as TF
 import Control.Applicative hiding (some,many)
-import Text.Megaparsec
+import Text.Megaparsec as MP
 import Text.Megaparsec.Char (satisfy)
 import Data.Proxy
 import Data.Void
@@ -55,6 +55,7 @@ import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
 import Data.Semigroup ((<>))
+import qualified Data.Set as S
 
 import Pact.Types.Crypto
 import Pact.Types.ExpNew
@@ -76,8 +77,9 @@ mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $ T.drop (fromIntegral $ TF.bytes d) s,d))
 
 data Cursor = Cursor
-  { _cParent :: Maybe Cursor
-  , _cStream :: [Exp Info] }
+  { _cContext :: Maybe (Cursor,Exp Info)
+  , _cStream :: [Exp Info]
+  }
 makeLenses ''Cursor
 instance Default Cursor where def = Cursor def def
 
@@ -90,16 +92,21 @@ instance Default CompileState where
   def = CompileState 0 Nothing
 
 
--- | copied from Text.Megaparsec.Stream
+-- | adapted from Text.Megaparsec.Stream
+
+initialMPState :: s -> MP.State s
+initialMPState s = MP.State
+  { stateInput           = s
+  , statePos             = initialPos "" :| []
+  , stateTokensProcessed = 0
+  , stateTabWidth        = defaultTabWidth }
+
 defaultAdvance1
   :: Pos               -- ^ Tab width (unused)
   -> SourcePos         -- ^ Current position
   -> t                 -- ^ Current token
   -> SourcePos         -- ^ Incremented position
-defaultAdvance1 _width (SourcePos n l c) t = npos
-  where
-    c' = unPos c
-    npos = SourcePos n l (c <> pos1)
+defaultAdvance1 _width (SourcePos n l c) _t = SourcePos n l (c <> pos1)
 {-# INLINE defaultAdvance1 #-}
 
 instance Stream Cursor where
@@ -114,12 +121,12 @@ instance Stream Cursor where
   advanceN Proxy w = foldl' (defaultAdvance1 w)
   take1_ Cursor{..} = case _cStream of
     [] -> Nothing
-    (t:ts) -> Just (t, Cursor _cParent ts)
+    (t:ts) -> Just (t, Cursor _cContext ts)
   takeN_ n s@Cursor{..}
     | n <= 0        = Just ([], s)
     | null _cStream = Nothing
-    | otherwise = Just $ second (Cursor _cParent) $ splitAt n _cStream
-  takeWhile_ f Cursor{..} = second (Cursor _cParent) $ span f _cStream
+    | otherwise = Just $ second (Cursor _cContext) $ splitAt n _cStream
+  takeWhile_ f Cursor{..} = second (Cursor _cContext) $ span f _cStream
 
 type Compile a = StateT CompileState (Parsec Void Cursor) a
 
@@ -127,11 +134,8 @@ reserved :: [Text]
 reserved = T.words "use module defun defpact step step-with-rollback true false let let* defconst"
 
 runCompile :: (Compile a) -> CompileState -> Exp Info -> Either PactError a
-runCompile act s a = either undefined (Right . fst) $
-  runParser (runStateT act s) "" (Cursor Nothing [a])
-  -- either (Left . getErr) Right $ runExcept (evalStateT act s)
- --  where getErr [] = PactError SyntaxError def def "Compile failed"
- --       getErr as = last as
+runCompile act s a = either (error . show) (Right . fst) $ snd $
+  runParser' (runStateT act s) (initialMPState (Cursor Nothing [a]))
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = runCompile term def (fmap mi e)
@@ -139,11 +143,14 @@ compile mi e = runCompile term def (fmap mi e)
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
+strErr :: String -> ErrorItem t
+strErr = Label . fromList
+
 syntaxError :: Info -> String -> Compile a
-syntaxError i s = failure (Just (Label (fromList s))) def -- throwError [PactError SyntaxError i def (pack s)]
+syntaxError i s = failure (Just (strErr s)) def
 
 syntaxError' :: String -> Compile a
-syntaxError' s = currentInfo >>= \e -> syntaxError (eInfo e) s
+syntaxError' s = contextInfo >>= \e -> syntaxError (eInfo e) s
 
 expected :: Text -> Compile a
 expected s = syntaxError' $ "Expected " ++ (unpack s)
@@ -152,9 +159,11 @@ expected s = syntaxError' $ "Expected " ++ (unpack s)
 unexpected' :: Text -> Compile a
 unexpected' s = syntaxError' $ "Unexpected " ++ (unpack s)
 
+context :: Compile (Maybe (Exp Info))
+context = (fmap snd . _cContext) <$> getInput
 
-currentInfo :: Compile Info
-currentInfo = return def -- use (csCursor . cInfo)
+contextInfo :: Compile Info
+contextInfo = maybe def eInfo <$> context
 
 currentModule :: Compile (ModuleName,Hash)
 currentModule = use csModule >>= \m -> case m of
@@ -176,37 +185,40 @@ _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
 
-popA :: Text -> Prism' (Exp Info) a -> Compile a
-popA ty prism = token test Nothing where -- TODO provide default token
+exp :: String -> Prism' (Exp Info) a -> Compile (a,Exp Info)
+exp ty prism = context >>= \dt -> token test dt where
   test i = case firstOf prism i of
-    Just a -> Right a
-    Nothing -> Left (pure (Tokens (i:|[])),def)
+    Just a -> Right (a,i)
+    Nothing -> Left (pure (Tokens (i:|[])),S.singleton (strErr ty))
 
-enter :: ListExp Info -> Compile (ListExp Info)
-enter l@ListExp{..} = do
+exp' :: String -> Prism' (Exp Info) a -> Compile a
+exp' t p = fst <$> exp t p
+
+enter :: (ListExp Info,Exp Info) -> Compile (ListExp Info)
+enter (l@ListExp{..},e) = do
   par <- getInput
-  setInput $ Cursor (Just par) _listList
+  setInput $ Cursor (Just (par,e)) _listList
   return l
 
 exit :: Compile ()
 exit = do
   child <- getInput
-  case _cParent child of
-    Just p -> setInput p
+  case _cContext child of
+    Just (p,_) -> setInput p
     Nothing -> failure (Just EndOfInput) def
 
 
 atom :: Compile (AtomExp Info)
-atom = popA "atom" _EAtom
+atom = exp' "atom" _EAtom
 
 lit :: Compile (LiteralExp Info)
-lit = popA "literal" _ELiteral
+lit = exp' "literal" _ELiteral
 
-list :: Compile (ListExp Info)
-list = popA "list" _EList
+list :: Compile (ListExp Info,Exp Info)
+list = exp "list" _EList
 
 sep :: Compile (SeparatorExp Info)
-sep = popA "sep" _ESeparator
+sep = exp' "sep" _ESeparator
 
 lit' :: Text -> Prism' Literal a -> Compile a
 lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
@@ -216,8 +228,8 @@ lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
 str :: Compile Text
 str = lit' "string" _LString
 
-list' :: ListDelimiter -> Compile (ListExp Info)
-list' d = list >>= \l@ListExp{..} ->
+list' :: ListDelimiter -> Compile (ListExp Info,Exp Info)
+list' d = list >>= \l@(ListExp{..},_) ->
   if _listDelimiter == d then return l else expected (tShow d)
 
 withList :: ListDelimiter -> (ListExp Info -> Compile a) -> Compile a
@@ -259,7 +271,7 @@ sexp = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
 
 app :: AtomExp Info -> Compile (Term Name)
 app a = do
-  i <- currentInfo -- note this isn't right, should be sexp info
+  i <- contextInfo -- note this isn't right, should be sexp info
   v <- varAtom' a
   body <- some (term <|> bindingForm) <* eof
   return $ TApp v body i
@@ -337,7 +349,7 @@ str' = literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
-  i <- currentInfo
+  i <- contextInfo
   (mn,mh) <- currentModule
   AtomExp{..} <- bareAtom
   ty <- optional (typed >>= \t -> case t of
@@ -348,11 +360,11 @@ deftable = do
 
 
 bless :: Compile (Term Name)
-bless = TBless <$> hash' <*> currentInfo
+bless = TBless <$> hash' <*> contextInfo
 
 defconst :: Compile (Term Name)
 defconst = do
-  i <- currentInfo
+  i <- contextInfo
   modName <- fst <$> currentModule
   a <- arg
   doc <- optional str
@@ -361,12 +373,12 @@ defconst = do
 
 step :: Compile (Term Name)
 step = do
-  i <- currentInfo
+  i <- contextInfo
   TStep <$> optional str' <*> term <*> pure Nothing <*> pure i
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  i <- currentInfo
+  i <- contextInfo
   TStep <$> optional str' <*> term <*> (Just <$> term) <*> pure i
 
 
@@ -377,7 +389,7 @@ letBindings = withList' Parens $
 
 letForm :: Compile (Term Name)
 letForm = do
-  i <- currentInfo
+  i <- contextInfo
   bindings <- letBindings
   let bNames = map (arg2Name . fst) bindings
   scope <- abstract (`elemIndex` bNames) <$> bodyForm
@@ -399,7 +411,7 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  i <- currentInfo
+  i <- contextInfo
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> pure i
 
@@ -453,7 +465,7 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
 
 bodyForm :: Compile (Term Name)
 bodyForm = do
-  i <- currentInfo
+  i <- contextInfo
   bs <- some term <* eof
   return $ TList bs TyAny i
 
