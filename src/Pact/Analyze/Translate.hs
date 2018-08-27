@@ -360,8 +360,7 @@ throwError' err = do
 -- 'Vertex' to the graph.
 issueVertex :: TranslateM Vertex
 issueVertex = do
-  v <- use tsNextVertex
-  tsNextVertex %= succ
+  v <- genId tsNextVertex
   tsPathHead .= v
   pure v
 
