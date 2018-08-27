@@ -23,7 +23,6 @@ import           Control.Monad.State.Strict  (MonadState, modify')
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
-import           Data.Functor                (($>))
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -159,13 +158,12 @@ tagAuth tid sKs sb = do
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
-tagSubpathStart :: TagId -> Analyze ()
-tagSubpathStart tid = do
+tagSubpathStart :: S Bool -> TagId -> Analyze ()
+tagSubpathStart sb tid = do
   mTag <- preview $ aeModelTags.mtPaths.at tid._Just
   case mTag of
     Nothing  -> pure ()
     Just sbv -> do
-      sb <- use purelyReachable
       addConstraint $ sansProv $ sbv .== _sSbv sb
 
 tagResult :: AVal -> Analyze ()
@@ -273,10 +271,13 @@ evalTermO = \case
   Sequence eterm objT -> evalETerm eterm *> evalTermO objT
 
   IfThenElse cond (thenPath, then') (elsePath, else') -> do
+    reachable <- use purelyReachable
     testPasses <- evalTerm cond
+    tagSubpathStart (reachable &&& testPasses) thenPath
+    tagSubpathStart (reachable &&& bnot testPasses) elsePath
     case unliteralS testPasses of
-      Just True  -> tagSubpathStart thenPath *> evalTermO then'
-      Just False -> tagSubpathStart elsePath *> evalTermO else'
+      Just True  -> evalTermO then'
+      Just False -> evalTermO else'
       Nothing    -> throwErrorNoLoc "Unable to determine statically the branch taken in an if-then-else evaluating to an object"
 
 validateWrite :: Pact.WriteType -> Schema -> Object -> Analyze ()
@@ -304,10 +305,13 @@ evalTerm = \case
   CoreTerm a -> evalCore a
 
   IfThenElse cond (thenPath, then') (elsePath, else') -> do
+    reachable <- use purelyReachable
     testPasses <- evalTerm cond
+    tagSubpathStart (reachable &&& testPasses) thenPath
+    tagSubpathStart (reachable &&& bnot testPasses) elsePath
     iteS testPasses
-      (tagSubpathStart thenPath *> evalTerm then')
-      (tagSubpathStart elsePath *> evalTerm else')
+      (evalTerm then')
+      (evalTerm else')
 
   -- TODO: check that the body of enforce is pure
   Enforce mTid cond -> do
@@ -329,16 +333,19 @@ evalTerm = \case
 
     (result, anySucceeded) <- foldlM
       (\(prevResult, earlierSuccess) ((failTag, passTag), cond) -> do
-        iteS earlierSuccess
-          (pure (prevResult, true))
-          (do
-            succeeds .= true
-            res <- evalTerm cond
-            succeeded <- use succeeds
-            iteS succeeded
-              (tagSubpathStart passTag $> (res, true))
-              (tagSubpathStart failTag $> (res, false))
-          ))
+        succeeds .= true
+        res <- evalTerm cond
+        currentSucceeded <- use succeeds
+
+        let reachable = bnot earlierSuccess
+        tagSubpathStart (reachable &&& currentSucceeded)      passTag
+        tagSubpathStart (reachable &&& bnot currentSucceeded) failTag
+
+        pure $ iteS earlierSuccess
+          (prevResult, true)
+          (iteS currentSucceeded
+            (res, true)
+            (res, false)))
       (true, false)
       conds
 
