@@ -67,6 +67,9 @@ library
       Pact.Analyze.LegacySFunArray
       Pact.Analyze.Model
       Pact.Analyze.Model.Dot
+      Pact.Analyze.Model.Graph
+      Pact.Analyze.Model.Tags
+      Pact.Analyze.Model.Text
       Pact.Analyze.Orphans
       Pact.Analyze.Parse
       Pact.Analyze.Parse.Invariant
