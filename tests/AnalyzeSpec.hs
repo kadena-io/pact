@@ -44,6 +44,7 @@ import           Pact.Analyze.Model           (linearizedTrace)
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
+import qualified Pact.Analyze.Model.Dot       as Dot
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util            ((...))
 
@@ -96,12 +97,20 @@ data TestFailure
   | VerificationFailure VerificationFailure
   deriving Show
 
-userShowTestFailure :: TestFailure -> String
-userShowTestFailure = \case
-  TestCheckFailure cf    -> T.unpack (describeCheckFailure cf)
-  NoTestModule           -> "example is missing a module named 'test'"
-  ReplError err          -> "ReplError: " ++ err
-  VerificationFailure vf -> "VerificationFailure: " ++ show vf
+renderTestFailure :: TestFailure -> IO String
+renderTestFailure = \case
+  TestCheckFailure cf -> do
+    svgInfo <- case falsifyingModel cf of
+      Nothing -> pure ""
+      Just m -> do
+        let fp = "/tmp/execution-graph.dot"
+        Dot.render fp m
+        pure $ "\n\nrendered execution graph to DOT: " ++ fp
+
+    pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
+  NoTestModule -> pure "example is missing a module named 'test'"
+  ReplError err -> pure $ "ReplError: " ++ err
+  VerificationFailure vf -> pure $ "VerificationFailure: " ++ show vf
 
 --
 -- TODO: use ExceptT
@@ -151,7 +160,7 @@ runCheck code check = do
 handlePositiveTestResult :: Maybe TestFailure -> IO ()
 handlePositiveTestResult = \case
   Nothing -> pure ()
-  Just tf -> HUnit.assertFailure $ userShowTestFailure tf
+  Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: Text -> Spec
 expectVerified code = do

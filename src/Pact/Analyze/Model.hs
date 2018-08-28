@@ -14,6 +14,7 @@ module Pact.Analyze.Model
   ( allocArgs
   , allocModelTags
   , linearizedTrace
+  , reachableEdges
   , saturateModel
   , showModel
   ) where
@@ -190,31 +191,32 @@ linearizedTrace model = mkTrace traceEvents
     -- are ordered, so we now have a linear trace of events. But we still have
     -- the possibility of 'TraceAssert' and 'TraceAuth' affecting control flow.
     traceEvents :: [TraceEvent]
-    traceEvents = concat $ restrictKeys edgeEvents reachableEdges
-
-    -- TODO: use Map.restrictKeys once using containers >= 0.5.8
-    restrictKeys :: Ord k => Map k a -> Set k -> Map k a
-    restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
+    traceEvents = concat $ restrictKeys edgeEvents (reachableEdges model)
 
     edgeEvents :: Map Edge [TraceEvent]
     edgeEvents = model ^. modelExecutionGraph.egEdgeEvents
 
-    reachableEdges :: Set Edge
-    reachableEdges = Set.fromList . concat $
-      restrictKeys pathEdges reachablePaths
+-- TODO: use Map.restrictKeys once using containers >= 0.5.8
+restrictKeys :: Ord k => Map k a -> Set k -> Map k a
+restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
 
+reachablePaths :: Model 'Concrete -> Set TagId
+reachablePaths model = Map.foldlWithKey'
+  (\paths path sbool -> maybe
+    (error $ "impossible: found symbolic value in concrete model for path "
+          <> show path)
+    (bool paths (Set.insert path paths))
+    (SBV.unliteral sbool))
+  Set.empty
+  (model ^. modelTags.mtPaths)
+
+reachableEdges :: Model 'Concrete -> Set Edge
+reachableEdges model = Set.fromList . concat $
+    restrictKeys pathEdges (reachablePaths model)
+
+  where
     pathEdges :: Map TagId [Edge]
     pathEdges = model ^. modelExecutionGraph.egPathEdges
-
-    reachablePaths :: Set TagId
-    reachablePaths = Map.foldlWithKey'
-      (\paths path sbool -> maybe
-        (error $ "impossible: found symbolic value in concrete model for path "
-              <> show path)
-        (bool paths (Set.insert path paths))
-        (SBV.unliteral sbool))
-      Set.empty
-      (model ^. modelTags.mtPaths)
 
 indent :: Text -> Text
 indent = ("  " <>)
