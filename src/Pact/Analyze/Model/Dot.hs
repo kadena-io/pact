@@ -4,8 +4,8 @@
 {-# LANGUAGE TupleSections       #-}
 
 module Pact.Analyze.Model.Dot
-  ( compile
-  , render
+  ( compileDot
+  , renderDot
   ) where
 
 import qualified Algebra.Graph            as Alga
@@ -21,15 +21,15 @@ import qualified Data.Text.IO             as Text
 
 import           Pact.Types.Util          (tShow)
 
-import qualified Pact.Analyze.Model       as Model
+import qualified Pact.Analyze.Model.Graph as Model
 import           Pact.Analyze.Types       (Concreteness (Concrete), Edge,
                                            Model, TagId, Vertex,
                                            modelExecutionGraph, egGraph,
                                            egPathEdges)
 
 -- | Compile to DOT format
-compile :: Model 'Concrete -> Text
-compile m = Alga.export style graph
+compileDot :: Model 'Concrete -> Text
+compileDot m = Alga.export style graph
   where
     graph :: Alga.Graph Vertex
     graph = m ^. modelExecutionGraph.egGraph
@@ -73,5 +73,5 @@ compile m = Alga.export style graph
       }
 
 -- | Render to a DOT file
-render :: FilePath -> Model 'Concrete -> IO ()
-render fp m = Text.writeFile fp $ compile m
+renderDot :: FilePath -> Model 'Concrete -> IO ()
+renderDot fp m = Text.writeFile fp $ compileDot m
