@@ -254,8 +254,9 @@ lit = exp' "literal" _ELiteral
 list :: Compile (ListExp Info,Exp Info)
 list = exp "list" _EList Right
 
-sep :: Compile (SeparatorExp Info)
-sep = exp' "sep" _ESeparator
+sep :: Separator -> Compile ()
+sep s = void $ exp "sep" _ESeparator $ \se@SeparatorExp{..} ->
+  if _sepSeparator == s then Right se else Left (show s)
 
 lit' :: String -> Prism' Literal a -> Compile a
 lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
@@ -275,10 +276,6 @@ withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
 
 withList' :: ListDelimiter -> Compile a -> Compile a
 withList' d = withList d . const
-
-sep' :: Separator -> Compile (SeparatorExp Info)
-sep' s = sep >>= \se@SeparatorExp{..} ->
-  if _sepSeparator == s then return se else expected (show s)
 
 term :: Compile (Term Name)
 term =
@@ -321,10 +318,10 @@ bindingForm :: Compile (Term Name)
 bindingForm = do
   let pair = do
         col <- term
-        a <- sep' ColonEquals *> arg
+        a <- sep ColonEquals *> arg
         return (a,col)
   (bindings,bi) <- withList' Braces $
-    (,) <$> pair `sepBy1` sep' Comma <*> contextInfo
+    (,) <$> pair `sepBy1` sep Comma <*> contextInfo
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
@@ -352,7 +349,7 @@ symbol s = void $ atom' $ \AtomExp{..} -> case _atomQualifiers of
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
   ls <- (some term <* eof) <|>
-        ((term `sepBy` sep' Comma) <* eof)
+        ((term `sepBy` sep Comma) <* eof)
   return $ TList ls TyAny _listInfo -- TODO capture literal type if any
 
 
@@ -360,9 +357,9 @@ objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
   let pair = do
         key <- term
-        val <- sep' Colon *> term
+        val <- sep Colon *> term
         return (key,val)
-  ps <- (pair `sepBy` sep' Comma) <* eof
+  ps <- (pair `sepBy` sep Comma) <* eof
   return $ TObject ps TyAny _listInfo
 
 
@@ -553,7 +550,7 @@ arg2Name Arg{..} = Name _aName _aInfo
 
 
 typed :: Compile (Type (Term Name))
-typed = sep' Colon *> parseType
+typed = sep Colon *> parseType
 
 parseType :: Compile (Type (Term Name))
 parseType = msum
