@@ -90,11 +90,12 @@ import Pact.Types.Exp
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: !(Maybe Exp)  -- ^ model
+  , _mModel :: !(Maybe (Exp Info))  -- ^ model
   } deriving (Eq, Show, Generic)
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+instance Default Meta where def = Meta def def
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 

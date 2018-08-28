@@ -31,63 +31,42 @@ import Control.Applicative
 import Data.List
 import Control.Monad
 import Prelude
-import Data.String
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (digitToInt)
+import Data.Text (Text)
 
-import Pact.Types.Lang
+import Pact.Types.Exp
 import Pact.Types.Parser
+import Pact.Types.Info
 
 type P a = forall m. (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => PactParser m a
 
 
 -- | Main parser for Pact expressions.
-expr :: P Exp
+expr :: P (Exp Parsed)
 expr = do
   delt <- position
   let inf = do
         end <- position
         let len = bytes end - bytes delt
         return $ Parsed delt (fromIntegral len)
+      separator t s = symbol t >> ((ESeparator . SeparatorExp s) <$> inf)
   msum
-    [ TF.try (ELiteral <$> token number <*> inf) <?> "number"
-    , ELiteral . LString <$> stringLiteral <*> inf <?> "string"
-    , ELiteral <$> bool <*> inf <?> "bool"
-    , ESymbol <$> (symbolic '\'' >> ident style) <*> inf <?> "symbol"
-    , do
-      a <- ident style
-      msum
-        [ let p = do
-                t <- typed
-                EAtom a Nothing (Just t) <$> inf
-          in TF.try p <?> "typed atom"
-        , let p = do
-                q <- qualified
-                EAtom a (Just q) Nothing <$> inf
-          in TF.try p <?> "qual atom"
-        , EAtom a Nothing Nothing <$> inf <?> "bare atom"
-        ]
-    , EList <$> parens (many expr) <*> pure Nothing <*> inf <?> "sexp"
-    , do
-      is <- msum
-        [ TF.try $ brackets (many expr) <?> "space-delimited list literal"
-        , brackets (expr `sepBy` comma) <?> "comma-delimited list literal"
-        ]
-      let lty = case nub (map expPrimTy is) of
-                  [Just ty] -> ty
-                  _ -> TyAny
-      i <- inf
-      return $ EList is (Just lty) i
-    , do
-      ps <- pairs
-      let (ops, kvs) = unzip ps
-      if
-        | all (== ":") ops  -> EObject kvs <$> inf
-        | all (== ":=") ops -> EBinding kvs <$> inf
-        | otherwise         -> unexpected $ "Mixed binding/object operators: " ++ show ops
+    [ TF.try (ELiteral <$> (LiteralExp <$> token number <*> inf)) <?> "number"
+    , ELiteral <$> (LiteralExp . LString <$> stringLiteral <*> inf) <?> "string"
+    , ELiteral <$> (LiteralExp . LString <$> (symbolic '\'' >> ident style) <*> inf) <?> "symbol"
+    , ELiteral <$> (LiteralExp <$> bool <*> inf) <?> "bool"
+    , (qualifiedAtom >>= \(a,qs) -> (EAtom . AtomExp a qs) <$> inf) <?> "atom"
+    , EList <$> (ListExp <$> parens (many expr) <*> pure Parens <*> inf) <?> "(list)"
+    , EList <$> (ListExp <$> braces (many expr) <*> pure Braces <*> inf) <?> "[list]"
+    , EList <$> (ListExp <$> brackets (many expr) <*> pure Brackets <*> inf) <?> "{list}"
+    , separator ":=" ColonEquals
+    , separator ":" Colon
+    , separator "," Comma
     ]
 {-# INLINE expr #-}
+
 
 number :: P Literal
 number = do
@@ -107,6 +86,12 @@ number = do
               (neg (strToNum (strToNum 0 num) d))
 {-# INLINE number #-}
 
+
+qualifiedAtom :: (Monad p, TokenParsing p) => p (Text,[Text])
+qualifiedAtom = ident style `sepBy` dot >>= \as -> case reverse as of
+  [] -> fail "qualifiedAtom"
+  (a:qs) -> return (a,reverse qs)
+
 bool :: P Literal
 bool = msum
   [ LBool True  <$ symbol "true"
@@ -114,68 +99,27 @@ bool = msum
   ]
 {-# INLINE bool #-}
 
-expPrimTy :: Exp -> Maybe (Type TypeName)
-expPrimTy ELiteral {..} = Just $ TyPrim $ litToPrim _eLiteral
-expPrimTy ESymbol {} = Just $ TyPrim TyString
-expPrimTy _ = Nothing
-
-typed :: P (Type TypeName)
-typed = colon *> parseType
-
-parseType :: P (Type TypeName)
-parseType = msum
-  [ brackets (TyList <$> parseType) <?> "typed list"
-  , parseUserSchema
-  , parseSchemaType tyObject TyObject
-  , parseSchemaType tyTable TyTable
-  , TyPrim TyInteger <$ tsymbol tyInteger
-  , TyPrim TyDecimal <$ tsymbol tyDecimal
-  , TyPrim TyTime    <$ tsymbol tyTime
-  , TyPrim TyBool    <$ tsymbol tyBool
-  , TyPrim TyString  <$ tsymbol tyString
-  , TyList TyAny     <$ tsymbol tyList
-  , TyPrim TyValue   <$ tsymbol tyValue
-  , TyPrim TyKeySet  <$ tsymbol tyKeySet
-  ]
-
-tsymbol :: Text -> P String
-tsymbol = symbol . unpack
-
-parseUserSchema :: P (Type TypeName)
-parseUserSchema =
-  braces (TyUser . fromString <$> ident style) <?> "user type"
-
-parseSchemaType :: Text -> SchemaType -> P (Type TypeName)
-parseSchemaType tyRep sty =
-  TF.try (TySchema sty <$> (tsymbol tyRep *> parseUserSchema)) <|>
-  (tsymbol tyRep *> return (TySchema sty TyAny))
 
 -- | Parse one or more Pact expressions.
-exprs :: P [Exp]
+exprs :: P [(Exp Parsed)]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
 -- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [Exp]
+exprsOnly :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [(Exp Parsed)]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
-pairs :: P [(String,(Exp,Exp))]
-pairs =
-    braces ((`sepBy` comma)
-    (do
-       k <- expr
-       op <- symbol ":=" <|> symbol ":"
-       v <- expr
-       return (op,(k,v))
-    )) <?> "object"
-
 -- | "Production" parser: atto, parse multiple exps.
-parseExprs :: Text -> Either String [Exp]
+parseExprs :: Text -> Either String [(Exp Parsed)]
 parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
 _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 
-_parseAccounts :: IO (Result ([Exp],String))
-_parseAccounts = _parseF exprsOnly "examples/accounts/accounts.pact"
 
+_parseS :: String -> TF.Result [Exp Parsed]
+_parseS = TF.parseString exprsOnly mempty
+
+
+_parseAccounts :: IO (Result ([(Exp Parsed)],String))
+_parseAccounts = _parseF exprsOnly "examples/accounts/accounts.pact"

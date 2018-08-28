@@ -51,7 +51,7 @@ benchParse = bgroup "parse" $ (`map` exps) $
                Right s -> s
                Left er -> error $ "Pact parse failed: " ++ er
 
-benchCompile :: [(String,[Exp])] -> Benchmark
+benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
   \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
 

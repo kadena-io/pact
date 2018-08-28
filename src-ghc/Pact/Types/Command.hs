@@ -124,7 +124,7 @@ instance NFData a => NFData (ProcessedCommand a)
 
 data ParsedCode = ParsedCode {
   _pcCode :: !Text,
-  _pcExps :: ![Exp]
+  _pcExps :: ![Exp Parsed]
   } deriving (Eq,Show,Generic)
 instance NFData ParsedCode
 
