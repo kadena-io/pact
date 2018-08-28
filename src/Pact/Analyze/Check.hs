@@ -14,6 +14,7 @@ module Pact.Analyze.Check
   , describeCheckResult
   , describeParseFailure
   , describeVerificationWarnings
+  , falsifyingModel
   , showModel
   , CheckFailure(..)
   , CheckFailureNoLoc(..)
@@ -173,6 +174,10 @@ describeCheckFailure (CheckFailure info failure) =
 
 describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
+
+falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
+falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
+falsifyingModel _ = Nothing
 
 -- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure

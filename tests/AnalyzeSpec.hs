@@ -5,14 +5,16 @@
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, (^.), (^..), _2,
-                                               _Left)
+import           Control.Lens                 (at, findOf, ix, matching, _2,
+                                               _Left, (^.), (^..))
+import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
-import           Data.Either                  (isLeft)
+import           Data.Either                  (isLeft, isRight)
 import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
@@ -24,6 +26,7 @@ import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
+import           Prelude                      hiding (read)
 import           Test.Hspec                   (Spec, describe,
                                                expectationFailure, it,
                                                pendingWith, runIO, shouldBe,
@@ -37,6 +40,7 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Model           (linearizedTrace)
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
@@ -160,7 +164,6 @@ expectFalsified code = do
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
--- TODO(joel): use expectNothing when it's available
 expectPass code check = do
   res <- runIO $ runCheck (wrap code) check
   it (show check) $ handlePositiveTestResult res
@@ -1832,11 +1835,6 @@ spec = describe "analyze" $ do
             Map.fromList [("name", EType TStr), ("balance", EType TInt)]
       userShow schema `shouldBe` "{ balance: integer, name: string }"
 
-  --
-  -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
-  --            named)
-  --
-
   describe "at-properties verify" $ do
     let code = [text|
           (defschema user
@@ -1913,3 +1911,85 @@ spec = describe "analyze" $ do
             "foo")
           |]
     expectFalsified code'
+
+  describe "execution trace" $ do
+    let read, write, assert, {-auth,-} var :: TraceEvent -> Bool
+        read   = isRight . matching _TraceRead
+        write  = isRight . matching _TraceWrite
+        assert = isRight . matching _TraceAssert
+        -- auth= isRight . matching _TraceAuth
+        var    = isRight . matching _TraceBind
+        path   = isRight . matching _TraceSubpathStart
+
+        match :: [a -> Bool] -> [a] -> Bool
+        tests `match` items
+          | length items == length tests
+          = and $ uncurry ($) <$> zip tests items
+          | otherwise
+          = False
+
+        expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
+        expectTrace code prop tests = do
+          res <- runIO $ runCheck (wrap code) $ Valid prop
+          it "produces the correct trace" $
+            case res of
+              Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
+                let trace = _etEvents (linearizedTrace model)
+                unless (tests `match` trace) $ HUnit.assertFailure $
+                  "trace doesn't match:\n\n" ++ show trace
+              _ ->
+                HUnit.assertFailure "unexpected lack of falsifying model"
+
+    describe "is a linearized trace of events" $ do
+      let code =
+            [text|
+              (defun test:string (from:string to:string amount:integer)
+                "Transfer money between accounts"
+                (let ((from-bal (at 'balance (read accounts from)))
+                      (to-bal   (at 'balance (read accounts to))))
+                  (enforce (> amount 0)         "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  ;; NOTE: this is disabled:
+                  ; (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts from { "balance": (- from-bal amount) })
+                  (update accounts to   { "balance": (+ to-bal amount) })))
+            |]
+
+      expectTrace code (bnot Success')
+        [read, var, read, var, assert, assert, write, write]
+
+    describe "doesn't include events excluded by a conditional" $ do
+      let code =
+            [text|
+              (defun test:string ()
+                (if false
+                  (insert accounts "stu" {"balance": 5}) ; impossible
+                  "didn't write"))
+            |]
+      expectTrace code (PLit False) [{- else -} path]
+
+    describe "doesn't include events after a failed enforce" $ do
+      let code =
+            [text|
+              (defun test:integer ()
+                (insert accounts "test" {"balance": 5})
+                (enforce false)
+                (at 'balance (read accounts "test")))
+            |]
+      expectTrace code Success' [write, assert]
+
+    describe "doesn't include cases after a successful enforce-one case" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-one ""
+                  [(enforce false)
+                   true
+                   (enforce false)
+                  ]))
+            |]
+      expectTrace code (bnot Success')
+        [assert, {- failure -} path, {- success -} path]
+
+    it "doesn't include events after the first failure in an enforce-one case" $ do
+      pendingWith "use of resumptionPath"
