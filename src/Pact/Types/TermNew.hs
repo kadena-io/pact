@@ -95,6 +95,7 @@ data Meta = Meta
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+instance Default Meta where def = Meta def def
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 

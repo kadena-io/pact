@@ -41,7 +41,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Arrow ((&&&),second)
+import Control.Arrow ((&&&),first,second)
 import Prelude hiding (exp)
 import Bound
 import Text.PrettyPrint.ANSI.Leijen (putDoc)
@@ -56,6 +56,7 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
 import Data.Semigroup ((<>))
 import qualified Data.Set as S
+import qualified Data.Map.Strict as M
 
 import Pact.Types.Crypto
 import Pact.Types.ExpNew
@@ -143,11 +144,16 @@ runCompile act cs a =
         (Label s:_) -> doErr def (toList s)
         er -> doErr def (show er)
       Label ne -> doErr def (toList ne)
-      Tokens (x :| _) -> doErr (eInfo x) $ case S.toList expect of
-        (Label s:_) -> toList s
-        es -> show es
+      Tokens (x :| _) -> doErr (eInfo x) $ showExpect expect
     (Left e) -> doErr def (show e)
     where doErr i s = Left $ PactError SyntaxError i def (pack s)
+          showExpect e = case (labelText $ S.toList e) of
+            [] -> show (S.toList e)
+            ss -> intercalate "," ss
+          labelText [] = []
+          labelText (Label s:r) = toList s:labelText r
+          labelText (EndOfInput:r) = "End of input":labelText r
+          labelText (_:r) = labelText r
 
 
 
@@ -188,6 +194,9 @@ currentModule :: Compile (ModuleName,Hash)
 currentModule = use csModule >>= \m -> case m of
   Just cm -> return cm
   Nothing -> context >>= tokenErr' "Must be declared within module"
+
+currentModule' :: Compile ModuleName
+currentModule' = fst <$> currentModule
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -291,6 +300,9 @@ specialForm =
     <|> stepWithRollback
     <|> bless
     <|> deftable
+    <|> defschema
+    <|> defun
+    <|> defpact
 
 
 app :: Compile (Term Name)
@@ -386,11 +398,59 @@ bless = symbol "bless" >> TBless <$> hash' <*> contextInfo
 defconst :: Compile (Term Name)
 defconst = do
   symbol "defconst"
-  modName <- fst <$> currentModule
+  modName <- currentModule'
   a <- arg
   (v,doc) <- try ((,) <$> term <*> (Just <$> str)) <|>
              ((,Nothing) <$> term)
   TConst a modName (CVRaw v) (Meta doc Nothing) <$> contextInfo
+
+meta :: Compile Meta
+meta = atPairs <|> try docStr <|> return def
+  where
+    docStr = Meta <$> (Just <$> str) <*> pure Nothing
+    docPair = symbol "@doc" >> str
+    modelPair = symbol "@model" >> (snd <$> list' Brackets)
+    atPairs = do
+      doc <- optional (try docPair)
+      model <- optional (try modelPair)
+      case (doc,model) of
+        (Nothing,Nothing) -> expected "@doc or @model declarations"
+        _ -> return $ Meta doc model
+
+defschema :: Compile (Term Name)
+defschema = do
+  symbol "defschema"
+  modName <- currentModule'
+  tn <- _atomAtom <$> bareAtom
+  m <- meta
+  fields <- some arg
+  TSchema (TypeName tn) modName m fields <$> contextInfo
+
+defun :: Compile (Term Name)
+defun = do
+  symbol "defun"
+  modName <- currentModule'
+  (defname,returnTy) <- first _atomAtom <$> typedAtom
+  args <- withList' Parens $ many arg
+  m <- meta
+  TDef defname modName Defun (FunType args returnTy)
+    <$> abstractBody args <*> pure m <*> contextInfo
+
+
+defpact :: Compile (Term Name)
+defpact = do
+  symbol "defpact"
+  modName <- currentModule'
+  (defname,returnTy) <- first _atomAtom <$> typedAtom
+  args <- withList' Parens $ many arg
+  m <- meta
+  (body,bi) <- bodyForm'
+  forM_ body $ \t -> case t of
+    TStep {} -> return ()
+    _ -> expected "step or step-with-rollback"
+  TDef defname modName Defpact (FunType args returnTy)
+    (abstractBody' args (TList body TyAny bi)) m <$> contextInfo
+
 
 step :: Compile (Term Name)
 step = do
@@ -412,13 +472,20 @@ letBindings = withList' Parens $
               some $ withList' Parens $
               (,) <$> arg <*> term
 
+abstractBody :: [Arg (Term Name)] -> Compile (Scope Int Term Name)
+abstractBody args = abstractBody' args <$> bodyForm
+
+abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope Int Term Name
+abstractBody' args = abstract (`elemIndex` bNames)
+  where bNames = map arg2Name args
+
+
 letForm :: Compile (Term Name)
 letForm = do
   symbol "let"
   bindings <- letBindings
-  let bNames = map (arg2Name . fst) bindings
-  scope <- abstract (`elemIndex` bNames) <$> bodyForm
-  TBinding bindings scope BindLet <$> contextInfo
+  TBinding bindings <$> abstractBody (map fst bindings) <*>
+    pure BindLet <*> contextInfo
 
 -- | let* is a macro to nest lets for referencing previous
 -- bindings.
@@ -491,10 +558,11 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
 
 bodyForm :: Compile (Term Name)
 bodyForm = do
-  i <- contextInfo
-  bs <- some term <* eof
+  (bs,i) <- bodyForm'
   return $ TList bs TyAny i
 
+bodyForm' :: Compile ([Term Name],Info)
+bodyForm' = (,) <$> (some term <* eof) <*> contextInfo
 
 {-
 doUse :: [Exp] -> Info -> Compile (Term Name)
