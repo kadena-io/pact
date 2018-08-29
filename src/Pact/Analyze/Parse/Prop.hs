@@ -51,16 +51,14 @@ import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (exp)
 
-import           Pact.Types.Lang              hiding (EObject, KeySet,
-                                               KeySetName, SchemaVar, TKeySet,
-                                               TableName, Type)
-import qualified Pact.Types.Lang              as Pact
+import           Pact.Types.Lang              hiding (KeySet, KeySetName,
+                                               SchemaVar, TKeySet, TableName,
+                                               Type)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
 import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.PrenexNormalize
-import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
@@ -92,15 +90,15 @@ parseColumnName bad = throwError $ T.unpack $
 -- @ComparisonOp@, etc. We handle this in @checkPreProp@ as it doesn't cause
 -- any difficulty there and is less burdensome than creating a new data type
 -- for these operators.
-expToPreProp :: Exp -> PropParse PreProp
+expToPreProp :: Exp Info -> PropParse PreProp
 expToPreProp = \case
-  ELiteral (LDecimal d) _ -> pure (PreDecimalLit (mkDecimal d))
-  ELiteral (LInteger i) _ -> pure (PreIntegerLit i)
-  (stringLike -> Just s)  -> pure (PreStringLit s)
-  ELiteral (LTime t) _    -> pure (PreTimeLit (mkTime t))
-  ELiteral (LBool b) _    -> pure (PreBoolLit b)
+  ELiteral' (LDecimal d) -> pure (PreDecimalLit (mkDecimal d))
+  ELiteral' (LInteger i) -> pure (PreIntegerLit i)
+  ELiteral' (LString s)  -> pure (PreStringLit s)
+  ELiteral' (LTime t)    -> pure (PreTimeLit (mkTime t))
+  ELiteral' (LBool b)    -> pure (PreBoolLit b)
 
-  EList' [EAtom' (textToQuantifier -> Just q), EList' bindings, body] -> do
+  ParenList [EAtom' (textToQuantifier -> Just q), ParenList bindings, body] -> do
     bindings' <- parseBindings (\name ty -> (, name, ty) <$> genVarId) bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(vid, name, _ty) -> (name, vid)) bindings'
@@ -110,17 +108,18 @@ expToPreProp = \case
       body'
       bindings'
 
-  EList' [EAtom' SObjectProjection, stringLike -> Just objIx, obj]
+  ParenList [EAtom' SObjectProjection, ELiteral' (LString objIx), obj]
     -> PreAt objIx <$> expToPreProp obj
-  exp@(EList' [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
+  exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
-  Pact.EObject bindings _parsed -> do
-    bindings' <- for bindings $ \(key, body) -> case stringLike key of
-      Just key' -> (key',) <$> expToPreProp body
-      Nothing   -> throwErrorIn key "static key required"
-    pure $ PreLiteralObject $ Map.fromList bindings'
+  -- XXX
+  -- Pact.EObject bindings _parsed -> do
+  --   bindings' <- for bindings $ \(key, body) -> case key of
+  --     ELiteral' (LString key') -> (key',) <$> expToPreProp body
+  --     _                        -> throwErrorIn key "static key required"
+  --   pure $ PreLiteralObject $ Map.fromList bindings'
 
-  EList' (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
+  ParenList (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 
   EAtom' STransactionAborts   -> pure PreAbort
   EAtom' STransactionSucceeds -> pure PreSuccess
@@ -136,23 +135,49 @@ expToPreProp = \case
 -- | Parse a set of bindings like '(x:integer y:string)'
 parseBindings
   :: MonadError String m
-  => (Text -> QType -> m binding) -> [Exp] -> m [binding]
+  => (Text -> QType -> m binding) -> [Exp Info] -> m [binding]
 parseBindings mkBinding = \case
   [] -> pure []
   -- we require a type annotation
-  exp@(EAtom _name _qual Nothing _parsed):_exps -> throwErrorIn exp
-    "type annotation required for all property bindings."
-  exp@(EAtom name _qual (Just ty) _parsed):exps -> do
+  exp@(EAtom' name):Colon':ty:exps -> do
     -- This is challenging because `ty : Pact.Type TypeName`, but
     -- `maybeTranslateType` handles `Pact.Type UserType`. We use `const
     -- Nothing` to punt on user types.
-    nameTy <- case maybeTranslateType' (const Nothing) ty of
+    nameTy <- case parseType ty of
       Just ty' -> mkBinding name ty'
       Nothing  -> throwErrorIn exp
         "currently objects can't be quantified in properties (issue 139)"
     (nameTy:) <$> parseBindings mkBinding exps
+  exp@(EAtom _):_exps -> throwErrorIn exp
+    "type annotation required for all property bindings."
   exp -> throwErrorT $
     "in " <> userShowList exp <> ", unexpected binding form"
+
+parseType :: Exp Info -> Maybe QType
+parseType exp = case exp of
+  EAtom' "bool"    -> pure $ EType TBool
+  EAtom' "decimal" -> pure $ EType TDecimal
+  EAtom' "integer" -> pure $ EType TInt
+  EAtom' "string"  -> pure $ EType TStr
+  EAtom' "time"    -> pure $ EType TTime
+  EAtom' "keyset"  -> pure $ EType TKeySet
+  EAtom' "*"       -> pure $ EType TAny
+
+  EAtom' "table"   -> pure QTable
+
+  -- TODO
+  EAtom' "value"   -> Nothing
+
+  -- TODO
+  -- # user schema type
+  -- # list type
+  BraceList _      -> Nothing
+  SquareList [_ty] -> Nothing -- TyList <$> parseType ty
+
+  -- TODO
+  -- # object schema type
+  -- # table schema type
+  _ -> Nothing
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
@@ -484,9 +509,9 @@ expToCheck
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
-  -> Exp
+  -> Exp Info
   -- ^ Exp to convert
   -> Either String Check
 expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
@@ -502,10 +527,10 @@ expToProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> Type a
-  -> Exp
+  -> Exp Info
   -- ^ Exp to convert
   -> Either String (Prop a)
 expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
@@ -524,9 +549,9 @@ inferProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
-  -> Exp
+  -> Exp Info
   -- ^ Exp to convert
   -> Either String EProp
 inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
@@ -540,8 +565,8 @@ parseToPreProp
   :: Traversable t
   => VarId
   -> Map Text VarId
-  -> t (DefinedProperty Exp)
-  -> Exp
+  -> t (DefinedProperty (Exp Info))
+  -> Exp Info
   -> Either String (PreProp, t (DefinedProperty PreProp))
 parseToPreProp genStart nameEnv propDefs body =
   (`evalStateT` genStart) $ (`runReaderT` nameEnv) $ do

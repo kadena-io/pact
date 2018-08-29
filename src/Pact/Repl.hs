@@ -118,7 +118,7 @@ getDelta = do
     (Script _ file) -> return $ Directed (BS.fromString file) 0 0 0 0
     _ -> return mempty
 
-handleParse :: TF.Result [Exp] -> ([Exp] -> Repl (Either String a)) -> Repl (Either String a)
+handleParse :: TF.Result [Exp Parsed] -> ([Exp Parsed] -> Repl (Either String a)) -> Repl (Either String a)
 handleParse (TF.Failure e) _ = do
   mode <- use rMode
   outStrLn HErr (renderPrettyString (colors mode) (_errDoc e))
@@ -129,14 +129,14 @@ colors :: ReplMode -> RenderColor
 colors Interactive = RColor
 colors _ = RPlain
 
-parsedCompileEval :: String -> TF.Result [Exp] -> Repl (Either String (Term Name))
+parsedCompileEval :: String -> TF.Result [Exp Parsed] -> Repl (Either String (Term Name))
 parsedCompileEval src r = do
   let fc (Left e) _ = return $ Left e
       fc _ exp = compileEval src exp
   handleParse r $ \es -> foldM fc (Right (toTerm True)) es
 
 
-handleCompile :: String -> Exp -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
+handleCompile :: String -> Exp Parsed -> (Term Name -> Repl (Either String a)) -> Repl (Either String a)
 handleCompile src exp a =
     case compile (mkStringInfo src) exp of
       Right t -> a t
@@ -150,7 +150,7 @@ handleCompile src exp a =
           return (Left $ show er)
 
 
-compileEval :: String -> Exp -> Repl (Either String (Term Name))
+compileEval :: String -> Exp Parsed -> Repl (Either String (Term Name))
 compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 

@@ -9,8 +9,8 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, matching, _2,
-                                               _Left, (^.), (^..))
+import           Control.Lens                 (at, findOf, ix, matching, (&),
+                                               (.~), (^.), (^..), _2, _Left)
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
@@ -36,8 +36,8 @@ import qualified Test.HUnit                   as HUnit
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
-import           Pact.Types.Runtime           (ModuleData, eeRefStore,
-                                               rsModules)
+import           Pact.Types.Runtime           (Exp, Info, ModuleData,
+                                               eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Model           (linearizedTrace)
@@ -45,7 +45,7 @@ import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
-import           Pact.Analyze.Util            ((...))
+import           Pact.Analyze.Util            (dummyInfo, (...))
 
 wrap :: Text -> Text
 wrap code =
@@ -1539,6 +1539,9 @@ spec = describe "analyze" $ do
       allA0 intTy (PAnd (PLit True) (CoreProp $ StringComparison Gte a0 a0))
 
   describe "prop parse / typecheck" $ do
+    let parseExprs' :: Text -> Either String [Exp Info]
+        parseExprs' t = parseExprs t & traverse . traverse . traverse .~ dummyInfo
+
     let textToProp'
           :: Map Text VarId
           -> Map VarId EType
@@ -1546,7 +1549,7 @@ spec = describe "analyze" $ do
           -> Type a
           -> Text
           -> Either String (Prop a)
-        textToProp' env1 env2 tableEnv ty t = case parseExprs t of
+        textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
           Right [exp'] ->
             expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
           Left err -> Left err
@@ -1564,7 +1567,7 @@ spec = describe "analyze" $ do
           -> TableEnv
           -> Text
           -> Either String EProp
-        inferProp' env1 env2 tableEnv t = case parseExprs t of
+        inferProp' env1 env2 tableEnv t = case parseExprs' t of
           Right [exp'] ->
             inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
           Left err -> Left err

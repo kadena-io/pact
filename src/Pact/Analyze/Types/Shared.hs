@@ -553,7 +553,10 @@ instance UserShow ArithOp where
     Pow -> "^"
     Log -> "log"
 
-instance UserShow Pact.Exp where
+instance UserShow (Pact.Exp Pact.Info) where
+  userShowsPrec _ = tShow
+
+instance UserShow (Pact.Exp Pact.Parsed) where
   userShowsPrec _ = tShow
 
 newtype ColumnMap a

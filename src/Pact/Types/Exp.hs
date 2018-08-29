@@ -9,8 +9,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -33,7 +31,7 @@ module Pact.Types.Exp
    Exp(..),ExpInfo(..),
    _ELiteral,_EAtom,_EList,_ESeparator,
    ListDelimiter(..),listDelims,enlist,
-   Separator(..)
+   Separator(..),
    ) where
 
 

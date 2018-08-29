@@ -54,14 +54,14 @@ import qualified Data.Text                 as T
 import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
+import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Code (Code), Info (Info), eParsed,
-                                            mName, renderInfo,
-                                            renderParsed, tMeta, mModel)
+import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
+                                            renderParsed, tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
-                                            Term (TConst, TDef, TSchema,
-                                            TTable), asString, tShow, pattern ELitList, pattern EAtom', pattern EList')
+                                            Term (TConst, TDef, TSchema, TTable),
+                                            asString, eInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -94,7 +94,7 @@ data CheckSuccess
   | ProvedTheorem
   deriving (Eq, Show)
 
-type ParseFailure = (Exp, String)
+type ParseFailure = (Exp Info, String)
 
 data SmtFailure
   = Invalid (Model 'Concrete)
@@ -146,7 +146,7 @@ describeCheckSuccess = \case
 
 describeParseFailure :: ParseFailure -> Text
 describeParseFailure (exp, info)
-  = T.pack (renderParsed (exp ^. eParsed))
+  = T.pack (renderInfo (eInfo exp))
   <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 describeSmtFailure :: SmtFailure -> Text
@@ -177,7 +177,7 @@ describeCheckResult = either describeCheckFailure describeCheckSuccess
 
 falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
 falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
-falsifyingModel _ = Nothing
+falsifyingModel _                                         = Nothing
 
 -- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure
@@ -370,10 +370,10 @@ moduleTables modules (_mod, modRefs) = do
 --
 -- * '(defproperty foo (> 1 0))'
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
-parseDefprops :: Exp -> Either ParseFailure [(Text, DefinedProperty Exp)]
-parseDefprops (ELitList exps) = traverse parseDefprops' exps where
-  parseDefprops' exp@(EList' (EAtom' "defproperty" : rest)) = case rest of
-    [ EAtom' propname, EList' args, body ] -> do
+parseDefprops :: Exp Info -> Either ParseFailure [(Text, DefinedProperty (Exp Info))]
+parseDefprops (ParenList exps) = traverse parseDefprops' exps where
+  parseDefprops' exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
+    [ EAtom' propname, ParenList args, body ] -> do
       args' <- parseBindings (curry Right) args & _Left %~ (exp,)
       pure (propname, DefinedProperty args' body)
     [ EAtom' propname,              body ] ->
@@ -391,7 +391,7 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 
 -- Get the set of properties defined in this module
 modulePropDefs
-  :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty Exp))
+  :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty (Exp Info)))
 modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
   = case model of
       Just model' -> HM.fromList <$> parseDefprops model'
@@ -400,7 +400,7 @@ modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
-  -> HM.HashMap Text (DefinedProperty Exp)
+  -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
 moduleFunChecks tables modTys propDefs = for modTys $
@@ -457,35 +457,36 @@ moduleFunChecks tables modTys propDefs = for modTys $
   pure (ref, Right checks)
 
 -- | Given an exp like '(k v)', convert it to a singleton map
-expToMapping :: Exp -> Maybe (Map Text Exp)
-expToMapping (Pact.EList [Pact.EAtom k Nothing Nothing _, v] Nothing _)
+expToMapping :: Exp Info -> Maybe (Map Text (Exp Info))
+expToMapping (ParenList [EAtom' k, Colon', v])
   = Just $ Map.singleton k v
 expToMapping _ = Nothing
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just
 -- collects the properties / invariants in a list.
-collectExps :: String -> Maybe Exp -> Maybe Exp -> Either ParseFailure [Exp]
+collectExps
+  :: String
+  -> Maybe (Exp Info)
+  -> Maybe (Exp Info)
+  -> Either ParseFailure [Exp Info]
 collectExps name multiExp singularExp = case multiExp of
-  Just (Pact.ELitList exps') -> Right exps'
+  Just (SquareList exps') -> Right exps'
   Just exp -> Left (exp, name ++ " must be a list")
   Nothing -> case singularExp of
     Just exp -> Right [exp]
     Nothing  -> Right []
 
-expToInfo :: Exp -> Info
-expToInfo exp = Info (Just (Code (tShow exp), exp ^. eParsed))
-
 -- | This runs a parser over a collection of 'Exp's, collecting the failures
 -- or successes.
 runExpParserOver
   :: forall t.
-     [Exp]
-  -> (Exp -> Either String t)
+     [Exp Info]
+  -> (Exp Info -> Either String t)
   -> Either ParseFailure [Located t]
 runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
-  Right good -> Right (Located (expToInfo meta) good)
+  Right good -> Right (Located (eInfo meta) good)
 
 verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
@@ -545,7 +546,7 @@ verifyModule modules moduleData = runExceptT $ do
         $ concatMap HM.keys
         $ allModulePropDefs
 
-      propDefs :: HM.HashMap Text (DefinedProperty Exp)
+      propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
 
       typecheckedRefs :: HM.HashMap Text Ref

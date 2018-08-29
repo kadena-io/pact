@@ -35,6 +35,7 @@ library
                      , Pact.Repl.Lib
                      , Pact.Repl.Types
                      , Pact.Types.Exp
+                     , Pact.Types.ExpParser
                      , Pact.Types.Gas
                      , Pact.Types.Hash
                      , Pact.Types.Info
