@@ -1,8 +1,16 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Util where
 
+import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
+                                       prism)
 import qualified Data.Default         as Default
+import qualified Data.Foldable        as Foldable
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
@@ -52,3 +60,46 @@ dummyInfo = Default.def
 
 vacuousMatch :: String -> a
 vacuousMatch msg = error $ "vacuous match: " ++ msg
+
+-- * SnocList
+--
+-- For when DList is not a great option because you occasionally need to
+-- inspect the last-added item.
+
+newtype SnocList a
+  = SnocList { _reversed :: [a] }
+  deriving (Eq, Ord, Show)
+
+instance Monoid (SnocList a) where
+  mempty = SnocList []
+  SnocList xs `mappend` SnocList ys = SnocList $ ys ++ xs
+
+pattern ConsList :: [a] -> SnocList a
+pattern ConsList xs <- SnocList (reverse -> xs)
+  where ConsList xs = SnocList $ reverse xs
+
+instance Functor SnocList where
+  fmap f (SnocList revXs) = SnocList $ fmap f revXs
+
+instance Foldable SnocList where
+  foldMap f (SnocList (reverse -> xs)) = foldMap f xs
+
+instance Traversable SnocList where
+  -- Not efficient, but we want to sequence the effects in-order:
+  traverse f (SnocList (reverse -> xs)) = SnocList . reverse <$> traverse f xs
+
+snocList :: [a] -> SnocList a
+snocList = SnocList . reverse
+
+makeLenses ''SnocList
+
+instance Snoc (SnocList a) (SnocList b) a b where
+  _Snoc = prism
+    (\(SnocList as,a) -> SnocList (a:as))
+    (\(SnocList aas) ->
+      case aas of
+        (a:as) -> Right (SnocList as, a)
+        []     -> Left  (SnocList []))
+
+snocConsList :: Iso (SnocList a) (SnocList b) [a] [b]
+snocConsList = iso Foldable.toList snocList

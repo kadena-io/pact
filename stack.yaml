@@ -22,6 +22,7 @@ extra-deps:
   - ed25519-donna-0.1.1
   - megaparsec-6.5.0
   - parser-combinators-1.0.0
+  - algebraic-graphs-0.1.1.1
 
 flags: {}
 

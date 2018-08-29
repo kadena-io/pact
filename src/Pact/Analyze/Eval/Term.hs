@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -21,7 +22,7 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify')
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl')
+import           Data.Foldable               (foldl', foldlM)
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -30,7 +31,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              bOr, constrain, false, ite)
+                                              constrain, false, ite)
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -53,7 +54,6 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
-
 newtype Analyze a
   = Analyze
     { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
@@ -69,7 +69,6 @@ instance Analyzer Analyze where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
-
 
 evalTermLogicalOp
   :: LogicalOp
@@ -108,23 +107,27 @@ instance (Mergeable a) => Mergeable (Analyze a) where
              , ()
              )
 
+--
+-- NOTE: for these tagging functions, at the moment we allow a "partial" model.
+--       we could also decide to 'throwError'; right now we simply don't tag in
+--       these cases where a tag is not found.
+--
+
 tagAccessKey
-  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> S RowKey
   -> Analyze ()
 tagAccessKey lens' tid srk = do
   mTup <- preview $ aeModelTags.lens'.at tid._Just.located._1
   case mTup of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing     -> pure ()
     Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
 tagAccessCell
-  :: Lens' ModelTags (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
   -> TagId
   -> Text
   -> AVal
@@ -133,23 +136,41 @@ tagAccessCell lens' tid fieldName av = do
   mTag <- preview $
     aeModelTags.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
+tagAssert :: TagId -> S Bool -> Analyze ()
+tagAssert tid sb = do
+  mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
+  case mTag of
+    Nothing  -> pure ()
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
+
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
-tagAuth :: TagId -> Maybe Provenance -> S Bool -> Analyze ()
-tagAuth tid mKsProv sb = do
-  mTag <- preview $ aeModelTags.mtAuths.at tid._Just.located
-  case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
+tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
+tagAuth tid sKs sb = do
+  mTup <- preview $ aeModelTags.mtAuths.at tid._Just.located
+  case mTup of
     Nothing  -> pure ()
-    Just sbv -> do
+    Just (ksTag, sbv) -> do
+      addConstraint $ sansProv $ ksTag .== sKs
       addConstraint $ sansProv $ sbv .== _sSbv sb
-      globalState.gasKsProvenances.at tid .= mKsProv
+      globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
+
+tagFork :: TagId -> TagId -> S Bool -> S Bool -> Analyze ()
+tagFork tidL tidR reachable lPasses = do
+    tagSubpathStart tidL $ reachable &&& lPasses
+    tagSubpathStart tidR $ reachable &&& bnot lPasses
+
+  where
+    tagSubpathStart :: TagId -> S Bool -> Analyze ()
+    tagSubpathStart tid active = do
+      mTag <- preview $ aeModelTags.mtPaths.at tid._Just
+      case mTag of
+        Nothing  -> pure ()
+        Just sbv -> do
+          addConstraint $ sansProv $ sbv .== _sSbv active
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -160,8 +181,6 @@ tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
   case mTag of
-    -- NOTE: ATM we allow a "partial" model. we could also decide to
-    -- 'throwError' here; we simply don't tag.
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
@@ -257,8 +276,10 @@ evalTermO = \case
 
   Sequence eterm objT -> evalETerm eterm *> evalTermO objT
 
-  IfThenElse cond then' else' -> do
+  IfThenElse cond (thenPath, then') (elsePath, else') -> do
+    reachable <- use purelyReachable
     testPasses <- evalTerm cond
+    tagFork thenPath elsePath reachable testPasses
     case unliteralS testPasses of
       Just True  -> evalTermO then'
       Just False -> evalTermO else'
@@ -288,28 +309,47 @@ evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
   CoreTerm a -> evalCore a
 
-  IfThenElse cond then' else' -> do
+  IfThenElse cond (thenPath, then') (elsePath, else') -> do
+    reachable <- use purelyReachable
     testPasses <- evalTerm cond
-    iteS testPasses (evalTerm then') (evalTerm else')
+    tagFork thenPath elsePath reachable testPasses
+    iteS testPasses
+      (evalTerm then')
+      (evalTerm else')
 
   -- TODO: check that the body of enforce is pure
-  Enforce cond -> do
+  Enforce mTid cond -> do
     cond' <- evalTerm cond
+    maybe (pure ()) (\tid -> tagAssert tid cond') mTid
     succeeds %= (&&& cond')
     pure true
 
-  EnforceOne conds -> do
+  EnforceOne (Left tid) -> do
+    tagAssert tid false -- in this case (of an empty list), we always fail.
+    succeeds .= false
+    pure true           -- <- this value doesn't matter.
+
+  -- TODO: check that each cond is pure. checking that @Enforce@ terms are pure
+  -- does *NOT* suffice; we can have arbitrary expressions in an @enforce-one@
+  -- list.
+  EnforceOne (Right conds) -> do
     initSucceeds <- use succeeds
 
-    successRecord <- for conds $ \cond -> do
-      succeeds .= true
-      _ <- evalTerm cond
-      use succeeds
+    (result, anySucceeded) <- foldlM
+      (\(prevRes, earlierSuccess) ((failTag, passTag), cond) -> do
+        succeeds .= true
+        res <- evalTerm cond
+        currentSucceeded <- use succeeds
+        tagFork passTag failTag (bnot earlierSuccess) currentSucceeded
 
-    let anySucceeded = bOr successRecord
+        pure $ iteS earlierSuccess
+          (prevRes, true)
+          (res,     currentSucceeded))
+      (true, false)
+      conds
+
     succeeds .= (initSucceeds &&& anySucceeded)
-
-    pure true
+    pure result
 
   Sequence eterm valT -> evalETerm eterm *> evalTerm valT
 
@@ -384,13 +424,14 @@ evalTerm = \case
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT
     authorized <- ksAuthorized ks
-    tagAuth tid (ks ^. sProv) authorized
+    tagAuth tid ks authorized
     pure authorized
 
   NameAuthorized tid str -> do
     ksn <- symKsName <$> evalTerm str
+    ks <- resolveKeySet ksn
     authorized <- nameAuthorized ksn
-    tagAuth tid (Just $ fromNamedKs ksn) authorized
+    tagAuth tid ks authorized
     pure authorized
 
   PactVersion -> pure $ literalS $ T.unpack pactVersion

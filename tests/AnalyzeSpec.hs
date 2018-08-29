@@ -1,28 +1,37 @@
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, (^.), (^..), _Left, _2)
+import           Control.Lens                 (at, findOf, ix, matching, _2,
+                                               _Left, (^.), (^..))
+import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
-import           Data.Either                  (isLeft)
+import           Data.Either                  (isLeft, isRight)
 import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)), isConcretely)
-import           Data.SBV.Internals           (SBV(SBV))
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
+                                               isConcretely)
+import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           NeatInterpolation            (text)
-import           Test.Hspec                   (Spec, describe, expectationFailure, it, runIO,
-                                               shouldBe, shouldSatisfy, pendingWith)
+import           Prelude                      hiding (read)
+import           Test.Hspec                   (Spec, describe,
+                                               expectationFailure, it,
+                                               pendingWith, runIO, shouldBe,
+                                               shouldSatisfy)
+import qualified Test.HUnit                   as HUnit
 
 import           Pact.Parse                   (parseExprs)
 import           Pact.Repl                    (evalRepl', initReplState)
@@ -31,8 +40,9 @@ import           Pact.Types.Runtime           (ModuleData, eeRefStore,
                                                rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Parse           (TableEnv, expToProp, inferProp,
-                                               PreProp(..))
+import           Pact.Analyze.Model           (linearizedTrace)
+import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
+                                               expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util            ((...))
@@ -86,6 +96,13 @@ data TestFailure
   | VerificationFailure VerificationFailure
   deriving Show
 
+userShowTestFailure :: TestFailure -> String
+userShowTestFailure = \case
+  TestCheckFailure cf    -> T.unpack (describeCheckFailure cf)
+  NoTestModule           -> "example is missing a module named 'test'"
+  ReplError err          -> "ReplError: " ++ err
+  VerificationFailure vf -> "VerificationFailure: " ++ show vf
+
 --
 -- TODO: use ExceptT
 --
@@ -131,10 +148,15 @@ runCheck code check = do
         Right (Left cf) -> Just $ TestCheckFailure cf
         Right (Right _) -> Nothing
 
+handlePositiveTestResult :: Maybe TestFailure -> IO ()
+handlePositiveTestResult = \case
+  Nothing -> pure ()
+  Just tf -> HUnit.assertFailure $ userShowTestFailure tf
+
 expectVerified :: Text -> Spec
 expectVerified code = do
   res <- runIO $ runVerification $ wrap code
-  it "passes in-code checks" $ res `shouldSatisfy` isNothing
+  it "passes in-code checks" $ handlePositiveTestResult res
 
 expectFalsified :: Text -> Spec
 expectFalsified code = do
@@ -142,10 +164,9 @@ expectFalsified code = do
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
--- TODO(joel): use expectNothing when it's available
 expectPass code check = do
   res <- runIO $ runCheck (wrap code) check
-  it (show check) $ res `shouldSatisfy` isNothing
+  it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
@@ -534,7 +555,8 @@ spec = describe "analyze" $ do
              (enforce true)]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
 
   describe "enforce-one.3" $ do
     let code =
@@ -545,7 +567,7 @@ spec = describe "analyze" $ do
              (enforce false)]))
           |]
 
-    expectPass code $ Valid $ PNot $ Inj Success
+    expectPass code $ Valid $ PNot Success'
 
   describe "enforce-one.4" $ do
     let code =
@@ -557,7 +579,8 @@ spec = describe "analyze" $ do
                   (enforce false))]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
 
   -- This one is a little subtle. Even though the `or` would evaluate to
   -- `true`, one of its `enforce`s threw, so it fails.
@@ -570,11 +593,11 @@ spec = describe "analyze" $ do
                  (enforce true))]))
           |]
 
-    expectPass code $ Valid $ PNot $ Inj Success
+    expectPass code $ Valid $ PNot Success'
 
   -- This one is also subtle. `or` short-circuits so the second `enforce` never
   -- throws.
-  describe "enforce-one.5" $ do
+  describe "enforce-one.6" $ do
     let code =
           [text|
         (defun test:bool ()
@@ -583,7 +606,44 @@ spec = describe "analyze" $ do
                  (enforce false))]))
           |]
 
-    expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
+
+  describe "enforce-one.7" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one ""
+                [(enforce false)
+                 (enforce-one "" ; nested enforce-one
+                   [(enforce false)
+                    (enforce true)
+                    (enforce false)])
+                 (enforce false)]))
+          |]
+
+    expectPass code $ Valid Success'
+    expectPass code $ Valid Result'
+
+  describe "enforce-one.8" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one ""
+                [(enforce false) false (enforce false)]))
+          |]
+
+    expectPass code $ Valid Success'
+    expectPass code $ Valid $ PNot Result'
+
+  describe "enforce-one.9" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one "" []))
+          |]
+
+    expectPass code $ Valid $ bnot Success'
 
   describe "logical short-circuiting" $ do
     describe "and" $ do
@@ -925,7 +985,7 @@ spec = describe "analyze" $ do
 
             [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model args (ModelTags _ _ writes _ _) ksProvs) = model
+            let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
 
             it "should have a negative amount" $ do
               Just (Located _ (_, (_, AVal _prov amount))) <- pure $
@@ -1775,11 +1835,6 @@ spec = describe "analyze" $ do
             Map.fromList [("name", EType TStr), ("balance", EType TInt)]
       userShow schema `shouldBe` "{ balance: integer, name: string }"
 
-  --
-  -- TODO(bts): test that execution traces include auth metadata (arg vs row vs
-  --            named)
-  --
-
   describe "at-properties verify" $ do
     let code = [text|
           (defschema user
@@ -1856,3 +1911,85 @@ spec = describe "analyze" $ do
             "foo")
           |]
     expectFalsified code'
+
+  describe "execution trace" $ do
+    let read, write, assert, {-auth,-} var :: TraceEvent -> Bool
+        read   = isRight . matching _TraceRead
+        write  = isRight . matching _TraceWrite
+        assert = isRight . matching _TraceAssert
+        -- auth= isRight . matching _TraceAuth
+        var    = isRight . matching _TraceBind
+        path   = isRight . matching _TraceSubpathStart
+
+        match :: [a -> Bool] -> [a] -> Bool
+        tests `match` items
+          | length items == length tests
+          = and $ uncurry ($) <$> zip tests items
+          | otherwise
+          = False
+
+        expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
+        expectTrace code prop tests = do
+          res <- runIO $ runCheck (wrap code) $ Valid prop
+          it "produces the correct trace" $
+            case res of
+              Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
+                let trace = _etEvents (linearizedTrace model)
+                unless (tests `match` trace) $ HUnit.assertFailure $
+                  "trace doesn't match:\n\n" ++ show trace
+              _ ->
+                HUnit.assertFailure "unexpected lack of falsifying model"
+
+    describe "is a linearized trace of events" $ do
+      let code =
+            [text|
+              (defun test:string (from:string to:string amount:integer)
+                "Transfer money between accounts"
+                (let ((from-bal (at 'balance (read accounts from)))
+                      (to-bal   (at 'balance (read accounts to))))
+                  (enforce (> amount 0)         "Non-positive amount")
+                  (enforce (>= from-bal amount) "Insufficient Funds")
+                  ;; NOTE: this is disabled:
+                  ; (enforce (!= from to)         "Sender is the recipient")
+                  (update accounts from { "balance": (- from-bal amount) })
+                  (update accounts to   { "balance": (+ to-bal amount) })))
+            |]
+
+      expectTrace code (bnot Success')
+        [read, var, read, var, assert, assert, write, write]
+
+    describe "doesn't include events excluded by a conditional" $ do
+      let code =
+            [text|
+              (defun test:string ()
+                (if false
+                  (insert accounts "stu" {"balance": 5}) ; impossible
+                  "didn't write"))
+            |]
+      expectTrace code (PLit False) [{- else -} path]
+
+    describe "doesn't include events after a failed enforce" $ do
+      let code =
+            [text|
+              (defun test:integer ()
+                (insert accounts "test" {"balance": 5})
+                (enforce false)
+                (at 'balance (read accounts "test")))
+            |]
+      expectTrace code Success' [write, assert]
+
+    describe "doesn't include cases after a successful enforce-one case" $ do
+      let code =
+            [text|
+              (defun test:bool ()
+                (enforce-one ""
+                  [(enforce false)
+                   true
+                   (enforce false)
+                  ]))
+            |]
+      expectTrace code (bnot Success')
+        [assert, {- failure -} path, {- success -} path]
+
+    it "doesn't include events after the first failure in an enforce-one case" $ do
+      pendingWith "use of resumptionPath"

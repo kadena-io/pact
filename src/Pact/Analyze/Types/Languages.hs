@@ -88,7 +88,6 @@ pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
 
-
 -- | Core terms.
 --
 -- These are the expressions shared by all three languages ('Prop',
@@ -402,7 +401,7 @@ data Term ret where
   -- TODO(joel): In principle this could be pure and applied to all the
   -- languages. Unfortunately, we can't add this to props because `Query` has
   -- `Symbolic` in its stack, so it can't do an `ite`.
-  IfThenElse      :: Term Bool -> Term a -> Term a -> Term a
+  IfThenElse      :: Term Bool -> (TagId, Term a) -> (TagId, Term a) -> Term a
 
   -- Variable binding
   Let             :: Text -> VarId -> ETerm -> Term a -> Term a
@@ -411,8 +410,12 @@ data Term ret where
   Sequence        :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
-  Enforce         :: Term Bool   -> Term Bool
-  EnforceOne      :: [Term Bool] -> Term Bool
+  Enforce         :: Maybe TagId -> Term Bool   -> Term Bool -- Only a TagId for an assertion; i.e. not keyset enforcement
+  -- Left to be tagged if the list of cases is empty. We do this because we
+  -- need a way to signal a failure due to this particular scenario in model
+  -- reporting. Right _1 to be tagged if the case fails, Right _2 to be tagged
+  -- if the case succeeds:
+  EnforceOne      :: Either TagId [((TagId, TagId), Term Bool)] -> Term Bool
 
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet

@@ -13,20 +13,23 @@
 
 module Pact.Analyze.Translate where
 
+import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
-import           Control.Lens               (at, cons, makeLenses, view, (<&>),
-                                             (?~), (^.), (^?), (%~), (.~),
-                                             (<&>), _1, _2)
-import           Control.Monad              ((>=>))
+import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
+                                             to, use, view, (%=), (%~), (.=),
+                                             (.~), (<&>), (<&>), (?=), (?~),
+                                             (^.), (^?), (<>~))
+import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
                                              runStateT)
-import           Data.Foldable              (foldl')
+import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
+import           Data.Maybe                 (fromMaybe, isNothing)
 import           Data.Monoid                ((<>))
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text)
@@ -44,8 +47,8 @@ import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
-import           Pact.Analyze.Feature       hiding (TyVar, Var, obj, str, time,
-                                                    col)
+import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
+                                             time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -106,88 +109,194 @@ describeTranslateFailureNoLoc = \case
   NoKeys _node  -> "`keys` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
-mkTranslateEnv :: [Arg] -> Map Node (Text, VarId)
-mkTranslateEnv = foldl'
-  (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
-  Map.empty
+data TranslateEnv
+  = TranslateEnv
+    { _teInfo           :: Info
+    , _teNodeVars       :: Map Node (Text, VarId)
+    , _teRecoverability :: Recoverability
+    }
+
+mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
+mkTranslateEnv info args = TranslateEnv info nodeVars mempty
+  where
+    nodeVars = foldl'
+      (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
+      Map.empty
+      args
 
 data TranslateState
   = TranslateState
-    { _tsTagAllocs :: [TagAllocation] -- "strict" WriterT isn't; so we use state
-    , _tsNextTagId :: TagId
-    , _tsNextVarId :: VarId
+    { _tsNextTagId     :: TagId
+    , _tsNextVarId     :: VarId
+    , _tsGraph         :: Alga.Graph Vertex
+      -- ^ The execution graph we've built so far. This is expanded upon as we
+      -- translate an entire function.
+    , _tsPathHead      :: Vertex
+      -- ^ The "latest" vertex/current path of the graph. This starts out as
+      -- the single initial vertex. it splits into two if we hit a conditional,
+      -- and rejoins afterwards.
+    , _tsNextVertex    :: Vertex
+    , _tsEdgeEvents    :: Map Edge [TraceEvent]
+      -- ^ Events added to each new 'Edge' upon creating a new 'Vertex' which
+      -- closes/completes the 'Edge'.
+    , _tsPendingEvents :: SnocList TraceEvent
+      -- ^ Events being accumulated until the creation of the next 'Vertex'.
+    , _tsCurrentPath   :: TagId
+      -- ^ Path to be associated with the 'Edge' formed by the creation of the
+      -- next 'Vertex'.
+    , _tsPathEdges     :: Map TagId [Edge]
+      -- ^ Graph edges corresponding to a given execution "path".
+      --
+      -- 'TraceSubpathStart's are emitted once for each path: at the start of
+      -- an execution trace, and at the beginning of either side of a
+      -- conditional.  After a conditional, we resume the path from before the
+      -- conditional.  Either side of a conditional will contain a minimum of
+      -- two edges: splitting away from the other branch, and then rejoining
+      -- back to the other branch at the join point. The following program:
+      --
+      --     (defun test ()
+      --       (if true 1 2))
+      --
+      -- will result in the following diagram, with six total edges (where /,
+      -- \, and - are edges):
+      --        .
+      --       / \
+      --     ->   ->
+      --       \./
+      --
+      -- The initial edge leading into the conditional, two for each branch,
+      -- and a final edge after the two branches have rejoined one another. We
+      -- must have two edges for each branch so that we can unambiguously talk
+      -- about either branch in our graph representation, where we only one
+      -- permit one edge in a given direction between two vertices.
+      --
+      -- Also note that in the presence of nested conditionals, these
+      -- "branch-out" and "rejoin" edges will not be contiguous in the graph on
+      -- the side of the outer conditional which contains the nested
+      -- conditional:
+      --       ......
+      --     _/  .   \_
+      --      \ / \ _/
+      --        \./
+      --
+      -- We track all of the edges for each path so that we can determine the
+      -- subset of edges on the graph that form the upper bound for the edges
+      -- that are reached during a particular execution trace. We say "upper
+      -- bound" here because some traces will not execute entirely to the end
+      -- of the program due to the use of e.g. @enforce@ and @enforce-keyset@.
+      --
+      -- There's one more scenario where we start subpaths: for each of the
+      -- "cases" of an @enforce-one@. Here's an example with three cases:
+      --
+      --     (enforce-one [case-1 case-2 case-3])
+      --
+      --     \____        <- case-1 runs, always
+      --      \___ ._     <- case-2 runs if case-1 fails
+      --       \__        <- case-3 runs if case-2 fails
+      --
+      -- The \ edges correspond to the execution of each case. The _ edges
+      -- correspond to successful exit early due to the lack of a failure.
+      -- These three "success" edges all join together at the same vertex.
     }
 
 makeLenses ''TranslateFailure
+makeLenses ''TranslateEnv
 makeLenses ''TranslateState
 
 instance HasVarId TranslateState where
   varId = tsNextVarId
 
+class HasInfo e where
+  envInfo :: Lens' e Info
+
+instance HasInfo Info where
+  envInfo = id
+
+instance HasInfo TranslateEnv where
+  envInfo = teInfo
+
 newtype TranslateM a
   = TranslateM
-    { unTranslateM :: ReaderT (Info, Map Node (Text, VarId))
+    { unTranslateM :: ReaderT TranslateEnv
                         (StateT TranslateState
                           (Except TranslateFailure))
                         a
     }
-  deriving (Functor, Applicative, Monad,
-    MonadReader (Info, Map Node (Text, VarId)), MonadState TranslateState,
-    MonadError TranslateFailure)
+  deriving (Functor, Applicative, Monad, MonadReader TranslateEnv,
+    MonadState TranslateState, MonadError TranslateFailure)
 
 instance MonadFail TranslateM where
   fail s = do
-    info <- view _1
+    info <- view envInfo
     throwError (TranslateFailure info (MonadFailure s))
 
 -- * Translation
 
 -- | Call when entering a node to set the current context
 nodeContext :: Node -> TranslateM a -> TranslateM a
-nodeContext node = local (_1 .~ nodeToInfo node)
+nodeContext node = local (envInfo .~ nodeToInfo node)
 
 -- | Call when entering an ast node to set the current context
 astContext :: AST Node -> TranslateM a -> TranslateM a
-astContext ast = local (_1 .~ astToInfo ast)
+astContext ast = local (envInfo .~ astToInfo ast)
 
-writeTagAlloc :: TagAllocation -> TranslateM ()
-writeTagAlloc tagAlloc = modify' $ tsTagAllocs %~ cons tagAlloc
+emit :: TraceEvent -> TranslateM ()
+emit event = modify' $ tsPendingEvents %~ flip snoc event
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
 
+nodeInfo :: Node -> Info
+nodeInfo node = node ^. aId . Pact.tiInfo
+
+startSubpath :: TagId -> TranslateM ()
+startSubpath tid = do
+  tsCurrentPath .= tid
+  emit $ TraceSubpathStart tid
+
+startNewSubpath :: TranslateM TagId
+startNewSubpath = do
+  tid <- genTagId
+  startSubpath tid
+  pure tid
+
 tagDbAccess
-  :: (Located (TagId, Schema) -> TagAllocation)
+  :: (Located (TagId, Schema) -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
-tagDbAccess mkTagAlloc node schema = do
+tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ mkTagAlloc $ Located info (tid, schema)
+  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
-tagRead = tagDbAccess AllocReadTag
+tagRead = tagDbAccess TraceRead
 
 tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess AllocWriteTag
+tagWrite = tagDbAccess TraceWrite
+
+tagAssert :: Node -> TranslateM TagId
+tagAssert node = do
+  tid <- genTagId
+  recov <- view teRecoverability
+  emit $ TraceAssert recov $ Located (nodeInfo node) tid
+  pure tid
 
 tagAuth :: Node -> TranslateM TagId
 tagAuth node = do
   tid <- genTagId
-  let info = node ^. aId . Pact.tiInfo
-  writeTagAlloc $ AllocAuthTag $ Located info tid
+  recov <- view teRecoverability
+  emit $ TraceAuth recov $ Located (nodeInfo node) tid
   pure tid
 
 tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
-tagVarBinding info nm ety vid = writeTagAlloc $
-  AllocVarTag (Located info (vid, nm, ety))
+tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))
 
 withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
 withNewVarId varNode varName action = do
   vid <- genVarId
-  local (_2 . at varNode ?~ (varName, vid)) (action vid)
+  local (teNodeVars.at varNode ?~ (varName, vid)) (action vid)
 
 -- Map.union is left-biased. The more explicit name makes this extra clear.
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
@@ -241,22 +350,76 @@ maybeTranslateType' f = \case
   TyFun _          -> empty
 
 throwError'
-  :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
+  :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => TranslateFailureNoLoc -> m a
 throwError' err = do
-  info <- view _1
+  info <- view envInfo
   throwError $ TranslateFailure info err
 
+-- | Generates a new 'Vertex', setting it as the head. Does *not* add this new
+-- 'Vertex' to the graph.
+issueVertex :: TranslateM Vertex
+issueVertex = do
+  v <- genId tsNextVertex
+  tsPathHead .= v
+  pure v
+
+-- | Flushes-out events accumulated for the current edge of the execution path.
+flushEvents :: TranslateM [TraceEvent]
+flushEvents = do
+  ConsList pathEvents <- use tsPendingEvents
+  tsPendingEvents .= mempty
+  pure pathEvents
+
+addPathEdge :: TagId -> Edge -> TranslateM ()
+addPathEdge path e =
+  tsPathEdges.at path %= pure . cons e . fromMaybe []
+
+-- | Extends the previous path head to a new 'Vertex', flushing accumulated
+-- events to 'tsEdgeEvents'.
+extendPath :: TranslateM Vertex
+extendPath = do
+  path <- use tsCurrentPath
+  v    <- use tsPathHead
+  v'   <- issueVertex
+  tsGraph %= Alga.overlay (Alga.edge v v')
+  edgeTrace <- flushEvents
+  let e = (v, v')
+  tsEdgeEvents.at e ?= edgeTrace
+  addPathEdge path e
+  pure v'
+
+-- | Extends multiple separate paths to a single join point. Assumes that each
+-- 'Vertex' was created via 'extendPath' before invocation, and thus
+-- 'tsPendingEvents' is currently empty.
+joinPaths :: [(Vertex, TagId)] -> TranslateM ()
+joinPaths branches = do
+  let vs = fst $ unzip branches
+  v' <- issueVertex
+  tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
+  for_ branches $ \(v, path) -> do
+    isNewPath <- use $ tsPathEdges.at path.to isNothing
+    let rejoinEdge = (v, v')
+    tsEdgeEvents.at rejoinEdge ?= [TraceSubpathStart path | isNewPath]
+    addPathEdge path rejoinEdge
+
+withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
+withNestedRecoverability r = local $ teRecoverability <>~ r
+
 translateType
-  :: (MonadError TranslateFailure m, MonadReader (Info, b) m)
+  :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => Node -> m EType
 translateType node = case _aTy node of
   (maybeTranslateType -> Just ety) -> pure ety
   ty                               -> throwError' $ UnhandledType node ty
 
 translateArg
-  :: (MonadState s m, HasVarId s, MonadError TranslateFailure m,
-      MonadReader (Info, b) m)
+  :: ( MonadState s m
+     , HasVarId s
+     , MonadReader r m
+     , HasInfo r
+     , MonadError TranslateFailure m
+     )
   => Named Node
   -> m Arg
 translateArg (Named nm node _) = do
@@ -274,7 +437,7 @@ translateSchema node = do
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
   []       -> do
-    info <- view _1
+    info <- view envInfo
     throwError $ TranslateFailure info EmptyBody
   [ast]    -> translateNode ast
   ast:asts -> do
@@ -326,7 +489,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
         (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
 
   fmap (mapExistential translateLet) $
-    local (_2 %~ unionPreferring nodeToNameVid) $
+    local (teNodeVars %~ unionPreferring nodeToNameVid) $
       translateBody bodyA
 
 translateNode :: AST Node -> TranslateM ETerm
@@ -356,7 +519,7 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_InlinedApp body -> translateBody body
 
   AST_Var node -> do
-    Just (varName, vid) <- view (_2 . at node)
+    Just (varName, vid) <- view $ teNodeVars.at node
     ty      <- translateType node
     pure $ case ty of
       EType ty'        -> ESimple ty'    $ CoreTerm $ Var vid varName
@@ -376,7 +539,7 @@ translateNode astNode = astContext astNode $ case astNode of
     LTime t    -> pure $ ESimple TTime (lit (mkTime t))
 
   AST_NegativeVar node -> do
-    Just (name, vid) <- view (_2 . at node)
+    Just (name, vid) <- view $ teNodeVars.at node
     EType ty <- translateType node
     case ty of
       TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Negate $
@@ -384,10 +547,6 @@ translateNode astNode = astContext astNode $ case astNode of
       TDecimal -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp Negate $
         CoreTerm $ Var vid name
       _        -> throwError' $ BadNegationType astNode
-
-  AST_Enforce _ cond -> do
-    ESimple TBool condTerm <- translateNode cond
-    pure $ ESimple TBool $ Enforce condTerm
 
   AST_Format formatStr vars -> do
     ESimple TStr formatStr' <- translateNode formatStr
@@ -423,25 +582,62 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_ReadInteger _ -> throwError' $ UnexpectedNode astNode
   AST_ReadMsg _     -> throwError' $ UnexpectedNode astNode
 
+  AST_Enforce _ cond -> do
+    ESimple TBool condTerm <- translateNode cond
+    tid <- tagAssert $ cond ^. aNode
+    pure $ ESimple TBool $ Enforce (Just tid) condTerm
+
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyString)
     -> do
       ESimple TStr ksnT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ESimple TBool $ Enforce $ NameAuthorized tid ksnT
+      return $ ESimple TBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
     | ksA ^? aNode.aTy == Just (TyPrim TyKeySet)
     -> do
       ESimple TKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode
-      return $ ESimple TBool $ Enforce (KsAuthorized tid ksT)
+      return $ ESimple TBool $ Enforce Nothing $ KsAuthorized tid ksT
 
-  AST_EnforceOne enforces -> do
-    tms <- for enforces $ \enforce -> do
-      ESimple TBool enforce' <- translateNode enforce
-      pure enforce'
-    return $ ESimple TBool (EnforceOne tms)
+  AST_EnforceOne node [] -> do
+    -- we just emit an event equivalent to one for `(enforce false)` in this
+    -- case:
+    tid <- tagAssert node
+    return $ ESimple TBool $ EnforceOne $ Left tid
+
+  AST_EnforceOne _ casesA@(_:_) -> do
+    let n = length casesA -- invariant: n > 0
+    preEnforcePath <- use tsCurrentPath
+    pathPairs <- (++)
+        -- For the first n-1 cases, we generate a failure, then success, tag,
+        -- for each possibility after the case runs.
+        <$> replicateM (pred n) ((,) <$> genTagId <*> genTagId)
+        -- For the last case, we generate a single tag for both, to result in a
+        -- fully-connected graph:
+        <*> replicateM 1        (genTagId <&> \tid -> (tid, tid))
+
+    let (failurePaths, successPaths) = unzip pathPairs
+        -- we don't start a new path for the first case -- we *always* run it:
+        newPaths :: [Maybe TagId]
+        newPaths = Nothing : fmap Just (take (pred n) failurePaths)
+
+        recovs :: [Recoverability]
+        recovs = (Recoverable <$> take (pred n) failurePaths)
+              ++ [Unrecoverable]
+
+    (terms, vertices) <- fmap unzip $
+      for (zip3 casesA newPaths recovs) $ \(caseA, mNewPath, recov) -> do
+        maybe (pure ()) startSubpath mNewPath
+        ESimple TBool caseT <- withNestedRecoverability recov $
+          translateNode caseA
+        postVertex <- extendPath
+        pure (caseT, postVertex)
+
+    joinPaths $ zip vertices successPaths
+    tsCurrentPath .= preEnforcePath
+    return $ ESimple TBool $ EnforceOne $ Right $ zip pathPairs terms
 
   AST_Days days -> do
     ESimple daysTy days' <- translateNode days
@@ -547,14 +743,14 @@ translateNode astNode = astContext astNode $ case astNode of
       ESimple ty a' <- translateNode a
       case ty of
         TDecimal -> pure $ ESimple TInt $ inject $ RoundingLikeOp1 op a'
-        _ -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn args
 
   AST_NFun_Basic fn@(toOp unaryArithOpP -> Just op) args@[a] -> do
       ESimple ty a' <- translateNode a
       case ty of
-        TInt -> pure $ ESimple TInt $ inject $ IntUnaryArithOp op a'
+        TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp op a'
         TDecimal -> pure $ ESimple TDecimal $ inject $ DecUnaryArithOp op a'
-        _ -> throwError' $ MalformedArithOp fn args
+        _        -> throwError' $ MalformedArithOp fn args
 
   --
   -- NOTE: We don't use a feature symbol here because + is overloaded across
@@ -606,10 +802,19 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_If _ cond tBranch fBranch -> do
     ESimple TBool cond' <- translateNode cond
-    ESimple ta a        <- translateNode tBranch
-    ESimple tb b        <- translateNode fBranch
+    preTestPath <- use tsCurrentPath
+    postTest <- extendPath
+    truePath <- startNewSubpath
+    ESimple ta a <- translateNode tBranch
+    postTrue <- extendPath
+    tsPathHead .= postTest -- reset to before true branch
+    falsePath <- startNewSubpath
+    ESimple tb b <- translateNode fBranch
+    postFalse <- extendPath
+    joinPaths [(postTrue, truePath), (postFalse, falsePath)]
+    tsCurrentPath .= preTestPath -- reset to before conditional
     case typeEq ta tb of
-      Just Refl -> pure $ ESimple ta $ IfThenElse cond' a b
+      Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
@@ -696,29 +901,40 @@ translateNode astNode = astContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
+mkExecutionGraph :: Vertex -> TagId -> TranslateState -> ExecutionGraph
+mkExecutionGraph vertex0 rootPath st = ExecutionGraph
+    vertex0
+    rootPath
+    (_tsGraph st)
+    (_tsEdgeEvents st)
+    (_tsPathEdges st)
+
 runTranslation
   :: Info
   -> [Named Node]
   -> [AST Node]
-  -> Except TranslateFailure ([Arg], ETerm, [TagAllocation])
+  -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
 runTranslation info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
-    (tm, tagAllocs) <- runBodyTranslation args translationVid
-    pure (args, tm, tagAllocs)
+    (tm, graph) <- runBodyTranslation args translationVid
+    pure (args, tm, graph)
 
   where
     runArgsTranslation :: Except TranslateFailure ([Arg], VarId)
-    runArgsTranslation =
-      -- Note we add () as a second value in the reader context because some
-      -- methods require a reader in a pair.
-      runStateT
-        (runReaderT (traverse translateArg pactArgs) (info, ()))
-        (VarId 1)
+    runArgsTranslation = runStateT
+      (runReaderT (traverse translateArg pactArgs) info)
+      (VarId 1)
 
     runBodyTranslation
-      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, [TagAllocation])
-    runBodyTranslation args nextVarId = fmap (fmap _tsTagAllocs) $
-      flip runStateT (TranslateState [] 0 nextVarId) $
-        runReaderT
-          (unTranslateM (translateBody body))
-          (info, mkTranslateEnv args)
+      :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
+    runBodyTranslation args nextVarId =
+      let vertex0    = 0
+          nextVertex = succ vertex0
+          path0      = 0
+          nextTagId  = succ path0
+          graph0     = pure vertex0
+          state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
+          translation = translateBody body
+                     <* extendPath -- form final edge for any remaining events
+      in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
+           runReaderT (unTranslateM translation) (mkTranslateEnv info args)

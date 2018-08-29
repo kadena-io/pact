@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -13,6 +14,7 @@ module Pact.Analyze.Check
   , describeCheckResult
   , describeParseFailure
   , describeVerificationWarnings
+  , falsifyingModel
   , showModel
   , CheckFailure(..)
   , CheckFailureNoLoc(..)
@@ -88,14 +90,14 @@ describeVerificationWarnings (VerificationWarnings dups) = case dups of
   _  -> "Warning: duplicated property definitions for " <> T.intercalate ", " dups
 
 data CheckSuccess
-  = SatisfiedProperty Model
+  = SatisfiedProperty (Model 'Concrete)
   | ProvedTheorem
   deriving (Eq, Show)
 
 type ParseFailure = (Exp, String)
 
 data SmtFailure
-  = Invalid Model
+  = Invalid (Model 'Concrete)
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | UnexpectedFailure SBV.SMTException
@@ -173,6 +175,10 @@ describeCheckFailure (CheckFailure info failure) =
 describeCheckResult :: CheckResult -> Text
 describeCheckResult = either describeCheckFailure describeCheckSuccess
 
+falsifyingModel :: CheckFailure -> Maybe (Model 'Concrete)
+falsifyingModel (CheckFailure _ (SmtFailure (Invalid m))) = Just m
+falsifyingModel _ = Nothing
+
 -- TODO: don't throw out these Infos
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
@@ -190,8 +196,8 @@ smtToCheckFailure info = CheckFailure info . SmtFailure
 --
 
 resultQuery
-  :: Goal                                      -- ^ are we in sat or valid mode?
-  -> Model                                     -- ^ unsaturated/symbolic model
+  :: Goal
+  -> Model 'Symbolic
   -> ExceptT SmtFailure SBV.Query CheckSuccess
 resultQuery goal model0 = do
   satResult <- lift SBV.checkSat
@@ -243,12 +249,12 @@ verifyFunctionInvariants'
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
 verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
-    (args, tm, tagAllocs) <- hoist generalize $
+    (args, tm, graph) <- hoist generalize $
       withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       modelArgs' <- lift $ allocArgs args
-      tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
+      tags <- lift $ allocModelTags (Located funInfo tm) graph
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis tables (analysisArgs modelArgs') tm tags funInfo
 
@@ -260,7 +266,7 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
                 void $ lift $ SBV.constrain $ SBV.bnot prop
-                resultQuery goal $ Model modelArgs' tags ksProvs
+                resultQuery goal $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -294,17 +300,17 @@ verifyFunctionProperty
   -> IO (Either CheckFailure CheckSuccess)
 verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
     runExceptT $ do
-      (args, tm, tagAllocs) <- hoist generalize $
+      (args, tm, graph) <- hoist generalize $
         withExcept translateToCheckFailure $
           runTranslation funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
-        tags <- lift $ allocModelTags (Located funInfo tm) tagAllocs
+        tags <- lift $ allocModelTags (Located funInfo tm) graph
         AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
         void $ lift $ SBV.output prop
         hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model modelArgs' tags ksProvs
+          resultQuery goal $ Model modelArgs' tags ksProvs graph
 
   where
     goal :: Goal
