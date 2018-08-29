@@ -165,10 +165,10 @@ instance Show Separator where
   show ColonEquals = ":="
   show Comma = ","
 
-class ExpInfo b a | a -> b where
-  eInfo :: a -> b
+class ExpInfo a where
+  eInfo :: a -> Info
 
-instance ExpInfo Info Info where
+instance ExpInfo Info where
   eInfo = id
 
 data LiteralExp i = LiteralExp
@@ -176,7 +176,7 @@ data LiteralExp i = LiteralExp
   , _litInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
-instance ExpInfo i (LiteralExp i) where
+instance ExpInfo (LiteralExp Info) where
   eInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
 
@@ -187,7 +187,7 @@ data AtomExp i = AtomExp
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (AtomExp i) where
   show AtomExp{..} = intercalate "." (map unpack $ _atomQualifiers ++ [_atomAtom])
-instance ExpInfo i (AtomExp i) where
+instance ExpInfo (AtomExp Info) where
   eInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
 
@@ -200,7 +200,7 @@ instance Show (ListExp i) where
   show ListExp{..} =
     enlist _listDelimiter $ \(o,c) ->
       unpack o ++ unwords (map show _listList) ++ unpack c
-instance ExpInfo i (ListExp i) where
+instance ExpInfo (ListExp Info) where
   eInfo = _listInfo
 instance NFData i => NFData (ListExp i)
 
@@ -209,7 +209,7 @@ data SeparatorExp i = SeparatorExp
   , _sepInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparator
-instance ExpInfo i (SeparatorExp i) where
+instance ExpInfo (SeparatorExp Info) where
   eInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
 
@@ -223,7 +223,7 @@ data Exp i =
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 
 instance NFData i => NFData (Exp i)
-instance ExpInfo i (Exp i) where
+instance ExpInfo (Exp Info) where
   eInfo e = case e of
     ELiteral i -> eInfo i
     EAtom a -> eInfo a
