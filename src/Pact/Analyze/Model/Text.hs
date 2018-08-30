@@ -58,16 +58,16 @@ showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
 --
 -- TODO: this should display the table name
 --
-showRead :: Located (S RowKey, Object) -> Text
-showRead (Located _ (srk, obj)) = "read " <> showObject obj
-                               <> " for key " <> showS srk
+showRead :: Located Access -> Text
+showRead (Located _ (Access srk obj)) = "read " <> showObject obj
+                                     <> " for key " <> showS srk
 
 --
 -- TODO: this should display the table name
 --
-showWrite :: Located (S RowKey, Object) -> Text
-showWrite (Located _ (srk, obj)) = "write " <> showObject obj
-                                <> " to key " <> showS srk
+showWrite :: Located Access -> Text
+showWrite (Located _ (Access srk obj)) = "write " <> showObject obj
+                                      <> " to key " <> showS srk
 
 showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of

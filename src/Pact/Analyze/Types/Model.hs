@@ -97,13 +97,20 @@ data Concreteness
   = Concrete
   | Symbolic
 
+data Access
+  = Access
+    { _accRowKey :: S RowKey
+    , _accObject :: Object
+    }
+    deriving (Eq, Show)
+
 data ModelTags (c :: Concreteness)
   = ModelTags
     { _mtVars    :: Map VarId (Located (Text, TVal))
     -- ^ each intermediate variable binding
-    , _mtReads   :: Map TagId (Located (S RowKey, Object))
+    , _mtReads   :: Map TagId (Located Access)
     -- ^ one per each read
-    , _mtWrites  :: Map TagId (Located (S RowKey, Object))
+    , _mtWrites  :: Map TagId (Located Access)
     -- ^ one per each write
     , _mtAsserts :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
@@ -151,5 +158,6 @@ deriving instance Eq Goal
 
 makePrisms ''TraceEvent
 makeLenses ''ExecutionGraph
+makeLenses ''Access
 makeLenses ''ModelTags
 makeLenses ''Model

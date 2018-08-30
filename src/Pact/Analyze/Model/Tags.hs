@@ -78,17 +78,17 @@ allocModelTags locatedTm graph = ModelTags
 
     allocAccesses
       :: Prism' TraceEvent (Located (TagId, Schema))
-      -> Symbolic (Map TagId (Located (S RowKey, Object)))
+      -> Symbolic (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $ \(Located info (tid, schema)) -> do
         srk <- allocS
         obj <- allocSchema schema
-        pure (tid, Located info (srk, obj))
+        pure (tid, Located info (Access srk obj))
 
-    allocReads :: Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocReads :: Symbolic (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
 
-    allocWrites :: Symbolic (Map TagId (Located (S RowKey, Object)))
+    allocWrites :: Symbolic (Map TagId (Located Access))
     allocWrites = allocAccesses _TraceWrite
 
     allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
@@ -157,11 +157,11 @@ saturateModel =
     fetchObject :: Object -> SBVI.Query Object
     fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
-    fetchAccess :: (S RowKey, Object) -> SBV.Query (S RowKey, Object)
-    fetchAccess (sRk, obj) = do
+    fetchAccess :: Access -> SBV.Query Access
+    fetchAccess (Access sRk obj) = do
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
-      pure (sRk', obj')
+      pure $ Access sRk' obj'
 
     fetchAuth :: (S KeySet, SBV Bool) -> SBV.Query (S KeySet, SBV Bool)
     fetchAuth (sKs, sbool) = (,) <$> fetchS sKs <*> fetchSbv sbool
