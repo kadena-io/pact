@@ -104,6 +104,7 @@ cToTV n | n < 26 = fromString [toC n]
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
 
+
 term :: Compile (Term Name)
 term =
   literal
@@ -130,6 +131,7 @@ specialForm =
     <|> defmodule
 
 
+{-# INLINE app #-}
 app :: Compile (Term Name)
 app = do
   v <- varAtom

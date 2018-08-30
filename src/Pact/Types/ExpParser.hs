@@ -93,13 +93,16 @@ makeLenses ''ParseState
 
 type MkInfo = Parsed -> Info
 
+{-# INLINE mkEmptyInfo #-}
 mkEmptyInfo :: MkInfo
 mkEmptyInfo e = Info (Just (mempty,e))
 
+{-# INLINE mkStringInfo #-}
 mkStringInfo :: String -> MkInfo
 mkStringInfo s d = Info (Just (fromString $ take (_pLength d) $
                                drop (fromIntegral $ TF.bytes d) s,d))
 
+{-# INLINE mkTextInfo #-}
 mkTextInfo :: T.Text -> MkInfo
 mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
                              T.drop (fromIntegral $ TF.bytes d) s,d))
@@ -107,6 +110,7 @@ mkTextInfo s d = Info (Just (Code $ T.take (_pLength d) $
 type ExpParse s a = StateT (ParseState s) (Parsec Void Cursor) a
 
 
+{-# INLINE runCompile #-}
 runCompile :: ExpParse s a -> ParseState s -> Exp Info -> Either PactError a
 runCompile act cs a =
   case runParser (runStateT act cs) "" (Cursor Nothing [a]) of
@@ -129,36 +133,46 @@ runCompile act cs a =
           labelText (_:r) = labelText r
 
 
+{-# INLINE strErr #-}
 strErr :: String -> ErrorItem t
 strErr = Label . fromList
 
+{-# INLINE tokenErr #-}
 tokenErr :: String -> Exp Info -> ExpParse s a
 tokenErr s = tokenErr' s . Just
 
+{-# INLINE tokenErr' #-}
 tokenErr' :: String -> Maybe (Exp Info) -> ExpParse s a
 tokenErr' ty i = failure
   (fmap (\e -> (Tokens (e:|[]))) i)
   (S.singleton (strErr ty))
 
+{-# INLINE context #-}
 context :: ExpParse s (Maybe (Exp Info))
 context = (fmap snd . _cContext) <$> getInput
 
+{-# INLINE contextInfo #-}
 contextInfo :: ExpParse s Info
 contextInfo = maybe def eInfo <$> context
 
+{-# INLINE current #-}
 current :: ExpParse s (Exp Info)
 current = use psCurrent
 
+{-# INLINE syntaxError #-}
 syntaxError :: String -> ExpParse s a
 syntaxError s = current >>= tokenErr s
 
+{-# INLINE expected #-}
 expected :: String -> ExpParse s a
 expected s = syntaxError $ "Expected: " ++ s
 
+{-# INLINE unexpected' #-}
 unexpected' :: String -> ExpParse s a
 unexpected' s = syntaxError $ "Unexpected: " ++ s
 
 
+{-# INLINE exp #-}
 exp :: String -> Prism' (Exp Info) a -> (a-> Either String b) -> ExpParse s (b,Exp Info)
 exp ty prism test2 = do
   let test i = case firstOf prism i of
@@ -172,15 +186,18 @@ exp ty prism test2 = do
   psCurrent .= snd r
   return r
 
+{-# INLINE exp' #-}
 exp' :: String -> Prism' (Exp Info) a -> ExpParse s a
 exp' t p = fst <$> exp t p Right
 
+{-# INLINE enter #-}
 enter :: (ListExp Info,Exp Info) -> ExpParse s (ListExp Info)
 enter (l@ListExp{..},e) = do
   par <- getInput
   setInput $ Cursor (Just (par,e)) _listList
   return l
 
+{-# INLINE exit #-}
 exit :: ExpParse s ()
 exit = do
   child <- getInput
@@ -188,46 +205,58 @@ exit = do
     Just (p,e) -> setInput p >> (psCurrent .= e)
     Nothing -> failure (Just EndOfInput) def
 
+{-# INLINE atom' #-}
 atom' :: (AtomExp Info -> Either String b) -> ExpParse s b
 atom' f = fst <$> exp "atom" _EAtom f
 
+{-# INLINE atom #-}
 atom :: ExpParse s (AtomExp Info)
 atom = exp' "atom" _EAtom
 
+{-# INLINE lit #-}
 lit :: ExpParse s (LiteralExp Info)
 lit = exp' "literal" _ELiteral
 
+{-# INLINE list #-}
 list :: ExpParse s (ListExp Info,Exp Info)
 list = exp "list" _EList Right
 
+{-# INLINE sep #-}
 sep :: Separator -> ExpParse s ()
 sep s = void $ exp "sep" _ESeparator $ \se@SeparatorExp{..} ->
   if _sepSeparator == s then Right se else Left (show s)
 
+{-# INLINE lit' #-}
 lit' :: String -> Prism' Literal a -> ExpParse s a
 lit' ty prism = lit >>= \LiteralExp{..} -> case firstOf prism _litLiteral of
   Just l -> return l
   Nothing -> expected ty
 
+{-# INLINE str #-}
 str :: ExpParse s Text
 str = lit' "string" _LString
 
+{-# INLINE list' #-}
 list' :: ListDelimiter -> ExpParse s (ListExp Info,Exp Info)
 list' d = list >>= \l@(ListExp{..},_) ->
   if _listDelimiter == d then return l
   else expected $ enlist d (\(s,e)->unpack(s<>"list"<>e))
 
+{-# INLINE withList #-}
 withList :: ListDelimiter -> (ListExp Info -> ExpParse s a) -> ExpParse s a
 withList d act = try $ list' d >>= enter >>= act >>= \a -> exit >> return a
 
+{-# INLINE withList' #-}
 withList' :: ListDelimiter -> ExpParse s a -> ExpParse s a
 withList' d = withList d . const
 
+{-# INLINE bareAtom #-}
 bareAtom :: ExpParse s (AtomExp Info)
 bareAtom = atom >>= \a@AtomExp{..} -> case _atomQualifiers of
   (_:_) -> expected "unqualified atom"
   [] -> return a
 
+{-# INLINE symbol #-}
 symbol :: Text -> ExpParse s ()
 symbol s = void $ atom' $ \AtomExp{..} -> case _atomQualifiers of
   [] | _atomAtom == s -> Right s
