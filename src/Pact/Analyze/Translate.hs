@@ -141,10 +141,10 @@ data TranslateState
       -- closes/completes the 'Edge'.
     , _tsPendingEvents :: SnocList TraceEvent
       -- ^ Events being accumulated until the creation of the next 'Vertex'.
-    , _tsCurrentPath   :: TagId
+    , _tsCurrentPath   :: Path
       -- ^ Path to be associated with the 'Edge' formed by the creation of the
       -- next 'Vertex'.
-    , _tsPathEdges     :: Map TagId [Edge]
+    , _tsPathEdges     :: Map Path [Edge]
       -- ^ Graph edges corresponding to a given execution "path".
       --
       -- 'TraceSubpathStart's are emitted once for each path: at the start of
@@ -249,16 +249,16 @@ genTagId = genId tsNextTagId
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
 
-startSubpath :: TagId -> TranslateM ()
-startSubpath tid = do
-  tsCurrentPath .= tid
-  emit $ TraceSubpathStart tid
+startSubpath :: Path -> TranslateM ()
+startSubpath p = do
+  tsCurrentPath .= p
+  emit $ TraceSubpathStart p
 
-startNewSubpath :: TranslateM TagId
+startNewSubpath :: TranslateM Path
 startNewSubpath = do
-  tid <- genTagId
-  startSubpath tid
-  pure tid
+  p <- Path <$> genTagId
+  startSubpath p
+  pure p
 
 tagDbAccess
   :: (Located (TagId, Schema) -> TraceEvent)
@@ -371,7 +371,7 @@ flushEvents = do
   tsPendingEvents .= mempty
   pure pathEvents
 
-addPathEdge :: TagId -> Edge -> TranslateM ()
+addPathEdge :: Path -> Edge -> TranslateM ()
 addPathEdge path e =
   tsPathEdges.at path %= pure . cons e . fromMaybe []
 
@@ -392,7 +392,7 @@ extendPath = do
 -- | Extends multiple separate paths to a single join point. Assumes that each
 -- 'Vertex' was created via 'extendPath' before invocation, and thus
 -- 'tsPendingEvents' is currently empty.
-joinPaths :: [(Vertex, TagId)] -> TranslateM ()
+joinPaths :: [(Vertex, Path)] -> TranslateM ()
 joinPaths branches = do
   let vs = fst $ unzip branches
   v' <- issueVertex
@@ -609,18 +609,19 @@ translateNode astNode = astContext astNode $ case astNode of
 
   AST_EnforceOne _ casesA@(_:_) -> do
     let n = length casesA -- invariant: n > 0
+        genPath = Path <$> genTagId
     preEnforcePath <- use tsCurrentPath
     pathPairs <- (++)
         -- For the first n-1 cases, we generate a failure, then success, tag,
         -- for each possibility after the case runs.
-        <$> replicateM (pred n) ((,) <$> genTagId <*> genTagId)
+        <$> replicateM (pred n) ((,) <$> genPath <*> genPath)
         -- For the last case, we generate a single tag for both, to result in a
         -- fully-connected graph:
-        <*> replicateM 1        (genTagId <&> \tid -> (tid, tid))
+        <*> replicateM 1        (genPath <&> \p -> (p, p))
 
     let (failurePaths, successPaths) = unzip pathPairs
         -- we don't start a new path for the first case -- we *always* run it:
-        newPaths :: [Maybe TagId]
+        newPaths :: [Maybe Path]
         newPaths = Nothing : fmap Just (take (pred n) failurePaths)
 
         recovs :: [Recoverability]
@@ -901,7 +902,7 @@ translateNode astNode = astContext astNode $ case astNode of
 
   _ -> throwError' $ UnexpectedNode astNode
 
-mkExecutionGraph :: Vertex -> TagId -> TranslateState -> ExecutionGraph
+mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph
 mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     vertex0
     rootPath
@@ -930,8 +931,8 @@ runTranslation info pactArgs body = do
     runBodyTranslation args nextVarId =
       let vertex0    = 0
           nextVertex = succ vertex0
-          path0      = 0
-          nextTagId  = succ path0
+          path0      = Path 0
+          nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
           translation = translateBody body

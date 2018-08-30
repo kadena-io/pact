@@ -23,7 +23,7 @@ import           Pact.Types.Util          (tShow)
 
 import qualified Pact.Analyze.Model.Graph as Model
 import           Pact.Analyze.Types       (Concreteness (Concrete), Edge,
-                                           Model, TagId, Vertex,
+                                           Model, Path, Vertex, _pathTag,
                                            modelExecutionGraph, egGraph,
                                            egPathEdges)
 
@@ -40,7 +40,7 @@ compileDot m = Alga.export style graph
     reachable :: Edge -> Bool
     reachable = flip Set.member reachableEdges
 
-    edgePaths :: Map Edge TagId
+    edgePaths :: Map Edge Path
     edgePaths = Map.fromList $ do
       (path, edges) <- Map.toList $ m ^. modelExecutionGraph.egPathEdges
       (,path) <$> edges
@@ -67,7 +67,7 @@ compileDot m = Alga.export style graph
           [ "color" := "blue"
           | reachable e
           ] ++
-          [ "label" := tShow (fromEnum $ edgePaths Map.! e)
+          [ "label" := tShow (fromEnum $ _pathTag $ edgePaths Map.! e)
           | True -- show path id on edge?
           ]
       }
