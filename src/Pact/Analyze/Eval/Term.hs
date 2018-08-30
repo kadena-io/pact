@@ -158,15 +158,15 @@ tagAuth tid sKs sb = do
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
-tagFork :: TagId -> TagId -> S Bool -> S Bool -> Analyze ()
-tagFork tidL tidR reachable lPasses = do
-    tagSubpathStart tidL $ reachable &&& lPasses
-    tagSubpathStart tidR $ reachable &&& bnot lPasses
+tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
+tagFork pathL pathR reachable lPasses = do
+    tagSubpathStart pathL $ reachable &&& lPasses
+    tagSubpathStart pathR $ reachable &&& bnot lPasses
 
   where
-    tagSubpathStart :: TagId -> S Bool -> Analyze ()
-    tagSubpathStart tid active = do
-      mTag <- preview $ aeModelTags.mtPaths.at tid._Just
+    tagSubpathStart :: Path -> S Bool -> Analyze ()
+    tagSubpathStart p active = do
+      mTag <- preview $ aeModelTags.mtPaths.at p._Just
       case mTag of
         Nothing  -> pure ()
         Just sbv -> do

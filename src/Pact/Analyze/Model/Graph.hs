@@ -84,7 +84,7 @@ linearize model = go traceEvents
 restrictKeys :: Ord k => Map k a -> Set k -> Map k a
 restrictKeys m kset = Map.filterWithKey (\k _v -> k `Set.member` kset) m
 
-reachablePaths :: Model 'Concrete -> Set TagId
+reachablePaths :: Model 'Concrete -> Set Path
 reachablePaths model = Map.foldlWithKey'
   (\paths path sbool -> maybe
     (error $ "impossible: found symbolic value in concrete model for path "
@@ -99,5 +99,5 @@ reachableEdges model = Set.fromList . concat $
     restrictKeys pathEdges (reachablePaths model)
 
   where
-    pathEdges :: Map TagId [Edge]
+    pathEdges :: Map Path [Edge]
     pathEdges = model ^. modelExecutionGraph.egPathEdges

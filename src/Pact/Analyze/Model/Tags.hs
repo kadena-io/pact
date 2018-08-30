@@ -113,15 +113,15 @@ allocModelTags locatedTm graph = ModelTags
     -- start of "subpaths" on either side of a conditional. the root path is
     -- always trivially reachable, because it corresponds to the start of a
     -- program.
-    allocPaths :: Symbolic (Map TagId (SBV Bool))
+    allocPaths :: Symbolic (Map Path (SBV Bool))
     allocPaths = do
       let rootPath = _egRootPath graph
           paths    = rootPath : toListOf (traverse._TraceSubpathStart) events
       fmap Map.fromList $
-        for paths $ \tid -> do
+        for paths $ \p -> do
           sbool <- alloc
-          when (tid == rootPath) $ SBV.constrain sbool
-          pure (tid, sbool)
+          when (p == rootPath) $ SBV.constrain sbool
+          pure (p, sbool)
 
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.

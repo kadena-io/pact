@@ -39,6 +39,10 @@ newtype Vertex
   = Vertex Natural
   deriving (Num, Enum, Show, Ord, Eq)
 
+newtype Path
+  = Path { _pathTag :: TagId }
+  deriving (Eq, Ord, Show)
+
 data Recoverability
   -- | The path upon which to resume inclusion of events. An alternative here
   -- would be to have more edges in the subgraphs formed by @enforce-one@ --
@@ -50,7 +54,7 @@ data Recoverability
   -- about the path upon which to resume execution because it's not necessarily
   -- the next vertex -- there could be more subpaths before where we should
   -- resume due to nested conditionals or @enforce-one@s.
-  = Recoverable { _resumptionPath :: TagId }
+  = Recoverable { _resumptionPath :: Path }
   | Unrecoverable
   deriving (Eq, Show)
 
@@ -71,7 +75,7 @@ data TraceEvent
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
-  | TraceSubpathStart TagId
+  | TraceSubpathStart Path
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -82,10 +86,10 @@ data TraceEvent
 data ExecutionGraph
   = ExecutionGraph
     { _egInitialVertex :: Vertex
-    , _egRootPath      :: TagId
+    , _egRootPath      :: Path
     , _egGraph         :: Alga.Graph Vertex
     , _egEdgeEvents    :: Map Edge [TraceEvent]
-    , _egPathEdges     :: Map TagId [Edge]
+    , _egPathEdges     :: Map Path [Edge]
     }
   deriving (Eq, Show)
 
@@ -108,7 +112,7 @@ data ModelTags (c :: Concreteness)
     -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
     , _mtResult  :: Located TVal
     -- ^ return value of the function being checked
-    , _mtPaths   :: Map TagId (SBV Bool)
+    , _mtPaths   :: Map Path (SBV Bool)
     -- ^ one at the start of the program, and on either side of the branches of
     -- each conditional. after a conditional, the path from before the
     -- conditional is resumed. we also split execution for each case of

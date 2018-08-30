@@ -401,7 +401,7 @@ data Term ret where
   -- TODO(joel): In principle this could be pure and applied to all the
   -- languages. Unfortunately, we can't add this to props because `Query` has
   -- `Symbolic` in its stack, so it can't do an `ite`.
-  IfThenElse      :: Term Bool -> (TagId, Term a) -> (TagId, Term a) -> Term a
+  IfThenElse      :: Term Bool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
   Let             :: Text -> VarId -> ETerm -> Term a -> Term a
@@ -415,7 +415,7 @@ data Term ret where
   -- need a way to signal a failure due to this particular scenario in model
   -- reporting. Right _1 to be tagged if the case fails, Right _2 to be tagged
   -- if the case succeeds:
-  EnforceOne      :: Either TagId [((TagId, TagId), Term Bool)] -> Term Bool
+  EnforceOne      :: Either TagId [((Path, Path), Term Bool)] -> Term Bool
 
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet
