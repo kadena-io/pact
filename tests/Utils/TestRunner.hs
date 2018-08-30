@@ -72,18 +72,9 @@ startServer configFile = do
   return (asyncServer, asyncCmd, asyncHist)
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
-stopServer (asyncServer, asyncCmd, asyncHist) = do
-  uninterruptibleCancel asyncCmd
-  uninterruptibleCancel asyncHist
-  uninterruptibleCancel asyncServer
-  mapM_ checkFinished [asyncServer, asyncCmd, asyncHist]
-  where checkFinished asy = do
-          asyPoll <- poll asy
-          case asyPoll of
-            Nothing -> Exception.evaluate $ error $ ("Thread " ++
-                                                      (show (asyncThreadId asy)) ++
-                                                      " could not be cancelled.")
-            _ -> return ()
+stopServer (asyncServer, _, _) = do
+  cancel asyncServer
+
           
 run :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 run cmds = do
