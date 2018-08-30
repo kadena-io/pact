@@ -96,10 +96,10 @@ allocModelTags locatedTm graph = ModelTags
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$> alloc
 
-    allocAuths :: Symbolic (Map TagId (Located (S KeySet, SBV Bool)))
+    allocAuths :: Symbolic (Map TagId (Located Authorization))
     allocAuths = fmap Map.fromList $
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> ((,) <$> allocS <*> alloc)
+        (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
 
     allocResult :: Symbolic (Located TVal)
     allocResult = sequence $ locatedTm <&> \case
@@ -127,15 +127,15 @@ allocModelTags locatedTm graph = ModelTags
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
 saturateModel =
-    traverseOf (modelArgs.traversed.located._2)             fetchTVal   >=>
-    traverseOf (modelTags.mtVars.traversed.located._2)      fetchTVal   >=>
-    traverseOf (modelTags.mtReads.traversed.located)        fetchAccess >=>
-    traverseOf (modelTags.mtWrites.traversed.located)       fetchAccess >=>
-    traverseOf (modelTags.mtAsserts.traversed.located)      fetchSbv    >=>
-    traverseOf (modelTags.mtAuths.traversed.located)        fetchAuth   >=>
-    traverseOf (modelTags.mtResult.located)                 fetchTVal   >=>
-    traverseOf (modelTags.mtPaths.traversed)                fetchSbv    >=>
-    traverseOf (modelKsProvs.traversed)                     fetchProv
+    traverseOf (modelArgs.traversed.located._2)        fetchTVal   >=>
+    traverseOf (modelTags.mtVars.traversed.located._2) fetchTVal   >=>
+    traverseOf (modelTags.mtReads.traversed.located)   fetchAccess >=>
+    traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
+    traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
+    traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
+    traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
+    traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
+    traverseOf (modelKsProvs.traversed)                fetchProv
 
   where
     fetchTVal :: TVal -> SBV.Query TVal
@@ -163,8 +163,9 @@ saturateModel =
       obj' <- fetchObject obj
       pure $ Access sRk' obj'
 
-    fetchAuth :: (S KeySet, SBV Bool) -> SBV.Query (S KeySet, SBV Bool)
-    fetchAuth (sKs, sbool) = (,) <$> fetchS sKs <*> fetchSbv sbool
+    fetchAuth :: Authorization -> SBV.Query Authorization
+    fetchAuth (Authorization sKs sbool) = Authorization <$>
+      fetchS sKs <*> fetchSbv sbool
 
     fetchProv :: Provenance -> SBV.Query Provenance
     fetchProv = traverseOf (_FromCell.ocRowKey) fetchS

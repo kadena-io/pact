@@ -88,12 +88,8 @@ showAssert recov (Located (Pact.Info mInfo) lsb) = case SBV.unliteral lsb of
   where
     context = maybe "" (\(Pact.Code code, _) -> ": " <> code) mInfo
 
-showAuth
-  :: Recoverability
-  -> Maybe Provenance
-  -> Located (S KeySet, SBV Bool)
-  -> Text
-showAuth recov mProv (_located -> (srk, sbool)) =
+showAuth :: Recoverability -> Maybe Provenance -> Located Authorization -> Text
+showAuth recov mProv (_located -> Authorization srk sbool) =
   status <> " " <> ksDescription
 
   where

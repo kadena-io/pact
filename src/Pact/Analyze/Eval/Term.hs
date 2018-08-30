@@ -150,10 +150,10 @@ tagAssert tid sb = do
 -- allocated in Symbolic.
 tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
 tagAuth tid sKs sb = do
-  mTup <- preview $ aeModelTags.mtAuths.at tid._Just.located
-  case mTup of
+  mAuth <- preview $ aeModelTags.mtAuths.at tid._Just.located
+  case mAuth of
     Nothing  -> pure ()
-    Just (ksTag, sbv) -> do
+    Just (Authorization ksTag sbv) -> do
       addConstraint $ sansProv $ ksTag .== sKs
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
