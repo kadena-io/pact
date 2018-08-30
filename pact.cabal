@@ -199,7 +199,7 @@ test-suite hspec
   main-is:          hspec.hs
   hs-source-dirs:   tests
   default-language: Haskell2010
-  ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options:      -Wall -threaded -with-rtsopts=-N -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
               , hspec
