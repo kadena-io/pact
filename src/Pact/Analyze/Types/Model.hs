@@ -102,7 +102,14 @@ data Access
     { _accRowKey :: S RowKey
     , _accObject :: Object
     }
-    deriving (Eq, Show)
+  deriving (Eq, Show)
+
+data Authorization
+  = Authorization
+    { _authKeySet  :: S KeySet
+    , _authSuccess :: SBV Bool
+    }
+  deriving (Eq, Show)
 
 data ModelTags (c :: Concreteness)
   = ModelTags
@@ -114,7 +121,7 @@ data ModelTags (c :: Concreteness)
     -- ^ one per each write
     , _mtAsserts :: Map TagId (Located (SBV Bool))
     -- ^ one per non-keyset enforcement
-    , _mtAuths   :: Map TagId (Located (S KeySet, SBV Bool))
+    , _mtAuths   :: Map TagId (Located Authorization)
     -- ^ one per each authorization check. note that this includes uses of
     -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
     , _mtResult  :: Located TVal
@@ -159,5 +166,6 @@ deriving instance Eq Goal
 makePrisms ''TraceEvent
 makeLenses ''ExecutionGraph
 makeLenses ''Access
+makeLenses ''Authorization
 makeLenses ''ModelTags
 makeLenses ''Model

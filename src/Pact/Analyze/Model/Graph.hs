@@ -8,7 +8,7 @@ module Pact.Analyze.Model.Graph
   , linearize
   ) where
 
-import           Control.Lens       (Traversal', at, to, (^.), (^?), _2, _Just)
+import           Control.Lens       (Traversal', at, to, (^.), (^?), _Just)
 import           Data.Bool          (bool)
 import           Data.Map.Strict    (Map)
 import qualified Data.Map.Strict    as Map
@@ -64,7 +64,7 @@ linearize model = go traceEvents
              TraceAssert recov (_located -> tid) ->
                handleEnforce recov $ mtAsserts.at tid._Just.located
              TraceAuth recov (_located -> tid) ->
-               handleEnforce recov $ mtAuths.at tid._Just.located._2
+               handleEnforce recov $ mtAuths.at tid._Just.located.authSuccess
              _ ->
                continue)
       (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
