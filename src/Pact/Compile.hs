@@ -109,26 +109,28 @@ term :: Compile (Term Name)
 term =
   literal
   <|> varAtom
+  <|> withList' Parens
+    ((try specialForm)
+     <|> app)
   <|> listLiteral
   <|> objectLiteral
-  <|> withList' Parens
-    (specialForm
-     <|> app)
 
+{-# INLINE specialForm #-}
 specialForm :: Compile (Term Name)
-specialForm =
-    useForm
-    <|> letForm
-    <|> letsForm
-    <|> defconst
-    <|> step
-    <|> stepWithRollback
-    <|> bless
-    <|> deftable
-    <|> defschema
-    <|> defun
-    <|> defpact
-    <|> defmodule
+specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
+    "use" -> useForm
+    "let" -> letForm
+    "let*" -> letsForm
+    "defconst" -> defconst
+    "step" -> step
+    "step-with-rollback" -> stepWithRollback
+    "bless" -> bless
+    "deftable" -> deftable
+    "defschema" -> defschema
+    "defun" -> defun
+    "defpact" -> defpact
+    "module" -> moduleForm
+    _ -> expected "special form"
 
 
 {-# INLINE app #-}
@@ -196,7 +198,7 @@ str' = literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
-  symbol "deftable"
+  --symbol "deftable"
   (mn,mh) <- currentModule
   AtomExp{..} <- bareAtom
   ty <- optional (typed >>= \t -> case t of
@@ -208,11 +210,12 @@ deftable = do
 
 
 bless :: Compile (Term Name)
-bless = symbol "bless" >> TBless <$> hash' <*> contextInfo
+bless = --symbol "bless" >>
+  TBless <$> hash' <*> contextInfo
 
 defconst :: Compile (Term Name)
 defconst = do
-  symbol "defconst"
+  --symbol "defconst"
   modName <- currentModule'
   a <- arg
   (v,doc) <- try ((,) <$> term <*> (Just <$> str)) <|>
@@ -234,7 +237,7 @@ meta = atPairs <|> try docStr <|> return def
 
 defschema :: Compile (Term Name)
 defschema = do
-  symbol "defschema"
+  --symbol "defschema"
   modName <- currentModule'
   tn <- _atomAtom <$> bareAtom
   m <- meta
@@ -243,7 +246,7 @@ defschema = do
 
 defun :: Compile (Term Name)
 defun = do
-  symbol "defun"
+  --symbol "defun"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -254,7 +257,7 @@ defun = do
 
 defpact :: Compile (Term Name)
 defpact = do
-  symbol "defpact"
+  --symbol "defpact"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -266,9 +269,9 @@ defpact = do
   TDef defname modName Defpact (FunType args returnTy)
     (abstractBody' args (TList body TyAny bi)) m <$> contextInfo
 
-defmodule :: Compile (Term Name)
-defmodule = do
-  symbol "module"
+moduleForm :: Compile (Term Name)
+moduleForm = do
+  --symbol "module"
   modName' <- _atomAtom <$> bareAtom
   keyset <- str
   m <- meta
@@ -298,14 +301,14 @@ defmodule = do
 
 step :: Compile (Term Name)
 step = do
-  symbol "step"
+  --symbol "step"
   cont <- try (TStep <$> (Just <$> str') <*> term) <|>
           (TStep Nothing <$> term)
   cont <$> pure Nothing <*> contextInfo
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  symbol "step-with-rollback"
+  --symbol "step-with-rollback"
   cont <- try (TStep <$> (Just <$> str') <*> term) <|>
           (TStep Nothing <$> term)
   cont <$> (Just <$> term) <*> contextInfo
@@ -326,7 +329,7 @@ abstractBody' args = abstract (`elemIndex` bNames)
 
 letForm :: Compile (Term Name)
 letForm = do
-  symbol "let"
+  --symbol "let"
   bindings <- letBindings
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure BindLet <*> contextInfo
@@ -335,7 +338,7 @@ letForm = do
 -- bindings.
 letsForm :: Compile (Term Name)
 letsForm = do
-  symbol "let*"
+  --symbol "let*"
   bindings <- letBindings
   let nest (binding:rest) = do
         let bName = [arg2Name (fst binding)]
@@ -348,7 +351,7 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  symbol "use"
+  --symbol "use"
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
