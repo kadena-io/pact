@@ -12,7 +12,7 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
                                               (&), (+=), (.=), (.~), (<&>),
-                                              (?~), (^.), (^?), _1, _2, _Just)
+                                              (?~), (^.), (^?), _2, _Just)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
@@ -114,27 +114,27 @@ instance (Mergeable a) => Mergeable (Analyze a) where
 --
 
 tagAccessKey
-  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> S RowKey
   -> Analyze ()
 tagAccessKey lens' tid srk = do
-  mTup <- preview $ aeModelTags.lens'.at tid._Just.located._1
-  case mTup of
+  mSrk <- preview $ aeModelTags.lens'.at tid._Just.located.accRowKey
+  case mSrk of
     Nothing     -> pure ()
     Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
 tagAccessCell
-  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> Text
   -> AVal
   -> Analyze ()
 tagAccessCell lens' tid fieldName av = do
   mTag <- preview $
-    aeModelTags.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
+    aeModelTags.lens'.at tid._Just.located.accObject.objFields.at fieldName._Just._2
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv

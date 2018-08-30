@@ -9,8 +9,8 @@
 
 module AnalyzeSpec (spec) where
 
-import           Control.Lens                 (at, findOf, ix, matching, _2,
-                                               _Left, (^.), (^..))
+import           Control.Lens                 (at, findOf, ix, matching, _Left,
+                                               (^.), (^..))
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
@@ -1004,7 +1004,7 @@ spec = describe "analyze" $ do
                   let (_bal, AVal _ sval) = m Map.! "balance"
                   in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
             balanceWrite <- pure $ find negativeWrite
-              $ writes ^.. traverse . located . _2
+              $ writes ^.. traverse . located . accObject
 
             it "should have a negative write" $
               balanceWrite `shouldSatisfy` isJust
