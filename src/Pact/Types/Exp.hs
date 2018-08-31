@@ -28,7 +28,7 @@ module Pact.Types.Exp
    simpleISO8601,formatLTime,
    litToPrim,
    LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
-   Exp(..),ExpInfo(..),
+   Exp(..),
    _ELiteral,_EAtom,_EList,_ESeparator,
    ListDelimiter(..),listDelims,enlist,
    Separator(..),
@@ -165,19 +165,14 @@ instance Show Separator where
   show ColonEquals = ":="
   show Comma = ","
 
-class ExpInfo a where
-  eInfo :: a -> Info
-
-instance ExpInfo Info where
-  eInfo = id
 
 data LiteralExp i = LiteralExp
   { _litLiteral :: !Literal
   , _litInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
-instance ExpInfo (LiteralExp Info) where
-  eInfo = _litInfo
+instance HasInfo (LiteralExp Info) where
+  getInfo = _litInfo
 instance NFData i => NFData (LiteralExp i)
 
 data AtomExp i = AtomExp
@@ -187,8 +182,8 @@ data AtomExp i = AtomExp
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (AtomExp i) where
   show AtomExp{..} = intercalate "." (map unpack $ _atomQualifiers ++ [_atomAtom])
-instance ExpInfo (AtomExp Info) where
-  eInfo = _atomInfo
+instance HasInfo (AtomExp Info) where
+  getInfo = _atomInfo
 instance NFData i => NFData (AtomExp i)
 
 data ListExp i = ListExp
@@ -200,8 +195,8 @@ instance Show (ListExp i) where
   show ListExp{..} =
     enlist _listDelimiter $ \(o,c) ->
       unpack o ++ unwords (map show _listList) ++ unpack c
-instance ExpInfo (ListExp Info) where
-  eInfo = _listInfo
+instance HasInfo (ListExp Info) where
+  getInfo = _listInfo
 instance NFData i => NFData (ListExp i)
 
 data SeparatorExp i = SeparatorExp
@@ -209,8 +204,8 @@ data SeparatorExp i = SeparatorExp
   , _sepInfo :: !i
   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparator
-instance ExpInfo (SeparatorExp Info) where
-  eInfo = _sepInfo
+instance HasInfo (SeparatorExp Info) where
+  getInfo = _sepInfo
 instance NFData i => NFData (SeparatorExp i)
 
 
@@ -223,12 +218,12 @@ data Exp i =
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
 
 instance NFData i => NFData (Exp i)
-instance ExpInfo (Exp Info) where
-  eInfo e = case e of
-    ELiteral i -> eInfo i
-    EAtom a -> eInfo a
-    EList l -> eInfo l
-    ESeparator s -> eInfo s
+instance HasInfo (Exp Info) where
+  getInfo e = case e of
+    ELiteral i -> getInfo i
+    EAtom a -> getInfo a
+    EList l -> getInfo l
+    ESeparator s -> getInfo s
 
 
 makePrisms ''Exp

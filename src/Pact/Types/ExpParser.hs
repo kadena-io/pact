@@ -117,11 +117,11 @@ runCompile act cs a =
     (Right (r,_)) -> Right r
     (Left (TrivialError _ (Just err) expect)) -> case err of
       EndOfInput -> case S.toList expect of
-        (Tokens (x :| _):_) -> doErr (eInfo x) "unexpected end of input"
+        (Tokens (x :| _):_) -> doErr (getInfo x) "unexpected end of input"
         (Label s:_) -> doErr def (toList s)
         er -> doErr def (show er)
       Label ne -> doErr def (toList ne)
-      Tokens (x :| _) -> doErr (eInfo x) $ showExpect expect
+      Tokens (x :| _) -> doErr (getInfo x) $ showExpect expect
     (Left e) -> doErr def (show e)
     where doErr i s = Left $ PactError SyntaxError i def (pack s)
           showExpect e = case (labelText $ S.toList e) of
@@ -153,7 +153,7 @@ context = (fmap snd . _cContext) <$> getInput
 
 {-# INLINE contextInfo #-}
 contextInfo :: ExpParse s Info
-contextInfo = maybe def eInfo <$> context
+contextInfo = maybe def getInfo <$> context
 
 {-# INLINE current #-}
 current :: ExpParse s (Exp Info)

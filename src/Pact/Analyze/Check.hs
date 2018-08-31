@@ -61,7 +61,7 @@ import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
 import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
                                             Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
-                                            asString, eInfo, tShow)
+                                            asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
@@ -146,7 +146,7 @@ describeCheckSuccess = \case
 
 describeParseFailure :: ParseFailure -> Text
 describeParseFailure (exp, info)
-  = T.pack (renderInfo (eInfo exp))
+  = T.pack (renderInfo (getInfo exp))
   <> ": could not parse " <> tShow exp <> ": " <> T.pack info
 
 describeSmtFailure :: SmtFailure -> Text
@@ -486,7 +486,7 @@ runExpParserOver
   -> Either ParseFailure [Located t]
 runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
-  Right good -> Right (Located (eInfo meta) good)
+  Right good -> Right (Located (getInfo meta) good)
 
 verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
 verifyFunctionProps tables ref props = do
