@@ -130,6 +130,10 @@ showEvent ksProvs tags = \case
       [display mtVars vid showVar]
     TraceSubpathStart _ ->
       [] -- not shown to end-users
+    TracePushScope _ ->
+      []
+    TracePopScope _ ->
+      []
 
   where
     display

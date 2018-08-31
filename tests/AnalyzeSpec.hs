@@ -1949,6 +1949,8 @@ spec = describe "analyze" $ do
         -- auth= isRight . matching _TraceAuth
         var    = isRight . matching _TraceBind
         path   = isRight . matching _TraceSubpathStart
+        push   = isRight . matching _TracePushScope
+        pop    = isRight . matching _TracePopScope
 
         match :: [a -> Bool] -> [a] -> Bool
         tests `match` items
@@ -1985,7 +1987,7 @@ spec = describe "analyze" $ do
             |]
 
       expectTrace code (bnot Success')
-        [read, var, read, var, assert, assert, write, write]
+        [push, read, var, read, var, assert, assert, write, write, pop]
 
     describe "doesn't include events excluded by a conditional" $ do
       let code =

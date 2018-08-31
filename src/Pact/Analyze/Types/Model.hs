@@ -76,6 +76,8 @@ data TraceEvent
   | TraceAuth Recoverability (Located TagId)
   | TraceBind (Located (VarId, Text, EType))
   | TraceSubpathStart Path
+  | TracePushScope Natural
+  | TracePopScope Natural
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
