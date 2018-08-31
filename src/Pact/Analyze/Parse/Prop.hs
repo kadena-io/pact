@@ -113,15 +113,14 @@ expToPreProp = \case
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
-    let go (keyExp : Colon' : valExp : rest) = do
-          key <- case keyExp of
+    let go (keyExp : Colon' : valExp : rest) = Map.insert
+          <$> case keyExp of
             ELiteral' (LString key) -> pure key
             _                       -> throwErrorIn keyExp "static key required"
-          val <- expToPreProp valExp
-          rest' <- case rest of
+          <*> expToPreProp valExp
+          <*> case rest of
             [] -> pure Map.empty
             _  -> go rest
-          pure $ Map.insert key val rest'
         go _ = throwErrorIn exp "cannot parse as object"
     in PreLiteralObject <$> go exps
 
