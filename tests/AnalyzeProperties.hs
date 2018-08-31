@@ -17,7 +17,7 @@ import           Control.Exception           (ArithException (DivideByZero))
 import Control.Lens hiding ((...), op)
 import           Control.Monad               ((<=<))
 import           Control.Monad.Catch         (catch)
-import           Control.Monad.Except        (runExcept)
+import           Control.Monad.Except        (runExcept, ExceptT(..))
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (ReaderT (runReaderT), MonadReader)
@@ -42,12 +42,13 @@ import           Numeric.Interval.Exception  (EmptyInterval)
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Errors
+-- import           Pact.Analyze.Model (allocModelTags)
 import           Pact.Analyze.Eval           (runAnalyze)
 import           Pact.Analyze.Eval.Term      (evalETerm)
 import           Pact.Analyze.Translate      (TranslateM (..),
                                               TranslateState (..),
                                               maybeTranslateType,
-                                              mkTranslateEnv, translateNode)
+                                              mkTranslateEnv, translateNode, IsTest(IsTest))
 import           Pact.Analyze.Types          hiding (Term)
 import qualified Pact.Analyze.Types          as Analyze
 import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
@@ -74,7 +75,7 @@ import qualified Pact.Types.Typecheck        as Pact
 
 import TimeGen
 
--- import Debug.Trace
+import Debug.Trace
 
 data GenEnv = GenEnv
   { _envTables        :: ![(TableName, Schema)]
@@ -328,9 +329,9 @@ genTermSpecific
   => SizedType -> m ETerm
 genTermSpecific size@SizedInt{} = genTermSpecific' size
 genTermSpecific SizedBool          = Gen.choice
-  [ ESimple TBool . Enforce Nothing . extract <$> genTerm SizedBool
+  [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
   , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
-       pure $ ESimple TBool $ EnforceOne $ Right $ fmap (((0, 0),) . extract) xs
+       pure $ ESimple TBool $ EnforceOne $ Right $ fmap (((Path 0, Path 0),) . extract) xs
   -- TODO:
   -- , do tagId <- genTagId
   --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
@@ -440,7 +441,7 @@ genTermSpecific' sizedTy = Gen.choice
        ESimple tyt1 t1 <- genTerm sizedTy
        ESimple tyt2 t2 <- genTerm sizedTy
        case typeEq tyt1 tyt2 of
-         Just Refl -> pure $ ESimple tyt1 $ IfThenElse b (0, t1) (0, t2)
+         Just Refl -> pure $ ESimple tyt1 $ IfThenElse b (Path 0, t1) (Path 0, t2)
          Nothing   -> error "t1 and t2 must have the same type"
   ]
 
@@ -523,7 +524,7 @@ toPactTm = \case
       Nothing -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
-  ESimple TBool (Enforce Nothing x)
+  ESimple TBool (Enforce _ x)
     -> mkApp enforceDef [ESimple TBool x]
   ESimple TBool (EnforceOne Left{})
     -> mkApp enforceOneDef []
@@ -624,11 +625,14 @@ toAnalyze :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO E
 toAnalyze ty tm = do
   let cnst = TConst (Pact.Arg "tm" ty dummyInfo) "module" (Pact.CVRaw tm) (Meta Nothing Nothing) dummyInfo
       ref = Pact.Ref cnst
+  traceM "typechecking"
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
+  traceM $ "typechecked"
   (_cTy, ast) <- case maybeConst of
     (Pact.TopConst _info _name constTy constAst _meta, _tcState)
       -> pure (constTy, constAst)
     _ -> MaybeT $ pure Nothing
+  traceM $ "typechecked'"
 
   -- TODO: this is all copied from Translate.hs
   -- TODO: good chance we'll have to change some of these like the initial var
@@ -641,15 +645,18 @@ toAnalyze ty tm = do
       state0 = TranslateState nextTagId 0 graph0 vertex0 nextVertex Map.empty
         mempty path0 Map.empty
 
-      translateEnv = mkTranslateEnv dummyInfo []
+      translateEnv = mkTranslateEnv IsTest dummyInfo []
 
   hoist generalize $
-    exceptToMaybeT $
+    exceptToMaybeT' $
       fmap fst $
         flip runStateT state0 $
           runReaderT
             (unTranslateM (translateNode ast))
             translateEnv
+
+exceptToMaybeT' :: (Functor m, Show e, Show a) => ExceptT e m a -> MaybeT m a
+exceptToMaybeT' (ExceptT m) = MaybeT $ fmap (either (const Nothing . traceShowId) (Just . traceShowId)) m
 
 -- This is limited to simple types for now
 reverseTranslateType :: Type a -> Pact.Type b
@@ -694,6 +701,63 @@ genEnv = GenEnv
   , Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo)
   ]
 
+fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
+fromPactVal (EType ty) = runMaybeT . toAnalyze (reverseTranslateType ty)
+
+-- Evaluate a term via Pact
+pactEval :: Pact.Term Pact.Ref -> IO (Either String (Maybe (Pact.Term Pact.Ref)))
+pactEval pactTm = do
+  evalEnv <- liftIO initPureEvalEnv
+
+  (do
+      let evalState = Default.def
+      -- evaluate via pact, convert to analyze term
+      (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
+      pactVal' <- pure $ closed pactVal
+
+      pure $ Right pactVal'
+    )
+      -- discard division by zero, on either the pact or analysis side
+      --
+      -- future work here is to make sure that if one side throws, the other
+      -- does as well.
+      `catch` (\(DivideByZero :: ArithException) -> pure $ Right Nothing)
+      `catch` (\((PactError err _ _ msg) :: PactError) ->
+        case err of
+          EvalError ->
+            if "Division by 0" `T.isPrefixOf` msg ||
+               "Negative precision not allowed" `T.isPrefixOf` msg
+            then pure $ Right Nothing
+            else pure $ Left (T.unpack msg)
+          _ -> pure $ Left (T.unpack msg))
+
+-- Evaluate a term symbolically
+analyzeEval :: ETerm -> IO (Either String ETerm)
+analyzeEval etm@(ESimple ty _tm) = do
+  -- analyze setup
+  let tables = []
+      args = Map.empty
+      state0 = mkInitialAnalyzeState tables
+
+      tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
+        -- this 'Located TVal' is never forced so we don't provide it
+        undefined
+        Map.empty
+
+  -- tags <- liftIO $ allocModelTags undefined graph
+
+  Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
+
+  -- evaluate via analyze
+  analyzeVal <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv state0 of
+    Right (analyzeVal, _, ()) -> pure analyzeVal
+    Left err                  -> error $ describeAnalyzeFailure err
+
+  case analyzeVal of
+    AVal _ sval -> case unliteral (SBVI.SBV sval) of
+      Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
+      Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
+    _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
 
 prop_evaluation :: Property
 prop_evaluation = property $ do
@@ -701,53 +765,27 @@ prop_evaluation = property $ do
 
   -- pact setup
   let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
-      evalState = Default.def
-  evalEnv <- liftIO initPureEvalEnv
-
-  -- analyze setup
-  let tables = []
-      args = Map.empty
-      tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
-        -- this 'Located TVal' is never forced so we don't provide it
-        undefined Map.empty
-
-  Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
 
   (do
       -- evaluate via pact, convert to analyze term
-      (pactVal, _) <- liftIO $ runEval evalState evalEnv (reduce pactTm)
-      Just pactVal' <- pure $ closed pactVal
-      Just (ESimple ty' (CoreTerm (Lit pactVal''))) <- lift $ runMaybeT $
-        toAnalyze (reverseTranslateType ty) pactVal'
+      pactVal <- liftIO $ pactEval pactTm
+      pactVal <- case pactVal of
+        Left err             -> footnote err >> failure
+        Right Nothing        -> discard
+        Right (Just pactVal) -> pure pactVal
+      Just (ESimple ty' (CoreTerm (Lit pactVal)))
+        <- lift $ fromPactVal (EType ty) pactVal
 
-      -- evaluate via analyze
-      analyzeVal <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv state0 of
-        Right (analyzeVal, _, ()) -> pure analyzeVal
-        Left err                  -> error $ describeAnalyzeFailure err
+      sval <- liftIO $ analyzeEval etm
+      ESimple ty'' (CoreTerm (Lit sval)) <- case sval of
+        Left err   -> footnote err >> failure
+        Right sval -> pure sval
 
       -- compare results
-      case typeEq ty ty' of
-        Just Refl -> case analyzeVal of
-          AVal _ sval -> case unliteral (SBVI.SBV sval) of
-            Just sval' -> sval' === pactVal''
-            Nothing    -> error $ "couldn't unliteral: " ++ show sval
-          _ -> error $ "not AVAl: " ++ show analyzeVal
-        Nothing -> EType ty === EType ty' -- this'll fail
+      case typeEq ty' ty'' of
+        Just Refl -> sval === pactVal
+        Nothing   -> EType ty' === EType ty'' -- this'll fail
     )
-      -- discard division by zero, on either the pact or analysis side
-      --
-      -- future work here is to make sure that if one side throws, the other
-      -- does as well.
-      `catch` (\(DivideByZero :: ArithException) -> discard)
-      `catch` (\((PactError err _ _ msg) :: PactError) ->
-        case err of
-          EvalError ->
-            if "Division by 0" `T.isPrefixOf` msg ||
-               "Negative precision not allowed" `T.isPrefixOf` msg
-            then discard
-            else footnote (T.unpack msg) >> failure
-          _ -> footnote (T.unpack msg) >> failure)
-
       -- see note [EmptyInterval]
       `catch` (\(_e :: EmptyInterval)  -> discard)
 
@@ -762,6 +800,7 @@ prop_round_trip_term = property (do
 
   etm' <- lift $ runMaybeT $
     (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
+
   etm' === Just etm)
     -- XXX
     -- `catch` (\(_e :: EmptyInterval)  -> discard)
@@ -792,3 +831,28 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_round_trip_term", prop_round_trip_term)
   , ("prop_evaluation", prop_evaluation)
   ]
+
+tm =
+  IfThenElse
+      (CoreTerm (Lit False))
+      ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
+      ( Path { _pathTag = TagId 0 }
+      , IfThenElse
+          (CoreTerm (Lit False))
+          ( Path { _pathTag = TagId 0 }
+          , IfThenElse
+              (CoreTerm (Lit False))
+              ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
+              ( Path { _pathTag = TagId 0 }
+              , IfThenElse
+                  (EnforceOne (Right []))
+                  ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
+                  ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
+              )
+          )
+          ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
+      )
+ty = TInt
+
+gState = GenState 0 Map.empty Map.empty
+etm = ESimple ty tm

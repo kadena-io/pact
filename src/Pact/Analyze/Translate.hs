@@ -58,7 +58,7 @@ import           Pact.Analyze.Util
 data TranslateFailure = TranslateFailure
   { _translateFailureInfo :: !Info
   , _translateFailure     :: !TranslateFailureNoLoc
-  }
+  } deriving Show
 
 data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
@@ -114,10 +114,13 @@ data TranslateEnv
     { _teInfo           :: Info
     , _teNodeVars       :: Map Node (Text, VarId)
     , _teRecoverability :: Recoverability
+    , _teTestMode       :: IsTest
     }
 
-mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars mempty
+data IsTest = IsTest | IsntTest
+
+mkTranslateEnv :: IsTest -> Info -> [Arg] -> TranslateEnv
+mkTranslateEnv isTest info args = TranslateEnv info nodeVars mempty isTest
   where
     nodeVars = foldl'
       (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
@@ -244,7 +247,11 @@ emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
 
 genTagId :: TranslateM TagId
-genTagId = genId tsNextTagId
+genTagId = do
+  testMode <- view teTestMode
+  case testMode of
+    IsTest   -> pure 0
+    IsntTest -> genId tsNextTagId
 
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
@@ -360,7 +367,10 @@ throwError' err = do
 -- 'Vertex' to the graph.
 issueVertex :: TranslateM Vertex
 issueVertex = do
-  v <- genId tsNextVertex
+  testMode <- view teTestMode
+  v <- case testMode of
+    IsTest   -> pure 0
+    IsntTest -> genId tsNextVertex
   tsPathHead .= v
   pure v
 
@@ -943,4 +953,4 @@ runTranslation info pactArgs body = do
           translation = translateBody body
                      <* extendPath -- form final edge for any remaining events
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
-           runReaderT (unTranslateM translation) (mkTranslateEnv info args)
+           runReaderT (unTranslateM translation) (mkTranslateEnv IsntTest info args)
