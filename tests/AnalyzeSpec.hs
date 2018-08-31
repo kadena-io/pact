@@ -47,6 +47,7 @@ import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util            (dummyInfo, (...))
 
+
 wrap :: Text -> Text
 wrap code =
   [text|

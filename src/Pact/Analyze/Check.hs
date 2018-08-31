@@ -81,6 +81,7 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
 
@@ -371,7 +372,7 @@ moduleTables modules (_mod, modRefs) = do
 -- * '(defproperty foo (> 1 0))'
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
 parseDefprops :: Exp Info -> Either ParseFailure [(Text, DefinedProperty (Exp Info))]
-parseDefprops (ParenList exps) = traverse parseDefprops' exps where
+parseDefprops (SquareList exps) = traverse parseDefprops' exps where
   parseDefprops' exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, ParenList args, body ] -> do
       args' <- parseBindings (curry Right) args & _Left %~ (exp,)
@@ -458,9 +459,8 @@ moduleFunChecks tables modTys propDefs = for modTys $
 
 -- | Given an exp like '(k v)', convert it to a singleton map
 expToMapping :: Exp Info -> Maybe (Map Text (Exp Info))
-expToMapping (ParenList [EAtom' k, Colon', v])
-  = Just $ Map.singleton k v
-expToMapping _ = Nothing
+expToMapping (ParenList [EAtom' k, v]) = Just $ Map.singleton k v
+expToMapping _                         = Nothing
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just

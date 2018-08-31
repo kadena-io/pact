@@ -62,6 +62,7 @@ import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+
 parseTableName :: PreProp -> PropCheck (Prop TableName)
 parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
 parseTableName (PreVar vid name) = do
@@ -119,8 +120,9 @@ expToPreProp = \case
             _                       -> throwErrorIn keyExp "static key required"
           <*> expToPreProp valExp
           <*> case rest of
-            [] -> pure Map.empty
-            _  -> go rest
+            []               -> pure Map.empty
+            CommaExp : rest' -> go rest'
+            _                -> throwErrorIn keyExp "unexpected token"
         go _ = throwErrorIn exp "cannot parse as object"
     in PreLiteralObject <$> go exps
 
