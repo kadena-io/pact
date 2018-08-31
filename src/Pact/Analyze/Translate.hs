@@ -18,7 +18,7 @@ import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, use, view, (%=), (%~), (.=),
                                              (.~), (<&>), (<&>), (?=), (?~),
-                                             (^.), (^?), (<>~))
+                                             (^.), (^?), (<>~), (+~))
 import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
@@ -37,6 +37,7 @@ import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
+import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
@@ -114,10 +115,11 @@ data TranslateEnv
     { _teInfo           :: Info
     , _teNodeVars       :: Map Node (Text, VarId)
     , _teRecoverability :: Recoverability
+    , _teScopesEntered  :: Natural
     }
 
 mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars mempty
+mkTranslateEnv info args = TranslateEnv info nodeVars mempty 0
   where
     nodeVars = foldl'
       (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
@@ -239,6 +241,12 @@ withNodeContext node = local (envInfo .~ nodeToInfo node)
 -- | Call when entering an ast node to set the current context
 withAstContext :: AST Node -> TranslateM a -> TranslateM a
 withAstContext ast = local (envInfo .~ astToInfo ast)
+
+withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
+withNestedRecoverability r = local $ teRecoverability <>~ r
+
+withNewScope :: TranslateM a -> TranslateM a
+withNewScope = local $ teScopesEntered +~ 1
 
 emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
@@ -403,9 +411,6 @@ joinPaths branches = do
     tsEdgeEvents.at rejoinEdge ?= [TraceSubpathStart path | isNewPath]
     addPathEdge path rejoinEdge
 
-withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
-withNestedRecoverability r = local $ teRecoverability <>~ r
-
 translateType
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
   => Node -> m EType
@@ -448,7 +453,7 @@ translateBody = \case
       EObject ty astsO -> EObject ty $ Sequence ast' astsO
 
 translateLet :: [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
-translateLet bindings body = go bindings
+translateLet bindings body = withNewScope $ go bindings
   where
     go :: [(Named Node, AST Node)] -> TranslateM ETerm
     go [] = translateBody body
@@ -481,7 +486,7 @@ translateObjBinding
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateObjBinding bindingsA schema bodyA rhsT = do
+translateObjBinding bindingsA schema bodyA rhsT = withNewScope $ do
   (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
     \(Named unmungedVarName varNode _, colAst) -> do
       let varName = varNode ^. aId.tiName
@@ -524,6 +529,9 @@ translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let _ bindings body -> translateLet bindings body
 
+  --
+  -- TODO: treat function scope specially
+  --
   AST_InlinedApp bindings body -> translateLet bindings body
 
   AST_Var node -> do
