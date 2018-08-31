@@ -110,8 +110,7 @@ term =
   literal
   <|> varAtom
   <|> withList' Parens
-    ((try specialForm)
-     <|> app)
+    (try specialForm <|> app)
   <|> listLiteral
   <|> objectLiteral
 
@@ -169,9 +168,10 @@ varAtom = do
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
-  ls <- (some term) <|>
-        (term `sepBy` sep Comma)
-  return $ TList ls TyAny _listInfo -- TODO capture literal type if any
+  ls <- case _listList of
+    _ : CommaExp : _ -> term `sepBy` sep Comma
+    _                -> many term
+  pure $ TList ls TyAny _listInfo -- TODO capture literal type if any
 
 
 objectLiteral :: Compile (Term Name)
@@ -204,9 +204,10 @@ deftable = do
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
-  docs <- optional str
+  m <- meta
+  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on tables"
   TTable (TableName _atomAtom) mn mh
-    (fromMaybe TyAny ty) (Meta docs Nothing) <$> contextInfo
+    (fromMaybe TyAny ty) m <$> contextInfo
 
 
 bless :: Compile (Term Name)
@@ -218,16 +219,17 @@ defconst = do
   --symbol "defconst"
   modName <- currentModule'
   a <- arg
-  (v,doc) <- try ((,) <$> term <*> (Just <$> str)) <|>
-             ((,Nothing) <$> term)
-  TConst a modName (CVRaw v) (Meta doc Nothing) <$> contextInfo
+  v <- term
+  m <- meta
+  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on defconst"
+  TConst a modName (CVRaw v) m <$> contextInfo
 
 meta :: Compile Meta
 meta = atPairs <|> try docStr <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure Nothing
     docPair = symbol "@doc" >> str
-    modelPair = symbol "@model" >> (snd <$> list' Brackets)
+    modelPair = symbol "@model" >> bareExp
     atPairs = do
       doc <- optional (try docPair)
       model <- optional (try modelPair)
@@ -241,7 +243,7 @@ defschema = do
   modName <- currentModule'
   tn <- _atomAtom <$> bareAtom
   m <- meta
-  fields <- some arg
+  fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
 defun :: Compile (Term Name)
@@ -344,7 +346,9 @@ letsForm = do
         let bName = [arg2Name (fst binding)]
         scope <- abstract (`elemIndex` bName) <$> case rest of
           [] -> bodyForm
-          _ -> nest rest
+          _ -> do
+            rest' <- nest rest
+            pure $ TList [rest'] TyAny def
         TBinding [binding] scope BindLet <$> contextInfo
       nest [] =  syntaxError "letsForm: invalid state (bug)"
   nest bindings
