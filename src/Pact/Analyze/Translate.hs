@@ -233,12 +233,12 @@ instance MonadFail TranslateM where
 -- * Translation
 
 -- | Call when entering a node to set the current context
-nodeContext :: Node -> TranslateM a -> TranslateM a
-nodeContext node = local (envInfo .~ nodeToInfo node)
+withNodeContext :: Node -> TranslateM a -> TranslateM a
+withNodeContext node = local (envInfo .~ nodeToInfo node)
 
 -- | Call when entering an ast node to set the current context
-astContext :: AST Node -> TranslateM a -> TranslateM a
-astContext ast = local (envInfo .~ astToInfo ast)
+withAstContext :: AST Node -> TranslateM a -> TranslateM a
+withAstContext ast = local (envInfo .~ astToInfo ast)
 
 emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
@@ -464,7 +464,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
       case colAst of
         AST_StringLit colName ->
           pure (T.unpack colName, varType, (varNode, varName, vid))
-        _ -> nodeContext varNode $ throwError' $ NonStringLitInBinding colAst
+        _ -> withNodeContext varNode $ throwError' $ NonStringLitInBinding colAst
 
   bindingId <- genVarId
   let freshVar = CoreTerm $ Var bindingId "binding"
@@ -493,7 +493,7 @@ translateObjBinding bindingsA schema bodyA rhsT = do
       translateBody bodyA
 
 translateNode :: AST Node -> TranslateM ETerm
-translateNode astNode = astContext astNode $ case astNode of
+translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let _ [] body -> translateBody body
 
   AST_Let node ((Named unmungedVarName varNode _, rhsNode):bindingsRest) body -> do
@@ -825,13 +825,13 @@ translateNode astNode = astContext astNode $ case astNode of
     ESimple TStr key' <- translateNode key
     tid               <- tagRead node schema
     let readT = EObject schema $ Read tid (TableName (T.unpack table)) schema key'
-    nodeContext node $
+    withNodeContext node $
       translateObjBinding bindings schema body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     schema  <- translateSchema schemaNode
     objectT <- translateNode objectA
-    nodeContext node $
+    withNodeContext node $
       translateObjBinding bindings schema body objectT
 
   AST_AddTime time seconds
