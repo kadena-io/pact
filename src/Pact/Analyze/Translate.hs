@@ -234,6 +234,9 @@ instance MonadFail TranslateM where
 
 -- * Translation
 
+emit :: TraceEvent -> TranslateM ()
+emit event = modify' $ tsPendingEvents %~ flip snoc event
+
 -- | Call when entering a node to set the current context
 withNodeContext :: Node -> TranslateM a -> TranslateM a
 withNodeContext node = local (envInfo .~ nodeToInfo node)
@@ -246,10 +249,12 @@ withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
 withNewScope :: TranslateM a -> TranslateM a
-withNewScope = local $ teScopesEntered +~ 1
-
-emit :: TraceEvent -> TranslateM ()
-emit event = modify' $ tsPendingEvents %~ flip snoc event
+withNewScope act = local (teScopesEntered +~ 1) $ do
+  depth <- view teScopesEntered
+  emit $ TracePushScope depth
+  res <- act
+  emit $ TracePopScope depth
+  pure res
 
 genTagId :: TranslateM TagId
 genTagId = genId tsNextTagId
