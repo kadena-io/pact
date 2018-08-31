@@ -137,7 +137,7 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  body <- many (term <|> bindingForm) <* eof
+  body <- many (term <|> bindingForm)
   TApp v body <$> contextInfo
 
 -- | Bindings (`{ "column" := binding }`) do not explicitly scope the
@@ -169,8 +169,8 @@ varAtom = do
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
-  ls <- (some term <* eof) <|>
-        ((term `sepBy` sep Comma) <* eof)
+  ls <- (some term) <|>
+        (term `sepBy` sep Comma)
   return $ TList ls TyAny _listInfo -- TODO capture literal type if any
 
 
@@ -180,7 +180,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         key <- term
         val <- sep Colon *> term
         return (key,val)
-  ps <- (pair `sepBy` sep Comma) <* eof
+  ps <- pair `sepBy` sep Comma
   return $ TObject ps TyAny _listInfo
 
 
@@ -294,7 +294,7 @@ moduleForm = do
     TTable {} -> return []
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
-    _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
+    _ -> syntaxError $ "Only defun, defpact, defconst, deftable, use, bless allowed in module"
   return $ TModule
     (Module modName (KeySetName keyset) m code modHash blessed)
     (abstract (const Nothing) (TList bd TyAny bi)) i
@@ -391,7 +391,7 @@ parseType = msum
   ]
 
 parseListType :: Compile (Type (Term Name))
-parseListType = withList' Brackets $ TyList <$> parseType <* eof
+parseListType = withList' Brackets $ TyList <$> parseType
 
 parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
@@ -409,7 +409,7 @@ bodyForm = do
   return $ TList bs TyAny i
 
 bodyForm' :: Compile ([Term Name],Info)
-bodyForm' = (,) <$> (some term <* eof) <*> contextInfo
+bodyForm' = (,) <$> some term <*> contextInfo
 
 
 
