@@ -447,6 +447,34 @@ translateBody = \case
       ESimple ty astsT -> ESimple ty $ Sequence ast' astsT
       EObject ty astsO -> EObject ty $ Sequence ast' astsO
 
+translateLet :: [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
+translateLet bindings body = go bindings
+  where
+    go :: [(Named Node, AST Node)] -> TranslateM ETerm
+    go [] = translateBody body
+
+    go ((Named unmungedVarName varNode _, rhsNode):bindingsRest) = do
+      rhsETerm <- translateNode rhsNode
+      let varName = varNode ^. aId.tiName
+      withNewVarId varNode varName $ \vid -> do
+        --
+        -- TODO: do we only want to allow subsequent bindings to reference
+        --       earlier ones if we know it's let* rather than let? or has this
+        --       been enforced by earlier stages for us?
+        --
+
+        let varInfo = varNode ^. aId . Pact.tiInfo
+            varType = existentialType rhsETerm
+
+        tagVarBinding varInfo unmungedVarName varType vid
+
+        body' <- go bindingsRest
+        pure $ case body' of
+          ESimple bodyTy bodyTm ->
+            ESimple bodyTy (Let varName vid rhsETerm bodyTm)
+          EObject bodyTy bodyTm ->
+            EObject bodyTy (Let varName vid rhsETerm bodyTm)
+
 translateObjBinding
   :: [(Named Node, AST Node)]
   -> Schema
@@ -469,8 +497,8 @@ translateObjBinding bindingsA schema bodyA rhsT = do
   bindingId <- genVarId
   let freshVar = CoreTerm $ Var bindingId "binding"
 
-  let translateLet :: Term a -> Term a
-      translateLet innerBody = Let "binding" bindingId rhsT $
+  let translateLet' :: Term a -> Term a
+      translateLet' innerBody = Let "binding" bindingId rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
           (\body (colName, varType, (_varNode, varName, vid)) ->
@@ -488,35 +516,15 @@ translateObjBinding bindingsA schema bodyA rhsT = do
       nodeToNameVid = Map.fromList $
         (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
 
-  fmap (mapExistential translateLet) $
+  fmap (mapExistential translateLet') $
     local (teNodeVars %~ unionPreferring nodeToNameVid) $
       translateBody bodyA
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
-  AST_Let _ [] body -> translateBody body
+  AST_Let _ bindings body -> translateLet bindings body
 
-  AST_Let node ((Named unmungedVarName varNode _, rhsNode):bindingsRest) body -> do
-    rhsETerm <- translateNode rhsNode
-    let varName = varNode ^. aId.tiName
-    withNewVarId varNode varName $ \vid -> do
-      --
-      -- TODO: do we only want to allow subsequent bindings to reference
-      --       earlier ones if we know it's let* rather than let? or has this
-      --       been enforced by earlier stages for us?
-      --
-
-      let varInfo = varNode ^. aId . Pact.tiInfo
-          varType = existentialType rhsETerm
-
-      tagVarBinding varInfo unmungedVarName varType vid
-
-      body' <- translateNode $ mkLet node bindingsRest body
-      pure $ case body' of
-        ESimple bodyTy bodyTm -> ESimple bodyTy (Let varName vid rhsETerm bodyTm)
-        EObject bodyTy bodyTm -> EObject bodyTy (Let varName vid rhsETerm bodyTm)
-
-  AST_InlinedApp body -> translateBody body
+  AST_InlinedApp bindings body -> translateLet bindings body
 
   AST_Var node -> do
     Just (varName, vid) <- view $ teNodeVars.at node
