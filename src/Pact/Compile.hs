@@ -111,7 +111,6 @@ term =
   <|> listLiteral
   <|> objectLiteral
 
-{-# INLINE specialForm #-}
 specialForm :: Compile (Term Name)
 specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "use" -> commit >> useForm
@@ -129,7 +128,6 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     _ -> expected "special form"
 
 
-{-# INLINE app #-}
 app :: Compile (Term Name)
 app = do
   v <- varAtom
@@ -173,7 +171,6 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
               _ -> TyAny
   pure $ TList ls lty _listInfo
 
-
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
   let pair = do
@@ -182,7 +179,6 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         return (key,val)
   ps <- pair `sepBy` sep Comma
   return $ TObject ps TyAny _listInfo
-
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->

@@ -198,7 +198,6 @@ nes x = x :| []
 -- allowing for further tests on the result before committing.
 -- This is copypasta from Megaparsec's implementation of 'token' as
 -- of version 6.5.0, so this might break in future MP versions.
-{-# INLINE pTokenEpsilon #-}
 pTokenEpsilon :: forall e s m a. Stream s
   => (Token s -> Either ( Maybe (ErrorItem (Token s))
                         , S.Set (ErrorItem (Token s)) ) a)
