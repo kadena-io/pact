@@ -22,6 +22,6 @@
   (defschema schema2
     "a schema")
 
-  (deftable tbl @doc "a table" @model (baz quux))
+  (deftable tbl @doc "a table")
   (deftable tbl2 "a table")
 )

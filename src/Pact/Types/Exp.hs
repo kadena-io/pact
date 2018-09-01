@@ -1,9 +1,15 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -16,36 +22,22 @@
 
 module Pact.Types.Exp
  (
-   Parsed(..),
-   Code(..),
-   Info(..),
-   renderInfo,
-   renderParsed,
    ModuleName(..),
    Name(..),
    Literal(..),
+   _LString,_LInteger,_LDecimal,_LBool,_LTime,
    simpleISO8601,formatLTime,
-   TypeName(..),
-   Arg(..),aInfo,aName,aType,
-   FunType(..),ftArgs,ftReturn,
-   FunTypes,funTypes,showFunTypes,
-   PrimType(..),
    litToPrim,
-   tyInteger,tyDecimal,tyTime,tyBool,tyString,
-   tyList,tyObject,tyValue,tyKeySet,tyTable,
-   SchemaType(..),
-   TypeVarName(..),typeVarName,
-   TypeVar(..),tvName,tvConstraint,
-   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
-   mkTyVar,mkTyVar',mkSchemaVar,
-   isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
-   Exp(..),eLiteral,eAtom,eBinding,eList,eLitListType,eObject,eParsed,eQualifier,eSymbol,eType,
-   _ELiteral,_ESymbol,_EAtom,_EList,_EObject,_EBinding,
-   pattern EList',pattern ELitList,pattern ELitString,pattern EAtom'
+   LiteralExp(..),AtomExp(..),ListExp(..),SeparatorExp(..),
+   Exp(..),
+   _ELiteral,_EAtom,_EList,_ESeparator,
+   ListDelimiter(..),listDelims,enlist,
+   Separator(..),
+   pattern CommaExp
    ) where
 
 
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens (makePrisms)
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -124,6 +116,8 @@ data Literal =
 instance Serialize Literal
 instance NFData Literal
 
+makePrisms ''Literal
+
 -- | ISO8601 Thyme format
 simpleISO8601 :: String
 simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
@@ -155,50 +149,94 @@ litToPrim LDecimal {} = TyDecimal
 litToPrim LBool {} = TyBool
 litToPrim LTime {} = TyTime
 
--- | Pact expressions, with parsing info.
-data Exp =
-  -- | Literals
-  ELiteral { _eLiteral :: !Literal, _eParsed :: !Parsed } |
-  -- | Symbol, effectively a string literal
-  ESymbol { _eSymbol :: !Text, _eParsed :: !Parsed } |
-  -- | Atom, with support for type literals.
-  EAtom { _eAtom :: !Text
-        , _eQualifier :: !(Maybe Text)
-        , _eType :: !(Maybe (Type TypeName))
-        , _eParsed :: !Parsed
-        } |
-  -- | Lists. '_eLitListType' distinguishes literal lists (`[1 2 3]`) from body forms.
-  EList { _eList :: ![Exp], _eLitListType :: !(Maybe (Type TypeName)), _eParsed :: !Parsed } |
-  -- | Object literals.
-  EObject { _eObject :: ![(Exp,Exp)], _eParsed :: !Parsed } |
-  -- | Special binding forms.
-  EBinding { _eBinding :: ![(Exp,Exp)], _eParsed :: !Parsed }
-           deriving (Eq,Generic)
+data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
+instance NFData ListDelimiter
 
-instance NFData Exp
+listDelims :: ListDelimiter -> (Text,Text)
+listDelims Parens = ("(",")")
+listDelims Brackets = ("[","]")
+listDelims Braces = ("{","}")
+
+enlist :: ListDelimiter -> ((Text,Text) -> a) -> a
+enlist d f = f (listDelims d)
+
+data Separator = Colon|ColonEquals|Comma deriving (Eq,Ord,Generic,Bounded,Enum)
+instance NFData Separator
+instance Show Separator where
+  show Colon = ":"
+  show ColonEquals = ":="
+  show Comma = ","
 
 
-pattern EList' :: [Exp] -> Exp
-pattern EList' ls <- EList ls Nothing _
-pattern ELitList :: [Exp] -> Exp
-pattern ELitList ls <- EList ls (Just _) _
-pattern EAtom' :: Text -> Exp
-pattern EAtom' tag <- EAtom tag Nothing Nothing _
-pattern ELitString :: Text -> Exp
-pattern ELitString s <- ELiteral (LString s) _
+data LiteralExp i = LiteralExp
+  { _litLiteral :: !Literal
+  , _litInfo :: !i
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
+instance Show (LiteralExp i) where show LiteralExp{..} = show _litLiteral
+instance HasInfo (LiteralExp Info) where
+  getInfo = _litInfo
+instance NFData i => NFData (LiteralExp i)
+
+data AtomExp i = AtomExp
+  { _atomAtom :: !Text
+  , _atomQualifiers :: ![Text]
+  , _atomInfo :: i
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
+instance Show (AtomExp i) where
+  show AtomExp{..} = intercalate "." (map unpack $ _atomQualifiers ++ [_atomAtom])
+instance HasInfo (AtomExp Info) where
+  getInfo = _atomInfo
+instance NFData i => NFData (AtomExp i)
+
+data ListExp i = ListExp
+  { _listList :: ![(Exp i)]
+  , _listDelimiter :: !ListDelimiter
+  , _listInfo :: !i
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
+instance Show (ListExp i) where
+  show ListExp{..} =
+    enlist _listDelimiter $ \(o,c) ->
+      unpack o ++ unwords (map show _listList) ++ unpack c
+instance HasInfo (ListExp Info) where
+  getInfo = _listInfo
+instance NFData i => NFData (ListExp i)
+
+data SeparatorExp i = SeparatorExp
+  { _sepSeparator :: !Separator
+  , _sepInfo :: !i
+  } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
+instance Show (SeparatorExp i) where show (SeparatorExp{..}) = show _sepSeparator
+instance HasInfo (SeparatorExp Info) where
+  getInfo = _sepInfo
+instance NFData i => NFData (SeparatorExp i)
+
+
+-- | Pact syntax expressions
+data Exp i =
+  ELiteral (LiteralExp i) |
+  EAtom (AtomExp i) |
+  EList (ListExp i) |
+  ESeparator (SeparatorExp i)
+  deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
+
+instance NFData i => NFData (Exp i)
+instance HasInfo (Exp Info) where
+  getInfo e = case e of
+    ELiteral i -> getInfo i
+    EAtom a -> getInfo a
+    EList l -> getInfo l
+    ESeparator s -> getInfo s
+
 
 makePrisms ''Exp
 
 
+instance Show (Exp i) where
+  show e = case e of
+    ELiteral i -> show i
+    EAtom a -> show a
+    EList l -> show l
+    ESeparator s -> show s
 
-
-instance Show Exp where
-    show (ELiteral i _) = show i
-    show (ESymbol s _) = '\'':unpack s
-    show (EAtom a q t _) =  unpack a ++ maybeDelim "."  q ++ maybeDelim ": " t
-    show (EList ls Nothing _) = "(" ++ unwords (map show ls) ++ ")"
-    show (EList ls Just {} _) = "[" ++ unwords (map show ls) ++ "]"
-    show (EObject ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ": " ++ show v) ps) ++ " }"
-    show (EBinding ps _) = "{ " ++ intercalate ", " (map (\(k,v) -> show k ++ ":= " ++ show v) ps) ++ " }"
-
-$(makeLenses ''Exp)
+pattern CommaExp :: Exp t
+pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
