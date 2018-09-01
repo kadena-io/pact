@@ -40,7 +40,7 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Model           (linearizedTrace)
+import qualified Pact.Analyze.Model           as Model
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
@@ -97,12 +97,20 @@ data TestFailure
   | VerificationFailure VerificationFailure
   deriving Show
 
-userShowTestFailure :: TestFailure -> String
-userShowTestFailure = \case
-  TestCheckFailure cf    -> T.unpack (describeCheckFailure cf)
-  NoTestModule           -> "example is missing a module named 'test'"
-  ReplError err          -> "ReplError: " ++ err
-  VerificationFailure vf -> "VerificationFailure: " ++ show vf
+renderTestFailure :: TestFailure -> IO String
+renderTestFailure = \case
+  TestCheckFailure cf -> do
+    svgInfo <- case falsifyingModel cf of
+      Nothing -> pure ""
+      Just m -> do
+        let fp = "/tmp/execution-graph.dot"
+        Model.renderDot fp m
+        pure $ "\n\nrendered execution graph to DOT: " ++ fp
+
+    pure $ T.unpack (describeCheckFailure cf) ++ svgInfo
+  NoTestModule -> pure "example is missing a module named 'test'"
+  ReplError err -> pure $ "ReplError: " ++ err
+  VerificationFailure vf -> pure $ "VerificationFailure: " ++ show vf
 
 --
 -- TODO: use ExceptT
@@ -152,7 +160,7 @@ runCheck code check = do
 handlePositiveTestResult :: Maybe TestFailure -> IO ()
 handlePositiveTestResult = \case
   Nothing -> pure ()
-  Just tf -> HUnit.assertFailure $ userShowTestFailure tf
+  Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: Text -> Spec
 expectVerified code = do
@@ -997,7 +1005,7 @@ spec = describe "analyze" $ do
                   let (_bal, AVal _ sval) = m Map.! "balance"
                   in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
             balanceWrite <- pure $ find negativeWrite
-              $ writes ^.. traverse . located . _2
+              $ writes ^.. traverse . located . accObject
 
             it "should have a negative write" $
               balanceWrite `shouldSatisfy` isJust
@@ -1938,7 +1946,7 @@ spec = describe "analyze" $ do
           it "produces the correct trace" $
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
-                let trace = _etEvents (linearizedTrace model)
+                let trace = _etEvents (Model.linearize model)
                 unless (tests `match` trace) $ HUnit.assertFailure $
                   "trace doesn't match:\n\n" ++ show trace
               _ ->

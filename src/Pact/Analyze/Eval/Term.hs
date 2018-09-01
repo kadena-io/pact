@@ -12,7 +12,7 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
                                               (&), (+=), (.=), (.~), (<&>),
-                                              (?~), (^.), (^?), _1, _2, _Just)
+                                              (?~), (^.), (^?), _2, _Just)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
@@ -114,27 +114,27 @@ instance (Mergeable a) => Mergeable (Analyze a) where
 --
 
 tagAccessKey
-  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> S RowKey
   -> Analyze ()
 tagAccessKey lens' tid srk = do
-  mTup <- preview $ aeModelTags.lens'.at tid._Just.located._1
-  case mTup of
+  mSrk <- preview $ aeModelTags.lens'.at tid._Just.located.accRowKey
+  case mSrk of
     Nothing     -> pure ()
     Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
 tagAccessCell
-  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located (S RowKey, Object)))
+  :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> Text
   -> AVal
   -> Analyze ()
 tagAccessCell lens' tid fieldName av = do
   mTag <- preview $
-    aeModelTags.lens'.at tid._Just.located._2.objFields.at fieldName._Just._2
+    aeModelTags.lens'.at tid._Just.located.accObject.objFields.at fieldName._Just._2
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
@@ -150,23 +150,23 @@ tagAssert tid sb = do
 -- allocated in Symbolic.
 tagAuth :: TagId -> S KeySet -> S Bool -> Analyze ()
 tagAuth tid sKs sb = do
-  mTup <- preview $ aeModelTags.mtAuths.at tid._Just.located
-  case mTup of
+  mAuth <- preview $ aeModelTags.mtAuths.at tid._Just.located
+  case mAuth of
     Nothing  -> pure ()
-    Just (ksTag, sbv) -> do
+    Just (Authorization ksTag sbv) -> do
       addConstraint $ sansProv $ ksTag .== sKs
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
-tagFork :: TagId -> TagId -> S Bool -> S Bool -> Analyze ()
-tagFork tidL tidR reachable lPasses = do
-    tagSubpathStart tidL $ reachable &&& lPasses
-    tagSubpathStart tidR $ reachable &&& bnot lPasses
+tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
+tagFork pathL pathR reachable lPasses = do
+    tagSubpathStart pathL $ reachable &&& lPasses
+    tagSubpathStart pathR $ reachable &&& bnot lPasses
 
   where
-    tagSubpathStart :: TagId -> S Bool -> Analyze ()
-    tagSubpathStart tid active = do
-      mTag <- preview $ aeModelTags.mtPaths.at tid._Just
+    tagSubpathStart :: Path -> S Bool -> Analyze ()
+    tagSubpathStart p active = do
+      mTag <- preview $ aeModelTags.mtPaths.at p._Just
       case mTag of
         Nothing  -> pure ()
         Just sbv -> do
