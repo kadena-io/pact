@@ -101,9 +101,6 @@ cToTV n | n < 26 = fromString [toC n]
         | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
   where toC i = toEnum (fromEnum 'a' + i)
 
-_testCToTV :: Bool
-_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
-
 
 term :: Compile (Term Name)
 term =
@@ -139,7 +136,7 @@ app = do
   body <- many (term <|> bindingForm)
   TApp v body <$> contextInfo
 
--- | Bindings (`{ "column" := binding }`) do not explicitly scope the
+-- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
 -- simply follow, showing up as more args to the containing app. Thus, once a
 -- binding is encountered, all following terms are subsumed into the
@@ -171,7 +168,10 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
   ls <- case _listList of
     _ : CommaExp : _ -> term `sepBy` sep Comma
     _                -> many term
-  pure $ TList ls TyAny _listInfo -- TODO capture literal type if any
+  let lty = case nub (map typeof ls) of
+              [Right ty] -> ty
+              _ -> TyAny
+  pure $ TList ls lty _listInfo
 
 
 objectLiteral :: Compile (Term Name)
@@ -188,17 +188,9 @@ literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
   return $ TLiteral _litLiteral _litInfo
 
-_literal' :: String -> Prism' Literal a -> Compile (Term Name)
-_literal' ty prism = literal >>= \t@TLiteral{..} -> case firstOf prism _tLiteral of
-  Just _ -> return t
-  Nothing -> expected ty
-
-_str' :: Compile (Term Name)
-_str' = _literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
-  --symbol "deftable"
   (mn,mh) <- currentModule
   AtomExp{..} <- bareAtom
   ty <- optional (typed >>= \t -> case t of
@@ -211,12 +203,10 @@ deftable = do
 
 
 bless :: Compile (Term Name)
-bless = --symbol "bless" >>
-  TBless <$> hash' <*> contextInfo
+bless = TBless <$> hash' <*> contextInfo
 
 defconst :: Compile (Term Name)
 defconst = do
-  --symbol "defconst"
   modName <- currentModule'
   a <- arg
   v <- term
@@ -239,7 +229,6 @@ meta = atPairs <|> try docStr <|> return def
 
 defschema :: Compile (Term Name)
 defschema = do
-  --symbol "defschema"
   modName <- currentModule'
   tn <- _atomAtom <$> bareAtom
   m <- meta
@@ -248,7 +237,6 @@ defschema = do
 
 defun :: Compile (Term Name)
 defun = do
-  --symbol "defun"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -259,7 +247,6 @@ defun = do
 
 defpact :: Compile (Term Name)
 defpact = do
-  --symbol "defpact"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -273,7 +260,6 @@ defpact = do
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
-  --symbol "module"
   modName' <- _atomAtom <$> bareAtom
   keyset <- str
   m <- meta
@@ -304,15 +290,12 @@ moduleForm = do
 
 step :: Compile (Term Name)
 step = do
-  --symbol "step"
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>
           (TStep Nothing <$> term)
   cont <$> pure Nothing <*> contextInfo
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  --symbol "step-with-rollback"
-
   try (TStep <$> (Just <$> term) <*> term <*> (Just <$> term) <*> contextInfo) <|>
       (TStep Nothing <$> term <*> (Just <$> term) <*> contextInfo)
 
@@ -333,7 +316,6 @@ abstractBody' args = abstract (`elemIndex` bNames)
 
 letForm :: Compile (Term Name)
 letForm = do
-  --symbol "let"
   bindings <- letBindings
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure BindLet <*> contextInfo
@@ -342,7 +324,6 @@ letForm = do
 -- bindings.
 letsForm :: Compile (Term Name)
 letsForm = do
-  --symbol "let*"
   bindings <- letBindings
   let nest (binding:rest) = do
         let bName = [arg2Name (fst binding)]
@@ -357,7 +338,6 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  --symbol "use"
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
@@ -468,3 +448,6 @@ _atto fp = do
   case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts
+
+_testCToTV :: Bool
+_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
