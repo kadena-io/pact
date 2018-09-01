@@ -188,13 +188,13 @@ literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
   return $ TLiteral _litLiteral _litInfo
 
-literal' :: String -> Prism' Literal a -> Compile (Term Name)
-literal' ty prism = literal >>= \t@TLiteral{..} -> case firstOf prism _tLiteral of
+_literal' :: String -> Prism' Literal a -> Compile (Term Name)
+_literal' ty prism = literal >>= \t@TLiteral{..} -> case firstOf prism _tLiteral of
   Just _ -> return t
   Nothing -> expected ty
 
-str' :: Compile (Term Name)
-str' = literal' "string" _LString
+_str' :: Compile (Term Name)
+_str' = _literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
@@ -288,6 +288,7 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
   (bd,bi) <- bodyForm'
+  eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
     TDef {} -> return []
     TNative {} -> return []
@@ -296,7 +297,7 @@ moduleForm = do
     TTable {} -> return []
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
-    _ -> syntaxError $ "Only defun, defpact, defconst, deftable, use, bless allowed in module"
+    _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
   return $ TModule
     (Module modName (KeySetName keyset) m code modHash blessed)
     (abstract (const Nothing) (TList bd TyAny bi)) i
@@ -304,16 +305,17 @@ moduleForm = do
 step :: Compile (Term Name)
 step = do
   --symbol "step"
-  cont <- try (TStep <$> (Just <$> str') <*> term) <|>
+  cont <- try (TStep <$> (Just <$> term) <*> term) <|>
           (TStep Nothing <$> term)
   cont <$> pure Nothing <*> contextInfo
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
   --symbol "step-with-rollback"
-  cont <- try (TStep <$> (Just <$> str') <*> term) <|>
-          (TStep Nothing <$> term)
-  cont <$> (Just <$> term) <*> contextInfo
+
+  try (TStep <$> (Just <$> term) <*> term <*> (Just <$> term) <*> contextInfo) <|>
+      (TStep Nothing <$> term <*> (Just <$> term) <*> contextInfo)
+
 
 
 letBindings :: Compile [(Arg (Term Name),Term Name)]
