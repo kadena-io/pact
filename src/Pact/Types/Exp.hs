@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 -- |
 -- Module      :  Pact.Types.Exp
@@ -32,6 +33,7 @@ module Pact.Types.Exp
    _ELiteral,_EAtom,_EList,_ESeparator,
    ListDelimiter(..),listDelims,enlist,
    Separator(..),
+   pattern CommaExp
    ) where
 
 
@@ -235,3 +237,6 @@ instance Show (Exp i) where
     EAtom a -> show a
     EList l -> show l
     ESeparator s -> show s
+
+pattern CommaExp :: Exp t
+pattern CommaExp <- ESeparator (SeparatorExp Comma _i)

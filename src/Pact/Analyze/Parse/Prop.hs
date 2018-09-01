@@ -62,6 +62,7 @@ import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+
 parseTableName :: PreProp -> PropCheck (Prop TableName)
 parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
 parseTableName (PreVar vid name) = do
@@ -112,12 +113,18 @@ expToPreProp = \case
     -> PreAt objIx <$> expToPreProp obj
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
-  -- XXX
-  -- Pact.EObject bindings _parsed -> do
-  --   bindings' <- for bindings $ \(key, body) -> case key of
-  --     ELiteral' (LString key') -> (key',) <$> expToPreProp body
-  --     _                        -> throwErrorIn key "static key required"
-  --   pure $ PreLiteralObject $ Map.fromList bindings'
+  exp@(BraceList exps) ->
+    let go (keyExp : Colon' : valExp : rest) = Map.insert
+          <$> case keyExp of
+            ELiteral' (LString key) -> pure key
+            _                       -> throwErrorIn keyExp "static key required"
+          <*> expToPreProp valExp
+          <*> case rest of
+            []               -> pure Map.empty
+            CommaExp : rest' -> go rest'
+            _                -> throwErrorIn keyExp "unexpected token"
+        go _ = throwErrorIn exp "cannot parse as object"
+    in PreLiteralObject <$> go exps
 
   ParenList (EAtom' funName:args) -> PreApp funName <$> traverse expToPreProp args
 

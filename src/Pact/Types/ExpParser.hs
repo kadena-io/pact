@@ -190,6 +190,10 @@ exp ty prism test2 = do
 exp' :: String -> Prism' (Exp Info) a -> ExpParse s a
 exp' t p = fst <$> exp t p Right
 
+{-# INLINE bareExp #-}
+bareExp :: ExpParse s (Exp Info)
+bareExp = token Right Nothing
+
 {-# INLINE enter #-}
 enter :: (ListExp Info,Exp Info) -> ExpParse s (ListExp Info)
 enter (l@ListExp{..},e) = do

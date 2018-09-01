@@ -101,17 +101,13 @@ cToTV n | n < 26 = fromString [toC n]
         | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
   where toC i = toEnum (fromEnum 'a' + i)
 
-_testCToTV :: Bool
-_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
-
 
 term :: Compile (Term Name)
 term =
   literal
   <|> varAtom
   <|> withList' Parens
-    ((try specialForm)
-     <|> app)
+    (try specialForm <|> app)
   <|> listLiteral
   <|> objectLiteral
 
@@ -137,10 +133,10 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  body <- many (term <|> bindingForm) <* eof
+  body <- many (term <|> bindingForm)
   TApp v body <$> contextInfo
 
--- | Bindings (`{ "column" := binding }`) do not explicitly scope the
+-- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
 -- simply follow, showing up as more args to the containing app. Thus, once a
 -- binding is encountered, all following terms are subsumed into the
@@ -169,9 +165,13 @@ varAtom = do
 
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
-  ls <- (some term <* eof) <|>
-        ((term `sepBy` sep Comma) <* eof)
-  return $ TList ls TyAny _listInfo -- TODO capture literal type if any
+  ls <- case _listList of
+    _ : CommaExp : _ -> term `sepBy` sep Comma
+    _                -> many term
+  let lty = case nub (map typeof ls) of
+              [Right ty] -> ty
+              _ -> TyAny
+  pure $ TList ls lty _listInfo
 
 
 objectLiteral :: Compile (Term Name)
@@ -180,7 +180,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
         key <- term
         val <- sep Colon *> term
         return (key,val)
-  ps <- (pair `sepBy` sep Comma) <* eof
+  ps <- pair `sepBy` sep Comma
   return $ TObject ps TyAny _listInfo
 
 
@@ -188,46 +188,38 @@ literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
   return $ TLiteral _litLiteral _litInfo
 
-literal' :: String -> Prism' Literal a -> Compile (Term Name)
-literal' ty prism = literal >>= \t@TLiteral{..} -> case firstOf prism _tLiteral of
-  Just _ -> return t
-  Nothing -> expected ty
-
-str' :: Compile (Term Name)
-str' = literal' "string" _LString
 
 deftable :: Compile (Term Name)
 deftable = do
-  --symbol "deftable"
   (mn,mh) <- currentModule
   AtomExp{..} <- bareAtom
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
-  docs <- optional str
+  m <- meta
+  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on tables"
   TTable (TableName _atomAtom) mn mh
-    (fromMaybe TyAny ty) (Meta docs Nothing) <$> contextInfo
+    (fromMaybe TyAny ty) m <$> contextInfo
 
 
 bless :: Compile (Term Name)
-bless = --symbol "bless" >>
-  TBless <$> hash' <*> contextInfo
+bless = TBless <$> hash' <*> contextInfo
 
 defconst :: Compile (Term Name)
 defconst = do
-  --symbol "defconst"
   modName <- currentModule'
   a <- arg
-  (v,doc) <- try ((,) <$> term <*> (Just <$> str)) <|>
-             ((,Nothing) <$> term)
-  TConst a modName (CVRaw v) (Meta doc Nothing) <$> contextInfo
+  v <- term
+  m <- meta
+  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on defconst"
+  TConst a modName (CVRaw v) m <$> contextInfo
 
 meta :: Compile Meta
 meta = atPairs <|> try docStr <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure Nothing
     docPair = symbol "@doc" >> str
-    modelPair = symbol "@model" >> (snd <$> list' Brackets)
+    modelPair = symbol "@model" >> bareExp
     atPairs = do
       doc <- optional (try docPair)
       model <- optional (try modelPair)
@@ -237,16 +229,14 @@ meta = atPairs <|> try docStr <|> return def
 
 defschema :: Compile (Term Name)
 defschema = do
-  --symbol "defschema"
   modName <- currentModule'
   tn <- _atomAtom <$> bareAtom
   m <- meta
-  fields <- some arg
+  fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
 defun :: Compile (Term Name)
 defun = do
-  --symbol "defun"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -257,7 +247,6 @@ defun = do
 
 defpact :: Compile (Term Name)
 defpact = do
-  --symbol "defpact"
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -271,7 +260,6 @@ defpact = do
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
-  --symbol "module"
   modName' <- _atomAtom <$> bareAtom
   keyset <- str
   m <- meta
@@ -286,6 +274,7 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
   (bd,bi) <- bodyForm'
+  eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
     TDef {} -> return []
     TNative {} -> return []
@@ -301,17 +290,15 @@ moduleForm = do
 
 step :: Compile (Term Name)
 step = do
-  --symbol "step"
-  cont <- try (TStep <$> (Just <$> str') <*> term) <|>
+  cont <- try (TStep <$> (Just <$> term) <*> term) <|>
           (TStep Nothing <$> term)
   cont <$> pure Nothing <*> contextInfo
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  --symbol "step-with-rollback"
-  cont <- try (TStep <$> (Just <$> str') <*> term) <|>
-          (TStep Nothing <$> term)
-  cont <$> (Just <$> term) <*> contextInfo
+  try (TStep <$> (Just <$> term) <*> term <*> (Just <$> term) <*> contextInfo) <|>
+      (TStep Nothing <$> term <*> (Just <$> term) <*> contextInfo)
+
 
 
 letBindings :: Compile [(Arg (Term Name),Term Name)]
@@ -329,7 +316,6 @@ abstractBody' args = abstract (`elemIndex` bNames)
 
 letForm :: Compile (Term Name)
 letForm = do
-  --symbol "let"
   bindings <- letBindings
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure BindLet <*> contextInfo
@@ -338,20 +324,20 @@ letForm = do
 -- bindings.
 letsForm :: Compile (Term Name)
 letsForm = do
-  --symbol "let*"
   bindings <- letBindings
   let nest (binding:rest) = do
         let bName = [arg2Name (fst binding)]
         scope <- abstract (`elemIndex` bName) <$> case rest of
           [] -> bodyForm
-          _ -> nest rest
+          _ -> do
+            rest' <- nest rest
+            pure $ TList [rest'] TyAny def
         TBinding [binding] scope BindLet <$> contextInfo
       nest [] =  syntaxError "letsForm: invalid state (bug)"
   nest bindings
 
 useForm :: Compile (Term Name)
 useForm = do
-  --symbol "use"
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
@@ -391,7 +377,7 @@ parseType = msum
   ]
 
 parseListType :: Compile (Type (Term Name))
-parseListType = withList' Brackets $ TyList <$> parseType <* eof
+parseListType = withList' Brackets $ TyList <$> parseType
 
 parseSchemaType :: Text -> SchemaType -> Compile (Type (Term Name))
 parseSchemaType tyRep sty = symbol tyRep >>
@@ -409,7 +395,7 @@ bodyForm = do
   return $ TList bs TyAny i
 
 bodyForm' :: Compile ([Term Name],Info)
-bodyForm' = (,) <$> (some term <* eof) <*> contextInfo
+bodyForm' = (,) <$> some term <*> contextInfo
 
 
 
@@ -462,3 +448,6 @@ _atto fp = do
   case sequence rs of
       Left e -> throwIO $ userError (show e)
       Right ts -> return ts
+
+_testCToTV :: Bool
+_testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
