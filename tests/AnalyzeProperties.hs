@@ -11,13 +11,15 @@
 {-# LANGUAGE TupleSections #-}
 module AnalyzeProperties where
 
+import Data.Aeson (toJSON, Value(Object))
 import           Bound                       (closed)
+import qualified Data.HashMap.Strict as HM
 import           GHC.Natural               (Natural)
 import           Control.Exception           (ArithException (DivideByZero))
 import Control.Lens hiding ((...), op)
 import           Control.Monad               ((<=<))
 import           Control.Monad.Catch         (catch)
-import           Control.Monad.Except        (runExcept, ExceptT(..))
+import           Control.Monad.Except        (runExcept)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (ReaderT (runReaderT), MonadReader)
@@ -29,7 +31,7 @@ import qualified Data.Decimal                as Decimal
 import qualified Data.Default                as Default
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (unliteral)
+import           Data.SBV                    (unliteral, writeArray, literal)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:) (Refl))
@@ -49,10 +51,10 @@ import           Pact.Analyze.Translate      (TranslateM (..),
                                               TranslateState (..),
                                               maybeTranslateType,
                                               mkTranslateEnv, translateNode, IsTest(IsTest))
-import           Pact.Analyze.Types          hiding (Term)
+import           Pact.Analyze.Types          hiding (Term, Object)
 import qualified Pact.Analyze.Types          as Analyze
 import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
-                                              mkInitialAnalyzeState)
+                                              mkInitialAnalyzeState, aeKeySets, aeDecimals)
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
@@ -61,13 +63,14 @@ import           Pact.Native.Ops
 import           Pact.Native.Time
 import           Pact.Native.Keysets
 import           Pact.Repl                   (initPureEvalEnv)
+import           Pact.Repl.Types (LibState)
 import           Pact.Typechecker            (typecheckTopLevel)
 import           Pact.Types.Exp              (Literal (..), Name(Name))
 import           Pact.Types.Persistence (WriteType)
 import           Pact.Types.Native           (NativeDef)
 import           Pact.Types.Runtime          (PactError (..),
                                               PactErrorType (EvalError),
-                                              runEval)
+                                              runEval, EvalEnv, eeMsgBody)
 import           Pact.Types.Term             (Term (TApp, TConst, TLiteral), Meta(Meta))
 import qualified Pact.Types.Term             as Pact
 import qualified Pact.Types.Type             as Pact
@@ -75,16 +78,15 @@ import qualified Pact.Types.Typecheck        as Pact
 
 import TimeGen
 
-import Debug.Trace
 
 data GenEnv = GenEnv
   { _envTables        :: ![(TableName, Schema)]
-  , _envKeysets       :: ![Pact.KeySet]
+  , _envKeysets       :: ![(Pact.KeySet, KeySet)]
   }
 
 data GenState = GenState
   { _idGen         :: !TagId
-  , _namedKeysets  :: !(Map String Pact.KeySet)
+  , _namedKeysets  :: !(Map String (Pact.KeySet, KeySet))
   , _namedDecimals :: !(Map String Decimal)
   } deriving Show
 
@@ -316,7 +318,7 @@ genAnyTerm = Gen.choice
   , genTerm strSize
   , genTerm SizedBool
   , genTerm SizedTime
-  , genTerm SizedKeySet
+  -- , genTerm SizedKeySet
   ]
 
 genTerm
@@ -406,6 +408,8 @@ genKeySetName = do
   idGen %= succ
   TagId nat <- use idGen
   keysets   <- view envKeysets
+  -- keysetIx  <- Gen.integral (Range.linear 0 (length keysets))
+  -- let keyset = keysets ^?! ix keysetIx
   keyset    <- Gen.element keysets
   let k = show nat
   namedKeysets . at k ?= keyset
@@ -520,7 +524,7 @@ toPactTm = \case
   ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
-      Just ks -> pure $ Pact.TKeySet ks dummyInfo
+      Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
       Nothing -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
@@ -541,9 +545,6 @@ toPactTm = \case
   ESimple TStr (Hash x) -> mkApp hashDef [x]
 
   ESimple TKeySet (ReadKeySet x) -> mkApp readKeysetDef [ESimple TStr x]
-
-  ESimple TTime (ParseTime Nothing x) ->
-    mkApp parseTimeDef [ESimple TStr x]
 
   ESimple TTime (ParseTime Nothing x) ->
     mkApp parseTimeDef [ESimple TStr x]
@@ -618,21 +619,22 @@ toPactTm'
   :: Monad m
   => (GenEnv, GenState) -> ETerm -> MaybeT m (Pact.Term Pact.Ref)
 toPactTm' envState etm = MaybeT $ do
-  -- traceM $ "in toPactTm', etm = " ++ show etm
   pure $ runReaderT (toPactTm etm) envState
 
 toAnalyze :: Pact.Type (Pact.Term Pact.Ref) -> Pact.Term Pact.Ref -> MaybeT IO ETerm
 toAnalyze ty tm = do
-  let cnst = TConst (Pact.Arg "tm" ty dummyInfo) "module" (Pact.CVRaw tm) (Meta Nothing Nothing) dummyInfo
+  let cnst = TConst
+        (Pact.Arg "tm" ty dummyInfo)
+        "module"
+        (Pact.CVRaw tm)
+        (Meta Nothing Nothing)
+        dummyInfo
       ref = Pact.Ref cnst
-  traceM "typechecking"
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref
-  traceM $ "typechecked"
   (_cTy, ast) <- case maybeConst of
     (Pact.TopConst _info _name constTy constAst _meta, _tcState)
       -> pure (constTy, constAst)
     _ -> MaybeT $ pure Nothing
-  traceM $ "typechecked'"
 
   -- TODO: this is all copied from Translate.hs
   -- TODO: good chance we'll have to change some of these like the initial var
@@ -648,15 +650,12 @@ toAnalyze ty tm = do
       translateEnv = mkTranslateEnv IsTest dummyInfo []
 
   hoist generalize $
-    exceptToMaybeT' $
+    exceptToMaybeT $
       fmap fst $
         flip runStateT state0 $
           runReaderT
             (unTranslateM (translateNode ast))
             translateEnv
-
-exceptToMaybeT' :: (Functor m, Show e, Show a) => ExceptT e m a -> MaybeT m a
-exceptToMaybeT' (ExceptT m) = MaybeT $ fmap (either (const Nothing . traceShowId) (Just . traceShowId)) m
 
 -- This is limited to simple types for now
 reverseTranslateType :: Type a -> Pact.Type b
@@ -688,7 +687,7 @@ genAnyTerm' = runReaderT
 
 alice, bob :: Pact.PublicKey
 alice = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"
-bob = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
+bob   = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
 
 genEnv :: GenEnv
 genEnv = GenEnv
@@ -696,44 +695,45 @@ genEnv = GenEnv
     [ ("balance", EType TInt)
     , ("name",    EType TStr)
     ])]
-  [ Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo)
-  , Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo)
-  , Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo)
+  [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), KeySet 0)
+  , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), KeySet 1)
+  , (Pact.KeySet [alice, bob] (Name "keys-2" dummyInfo), KeySet 2)
   ]
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
 fromPactVal (EType ty) = runMaybeT . toAnalyze (reverseTranslateType ty)
+fromPactVal EObjectTy{} = const (pure Nothing) -- TODO
 
 -- Evaluate a term via Pact
-pactEval :: Pact.Term Pact.Ref -> IO (Either String (Maybe (Pact.Term Pact.Ref)))
-pactEval pactTm = do
-  evalEnv <- liftIO initPureEvalEnv
+pactEval
+  :: Pact.Term Pact.Ref
+  -> EvalEnv LibState
+  -> IO (Either String (Maybe (Pact.Term Pact.Ref)))
+pactEval pactTm evalEnv = (do
+    let evalState = Default.def
+    -- evaluate via pact, convert to analyze term
+    (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
+    pactVal' <- pure $ closed pactVal
 
-  (do
-      let evalState = Default.def
-      -- evaluate via pact, convert to analyze term
-      (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
-      pactVal' <- pure $ closed pactVal
-
-      pure $ Right pactVal'
-    )
-      -- discard division by zero, on either the pact or analysis side
-      --
-      -- future work here is to make sure that if one side throws, the other
-      -- does as well.
-      `catch` (\(DivideByZero :: ArithException) -> pure $ Right Nothing)
-      `catch` (\((PactError err _ _ msg) :: PactError) ->
-        case err of
-          EvalError ->
-            if "Division by 0" `T.isPrefixOf` msg ||
-               "Negative precision not allowed" `T.isPrefixOf` msg
-            then pure $ Right Nothing
-            else pure $ Left (T.unpack msg)
-          _ -> pure $ Left (T.unpack msg))
+    pure $ Right pactVal'
+  )
+    -- discard division by zero, on either the pact or analysis side
+    --
+    -- future work here is to make sure that if one side throws, the other
+    -- does as well.
+    `catch` (\(DivideByZero :: ArithException) -> pure $ Right Nothing)
+    `catch` (\((PactError err _ _ msg) :: PactError) ->
+      case err of
+        EvalError ->
+          if "Division by 0" `T.isPrefixOf` msg ||
+             "Negative precision not allowed" `T.isPrefixOf` msg
+          then pure $ Right Nothing
+          else pure $ Left (T.unpack msg)
+        _ -> pure $ Left (T.unpack msg))
 
 -- Evaluate a term symbolically
-analyzeEval :: ETerm -> IO (Either String ETerm)
-analyzeEval etm@(ESimple ty _tm) = do
+analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
+analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
   -- analyze setup
   let tables = []
       args = Map.empty
@@ -747,9 +747,17 @@ analyzeEval etm@(ESimple ty _tm) = do
   -- tags <- liftIO $ allocModelTags undefined graph
 
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
+  -- TODO: also write aeKsAuths
+  let writeArray' k v env = writeArray env k v
+  let aEnv' = foldr (\(k, v) -> aeKeySets
+          %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
+        aEnv (Map.toList (fmap snd keysets))
+  let aEnv'' = foldr
+          (\(k, v) -> aeDecimals %~ writeArray' (literal k) (literal v))
+        aEnv' (Map.toList decimals)
 
   -- evaluate via analyze
-  analyzeVal <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv state0 of
+  analyzeVal <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
     Right (analyzeVal, _, ()) -> pure analyzeVal
     Left err                  -> error $ describeAnalyzeFailure err
 
@@ -758,32 +766,47 @@ analyzeEval etm@(ESimple ty _tm) = do
       Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
       Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
     _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
+analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
+
+mkEvalEnv :: GenState -> IO (EvalEnv LibState)
+mkEvalEnv (GenState _ keysets decimals) = do
+  evalEnv <- liftIO initPureEvalEnv
+  let keysets' = HM.fromList
+        $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
+        $ Map.toList keysets
+      decimals' = HM.fromList
+        $ fmap (\(k, v) -> (T.pack k, toJSON (show (toPact decimalIso v))))
+        $ Map.toList decimals
+      body = Object $ keysets' `HM.union` decimals'
+  pure $ evalEnv & eeMsgBody .~ body
 
 prop_evaluation :: Property
 prop_evaluation = property $ do
   (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
+  evalEnv <- liftIO $ mkEvalEnv gState
 
   -- pact setup
+  -- TODO: look at what this reads from gState. does it read the named things?
   let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
 
   (do
       -- evaluate via pact, convert to analyze term
-      pactVal <- liftIO $ pactEval pactTm
-      pactVal <- case pactVal of
+      mPactVal <- liftIO $ pactEval pactTm evalEnv
+      pactVal <- case mPactVal of
         Left err             -> footnote err >> failure
         Right Nothing        -> discard
         Right (Just pactVal) -> pure pactVal
-      Just (ESimple ty' (CoreTerm (Lit pactVal)))
+      Just (ESimple ty' (CoreTerm (Lit pactSval)))
         <- lift $ fromPactVal (EType ty) pactVal
 
-      sval <- liftIO $ analyzeEval etm
-      ESimple ty'' (CoreTerm (Lit sval)) <- case sval of
-        Left err   -> footnote err >> failure
-        Right sval -> pure sval
+      sval <- liftIO $ analyzeEval etm gState
+      ESimple ty'' (CoreTerm (Lit sval')) <- case sval of
+        Left err    -> footnote err >> failure
+        Right sval' -> pure sval'
 
       -- compare results
       case typeEq ty' ty'' of
-        Just Refl -> sval === pactVal
+        Just Refl -> sval' === pactSval
         Nothing   -> EType ty' === EType ty'' -- this'll fail
     )
       -- see note [EmptyInterval]
@@ -832,27 +855,8 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_evaluation", prop_evaluation)
   ]
 
-tm =
-  IfThenElse
-      (CoreTerm (Lit False))
-      ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
-      ( Path { _pathTag = TagId 0 }
-      , IfThenElse
-          (CoreTerm (Lit False))
-          ( Path { _pathTag = TagId 0 }
-          , IfThenElse
-              (CoreTerm (Lit False))
-              ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
-              ( Path { _pathTag = TagId 0 }
-              , IfThenElse
-                  (EnforceOne (Right []))
-                  ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
-                  ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
-              )
-          )
-          ( Path { _pathTag = TagId 0 } , CoreTerm (Lit 0) )
-      )
-ty = TInt
+-- tm' = Format (CoreTerm (Lit "{}")) [ ESimple TInt (CoreTerm (Lit 0)) ]
+-- ty' = TStr
 
-gState = GenState 0 Map.empty Map.empty
-etm = ESimple ty tm
+-- gState' = GenState 0 Map.empty Map.empty
+-- etm' = ESimple ty' tm'

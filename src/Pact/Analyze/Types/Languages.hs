@@ -76,10 +76,12 @@ instance Eq (Existential tm) where                        \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
-#define SHOW_EXISTENTIAL(tm)                                         \
-instance Show (Existential tm) where                                 \
-  show (ESimple ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"; \
-  show (EObject ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")";
+-- TODO: showsPrec
+-- TODO: userShow
+#define SHOW_EXISTENTIAL(tm)                                                \
+instance Show (Existential tm) where                                        \
+  show (ESimple ty inv) = "(ESimple " ++ show ty ++ " " ++ show inv ++ ")"; \
+  show (EObject ty obj) = "(EObject " ++ show ty ++ " " ++ show obj ++ ")";
 
 
 -- | Subtyping relation from "Data types a la carte".

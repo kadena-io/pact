@@ -99,6 +99,11 @@ pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
 pattern AST_EnforceOne node enforces <-
   App node (NativeFunc "enforce-one") [_, List _ enforces]
 
+-- Sometimes format is applied to a single arg not a list?
+pattern AST_Format1 :: forall a. AST a -> AST a -> AST a
+pattern AST_Format1 str var <-
+  App _node (NativeFunc "format") [str, var]
+
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-
   App _node (NativeFunc "format") [str, List _ vars]
