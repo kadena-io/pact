@@ -107,25 +107,25 @@ term =
   literal
   <|> varAtom
   <|> withList' Parens
-    (try specialForm <|> app)
+    (specialForm <|> app)
   <|> listLiteral
   <|> objectLiteral
 
 {-# INLINE specialForm #-}
 specialForm :: Compile (Term Name)
 specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
-    "use" -> useForm
-    "let" -> letForm
-    "let*" -> letsForm
-    "defconst" -> defconst
-    "step" -> step
-    "step-with-rollback" -> stepWithRollback
-    "bless" -> bless
-    "deftable" -> deftable
-    "defschema" -> defschema
-    "defun" -> defun
-    "defpact" -> defpact
-    "module" -> moduleForm
+    "use" -> commit >> useForm
+    "let" -> commit >> letForm
+    "let*" -> commit >> letsForm
+    "defconst" -> commit >> defconst
+    "step" -> commit >> step
+    "step-with-rollback" -> commit >> stepWithRollback
+    "bless" -> commit >> bless
+    "deftable" -> commit >> deftable
+    "defschema" -> commit >> defschema
+    "defun" -> commit >> defun
+    "defpact" -> commit >> defpact
+    "module" -> commit >> moduleForm
     _ -> expected "special form"
 
 
@@ -152,7 +152,6 @@ bindingForm = do
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
-
 varAtom :: Compile (Term Name)
 varAtom = do
   AtomExp{..} <- atom
@@ -161,6 +160,7 @@ varAtom = do
     [] -> return $ Name _atomAtom _atomInfo
     [q] -> return $ QName (ModuleName q) _atomAtom _atomInfo
     _ -> expected "single qualifier"
+  commit
   return $ TVar n _atomInfo
 
 listLiteral :: Compile (Term Name)
@@ -186,7 +186,7 @@ objectLiteral = withList Braces $ \ListExp{..} -> do
 
 literal :: Compile (Term Name)
 literal = lit >>= \LiteralExp{..} ->
-  return $ TLiteral _litLiteral _litInfo
+  commit >> return (TLiteral _litLiteral _litInfo)
 
 
 deftable :: Compile (Term Name)
@@ -219,7 +219,7 @@ meta = atPairs <|> try docStr <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure Nothing
     docPair = symbol "@doc" >> str
-    modelPair = symbol "@model" >> bareExp
+    modelPair = symbol "@model" >> anyExp
     atPairs = do
       doc <- optional (try docPair)
       model <- optional (try modelPair)
