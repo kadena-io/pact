@@ -23,7 +23,7 @@ extra-deps:
   - megaparsec-6.5.0
   - parser-combinators-1.0.0
   - algebraic-graphs-0.1.1.1
-
+  - parsers-megaparsec-0.1.0.0
 flags: {}
 
 extra-package-dbs: []

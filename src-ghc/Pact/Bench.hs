@@ -51,6 +51,12 @@ benchParse = bgroup "parse" $ (`map` exps) $
                Right s -> s
                Left er -> error $ "Pact parse failed: " ++ er
 
+benchParseMP :: Benchmark
+benchParseMP = bgroup "parseMP" $ (`map` exps) $
+             \(bname,ex) -> bench bname $ (`whnf` ex) $ \e -> parseExprsMP e >>= \r -> case r of
+               Right s -> s
+               Left er -> error $ "Pact parse failed: " ++ (show er)
+
 benchCompile :: [(String,[Exp Parsed])] -> Benchmark
 benchCompile es = bgroup "compile" $ (`map` es) $
   \(bname,exs) -> bench bname $ nf (map (either (error . show) show . compile mkEmptyInfo)) exs
@@ -127,6 +133,7 @@ main = do
 
   defaultMain [
     benchParse,
+    benchParseMP,
     benchCompile parsedExps,
     benchVerify cmds,
     benchNFIO "puredb" (runPactExec pureDb refStore benchCmd),

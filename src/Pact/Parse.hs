@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -18,7 +20,7 @@
 module Pact.Parse
     (
      exprs, exprsOnly
-    ,parseExprs
+    ,parseExprs,parseExprsMP
     ,number
     ,PactParser(unPactParser)
     )
@@ -33,6 +35,8 @@ import Control.Monad
 import Prelude
 import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
+import qualified Text.Megaparsec as MP
+import qualified Text.Megaparsec.Parsers as MPP
 import Data.Char (digitToInt)
 import Data.Text (Text)
 
@@ -112,6 +116,17 @@ exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 -- | "Production" parser: atto, parse multiple exps.
 parseExprs :: Text -> Either String [(Exp Parsed)]
 parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
+
+instance Ord e => DeltaParsing (MPP.ParsecT e Text m) where
+    line = return mempty
+    position = return $ Columns 0 0
+    slicedWith f a = (`f` mempty) <$> a
+    rend = return mempty
+    restOfLine = return mempty
+-- | megaparsec version
+parseExprsMP :: Monad m => Text -> m (Either (MP.ParseError (MP.Token Text) ()) [Exp Parsed])
+parseExprsMP = MP.runParserT (MPP.unParsecT (unPactParser (whiteSpace *> exprs))) ""
+
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
 _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
