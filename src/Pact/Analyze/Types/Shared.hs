@@ -482,6 +482,14 @@ newtype VarId
   = VarId Int
   deriving (Show, Eq, Enum, Num, Ord)
 
+data Binding
+  = Binding
+    { _bVid  :: VarId
+    , _bName :: Text
+    , _bType :: EType
+    }
+  deriving (Eq, Show)
+
 -- | The type of a pact data type we can't reason about -- see 'TAny'.
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
@@ -615,6 +623,7 @@ makeLenses ''Object
 makeLenses ''OriginatingCell
 makePrisms ''Provenance
 makeLenses ''S
+makeLenses ''Binding
 makeLenses ''TableMap
 
 type instance Index (ColumnMap a) = ColumnName
