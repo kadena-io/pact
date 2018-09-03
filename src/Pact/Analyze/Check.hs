@@ -420,19 +420,19 @@ moduleFunChecks tables modTys propDefs = for modTys $
         TypeTranslationFailure "couldn't translate argument type" ty
 
   resultTy' <- case maybeTranslateType resultTy of
-    Just ety -> pure (0, "result", ety)
+    Just ety -> pure $ Binding 0 "result" ety
     Nothing  -> throwError $
       TypeTranslationFailure "couldn't translate result type" resultTy
 
-  let env :: [(VarId, Text, EType)]
+  let env :: [Binding]
       env = resultTy' :
-        ((\(vid, (nm, ty)) -> (vid, nm, ty)) <$> zip vids argTys')
+        ((\(vid, (nm, ty)) -> Binding vid nm ty) <$> zip vids argTys')
 
       nameEnv :: Map Text VarId
-      nameEnv = Map.fromList $ fmap (\(vid, nm, _) -> (nm, vid)) env
+      nameEnv = Map.fromList $ fmap (\(Binding vid nm _) -> (nm, vid)) env
 
       idEnv :: Map VarId EType
-      idEnv = Map.fromList $ fmap (\(vid, _, ty) -> (vid, ty)) env
+      idEnv = Map.fromList $ fmap (\(Binding vid _ ty) -> (vid, ty)) env
 
       vidStart = VarId (length env)
 
