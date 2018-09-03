@@ -479,11 +479,7 @@ translateLet bindings body = withNewScope $ go bindings
         tagVarBinding varInfo unmungedVarName varType vid
 
         body' <- go bindingsRest
-        pure $ case body' of
-          ESimple bodyTy bodyTm ->
-            ESimple bodyTy (Let varName vid rhsETerm bodyTm)
-          EObject bodyTy bodyTm ->
-            EObject bodyTy (Let varName vid rhsETerm bodyTm)
+        pure $ mapExistential (Let varName vid rhsETerm) body'
 
 translateObjBinding
   :: [(Named Node, AST Node)]
