@@ -13,6 +13,7 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
 
+
 evalNumerical
   :: (Analyzer m, S :<: TermOf m)
   => Numerical (TermOf m) a -> m (S a)
@@ -187,6 +188,7 @@ evalRoundingLikeOp2
 evalRoundingLikeOp2 op x precision = do
   x'         <- eval x
   precision' <- eval precision
+  -- success .= precision .>= 0
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
   x''' <- evalRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)

@@ -31,7 +31,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite)
+                                              constrain, false, ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -53,6 +53,7 @@ import           Pact.Analyze.Orphans        ()
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
+
 
 newtype Analyze a
   = Analyze
@@ -517,7 +518,9 @@ format s tms = do
       rep = \case
         Left  str          -> str
         Right (Right bool) -> ite (_sSbv bool) "true" "false"
-        Right (Left int)   -> sansProv (SBV.natToStr (_sSbv int))
+        Right (Left int)   ->
+          ite (int .< 0) "-" "" .++
+          sansProv (SBV.natToStr (_sSbv (abs int)))
   if plen == 1
   then Right (literalS s)
   else if plen - length tms > 1

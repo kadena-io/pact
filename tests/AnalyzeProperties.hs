@@ -45,7 +45,7 @@ import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Errors
 -- import           Pact.Analyze.Model (allocModelTags)
-import           Pact.Analyze.Eval           (runAnalyze)
+import           Pact.Analyze.Eval           (runAnalyze, lasSucceeds, latticeState)
 import           Pact.Analyze.Eval.Term      (evalETerm)
 import           Pact.Analyze.Translate      (TranslateM (..),
                                               TranslateState (..),
@@ -78,8 +78,7 @@ import qualified Pact.Types.Typecheck        as Pact
 
 import TimeGen
 
-import Debug.Trace
-import Control.Arrow ((>>>))
+import GHC.Stack
 
 
 data GenEnv = GenEnv
@@ -177,7 +176,7 @@ mkDec = pure . ESimple TDecimal . Inj . Numerical
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
 class Extract a where
-  extract :: ETerm -> Analyze.Term a
+  extract :: HasCallStack => ETerm -> Analyze.Term a
 
 instance Extract Integer where
   extract = \case
@@ -267,7 +266,7 @@ genCore SizedBool = Gen.recursive Gen.choice [
     ESimple TBool . CoreTerm . Lit <$> Gen.bool
   ] [
     do op <- genComparisonOp
-       Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y ->
+       Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
          pure $ ESimple TBool $ Inj $ IntegerComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore decSize) (genCore decSize) $ \x y ->
@@ -313,7 +312,7 @@ strSize = SizedString  1000
 -- time:
 -- # ParseTime
 genAnyTerm
-  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => m ETerm
 genAnyTerm = Gen.choice
   [ genTerm intSize
@@ -325,12 +324,12 @@ genAnyTerm = Gen.choice
   ]
 
 genTerm
-  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => SizedType -> m ETerm
 genTerm size = Gen.choice [genCore size, genTermSpecific size]
 
 genTermSpecific
-  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => SizedType -> m ETerm
 genTermSpecific size@SizedInt{} = genTermSpecific' size
 genTermSpecific SizedBool          = Gen.choice
@@ -356,19 +355,24 @@ genTermSpecific size@(SizedString _len) = Gen.choice
   -- Write
   [ pure (ESimple TStr PactVersion)
   , do
+       let genFormattableTerm = Gen.choice
+             [ genTerm intSize
+             , genTerm strSize
+             , genTerm SizedBool
+             ]
        (str, tms) <- Gen.choice
          [ do
-              tm <- genAnyTerm
+              tm <- genFormattableTerm
               pure (lit "{}", [tm])
          , do
-              tm1 <- genAnyTerm
-              tm2 <- genAnyTerm
+              tm1 <- genFormattableTerm
+              tm2 <- genFormattableTerm
               str <- Gen.element ["{} {}", "{} / {}", "{} - {}"]
               pure (lit str, [tm1, tm2])
          , do
-              tm1 <- genAnyTerm
-              tm2 <- genAnyTerm
-              tm3 <- genAnyTerm
+              tm1 <- genFormattableTerm
+              tm2 <- genFormattableTerm
+              tm3 <- genFormattableTerm
               str <- Gen.element ["{} {} {}", "{} / {} / {}", "{} - {} - {}"]
               pure (lit str, [tm1, tm2, tm3])
          ]
@@ -379,7 +383,12 @@ genTermSpecific size@(SizedString _len) = Gen.choice
        format           <- genFormat
        ESimple TTime t2 <- genTerm SizedTime
        pure $ ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
-  , ESimple TStr . Hash <$> genAnyTerm
+  , let genHashableTerm = Gen.choice
+          [ genTerm intSize
+          , genTerm strSize
+          , genTerm SizedBool
+          ]
+    in ESimple TStr . Hash <$> genHashableTerm
   , genTermSpecific' size
   ]
 genTermSpecific SizedKeySet =
@@ -437,7 +446,7 @@ genNatural = Gen.integral
 -- Generate a term of a specific type with a generic construct
 -- (Let, Sequence, IfThenElse)
 genTermSpecific'
-  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => SizedType -> m ETerm
 genTermSpecific' sizedTy = Gen.choice
   -- TODO: Let
@@ -534,9 +543,9 @@ toPactTm = \case
 
   -- term-specific terms:
   ESimple TBool (Enforce _ x)
-    -> mkApp enforceDef [ESimple TBool x, ESimple TStr $ CoreTerm $ Lit ""]
+    -> mkApp enforceDef [ESimple TBool x, ESimple TStr $ CoreTerm $ Lit "(enforce)"]
   ESimple TBool (EnforceOne Left{}) -> do
-    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit ""
+    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit "(enforce-one)"
     pure $ TApp (liftTerm $ snd enforceOneDef)
       [ msg
       , Pact.TList [] (Pact.TyList Pact.TyAny) dummyInfo
@@ -546,7 +555,7 @@ toPactTm = \case
 
   -- TODO: can this be mkApp?
   ESimple TBool (EnforceOne (Right xs)) -> do
-    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit ""
+    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit "(enforce-one)"
     args <- traverse toPactTm $ ESimple TBool . snd <$> xs
     pure $ TApp (liftTerm $ snd enforceOneDef)
       [ msg
@@ -561,7 +570,9 @@ toPactTm = \case
   ESimple TStr (Format x ys) -> do
     x'  <- toPactTm $ ESimple TStr x
     ys' <- traverse toPactTm ys
-    pure $ TApp (liftTerm $ snd formatDef) [x', Pact.TList ys' (Pact.TyList Pact.TyAny) dummyInfo] dummyInfo
+    let fun = liftTerm $ snd formatDef
+    pure $ TApp fun
+      [x', Pact.TList ys' (Pact.TyList Pact.TyAny) dummyInfo] dummyInfo
     -- -> mkApp formatDef (ESimple TStr x : ys)
   -- $ Pact.TList tms (Pact.TyList Pact.TyAny) dummyInfo
   ESimple TStr (FormatTime x y)
@@ -674,7 +685,7 @@ toAnalyze ty tm = do
       translateEnv = mkTranslateEnv IsTest dummyInfo []
 
   hoist generalize $
-    exceptToMaybeT $ -- traceShowId $
+    exceptToMaybeT $
       fmap fst $
         flip runStateT state0 $
           runReaderT
@@ -728,32 +739,42 @@ fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
 fromPactVal (EType ty) = runMaybeT . toAnalyze (reverseTranslateType ty)
 fromPactVal EObjectTy{} = const (pure Nothing) -- TODO
 
+data EvalResult
+  = EvalResult !(Pact.Term Pact.Ref)
+  | Discard
+  | EvalErr !String
+  | UnexpectedErr !String
+
 -- Evaluate a term via Pact
 pactEval
   :: Pact.Term Pact.Ref
   -> EvalEnv LibState
-  -> IO (Either String (Maybe (Pact.Term Pact.Ref)))
+  -> IO EvalResult
 pactEval pactTm evalEnv = (do
     let evalState = Default.def
     -- evaluate via pact, convert to analyze term
     (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
-    pactVal' <- pure $ closed pactVal
+    Just pactVal' <- pure $ closed pactVal
 
-    pure $ Right pactVal'
+    pure $ EvalResult pactVal'
   )
     -- discard division by zero, on either the pact or analysis side
     --
     -- future work here is to make sure that if one side throws, the other
     -- does as well.
-    `catch` (\(DivideByZero :: ArithException) -> pure $ Right Nothing)
+    `catch` (\(DivideByZero :: ArithException) -> pure Discard)
     `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
-      traceShow pe $ case err of
+      case err of
         EvalError ->
           if "Division by 0" `T.isPrefixOf` msg ||
              "Negative precision not allowed" `T.isPrefixOf` msg
-          then pure $ Right Nothing
-          else pure $ Left (T.unpack msg)
-        _ -> pure $ Left (T.unpack msg))
+          then pure Discard
+          else pure $ EvalErr $ T.unpack msg
+        _ -> case msg of
+          "(enforce)" -> pure $ EvalErr $ T.unpack msg
+          "(enforce-one)" -> pure $ EvalErr $ T.unpack msg
+          "" -> pure $ UnexpectedErr $ show pe
+          _ -> pure $ UnexpectedErr $ T.unpack msg)
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
@@ -773,23 +794,26 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
   -- TODO: also write aeKsAuths
   let writeArray' k v env = writeArray env k v
-  let aEnv' = foldr (\(k, v) -> aeKeySets
+      aEnv' = foldr (\(k, v) -> aeKeySets
           %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
         aEnv (Map.toList (fmap snd keysets))
-  let aEnv'' = foldr
+      aEnv'' = foldr
           (\(k, v) -> aeDecimals %~ writeArray' (literal k) (literal v))
         aEnv' (Map.toList decimals)
 
   -- evaluate via analyze
-  analyzeVal <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
-    Right (analyzeVal, _, ()) -> pure analyzeVal
-    Left err                  -> error $ describeAnalyzeFailure err
+  (analyzeVal, las) <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
+    Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
+    Left err                    -> error $ describeAnalyzeFailure err
 
-  case analyzeVal of
-    AVal _ sval -> case unliteral (SBVI.SBV sval) of
-      Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
-      Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
-    _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
+  case unliteral (las ^. latticeState . lasSucceeds) of
+    Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
+    Just False -> pure $ Left "fails"
+    Just True -> case analyzeVal of
+      AVal _ sval -> case unliteral (SBVI.SBV sval) of
+        Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
+        Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
+      _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
 analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
@@ -816,23 +840,36 @@ prop_evaluation = property $ do
   (do
       -- evaluate via pact, convert to analyze term
       mPactVal <- liftIO $ pactEval pactTm evalEnv
-      pactVal <- case mPactVal of
-        Left err             -> footnote err >> failure
-        Right Nothing        -> discard
-        Right (Just pactVal) -> pure pactVal
-      Just (ESimple ty' (CoreTerm (Lit pactSval)))
-        <- lift $ fromPactVal (EType ty) pactVal
+      ePactVal <- case mPactVal of
+        UnexpectedErr err  -> footnote err >> failure
+        Discard            -> discard
+        EvalResult pactVal -> pure $ Right pactVal
+        EvalErr err        -> pure $ Left err
 
-      sval <- liftIO $ analyzeEval etm gState
-      ESimple ty'' (CoreTerm (Lit sval')) <- case sval of
-        Left err    -> footnote err >> failure
-        Right sval' -> pure sval'
+      eAnalyzeVal <- liftIO $ analyzeEval etm gState
 
-      -- compare results
-      case typeEq ty' ty'' of
-        Just Refl -> sval' === pactSval
-        Nothing   -> EType ty' === EType ty'' -- this'll fail
+      case (ePactVal, eAnalyzeVal) of
+        (Left _pactErr, Left _analyzeErr) -> success
+        (Left pactErr, Right analyzeVal) -> do
+          footnote $ "got failure from pact: " ++ pactErr
+          footnote $ "got value from analyze: " ++ show analyzeVal
+          failure
+        (Right pactVal, Left analyzeErr) ->  do
+          footnote $ "got value from pact: " ++ show pactVal
+          footnote $ "got failure from analyze: " ++ analyzeErr
+          failure
+
+        (Right pactVal, Right analyzeVal) -> do
+          Just (ESimple ty' (CoreTerm (Lit pactSval)))
+            <- lift $ fromPactVal (EType ty) pactVal
+          ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+
+          -- compare results
+          case typeEq ty' ty'' of
+            Just Refl -> sval' === pactSval
+            Nothing   -> EType ty' === EType ty'' -- this'll fail
     )
+      -- TODO: is this even on the right block?
       -- see note [EmptyInterval]
       `catch` (\(_e :: EmptyInterval)  -> discard)
 
@@ -878,9 +915,12 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_evaluation", prop_evaluation)
   ]
 
-tm' = Enforce (Just (TagId 0)) (CoreTerm (IntegerComparison Neq (CoreTerm (Lit (-1))) (CoreTerm (Lit (-1)))))
+-- tm' = Enforce (Just (TagId 0))
+--   (CoreTerm (IntegerComparison Neq
+--     (CoreTerm (Lit (-1)))
+--     (CoreTerm (Lit (-1)))))
 
-ty' = TBool
+-- ty' = TBool
 
-gState' = GenState 0 Map.empty Map.empty
-etm' = ESimple ty' tm'
+-- gState' = GenState 0 Map.empty Map.empty
+-- etm' = ESimple ty' tm'

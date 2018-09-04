@@ -96,16 +96,10 @@ pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
 
-viewEnforceOne = \case
-  -- TODO: remove
-  App node (NativeFunc "enforce-one") [] -> Just (node, [])
-  App node (NativeFunc "enforce-one") [enforce] -> Just (node, [enforce])
-  App node (NativeFunc "enforce-one") [_, List _ enforces] -> Just (node, enforces)
-  _ -> Nothing
-
 pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
-pattern AST_EnforceOne node enforces <- (viewEnforceOne -> Just (node, enforces))
-  -- App node (NativeFunc "enforce-one") [_, List _ enforces]
+pattern AST_EnforceOne node enforces <-
+  App node (NativeFunc "enforce-one") [_, List _ enforces]
+  -- App node (NativeFunc "enforce-one") [] ->
 
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-
