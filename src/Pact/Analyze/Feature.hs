@@ -54,7 +54,7 @@ classTitle CDatabase = "Database"
 classTitle CAuthorization = "Authorization"
 
 data Feature
-  -- * Numerical operators
+  -- Numerical operators
   = FAddition
   | FSubtraction
   | FMultiplication
@@ -70,7 +70,7 @@ data Feature
   | FCeilingRound
   | FFloorRound
   | FModulus
-  -- * Logical operators
+  -- Logical operators
   | FGreaterThan
   | FLessThan
   | FGreaterThanOrEqual
@@ -81,22 +81,22 @@ data Feature
   | FLogicalDisjunction
   | FLogicalNegation
   | FLogicalImplication
-  -- * Object operators
+  -- Object operators
   | FObjectProjection
   | FObjectMerge
-  -- * String operators
+  -- String operators
   | FStringLength
   | FStringConcatenation
-  -- * Temporal operators
+  -- Temporal operators
   | FTemporalAddition
-  -- * Quantification forms
+  -- Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
-  -- * Transactional operators
+  -- Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
   | FFunctionResult
-  -- * Database operators
+  -- Database operators
   | FTableWritten
   | FTableRead
   | FCellDelta
@@ -105,7 +105,7 @@ data Feature
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
-  -- * Authorization operators
+  -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
   deriving (Eq, Ord, Show, Bounded, Enum)
@@ -970,7 +970,7 @@ symbolFeatures = allFeatures `by` symbol
 classFeatures :: Map FeatureClass (Set Feature)
 classFeatures = allFeatures `by` featureClass
 
--- * Pattern synonyms for matching on symbol names
+-- Pattern synonyms for matching on symbol names
 
 symIs :: Feature -> Text -> Bool
 symIs feat sym = symbol feat == sym
@@ -1030,7 +1030,7 @@ PAT(SRowWriteCount, FRowWriteCount)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 
--- * 'Text'/op prisms
+-- 'Text'/op prisms
 
 mkOpNamePrism :: Ord op => [(Text, op)] -> Prism' Text op
 mkOpNamePrism table =
