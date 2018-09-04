@@ -86,6 +86,13 @@ in
         (path: type: !(builtins.elem (baseNameOf path)
            ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
         ./.;
+
+      algebraic-graphs = pkgs.fetchFromGitHub {
+        owner = "snowleopard";
+        repo = "alga";
+        rev = "1c04f5664b9476e0b01a573b40462531e52e8756";
+        sha256 = "0j121551zqjrp4xy0qcz1pk46znr6w59jkg75v5svdh9ag3vmbsp";
+      };
     };
     toolOverrides = ghc: super: {
       z3 = pkgs.z3;
