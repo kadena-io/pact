@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- |
 -- Module      :  Pact.Typechecker
@@ -370,21 +371,55 @@ substAppDefun :: Maybe (TcId, AST Node) -> Visitor TC Node
 substAppDefun (Just (defArg,appAst)) Pre t@Var {..}
   | defArg == _aId _aNode = assocAST defArg appAst >> return appAst
   | otherwise = return t
-substAppDefun Nothing Post (App appNode appFun appArgs) = do -- Post, to allow AST subs first
-    af <- case appFun of
-      FNative {} -> return appFun -- noop
-      FDefun {..} -> do
-        -- assemble substitutions, and also associate fun ty with app args
-        let mangledFty = mangleFunType (_aId appNode) _fType
-        subArgs <- forM (zip3 _fArgs appArgs (_ftArgs mangledFty)) $ \(fa,aa,_ft) -> -- do
-          -- assocAstTy (_aNode aa) (_aType ft) -- this was causing recursive var refs, bailing for now
-          return (_aId (_nnNamed fa),aa)
-        -- associate fun return ty with app
-        assocAstTy appNode (_ftReturn mangledFty)
-        let subDefArg b fa = walkAST (substAppDefun (Just fa)) b
-        fb' <- forM _fBody $ \bAst -> foldM subDefArg bAst subArgs
-        return $ set fBody fb' appFun
-    return (App appNode af appArgs)
+substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST subs first
+    fun' <- case fun of
+      FNative {} -> return fun -- noop
+      FDefun {_fType,_fArgs,_fBody} -> do
+        let FunType argTys retTy = mangleFunType (_aId appNode) _fType
+
+        -- associate nodes with types
+
+        -- TODO(stu): this was causing recursive var refs, bailing for now
+        -- for_ (zip args argTys) $ \(arg, argTy) ->
+        --   assocAstTy (_aNode arg) (_aType argTy)
+
+        assocAstTy appNode retTy
+
+        -- substitute newly let-bound variables into use sites in function body
+
+        let appInfo  = _tiInfo $ _aId appNode
+            bindType = BindLet :: BindType Node
+        letId <- freshId appInfo (pack $ show bindType)
+        letNode <- trackIdNode letId
+        assocAstTy letNode retTy
+
+        letBinders :: [Named Node] <- forM (zip args argTys) $
+          \(arg, Arg nm argTy info) -> do
+            let uniqueName = pack (show letId) `pfx` nm
+            varId <- freshId info uniqueName
+            let varTy = mangleType varId argTy
+            varNode <- trackNode varTy varId
+            assocAST varId arg
+            pure $ Named nm varNode varId
+
+        let letBindings :: [(Named Node, AST Node)]
+            letBindings = zip letBinders args
+
+            vars :: [AST Node]
+            vars = Var . _nnNamed <$> letBinders
+
+            subs :: [(TcId, AST Node)]
+            subs = zip (_aId . _nnNamed <$> _fArgs) vars
+
+            substitute :: (TcId, AST Node) -> AST Node -> TC (AST Node)
+            substitute sub = walkAST (substAppDefun (Just sub))
+
+        body' <- forM _fBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
+
+        let letTerm = Binding letNode letBindings body' bindType
+
+        return $ set fBody [letTerm] fun
+    return (App appNode fun' args)
 substAppDefun _ _ t = return t
 
 -- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,

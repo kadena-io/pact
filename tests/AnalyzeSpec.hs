@@ -534,6 +534,22 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
+  describe "call-by-value semantics for inlining" $ do
+    let code =
+          [text|
+            (defun id:string (s:string)
+              s
+              s)
+
+            (defun test:string ()
+              @model (properties [ (my-column-delta 1) ])
+              (id
+                (write accounts "bob"
+                  {"balance": (+ 1 (at 'balance (read accounts "bob")))})
+                ))
+          |]
+    expectVerified code
+
   describe "enforce-one.1" $ do
     let code =
           [text|
