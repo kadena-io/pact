@@ -565,11 +565,6 @@ translateNode astNode = astContext astNode $ case astNode of
     vars' <- for vars translateNode
     pure $ ESimple TStr $ Format formatStr' vars'
 
-  AST_Format1 formatStr var -> do
-    ESimple TStr formatStr' <- translateNode formatStr
-    var' <- translateNode var
-    pure $ ESimple TStr $ Format formatStr' [var']
-
   AST_FormatTime formatStr time -> do
     ESimple TStr formatStr' <- translateNode formatStr
     ESimple TTime time'     <- translateNode time

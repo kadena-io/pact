@@ -78,6 +78,9 @@ import qualified Pact.Types.Typecheck        as Pact
 
 import TimeGen
 
+import Debug.Trace
+import Control.Arrow ((>>>))
+
 
 data GenEnv = GenEnv
   { _envTables        :: ![(TableName, Schema)]
@@ -333,7 +336,9 @@ genTermSpecific size@SizedInt{} = genTermSpecific' size
 genTermSpecific SizedBool          = Gen.choice
   [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
   , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
-       pure $ ESimple TBool $ EnforceOne $ Right $ fmap (((Path 0, Path 0),) . extract) xs
+       pure $ ESimple TBool $ EnforceOne $ case xs of
+         [] -> Left 0
+         _ -> Right $ fmap (((Path 0, Path 0),) . extract) xs
   -- TODO:
   -- , do tagId <- genTagId
   --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
@@ -388,9 +393,9 @@ genTermSpecific SizedTime = Gen.choice
        timeStr <- genTimeOfFormat format
        pure $ ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
          lit timeStr
-  , do
-       timeStr <- genTimeOfFormat standardTimeFormat
-       pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
+  -- , do
+  --      timeStr <- genTimeOfFormat standardTimeFormat
+  --      pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
   ]
 
 genWriteType :: MonadGen m => m WriteType
@@ -529,17 +534,36 @@ toPactTm = \case
 
   -- term-specific terms:
   ESimple TBool (Enforce _ x)
-    -> mkApp enforceDef [ESimple TBool x]
-  ESimple TBool (EnforceOne Left{})
-    -> mkApp enforceOneDef []
-  ESimple TBool (EnforceOne (Right xs))
-    -> mkApp enforceOneDef (ESimple TBool . snd <$> xs)
+    -> mkApp enforceDef [ESimple TBool x, ESimple TStr $ CoreTerm $ Lit ""]
+  ESimple TBool (EnforceOne Left{}) -> do
+    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit ""
+    pure $ TApp (liftTerm $ snd enforceOneDef)
+      [ msg
+      , Pact.TList [] (Pact.TyList Pact.TyAny) dummyInfo
+      ] dummyInfo
+
+    -- -> mkApp enforceOneDef [ESimple TStr $ CoreTerm $ Lit ""]
+
+  -- TODO: can this be mkApp?
+  ESimple TBool (EnforceOne (Right xs)) -> do
+    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit ""
+    args <- traverse toPactTm $ ESimple TBool . snd <$> xs
+    pure $ TApp (liftTerm $ snd enforceOneDef)
+      [ msg
+      , Pact.TList args (Pact.TyList Pact.TyAny) dummyInfo
+      ] dummyInfo
+
   -- ESimple TBool (KsAuthorized x)
   -- ESimple TBool (NameAuthorized x)
 
+  -- TODO: can this be mkApp?
   ESimple TStr PactVersion -> mkApp pactVersionDef []
-  ESimple TStr (Format x ys)
-    -> mkApp formatDef (ESimple TStr x : ys)
+  ESimple TStr (Format x ys) -> do
+    x'  <- toPactTm $ ESimple TStr x
+    ys' <- traverse toPactTm ys
+    pure $ TApp (liftTerm $ snd formatDef) [x', Pact.TList ys' (Pact.TyList Pact.TyAny) dummyInfo] dummyInfo
+    -- -> mkApp formatDef (ESimple TStr x : ys)
+  -- $ Pact.TList tms (Pact.TyList Pact.TyAny) dummyInfo
   ESimple TStr (FormatTime x y)
     -> mkApp defFormatTime [ESimple TStr x, ESimple TTime y]
   ESimple TStr (Hash x) -> mkApp hashDef [x]
@@ -650,7 +674,7 @@ toAnalyze ty tm = do
       translateEnv = mkTranslateEnv IsTest dummyInfo []
 
   hoist generalize $
-    exceptToMaybeT $
+    exceptToMaybeT $ -- traceShowId $
       fmap fst $
         flip runStateT state0 $
           runReaderT
@@ -722,8 +746,8 @@ pactEval pactTm evalEnv = (do
     -- future work here is to make sure that if one side throws, the other
     -- does as well.
     `catch` (\(DivideByZero :: ArithException) -> pure $ Right Nothing)
-    `catch` (\((PactError err _ _ msg) :: PactError) ->
-      case err of
+    `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
+      traceShow pe $ case err of
         EvalError ->
           if "Division by 0" `T.isPrefixOf` msg ||
              "Negative precision not allowed" `T.isPrefixOf` msg
@@ -818,15 +842,14 @@ prop_round_trip_type = property $ do
   maybeTranslateType (reverseTranslateType ty) === Just ety
 
 prop_round_trip_term :: Property
-prop_round_trip_term = property (do
+prop_round_trip_term = property $ (do
   (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
 
   etm' <- lift $ runMaybeT $
     (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
 
   etm' === Just etm)
-    -- XXX
-    -- `catch` (\(_e :: EmptyInterval)  -> discard)
+    `catch` (\(_e :: EmptyInterval)  -> discard)
 
 spec :: Spec
 spec = describe "analyze properties" $ do
@@ -855,8 +878,9 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_evaluation", prop_evaluation)
   ]
 
--- tm' = Format (CoreTerm (Lit "{}")) [ ESimple TInt (CoreTerm (Lit 0)) ]
--- ty' = TStr
+tm' = Enforce (Just (TagId 0)) (CoreTerm (IntegerComparison Neq (CoreTerm (Lit (-1))) (CoreTerm (Lit (-1)))))
 
--- gState' = GenState 0 Map.empty Map.empty
--- etm' = ESimple ty' tm'
+ty' = TBool
+
+gState' = GenState 0 Map.empty Map.empty
+etm' = ESimple ty' tm'

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
@@ -95,14 +96,16 @@ pattern AST_EnforceKeyset :: forall a. AST a -> AST a
 pattern AST_EnforceKeyset ks <-
   App _node (NativeFunc "enforce-keyset") [ks] -- can be string or object
 
-pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
-pattern AST_EnforceOne node enforces <-
-  App node (NativeFunc "enforce-one") [_, List _ enforces]
+viewEnforceOne = \case
+  -- TODO: remove
+  App node (NativeFunc "enforce-one") [] -> Just (node, [])
+  App node (NativeFunc "enforce-one") [enforce] -> Just (node, [enforce])
+  App node (NativeFunc "enforce-one") [_, List _ enforces] -> Just (node, enforces)
+  _ -> Nothing
 
--- Sometimes format is applied to a single arg not a list?
-pattern AST_Format1 :: forall a. AST a -> AST a -> AST a
-pattern AST_Format1 str var <-
-  App _node (NativeFunc "format") [str, var]
+pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
+pattern AST_EnforceOne node enforces <- (viewEnforceOne -> Just (node, enforces))
+  -- App node (NativeFunc "enforce-one") [_, List _ enforces]
 
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-
