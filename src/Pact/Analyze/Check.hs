@@ -59,8 +59,7 @@ import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
                                             renderParsed, tMeta)
-import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
-                                            pattern ELitList, Exp, ModuleData,
+import           Pact.Types.Runtime        (Exp, ModuleData,
                                             ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
