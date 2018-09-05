@@ -24,7 +24,8 @@ import           Control.Monad.Reader        (MonadReader, ReaderT (runReaderT))
 import           Control.Monad.RWS.Strict    (runRWST)
 import           Control.Monad.State.Strict  (MonadState, runStateT)
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
-import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.Maybe   (MaybeT (MaybeT, runMaybeT),
+                                              exceptToMaybeT)
 import           Data.Aeson                  (Value (Object), toJSON)
 import qualified Data.Decimal                as Decimal
 import qualified Data.Default                as Default
@@ -36,17 +37,17 @@ import qualified Data.SBV.Internals          as SBVI
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:) (Refl))
 import           GHC.Natural                 (Natural)
-import           GHC.Stack
+import           GHC.Stack                   (HasCallStack)
 import           HaskellWorks.Hspec.Hedgehog
 import           Hedgehog                    hiding (Update)
 import qualified Hedgehog.Gen                as Gen
 import qualified Hedgehog.Range              as Range
-import           Numeric.Interval
+import           Numeric.Interval            (Interval, inf, midpoint, sup,
+                                              (+/-), (...))
 import           Numeric.Interval.Exception  (EmptyInterval)
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Errors
--- import           Pact.Analyze.Model (allocModelTags)
 import           Pact.Analyze.Eval           (lasSucceeds, latticeState,
                                               runAnalyze)
 import           Pact.Analyze.Eval.Term      (evalETerm)
@@ -87,6 +88,11 @@ import qualified Pact.Types.Typecheck        as Pact
 import           TimeGen
 
 
+-- Note [EmptyInterval]: For both genDecimal and genInteger, it's possible that
+-- the range is too small to generate even one number. When this is true,
+-- these'll throw EmptyInterval. This is caught and discarded by the
+-- properties.
+
 data GenEnv = GenEnv
   { _envTables  :: ![(TableName, Schema)]
   , _envKeysets :: ![(Pact.KeySet, KeySet)]
@@ -100,11 +106,6 @@ data GenState = GenState
 
 makeLenses ''GenEnv
 makeLenses ''GenState
-
--- Note [EmptyInterval]: For both genDecimal and genInteger, it's possible that
--- the range is too small to generate even one number. When this is true,
--- these'll throw EmptyInterval. This is caught and discarded by the
--- properties.
 
 genDecimal :: MonadGen m => NumSize -> m Decimal
 genDecimal size = do
@@ -148,12 +149,6 @@ data SizedType where
   SizedBool    ::            SizedType
   SizedKeySet  ::            SizedType
   -- TODO: objects
-
--- sizedLog :: NumSize -> (NumSize, NumSize)
--- sizedLog size =
---   let newExp  = logBase 10 size
---       newBase = size ** (1 / newExp)
---   in (newExp, newBase)
 
 arithSize :: ArithOp -> NumSize -> (NumSize, NumSize)
 arithSize op size = case op of
@@ -352,6 +347,7 @@ genTermSpecific SizedBool       = Gen.choice
   , genTermSpecific' SizedBool
   ]
 genTermSpecific size@(SizedString _len) = Gen.choice
+  -- TODO:
   -- [ do
   --      tables <- view envTables
   --      (table, schema) <- Gen.element tables
@@ -405,14 +401,13 @@ genTermSpecific (SizedDecimal len) =
   ESimple TDecimal . ReadDecimal . lit <$> genDecimalName len
 genTermSpecific SizedTime = Gen.choice
   [ do
-       -- We simplify a bit here and
        format  <- genFormat
        timeStr <- genTimeOfFormat format
        pure $ ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
          lit timeStr
-  -- , do
-  --      timeStr <- genTimeOfFormat standardTimeFormat
-  --      pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
+  , do
+       timeStr <- genTimeOfFormat standardTimeFormat
+       pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
   ]
 
 genWriteType :: MonadGen m => m WriteType
@@ -463,7 +458,9 @@ genTermSpecific' sizedTy = Gen.choice
   --      ESimple ty tm <- genTerm sizedTy
   --      pure $ ESimple ty $ Sequence eTm tm
   [ do
-       ESimple TBool b <- genTerm SizedBool
+       -- ESimple TBool b <- genTerm SizedBool
+       b' <- genTerm SizedBool
+       let b :: Analyze.Term Bool = extract b'
        ESimple tyt1 t1 <- genTerm sizedTy
        ESimple tyt2 t2 <- genTerm sizedTy
        case typeEq tyt1 tyt2 of
@@ -552,37 +549,21 @@ toPactTm = \case
   -- term-specific terms:
   ESimple TBool (Enforce _ x)
     -> mkApp enforceDef [ESimple TBool x, ESimple TStr $ CoreTerm $ Lit "(enforce)"]
-  ESimple TBool (EnforceOne Left{}) -> do
-    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit "(enforce-one)"
-    pure $ TApp (liftTerm $ snd enforceOneDef)
-      [ msg
-      , Pact.TList [] (Pact.TyList Pact.TyAny) dummyInfo
-      ] dummyInfo
-
-    -- -> mkApp enforceOneDef [ESimple TStr $ CoreTerm $ Lit ""]
+  ESimple TBool (EnforceOne Left{})
+    -> mkApp' enforceOneDef (ESimple TStr $ CoreTerm $ Lit "(enforce-one)") []
 
   -- TODO: can this be mkApp?
-  ESimple TBool (EnforceOne (Right xs)) -> do
-    msg <- toPactTm $ ESimple TStr $ CoreTerm $ Lit "(enforce-one)"
-    args <- traverse toPactTm $ ESimple TBool . snd <$> xs
-    pure $ TApp (liftTerm $ snd enforceOneDef)
-      [ msg
-      , Pact.TList args (Pact.TyList Pact.TyAny) dummyInfo
-      ] dummyInfo
+  ESimple TBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
+    (ESimple TStr $ CoreTerm $ Lit "(enforce-one)")
+    (ESimple TBool . snd <$> xs)
 
   -- ESimple TBool (KsAuthorized x)
   -- ESimple TBool (NameAuthorized x)
 
   -- TODO: can this be mkApp?
   ESimple TStr PactVersion -> mkApp pactVersionDef []
-  ESimple TStr (Format x ys) -> do
-    x'  <- toPactTm $ ESimple TStr x
-    ys' <- traverse toPactTm ys
-    let fun = liftTerm $ snd formatDef
-    pure $ TApp fun
-      [x', Pact.TList ys' (Pact.TyList Pact.TyAny) dummyInfo] dummyInfo
-    -- -> mkApp formatDef (ESimple TStr x : ys)
-  -- $ Pact.TList tms (Pact.TyList Pact.TyAny) dummyInfo
+  ESimple TStr (Format template vals)
+    -> mkApp' formatDef (ESimple TStr template) vals
   ESimple TStr (FormatTime x y)
     -> mkApp defFormatTime [ESimple TStr x, ESimple TTime y]
   ESimple TStr (Hash x) -> mkApp hashDef [x]
@@ -592,7 +573,7 @@ toPactTm = \case
   ESimple TDecimal (ReadDecimal x) -> mkApp readDecimalDef [ESimple TStr x]
 
   ESimple TTime (ParseTime Nothing x) ->
-    mkApp parseTimeDef [ESimple TStr x]
+    mkApp timeDef [ESimple TStr x]
 
   ESimple TTime (ParseTime (Just x) y) ->
     mkApp parseTimeDef [ESimple TStr x, ESimple TStr y]
@@ -619,6 +600,20 @@ toPactTm = \case
     mkApp (_, defTm) args = do
       args' <- traverse toPactTm args
       pure $ TApp (liftTerm defTm) args' dummyInfo
+
+    -- Like mkApp but for functions that take two arguments, the second of
+    -- which is a list. This pattern is used in `enforce-one` and `format`
+    mkApp'
+      :: NativeDef
+      -> ETerm
+      -> [ETerm]
+      -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
+    mkApp' (_, defTm) arg argList = do
+      arg'     <- toPactTm arg
+      argList' <- traverse toPactTm argList
+      pure $ TApp (liftTerm defTm)
+        [arg', Pact.TList argList' (Pact.TyList Pact.TyAny) dummyInfo]
+        dummyInfo
 
     arithOpToDef :: ArithOp -> NativeDef
     arithOpToDef = \case

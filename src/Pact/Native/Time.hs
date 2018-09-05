@@ -17,6 +17,7 @@ module Pact.Native.Time
     , defAddTime
     , defFormatTime
     , parseTimeDef
+    , timeDef
     ) where
 
 import Control.Monad
@@ -54,15 +55,19 @@ parseTimeDef = defRNative "parse-time" parseTime'
   $ "Construct time from UTCVAL using FORMAT. " <> timedoc
   <> "`(parse-time \"%F\" \"2016-09-12\")`"
 
+timeDef :: NativeDef
+timeDef = defRNative "time" time
+  (funType tTyTime [("utcval", tTyString)])
+  $ "Construct time from UTCVAL using ISO8601 format ("
+  <> pack simpleISO8601 <> "). "
+  <> "`(time \"2016-07-22T11:26:35Z\")`"
+
+
 timeDefs :: NativeModule
-timeDefs = ("Time", timeDef)
+timeDefs = ("Time", defs)
   where
-    timeDef =
-        [ defRNative "time" time
-            (funType tTyTime [("utcval", tTyString)])
-            $ "Construct time from UTCVAL using ISO8601 format ("
-            <> pack simpleISO8601 <> "). "
-            <> "`(time \"2016-07-22T11:26:35Z\")`"
+    defs =
+        [ timeDef
         , parseTimeDef
         , defAddTime
         , defRNative "diff-time" diffTime
