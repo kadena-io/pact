@@ -125,6 +125,9 @@ mkInt = pure . ESimple TInt . Inj
 mkDec :: MonadGen m => Numerical Analyze.Term Decimal -> m ETerm
 mkDec = pure . ESimple TDecimal . Inj . Numerical
 
+mkBool :: MonadGen m => Core Analyze.Term Bool -> m ETerm
+mkBool = pure . ESimple TBool . Inj
+
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
 class Extract a where
@@ -219,24 +222,24 @@ genCore BoundedBool = Gen.recursive Gen.choice [
   ] $ scale 4 <$> [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
-         pure $ ESimple TBool $ Inj $ IntegerComparison op (extract x) (extract y)
+         mkBool $ IntegerComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore decSize) (genCore decSize) $ \x y ->
-         pure $ ESimple TBool $ Inj $ DecimalComparison op (extract x) (extract y)
+         mkBool $ DecimalComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore BoundedTime) (genCore BoundedTime) $ \x y ->
-         pure $ ESimple TBool $ Inj $ TimeComparison op (extract x) (extract y)
+         mkBool $ TimeComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore strSize) (genCore strSize) $ \x y ->
-         pure $ ESimple TBool $ Inj $ StringComparison op (extract x) (extract y)
+         mkBool $ StringComparison op (extract x) (extract y)
   , do op <- Gen.element [Eq, Neq]
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
-         pure $ ESimple TBool $ Inj $ BoolComparison op (extract x) (extract y)
+         mkBool $ BoolComparison op (extract x) (extract y)
   , do op <- Gen.element [AndOp, OrOp]
        Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
-         pure $ ESimple TBool $ Inj $ Logical op [extract x, extract y]
+         mkBool $ Logical op [extract x, extract y]
   , Gen.subtermM (genCore BoundedBool) $ \x ->
-      pure $ ESimple TBool $ Inj $ Logical NotOp [extract x]
+      mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
     ESimple TTime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
