@@ -54,13 +54,17 @@ data GenState = GenState
 makeLenses ''GenEnv
 makeLenses ''GenState
 
-genDecimal :: MonadGen m => NumSize -> m Decimal
+-- Explicitly shrink the size parameter to generate smaller terms.
+scale :: MonadGen m => Size -> m a -> m a
+scale n = Gen.scale (`div` n)
+
+genDecimal :: MonadGen m => NumBound -> m Decimal
 genDecimal size = do
   places   <- Gen.word8 Range.constantBounded
   mantissa <- genInteger (size * 10 ^ places)
   pure $ fromPact decimalIso $ Decimal.Decimal places mantissa
 
-genInteger :: MonadGen m => NumSize -> m Integer
+genInteger :: MonadGen m => NumBound -> m Integer
 genInteger size = Gen.integral $
   Range.exponentialFrom
     (round   (midpoint size))
@@ -86,18 +90,18 @@ type ECore = Existential (Core Analyze.Term)
 -- 'NumSize' bounds the values that a generated expression can evaluate to. We
 -- use this to avoid generating large numbers in computationally expensive
 -- spots.
-type NumSize = Interval Double
+type NumBound = Interval Double
 
-data SizedType where
-  SizedInt     :: NumSize -> SizedType
-  SizedDecimal :: NumSize -> SizedType
-  SizedString  :: Int     -> SizedType
-  SizedTime    ::            SizedType
-  SizedBool    ::            SizedType
-  SizedKeySet  ::            SizedType
+data BoundedType where
+  BoundedInt     :: NumBound -> BoundedType
+  BoundedDecimal :: NumBound -> BoundedType
+  BoundedString  :: Int      -> BoundedType
+  BoundedTime    ::             BoundedType
+  BoundedBool    ::             BoundedType
+  BoundedKeySet  ::             BoundedType
   -- TODO: objects
 
-arithSize :: ArithOp -> NumSize -> (NumSize, NumSize)
+arithSize :: ArithOp -> NumBound -> (NumBound, NumBound)
 arithSize op size = case op of
   Add -> (size, size)
   Sub -> (size, size)
@@ -106,7 +110,7 @@ arithSize op size = case op of
   Pow -> error "not yet implemented: we don't symbolically interpret this operator"
   Log -> error "not yet implemented: we don't symbolically interpret this operator"
 
-unaryArithSize :: UnaryArithOp -> NumSize -> NumSize
+unaryArithSize :: UnaryArithOp -> NumBound -> NumBound
 unaryArithSize op size = case op of
   Negate -> - size
   Sqrt   -> size ** 2
@@ -158,61 +162,61 @@ instance Extract KeySet where
 
 -- TODO: Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
-genCore :: MonadGen m => SizedType -> m ETerm
-genCore (SizedInt size) = Gen.recursive Gen.choice [
+genCore :: MonadGen m => BoundedType -> m ETerm
+genCore (BoundedInt size) = Gen.recursive Gen.choice [
     ESimple TInt . CoreTerm . Lit <$> genInteger size
-  ] [
-    Gen.subtermM2 (genCore (SizedInt size)) (genCore (SizedInt (1 ... 1e3))) $
+  ] $ scale 4 <$> [
+    Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e3))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
   , do op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (SizedInt size1)) (genCore (SizedInt size2)) $
+       Gen.subtermM2 (genCore (BoundedInt size1)) (genCore (BoundedInt size2)) $
          \x y -> mkInt $ Numerical $ IntArithOp op (extract x) (extract y)
   , do op <- genUnaryArithOp
        let size' = unaryArithSize op size
-       Gen.subtermM (genCore (SizedInt size')) $
+       Gen.subtermM (genCore (BoundedInt size')) $
          mkInt . Numerical . IntUnaryArithOp op . extract
-  , Gen.subtermM (genCore (SizedDecimal size)) $ \x -> do
+  , Gen.subtermM (genCore (BoundedDecimal size)) $ \x -> do
     op <- genRoundingLikeOp
     mkInt $ Numerical $ RoundingLikeOp1 op (extract x)
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
-genCore sizeD@(SizedDecimal size) = Gen.recursive Gen.choice [
+genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
     ESimple TDecimal . CoreTerm . Lit <$> genDecimal size
-  ] [
+  ] $ scale 4 <$> [
     do op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (SizedDecimal size1)) (genCore (SizedDecimal size2)) $
+       Gen.subtermM2 (genCore (BoundedDecimal size1)) (genCore (BoundedDecimal size2)) $
          \x y -> mkDec $ DecArithOp op (extract x) (extract y)
   , do
        op <- genUnaryArithOp
        let size' = unaryArithSize op size
-       Gen.subtermM (genCore (SizedDecimal size')) $
+       Gen.subtermM (genCore (BoundedDecimal size')) $
          mkDec . DecUnaryArithOp op . extract
   , do op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (SizedDecimal size1)) (genCore (SizedInt size2)) $
+       Gen.subtermM2 (genCore (BoundedDecimal size1)) (genCore (BoundedInt size2)) $
          \x y -> mkDec $ DecIntArithOp op (extract x) (extract y)
   , do
        op <- genArithOp
        let (size1, size2) = arithSize op size
-       Gen.subtermM2 (genCore (SizedInt size1)) (genCore (SizedDecimal size2)) $
+       Gen.subtermM2 (genCore (BoundedInt size1)) (genCore (BoundedDecimal size2)) $
          \x y -> mkDec $ IntDecArithOp op (extract x) (extract y)
-  , Gen.subtermM2 (genCore sizeD) (genCore (SizedInt (0 +/- 255))) $ \x y -> do
+  , Gen.subtermM2 (genCore bounded) (genCore (BoundedInt (0 +/- 255))) $ \x y -> do
       op <- genRoundingLikeOp
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
-genCore (SizedString len) = Gen.recursive Gen.choice [
+genCore (BoundedString len) = Gen.recursive Gen.choice [
     ESimple TStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
-    Gen.subtermM2
-      (genCore (SizedString (len `div` 2)))
-      (genCore (SizedString (len `div` 2))) $ \x y ->
+    scale 4 $ Gen.subtermM2
+      (genCore (BoundedString (len `div` 2)))
+      (genCore (BoundedString (len `div` 2))) $ \x y ->
         pure $ ESimple TStr $ Inj $ StrConcat (extract x) (extract y)
   ]
-genCore SizedBool = Gen.recursive Gen.choice [
+genCore BoundedBool = Gen.recursive Gen.choice [
     ESimple TBool . CoreTerm . Lit <$> Gen.bool
-  ] [
+  ] $ scale 4 <$> [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
          pure $ ESimple TBool $ Inj $ IntegerComparison op (extract x) (extract y)
@@ -220,35 +224,35 @@ genCore SizedBool = Gen.recursive Gen.choice [
        Gen.subtermM2 (genCore decSize) (genCore decSize) $ \x y ->
          pure $ ESimple TBool $ Inj $ DecimalComparison op (extract x) (extract y)
   , do op <- genComparisonOp
-       Gen.subtermM2 (genCore SizedTime) (genCore SizedTime) $ \x y ->
+       Gen.subtermM2 (genCore BoundedTime) (genCore BoundedTime) $ \x y ->
          pure $ ESimple TBool $ Inj $ TimeComparison op (extract x) (extract y)
   , do op <- genComparisonOp
        Gen.subtermM2 (genCore strSize) (genCore strSize) $ \x y ->
          pure $ ESimple TBool $ Inj $ StringComparison op (extract x) (extract y)
   , do op <- Gen.element [Eq, Neq]
-       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $ \x y ->
+       Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          pure $ ESimple TBool $ Inj $ BoolComparison op (extract x) (extract y)
   , do op <- Gen.element [AndOp, OrOp]
-       Gen.subtermM2 (genCore SizedBool) (genCore SizedBool) $ \x y ->
+       Gen.subtermM2 (genCore BoundedBool) (genCore BoundedBool) $ \x y ->
          pure $ ESimple TBool $ Inj $ Logical op [extract x, extract y]
-  , Gen.subtermM (genCore SizedBool) $ \x ->
+  , Gen.subtermM (genCore BoundedBool) $ \x ->
       pure $ ESimple TBool $ Inj $ Logical NotOp [extract x]
   ]
-genCore SizedTime = Gen.recursive Gen.choice [
+genCore BoundedTime = Gen.recursive Gen.choice [
     ESimple TTime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
-  ] [
-    Gen.subtermM2 (genCore SizedTime) (genCore (SizedInt 1e9)) $ \x y ->
+  ] $ scale 4 <$> [
+    Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedInt 1e9)) $ \x y ->
       pure $ ESimple TTime $ Inj $ IntAddTime (extract x) (extract y)
-  , Gen.subtermM2 (genCore SizedTime) (genCore (SizedDecimal 1e9)) $ \x y ->
+  , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
       pure $ ESimple TTime $ Inj $ DecAddTime (extract x) (extract y)
   ]
-genCore SizedKeySet = ESimple TKeySet . CoreTerm . Lit . KeySet
+genCore BoundedKeySet = ESimple TKeySet . CoreTerm . Lit . KeySet
   <$> genInteger (0 ... 2)
 
-intSize, decSize, strSize :: SizedType
-intSize = SizedInt     (0 +/- 1e25)
-decSize = SizedDecimal (0 +/- 1e25)
-strSize = SizedString  1000
+intSize, decSize, strSize :: BoundedType
+intSize = BoundedInt     (0 +/- 1e25)
+decSize = BoundedDecimal (0 +/- 1e25)
+strSize = BoundedString  1000
 
 -- TODO
 -- generic:
@@ -266,38 +270,45 @@ genAnyTerm = Gen.choice
   [ genTerm intSize
   , genTerm decSize
   , genTerm strSize
-  , genTerm SizedBool
-  , genTerm SizedTime
-  -- , genTerm SizedKeySet
+  , genTerm BoundedBool
+  , genTerm BoundedTime
+  -- , genTerm BoundedKeySet
   ]
 
 genTerm
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
-  => SizedType -> m ETerm
-genTerm size = Gen.choice [genCore size, genTermSpecific size]
+  => BoundedType -> m ETerm
+genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
-  => SizedType -> m ETerm
-genTermSpecific size@SizedInt{} = genTermSpecific' size
-genTermSpecific SizedBool       = Gen.choice
+  => BoundedType -> m ETerm
+genTermSpecific size@BoundedInt{} = genTermSpecific' size
+genTermSpecific BoundedBool       = Gen.choice
   [
   -- TODO: temporarily disabled pending
   -- https://github.com/kadena-io/pact/issues/207
-  -- [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
-  -- , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
+  -- [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm BoundedBool
+  -- , do xs <- Gen.list (Range.linear 0 4) (genTerm BoundedBool)
   --      pure $ ESimple TBool $ EnforceOne $ case xs of
   --        [] -> Left 0
   --        _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
 
-  -- TODO:
+  -- TODO(joel):
   -- , do tagId <- genTagId
-  --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
+  --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
   -- , do tagId <- genTagId
   --      ESimple TBool . NameAuthorized tagId . extract <$> genTerm strSize
-    genTermSpecific' SizedBool
+
+  -- HACK(joel): Right now we "dilute" this choice with literal bools.
+  -- Otherwise this tends to hang forever. Fix this properly (why does scale
+  -- not work?).
+    ESimple TBool . CoreTerm . Lit <$> Gen.bool
+  , ESimple TBool . CoreTerm . Lit <$> Gen.bool
+  , ESimple TBool . CoreTerm . Lit <$> Gen.bool
+  , genTermSpecific' BoundedBool
   ]
-genTermSpecific size@(SizedString _len) = Gen.choice
+genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   -- TODO:
   -- [ do
   --      tables <- view envTables
@@ -313,18 +324,18 @@ genTermSpecific size@(SizedString _len) = Gen.choice
              , do
                   x <- genTerm strSize
                   pure x
-             , genTerm SizedBool
+             , genTerm BoundedBool
              ]
        (str, tms) <- Gen.choice
-         [ do
+         [ scale 2 $ do
               tm <- genFormattableTerm
               pure (lit "{}", [tm])
-         , do
+         , scale 4 $ do
               tm1 <- genFormattableTerm
               tm2 <- genFormattableTerm
               str <- Gen.element ["{} {}", "{} / {}", "{} - {}"]
               pure (lit str, [tm1, tm2])
-         , do
+         , scale 8 $ do
               tm1 <- genFormattableTerm
               tm2 <- genFormattableTerm
               tm3 <- genFormattableTerm
@@ -332,25 +343,25 @@ genTermSpecific size@(SizedString _len) = Gen.choice
               pure (lit str, [tm1, tm2, tm3])
          ]
        pure $ ESimple TStr $ Format str tms
-  , do
+  , scale 4 $ do
        -- just generate literal format strings here so this tests something
        -- interesting
        format           <- genFormat
-       ESimple TTime t2 <- genTerm SizedTime
+       ESimple TTime t2 <- genTerm BoundedTime
        pure $ ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
   , let genHashableTerm = Gen.choice
           [ genTerm intSize
           , genTerm strSize
-          , genTerm SizedBool
+          , genTerm BoundedBool
           ]
     in ESimple TStr . Hash <$> genHashableTerm
   , genTermSpecific' size
   ]
-genTermSpecific SizedKeySet =
+genTermSpecific BoundedKeySet = scale 2 $
   ESimple TKeySet . ReadKeySet . lit <$> genKeySetName
-genTermSpecific (SizedDecimal len) =
+genTermSpecific (BoundedDecimal len) = scale 2 $
   ESimple TDecimal . ReadDecimal . lit <$> genDecimalName len
-genTermSpecific SizedTime = Gen.choice
+genTermSpecific BoundedTime = scale 8 $ Gen.choice
   [ do
        format  <- genFormat
        timeStr <- genTimeOfFormat format
@@ -385,7 +396,7 @@ genKeySetName = do
 
 genDecimalName
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
-  => NumSize -> m String
+  => NumBound -> m String
 genDecimalName size = do
   idGen %= succ
   TagId nat <- use idGen
@@ -401,19 +412,17 @@ genNatural = Gen.integral
 -- (Let, Sequence, IfThenElse)
 genTermSpecific'
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
-  => SizedType -> m ETerm
-genTermSpecific' sizedTy = Gen.choice
+  => BoundedType -> m ETerm
+genTermSpecific' boundedTy = scale 8 $ Gen.choice
   -- TODO: Let
   -- [ do
   --      eTm <- genAnyTerm
-  --      ESimple ty tm <- genTerm sizedTy
+  --      ESimple ty tm <- genTerm boundedTy
   --      pure $ ESimple ty $ Sequence eTm tm
   [ do
-       -- ESimple TBool b <- genTerm SizedBool
-       b' <- genTerm SizedBool
-       let b :: Analyze.Term Bool = extract b'
-       ESimple tyt1 t1 <- genTerm sizedTy
-       ESimple tyt2 t2 <- genTerm sizedTy
+       ESimple TBool b <- genTerm BoundedBool
+       ESimple tyt1 t1 <- genTerm boundedTy
+       ESimple tyt2 t2 <- genTerm boundedTy
        case typeEq tyt1 tyt2 of
          Just Refl -> pure $ ESimple tyt1 $ IfThenElse b (Path 0, t1) (Path 0, t2)
          Nothing   -> error "t1 and t2 must have the same type"
@@ -422,7 +431,7 @@ genTermSpecific' sizedTy = Gen.choice
 genType :: MonadGen m => m EType
 genType = Gen.element
   [ EType TInt, EType TDecimal, EType TBool, EType TStr, EType TTime
-  -- , EType TKeySet
+  , EType TKeySet
   ]
 
 describeAnalyzeFailure :: AnalyzeFailure -> String
