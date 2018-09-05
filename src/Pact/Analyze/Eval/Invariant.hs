@@ -2,12 +2,12 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Invariant where
 
-import           Control.Lens               (at, view, (.=))
+import           Control.Lens               (at, view, (%=))
 import           Control.Monad.Except       (MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader, ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
 import           Data.Map.Strict            (Map)
-import           Data.SBV                   (bnot)
+import           Data.SBV                   (bnot, (&&&))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
@@ -32,4 +32,4 @@ instance Analyzer InvariantCheck where
     info <- view location
     throwError $ AnalyzeFailure info err
   getVar vid = view (located . at vid)
-  markFailure b = id .= bnot b
+  markFailure b = id %= (&&& bnot b)

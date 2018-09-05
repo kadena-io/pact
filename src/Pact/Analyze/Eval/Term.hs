@@ -71,7 +71,7 @@ instance Analyzer Analyze where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
-  markFailure b = succeeds .= sansProv (bnot b)
+  markFailure b = succeeds %= (&&& sansProv (bnot b))
 
 evalTermLogicalOp
   :: LogicalOp

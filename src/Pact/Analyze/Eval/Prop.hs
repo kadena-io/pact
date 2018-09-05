@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens               (at, view, (.=), (?~))
+import           Control.Lens               (at, view, (%=), (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
@@ -48,7 +48,7 @@ instance Analyzer Query where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
-  markFailure b = id .= bnot b
+  markFailure b = id %= (&&& bnot b)
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift . lift
