@@ -288,7 +288,7 @@ reverse' i as = argsError i as
 fold' :: NativeFun e
 fold' i as@[app@TApp {},initv,l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> reduce initv >>= \initv' ->
-                         foldM (\r a -> apply' app [r,a]) initv' ls
+                         foldM (\r a' -> apply' app [r,a']) initv' ls
            t -> evalError' i $ "fold: expecting list: " ++ abbrev t
 fold' i as = argsError' i as
 
@@ -296,10 +296,10 @@ fold' i as = argsError' i as
 filter' :: NativeFun e
 filter' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls lt _ -> ((\b -> TList b lt def) . concat) <$>
-                         forM ls (\a -> do
-                           t <- apply' app [a]
+                         forM ls (\a' -> do
+                           t <- apply' app [a']
                            case t of
-                             (TLiteral (LBool True) _) -> return [a]
+                             (TLiteral (LBool True) _) -> return [a']
                              _ -> return []) -- hmm, too permissive here, select is stricter
            t -> evalError' i $ "filter: expecting list: " ++ abbrev t
 filter' i as = argsError' i as
@@ -349,8 +349,8 @@ remove i as = argsError i as
 compose :: NativeFun e
 compose i as@[appA@TApp {},appB@TApp {},v] = gasUnreduced i as $ do
   v' <- reduce v
-  a <- apply' appA [v']
-  apply' appB [a]
+  a' <- apply' appA [v']
+  apply' appB [a']
 compose i as = argsError' i as
 
 
@@ -390,8 +390,8 @@ instance FromJSON ParsedDecimal where
 
 readDecimal :: RNativeFun e
 readDecimal i [TLitString key] = do
-  (ParsedDecimal a) <- parseMsgKey i "read-decimal" key
-  return $ toTerm a
+  (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
+  return $ toTerm a'
 readDecimal i as = argsError i as
 
 
@@ -412,8 +412,8 @@ instance FromJSON ParsedInteger where
 
 readInteger :: RNativeFun e
 readInteger i [TLitString key] = do
-  (ParsedInteger a) <- parseMsgKey i "read-integer" key
-  return $ toTerm a
+  (ParsedInteger a') <- parseMsgKey i "read-integer" key
+  return $ toTerm a'
 readInteger i as = argsError i as
 
 enforce :: NativeFun e
@@ -470,7 +470,7 @@ listModules _ _ = do
   return $ toTermList tTyString $ map asString $ M.keys mods
 
 unsetInfo :: Term a -> Term a
-unsetInfo a = set tInfo def a
+unsetInfo a' = set tInfo def a'
 {-# INLINE unsetInfo #-}
 
 yield :: RNativeFun e
@@ -569,13 +569,13 @@ constantly i (v:_) = gasUnreduced i [v] $ reduce v
 constantly i as = argsError' i as
 
 identity :: RNativeFun e
-identity _ [a] = return a
+identity _ [a'] = return a'
 identity i as = argsError i as
 
 hash' :: RNativeFun e
 hash' i as = case as of
   [TLitString s] -> go $ encodeUtf8 s
-  [a] -> go $ toStrict $ encode a
+  [a'] -> go $ toStrict $ encode a'
   _ -> argsError i as
   where go = return . tStr . asString . hash
 
