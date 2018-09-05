@@ -265,7 +265,7 @@ applySchemas Pre ast = case ast of
       (\(k,v) -> (,) <$> asPrimString k <*> ((v,_aId (_aNode k),) <$> lookupTy (_aNode v)))
     validateSchema sch pmap
     return ast
-  (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
+  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
     pmap <- M.fromList <$> forM bs
       (\(Named _ node ni, Prim _ (PrimLit (LString bn))) -> (bn,) <$> ((Var node,ni,) <$> lookupTy node))
@@ -331,7 +331,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
         Just spec -> case (spec,args) of
           -- bindings
           ((_,SBinding b),_) -> case b of
-            (Binding bn _ _ (BindSchema sn)) -> do
+            (Binding bn _ _ (AstBindSchema sn)) -> do
               -- assoc binding with app return
               assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
@@ -388,7 +388,7 @@ substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST sub
         -- substitute newly let-bound variables into use sites in function body
 
         let appInfo  = _tiInfo $ _aId appNode
-            bindType = BindLet :: BindType Node
+            bindType = AstBindInlinedCallArgs :: AstBindType Node
         letId <- freshId appInfo (pack $ show bindType)
         letNode <- trackIdNode letId
         assocAstTy letNode retTy
@@ -731,15 +731,13 @@ toAST TBinding {..} = do
         _fieldName <- asPrimString v'
         return (Named n an aid,v')
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
+  assocAST bi (last bb)
   bt <- case _tBindType of
-    BindLet -> do
-      assocAST bi (last bb)
-      return BindLet
+    BindLet -> return AstBindLet
     BindSchema sty -> do
-      assocAST bi (last bb)
       sty' <- mangleType bi <$> traverse toUserType sty
       sn <- trackNode sty' =<< freshId _tInfo (pack $ show bi ++ "schema")
-      return $ BindSchema sn
+      return $ AstBindSchema sn
   return $ Binding bn bs bb bt
 
 toAST TList {..} = do

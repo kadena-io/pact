@@ -9,9 +9,9 @@ import           Data.Maybe           (isJust)
 import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
-import           Pact.Types.Runtime   (BindType (BindLet, BindSchema),
-                                       Literal (LString))
-import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
+import           Pact.Types.Runtime   (Literal (LString))
+import           Pact.Types.Typecheck (AstBindType (..),
+                                       AST (App, Binding, List, Object, Prim, Step, Table),
                                        Fun (FDefun, FNative), Named, Node,
                                        PrimValue (PrimLit), Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
@@ -35,14 +35,33 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
+-- NOTE: For now, we don't handle an inlined App's synthetic (CBV) let bindings
+--       specially -- we'll let AST_Let handle these bindings until a refactor
+--       that will soon land (from the `trace-scopes` branch). At that point,
+--       we can get rid of 'letBindingType', the current version of
+--       'AST_InlinedApp', 'mkLet', and change 'AST_Let' to only match
+--       'AstBindLet' 'Binding's.
+
+-- pattern AST_InlinedApp :: [(Named a, AST a)] -> [AST a] -> AST a
+-- pattern AST_InlinedApp bindings body <-
+--   App _ (FDefun _ _ _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+
 pattern AST_InlinedApp :: [AST a] -> AST a
-pattern AST_InlinedApp body <- App _node (FDefun _ _ _ _ body) _args
+pattern AST_InlinedApp body <- App _ (FDefun _ _ _ _ body) _args
+
+letBindingType :: AstBindType n -> Bool
+letBindingType AstBindLet = True
+letBindingType AstBindInlinedCallArgs = True
+letBindingType (AstBindSchema _) = False
+
+mkLet :: a -> [(Named a, AST a)] -> [AST a] -> AST a
+mkLet node bindings body = Binding node bindings body AstBindLet
 
 pattern AST_Let :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_Let node bindings body = Binding node bindings body BindLet
+pattern AST_Let node bindings body <- Binding node bindings body (letBindingType -> True)
 
 pattern AST_BindSchema :: forall a. a -> [(Named a, AST a)] -> a -> [AST a] -> AST a
-pattern AST_BindSchema node bindings schema body <- Binding node bindings body (BindSchema schema)
+pattern AST_BindSchema node bindings schema body <- Binding node bindings body (AstBindSchema schema)
 
 pattern AST_Var :: forall a. a -> AST a
 pattern AST_Var var <- TC.Var var
