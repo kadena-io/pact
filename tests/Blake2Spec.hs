@@ -1,11 +1,11 @@
 module Blake2Spec (spec) where
 
-import Test.Hspec
+import Data.Foldable (foldlM)
 import Crypto.Hash.Blake2Native
-import Data.Word
-import Data.ByteString (ByteString,pack)
 import Data.Bits
-import Data.Either
+import Data.ByteString (ByteString,pack)
+import Data.Word
+import Test.Hspec
 
 spec :: Spec
 spec = do
@@ -24,8 +24,11 @@ blake2b_res = pack [
     ]
 
 -- parameter sets
-b2b_md_len :: [Int]; b2b_md_len = [ 20, 32, 48, 64 ];
-b2b_in_len :: [Int]; b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ];
+b2b_md_len :: [Int]
+b2b_md_len = [ 20, 32, 48, 64 ]
+
+b2b_in_len :: [Int]
+b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ]
 
 
 selftest_seq :: Int -> Word32 -> ByteString
@@ -42,24 +45,17 @@ selftest_seq len seed =
 
 
 blake2b_selftest :: Spec
-blake2b_selftest = do
-  let ctxm = blake2b_init 32 mempty
-  it "init succeeds" $ isRight ctxm
-  let (Right cxinit) = ctxm
-
-      cxr = ffoldl cxinit b2b_md_len $
-        \c outlen -> ffoldl c b2b_in_len $ \cx0 inlen ->
-          let inB = selftest_seq inlen (fromIntegral inlen)
-              (Right md0) = blake2b outlen mempty inB
-              cx1 = blake2b_update md0 cx0
-              key = selftest_seq outlen (fromIntegral outlen)
-              (Right md1) = blake2b outlen key inB
-          in blake2b_update md1 cx1
-
-      res = blake2b_final cxr
-
-  it "final hash correct" $ res `shouldBe` blake2b_res
-
+blake2b_selftest = either fail p hashing
+  where hashing = blake2b_init 32 mempty >>= \cxinit -> foldlM f cxinit b2b_md_len
+        p cxr   = it "final hash correct" $ blake2b_final cxr `shouldBe` blake2b_res
+        f cx outlen = foldlM g cx b2b_in_len
+          where g cx0 inlen = do
+                  let inB = selftest_seq inlen (fromIntegral inlen)
+                  md0 <- blake2b outlen mempty inB
+                  let cx1 = blake2b_update md0 cx0
+                      key = selftest_seq outlen (fromIntegral outlen)
+                  md1 <- blake2b outlen key inB
+                  Right $ blake2b_update md1 cx1
 
 -- | Grand hash of hash results.
 blake2s_res :: ByteString
@@ -71,24 +67,21 @@ blake2s_res = pack [
     ];
 
 -- Parameter sets.
-b2s_md_len :: [Int]; b2s_md_len = [ 16, 20, 28, 32 ];
-b2s_in_len :: [Int]; b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ];
+b2s_md_len :: [Int]
+b2s_md_len = [ 16, 20, 28, 32 ]
+
+b2s_in_len :: [Int]
+b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ]
 
 blake2s_selftest :: Spec
-blake2s_selftest = do
-  let ctxm = blake2s_init 32 mempty
-  it "init succeeds" $ isRight ctxm
-  let (Right cxinit) = ctxm
-
-      cxr = ffoldl cxinit b2s_md_len $
-        \c outlen -> ffoldl c b2s_in_len $ \cx0 inlen ->
-          let inB = selftest_seq inlen (fromIntegral inlen)
-              (Right md0) = blake2s outlen mempty inB
-              cx1 = blake2s_update md0 cx0
-              key = selftest_seq outlen (fromIntegral outlen)
-              (Right md1) = blake2s outlen key inB
-          in blake2s_update md1 cx1
-
-      res = blake2s_final cxr
-
-  it "final hash correct" $ res `shouldBe` blake2s_res
+blake2s_selftest = either fail p hashing
+  where hashing = blake2s_init 32 mempty >>= \cxinit -> foldlM f cxinit b2s_md_len
+        p cxr   = it "final hash correct" $ blake2s_final cxr `shouldBe` blake2s_res
+        f cx outlen = foldlM g cx b2s_in_len
+          where g cx0 inlen = do
+                  let inB = selftest_seq inlen (fromIntegral inlen)
+                  md0 <- blake2s outlen mempty inB
+                  let cx1 = blake2s_update md0 cx0
+                      key = selftest_seq outlen (fromIntegral outlen)
+                  md1 <- blake2s outlen key inB
+                  Right $ blake2s_update md1 cx1
