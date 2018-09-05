@@ -31,9 +31,12 @@ type Persist s a = s -> IO (s,a)
 
 newtype DataKey = DataKey Text
   deriving (Eq,Ord,IsString,AsString,Hashable)
+
 instance Show DataKey where show (DataKey k) = show k
+
 newtype TxKey = TxKey Integer
   deriving (Eq,Ord,Num,Enum,Real,Integral,Hashable)
+
 instance Show TxKey where show (TxKey k) = show k
 
 type DataTable = Table DataKey

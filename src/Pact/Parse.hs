@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
+
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -16,35 +17,31 @@
 --
 
 module Pact.Parse
-    (
-     exprs, exprsOnly
-    ,parseExprs
-    ,number
-    ,PactParser(unPactParser)
-    )
+  ( exprs, exprsOnly
+  , parseExprs
+  , number
+  , PactParser(unPactParser)
+  ) where
 
-where
-
-import Text.Trifecta as TF
-import Text.Trifecta.Delta as TF
-import Control.Applicative
-import Data.List
-import Control.Monad
-import Prelude
-import Data.Decimal
+import           Control.Applicative
+import           Control.Monad
 import qualified Data.Attoparsec.Text as AP
-import Data.Char (digitToInt)
-import Data.Text (Text)
+import           Data.Char (digitToInt)
+import           Data.Decimal
+import           Data.List
+import           Data.Text (Text)
+import           Prelude
+import           Text.Trifecta as TF
+import           Text.Trifecta.Delta as TF
 
-import Pact.Types.Exp
-import Pact.Types.Parser
-import Pact.Types.Info
+import           Pact.Types.Exp
+import           Pact.Types.Parser
+import           Pact.Types.Info
 
-type P a = forall m. (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => PactParser m a
-
+---
 
 -- | Main parser for Pact expressions.
-expr :: P (Exp Parsed)
+expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
 expr = do
   delt <- position
   let inf = do
@@ -67,8 +64,8 @@ expr = do
     ]
 {-# INLINE expr #-}
 
-
-number :: P Literal
+-- TODO Consider: http://hackage.haskell.org/package/megaparsec-7.0.0/docs/Text-Megaparsec-Char-Lexer.html#v:float
+number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather
   -- than `symbolic :: TokenParsing m => Char -> m Char` here. We use the char
@@ -92,7 +89,7 @@ qualifiedAtom = ident style `sepBy` dot >>= \as -> case reverse as of
   [] -> fail "qualifiedAtom"
   (a:qs) -> return (a,reverse qs)
 
-bool :: P Literal
+bool :: (Monad m, DeltaParsing m) => PactParser m Literal
 bool = msum
   [ LBool True  <$ symbol "true"
   , LBool False <$ symbol "false"
@@ -101,12 +98,12 @@ bool = msum
 
 
 -- | Parse one or more Pact expressions.
-exprs :: P [(Exp Parsed)]
+exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [(Exp Parsed)]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
 -- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: (Monad m,TokenParsing m,CharParsing m,DeltaParsing m) => m [(Exp Parsed)]
+exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [(Exp Parsed)]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
 -- | "Production" parser: atto, parse multiple exps.
@@ -119,7 +116,6 @@ _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty
-
 
 _parseAccounts :: IO (Result ([(Exp Parsed)],String))
 _parseAccounts = _parseF exprsOnly "examples/accounts/accounts.pact"

@@ -81,8 +81,7 @@ enforceKeySetName mi mksn = do
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment
-enforceKeySet :: PureNoDb e => Info ->
-             Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySet :: Info -> Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys

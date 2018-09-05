@@ -393,7 +393,7 @@ enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ gasUnreduced i 
 enforceOne i as = argsError' i as
 
 
-enforce' :: PureNoDb e => RNativeFun e
+enforce' :: RNativeFun e
 enforce' i [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
     | otherwise = failTx (_faInfo i) $ unpack msg
