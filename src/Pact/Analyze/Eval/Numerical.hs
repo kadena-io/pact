@@ -13,6 +13,14 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 
+-- This module handles evaluation of unary and binary integers and decimals.
+-- Two tricky details to watch out for:
+--
+-- 1. See Note [Rounding]
+--
+-- 2. Errors. Division can fail if the denominator is 0. Rounding can fail if
+--    the precision is negative. In either case we mark failure via
+--    @markFailure@. Thus our codomain is extended with failure.
 
 evalNumerical
   :: (Analyzer m, S :<: TermOf m)
@@ -27,7 +35,7 @@ evalNumerical (ModOp x y)              = evalModOp x y
 evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
 evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
--- | Implementation of decimal arithmetic.
+-- Note [Rounding]
 --
 -- The key is this quote from "Data.Decimal":
 --

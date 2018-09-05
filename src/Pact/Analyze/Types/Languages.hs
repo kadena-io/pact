@@ -45,8 +45,8 @@ module Pact.Analyze.Types.Languages
   , pattern PVar
   ) where
 
-import Control.Lens (view)
-import Control.Lens.Iso
+import           Control.Lens                 (view)
+import           Control.Lens.Iso
 import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
@@ -76,12 +76,14 @@ instance Eq (Existential tm) where                        \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
--- TODO: showsPrec
 -- TODO: userShow
-#define SHOW_EXISTENTIAL(tm)                                                \
-instance Show (Existential tm) where                                        \
-  show (ESimple ty inv) = "(ESimple " ++ show ty ++ " " ++ show inv ++ ")"; \
-  show (EObject ty obj) = "(EObject " ++ show ty ++ " " ++ show obj ++ ")";
+#define SHOW_EXISTENTIAL(tm)                                                   \
+instance Show (Existential tm) where                                           \
+  showsPrec d e = showParen (d > 10) $ case e of                               \
+    ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
+      . showsPrec 11 inv;                                                      \
+    EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
+      . showsPrec 11 obj;
 
 
 -- | Subtyping relation from "Data types a la carte".

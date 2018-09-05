@@ -627,9 +627,6 @@ instance UserShow ColumnName where
 instance UserShow Schema where
   userShowsPrec d (Schema schema) = userShowsPrec d schema
 
--- userShow :: UserShow a => a -> Text
--- userShow = userShowsPrec 0
-
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]
   , propertyBody :: a

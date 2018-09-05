@@ -13,7 +13,7 @@
 --
 
 module Pact.Native.Time
-    (timeDefs
+    ( timeDefs
     , defAddTime
     , defFormatTime
     , parseTimeDef

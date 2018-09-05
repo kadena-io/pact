@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
@@ -99,7 +98,6 @@ pattern AST_EnforceKeyset ks <-
 pattern AST_EnforceOne :: forall a. a -> [AST a] -> AST a
 pattern AST_EnforceOne node enforces <-
   App node (NativeFunc "enforce-one") [_, List _ enforces]
-  -- App node (NativeFunc "enforce-one") [] ->
 
 pattern AST_Format :: forall a. AST a -> [AST a] -> AST a
 pattern AST_Format str vars <-

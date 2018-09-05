@@ -221,7 +221,6 @@ applyInvariants tn aValFields addInvariants = do
   case (mInvariants, mColumnIds) of
     (Just invariants', Just columnIds) -> do
       let aValFields' = reindex columnIds aValFields
-      -- TODO: better naming
       invariants'' <- for invariants' $ \(Located info invariant) ->
         case runReaderT (runStateT (unInvariantCheck (eval invariant)) true)
                         (Located info aValFields') of
@@ -451,8 +450,7 @@ evalTerm = \case
       ESimple TBool bool -> Right . Right <$> eval bool
       etm                -> throwErrorNoLoc $ fromString $ T.unpack $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
-        -- " (not " <> userShow etm <> ")"
-        " (not " <> T.pack (show etm) <> ")"
+        " (not " <> userShow etm <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just concreteStr -> case format concreteStr args' of

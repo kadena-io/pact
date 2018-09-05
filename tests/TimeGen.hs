@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+-- Hedgehog generators of times
 module TimeGen where
 
 import           Hedgehog       hiding (Update)

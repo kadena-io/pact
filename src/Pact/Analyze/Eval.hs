@@ -105,8 +105,9 @@ runAnalysis' query tables args tm tags info = do
   let qEnv  = mkQueryEnv aEnv state1 funResult
       ksProvs = state1 ^. globalState.gasKsProvenances
 
-  (results, success) <- runReaderT (runStateT (queryAction query) true) qEnv
-  pure $ results <&> \prop -> AnalysisResult success (_sSbv prop) ksProvs
+  (results, querySucceeds)
+    <- runReaderT (runStateT (queryAction query) true) qEnv
+  pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis
   :: Check
