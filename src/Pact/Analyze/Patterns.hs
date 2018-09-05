@@ -176,4 +176,4 @@ pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
 
 pattern AST_Step :: AST a
-pattern AST_Step <- Step _ _ _ _
+pattern AST_Step <- Step {}

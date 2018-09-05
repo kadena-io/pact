@@ -4,8 +4,8 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 
 module AnalyzeSpec (spec) where
 
@@ -679,7 +679,7 @@ spec = describe "analyze" $ do
             |]
 
       expectPass code $ Valid $ PVar 1 "x" ==> PNot (Inj Success)
-      expectPass code $ Valid $ PNot (PVar 1 "x") ==> (Inj Success)
+      expectPass code $ Valid $ PNot (PVar 1 "x") ==> Inj Success
 
     describe "or" $ do
       let code =
@@ -1008,27 +1008,28 @@ spec = describe "analyze" $ do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
-            [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
-              invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model args (ModelTags _ _ writes _ _ _ _ _) ksProvs _) = model
+            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+              [CheckFailure _ (SmtFailure (Invalid model))] -> do
+                let (Model args ModelTags{_mtWrites} ksProvs _) = model
 
-            it "should have a negative amount" $ do
-              Just (Located _ (_, (_, AVal _prov amount))) <- pure $
-                find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse
-              (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+                it "should have a negative amount" $
+                  case find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse of
+                    Just (Located _ (_, (_, AVal _prov amount))) ->
+                      (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+                    _ -> fail "Failed pattern match"
 
-            let negativeWrite (Object m) = case m Map.! "balance" of
-                  (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
-                  _ -> False
+                let negativeWrite (Object m) = case m Map.! "balance" of
+                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                      _ -> False
 
-            balanceWrite <- pure $ find negativeWrite
-              $ writes ^.. traverse . located . accObject
+                    balanceWrite = find negativeWrite $ _mtWrites ^.. traverse . located . accObject
 
-            it "should have a negative write" $
-              balanceWrite `shouldSatisfy` isJust
+                it "should have a negative write" $
+                  balanceWrite `shouldSatisfy` isJust
 
-            it "should have no keyset provenance" $ do
-              ksProvs `shouldBe` Map.empty
+                it "should have no keyset provenance" $
+                  ksProvs `shouldBe` Map.empty
+              _ -> fail "Failed pattern match"
 
   describe "cell-delta.integer" $ do
     let code =
@@ -1743,7 +1744,7 @@ spec = describe "analyze" $ do
       textToProp'' TInt  "result"  `shouldBe` Right Result'
       textToProp'' TStr  "result"  `shouldBe` Right Result'
 
-    it "parses quantified tables" $ do
+    it "parses quantified tables" $
       inferProp'' "(forall (table:table) (not (table-written table)))"
         `shouldBe`
         Right
@@ -1858,7 +1859,7 @@ spec = describe "analyze" $ do
       pendingWith "separate parser for props"
       res `shouldSatisfy` isNothing
 
-  describe "UserShow" $ do
+  describe "UserShow" $
     it "schema looks okay" $ do
       let schema = Schema $
             Map.fromList [("name", EType TStr), ("balance", EType TInt)]
@@ -2021,5 +2022,5 @@ spec = describe "analyze" $ do
       expectTrace code (bnot Success')
         [assert, {- failure -} path, {- success -} path]
 
-    it "doesn't include events after the first failure in an enforce-one case" $ do
+    it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"

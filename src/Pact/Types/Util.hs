@@ -152,7 +152,7 @@ renderCompactString :: Pretty a => a -> String
 renderCompactString = renderString renderCompact RPlain
 
 renderPrettyString :: Pretty a => RenderColor -> a -> String
-renderPrettyString c a = renderString (renderPretty 0.4 100) c a
+renderPrettyString = renderString (renderPretty 0.4 100)
 
 
 -- | Provide unquoted string representation.
@@ -165,7 +165,7 @@ instance AsString Integer where asString = pack . show
 
 -- | Pure version of 'modifyMVar_'
 modifyMVar' :: MVar a -> (a -> a) -> IO ()
-modifyMVar' mv f = modifyMVar_ mv (\ps -> return (f ps))
+modifyMVar' mv f = modifyMVar_ mv (pure . f)
 {-# INLINE modifyMVar' #-}
 
 -- | Modify the target of a lens.
