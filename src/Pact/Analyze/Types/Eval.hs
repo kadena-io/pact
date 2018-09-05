@@ -48,12 +48,15 @@ import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 
+type SymbolicSuccess = SBV Bool
+
 class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   type TermOf m   :: * -> *
   eval            :: (Show a, SymWord a) => TermOf m a -> m (S a)
   evalO           :: TermOf m Object -> m Object
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
   getVar          :: VarId -> m (Maybe AVal)
+  markFailure     :: SymbolicSuccess -> m ()
 
   -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
   -- their monad stack, they can't use `ite`, which we need to use to implement
@@ -150,7 +153,7 @@ deriving instance Mergeable SymbolicCells
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds            :: SBV Bool
+    { _lasSucceeds            :: SymbolicSuccess
     , _lasPurelyReachable     :: SBV Bool
     --
     -- TODO: instead of having a single boolean here, we should probably use
@@ -195,7 +198,8 @@ data AnalyzeState
 
 data AnalysisResult
   = AnalysisResult
-    { _arProposition   :: SBV Bool
+    { _arEvalFailure   :: SymbolicSuccess
+    , _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
     }
   deriving (Show)

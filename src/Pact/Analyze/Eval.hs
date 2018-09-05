@@ -21,11 +21,12 @@ import           Control.Lens                (view, (<&>), (^.))
 import           Control.Monad.Except        (ExceptT, throwError)
 import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (runReaderT)
+import           Control.Monad.State.Strict  (runStateT)
 import           Control.Monad.RWS.Strict    (RWST (runRWST))
 import           Control.Monad.Trans.Class   (lift)
 import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.Map.Strict             (Map)
-import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic)
+import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic, true)
 import           Data.String                 (fromString)
 
 import           Pact.Types.Lang             (Info)
@@ -103,8 +104,8 @@ runAnalysis' query tables args tm tags info = do
   let qEnv  = mkQueryEnv aEnv state1 funResult
       ksProvs = state1 ^. globalState.gasKsProvenances
 
-  results <- runReaderT (queryAction query) qEnv
-  pure $ results <&> \prop -> AnalysisResult (_sSbv prop) ksProvs
+  (results, success) <- runReaderT (runStateT (queryAction query) true) qEnv
+  pure $ results <&> \prop -> AnalysisResult success (_sSbv prop) ksProvs
 
 runPropertyAnalysis
   :: Check

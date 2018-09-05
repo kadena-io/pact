@@ -5,7 +5,8 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens              (at, view, (?~))
+import           Control.Monad.State.Strict     (MonadState, StateT)
+import           Control.Lens              (at, view, (?~), (.=))
 import           Control.Monad.Except      (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader      (MonadReader (local), ReaderT)
 import           Control.Monad.Trans.Class (lift)
@@ -34,9 +35,9 @@ import           Pact.Analyze.Util
 --
 newtype Query a
   = Query
-    { queryAction :: ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic) a }
+    { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
-            MonadError AnalyzeFailure)
+            MonadError AnalyzeFailure, MonadState SymbolicSuccess)
 
 instance Analyzer Query where
   type TermOf Query = Prop
@@ -47,9 +48,10 @@ instance Analyzer Query where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
+  markFailure b = id .= bnot b
 
 liftSymbolic :: Symbolic a -> Query a
-liftSymbolic = Query . lift . lift
+liftSymbolic = Query . lift . lift . lift
 
 aval
   :: Analyzer m

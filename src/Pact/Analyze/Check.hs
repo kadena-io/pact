@@ -45,6 +45,7 @@ import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Symbolic)
 import qualified Data.SBV                  as SBV
+import           Data.SBV                  ((&&&))
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
 import           Data.Set                  (Set)
@@ -263,10 +264,11 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
-          for2 resultsTable $ \(Located info (AnalysisResult prop ksProvs)) -> do
+          -- TODO(joel): warn for queries that could fail!
+          for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
-                void $ lift $ SBV.constrain $ SBV.bnot prop
+                void $ lift $ SBV.constrain $ SBV.bnot (prop &&& querySucceeds)
                 resultQuery goal $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
@@ -307,9 +309,10 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
-        AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
+        -- TODO(joel): warn for queries that could fail!
+        AnalysisResult querySucceeds prop ksProvs <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
-        void $ lift $ SBV.output prop
+        void $ lift $ SBV.output (prop &&& querySucceeds)
         hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
           resultQuery goal $ Model modelArgs' tags ksProvs graph
 

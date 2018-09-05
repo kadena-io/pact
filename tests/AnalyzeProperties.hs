@@ -15,6 +15,7 @@ import Data.Aeson (toJSON, Value(Object))
 import           Bound                       (closed)
 import qualified Data.HashMap.Strict as HM
 import           GHC.Natural               (Natural)
+import GHC.Stack
 import           Control.Exception           (ArithException (DivideByZero))
 import Control.Lens hiding ((...), op)
 import           Control.Monad               ((<=<))
@@ -58,7 +59,7 @@ import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
-import           Pact.Native                 (enforceDef, enforceOneDef, lengthDef, pactVersionDef, formatDef, hashDef, ifDef)
+import           Pact.Native                 (enforceDef, enforceOneDef, lengthDef, pactVersionDef, formatDef, hashDef, ifDef, readDecimalDef)
 import           Pact.Native.Ops
 import           Pact.Native.Time
 import           Pact.Native.Keysets
@@ -77,8 +78,6 @@ import qualified Pact.Types.Type             as Pact
 import qualified Pact.Types.Typecheck        as Pact
 
 import TimeGen
-
-import GHC.Stack
 
 
 data GenEnv = GenEnv
@@ -332,7 +331,7 @@ genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => SizedType -> m ETerm
 genTermSpecific size@SizedInt{} = genTermSpecific' size
-genTermSpecific SizedBool          = Gen.choice
+genTermSpecific SizedBool       = Gen.choice
   [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
   , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
        pure $ ESimple TBool $ EnforceOne $ case xs of
@@ -353,11 +352,13 @@ genTermSpecific size@(SizedString _len) = Gen.choice
   --      tagId <- genTagId
   --      Write writeType tagId table schema
   -- Write
-  [ pure (ESimple TStr PactVersion)
+  [ pure $ ESimple TStr PactVersion
   , do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
-             , genTerm strSize
+             , do
+                  x <- genTerm strSize
+                  pure x
              , genTerm SizedBool
              ]
        (str, tms) <- Gen.choice
@@ -394,7 +395,7 @@ genTermSpecific size@(SizedString _len) = Gen.choice
 genTermSpecific SizedKeySet =
   ESimple TKeySet . ReadKeySet . lit <$> genKeySetName
 genTermSpecific (SizedDecimal len) =
-  ESimple TKeySet . ReadKeySet . lit <$> genDecimalName len
+  ESimple TDecimal . ReadDecimal . lit <$> genDecimalName len
 genTermSpecific SizedTime = Gen.choice
   [ do
        -- We simplify a bit here and
@@ -580,6 +581,8 @@ toPactTm = \case
   ESimple TStr (Hash x) -> mkApp hashDef [x]
 
   ESimple TKeySet (ReadKeySet x) -> mkApp readKeysetDef [ESimple TStr x]
+
+  ESimple TDecimal (ReadDecimal x) -> mkApp readDecimalDef [ESimple TStr x]
 
   ESimple TTime (ParseTime Nothing x) ->
     mkApp parseTimeDef [ESimple TStr x]
@@ -914,13 +917,3 @@ sequentialChecks = checkSequential $ Group "checks"
   , ("prop_round_trip_term", prop_round_trip_term)
   , ("prop_evaluation", prop_evaluation)
   ]
-
--- tm' = Enforce (Just (TagId 0))
---   (CoreTerm (IntegerComparison Neq
---     (CoreTerm (Lit (-1)))
---     (CoreTerm (Lit (-1)))))
-
--- ty' = TBool
-
--- gState' = GenState 0 Map.empty Map.empty
--- etm' = ESimple ty' tm'

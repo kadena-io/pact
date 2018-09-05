@@ -19,7 +19,7 @@ import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               runExcept)
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
-import           Control.Monad.State.Strict  (MonadState, modify')
+import           Control.Monad.State.Strict  (MonadState, modify', runStateT, runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
@@ -33,6 +33,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               SymArray (readArray), SymWord,
                                               constrain, false, ite, (.<))
 import qualified Data.SBV.String             as SBV
+import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
@@ -70,6 +71,7 @@ instance Analyzer Analyze where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
+  markFailure b = succeeds .= sansProv (bnot b)
 
 evalTermLogicalOp
   :: LogicalOp
@@ -219,12 +221,16 @@ applyInvariants tn aValFields addInvariants = do
   case (mInvariants, mColumnIds) of
     (Just invariants', Just columnIds) -> do
       let aValFields' = reindex columnIds aValFields
+      -- TODO: better naming
       invariants'' <- for invariants' $ \(Located info invariant) ->
-        case runReaderT (unInvariantCheck (eval invariant))
+        case runReaderT (runStateT (unInvariantCheck (eval invariant)) true)
                         (Located info aValFields') of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
-          Right inv -> pure inv
+          -- require both:
+          -- 1. the invariant holds
+          -- 2. the query succeeds.
+          Right (inv, querySucceeds) -> pure $ inv &&& sansProv querySucceeds
       addInvariants invariants''
     _ -> pure ()
 
@@ -443,7 +449,10 @@ evalTerm = \case
       ESimple TStr  str  -> Left          <$> eval str
       ESimple TInt  int  -> Right . Left  <$> eval int
       ESimple TBool bool -> Right . Right <$> eval bool
-      _                  -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
+      etm                -> throwErrorNoLoc $ fromString $ T.unpack $
+        "We can only analyze calls to `format` formatting {string,integer,bool}" <>
+        -- " (not " <> userShow etm <> ")"
+        " (not " <> T.pack (show etm) <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just concreteStr -> case format concreteStr args' of

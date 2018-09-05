@@ -26,6 +26,7 @@ module Pact.Native
     ,formatDef
     ,hashDef
     ,ifDef
+    ,readDecimalDef
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
@@ -190,9 +191,7 @@ langDefs =
     ,defRNative "pact-id" pactId (funType tTyInteger [])
      "Return ID if called during current pact execution, failing if not."
 
-    ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
-     "Parse KEY string or number value from top level of message data body as decimal.\
-     \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
+    ,readDecimalDef
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
@@ -394,6 +393,12 @@ readDecimal i [TLitString key] = do
   (ParsedDecimal a) <- parseMsgKey i "read-decimal" key
   return $ toTerm a
 readDecimal i as = argsError i as
+
+
+readDecimalDef :: NativeDef
+readDecimalDef = defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
+ "Parse KEY string or number value from top level of message data body as decimal.\
+ \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
 -- | One-off type for 'readInteger', not exported.
 newtype ParsedInteger = ParsedInteger Integer

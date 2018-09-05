@@ -7,7 +7,7 @@ module Pact.Analyze.Eval.Numerical where
 
 import           Control.Lens            (over)
 import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
-                                          sMod, (.^))
+                                          sMod, (.^), (.<))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types.Eval
@@ -59,7 +59,9 @@ evalDecArithOp op xT yT = do
     Add -> pure $ dropRemainder $ x + y
     Sub -> pure $ dropRemainder $ x - y
     Mul -> pure $ dropRemainder $ x * y
-    Div -> pure $ dropRemainder $ x / y
+    Div -> do
+      markFailure $ y .== 0
+      pure $ dropRemainder $ x / y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -76,7 +78,9 @@ evalIntArithOp op xT yT = do
     Add -> pure $ x + y
     Sub -> pure $ x - y
     Mul -> pure $ x * y
-    Div -> pure $ x `sDiv` y
+    Div -> do
+      markFailure $ y .== 0
+      pure $ x `sDiv` y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -93,7 +97,9 @@ evalIntDecArithOp op xT yT = do
     Add -> pure $ dropRemainder $ fromIntegralS x + y
     Sub -> pure $ dropRemainder $ fromIntegralS x - y
     Mul -> pure $ dropRemainder $ fromIntegralS x * y
-    Div -> pure $ dropRemainder $ fromIntegralS x / y
+    Div -> do
+      markFailure $ y .== 0
+      pure $ dropRemainder $ fromIntegralS x / y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -110,7 +116,9 @@ evalDecIntArithOp op xT yT = do
     Add -> pure $ dropRemainder $ x + fromIntegralS y
     Sub -> pure $ dropRemainder $ x - fromIntegralS y
     Mul -> pure $ dropRemainder $ x * fromIntegralS y
-    Div -> pure $ dropRemainder $ x / fromIntegralS y
+    Div -> do
+      markFailure $ y .== 0
+      pure $ dropRemainder $ x / fromIntegralS y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -188,7 +196,8 @@ evalRoundingLikeOp2
 evalRoundingLikeOp2 op x precision = do
   x'         <- eval x
   precision' <- eval precision
-  -- success .= precision .>= 0
+  -- Precision must be >= 0
+  markFailure (precision' .< 0)
   let digitShift = over s2Sbv (10 .^) precision' :: S Integer
       x''        = x' * fromIntegralS digitShift
   x''' <- evalRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)
