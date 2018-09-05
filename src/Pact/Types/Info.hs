@@ -17,8 +17,8 @@ module Pact.Types.Info
    Code(..),
    Info(..),
    renderInfo,
-   renderParsed
-
+   renderParsed,
+   HasInfo(..)
    ) where
 
 
@@ -95,3 +95,9 @@ renderParsed (Parsed d _) = case d of
   (Directed f l c _ _) -> asString' f ++ ":" ++ show (succ l) ++ ":" ++ show c
   (Lines l c _ _) -> "<interactive>:" ++ show (succ l) ++ ":" ++ show c
   _ -> "<interactive>:0:0"
+
+
+class HasInfo a where
+  getInfo :: a -> Info
+
+instance HasInfo Info where getInfo = id

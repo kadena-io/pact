@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE TemplateHaskell       #-}
 module Pact.Analyze.Parse.Types where
 
@@ -17,9 +18,10 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            hiding (EObject, KeySet, KeySetName,
-                                             SchemaVar, TKeySet, TableName,
-                                             Type)
+import           Pact.Types.Lang            (AtomExp (..), Exp (..),
+                                             ListDelimiter (..), ListExp (..),
+                                             Literal, LiteralExp (..),
+                                             Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Util            (tShow)
@@ -99,12 +101,6 @@ textToQuantifier = \case
   SExistentialQuantification -> Just PreExists
   _                          -> Nothing
 
-stringLike :: Exp -> Maybe Text
-stringLike = \case
-  ESymbol str _  -> Just str
-  ELitString str -> Just str
-  _              -> Nothing
-
 type TableEnv = TableMap (ColumnMap EType)
 
 data PropCheckEnv = PropCheckEnv
@@ -127,3 +123,21 @@ type PropCheck      = ReaderT PropCheckEnv (Either String)
 type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
 makeLenses ''PropCheckEnv
+
+pattern ParenList :: [Exp t] -> Exp t
+pattern ParenList elems <- EList (ListExp elems Parens _i)
+
+pattern BraceList :: [Exp t] -> Exp t
+pattern BraceList elems <- EList (ListExp elems Braces _i)
+
+pattern SquareList :: [Exp t] -> Exp t
+pattern SquareList elems <- EList (ListExp elems Brackets _i)
+
+pattern EAtom' :: Text -> Exp t
+pattern EAtom' name <- EAtom (AtomExp name [] _i)
+
+pattern ELiteral' :: Literal -> Exp t
+pattern ELiteral' lit <- ELiteral (LiteralExp lit _i)
+
+pattern Colon' :: Exp t
+pattern Colon' <- ESeparator (SeparatorExp Colon _i)
