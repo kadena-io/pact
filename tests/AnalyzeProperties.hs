@@ -334,17 +334,21 @@ genTermSpecific
   => SizedType -> m ETerm
 genTermSpecific size@SizedInt{} = genTermSpecific' size
 genTermSpecific SizedBool       = Gen.choice
-  [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
-  , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
-       pure $ ESimple TBool $ EnforceOne $ case xs of
-         [] -> Left 0
-         _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
+  [
+  -- TODO: temporarily disabled pending
+  -- https://github.com/kadena-io/pact/issues/207
+  -- [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm SizedBool
+  -- , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
+  --      pure $ ESimple TBool $ EnforceOne $ case xs of
+  --        [] -> Left 0
+  --        _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
+
   -- TODO:
   -- , do tagId <- genTagId
   --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
   -- , do tagId <- genTagId
   --      ESimple TBool . NameAuthorized tagId . extract <$> genTerm strSize
-  , genTermSpecific' SizedBool
+    genTermSpecific' SizedBool
   ]
 genTermSpecific size@(SizedString _len) = Gen.choice
   -- TODO:
