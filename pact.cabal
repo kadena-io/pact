@@ -171,7 +171,7 @@ library
 
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall -O2 -Werror
+  ghc-options:         -Widentities -Wincomplete-patterns -Wincomplete-record-updates -Wincomplete-uni-patterns -Wname-shadowing -Wredundant-constraints -Wunused-binds -Wunused-imports -Wunused-matches
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
 
 executable pact
@@ -180,7 +180,7 @@ executable pact
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
-  ghc-options:         -Wall -threaded -rtsopts
+  ghc-options:         -Widentities -Wincomplete-patterns -Wincomplete-record-updates -Wincomplete-uni-patterns -Wname-shadowing -Wredundant-constraints -Wunused-binds -Wunused-imports -Wunused-matches -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
@@ -189,15 +189,16 @@ executable bench
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
-  ghc-options:         -Wall -threaded -rtsopts
+  ghc-options:         -Widentities -Wincomplete-patterns -Wincomplete-record-updates -Wincomplete-uni-patterns -Wname-shadowing -Wredundant-constraints -Wunused-binds -Wunused-imports -Wunused-matches -threaded -rtsopts
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
 test-suite hspec
-  type: exitcode-stdio-1.0
-  main-is: hspec.hs
-  hs-source-dirs: tests
+  type:             exitcode-stdio-1.0
+  main-is:          hspec.hs
+  hs-source-dirs:   tests
   default-language: Haskell2010
+  ghc-options:      -Widentities -Wincomplete-patterns -Wincomplete-record-updates -Wincomplete-uni-patterns -Wname-shadowing -Wredundant-constraints -Wunused-binds -Wunused-imports -Wunused-matches -O2 -threaded
   build-depends:
                 base
               , hspec
