@@ -31,30 +31,31 @@
 
 module Pact.Typechecker where
 
-import Control.Monad.Catch
-import Control.Lens hiding (List,Fold)
-import Bound.Scope
-import Safe hiding (at)
-import Data.Default
-import qualified Data.Map.Strict as M
+import           Bound.Scope
+import           Control.Arrow hiding ((<+>))
+import           Control.Compactable (traverseMaybe)
+import           Control.Lens hiding (List,Fold)
+import           Control.Monad
+import           Control.Monad.Catch
+import           Control.Monad.State
+import           Data.Default
+import           Data.Foldable
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Set as S
-import Control.Monad
-import Control.Monad.State
-import Data.List.NonEmpty (NonEmpty (..))
+import           Data.List
+import           Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NE
-import Control.Arrow hiding ((<+>))
-import Data.Foldable
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
-import Data.String
-import Data.List
-import Data.Monoid
-import Data.Maybe (isJust)
+import qualified Data.Map.Strict as M
+import           Data.Maybe (isJust)
+import           Data.Monoid
+import qualified Data.Set as S
+import           Data.String
+import           Safe hiding (at)
+import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
 
 
-import Pact.Types.Typecheck
-import Pact.Types.Runtime
-import Pact.Types.Native
+import           Pact.Types.Typecheck
+import           Pact.Types.Runtime
+import           Pact.Types.Native
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
@@ -266,8 +267,7 @@ applySchemas Pre ast = case ast of
     return ast
   (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> forM bs
-      (\(Named _ node ni, Prim _ (PrimLit (LString bn))) -> (bn,) <$> ((Var node,ni,) <$> lookupTy node))
+    pmap <- M.fromList <$> traverseMaybe f bs
     validateSchema sch pmap
     return ast
   _ -> return ast
@@ -279,7 +279,13 @@ applySchemas Pre ast = case ast of
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocAstTy (_aNode v) (either id id u)
+
+    -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
+    f (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
+    f _ = pure Nothing
+
     lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
+
     findSchema n act = do
       ty <- lookupTy n
       case ty of
@@ -539,8 +545,8 @@ unifyTypes l r = case (l,r) of
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
         (TypeVar _ ac,TyVar sv@(TypeVar _ bc)) -> case unifyConstraints ac bc of
-          Just (Left uc) -> Just $ vWrap $ TyVar $ v { _tvConstraint = uc }
-          Just (Right uc) -> Just $ sWrap $ TyVar $ sv { _tvConstraint = uc }
+          Just (Left uc)  -> Just . vWrap . TyVar $ (v  & tvConstraint .~ uc)
+          Just (Right uc) -> Just . sWrap . TyVar $ (sv & tvConstraint .~ uc)
           Nothing -> Nothing
         (TypeVar _ ac,_) | checkConstraints s ac -> Just useS
         _ -> Nothing
