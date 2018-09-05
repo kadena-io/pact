@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 -- Hedgehog generators of times
-module TimeGen where
+module Analyze.TimeGen where
 
 import           Hedgehog       hiding (Update)
 import qualified Hedgehog.Gen   as Gen
