@@ -19,7 +19,7 @@ import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               runExcept)
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
-import           Control.Monad.State.Strict  (MonadState, modify', runStateT, runStateT)
+import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)

@@ -1,10 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 module TimeGen where
 
-import           Hedgehog hiding (Update)
-import qualified Hedgehog.Gen                as Gen
-import qualified Hedgehog.Range              as Range
-import qualified Text.Printf as T
+import           Hedgehog       hiding (Update)
+import qualified Hedgehog.Gen   as Gen
+import qualified Hedgehog.Range as Range
+import qualified Text.Printf    as T
 
 -- with a few problematic ones disabled
 data TimeFormatAtom

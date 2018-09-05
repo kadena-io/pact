@@ -17,8 +17,8 @@ import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
                                              to, use, view, (%=), (%~), (.=),
-                                             (.~), (<&>), (<&>), (?=), (?~),
-                                             (^.), (^?), (<>~))
+                                             (.~), (<&>), (<>~), (?=), (?~),
+                                             (^.), (^?))
 import           Control.Monad              (replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))

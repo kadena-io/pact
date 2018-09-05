@@ -5,28 +5,28 @@
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Monad.State.Strict     (MonadState, StateT)
-import           Control.Lens              (at, view, (?~), (.=))
-import           Control.Monad.Except      (ExceptT, MonadError (throwError))
-import           Control.Monad.Reader      (MonadReader (local), ReaderT)
-import           Control.Monad.Trans.Class (lift)
-import qualified Data.Map.Strict           as Map
-import           Data.Monoid               ((<>))
-import           Data.SBV                  (Boolean (bnot, true, (&&&), (|||)),
-                                            EqSymbolic ((.==)), SBV,
-                                            SymWord (exists_, forall_),
-                                            Symbolic)
-import qualified Data.SBV.Internals        as SBVI
-import           Data.String               (IsString (fromString))
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
+import           Control.Lens               (at, view, (.=), (?~))
+import           Control.Monad.Except       (ExceptT, MonadError (throwError))
+import           Control.Monad.Reader       (MonadReader (local), ReaderT)
+import           Control.Monad.State.Strict (MonadState, StateT)
+import           Control.Monad.Trans.Class  (lift)
+import qualified Data.Map.Strict            as Map
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (Boolean (bnot, true, (&&&), (|||)),
+                                             EqSymbolic ((.==)), SBV,
+                                             SymWord (exists_, forall_),
+                                             Symbolic)
+import qualified Data.SBV.Internals         as SBVI
+import           Data.String                (IsString (fromString))
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
+import           Pact.Analyze.Orphans       ()
+import           Pact.Analyze.Types         hiding (tableName)
+import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
-import           Pact.Analyze.Orphans      ()
-import           Pact.Analyze.Types        hiding (tableName)
-import qualified Pact.Analyze.Types        as Types
 import           Pact.Analyze.Util
 
 

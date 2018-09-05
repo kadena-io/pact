@@ -44,8 +44,8 @@ import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Symbolic)
-import qualified Data.SBV                  as SBV
 import           Data.SBV                  ((&&&))
+import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
 import           Data.Set                  (Set)
@@ -59,8 +59,9 @@ import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
                                             renderParsed, tMeta)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
+import           Pact.Types.Runtime        (pattern EAtom', pattern EList',
+                                            pattern ELitList, Exp, ModuleData,
+                                            ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact

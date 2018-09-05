@@ -15,11 +15,11 @@
 
 module Pact.Analyze.Types.Shared where
 
-import           Control.Lens                 (At (at), Index, Iso, Iso', Prism',
-                                               IxValue, Ixed (ix), Lens', both,
-                                               from, iso, lens, makeLenses,
-                                               makePrisms, over, view, (%~),
-                                               (&))
+import           Control.Lens                 (At (at), Index, Iso, Iso',
+                                               IxValue, Ixed (ix), Lens',
+                                               Prism', both, from, iso, lens,
+                                               makeLenses, makePrisms, over,
+                                               view, (%~), (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Data                    (Data)
@@ -55,7 +55,7 @@ import           Prelude                      hiding (Float)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, time, obj, ks)
+import           Pact.Analyze.Feature         hiding (Type, ks, obj, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow

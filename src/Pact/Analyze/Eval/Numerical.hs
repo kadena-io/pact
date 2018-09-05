@@ -1,17 +1,17 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE Rank2Types            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 module Pact.Analyze.Eval.Numerical where
 
 import           Control.Lens            (over)
 import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
-                                          sMod, (.^), (.<))
+                                          sMod, (.<), (.^))
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Eval
 
 
 evalNumerical

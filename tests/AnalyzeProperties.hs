@@ -1,43 +1,44 @@
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE LambdaCase           #-}
-{-# LANGUAGE NumDecimals          #-}
-{-# LANGUAGE OverloadedStrings    #-}
-{-# LANGUAGE PatternSynonyms      #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TemplateHaskell      #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NumDecimals           #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 module AnalyzeProperties where
 
-import Data.Aeson (toJSON, Value(Object))
 import           Bound                       (closed)
-import qualified Data.HashMap.Strict as HM
-import           GHC.Natural               (Natural)
-import GHC.Stack
 import           Control.Exception           (ArithException (DivideByZero))
-import Control.Lens hiding ((...), op)
+import           Control.Lens                hiding (op, (...))
 import           Control.Monad               ((<=<))
 import           Control.Monad.Catch         (catch)
 import           Control.Monad.Except        (runExcept)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Morph         (generalize, hoist)
-import           Control.Monad.Reader        (ReaderT (runReaderT), MonadReader)
+import           Control.Monad.Reader        (MonadReader, ReaderT (runReaderT))
 import           Control.Monad.RWS.Strict    (runRWST)
-import           Control.Monad.State.Strict  (runStateT, MonadState)
+import           Control.Monad.State.Strict  (MonadState, runStateT)
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe
+import           Data.Aeson                  (Value (Object), toJSON)
 import qualified Data.Decimal                as Decimal
 import qualified Data.Default                as Default
+import qualified Data.HashMap.Strict         as HM
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (unliteral, writeArray, literal)
+import           Data.SBV                    (literal, unliteral, writeArray)
 import qualified Data.SBV.Internals          as SBVI
 import qualified Data.Text                   as T
 import           Data.Type.Equality          ((:~:) (Refl))
+import           GHC.Natural                 (Natural)
+import           GHC.Stack
 import           HaskellWorks.Hspec.Hedgehog
-import           Hedgehog hiding (Update)
+import           Hedgehog                    hiding (Update)
 import qualified Hedgehog.Gen                as Gen
 import qualified Hedgehog.Range              as Range
 import           Numeric.Interval
@@ -46,43 +47,49 @@ import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Errors
 -- import           Pact.Analyze.Model (allocModelTags)
-import           Pact.Analyze.Eval           (runAnalyze, lasSucceeds, latticeState)
+import           Pact.Analyze.Eval           (lasSucceeds, latticeState,
+                                              runAnalyze)
 import           Pact.Analyze.Eval.Term      (evalETerm)
-import           Pact.Analyze.Translate      (TranslateM (..),
+import           Pact.Analyze.Translate      (IsTest (IsTest), TranslateM (..),
                                               TranslateState (..),
                                               maybeTranslateType,
-                                              mkTranslateEnv, translateNode, IsTest(IsTest))
-import           Pact.Analyze.Types          hiding (Term, Object)
+                                              mkTranslateEnv, translateNode)
+import           Pact.Analyze.Types          hiding (Object, Term)
 import qualified Pact.Analyze.Types          as Analyze
-import           Pact.Analyze.Types.Eval     (mkAnalyzeEnv,
-                                              mkInitialAnalyzeState, aeKeySets, aeDecimals)
+import           Pact.Analyze.Types.Eval     (aeDecimals, aeKeySets,
+                                              mkAnalyzeEnv,
+                                              mkInitialAnalyzeState)
 import           Pact.Analyze.Util           (dummyInfo)
 
 import           Pact.Eval                   (liftTerm, reduce)
-import           Pact.Native                 (enforceDef, enforceOneDef, lengthDef, pactVersionDef, formatDef, hashDef, ifDef, readDecimalDef)
+import           Pact.Native                 (enforceDef, enforceOneDef,
+                                              formatDef, hashDef, ifDef,
+                                              lengthDef, pactVersionDef,
+                                              readDecimalDef)
+import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
-import           Pact.Native.Keysets
 import           Pact.Repl                   (initPureEvalEnv)
-import           Pact.Repl.Types (LibState)
+import           Pact.Repl.Types             (LibState)
 import           Pact.Typechecker            (typecheckTopLevel)
-import           Pact.Types.Exp              (Literal (..), Name(Name))
-import           Pact.Types.Persistence (WriteType)
+import           Pact.Types.Exp              (Literal (..), Name (Name))
 import           Pact.Types.Native           (NativeDef)
-import           Pact.Types.Runtime          (PactError (..),
+import           Pact.Types.Persistence      (WriteType)
+import           Pact.Types.Runtime          (EvalEnv, PactError (..),
                                               PactErrorType (EvalError),
-                                              runEval, EvalEnv, eeMsgBody)
-import           Pact.Types.Term             (Term (TApp, TConst, TLiteral), Meta(Meta))
+                                              eeMsgBody, runEval)
+import           Pact.Types.Term             (Meta (Meta),
+                                              Term (TApp, TConst, TLiteral))
 import qualified Pact.Types.Term             as Pact
 import qualified Pact.Types.Type             as Pact
 import qualified Pact.Types.Typecheck        as Pact
 
-import TimeGen
+import           TimeGen
 
 
 data GenEnv = GenEnv
-  { _envTables        :: ![(TableName, Schema)]
-  , _envKeysets       :: ![(Pact.KeySet, KeySet)]
+  { _envTables  :: ![(TableName, Schema)]
+  , _envKeysets :: ![(Pact.KeySet, KeySet)]
   }
 
 data GenState = GenState
@@ -336,7 +343,7 @@ genTermSpecific SizedBool       = Gen.choice
   , do xs <- Gen.list (Range.linear 0 4) (genTerm SizedBool)
        pure $ ESimple TBool $ EnforceOne $ case xs of
          [] -> Left 0
-         _ -> Right $ fmap (((Path 0, Path 0),) . extract) xs
+         _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
   -- TODO:
   -- , do tagId <- genTagId
   --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm SizedKeySet
@@ -540,7 +547,7 @@ toPactTm = \case
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
       Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
-      Nothing -> error $ "no keysets found at index " ++ show x
+      Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
   ESimple TBool (Enforce _ x)
@@ -739,7 +746,7 @@ genEnv = GenEnv
   ]
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
-fromPactVal (EType ty) = runMaybeT . toAnalyze (reverseTranslateType ty)
+fromPactVal (EType ty)  = runMaybeT . toAnalyze (reverseTranslateType ty)
 fromPactVal EObjectTy{} = const (pure Nothing) -- TODO
 
 data EvalResult
@@ -774,10 +781,10 @@ pactEval pactTm evalEnv = (do
           then pure Discard
           else pure $ EvalErr $ T.unpack msg
         _ -> case msg of
-          "(enforce)" -> pure $ EvalErr $ T.unpack msg
+          "(enforce)"     -> pure $ EvalErr $ T.unpack msg
           "(enforce-one)" -> pure $ EvalErr $ T.unpack msg
-          "" -> pure $ UnexpectedErr $ show pe
-          _ -> pure $ UnexpectedErr $ T.unpack msg)
+          ""              -> pure $ UnexpectedErr $ show pe
+          _               -> pure $ UnexpectedErr $ T.unpack msg)
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)

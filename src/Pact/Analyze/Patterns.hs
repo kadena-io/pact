@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE Rank2Types        #-}
@@ -18,8 +18,8 @@ import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, St
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
-import           Pact.Analyze.Types   (arithOpP, unaryArithOpP, roundingLikeOpP,
-                                       comparisonOpP, logicalOpP)
+import           Pact.Analyze.Types   (arithOpP, comparisonOpP, logicalOpP,
+                                       roundingLikeOpP, unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
 ofBasicOp s = if isBasicOp then Just s else Nothing
