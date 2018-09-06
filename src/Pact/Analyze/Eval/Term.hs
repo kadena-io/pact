@@ -240,7 +240,6 @@ evalTermO = \case
     rowReadCount tn sRk += 1
     tagAccessKey mtReads tid sRk
 
-
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
       sDirty <- use $ cellWritten tn cn sRk

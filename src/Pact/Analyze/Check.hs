@@ -241,7 +241,7 @@ inNewAssertionStack act = do
     pop  = lift $ SBV.pop 1
 
 -- Produces args for analysis from model args
-analysisArgs :: Map VarId (Located (Text, TVal)) -> Map VarId AVal
+analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
 verifyFunctionInvariants'
@@ -418,24 +418,33 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
     -- @checkFunction@. We need to more carefully enforce this is true!
     argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
       case maybeTranslateType ty of
-        Just ety -> pure (name, ety)
+        Just ety -> pure (Unmunged name, ety)
         Nothing  -> throwError $
           TypeTranslationFailure "couldn't translate argument type" ty
 
-    resultTy' <- case maybeTranslateType resultTy of
-      Just ety -> pure $ Binding 0 "result" ety
+    resultBinding <- case maybeTranslateType resultTy of
+      Just ety -> pure $ Binding 0 (Unmunged "result") (Munged "result") ety
       Nothing  -> throwError $
         TypeTranslationFailure "couldn't translate result type" resultTy
 
+    -- NOTE: At the moment, we leave all variables except for the toplevel args
+    -- under analysis as the original munged/SSA'd variable names. And result,
+    -- which we introduce. We also rely on this assumption in Translate's
+    -- mkTranslateEnv.
+
     let env :: [Binding]
-        env = resultTy' :
-          ((\(vid, (nm, ty)) -> Binding vid nm ty) <$> zip vids argTys')
+        env = resultBinding :
+          ((\(vid, (Unmunged nm, ty)) -> Binding vid (Unmunged nm) (Munged nm) ty) <$>
+            zip vids argTys')
 
-        nameEnv :: Map Text VarId
-        nameEnv = Map.fromList $ fmap (\(Binding vid nm _) -> (nm, vid)) env
+        --
+        -- TODO: should the map sent to parsing should be Un/Munged, instead of Text?
+        --
+        nameVids :: Map Text VarId
+        nameVids = Map.fromList $ fmap (\(Binding vid (Unmunged nm) _ _) -> (nm, vid)) env
 
-        idEnv :: Map VarId EType
-        idEnv = Map.fromList $ fmap (\(Binding vid _ ty) -> (vid, ty)) env
+        vidTys :: Map VarId EType
+        vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
 
         vidStart = VarId (length env)
 
@@ -456,7 +465,7 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
             expProperty   = model' ^? _Just . ix "property"
         exps <- collectExps "properties" expProperties expProperty
         runExpParserOver exps $
-          expToCheck tableEnv vidStart nameEnv idEnv propDefs
+          expToCheck tableEnv vidStart nameVids vidTys propDefs
 
     pure (ref, Right checks)
 

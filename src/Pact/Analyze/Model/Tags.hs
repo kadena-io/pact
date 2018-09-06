@@ -17,7 +17,8 @@ module Pact.Analyze.Model.Tags
   ) where
 
 import           Control.Lens            (Prism', toListOf, traverseOf,
-                                          traversed, (<&>), (?~), (^.), _1, _2)
+                                          traversed, (<&>), (?~), (^.), _1, _2,
+                                          _3)
 import           Control.Monad           (when, (>=>))
 import           Data.Map.Strict         (Map)
 import qualified Data.Map.Strict         as Map
@@ -25,7 +26,6 @@ import           Data.SBV                (SBV, SymWord, Symbolic)
 import qualified Data.SBV                as SBV
 import qualified Data.SBV.Control        as SBV
 import qualified Data.SBV.Internals      as SBVI
-import           Data.Text               (Text)
 import           Data.Traversable        (for)
 
 import qualified Pact.Types.Typecheck    as TC
@@ -45,7 +45,7 @@ allocAVal = \case
   EType (_ :: Type t) -> mkAVal . sansProv <$>
     (alloc :: Symbolic (SBV t))
 
-allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Text, TVal)))
+allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
@@ -67,10 +67,10 @@ allocModelTags locatedTm graph = ModelTags
     events :: [TraceEvent]
     events = toListOf (egEdgeEvents.traverse.traverse) graph
 
-    allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocVars :: Symbolic (Map VarId (Located (Unmunged, TVal)))
     allocVars = fmap Map.fromList $
-      for (toListOf (traverse._TraceBind) events) $
-        \(Located info (vid, nm, ety)) ->
+      for (toListOf (traverse._TracePushScope._3.traverse) events) $
+        \(Located info (Binding vid nm _ ety)) ->
           allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
 
     allocS :: SymWord a => Symbolic (S a)
