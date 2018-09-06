@@ -410,9 +410,9 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
   (Pact.Direct _, _) -> throwError InvalidRefType
   (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
-    -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
-    --       not there yet:
-    let vids = VarId <$> [1..]
+    let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
+        --       not there yet:
+        vids = VarId <$> [1..]
 
     -- TODO(joel): this relies on generating the same unique ids as
     -- @checkFunction@. We need to more carefully enforce this is true!
@@ -441,11 +441,11 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
 
         tableEnv = TableMap $ Map.fromList $
           tables <&> \Table { _tableName, _tableType } ->
-                       let fields = _utFields _tableType
-                           colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-                             \(Pact.Arg argName ty _) ->
-                               (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-                       in (TableName (T.unpack _tableName), colMap)
+            let fields = _utFields _tableType
+                colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+                  \(Pact.Arg argName ty _) ->
+                    (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+            in (TableName (T.unpack _tableName), colMap)
 
     checks <- case defn ^? tMeta . mModel . _Just of
       -- no model = no properties

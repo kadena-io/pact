@@ -6,6 +6,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 
+-- TODO This is to hide a warning involving `enforce'`, which has a typeclass
+-- constraint unused in the function itself, but is critical for preventing misuse
+-- by a caller. There is probably a better way to enforce this restriction,
+-- allowing us to remove this warning suppression.
+-- See: https://github.com/kadena-io/pact/pull/206/files#r215468087
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -393,7 +400,7 @@ enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ gasUnreduced i 
 enforceOne i as = argsError' i as
 
 
-enforce' :: RNativeFun e
+enforce' :: PureNoDb e => RNativeFun e
 enforce' i [TLiteral (LBool b) _,TLitString msg]
     | b = return $ TLiteral (LBool True) def
     | otherwise = failTx (_faInfo i) $ unpack msg

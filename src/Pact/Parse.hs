@@ -17,26 +17,29 @@
 --
 
 module Pact.Parse
-  ( exprs, exprsOnly
-  , parseExprs
-  , number
-  , PactParser(unPactParser)
-  ) where
+    (
+     exprs, exprsOnly
+    ,parseExprs
+    ,number
+    ,PactParser(unPactParser)
+    )
 
-import           Control.Applicative
-import           Control.Monad
+where
+
+import Text.Trifecta as TF
+import Text.Trifecta.Delta as TF
+import Control.Applicative
+import Data.List
+import Control.Monad
+import Prelude
+import Data.Decimal
 import qualified Data.Attoparsec.Text as AP
-import           Data.Char (digitToInt)
-import           Data.Decimal
-import           Data.List
-import           Data.Text (Text)
-import           Prelude
-import           Text.Trifecta as TF
-import           Text.Trifecta.Delta as TF
+import Data.Char (digitToInt)
+import Data.Text (Text)
 
-import           Pact.Types.Exp
-import           Pact.Types.Parser
-import           Pact.Types.Info
+import Pact.Types.Exp
+import Pact.Types.Parser
+import Pact.Types.Info
 
 ---
 
@@ -64,7 +67,8 @@ expr = do
     ]
 {-# INLINE expr #-}
 
--- TODO Consider: http://hackage.haskell.org/package/megaparsec-7.0.0/docs/Text-Megaparsec-Char-Lexer.html#v:float
+-- TODO As number parsing is a solved problem, consider something like:
+-- http://hackage.haskell.org/package/megaparsec-7.0.0/docs/Text-Megaparsec-Char-Lexer.html#v:float
 number :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m Literal
 number = do
   -- Tricky: note that we use `char :: CharParsing m => Char -> m Char` rather

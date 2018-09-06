@@ -24,11 +24,8 @@ blake2b_res = pack [
     ]
 
 -- parameter sets
-b2b_md_len :: [Int]
-b2b_md_len = [ 20, 32, 48, 64 ]
-
-b2b_in_len :: [Int]
-b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ]
+b2b_md_len :: [Int]; b2b_md_len = [ 20, 32, 48, 64 ];
+b2b_in_len :: [Int]; b2b_in_len = [ 0, 3, 128, 129, 255, 1024 ];
 
 
 selftest_seq :: Int -> Word32 -> ByteString
@@ -67,11 +64,8 @@ blake2s_res = pack [
     ];
 
 -- Parameter sets.
-b2s_md_len :: [Int]
-b2s_md_len = [ 16, 20, 28, 32 ]
-
-b2s_in_len :: [Int]
-b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ]
+b2s_md_len :: [Int]; b2s_md_len = [ 16, 20, 28, 32 ];
+b2s_in_len :: [Int]; b2s_in_len = [ 0,  3,  64, 65, 255, 1024 ];
 
 blake2s_selftest :: Spec
 blake2s_selftest = either fail p hashing

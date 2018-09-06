@@ -469,7 +469,8 @@ ksCell
 ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
-symArrayAt :: forall array k v
+symArrayAt
+  :: forall array k v
    . (SymWord v, SymArray array)
   => S k -> Lens' (array k v) (SBV v)
 symArrayAt (S _ symKey) = lens getter setter

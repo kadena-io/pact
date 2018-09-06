@@ -8,6 +8,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+
+-- TODO This is to hide a warning involving `enforceKeySet`, which has a typeclass
+-- constraint unused in the function itself, but is critical for preventing misuse
+-- by a caller. There is probably a better way to enforce this restriction,
+-- allowing us to remove this warning suppression.
+-- See: https://github.com/kadena-io/pact/pull/206/files#r215468087
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+
 -- |
 -- Module      :  Pact.Eval
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -81,7 +89,8 @@ enforceKeySetName mi mksn = do
 {-# INLINE enforceKeySetName #-}
 
 -- | Enforce keyset against environment
-enforceKeySet :: Info -> Maybe KeySetName -> KeySet -> Eval e ()
+enforceKeySet :: PureNoDb e => Info ->
+  Maybe KeySetName -> KeySet -> Eval e ()
 enforceKeySet i ksn KeySet{..} = do
   sigs <- view eeMsgSigs
   let count = length _ksKeys

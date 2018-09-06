@@ -31,31 +31,32 @@
 
 module Pact.Typechecker where
 
-import           Bound.Scope
-import           Control.Arrow hiding ((<+>))
-import           Control.Compactable (traverseMaybe)
-import           Control.Lens hiding (List,Fold)
-import           Control.Monad
-import           Control.Monad.Catch
-import           Control.Monad.State
-import           Data.Default
-import           Data.Foldable
-import qualified Data.HashMap.Strict as HM
-import           Data.List
-import           Data.List.NonEmpty (NonEmpty (..))
-import qualified Data.List.NonEmpty as NE
+import Control.Monad.Catch
+import Control.Lens hiding (List,Fold)
+import Bound.Scope
+import Safe hiding (at)
+import Data.Default
 import qualified Data.Map.Strict as M
-import           Data.Maybe (isJust)
-import           Data.Monoid
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as S
-import           Data.String
-import           Safe hiding (at)
-import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
+import Control.Monad
+import Control.Monad.State
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NE
+import Control.Arrow hiding ((<+>))
+import Data.Foldable
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>),(<>))
+import Data.String
+import Data.List
+import Data.Monoid
+import Data.Maybe (isJust)
+import Control.Compactable (traverseMaybe)
 
 
-import           Pact.Types.Typecheck
-import           Pact.Types.Runtime
-import           Pact.Types.Native
+import Pact.Types.Typecheck
+import Pact.Types.Runtime
+import Pact.Types.Native
+
 
 die :: MonadThrow m => Info -> String -> m a
 die i s = throwM $ CheckerException i s
@@ -267,7 +268,7 @@ applySchemas Pre ast = case ast of
     return ast
   (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> traverseMaybe f bs
+    pmap <- M.fromList <$> traverseMaybe lookupNode bs
     validateSchema sch pmap
     return ast
   _ -> return ast
@@ -281,8 +282,8 @@ applySchemas Pre ast = case ast of
           Just u -> assocAstTy (_aNode v) (either id id u)
 
     -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
-    f (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
-    f _ = pure Nothing
+    lookupNode (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
+    lookupNode _ = pure Nothing
 
     lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
 

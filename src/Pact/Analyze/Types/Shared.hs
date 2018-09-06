@@ -404,7 +404,11 @@ coerceS (S mProv a) = S mProv $ coerceSBV a
 iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
-fromIntegralS :: (Integral a, SymWord a, Num b, SymWord b) => S a -> S b
+fromIntegralS
+  :: forall a b
+  . (Integral a, SymWord a, Num b, SymWord b)
+  => S a
+  -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
 realToIntegerS :: S Decimal -> S Integer
