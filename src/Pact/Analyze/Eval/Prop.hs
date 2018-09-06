@@ -48,7 +48,7 @@ instance Analyzer Query where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
-  markFailure b = id %= (&&& bnot b)
+  markFailure b = id %= (&&& SymbolicSuccess (bnot b))
 
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift . lift

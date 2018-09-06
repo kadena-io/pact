@@ -268,7 +268,8 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
           for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
-                void $ lift $ SBV.constrain $ SBV.bnot (prop &&& querySucceeds)
+                void $ lift $ SBV.constrain $ SBV.bnot $
+                  prop &&& successBool querySucceeds
                 resultQuery goal $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
@@ -310,9 +311,11 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
         -- TODO(joel): warn for queries that could fail!
-        AnalysisResult querySucceeds prop ksProvs <- withExceptT analyzeToCheckFailure $
-          runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
-        void $ lift $ SBV.output (prop &&& querySucceeds)
+        AnalysisResult querySucceeds prop ksProvs
+          <- withExceptT analyzeToCheckFailure $
+            runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
+              funInfo
+        void $ lift $ SBV.output $ prop &&& successBool querySucceeds
         hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
           resultQuery goal $ Model modelArgs' tags ksProvs graph
 

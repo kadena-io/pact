@@ -229,7 +229,8 @@ applyInvariants tn aValFields addInvariants = do
           -- require both:
           -- 1. the invariant holds
           -- 2. the query succeeds.
-          Right (inv, querySucceeds) -> pure $ inv &&& sansProv querySucceeds
+          Right (inv, SymbolicSuccess querySucceeds)
+            -> pure $ inv &&& sansProv querySucceeds
       addInvariants invariants''
     _ -> pure ()
 

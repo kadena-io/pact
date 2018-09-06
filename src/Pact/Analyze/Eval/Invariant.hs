@@ -32,4 +32,4 @@ instance Analyzer InvariantCheck where
     info <- view location
     throwError $ AnalyzeFailure info err
   getVar vid = view (located . at vid)
-  markFailure b = id %= (&&& bnot b)
+  markFailure b = id %= (&&& SymbolicSuccess (bnot b))

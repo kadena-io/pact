@@ -101,7 +101,7 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
     Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
     Left err                    -> error $ describeAnalyzeFailure err
 
-  case unliteral (las ^. latticeState . lasSucceeds) of
+  case unliteral (las ^. latticeState . lasSucceeds . _Wrapped') of
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
     Just False -> pure $ Left "fails"
     Just True -> case analyzeVal of
