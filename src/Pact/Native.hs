@@ -13,12 +13,11 @@
 --
 -- Pact builtins/standard library.
 --
-
 module Pact.Native
-    (natives
-    ,nativeDefs
-    ,moduleToMap)
-    where
+  (natives
+  ,nativeDefs
+  ,moduleToMap
+  ) where
 
 import Control.Arrow hiding (app)
 import Control.Lens hiding (parts,Fold,contains)
@@ -55,12 +54,13 @@ import Pact.Types.Hash (hash, hexidecimalHash)
 
 -- | All production native modules.
 natives :: [NativeModule]
-natives = [
-  langDefs,
-  dbDefs,
-  timeDefs,
-  opDefs,
-  keyDefs]
+natives =
+  [ langDefs
+  , dbDefs
+  , timeDefs
+  , opDefs
+  , keyDefs
+  ]
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: M.HashMap Name Ref
@@ -68,8 +68,6 @@ nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> M.HashMap Name Ref
 moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
-
-
 
 langDefs :: NativeModule
 langDefs =
@@ -155,8 +153,10 @@ langDefs =
     ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
+
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
+
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, \
@@ -170,13 +170,17 @@ langDefs =
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
+
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
+
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
+
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
+
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
@@ -549,12 +553,12 @@ integerHashNativeFun i as =
   case as of
     [TLitString s] -> go $ encodeUtf8 s
     [a] -> go $ toStrict $ encode a
-    _ -> argsError i as
+    _   -> argsError i as
     where
       go :: ByteString -> Eval e (Term Name)
       go bs =
         case hexidecimalHash bs of
-          Left e -> const (argsError i as) e -- How to concatenate these errors to the existing spec?
+          Left  e -> const (argsError i as) e -- How to concatenate these errors to the existing spec?
           Right a -> return . tStr . asString $ a
       
 txHashNativeFun :: RNativeFun e

@@ -163,7 +163,6 @@ instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
 instance AsString Integer where asString = pack . show
 
-
 -- | Pure version of 'modifyMVar_'
 modifyMVar' :: MVar a -> (a -> a) -> IO ()
 modifyMVar' mv f = modifyMVar_ mv (\ps -> return (f ps))
