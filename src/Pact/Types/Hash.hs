@@ -52,7 +52,7 @@ numericBasedHash
   -> ByteString
   -> Either Text Integer
 numericBasedHash base =
-    readBasedIntegerText base toBase . asString . hash 
+    readStringAtBase base toBase . asString . hash 
   where
     toBase :: Char -> Integer
     toBase = (`mod` base) . fromIntegral . ord . toUpper
@@ -83,16 +83,16 @@ hexidecimalHash = numericBasedHash 16
 -- | Reads 'String' as a non-negative 'Integral' number using the base
 -- specified by the first argument, and character representation
 -- specified by the second argument
-readBasedIntegerText
+readStringAtBase
   :: Integer -- ^ The base specification
   -> (Char -> Integer) -- ^ the a-valued representation for a given character
   -> Text -- ^ The string to convert to integral base-a
   -> Either Text Integer
-readBasedIntegerText base rChr txt
+readStringAtBase base rChr txt
   | base <= 1 = Left ("readStringAtBase: applied to unsupported base - " `append` asString base)
   | null txt = Left ("readStringAtBase: applied to empty string - " `append`  txt)
   | otherwise = Right $ foldl' go 0 txt
   where
     go :: Integer -> Char -> Integer
     go acc c = base*acc + (rChr c)
-{-# INLINE readBasedIntegerText #-}
+{-# INLINE readStringAtBase #-}
