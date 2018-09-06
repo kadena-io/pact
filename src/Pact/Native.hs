@@ -5,7 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
