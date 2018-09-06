@@ -35,12 +35,12 @@ pattern NativeFunc f <- FNative _ f _ _
 
 -- compileNode's Patterns
 
-pattern AST_InlinedApp :: [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_InlinedApp bindings body <-
-  App _ (FDefun _ _ _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
+pattern AST_InlinedApp :: Text -> [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_InlinedApp funName bindings body <-
+  App _ (FDefun _ funName _ _ [Binding _ bindings body AstBindInlinedCallArgs]) _args
 
-pattern AST_Let :: forall a. a -> [(Named a, AST a)] -> [AST a] -> AST a
-pattern AST_Let node bindings body = Binding node bindings body AstBindLet
+pattern AST_Let :: forall a. [(Named a, AST a)] -> [AST a] -> AST a
+pattern AST_Let bindings body <- Binding _ bindings body AstBindLet
 
 pattern AST_BindSchema :: forall a. a -> [(Named a, AST a)] -> a -> [AST a] -> AST a
 pattern AST_BindSchema node bindings schema body <- Binding node bindings body (AstBindSchema schema)

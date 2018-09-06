@@ -1014,7 +1014,7 @@ spec = describe "analyze" $ do
 
             it "should have a negative amount" $ do
               Just (Located _ (_, (_, AVal _prov amount))) <- pure $
-                find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
+                find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse
               (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
             let negativeWrite (Object m) = case m Map.! "balance" of
@@ -1942,12 +1942,11 @@ spec = describe "analyze" $ do
     expectFalsified code'
 
   describe "execution trace" $ do
-    let read, write, assert, {-auth,-} var :: TraceEvent -> Bool
+    let read, write, assert {-auth,-} :: TraceEvent -> Bool
         read   = isRight . matching _TraceRead
         write  = isRight . matching _TraceWrite
         assert = isRight . matching _TraceAssert
         -- auth= isRight . matching _TraceAuth
-        var    = isRight . matching _TraceBind
         path   = isRight . matching _TraceSubpathStart
         push   = isRight . matching _TracePushScope
         pop    = isRight . matching _TracePopScope
@@ -1987,7 +1986,7 @@ spec = describe "analyze" $ do
             |]
 
       expectTrace code (bnot Success')
-        [push, read, var, read, var, assert, assert, write, write, pop]
+        [read, read, push, assert, assert, write, write, pop]
 
     describe "doesn't include events excluded by a conditional" $ do
       let code =
