@@ -16,10 +16,10 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, use, view, (%=), (%~), (.=),
-                                             (.~), (<&>), (<>~), (?=), (?~),
-                                             (^.), (^?))
-import           Control.Monad              (replicateM, (>=>))
+                                             to, use, view, zoom, (%=), (%~),
+                                             (.=), (.~), (<&>), (<>~), (?=),
+                                             (?~), (^.), (^?))
+import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
@@ -115,13 +115,16 @@ data TranslateEnv
     { _teInfo           :: Info
     , _teNodeVars       :: Map Node (Text, VarId)
     , _teRecoverability :: Recoverability
-    , _teTestMode       :: IsTest
+
+    -- How to generate the next tag and vertex ids. Usually this is via @genId@
+    -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
+    , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
+    , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
     }
 
-data IsTest = IsTest | IsntTest
-
-mkTranslateEnv :: IsTest -> Info -> [Arg] -> TranslateEnv
-mkTranslateEnv isTest info args = TranslateEnv info nodeVars mempty isTest
+mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
+mkTranslateEnv info args
+  = TranslateEnv info nodeVars mempty (genId id) (genId id)
   where
     nodeVars = foldl'
       (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
@@ -248,11 +251,7 @@ emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
 
 genTagId :: TranslateM TagId
-genTagId = do
-  testMode <- view teTestMode
-  case testMode of
-    IsTest   -> pure 0
-    IsntTest -> genId tsNextTagId
+genTagId = TranslateM $ zoom tsNextTagId $ join $ view teGenTagId
 
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
@@ -368,10 +367,7 @@ throwError' err = do
 -- 'Vertex' to the graph.
 issueVertex :: TranslateM Vertex
 issueVertex = do
-  testMode <- view teTestMode
-  v <- case testMode of
-    IsTest   -> pure 0
-    IsntTest -> genId tsNextVertex
+  v <- TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
   tsPathHead .= v
   pure v
 
@@ -954,4 +950,4 @@ runTranslation info pactArgs body = do
           translation = translateBody body
                      <* extendPath -- form final edge for any remaining events
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
-           runReaderT (unTranslateM translation) (mkTranslateEnv IsntTest info args)
+           runReaderT (unTranslateM translation) (mkTranslateEnv info args)

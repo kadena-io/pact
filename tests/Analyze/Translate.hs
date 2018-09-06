@@ -13,9 +13,9 @@ import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT, runMaybeT),
 import qualified Data.Map.Strict            as Map
 import qualified Data.Text                  as T
 
-import           Pact.Analyze.Translate     (IsTest (IsTest), TranslateM (..),
-                                             TranslateState (..),
-                                             mkTranslateEnv, translateNode)
+import           Pact.Analyze.Translate     (TranslateEnv (TranslateEnv),
+                                             TranslateM (..),
+                                             TranslateState (..), translateNode)
 import           Pact.Analyze.Types         hiding (Object, Term)
 import           Pact.Analyze.Util          (dummyInfo)
 
@@ -258,13 +258,15 @@ toAnalyze ty tm = do
       state0 = TranslateState nextTagId 0 graph0 vertex0 nextVertex Map.empty
         mempty path0 Map.empty
 
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty (pure 0) (pure 0)
+
   hoist generalize $
     exceptToMaybeT $
       fmap fst $
         flip runStateT state0 $
           runReaderT
             (unTranslateM (translateNode ast))
-            (mkTranslateEnv IsTest dummyInfo [])
+            translateEnv
 
 -- This is limited to simple types for now
 reverseTranslateType :: Type a -> Pact.Type b
