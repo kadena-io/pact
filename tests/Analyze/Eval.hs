@@ -3,6 +3,7 @@
 module Analyze.Eval where
 
 import           Bound                    (closed)
+import           Control.DeepSeq
 import           Control.Exception        (ArithException (DivideByZero))
 import           Control.Lens             hiding (op, (...))
 import           Control.Monad.Catch      (catch)
@@ -35,7 +36,6 @@ import qualified Pact.Types.Term          as Pact
 
 import           Analyze.Gen
 
-
 data EvalResult
   = EvalResult !(Pact.Term Pact.Ref)
   | Discard
@@ -53,7 +53,9 @@ pactEval pactTm evalEnv = (do
     (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
     Just pactVal' <- pure $ closed pactVal
 
-    pure $ EvalResult pactVal'
+    -- Fully evaluate (via deepseq) before returning result so we are sure to
+    -- catch any exceptions.
+    pure $ EvalResult $ show pactVal' `deepseq` pactVal'
   )
     -- discard division by zero, on either the pact or analysis side
     --

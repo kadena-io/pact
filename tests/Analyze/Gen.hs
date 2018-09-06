@@ -8,7 +8,9 @@
 {-# LANGUAGE TemplateHaskell       #-}
 module Analyze.Gen where
 
+import           Control.DeepSeq
 import           Control.Lens               hiding (op, (...))
+import           Control.Monad.Catch        (MonadCatch (catch))
 import           Control.Monad.Reader       (MonadReader, ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, runStateT)
 import qualified Data.Decimal               as Decimal
@@ -23,6 +25,7 @@ import qualified Hedgehog.Gen               as Gen
 import qualified Hedgehog.Range             as Range
 import           Numeric.Interval           (Interval, inf, midpoint, sup,
                                              (+/-), (...))
+import           Numeric.Interval.Exception (EmptyInterval)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types         hiding (Object, Term)
 import qualified Pact.Analyze.Types         as Analyze
@@ -447,6 +450,14 @@ genAnyTerm' :: Gen (ETerm, GenState)
 genAnyTerm' = runReaderT
   (runStateT genAnyTerm (GenState 0 Map.empty Map.empty))
   genEnv
+
+safeGenAnyTerm
+  :: (Monad m, MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
+safeGenAnyTerm = (do
+  (etm, gState) <- forAll genAnyTerm'
+  pure $ show etm `deepseq` (etm, gState)
+  ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
+
 
 alice, bob :: Pact.PublicKey
 alice = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"

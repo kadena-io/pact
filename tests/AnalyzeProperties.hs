@@ -4,7 +4,6 @@
 module AnalyzeProperties where
 
 import           Control.Monad               ((<=<))
-import           Control.Monad.Catch         (catch)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Reader        (ReaderT (runReaderT))
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
@@ -12,7 +11,6 @@ import           Control.Monad.Trans.Maybe   (MaybeT (runMaybeT))
 import           Data.Type.Equality          ((:~:) (Refl))
 import           HaskellWorks.Hspec.Hedgehog
 import           Hedgehog                    hiding (Update)
-import           Numeric.Interval.Exception  (EmptyInterval)
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
@@ -22,51 +20,45 @@ import           Analyze.Eval
 import           Analyze.Gen
 import           Analyze.Translate
 
-
 prop_evaluation :: Property
 prop_evaluation = property $ do
-  (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
+  (etm@(ESimple ty _tm), gState) <- safeGenAnyTerm
   evalEnv <- liftIO $ mkEvalEnv gState
 
   -- pact setup
   -- TODO: look at what this reads from gState. does it read the named things?
   let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
 
-  (do
-      -- evaluate via pact, convert to analyze term
-      mPactVal <- liftIO $ pactEval pactTm evalEnv
-      ePactVal <- case mPactVal of
-        UnexpectedErr err  -> footnote err >> failure
-        Discard            -> discard
-        EvalResult pactVal -> pure $ Right pactVal
-        EvalErr err        -> pure $ Left err
+  -- evaluate via pact, convert to analyze term
+  mPactVal <- liftIO $ pactEval pactTm evalEnv
+  ePactVal <- case mPactVal of
+    UnexpectedErr err  -> footnote err >> failure
+    Discard            -> discard
+    EvalResult pactVal -> pure $ Right pactVal
+    EvalErr err        -> pure $ Left err
 
-      eAnalyzeVal <- liftIO $ analyzeEval etm gState
+  eAnalyzeVal <- liftIO $ analyzeEval etm gState
 
-      case (ePactVal, eAnalyzeVal) of
-        (Left _pactErr, Left _analyzeErr) -> success
-        (Left pactErr, Right analyzeVal) -> do
-          footnote $ "got failure from pact: " ++ pactErr
-          footnote $ "got value from analyze: " ++ show analyzeVal
-          failure
-        (Right pactVal, Left analyzeErr) ->  do
-          footnote $ "got value from pact: " ++ show pactVal
-          footnote $ "got failure from analyze: " ++ analyzeErr
-          failure
+  case (ePactVal, eAnalyzeVal) of
+    (Left _pactErr, Left _analyzeErr) -> success
+    (Left pactErr, Right analyzeVal) -> do
+      footnote $ "got failure from pact: " ++ pactErr
+      footnote $ "got value from analyze: " ++ show analyzeVal
+      failure
+    (Right pactVal, Left analyzeErr) ->  do
+      footnote $ "got value from pact: " ++ show pactVal
+      footnote $ "got failure from analyze: " ++ analyzeErr
+      failure
 
-        (Right pactVal, Right analyzeVal) -> do
-          Just (ESimple ty' (CoreTerm (Lit pactSval)))
-            <- lift $ fromPactVal (EType ty) pactVal
-          ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
+    (Right pactVal, Right analyzeVal) -> do
+      Just (ESimple ty' (CoreTerm (Lit pactSval)))
+        <- lift $ fromPactVal (EType ty) pactVal
+      ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
 
-          -- compare results
-          case typeEq ty' ty'' of
-            Just Refl -> sval' === pactSval
-            Nothing   -> EType ty' === EType ty'' -- this'll fail
-    )
-      -- TODO: is this even on the right block?
-      -- see note [EmptyInterval]
-      `catch` (\(_e :: EmptyInterval)  -> discard)
+      -- compare results
+      case typeEq ty' ty'' of
+        Just Refl -> sval' === pactSval
+        Nothing   -> EType ty' === EType ty'' -- this'll fail
 
 prop_round_trip_type :: Property
 prop_round_trip_type = property $ do
@@ -74,14 +66,13 @@ prop_round_trip_type = property $ do
   maybeTranslateType (reverseTranslateType ty) === Just ety
 
 prop_round_trip_term :: Property
-prop_round_trip_term = property $ (do
-  (etm@(ESimple ty _tm), gState) <- forAll genAnyTerm'
+prop_round_trip_term = property $ do
+  (etm@(ESimple ty _tm), gState) <- safeGenAnyTerm
 
   etm' <- lift $ runMaybeT $
     (toAnalyze (reverseTranslateType ty) <=< toPactTm' (genEnv, gState)) etm
 
-  etm' === Just etm)
-    `catch` (\(_e :: EmptyInterval)  -> discard)
+  etm' === Just etm
 
 spec :: Spec
 spec = describe "analyze properties" $ do
