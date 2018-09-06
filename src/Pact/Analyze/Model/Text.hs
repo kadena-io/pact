@@ -9,25 +9,31 @@ module Pact.Analyze.Model.Text
   ( showModel
   ) where
 
-import           Control.Lens             (Lens', at, ifoldr, view, (^.))
-import qualified Data.Foldable            as Foldable
-import           Data.Map.Strict          (Map)
-import qualified Data.Map.Strict          as Map
-import           Data.Monoid              ((<>))
-import           Data.SBV                 (SBV, SymWord)
-import qualified Data.SBV                 as SBV
-import qualified Data.SBV.Internals       as SBVI
-import           Data.Text                (Text)
-import qualified Data.Text                as T
+import           Control.Lens               (Lens', at, ifoldr, view, (^.))
+import           Control.Monad.State.Strict (State, evalState, get, modify)
+import qualified Data.Foldable              as Foldable
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (SBV, SymWord)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           GHC.Natural                (Natural)
 
-import qualified Pact.Types.Info          as Pact
-import           Pact.Types.Runtime       (tShow)
+import qualified Pact.Types.Info            as Pact
+import           Pact.Types.Runtime         (tShow)
 
-import           Pact.Analyze.Model.Graph (linearize)
+import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
 
 indent :: Text -> Text
 indent = ("  " <>)
+
+indent' :: Natural -> Text -> Text
+indent' 0     = id
+indent' times = indent' (pred times) . indent
 
 showSbv :: (Show a, SymWord a) => SBV a -> Text
 showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
@@ -116,22 +122,36 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
 
 -- TODO: after factoring Location out of TraceEvent, include source locations
 --       in trace
-showEvent :: Map TagId Provenance -> ModelTags 'Concrete -> TraceEvent -> [Text]
-showEvent ksProvs tags = \case
-    TraceRead (_located -> (tid, _)) ->
-      [display mtReads tid showRead]
-    TraceWrite (_located -> (tid, _)) ->
-      [display mtWrites tid showWrite]
-    TraceAssert recov (_located -> tid) ->
-      [display mtAsserts tid (showAssert recov)]
-    TraceAuth recov (_located -> tid) ->
-      [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
-    TraceSubpathStart _ ->
-      [] -- not shown to end-users
-    TracePushScope _ _ (fmap (view (located.bVid)) -> vids) ->
-      (\vid -> display mtVars vid showVar) <$> vids
-    TracePopScope _ _ ->
-      []
+showEvent
+  :: Map TagId Provenance
+  -> ModelTags 'Concrete
+  -> TraceEvent
+  -> State Natural [Text]
+showEvent ksProvs tags event = do
+  lastDepth <- get
+  fmap (fmap (indent' lastDepth)) $
+    case event of
+      TraceRead (_located -> (tid, _)) ->
+        pure [display mtReads tid showRead]
+      TraceWrite (_located -> (tid, _)) ->
+        pure [display mtWrites tid showWrite]
+      TraceAssert recov (_located -> tid) ->
+        pure [display mtAsserts tid (showAssert recov)]
+      TraceAuth recov (_located -> tid) ->
+        pure [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
+      TraceSubpathStart _ ->
+        pure [] -- not shown to end-users
+      TracePushScope _ scopeTy (fmap (view (located.bVid)) -> vids) -> do
+        modify succ
+        pure $
+          (case scopeTy of
+             LetScope         -> "let"
+             ObjectScope      -> "destructuring object"
+             FunctionScope nm -> "entering function " <> nm
+          ) : ((\vid -> indent $ display mtVars vid showVar) <$> vids)
+      TracePopScope _ _ -> do
+        modify pred
+        pure []
 
   where
     display
@@ -149,7 +169,7 @@ showModel model =
       , indent <$> Foldable.toList (showVar <$> (model ^. modelArgs))
       , []
       , ["Program trace:"]
-      , indent <$> (showEvent' =<< traceEvents)
+      , indent <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
       , []
       , ["Result:"]
       , [indent $ maybe
