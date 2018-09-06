@@ -150,7 +150,11 @@ evalModOp
   => TermOf m Integer
   -> TermOf m Integer
   -> m (S Integer)
-evalModOp xT yT = sMod <$> eval xT <*> eval yT
+evalModOp xT yT = do
+  x <- eval xT
+  y <- eval yT
+  markFailure $ y .== 0
+  pure $ sMod x y
 
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethod :: S Decimal -> S Integer

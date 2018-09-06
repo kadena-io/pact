@@ -59,7 +59,8 @@ pactEval pactTm evalEnv = (do
     --
     -- future work here is to make sure that if one side throws, the other
     -- does as well.
-    `catch` (\(DivideByZero :: ArithException) -> pure Discard)
+    `catch` (\(DivideByZero :: ArithException) ->
+      pure $ EvalErr "division by zero")
     `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
       case err of
         EvalError ->
