@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
-
+{-# LANGUAGE LambdaCase #-}
 -- |
 -- Module      :  Pact.Native
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -21,25 +21,26 @@ module Pact.Native
     ,moduleToMap)
     where
 
+import Control.Arrow hiding (app)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
+
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
-import Prelude
 import qualified Data.HashMap.Strict as M
 import qualified Data.Text as T
-import Safe
-import Control.Arrow hiding (app)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Decimal
 import Data.List
 import Data.Function (on)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
 
+import Safe
 
 import Pact.Eval
 import Pact.Native.Db
@@ -50,7 +51,8 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash
+import Pact.Types.Hash (hash, hexidecimalHash)
+
 
 -- | All production native modules.
 natives :: [NativeModule]
@@ -60,7 +62,6 @@ natives = [
   timeDefs,
   opDefs,
   keyDefs]
-
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: M.HashMap Name Ref
@@ -163,7 +164,7 @@ langDefs =
      \List -> value, Object -> value. NB value types are not introspectable in pact. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defRNative "tx-hash" txHash (funType tTyString [])
+    ,defRNative "tx-hash" txHashNativeFun (funType tTyString [])
      "Obtain hash of current transaction as a string. `(tx-hash)`"
 
     ,defNative (specialForm Bind) bind
@@ -206,9 +207,14 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-    ,defRNative "hash" hash' (funType tTyString [("value",a)])
+    ,defRNative "hash" stringHashNativeFun (funType tTyString [("value",a)])
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
+
+    ,defRNative "int-hash" integerHashNativeFun (funType tTyString [("value", a)])
+     "Compute the BLAKE2b 512-bit hash of VALUE, returning a value of type Integer. Strings are converted \
+     \directly, while other values are converted using their JSON representation. `(int-hash \"hello\")` \
+     \`(int-hash { 'foo: 1 })`"
 
     ])
     where a = mkTyVar "a" []
@@ -532,13 +538,27 @@ identity :: RNativeFun e
 identity _ [a] = return a
 identity i as = argsError i as
 
-hash' :: RNativeFun e
-hash' i as = case as of
+stringHashNativeFun :: RNativeFun e
+stringHashNativeFun i as = case as of
   [TLitString s] -> go $ encodeUtf8 s
   [a] -> go $ toStrict $ encode a
   _ -> argsError i as
   where go = return . tStr . asString . hash
 
-txHash :: RNativeFun e
-txHash _ [] = (tStr . asString) <$> view eeHash
-txHash i as = argsError i as
+integerHashNativeFun :: RNativeFun e
+integerHashNativeFun i as =
+  case as of
+    [TLitString s] -> go $ encodeUtf8 s
+    [a] -> go $ toStrict $ encode a
+    _ -> argsError i as
+    where
+      go :: ByteString -> Eval e (Term Name)
+      go bs =
+        case hexidecimalHash bs of
+          Left e -> const (argsError i as) e -- How to concatenate these errors to the existing spec?
+          Right a -> return . tStr . asString $ a
+      
+txHashNativeFun :: RNativeFun e
+txHashNativeFun _ [] = (tStr . asString) <$> view eeHash
+txHashNativeFun i as = argsError i as
+

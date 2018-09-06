@@ -50,6 +50,7 @@ library
                      , Pact.Types.Type
                      , Pact.Types.Util
                      , Pact.Types.Version
+                     , Pact.Types.Word512
                      , Crypto.Hash.Blake2Native
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
@@ -121,6 +122,7 @@ library
                      , cereal >=0.5.4.0 && < 0.6
                      , containers >= 0.5.7 && < 0.6
                      , data-default >= 0.7.1.1 && < 0.8
+                     , data-dword >= 0.3 && < 0.3.2.2
                      , deepseq >= 1.4.2.0 && < 1.5
                      , directory >= 1.2.6.2 && < 1.4
                      , exceptions >= 0.8.3 && < 0.11

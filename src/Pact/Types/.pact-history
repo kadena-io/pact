@@ -1,0 +1,4 @@
+(int-hash "foo")
+stack build
+(hash "hello")
+(int-hash "hello")
