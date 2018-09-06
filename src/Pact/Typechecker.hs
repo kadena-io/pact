@@ -546,8 +546,8 @@ unifyTypes l r = case (l,r) of
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
         (TypeVar _ ac,TyVar sv@(TypeVar _ bc)) -> case unifyConstraints ac bc of
-          Just (Left uc)  -> Just . vWrap . TyVar $ (v  & tvConstraint .~ uc)
-          Just (Right uc) -> Just . sWrap . TyVar $ (sv & tvConstraint .~ uc)
+          Just (Left uc)  -> Just . vWrap . TyVar $ set tvConstraint uc v
+          Just (Right uc) -> Just . sWrap . TyVar $ set tvConstraint uc sv
           Nothing -> Nothing
         (TypeVar _ ac,_) | checkConstraints s ac -> Just useS
         _ -> Nothing
