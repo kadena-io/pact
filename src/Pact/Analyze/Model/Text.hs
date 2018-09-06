@@ -9,7 +9,7 @@ module Pact.Analyze.Model.Text
   ( showModel
   ) where
 
-import           Control.Lens             (Lens', at, ifoldr, (^.))
+import           Control.Lens             (Lens', at, ifoldr, view, (^.))
 import qualified Data.Foldable            as Foldable
 import           Data.Map.Strict          (Map)
 import qualified Data.Map.Strict          as Map
@@ -52,8 +52,8 @@ showObject (Object m) = "{ "
 showObjMapping :: Text -> TVal -> Text
 showObjMapping key val = key <> ": " <> showTVal val
 
-showVar :: Located (Text, TVal) -> Text
-showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
+showVar :: Located (Unmunged, TVal) -> Text
+showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
 --
 -- TODO: this should display the table name
@@ -111,7 +111,7 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
           <> showS sRk <> ")"
       Just (FromNamedKs sKsn) ->
         ks <> " named " <> showKsn sKsn
-      Just (FromInput arg) ->
+      Just (FromInput (Unmunged arg)) ->
         ks <> " from argument " <> arg
 
 -- TODO: after factoring Location out of TraceEvent, include source locations
@@ -126,13 +126,11 @@ showEvent ksProvs tags = \case
       [display mtAsserts tid (showAssert recov)]
     TraceAuth recov (_located -> tid) ->
       [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
-    TraceBind (_located -> (vid, _, _)) ->
-      [display mtVars vid showVar]
     TraceSubpathStart _ ->
       [] -- not shown to end-users
-    TracePushScope _ ->
-      []
-    TracePopScope _ ->
+    TracePushScope _ _ (fmap (view (located.bVid)) -> vids) ->
+      (\vid -> display mtVars vid showVar) <$> vids
+    TracePopScope _ _ ->
       []
 
   where
