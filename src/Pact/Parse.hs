@@ -6,7 +6,6 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
-
 -- |
 -- Module      :  Pact.Compile
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -41,7 +40,6 @@ import Pact.Types.Exp
 import Pact.Types.Parser
 import Pact.Types.Info
 
----
 
 -- | Main parser for Pact expressions.
 expr :: (Monad m, TokenParsing m, DeltaParsing m) => PactParser m (Exp Parsed)
