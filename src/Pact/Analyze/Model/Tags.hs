@@ -45,6 +45,12 @@ allocAVal = \case
   EType (_ :: Type t) -> mkAVal . sansProv <$>
     (alloc :: Symbolic (SBV t))
 
+allocTVal :: EType -> Symbolic TVal
+allocTVal ety = (ety,) <$> allocAVal ety
+
+allocForETerm :: ETerm -> Symbolic TVal
+allocForETerm (existentialType -> ety) = allocTVal ety
+
 allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
@@ -71,7 +77,7 @@ allocModelTags locatedTm graph = ModelTags
     allocVars = fmap Map.fromList $
       for (toListOf (traverse._TracePushScope._3.traverse) events) $
         \(Located info (Binding vid nm _ ety)) ->
-          allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
+          allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
 
     allocS :: SymWord a => Symbolic (S a)
     allocS = sansProv <$> alloc
@@ -102,12 +108,7 @@ allocModelTags locatedTm graph = ModelTags
         (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
 
     allocResult :: Symbolic (Located TVal)
-    allocResult = sequence $ locatedTm <&> \case
-      ESimple ty _ ->
-        let ety = EType ty
-        in (ety,) <$> allocAVal ety
-      EObject sch _ ->
-        (EObjectTy sch,) . AnObj <$> allocSchema sch
+    allocResult = sequence $ allocForETerm <$> locatedTm
 
     -- NOTE: the root path we manually set to true. translation only emits the
     -- start of "subpaths" on either side of a conditional. the root path is
