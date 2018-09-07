@@ -24,7 +24,6 @@ module Pact.Analyze.Types.Languages
   , Term(..)
 
   , lit
-  , decimalIso
   , toPact
   , fromPact
 
@@ -47,12 +46,9 @@ module Pact.Analyze.Types.Languages
   , pattern PVar
   ) where
 
-import           Control.Lens                 (view)
-import           Control.Lens.Iso
-import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               SymWord, (%))
+                                               SymWord)
 import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
@@ -427,24 +423,6 @@ pattern POr a b = CoreProp (Logical OrOp [a, b])
 
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = CoreProp (Logical NotOp [a])
-
-decimalIso :: Iso' Decimal.Decimal Decimal
-decimalIso = iso mkDecimal unMkDecimal
-  where
-    mkDecimal :: Decimal.Decimal -> Decimal
-    mkDecimal (Decimal.Decimal places mantissa) = fromRational $
-      mantissa % 10 ^ places
-
-    unMkDecimal :: Decimal -> Decimal.Decimal
-    unMkDecimal algReal = case Decimal.eitherFromRational (toRational algReal) of
-      Left err  -> error err
-      Right dec -> dec
-
-fromPact :: Iso' a b -> a -> b
-fromPact = view
-
-toPact :: Iso' a b -> b -> a
-toPact = view . from
 
 
 -- | The schema invariant language.

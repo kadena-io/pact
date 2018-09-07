@@ -23,6 +23,7 @@ import           Control.Lens                 (At (at), Index, Iso, Iso',
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Data                    (Data)
+import qualified Data.Decimal                 as Decimal
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
 import           Data.Map.Strict              (Map)
@@ -39,7 +40,7 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral,
                                                sRealToSInteger, unliteral, (.<),
-                                               (.==))
+                                               (.==), (%))
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
@@ -122,6 +123,26 @@ mkConcreteInteger = SBVI.SBV
                   . SBVI.CW KUnbounded
                   . SBVI.CWInteger
 
+newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
+
+decimalIso :: PactIso Decimal.Decimal Decimal
+decimalIso = PactIso $ iso mkDecimal unMkDecimal
+  where
+    mkDecimal :: Decimal.Decimal -> Decimal
+    mkDecimal (Decimal.Decimal places mantissa) = fromRational $
+      mantissa % 10 ^ places
+
+    unMkDecimal :: Decimal -> Decimal.Decimal
+    unMkDecimal algReal = case Decimal.eitherFromRational (toRational algReal) of
+      Left err -> error err
+      Right d  -> d
+
+fromPact :: PactIso a b -> a -> b
+fromPact = view . unPactIso
+
+toPact :: PactIso a b -> b -> a
+toPact = view . from . unPactIso
+
 newtype KeySetName
   = KeySetName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
@@ -176,8 +197,8 @@ type RowKey = String
 
 type Time = Int64
 
-timeIso :: Iso' UTCTime Time
-timeIso = iso mkTime unMkTime
+timeIso :: PactIso UTCTime Time
+timeIso = PactIso $ iso mkTime unMkTime
   where
     mkTime :: UTCTime -> Time
     mkTime utct = view microseconds (utct .-. toEnum 0)
