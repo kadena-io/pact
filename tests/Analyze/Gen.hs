@@ -57,6 +57,9 @@ data GenState = GenState
 makeLenses ''GenEnv
 makeLenses ''GenState
 
+emptyGenState :: GenState
+emptyGenState = GenState 0 Map.empty Map.empty
+
 -- Explicitly shrink the size parameter to generate smaller terms.
 scale :: MonadGen m => Size -> m a -> m a
 scale n = Gen.scale (`div` n)
@@ -447,9 +450,7 @@ describeAnalyzeFailure (AnalyzeFailure info err) = unlines
   ]
 
 genAnyTerm' :: Gen (ETerm, GenState)
-genAnyTerm' = runReaderT
-  (runStateT genAnyTerm (GenState 0 Map.empty Map.empty))
-  genEnv
+genAnyTerm' = runReaderT (runStateT genAnyTerm emptyGenState) genEnv
 
 safeGenAnyTerm
   :: (Monad m, MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
@@ -458,6 +459,22 @@ safeGenAnyTerm = (do
   pure $ show etm `deepseq` (etm, gState)
   ) `catch` (\(_e :: EmptyInterval)  -> discard) -- see note [EmptyInterval]
 
+genFormatTime :: Gen (ETerm, GenState)
+genFormatTime = do
+  format <- genFormat
+  (ESimple TTime t2, gState) <- runReaderT
+    (runStateT (genTerm BoundedTime) emptyGenState)
+    genEnv
+  let etm = ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
+  pure (etm, gState)
+
+genParseTime :: Gen (ETerm, GenState)
+genParseTime = do
+  format  <- genFormat
+  timeStr <- genTimeOfFormat format
+  let etm = ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
+        lit timeStr
+  pure (etm, emptyGenState)
 
 alice, bob :: Pact.PublicKey
 alice = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"

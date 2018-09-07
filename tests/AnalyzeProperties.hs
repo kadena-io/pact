@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Maybe   (MaybeT (runMaybeT))
 import           Data.Type.Equality          ((:~:) (Refl))
 import           HaskellWorks.Hspec.Hedgehog
 import           Hedgehog                    hiding (Update)
+import qualified Hedgehog.Gen                as Gen
 import           Test.Hspec                  (Spec, describe, it, pending)
 
 import           Pact.Analyze.Translate      (maybeTranslateType)
@@ -21,9 +22,8 @@ import           Analyze.Gen
 import           Analyze.Translate
 
 
-prop_evaluation :: Property
-prop_evaluation = property $ do
-  (etm@(ESimple ty _tm), gState) <- safeGenAnyTerm
+testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
+testDualEvaluation etm@(ESimple ty _tm) gState = do
   evalEnv <- liftIO $ mkEvalEnv gState
 
   -- pact setup
@@ -60,6 +60,19 @@ prop_evaluation = property $ do
       case typeEq ty' ty'' of
         Just Refl -> sval' === pactSval
         Nothing   -> EType ty' === EType ty'' -- this'll fail
+testDualEvaluation EObject{} _ = do
+  footnote "can't property test evaluation of objects"
+  failure
+
+prop_evaluation :: Property
+prop_evaluation = property $ do
+  (etm, gState) <- safeGenAnyTerm
+  testDualEvaluation etm gState
+
+prop_evaluation_time :: Property
+prop_evaluation_time = property $ do
+  (etm, gState) <- forAll $ Gen.choice [genFormatTime, genParseTime]
+  testDualEvaluation etm gState
 
 prop_round_trip_type :: Property
 prop_round_trip_type = property $ do
@@ -89,6 +102,10 @@ spec = describe "analyze properties" $ do
   -- get the same result in both places.
   it "should evaluate to the same" $ require prop_evaluation
 
+  -- This is a more specific version of the last test, covering parse-time and
+  -- format-time in detail
+  it "should evaluate format-time to the same" $ require prop_evaluation_time
+
   it "show round-trip userShow / parse" pending
 
   it "userShow should have the same result on both the pact and analyze side" pending
@@ -100,4 +117,5 @@ sequentialChecks = checkSequential $ Group "checks"
   [ ("prop_round_trip_type", prop_round_trip_type)
   , ("prop_round_trip_term", prop_round_trip_term)
   , ("prop_evaluation", prop_evaluation)
+  , ("prop_evaluation_time", prop_evaluation_time)
   ]
