@@ -226,11 +226,10 @@ applyInvariants tn aValFields addInvariants = do
                         (Located info aValFields') of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
-          -- require both:
-          -- 1. the invariant holds
-          -- 2. the query succeeds.
-          Right (inv, SymbolicSuccess querySucceeds)
-            -> pure $ inv &&& sansProv querySucceeds
+          -- though it's important that the query succeeds, we don't check that
+          -- here. it's checked when we query invariants. if it passes there,
+          -- it'll pass here. if not, we won't get here.
+          Right (inv, _querySucceeds) -> pure inv
       addInvariants invariants''
     _ -> pure ()
 

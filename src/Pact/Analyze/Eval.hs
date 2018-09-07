@@ -44,9 +44,9 @@ import           Pact.Analyze.Util
 
 analyzeCheck :: Check -> Query (S Bool)
 analyzeCheck = \case
-    PropertyHolds p -> assumingSuccess =<< evalProp p
-    Valid p         -> evalProp p
-    Satisfiable p   -> evalProp p
+    PropertyHolds p _ -> assumingSuccess =<< evalProp p
+    Valid p _         -> evalProp p
+    Satisfiable p _   -> evalProp p
 
   where
     assumingSuccess :: S Bool -> Query (S Bool)

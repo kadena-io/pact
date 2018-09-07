@@ -44,7 +44,6 @@ import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
 import           Data.Monoid               ((<>))
 import           Data.SBV                  (Symbolic)
-import           Data.SBV                  ((&&&))
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV
 import qualified Data.SBV.Internals        as SBVI
@@ -119,6 +118,7 @@ data CheckFailureNoLoc
   | TranslateFailure' TranslateFailureNoLoc
   | AnalyzeFailure' AnalyzeFailureNoLoc
   | SmtFailure SmtFailure
+  | QueryFailure SmtFailure
   deriving (Eq, Show)
 
 data CheckFailure = CheckFailure
@@ -158,6 +158,13 @@ describeSmtFailure = \case
   Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
   UnexpectedFailure smtE -> T.pack $ show smtE
 
+describeQueryFailure :: SmtFailure -> Text
+describeQueryFailure = \case
+  Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
+  Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one.\n\nGood luck...\n" <> tShow reason
+  Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
+  UnexpectedFailure smtE -> T.pack $ show smtE
+
 describeCheckFailure :: CheckFailure -> Text
 describeCheckFailure (CheckFailure info failure) =
   case failure of
@@ -172,6 +179,7 @@ describeCheckFailure (CheckFailure info failure) =
             TranslateFailure' err -> describeTranslateFailureNoLoc err
             AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
             SmtFailure err        -> describeSmtFailure err
+            QueryFailure err      -> describeQueryFailure err
       in T.pack (renderParsed (infoToParsed info)) <> ":Warning: " <> str
 
 describeCheckResult :: CheckResult -> Text
@@ -192,6 +200,9 @@ analyzeToCheckFailure (AnalyzeFailure info err)
 
 smtToCheckFailure :: Info -> SmtFailure -> CheckFailure
 smtToCheckFailure info = CheckFailure info . SmtFailure
+
+smtToQueryFailure :: Info -> SmtFailure -> CheckFailure
+smtToQueryFailure info = CheckFailure info . QueryFailure
 
 --
 -- TODO: implement machine-friendly JSON output for CheckResult
@@ -228,8 +239,8 @@ resultQuery goal model0 = do
 
 -- SBV also provides 'inNewAssertionStack', but in 'Query'
 inNewAssertionStack
-  :: ExceptT a SBV.Query CheckSuccess
-  -> ExceptT a SBV.Query CheckSuccess
+  :: ExceptT a SBV.Query b
+  -> ExceptT a SBV.Query b
 inNewAssertionStack act = do
     push
     result <- act `catchError` \e -> pop *> throwError e
@@ -264,13 +275,16 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
-          -- TODO(joel): warn for queries that could fail!
           for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
             queryResult <- runExceptT $
               inNewAssertionStack $ do
-                void $ lift $ SBV.constrain $ SBV.bnot $
-                  prop &&& successBool querySucceeds
+                void $ lift $ SBV.constrain $ SBV.bnot prop
                 resultQuery goal $ Model modelArgs' tags ksProvs graph
+
+            _ <- runExceptT $ inNewAssertionStack $ do
+              void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+              withExceptT (smtToQueryFailure info) $
+                resultQuery Validation $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -310,14 +324,20 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
-        -- TODO(joel): warn for queries that could fail!
         AnalysisResult querySucceeds prop ksProvs
           <- withExceptT analyzeToCheckFailure $
             runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
               funInfo
-        void $ lift $ SBV.output $ prop &&& successBool querySucceeds
-        hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model modelArgs' tags ksProvs graph
+
+        _ <- hoist SBV.query $ inNewAssertionStack $ do
+          void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+          withExceptT (smtToQueryFailure (getInfo check)) $
+            resultQuery Validation $ Model modelArgs' tags ksProvs graph
+
+        hoist SBV.query $ inNewAssertionStack $ do
+          void $ lift $ SBV.constrain $ SBV.bnot prop
+          withExceptT (smtToCheckFailure propInfo) $
+            resultQuery goal $ Model modelArgs' tags ksProvs graph
 
   where
     goal :: Goal
