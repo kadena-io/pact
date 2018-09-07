@@ -994,26 +994,29 @@ spec = describe "analyze" $ do
             it "should have no prop results" $
               propResults `shouldBe` HM.singleton "test" []
 
-            [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
-              invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
+            case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+              [CheckFailure _ (SmtFailure (Invalid model))] -> do
+                let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
 
-            it "should have a negative amount" $ do
-              Just (Located _ (_, (_, AVal _prov amount))) <- pure $
-                find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
-              (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+                it "should have a negative amount" $ do
+                  Just (Located _ (_, (_, AVal _prov amount))) <- pure $
+                    find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
+                  (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
-            let negativeWrite (Object m) =
-                  let (_bal, AVal _ sval) = m Map.! "balance"
-                  in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
-            balanceWrite <- pure $ find negativeWrite
-              $ writes ^.. traverse . located . accObject
+                let negativeWrite (Object m) =
+                      let (_bal, AVal _ sval) = m Map.! "balance"
+                      in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                balanceWrite <- pure $ find negativeWrite
+                  $ writes ^.. traverse . located . accObject
 
-            it "should have a negative write" $
-              balanceWrite `shouldSatisfy` isJust
+                it "should have a negative write" $
+                  balanceWrite `shouldSatisfy` isJust
 
-            it "should have no keyset provenance" $ do
-              ksProvs `shouldBe` Map.empty
+                it "should have no keyset provenance" $ do
+                  ksProvs `shouldBe` Map.empty
+
+              other -> it "didn't find a single CheckFailure" $
+                HUnit.assertFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =
