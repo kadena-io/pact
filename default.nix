@@ -19,6 +19,9 @@ in
             blake2 = guardGhcjs super.blake2;
             haskeline = guardGhcjs super.haskeline;
 
+            # Needed to get around a requirement on `hspec-discover`.
+            megaparsec = pkgs.haskell.lib.dontCheck super.megaparsec;
+
             # Needed to build with the below version of statistics
             criterion = self.callCabal2nix "criterion" (pkgs.fetchFromGitHub {
               owner = "bos";
@@ -93,6 +96,21 @@ in
         rev = "1c04f5664b9476e0b01a573b40462531e52e8756";
         sha256 = "0j121551zqjrp4xy0qcz1pk46znr6w59jkg75v5svdh9ag3vmbsp";
       };
+
+      megaparsec = pkgs.fetchFromGitHub {
+        owner  = "mrkkrp";
+        repo   = "megaparsec";
+        rev    = "7b271a5edc1af59fa435a705349310cfdeaaa7e9";
+        sha256 = "0415z18gl8dgms57rxzp870dpz7rcqvy008wrw5r22xw8qq0s13c";
+      };
+
+      parser-combinators = pkgs.fetchFromGitHub {
+        owner  = "mrkkrp";
+        repo   = "parser-combinators";
+        rev    = "dd6599224fe7eb224477ef8e9269602fb6b79fe0";
+        sha256 = "11cpfzlb6vl0r5i7vbhp147cfxds248fm5xq8pwxk92d1f5g9pxm";
+      };
+
     };
     toolOverrides = ghc: super: {
       z3 = pkgs.z3;
@@ -102,5 +120,5 @@ in
       ghc = ["pact"];
       # ghcjs = ["pact"];
     };
-  
+
   })
