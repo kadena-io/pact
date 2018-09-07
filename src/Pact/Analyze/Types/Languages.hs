@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP                   #-}
+{-# LANGUAGE UndecidableInstances  #-} -- UserShow (Core tm a)
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -76,15 +78,17 @@ instance Eq (Existential tm) where                        \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
--- TODO: userShow
 #define SHOW_EXISTENTIAL(tm)                                                   \
-instance Show (Existential tm) where                                           \
+instance Show (Existential tm) where {                                         \
   showsPrec d e = showParen (d > 10) $ case e of                               \
     ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
       . showsPrec 11 inv;                                                      \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
-      . showsPrec 11 obj;
-
+      . showsPrec 11 obj; };                                                   \
+instance UserShow (Existential tm) where                                       \
+  userShowsPrec d e = case e of                                                \
+    ESimple _ty a -> userShowsPrec d a;                                        \
+    EObject _ty a -> userShowsPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
 --
@@ -178,6 +182,38 @@ data Core t a where
 
 deriving instance Eq a   => Eq   (Core Prop a)
 deriving instance Show a => Show (Core Prop a)
+
+instance
+  ( UserShow a
+  , UserShow (tm String)
+  , UserShow (tm Integer)
+  , UserShow (tm Time)
+  , UserShow (tm Decimal)
+  , UserShow (tm Bool)
+  , UserShow (tm KeySet)
+  , UserShow (tm Object)
+  , UserShow (Existential tm)
+  ) => UserShow (Core tm a) where
+  userShowsPrec d = \case
+    Lit a                    -> userShowsPrec d a
+    Sym s                    -> tShow s
+    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
+    StrLength str            -> parenList [SStringLength, userShow str]
+    Numerical tm             -> userShowsPrec d tm
+    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
+    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    Logical op args          -> parenList $ userShow op : fmap userShow args
+    Var _vid name            -> name
+    KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
+    ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
+    At _schema k obj _ty     -> parenList [userShow k, userShow obj]
+    ObjectMerge x y          -> parenList ["+", userShow x, userShow y]
+    LiteralObject obj        -> userShow obj
 
 
 -- | Property-specific constructions.
@@ -285,28 +321,13 @@ instance UserShow a => UserShow (PropSpecific a) where
     RowReadCount tab rk     -> parenList [SRowReadCount, userShow tab, userShow rk]
     RowWrite tab rk         -> parenList [SRowWritten, userShow tab, userShow rk]
     RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
+    KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
+    RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
 
 instance UserShow a => UserShow (Prop a) where
   userShowsPrec d = \case
     PropSpecific p -> userShowsPrec d p
     CoreProp     p -> userShowsPrec d p
-
-instance UserShow a => UserShow (Core Prop a) where
-  -- TODO: this is exactly duplicated with `UserShow (Core Term a)`
-  userShowsPrec d = \case
-    Lit a                    -> userShowsPrec d a
-    Sym s                    -> tShow s
-    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
-    StrLength str            -> parenList [SStringLength, userShow str]
-    Numerical tm             -> userShowsPrec d tm
-    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
-    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    Logical op args          -> parenList $ userShow op : fmap userShow args
 
 instance S :<: Prop where
   inject = CoreProp . Sym
@@ -452,6 +473,9 @@ instance S :<: Invariant where
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
+instance UserShow a => UserShow (Invariant a) where
+  userShowsPrec d (CoreInvariant a) = userShowsPrec d a
+
 type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
 SHOW_EXISTENTIAL(Invariant)
@@ -513,23 +537,6 @@ data Term ret where
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
   Hash            :: ETerm                              -> Term String
 
-instance UserShow a => UserShow (Core Term a) where
-  -- TODO: this is exactly duplicated with `UserShow (Core Prop a)`
-  userShowsPrec d = \case
-    Lit a                    -> userShowsPrec d a
-    Sym s                    -> tShow s
-    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
-    StrLength str            -> parenList [SStringLength, userShow str]
-    Numerical tm             -> userShowsPrec d tm
-    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
-    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
-    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
-    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    Logical op args          -> parenList $ userShow op : fmap userShow args
-
 instance UserShow a => UserShow (Term a) where
   userShowsPrec _ = \case
     CoreTerm tm                -> userShow tm
@@ -558,10 +565,8 @@ instance UserShow a => UserShow (Term a) where
     ParseTime Nothing y  -> parenList ["parse-time", userShow y]
     ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
     Hash x               -> parenList ["hash", userShow x]
-
-instance UserShow ETerm where
-  userShowsPrec _ = \case
-    ESimple ty tm -> parens $ userShow tm <> ": " <> userShow ty
+    ReadKeySet name      -> parenList ["read-keyset", userShow name]
+    ReadDecimal name     -> parenList ["read-decimal", userShow name]
 
 deriving instance Eq a   => Eq (Term a)
 deriving instance Eq a   => Eq (Core Term a)

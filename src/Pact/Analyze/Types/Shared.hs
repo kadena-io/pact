@@ -139,6 +139,9 @@ instance HasKind KeySetName where
 instance SMTValue KeySetName where
   sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
 
+instance UserShow KeySetName where
+  userShowsPrec _ (KeySetName name) = "'" <> name
+
 newtype TableName
   = TableName String
   deriving (Eq, Ord, Show)
@@ -370,6 +373,10 @@ instance Monoid Schema where
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
   Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
+
+-- Note: this doesn't exactly match the pact syntax
+instance UserShow Schema where
+  userShowsPrec d (Schema schema) = userShowsPrec d schema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -622,10 +629,6 @@ instance UserShow TableName where
 
 instance UserShow ColumnName where
   userShowsPrec _ (ColumnName cn) = T.pack cn
-
--- Note: this doesn't exactly match the pact syntax
-instance UserShow Schema where
-  userShowsPrec d (Schema schema) = userShowsPrec d schema
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]

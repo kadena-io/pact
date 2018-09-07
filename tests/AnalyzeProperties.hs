@@ -20,6 +20,7 @@ import           Analyze.Eval
 import           Analyze.Gen
 import           Analyze.Translate
 
+
 prop_evaluation :: Property
 prop_evaluation = property $ do
   (etm@(ESimple ty _tm), gState) <- safeGenAnyTerm
