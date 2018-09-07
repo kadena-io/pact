@@ -27,7 +27,6 @@ testDualEvaluation etm@(ESimple ty _tm) gState = do
   evalEnv <- liftIO $ mkEvalEnv gState
 
   -- pact setup
-  -- TODO: look at what this reads from gState. does it read the named things?
   let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
 
   -- evaluate via pact, convert to analyze term

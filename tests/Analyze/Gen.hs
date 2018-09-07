@@ -105,7 +105,7 @@ data BoundedType where
   BoundedTime    ::             BoundedType
   BoundedBool    ::             BoundedType
   BoundedKeySet  ::             BoundedType
-  -- TODO: objects
+  -- TODO: cover objects
 
 arithSize :: ArithOp -> NumBound -> (NumBound, NumBound)
 arithSize op size = case op of
@@ -169,7 +169,7 @@ instance Extract KeySet where
     ESimple TKeySet x -> x
     other -> error (show other)
 
--- TODO: Var, objects
+-- TODO: cover Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
@@ -263,15 +263,13 @@ intSize = BoundedInt     (0 +/- 1e25)
 decSize = BoundedDecimal (0 +/- 1e25)
 strSize = BoundedString  1000
 
--- TODO
+-- TODO: add tests for these constructs
 -- generic:
 -- # Let
 -- object:
 -- # Read
 -- string:
 -- # Write
--- time:
--- # ParseTime
 genAnyTerm
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => m ETerm
@@ -303,7 +301,7 @@ genTermSpecific BoundedBool       = Gen.choice
   --        [] -> Left 0
   --        _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
 
-  -- TODO(joel):
+  -- TODO(joel): cover these
   -- , do tagId <- genTagId
   --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
   -- , do tagId <- genTagId
@@ -318,7 +316,7 @@ genTermSpecific BoundedBool       = Gen.choice
   , genTermSpecific' BoundedBool
   ]
 genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
-  -- TODO:
+  -- TODO: cover Write
   -- [ do
   --      tables <- view envTables
   --      (table, schema) <- Gen.element tables
@@ -396,8 +394,6 @@ genKeySetName = do
   idGen %= succ
   TagId nat <- use idGen
   keysets   <- view envKeysets
-  -- keysetIx  <- Gen.integral (Range.linear 0 (length keysets))
-  -- let keyset = keysets ^?! ix keysetIx
   keyset    <- Gen.element keysets
   let k = show nat
   namedKeysets . at k ?= keyset

@@ -90,19 +90,25 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
         Map.empty
 
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
+
   -- TODO: also write aeKsAuths
   let writeArray' k v env = writeArray env k v
+
+      -- Update the analysis env with keysets
       aEnv' = foldr (\(k, v) -> aeKeySets
           %~ writeArray' (literal (KeySetName (T.pack k))) (literal v))
         aEnv (Map.toList (fmap snd keysets))
+
+      -- ... and decimals
       aEnv'' = foldr
           (\(k, v) -> aeDecimals %~ writeArray' (literal k) (literal v))
         aEnv' (Map.toList decimals)
 
   -- evaluate via analyze
-  (analyzeVal, las) <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
-    Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
-    Left err                    -> error $ describeAnalyzeFailure err
+  (analyzeVal, las)
+    <- case runExcept $ runRWST (runAnalyze (evalETerm etm)) aEnv'' state0 of
+      Right (analyzeVal, las, ()) -> pure (analyzeVal, las)
+      Left err                    -> error $ describeAnalyzeFailure err
 
   case unliteral (las ^. latticeState . lasSucceeds . _Wrapped') of
     Nothing -> pure $ Left $ "couldn't unliteral lasSucceeds"
