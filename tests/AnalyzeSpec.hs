@@ -205,6 +205,7 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+{-
   describe "result" $ do
     let code =
           [text|
@@ -1019,6 +1020,7 @@ spec = describe "analyze" $ do
 
               other -> it "didn't find a single CheckFailure" $
                 HUnit.assertFailure $ show other
+-}
 
   describe "cell-delta.integer" $ do
     let code =
@@ -1036,32 +1038,33 @@ spec = describe "analyze" $ do
                 ))
           |]
 
-    expectVerified code
-
-    expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType TStr) $
-      CoreProp $ IntegerComparison Eq
-        (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
-
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
-      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob"))
-        ==>
-        CoreProp (IntegerComparison Eq
-          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
-
-    expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
-      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob"))
-        ==>
-        CoreProp (IntegerComparison Eq
-          (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
-
     expectPass code $ Valid $ Inj $ Exists 1 "row" (EType TStr) $
       CoreProp (IntegerComparison Eq
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
 
-    expectPass code $ Valid $
-      CoreProp (IntegerComparison Eq
-        (Inj (IntCellDelta "accounts" "balance" (PLit "bob"))) 3)
+    -- expectVerified code
 
+    -- expectPass code $ Valid $ bnot $ Inj $ Exists 1 "row" (EType TStr) $
+    --   CoreProp $ IntegerComparison Eq
+    --     (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
+
+    -- expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    --   CoreProp (StringComparison Neq (PVar 1 "row" :: Prop String) (PLit "bob"))
+    --     ==>
+    --     CoreProp (IntegerComparison Eq
+    --       (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
+
+    -- expectPass code $ Valid $ Inj $ Forall 1 "row" (EType TStr) $
+    --   CoreProp (StringComparison Eq (PVar 1 "row" :: Prop String) (PLit "bob"))
+    --     ==>
+    --     CoreProp (IntegerComparison Eq
+    --       (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
+
+--     expectPass code $ Valid $
+--       CoreProp (IntegerComparison Eq
+--         (Inj (IntCellDelta "accounts" "balance" (PLit "bob"))) 3)
+
+{-
   describe "with-read" $ do
     let code =
           [text|
@@ -2027,3 +2030,4 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $ do
       pendingWith "use of resumptionPath"
+      -}

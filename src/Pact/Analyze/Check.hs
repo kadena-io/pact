@@ -343,22 +343,27 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
             runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
               funInfo
 
-        _ <- hoist SBV.query $ do
-          void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
-          withExceptT (smtToQueryFailure (getInfo check)) $
-            resultQuery Validation $ Model modelArgs' tags ksProvs graph
+        let model = Model modelArgs' tags ksProvs graph
+        ExceptT $ fmap (_Left %~ smtToQueryFailure (getInfo check)) $
+          SBV.query $ do
+            void $ runExceptT $ inNewAssertionStack $ do
+              lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+              resultQuery Validation model
 
-        void $ lift $ SBV.output prop
-        hoist SBV.query $ do
-          withExceptT (smtToCheckFailure propInfo) $
-            resultQuery goal $ Model modelArgs' tags ksProvs graph
+            runExceptT $ inNewAssertionStack $ do
+              -- SBV.output prop
+              void $ lift $ SBV.constrain $ case goal of
+                Satisfaction -> prop
+                Validation   -> SBV.bnot prop -- SBV.output prop
+
+              resultQuery goal model
 
   where
     goal :: Goal
     goal = checkGoal check
 
     config :: SBV.SMTConfig
-    config = SBV.z3
+    config = SBV.z3 {SBVI.verbose = True}
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
