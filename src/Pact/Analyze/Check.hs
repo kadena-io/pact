@@ -338,18 +338,20 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
-        AnalysisResult querySucceeds prop ksProvs
+        AnalysisResult _querySucceeds prop ksProvs
           <- withExceptT analyzeToCheckFailure $
             runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
               funInfo
 
-        _ <- hoist SBV.query $ do
-          void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
-          withExceptT (smtToQueryFailure (getInfo check)) $
-            resultQuery Validation $ Model modelArgs' tags ksProvs graph
+        -- TODO: bring back the query success check when we've resolved the SBV
+        -- query / quantified variables issue.
+        -- _ <- hoist SBV.query $ do
+        --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+        --   withExceptT (smtToQueryFailure (getInfo check)) $
+        --     resultQuery Validation model
 
         void $ lift $ SBV.output prop
-        hoist SBV.query $ do
+        hoist SBV.query $
           withExceptT (smtToCheckFailure propInfo) $
             resultQuery goal $ Model modelArgs' tags ksProvs graph
 
