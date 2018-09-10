@@ -404,7 +404,7 @@ data Term ret where
   IfThenElse      :: Term Bool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
-  Let             :: Text -> VarId -> ETerm -> Term a -> Term a
+  Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
 
   -- Control flow
   Sequence        :: ETerm     -> Term a ->           Term a

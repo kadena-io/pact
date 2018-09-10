@@ -66,6 +66,7 @@ allocModelTags locatedTm graph = ModelTags
     <*> allocAuths
     <*> allocResult
     <*> allocPaths
+    <*> allocReturns
 
   where
     -- For the purposes of symbolic value allocation, we just grab all of the
@@ -124,6 +125,11 @@ allocModelTags locatedTm graph = ModelTags
           when (p == rootPath) $ SBV.constrain sbool
           pure (p, sbool)
 
+    allocReturns :: Symbolic (Map TagId TVal)
+    allocReturns = fmap Map.fromList $
+      for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
+        (tid,) <$> allocTVal ety
+
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
@@ -136,6 +142,7 @@ saturateModel =
     traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
     traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
+    traverseOf (modelTags.mtReturns.traversed)         fetchTVal   >=>
     traverseOf (modelKsProvs.traversed)                fetchProv
 
   where

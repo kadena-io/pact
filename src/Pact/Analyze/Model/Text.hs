@@ -149,9 +149,12 @@ showEvent ksProvs tags event = do
              ObjectScope      -> "destructuring object"
              FunctionScope nm -> "entering function " <> nm
           ) : ((\vid -> indent $ display mtVars vid showVar) <$> vids)
-      TracePopScope _ _ -> do
+      TracePopScope _ scopeTy tid _ -> do
         modify pred
-        pure []
+        pure $ case scopeTy of
+          LetScope -> []
+          ObjectScope -> []
+          FunctionScope _ -> ["returning with " <> display mtReturns tid showTVal]
 
   where
     display
