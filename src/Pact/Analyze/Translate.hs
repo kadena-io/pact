@@ -255,12 +255,18 @@ withAstContext ast = local (envInfo .~ astToInfo ast)
 withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
 withNestedRecoverability r = local $ teRecoverability <>~ r
 
-withNewScope :: ScopeType -> [Located Binding] -> TranslateM a -> TranslateM a
-withNewScope scopeType bindings act = local (teScopesEntered +~ 1) $ do
+withNewScope
+  :: ScopeType
+  -> [Located Binding]
+  -> TagId
+  -> TranslateM ETerm
+  -> TranslateM ETerm
+withNewScope scopeType bindings retTid act = local (teScopesEntered +~ 1) $ do
   depth <- view teScopesEntered
   emit $ TracePushScope depth scopeType bindings
   res <- act
-  emit $ TracePopScope depth scopeType
+  let ty = existentialType res
+  emit $ TracePopScope depth scopeType retTid ty
   pure res
 
 genTagId :: TranslateM TagId
@@ -472,12 +478,13 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
   bindingTs <- traverse translateBinding bindingAs
   rhsETs <- traverse translateNode rhsAs
 
-  let -- Using each of the bindings, we build up a function that takes a 'Term'
-      -- of body of clauses to that 'Term' body wrapped in 'Let' bindings
+  retTid <- genTagId
+
+  let -- Wrap the 'Term' body of clauses in a 'Let' for each of the bindings
       wrapWithLets :: Term a -> Term a
       wrapWithLets tm = foldr
         (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
-          Let munged vid rhsET body')
+          Let munged vid retTid rhsET body')
         tm
         (zip rhsETs bindingTs)
 
@@ -489,7 +496,7 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
         ]
 
   fmap (mapExistential wrapWithLets) $
-    withNewScope scopeTy bindingTs $
+    withNewScope scopeTy bindingTs retTid $
       withNodeVars nodeVars $
         translateBody body
 
@@ -508,6 +515,8 @@ translateObjBinding pairs schema bodyA rhsT = do
     (Named _ node _, x) ->
       withNodeContext node $ throwError' $ NonStringLitInBinding x
 
+  retTid <- genTagId
+
   -- We create one synthetic binding for the object, which then only the column
   -- bindings use.
   objBindingId <- genVarId
@@ -515,11 +524,16 @@ translateObjBinding pairs schema bodyA rhsT = do
 
   --
   -- TODO: we might want to only create a single Let here, with a binding for
-  --       each column. at the moment we create a new Let for each binding:
+  --       each column. at the moment we create a new Let for each binding. a
+  --       single let would be slightly more elegant for generating assertions
+  --       for tags during evaluation as well. with this current elaboration,
+  --       we would generate @n@ extra/unnecessary assertions for @n@ columns
+  --       (because we currently generate @n+1@ lets -- one synthetic binding
+  --       for the object, and one for each column.
   --
 
   let wrapWithLets :: Term a -> Term a
-      wrapWithLets innerBody = Let "binding" objBindingId rhsT $
+      wrapWithLets innerBody = Let "binding" objBindingId retTid rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
           (\body (colName, _located -> Binding vid _ (Munged varName) varType) ->
@@ -529,7 +543,7 @@ translateObjBinding pairs schema bodyA rhsT = do
                     ESimple ty  (CoreTerm (At schema colTerm objVar varType))
                   EObjectTy sch ->
                     EObject sch (CoreTerm (At schema colTerm objVar varType))
-            in Let varName vid rhs body)
+            in Let varName vid retTid rhs body)
           innerBody
           (zip cols bindingTs)
 
@@ -541,7 +555,7 @@ translateObjBinding pairs schema bodyA rhsT = do
         ]
 
   fmap (mapExistential wrapWithLets) $
-    withNewScope ObjectScope bindingTs $
+    withNewScope ObjectScope bindingTs retTid $
       withNodeVars nodeVars $
         translateBody bodyA
 

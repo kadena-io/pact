@@ -82,7 +82,7 @@ data TraceEvent
   | TraceAuth Recoverability (Located TagId)
   | TraceSubpathStart Path
   | TracePushScope Natural ScopeType [Located Binding]
-  | TracePopScope Natural ScopeType
+  | TracePopScope Natural ScopeType TagId EType
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -138,6 +138,8 @@ data ModelTags (c :: Concreteness)
     -- each conditional. after a conditional, the path from before the
     -- conditional is resumed. we also split execution for each case of
     -- @enforce-one@.
+    , _mtReturns :: Map TagId TVal
+    -- ^ return values from function calls
     }
   deriving (Eq, Show)
 

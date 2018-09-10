@@ -1010,7 +1010,7 @@ spec = describe "analyze" $ do
 
             [CheckFailure _ (SmtFailure (Invalid model))] <- pure $
               invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left
-            let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
+            let (Model args (ModelTags _ _ writes _ _ _ _ _) ksProvs _) = model
 
             it "should have a negative amount" $ do
               Just (Located _ (_, (_, AVal _prov amount))) <- pure $
