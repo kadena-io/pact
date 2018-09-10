@@ -11,13 +11,10 @@ module Pact.Types.Hash
   ) where
 
 import Prelude hiding (null)
-
-import Data.ByteString (ByteString)
-import Data.Char (ord, toUpper)
-import Data.Text (Text, append, null, foldl') 
-
+import Data.ByteString (ByteString, null, foldl')
+import Data.Text (Text, append)
 import Pact.Types.Util
-
+import Data.Word (Word8)
 
 #if !defined(ghcjs_HOST_OS)
 
@@ -47,15 +44,16 @@ verifyHash h b = if hash b == h
 initialHash :: Hash
 initialHash = hash mempty
 
+-- | Compute the numeric hash base-a of a given ByteString.
 numericBasedHash
-  :: Integer
-  -> ByteString
-  -> Either Text Integer
+  :: Integer -- ^ base a
+  -> ByteString -- ^ ByteString to hash 
+  -> Either Text Integer -- ^ Left : Err, Right : Success
 numericBasedHash base =
-    readStringAtBase base toBase . asString . hash 
+    hashAsBasedInteger base toBase . hash 
   where
-    toBase :: Char -> Integer
-    toBase = (`mod` base) . fromIntegral . ord . toUpper
+    toBase :: Word8 -> Integer
+    toBase = (`mod` base) . fromIntegral 
 {-# INLINE numericBasedHash #-}
 
 
@@ -80,19 +78,21 @@ hexidecimalHash
 hexidecimalHash = numericBasedHash 16
 {-# INLINE hexidecimalHash #-}
 
--- | Reads 'String' as a non-negative 'Integral' number using the base
+-- | Reads 'Hash' as a non-negative 'Integral' number using the base
 -- specified by the first argument, and character representation
 -- specified by the second argument
-readStringAtBase
+hashAsBasedInteger
   :: Integer -- ^ The base specification
-  -> (Char -> Integer) -- ^ the a-valued representation for a given character
-  -> Text -- ^ The string to convert to integral base-a
+  -> (Word8 -> Integer) -- ^ the a-valued representation for a given character
+  -> Hash -- ^ The string to convert to integral base-a
   -> Either Text Integer
-readStringAtBase base rChr txt
-  | base <= 1 = Left ("readStringAtBase: applied to unsupported base - " `append` asString base)
-  | null txt = Left ("readStringAtBase: applied to empty string - " `append`  txt)
-  | otherwise = Right $ foldl' go 0 txt
-  where
-    go :: Integer -> Char -> Integer
-    go acc c = base*acc + (rChr c)
-{-# INLINE readStringAtBase #-}
+hashAsBasedInteger base k h 
+  | base <= 1 = Left $
+    "readStringAtBase: applied to unsupported base - " `append` asString base
+  | null (unHash h) = Left $
+    "readStringAtBase: applied to empty hash - " `append` (asString . unHash $ h)
+  | otherwise = Right . foldl' go 0 . unHash $ h
+    where
+      go :: Integer -> Word8 -> Integer
+      go acc w = base * acc + (k w) 
+{-# INLINE hashAsBasedInteger #-}

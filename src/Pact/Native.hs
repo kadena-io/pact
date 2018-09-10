@@ -25,10 +25,12 @@ import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
 
+import Data.Bool (bool)
+import Data.Char (isDigit)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T
+import qualified Data.Text as T (isInfixOf, length, all, splitOn)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Decimal
@@ -49,7 +51,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash (hash, hexidecimalHash)
+import Pact.Types.Hash (hash, hexidecimalHash, numericBasedHash)
 
 
 -- | All production native modules.
@@ -163,7 +165,7 @@ langDefs =
      \List -> value, Object -> value. NB value types are not introspectable in pact. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defRNative "tx-hash" txHashNativeFun (funType tTyString [])
+    ,defRNative "tx-hash" transactionHash (funType tTyString [])
      "Obtain hash of current transaction as a string. `(tx-hash)`"
 
     ,defNative (specialForm Bind) bind
@@ -214,11 +216,13 @@ langDefs =
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
-    ,defRNative "int-hash" integerHashNativeFun (funType tTyString [("value", a)])
-     "Compute the BLAKE2b 512-bit hash of VALUE, returning a value of type Integer. Strings are converted \
+    ,defRNative "int-hash" hashStringToInteger (funType tTyInteger [("value", a), ("base", tTyInteger)])
+     "Compute the BLAKE2b 512-bit hash of VALUE in base BASE, returning a value of type Integer. Strings are converted \
      \directly, while other values are converted using their JSON representation. `(int-hash \"hello\")` \
      \`(int-hash { 'foo: 1 })`"
 
+    ,defRNative "hex-str-to-int" hexStringToInteger (funType tTyInteger [("value", a)])
+     "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -548,20 +552,34 @@ stringHashNativeFun i as = case as of
   _ -> argsError i as
   where go = return . tStr . asString . hash
 
-integerHashNativeFun :: RNativeFun e
-integerHashNativeFun i as =
+hashStringToInteger :: RNativeFun e
+hashStringToInteger i as =
   case as of
-    [TLitString s] -> go $ encodeUtf8 s
-    [a] -> go $ toStrict $ encode a
+    [TLitString s, TLitInteger b] ->
+      go b (encodeUtf8 s)
     _   -> argsError i as
     where
-      go :: ByteString -> Eval e (Term Name)
-      go bs =
-        case hexidecimalHash bs of
+      go :: Integer -> ByteString -> Eval e (Term Name)
+      go base bs =
+        case numericBasedHash base bs of
           Left  e -> const (argsError i as) e -- How to concatenate these errors to the existing spec?
           Right a -> return . tStr . asString $ a
-      
-txHashNativeFun :: RNativeFun e
-txHashNativeFun _ [] = (tStr . asString) <$> view eeHash
-txHashNativeFun i as = argsError i as
+
+hexStringToInteger :: RNativeFun e
+hexStringToInteger i as =
+  case as of
+    [TLitString s] ->
+      bool (argsError i as) (go . encodeUtf8 $ s) $
+        T.all (\a -> isDigit a || a `elem` ['a'..'f']) s
+    _ -> argsError i as 
+  where
+    go :: ByteString -> Eval e (Term Name)
+    go bs =
+      case hexidecimalHash bs of
+        Left e -> const (argsError i as) e
+        Right a -> return . tStr . asString $ a
+
+transactionHash :: RNativeFun e
+transactionHash _ [] = (tStr . asString) <$> view eeHash
+transactionHash i as = argsError i as
 
