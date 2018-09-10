@@ -9,6 +9,7 @@ import           Control.Lens             hiding (op, (...))
 import           Control.Monad.Catch      (catch)
 import           Control.Monad.Except     (runExcept)
 import           Control.Monad.IO.Class   (liftIO)
+import           Control.Monad.Reader     (ReaderT (runReaderT))
 import           Control.Monad.RWS.Strict (runRWST)
 import           Data.Aeson               (Value (Object), toJSON)
 import qualified Data.Default             as Default
@@ -35,6 +36,7 @@ import           Pact.Types.Runtime       (EvalEnv, PactError (..),
 import qualified Pact.Types.Term          as Pact
 
 import           Analyze.Gen
+import           Analyze.Translate
 
 data EvalResult
   = EvalResult !(Pact.Term Pact.Ref)
@@ -43,11 +45,11 @@ data EvalResult
   | UnexpectedErr !String
 
 -- Evaluate a term via Pact
-pactEval
-  :: Pact.Term Pact.Ref
-  -> EvalEnv LibState
-  -> IO EvalResult
-pactEval pactTm evalEnv = (do
+pactEval :: ETerm -> GenState -> IO EvalResult
+pactEval etm gState = (do
+    let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
+    evalEnv <- liftIO $ mkEvalEnv gState
+
     let evalState = Default.def
     -- evaluate via pact, convert to analyze term
     (pactVal, _) <- runEval evalState evalEnv (reduce pactTm)
@@ -120,6 +122,9 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
 analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 
+-- Generate a pact evaluation environment given the keysets and decimals used
+-- in the generated term. This generates an environment with just keysets and
+-- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
 mkEvalEnv (GenState _ keysets decimals) = do
   evalEnv <- liftIO initPureEvalEnv

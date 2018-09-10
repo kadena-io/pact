@@ -5,7 +5,6 @@ module AnalyzeProperties where
 
 import           Control.Monad               ((<=<))
 import           Control.Monad.IO.Class      (liftIO)
-import           Control.Monad.Reader        (ReaderT (runReaderT))
 import           Control.Monad.Trans.Class   (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe   (MaybeT (runMaybeT))
 import           Data.Type.Equality          ((:~:) (Refl))
@@ -22,15 +21,14 @@ import           Analyze.Gen
 import           Analyze.Translate
 
 
+-- Evaluate a term (in the given environment) in both concretely (in the real
+-- implementation) and symbolically (in analyze) to verify that both
+-- evaluations give the same result (including the same exception, if the
+-- program throws).
 testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
 testDualEvaluation etm@(ESimple ty _tm) gState = do
-  evalEnv <- liftIO $ mkEvalEnv gState
-
-  -- pact setup
-  let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
-
   -- evaluate via pact, convert to analyze term
-  mPactVal <- liftIO $ pactEval pactTm evalEnv
+  mPactVal <- liftIO $ pactEval etm gState
   ePactVal <- case mPactVal of
     UnexpectedErr err  -> footnote err >> failure
     Discard            -> discard
@@ -107,7 +105,8 @@ spec = describe "analyze properties" $ do
 
   it "show round-trip userShow / parse" pending
 
-  it "userShow should have the same result on both the pact and analyze side" pending
+  it "userShow should have the same result on both the pact and analyze side"
+    pending
 
 -- Usually we run via `spec`, but these are useful for running tests
 -- sequentially (so logs from different threads don't clobber each other)
@@ -115,6 +114,6 @@ sequentialChecks :: IO Bool
 sequentialChecks = checkSequential $ Group "checks"
   [ ("prop_round_trip_type", prop_round_trip_type)
   , ("prop_round_trip_term", prop_round_trip_term)
-  , ("prop_evaluation", prop_evaluation)
+  , ("prop_evaluation",      prop_evaluation)
   , ("prop_evaluation_time", prop_evaluation_time)
   ]
