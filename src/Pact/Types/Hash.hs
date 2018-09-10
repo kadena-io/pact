@@ -7,7 +7,7 @@ module Pact.Types.Hash
   , numericBasedHash
   , binaryHash
   , octalHash
-  , hexidecimalHash
+  , hexadecimalHash
   ) where
 
 import Prelude hiding (null)
@@ -72,11 +72,11 @@ binaryHash = numericBasedHash 2
 {-# INLINE binaryHash #-}
 
 -- | Compute the hexidecimal value of a BLAKE2 hashed bytestring
-hexidecimalHash
+hexadecimalHash
   :: ByteString -- ^ value to hash and compute in hex
   -> Either Text Integer
-hexidecimalHash = numericBasedHash 16
-{-# INLINE hexidecimalHash #-}
+hexadecimalHash = numericBasedHash 16
+{-# INLINE hexadecimalHash #-}
 
 -- | Reads 'Hash' as a non-negative 'Integral' number using the base
 -- specified by the first argument, and character representation

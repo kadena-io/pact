@@ -51,7 +51,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash (hash, hexidecimalHash, numericBasedHash)
+import Pact.Types.Hash (hash, hexadecimalHash, numericBasedHash)
 
 
 -- | All production native modules.
@@ -216,10 +216,9 @@ langDefs =
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
-    ,defRNative "int-hash" hashStringToInteger (funType tTyInteger [("value", a), ("base", tTyInteger)])
+    ,defRNative "based-hash" hashStringToBasedInteger (funType tTyInteger [("value", a), ("base", tTyInteger)])
      "Compute the BLAKE2b 512-bit hash of VALUE in base BASE, returning a value of type Integer. Strings are converted \
-     \directly, while other values are converted using their JSON representation. `(int-hash \"hello\")` \
-     \`(int-hash { 'foo: 1 })`"
+     \directly, while other values are converted using their JSON representation. `(based-hash \"hello\" 16)`"
 
     ,defRNative "hex-str-to-int" hexStringToInteger (funType tTyInteger [("value", a)])
      "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
@@ -552,8 +551,8 @@ stringHashNativeFun i as = case as of
   _ -> argsError i as
   where go = return . tStr . asString . hash
 
-hashStringToInteger :: RNativeFun e
-hashStringToInteger i as =
+hashStringToBasedInteger :: RNativeFun e
+hashStringToBasedInteger i as =
   case as of
     [TLitString s, TLitInteger b] ->
       go b (encodeUtf8 s)
@@ -562,7 +561,7 @@ hashStringToInteger i as =
       go :: Integer -> ByteString -> Eval e (Term Name)
       go base bs =
         case numericBasedHash base bs of
-          Left  e -> const (argsError i as) e -- How to concatenate these errors to the existing spec?
+          Left  e -> const (argsError i as) e
           Right a -> return . tStr . asString $ a
 
 hexStringToInteger :: RNativeFun e
@@ -575,7 +574,7 @@ hexStringToInteger i as =
   where
     go :: ByteString -> Eval e (Term Name)
     go bs =
-      case hexidecimalHash bs of
+      case hexadecimalHash bs of
         Left e -> const (argsError i as) e
         Right a -> return . tStr . asString $ a
 

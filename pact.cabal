@@ -229,6 +229,7 @@ test-suite hspec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
+                HashSpec
   if !impl(ghcjs)
     other-modules:
         DocgenSpec
