@@ -364,6 +364,52 @@ assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ sho
   Nothing -> return ()
 assocTyWithAppArg _ _ _ = return ()
 
+-- | Inlines function call arguments into a defun, returning the new body. We
+-- introduce a synthetic 'Binding' to let-bind all arguments before inlining to
+-- achieve call-by-value semantics, and the correct behavior for effectful
+-- argument expressions.
+inlineAppArgs
+  :: Node             -- ^ function application 'Node'
+  -> FunType UserType -- ^ type of the function being applied
+  -> [Named Node]     -- ^ arglist of the defun
+  -> [AST Node]       -- ^ body of the defun
+  -> [AST Node]       -- ^ arguments being passed into the function
+  -> TC [AST Node]    -- ^ updated, inlined body
+inlineAppArgs appNode defunType defunArgs defunBody args = do
+  let FunType argTys retTy = mangleFunType (_aId appNode) defunType
+
+  assocAstTy appNode retTy
+
+  let appInfo  = _tiInfo $ _aId appNode
+      bindType = AstBindInlinedCallArgs :: AstBindType Node
+  letId <- freshId appInfo (pack $ show bindType)
+  letNode <- trackIdNode letId
+  assocAstTy letNode retTy
+
+  letBinders :: [Named Node] <- forM (zip args argTys) $
+    \(arg, Arg nm argTy info) -> do
+      let uniqueName = tShow letId `pfx` nm
+      varId <- freshId info uniqueName
+      let varTy = mangleType varId argTy
+      varNode <- trackNode varTy varId
+      assocAST varId arg
+      pure $ Named nm varNode varId
+
+  let letBindings :: [(Named Node, AST Node)]
+      letBindings = zip letBinders args
+
+      vars :: [AST Node]
+      vars = Var . _nnNamed <$> letBinders
+
+      subs :: [(TcId, AST Node)]
+      subs = zip (_aId . _nnNamed <$> defunArgs) vars
+
+      substitute :: (TcId, AST Node) -> AST Node -> TC (AST Node)
+      substitute sub = walkAST (substAppDefun (Just sub))
+
+  body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
+  return $ [Binding letNode letBindings body' bindType]
+
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
 -- b) associate the AST nodes to check and track their related types
@@ -373,52 +419,11 @@ substAppDefun (Just (defArg,appAst)) Pre t@Var {..}
   | otherwise = return t
 substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST subs first
     fun' <- case fun of
-      FNative {} -> return fun -- noop
+      FNative {} ->
+        return fun -- noop
       FDefun {_fType,_fArgs,_fBody} -> do
-        let FunType argTys retTy = mangleFunType (_aId appNode) _fType
-
-        -- associate nodes with types
-
-        -- TODO(stu): this was causing recursive var refs, bailing for now
-        -- for_ (zip args argTys) $ \(arg, argTy) ->
-        --   assocAstTy (_aNode arg) (_aType argTy)
-
-        assocAstTy appNode retTy
-
-        -- substitute newly let-bound variables into use sites in function body
-
-        let appInfo  = _tiInfo $ _aId appNode
-            bindType = AstBindInlinedCallArgs :: AstBindType Node
-        letId <- freshId appInfo (pack $ show bindType)
-        letNode <- trackIdNode letId
-        assocAstTy letNode retTy
-
-        letBinders :: [Named Node] <- forM (zip args argTys) $
-          \(arg, Arg nm argTy info) -> do
-            let uniqueName = pack (show letId) `pfx` nm
-            varId <- freshId info uniqueName
-            let varTy = mangleType varId argTy
-            varNode <- trackNode varTy varId
-            assocAST varId arg
-            pure $ Named nm varNode varId
-
-        let letBindings :: [(Named Node, AST Node)]
-            letBindings = zip letBinders args
-
-            vars :: [AST Node]
-            vars = Var . _nnNamed <$> letBinders
-
-            subs :: [(TcId, AST Node)]
-            subs = zip (_aId . _nnNamed <$> _fArgs) vars
-
-            substitute :: (TcId, AST Node) -> AST Node -> TC (AST Node)
-            substitute sub = walkAST (substAppDefun (Just sub))
-
-        body' <- forM _fBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
-
-        let letTerm = Binding letNode letBindings body' bindType
-
-        return $ set fBody [letTerm] fun
+        body' <- inlineAppArgs appNode _fType _fArgs _fBody args
+        return $ set fBody body' fun
     return (App appNode fun' args)
 substAppDefun _ _ t = return t
 
