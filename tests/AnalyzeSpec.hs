@@ -160,6 +160,8 @@ runCheck code check = do
 handlePositiveTestResult :: Maybe TestFailure -> IO ()
 handlePositiveTestResult = \case
   Nothing -> pure ()
+  Just (TestCheckFailure (CheckFailure _ (SmtFailure (SortMismatch msg))))
+    -> pendingWith msg
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: Text -> Spec

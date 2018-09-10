@@ -39,6 +39,7 @@ import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import qualified Data.HashMap.Strict       as HM
+import           Data.List                 (isPrefixOf)
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
@@ -101,6 +102,7 @@ data SmtFailure
   = Invalid (Model 'Concrete)
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
+  | SortMismatch String
   | UnexpectedFailure SBV.SMTException
   deriving Show
 
@@ -153,15 +155,22 @@ describeParseFailure (exp, info)
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
-  Invalid model  -> "Invalidating model found:\n" <> showModel model
-  Unsatisfiable  -> "This property is unsatisfiable"
-  Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
+  Invalid model    -> "Invalidating model found:\n" <> showModel model
+  Unsatisfiable    -> "This property is unsatisfiable"
+  Unknown reason   -> "The solver returned 'unknown':\n" <> tShow reason
+  SortMismatch msg -> T.unlines
+    [ "The solver returned a sort mismatch:"
+    , T.pack msg
+    , "This may be the result of a bug in z3 versions 4.8.0 and earlier."
+    , "Specifically, before commit a37d05d54b9ca10d4c613a4bb3a980f1bb0c1c4a."
+    ]
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
   Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
   Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one.\n\nGood luck...\n" <> tShow reason
+  err@SortMismatch{} -> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
   UnexpectedFailure smtE -> T.pack $ show smtE
 
@@ -219,13 +228,19 @@ resultQuery goal model0 = do
       case satResult of
         SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
         SBV.Unsat -> pure ProvedTheorem
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+        SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
         SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+        SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
+
+  where mkUnknown = \case
+          SBV.UnknownOther explanation
+            | "Sort mismatch" `isPrefixOf` explanation
+            -> SortMismatch explanation
+          other -> Unknown other
 
 -- -- Assumes sat mode. It might be a decent idea for us to introduce an indexed
 -- -- type to denote which things assume certain modes.
