@@ -8,13 +8,18 @@ module Pact.Types.Hash
   , binaryHash
   , octalHash
   , hexadecimalHash
+  , hexStringToInteger
   ) where
 
+
 import Prelude hiding (null)
+
 import Data.ByteString (ByteString, null, foldl')
 import Data.Text (Text, append)
-import Pact.Types.Util
 import Data.Word (Word8)
+
+import Pact.Types.Util
+
 
 #if !defined(ghcjs_HOST_OS)
 
@@ -96,3 +101,14 @@ hashAsBasedInteger base k h
       go :: Integer -> Word8 -> Integer
       go acc w = base * acc + (k w) 
 {-# INLINE hashAsBasedInteger #-}
+
+-- | Computes the integer value of a hexadecimal string
+hexStringToInteger
+  :: ByteString
+  -> Integer
+hexStringToInteger = foldl' go 0 
+  where
+    go :: Integer -> Word8 -> Integer
+    go acc w = 16 * acc + (hex w)
+    hex :: Word8 -> Integer
+    hex = (`mod` 16) . fromIntegral

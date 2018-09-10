@@ -14,9 +14,9 @@
 -- Pact builtins/standard library.
 --
 module Pact.Native
-  (natives
-  ,nativeDefs
-  ,moduleToMap
+  ( natives
+  , nativeDefs
+  , moduleToMap
   ) where
 
 import Control.Arrow hiding (app)
@@ -51,7 +51,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash (hash, hexadecimalHash, numericBasedHash)
+import Pact.Types.Hash (hash, numericBasedHash, hexStringToInteger)
 
 
 -- | All production native modules.
@@ -220,7 +220,7 @@ langDefs =
      "Compute the BLAKE2b 512-bit hash of VALUE in base BASE, returning a value of type Integer. Strings are converted \
      \directly, while other values are converted using their JSON representation. `(based-hash \"hello\" 16)`"
 
-    ,defRNative "hex-str-to-int" hexStringToInteger (funType tTyInteger [("value", a)])
+    ,defRNative "hex-str-to-int" hexStringToIntegerFun (funType tTyInteger [("value", a)])
      "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
@@ -564,8 +564,8 @@ hashStringToBasedInteger i as =
           Left  e -> const (argsError i as) e
           Right a -> return . tStr . asString $ a
 
-hexStringToInteger :: RNativeFun e
-hexStringToInteger i as =
+hexStringToIntegerFun :: RNativeFun e
+hexStringToIntegerFun i as =
   case as of
     [TLitString s] ->
       bool (argsError i as) (go . encodeUtf8 $ s) $
@@ -573,10 +573,7 @@ hexStringToInteger i as =
     _ -> argsError i as 
   where
     go :: ByteString -> Eval e (Term Name)
-    go bs =
-      case hexadecimalHash bs of
-        Left e -> const (argsError i as) e
-        Right a -> return . tStr . asString $ a
+    go = return . tStr . asString . hexStringToInteger
 
 transactionHash :: RNativeFun e
 transactionHash _ [] = (tStr . asString) <$> view eeHash

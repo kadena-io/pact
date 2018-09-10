@@ -36,3 +36,6 @@ sanitySpec = describe "hashing functions" $ do
     octalHash s `shouldBe` (numericBasedHash 8 s)
   it "should have sane base-2 behavior" $ do
     hexadecimalHash s `shouldBe` numericBasedHash 16 s
+  it "should have sane hex-to-int behavior" $ do
+    hexStringToInteger "f" `shouldBe` 15
+    hexStringToInteger "ff" `shouldBe` 255

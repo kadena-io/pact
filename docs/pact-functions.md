@@ -203,7 +203,7 @@ pact> (hash { 'foo: 1 })
 Compute the compute the integer value of a string of hexidecimal numbers. 
 ```lisp
 pact> (hex-str-to-int "abcdef12345")
-"27548069368183024548605956080956084621920581229859500336861256883062724160107"
+"1250999477061"
 ```
 
 
