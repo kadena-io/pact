@@ -123,7 +123,6 @@ toPactTm = \case
   ESimple TBool (EnforceOne Left{})
     -> mkApp' enforceOneDef (ESimple TStr $ CoreTerm $ Lit "(enforce-one)") []
 
-  -- TODO: can this be mkApp?
   ESimple TBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
     (ESimple TStr $ CoreTerm $ Lit "(enforce-one)")
     (ESimple TBool . snd <$> xs)
@@ -131,7 +130,6 @@ toPactTm = \case
   -- ESimple TBool (KsAuthorized x)
   -- ESimple TBool (NameAuthorized x)
 
-  -- TODO: can this be mkApp?
   ESimple TStr PactVersion -> mkApp pactVersionDef []
   ESimple TStr (Format template vals)
     -> mkApp' formatDef (ESimple TStr template) vals
@@ -247,16 +245,14 @@ toAnalyze ty tm = do
       -> pure (constTy, constAst)
     _ -> MaybeT $ pure Nothing
 
-  -- TODO: this is all copied from Translate.hs
-  -- TODO: good chance we'll have to change some of these like the initial var
-  --       id
-  let vertex0 = 0
+  -- Note: these values all copied from runTranslation
+  let vertex0    = 0
       nextVertex = succ vertex0
-      path0 = Path 0
-      nextTagId = succ $ _pathTag path0
-      graph0 = pure vertex0
-      state0 = TranslateState nextTagId 0 graph0 vertex0 nextVertex Map.empty
-        mempty path0 Map.empty
+      path0      = Path 0
+      nextTagId  = succ $ _pathTag path0
+      graph0     = pure vertex0
+      state0     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty
 
       translateEnv = TranslateEnv dummyInfo Map.empty mempty (pure 0) (pure 0)
 

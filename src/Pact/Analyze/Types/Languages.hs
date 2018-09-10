@@ -520,12 +520,18 @@ instance UserShow a => UserShow (Term a) where
     CoreTerm tm                -> userShow tm
     IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
     Let var _ x y              -> parenList ["let", userShow var, userShow x, userShow y]
-    -- TODO(joel): not sure about this one
     Sequence x y               -> Text.unlines [userShow x, userShow y]
 
-    -- TODO(joel): enforce / enforce-one could have messages
-    EnforceOne (Left _)        -> parenList ["enforce-one"]
-    EnforceOne (Right x)       -> parenList ["enforce-one", userShowList $ fmap snd x]
+    EnforceOne (Left _)        -> parenList
+      [ "enforce-one"
+      , "\"(generated enforce-one)\""
+      , userShowList ([] :: [Integer])
+      ]
+    EnforceOne (Right x)       -> parenList
+      [ "enforce-one"
+      , "\"(generated enforce-one)\""
+      , userShowList $ fmap snd x
+      ]
 
     Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
     Enforce _ (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
