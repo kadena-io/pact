@@ -33,7 +33,7 @@ module Pact.Analyze.Types.Languages
   , pattern ILogicalOp
   , pattern Inj
   , pattern PAnd
-  , pattern PAt
+  , pattern PObjAt
   , pattern PDecAddTime
   , pattern PIntAddTime
   , pattern PKeySetEqNeq
@@ -164,12 +164,35 @@ data Core t a where
 
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
   ObjectEqNeq :: EqNeq -> t Object -> t Object -> Core t Bool
+  -- ListEqNeq   :: EqNeq -> t [a]    -> t [a]    -> Core t Bool
+  ListEqNeq   :: EqNeq -> Existential t    -> Existential t    -> Core t Bool
 
-  At :: Schema -> t String -> t Object -> EType -> Core t a
+  ObjAt :: Schema -> t String -> t Object -> EType -> Core t a
+  ListAt :: t Integer -> t [a] -> Core t a
+
+  -- TODO: ListContains   :: forall t a. SimpleType a => t a -> t [a] -> Core t Bool
+  ObjContains    :: Schema -> Existential t -> Core t Bool
+  StringContains :: t String -> t String -> Core t Bool
+
+  ListDrop :: t Integer -> t [a] -> Core t [a]
+  ObjDrop :: Schema -> t String -> t Object -> Core t Object
+
+  -- ListFilter ::
+  -- ListFold ::
+  -- ListMap ::
+  -- MkList ?
+  -- MakeList :: t a -> t Integer -> Core t [a]
+  ListReverse :: t [a] -> Core t [a]
+  ListSort    :: t [a] -> Core t [a]
+  ListTake    :: t Integer -> t [a] -> Core t [a]
+  ObjTake     :: Schema -> t [String] -> t Object -> Core t Object
+  ListConcat  :: t [a] -> t [a] -> Core t [a]
 
   ObjectMerge :: t Object -> t Object -> Core t Object
 
   LiteralObject :: Map Text (Existential t) -> Core t Object
+
+  LiteralList   :: forall a t. SimpleType a => [t a] -> Core t [a]
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -207,7 +230,7 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    At _schema k obj _ty     -> parenList [userShow k, userShow obj]
+    ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
 
@@ -418,8 +441,8 @@ pattern PIntAddTime x y = CoreProp (IntAddTime x y)
 pattern PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
 pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 
-pattern PAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
-pattern PAt a b c d = CoreProp (At a b c d)
+pattern PObjAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
+pattern PObjAt a b c d = CoreProp (ObjAt a b c d)
 
 pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
 pattern PKeySetEqNeq op x y = CoreProp (KeySetEqNeq op x y)

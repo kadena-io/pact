@@ -24,7 +24,7 @@ import           Control.Lens                 (At (at), Index, Iso, Iso',
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
-import           Data.Data                    (Data)
+import           Data.Data                    (Data, Typeable)
 import qualified Data.Decimal                 as Decimal
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
@@ -50,7 +50,7 @@ import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
-import           Data.Typeable                ((:~:) (Refl))
+import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Prelude                      hiding (Float)
 
 import qualified Pact.Types.Lang              as Pact
@@ -528,7 +528,7 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 -- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a)
+type SimpleType a = (Show a, SymWord a, SMTValue a, Typeable a, UserShow a)
 
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
@@ -643,19 +643,26 @@ data Type a where
   TDecimal :: Type Decimal
   TKeySet  :: Type KeySet
   TAny     :: Type Any
+  TList    :: SimpleType a => Type a -> Type [a]
 
 deriving instance Show (Type a)
 deriving instance Eq (Type a)
 
+-- data List a = List [a]
+--   deriving (Show, Eq, Ord)
+
+-- instance SMTValue (List a)
+
 typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt     TInt     = Just Refl
-typeEq TBool    TBool    = Just Refl
-typeEq TStr     TStr     = Just Refl
-typeEq TTime    TTime    = Just Refl
-typeEq TDecimal TDecimal = Just Refl
-typeEq TAny     TAny     = Just Refl
-typeEq TKeySet  TKeySet  = Just Refl
-typeEq _        _        = Nothing
+typeEq TInt     TInt       = Just Refl
+typeEq TBool    TBool      = Just Refl
+typeEq TStr     TStr       = Just Refl
+typeEq TTime    TTime      = Just Refl
+typeEq TDecimal TDecimal   = Just Refl
+typeEq TAny     TAny       = Just Refl
+typeEq TKeySet  TKeySet    = Just Refl
+typeEq (TList a) (TList b) = apply Refl <$> typeEq a b
+typeEq _        _          = Nothing
 
 instance UserShow (Type a) where
   userShowsPrec _ = \case
@@ -666,6 +673,7 @@ instance UserShow (Type a) where
     TDecimal -> "decimal"
     TKeySet  -> "keyset"
     TAny     -> "*"
+    TList a  -> "[" <> userShow a <> "]"
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema

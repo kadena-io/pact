@@ -54,7 +54,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                SchemaVar, TKeySet, TableName,
-                                               Type)
+                                               Type, TList)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
@@ -110,6 +110,7 @@ expToPreProp = \case
   ELiteral' (LString s)  -> pure (PreStringLit s)
   ELiteral' (LTime t)    -> pure (PreTimeLit (fromPact timeIso t))
   ELiteral' (LBool b)    -> pure (PreBoolLit b)
+  SquareList elems       -> PreListLit <$> traverse expToPreProp elems
 
   ParenList [EAtom' (textToQuantifier -> Just q), ParenList bindings, body] -> do
     bindings' <- parseBindings (\name ty -> (, name, ty) <$> genVarId) bindings
@@ -121,7 +122,7 @@ expToPreProp = \case
       body'
       bindings'
 
-  ParenList [EAtom' SObjectProjection, ELiteral' (LString objIx), obj]
+  ParenList [EAtom' SProjection, ELiteral' (LString objIx), obj]
     -> PreAt objIx <$> expToPreProp obj
   ParenList [EAtom' SPropRead, tn, rk, ba] -> PrePropRead
     <$> expToPreProp tn
@@ -131,7 +132,7 @@ expToPreProp = \case
     SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
-  exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
+  exp@(ParenList [EAtom' SProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
     let go (keyExp : Colon' : valExp : rest) = Map.insert
@@ -181,7 +182,7 @@ parseBindings mkBinding = \case
     "in " <> userShowList exp <> ", unexpected binding form"
 
 parseType :: Exp Info -> Maybe QType
-parseType exp = case exp of
+parseType = \case
   EAtom' "bool"    -> pure $ EType TBool
   EAtom' "decimal" -> pure $ EType TDecimal
   EAtom' "integer" -> pure $ EType TInt
@@ -197,12 +198,14 @@ parseType exp = case exp of
 
   -- TODO
   -- # user schema type
-  -- # list type
   BraceList _      -> Nothing
-  SquareList [_ty] -> Nothing -- TyList <$> parseType ty
   ParenList [EAtom' "column-of", EAtom' tabName]
     -- TODO: look up quantified table names
     -> pure $ QColumnOf $ TableName $ T.unpack tabName
+  SquareList [ty]  -> case parseType ty of
+    Just (EType ty) -> pure $ EType $ TList ty
+    _               -> Nothing
+  SquareList _     -> Nothing
 
   -- TODO
   -- # object schema type
@@ -242,6 +245,22 @@ inferVar vid name prop = do
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
 
+-- TODO: generalize this / doit from Translate
+doit :: [EProp] -> Maybe (Existential (Core Prop))
+doit [] = Just $ ESimple (TList TAny) (LiteralList [])
+doit (ESimple ty1 x : xs) = foldr
+  (\case
+    EObject{} -> \_ -> Nothing
+    ESimple ty y -> \case
+      Nothing -> Nothing
+      Just EObject{} -> error "impossible"
+      Just (ESimple listTy@(TList ty') (LiteralList ys)) -> case typeEq ty ty' of
+        Nothing   -> Nothing
+        Just Refl -> Just (ESimple listTy (LiteralList (y:ys)))
+      _ -> error "impossible")
+  (Just (ESimple (TList ty1) (LiteralList [x])))
+  xs
+
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
 -- in conjunction with view patterns for feature symbols (see
@@ -263,6 +282,13 @@ inferPreProp preProp = case preProp of
   PreBoolLit a    -> pure (ESimple TBool (PLit a))
   PreAbort        -> pure (ESimple TBool (PropSpecific Abort))
   PreSuccess      -> pure (ESimple TBool (PropSpecific Success))
+
+  PreListLit as   -> do
+    as' <- traverse inferPreProp as
+    ESimple listTy litList
+      <- maybe (throwErrorT "TODO: bad list") pure $ doit as'
+
+    pure $ ESimple listTy $ CoreProp litList
 
   -- identifiers
   PreResult         -> inferVar 0 SFunctionResult (PropSpecific Result)
@@ -307,10 +333,10 @@ inferPreProp preProp = case preProp of
         Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
         Just ety@(EType ty) -> pure $ ESimple
           ty
-          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+          (PObjAt objSchema (PLit (T.unpack objIx)) objProp ety)
         Just ety@(EObjectTy schemaTy) -> pure $ EObject
           schemaTy
-          (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+          (PObjAt objSchema (PLit (T.unpack objIx)) objProp ety)
 
   PrePropRead tn rk ba -> do
     tn' <- parseTableName tn
@@ -369,14 +395,18 @@ inferPreProp preProp = case preProp of
         Just Refl -> case aTy of
           TInt     -> ret (CoreProp .... IntegerComparison) aProp bProp
           TDecimal -> ret (CoreProp .... DecimalComparison) aProp bProp
-          TTime    -> ret (CoreProp .... TimeComparison) aProp bProp
-          TBool    -> ret (CoreProp .... BoolComparison) aProp bProp
-          TStr     -> ret (CoreProp .... StringComparison) aProp bProp
+          TTime    -> ret (CoreProp .... TimeComparison)    aProp bProp
+          TBool    -> ret (CoreProp .... BoolComparison)    aProp bProp
+          TStr     -> ret (CoreProp .... StringComparison)  aProp bProp
           TAny     -> throwErrorIn preProp $
             "cannot compare objects of type " <> userShow aTy
           TKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple TBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
+          TList ty -> case toOp eqNeqP op' of
+            Just eqNeq
+              -> pure $ ESimple TBool $ CoreProp $ ListEqNeq eqNeq (ESimple aTy aProp) (ESimple aTy bProp)
+            Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
       (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
           Just eqNeq -> pure $ ESimple TBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
           Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
@@ -496,8 +526,8 @@ inferPreProp preProp = case preProp of
           local (definedProps . at fName .~ Nothing) $
             inferPreProp body
 
-  _ -> vacuousMatch
-    "PreForall / PreExists are handled via the viewQ view pattern"
+  x -> vacuousMatch $
+    "PreForall / PreExists are handled via the viewQ view pattern: " ++ show x
 
 checkPreProp :: Type a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp

@@ -29,7 +29,7 @@ import           Pact.Analyze.Util
   CoreProp Var{}      -> ([], p);                                     \
   CoreProp Lit{}      -> ([], p);                                     \
   CoreProp Sym{}      -> ([], p);                                     \
-  CoreProp (At schema a b ty) -> PAt schema a <$> float b <*> pure ty;
+  CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
 
 instance Float Integer where
   float = floatIntegerQuantifiers
@@ -156,6 +156,15 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
+  CoreProp (ListEqNeq   op (ESimple tyA a) (ESimple tyB b)) ->
+    let -- HACK!
+        qa = []
+        qb = []
+        a' = a
+        b' = b
+    -- let (qa, a') = float a
+    --     (qb, b') = float b
+    in (qa, CoreProp (ListEqNeq op (ESimple tyA a') (ESimple tyB b')))
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b

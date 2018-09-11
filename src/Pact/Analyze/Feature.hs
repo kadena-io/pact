@@ -32,6 +32,7 @@ data FeatureClass
   = CNumerical
   | CLogical
   | CObject
+  | CList
   | CString
   | CTemporal
   | CQuantification
@@ -80,8 +81,14 @@ data Feature
   | FLogicalNegation
   | FLogicalImplication
   -- Object operators
-  | FObjectProjection
+  | FProjection
   | FObjectMerge
+  -- List operators
+  | FContains
+  | FDrop
+  | FReverse
+  | FSort
+  | FTake
   -- String operators
   | FStringLength
   | FStringConcatenation
@@ -181,6 +188,7 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
+  | TyList' Type
   | TyEnum [Text]
   deriving (Eq, Ord, Show)
 
@@ -189,7 +197,7 @@ data Bindings
   | BindObject
   deriving (Eq, Ord, Show)
 
-int, dec, str, time, bool, obj, ks, tbl, col :: ConcreteType
+int, dec, str, time, bool, obj, ks, tbl, col, list :: ConcreteType
 int  = "integer"
 dec  = "decimal"
 str  = "string"
@@ -199,6 +207,7 @@ obj  = "object"
 ks   = "keyset"
 tbl  = "table"
 col  = "column"
+list = "list"
 
 doc :: Feature -> Doc
 
@@ -618,11 +627,11 @@ doc FLogicalImplication = Doc
 
 -- Object features
 
-doc FObjectProjection = Doc
+doc FProjection = Doc
   "at"
-  CObject
+  (error "TODO")
   InvAndProp
-  "Object projection"
+  "projection"
   [ Usage
       "(at k o)"
       Map.empty
@@ -630,6 +639,15 @@ doc FObjectProjection = Doc
         Nothing
         [ ("k", TyCon str)
         , ("o", TyCon obj)
+        ]
+        (TyCon bool)
+  , Usage
+      "(at i l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("i", TyCon int)
+        , ("o", TyCon list)
         ]
         (TyCon bool)
   ]
@@ -649,6 +667,93 @@ doc FObjectMerge = Doc
         ]
         (TyCon obj)
   ]
+
+-- List features
+
+doc FContains = Doc
+  "contains"
+  CList
+  InvAndProp
+  "List contains"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(contains x xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("x", a)
+        , ("xs", TyList' a)
+        ]
+        (TyCon bool)
+  ]
+
+
+doc FDrop = Doc
+  "drop"
+  CList
+  InvAndProp
+  "drop n values from a list"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(drop n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FReverse = Doc
+  "reverse"
+  CList
+  InvAndProp
+  ""
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(reverse xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FSort = Doc
+  "sort"
+  CList
+  InvAndProp
+  "(sort xs)"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      ""
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
+doc FTake = Doc
+  "take"
+  CList
+  InvAndProp
+  ""
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(take n xs)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("n", TyCon int)
+        , ("xs", TyList' a)
+        ]
+      (TyList' a)
+  ]
+
 
 -- String features
 
@@ -1086,7 +1191,12 @@ PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SLogicalImplication, FLogicalImplication)
-PAT(SObjectProjection, FObjectProjection)
+PAT(SProjection, FProjection)
+PAT(SContains, FContains)
+PAT(SDrop, FDrop)
+PAT(SReverse, FReverse)
+PAT(SSort, FSort)
+PAT(STake, FTake)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)

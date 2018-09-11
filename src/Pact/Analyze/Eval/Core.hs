@@ -12,9 +12,11 @@ import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord, ite)
-import qualified Data.SBV.String             as SBV
+import qualified Data.SBV.String             as SBVS
+import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
+import Data.Type.Equality
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -126,12 +128,12 @@ evalObjectEqNeq op xT yT = do
     Neq' -> x ./= y
 
 evalCore
-  :: (Analyzer m, SymWord a)
+  :: (Analyzer m, SymWord a, Show (Core (TermOf m) a))
   => Core (TermOf m) a -> m (S a)
 evalCore (Lit a)                           = pure (literalS a)
 evalCore (Sym s)                           = pure s
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
-evalCore (StrLength p)                     = over s2Sbv SBV.length <$> eval p
+evalCore (StrLength p)                     = over s2Sbv SBVS.length <$> eval p
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
@@ -143,11 +145,31 @@ evalCore (BoolComparison op x y)           = evalComparisonOp op x y
 evalCore (ObjectEqNeq op x y)              = evalObjectEqNeq  op x y
 evalCore (KeySetEqNeq      op x y)         = evalEqNeq        op x y
 evalCore (Logical op props)                = evalLogicalOp op props
-evalCore (At schema colNameT objT retType) = evalAt schema colNameT objT retType
+evalCore (ObjAt schema colNameT objT retType) = evalObjAt schema colNameT objT retType
 evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
+evalCore (LiteralList xs)                  =
+  sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
+evalCore (StringContains needle haystack) = do
+  needle'   <- eval needle
+  haystack' <- eval haystack
+  pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
+-- evalCore (ListDrop n list) = do
+--   n'    <- eval n
+--   list' <- eval list
+--   pure $ sansProv $ _sSbv n' `SBVL.drop` _sSbv list'
+evalCore ListReverse{} = undefined
+evalCore ListSort{} = undefined
+-- evalCore (ListTake n list) = do
+--   n'    <- eval n
+--   list' <- eval list
+--   pure $ sansProv $ _sSbv n' `SBVL.take` _sSbv list'
+evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
+  case typeEq tyA tyB of
+    Nothing   -> error "TODO"
+    Just Refl -> evalEqNeq op a b
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -155,15 +177,16 @@ evalCore (Var vid name) = do
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
+evalCore x = error $ "no case for: " ++ show x
 
-evalAt
+evalObjAt
   :: (Analyzer m, SymWord a)
   => Schema
   -> TermOf m String
   -> TermOf m Object
   -> EType
   -> m (S a)
-evalAt schema@(Schema schemaFields) colNameT objT retType = do
+evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
   obj@(Object fields) <- evalO objT
 
   -- Filter down to only fields which contain the type we're looking for
@@ -203,13 +226,13 @@ evalAt schema@(Schema schemaFields) colNameT objT retType = do
     firstVal
     relevantFields'
 
-evalAtO
+evalObjAtO
   :: forall m
    . Analyzer m
   => TermOf m String
   -> TermOf m Object
   -> m Object
-evalAtO colNameT objT = do
+evalObjAtO colNameT objT = do
     obj@(Object fields) <- evalO objT
     sCn <- eval colNameT
 
@@ -229,7 +252,7 @@ evalCoreO
   :: Analyzer m
   => Core (TermOf m) Object -> m Object
 evalCoreO (LiteralObject obj) = Object <$> traverse evalExistential obj
-evalCoreO (At _schema colNameT objT _retType) = evalAtO colNameT objT
+evalCoreO (ObjAt _schema colNameT objT _retType) = evalObjAtO colNameT objT
 evalCoreO (ObjectMerge objT1 objT2) = mappend <$> evalO objT1 <*> evalO objT2
 evalCoreO (Var vid name) = do
   mVal <- getVar vid

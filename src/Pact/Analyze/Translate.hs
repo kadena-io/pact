@@ -49,7 +49,7 @@ import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
 import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
-                                             time)
+                                             time, list)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -84,6 +84,9 @@ data TranslateFailureNoLoc
   | NoReadMsg (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
+
+  | BadList
+  | TODO
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -346,7 +349,7 @@ maybeTranslateType
 -- A helper to translate types that doesn't know how to handle user types
 -- itself
 maybeTranslateType'
-  :: Alternative f
+  :: (Monad f, Alternative f)
   => (a -> f QType)
   -> Pact.Type a
   -> f QType
@@ -375,7 +378,9 @@ maybeTranslateType' f = \case
   -- TODO: handle these:
   --
   TyPrim TyValue   -> empty
-  TyList _         -> empty
+  TyList a         -> maybeTranslateType' f a >>= \case
+    EType t -> pure $ EType $ TList t
+    _       -> empty
   TyFun _          -> empty
 
 throwError'
@@ -548,9 +553,9 @@ translateObjBinding pairs schema bodyA rhsT = do
             let colTerm = lit colName
                 rhs = case varType of
                   EType ty ->
-                    ESimple ty  (CoreTerm (At schema colTerm objVar varType))
+                    ESimple ty  (CoreTerm (ObjAt schema colTerm objVar varType))
                   EObjectTy sch ->
-                    EObject sch (CoreTerm (At schema colTerm objVar varType))
+                    EObject sch (CoreTerm (ObjAt schema colTerm objVar varType))
             in Let varName vid retTid rhs body)
           innerBody
           (zip cols bindingTs)
@@ -934,12 +939,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Read tid (TableName (T.unpack table)) schema key'
 
   AST_At node colName obj -> do
+    -- TODO: list case
     EObject schema obj'   <- translateNode obj
     ESimple TStr colName' <- translateNode colName
     ty <- translateType node
     pure $ case ty of
-      EType ty'         -> ESimple ty'     $ CoreTerm $ At schema colName' obj' ty
-      EObjectTy schema' -> EObject schema' $ CoreTerm $ At schema colName' obj' ty
+      EType ty'         -> ESimple ty'     $ CoreTerm $ ObjAt schema colName' obj' ty
+      EObjectTy schema' -> EObject schema' $ CoreTerm $ ObjAt schema colName' obj' ty
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -952,6 +958,54 @@ translateNode astNode = withAstContext astNode $ case astNode of
     schema <- translateSchema node
     pure $ EObject schema $ CoreTerm $ LiteralObject $ Map.fromList kvs'
 
+  AST_List _node elems -> do
+    elems' <- traverse translateNode elems
+    ESimple listTy litList
+      <- maybe (throwError' BadList) pure $ doit elems'
+    pure $ ESimple listTy $ CoreTerm litList
+
+  AST_Contains node val collection -> do
+    ty          <- translateType node
+    val'        <- translateNode val
+    collection' <- translateNode collection
+    case ty of
+      EObjectTy{} -> throwError' TODO
+      EType TStr -> case (val', collection') of
+        (ESimple TStr needle, ESimple TStr haystack)
+          -> pure $ ESimple TBool $ CoreTerm $ StringContains needle haystack
+
+  -- TODO: object drop
+  AST_Drop _node num list -> do
+    ESimple ty' list' <- translateNode list
+    ESimple TInt num' <- translateNode num
+    case ty' of
+      TList{} -> pure $ ESimple ty' $ CoreTerm $ ListDrop num' list'
+      _       -> throwError' TODO
+
+  AST_Reverse _node list -> do
+    ESimple ty' list' <- translateNode list
+    case ty' of
+      TList{} -> pure $ ESimple ty' $ CoreTerm $ ListReverse list'
+      _       -> throwError' TODO
+
+  AST_Sort node list               -> do
+    -- TODO: do we need to translate the node ty? look at Take
+    ty                <- translateType node
+    ESimple ty' list' <- translateNode list
+
+    case ty of
+      EObjectTy{} -> throwError' TODO
+      EType ty''@TList{} -> case typeEq ty' ty'' of
+        Nothing   -> throwError' TODO
+        Just Refl -> pure $ ESimple ty' $ CoreTerm $ ListSort list'
+
+  AST_Take _node num list -> do
+    ESimple ty' list' <- translateNode list
+    ESimple TInt num' <- translateNode num
+    case ty' of
+      TList{} -> pure $ ESimple ty' $ CoreTerm $ ListTake num' list'
+      _       -> throwError' TODO
+
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode
 
@@ -960,12 +1014,27 @@ translateNode astNode = withAstContext astNode $ case astNode of
       --
       -- TODO: add symbols these to Feature once implemented.
       --
-      ["map", "make-list", "filter", "reverse", "sort", "take", "fold"]
+      ["map", "make-list", "filter", "fold"]
     -> throwError' $ NoLists astNode
 
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
+
+doit :: [ETerm] -> Maybe (Existential (Core Term))
+doit [] = Just $ ESimple (TList TAny) (LiteralList [])
+doit (ESimple ty1 x : xs) = foldr
+  (\case
+    EObject{} -> \_ -> Nothing
+    ESimple ty y -> \case
+      Nothing -> Nothing
+      Just EObject{} -> error "impossible"
+      Just (ESimple listTy@(TList ty') (LiteralList ys)) -> case typeEq ty ty' of
+        Nothing   -> Nothing
+        Just Refl -> Just (ESimple listTy (LiteralList (y:ys)))
+      _ -> error "impossible")
+  (Just (ESimple (TList ty1) (LiteralList [x])))
+  xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph
 mkExecutionGraph vertex0 rootPath st = ExecutionGraph

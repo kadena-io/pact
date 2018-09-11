@@ -172,10 +172,28 @@ pattern AST_ReadCols node tn key columns
   <- App node (NativeFunc "read") [ShortTableName tn, key, List _ columns]
 
 pattern AST_At :: a -> AST a -> AST a -> AST a
-pattern AST_At node colName obj <- App node (NativeFunc SObjectProjection) [colName, obj]
+pattern AST_At node colName obj <- App node (NativeFunc SProjection) [colName, obj]
+
+pattern AST_Contains :: a -> AST a -> AST a -> AST a
+pattern AST_Contains node val collection <- App node (NativeFunc SContains) [val, collection]
+
+pattern AST_Drop :: a -> AST a -> AST a -> AST a
+pattern AST_Drop node num collection <- App node (NativeFunc SDrop) [num, collection]
+
+pattern AST_Reverse :: a -> AST a -> AST a
+pattern AST_Reverse node list <- App node (NativeFunc SReverse) [list]
+
+pattern AST_Sort :: a -> AST a -> AST a
+pattern AST_Sort node list <- App node (NativeFunc SSort) [list]
+
+pattern AST_Take :: a -> AST a -> AST a -> AST a
+pattern AST_Take node num list <- App node (NativeFunc STake) [num, list]
 
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
+
+pattern AST_List :: forall a. a -> [AST a] -> AST a
+pattern AST_List node elems <- List node elems
 
 pattern AST_Step :: AST a
 pattern AST_Step <- Step {}
