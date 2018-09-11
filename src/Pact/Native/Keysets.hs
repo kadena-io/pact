@@ -26,6 +26,12 @@ readKeysetDef =
   defRNative "read-keyset" readKeySet (funType tTyKeySet [("key",tTyString)]) $
     "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
     "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
+  where
+
+    readKeySet :: RNativeFun e
+    readKeySet i [TLitString key]
+      = (`TKeySet` def) <$> parseMsgKey i "read-keyset" key
+    readKeySet i as = argsError i as
 
 keyDefs :: NativeModule
 keyDefs =
@@ -52,10 +58,6 @@ keyDefs =
     ,defKeyPred Keys2 (keysN 2)
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
     ])
-
-readKeySet :: RNativeFun e
-readKeySet i [TLitString key] = (`TKeySet` def) <$> parseMsgKey i "read-keyset" key
-readKeySet i as = argsError i as
 
 
 defineKeyset :: RNativeFun e

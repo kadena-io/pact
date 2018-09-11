@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      :  Pact.Native
@@ -87,16 +88,44 @@ listA :: Type n
 listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (mkSchemaVar "o")]
 
 enforceDef :: NativeDef
-enforceDef = defNative "enforce" enforce (funType tTyBool [("test",tTyBool),("msg",tTyString)])
+enforceDef = defNative "enforce" enforce
+  (funType tTyBool [("test",tTyBool),("msg",tTyString)])
   "Fail transaction with MSG if pure function TEST fails, or returns true. \
   \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
+  where
+
+    enforce :: NativeFun e
+    enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
+
+    enforce' :: PureNoDb e => RNativeFun e
+    enforce' i [TLiteral (LBool b) _,TLitString msg]
+        | b = return $ TLiteral (LBool True) def
+        | otherwise = failTx (_faInfo i) $ unpack msg
+    enforce' i as = argsError i as
+    {-# INLINE enforce' #-}
 
 enforceOneDef :: NativeDef
 enforceOneDef =
   defNative "enforce-one" enforceOne (funType tTyBool [("msg",tTyString),("tests",TyList tTyBool)])
   "Run TESTS in order (in pure context, plus keyset enforces). If all fail, fail transaction. Short-circuits on first success. \
   \`(enforce-one \"Should succeed on second test\" [(enforce false \"Skip me\") (enforce (= (+ 2 2) 4) \"Chaos reigns\")])`"
+  where
 
+    enforceOne :: NativeFun e
+    enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $
+      gasUnreduced i as $ do
+        msg' <- reduce msg >>= \m -> case m of
+          TLitString s -> return s
+          _ -> argsError' i as
+        let tryCond r@Just {} _ = return r
+            tryCond Nothing cond = catch
+              (Just <$> reduce cond)
+              (\(_ :: SomeException) -> return Nothing)
+        r <- foldM tryCond Nothing conds
+        case r of
+          Nothing -> failTx (_faInfo i) (unpack msg')
+          Just b -> return b
+    enforceOne i as = argsError' i as
 
 pactVersionDef :: NativeDef
 pactVersionDef =
@@ -106,19 +135,67 @@ pactVersionDef =
 
 formatDef :: NativeDef
 formatDef =
-  defRNative "format" format (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
+  defRNative "format" format
+  (funType tTyString [("template",tTyString),("vars",TyList TyAny)])
   "Interpolate VARS into TEMPLATE using {}. \
   \`(format \"My {} has {}\" [\"dog\" \"fleas\"])`"
+  where
+
+    format :: RNativeFun e
+    format i [TLitString s,TList es _ _] = do
+      let parts = T.splitOn "{}" s
+          plen = length parts
+          rep (TLitString t) = t
+          rep t = pack $ show t
+      if plen == 1
+      then return $ tStr s
+      else if plen - length es > 1
+           then evalError' i "format: not enough arguments for template"
+           else return $ tStr $
+                foldl'
+                  (\r (e,t) -> r <> rep e <> t)
+                  (head parts)
+                  (zip es (tail parts))
+    format i as = argsError i as
 
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
   \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
+  where
+
+    hash' :: RNativeFun e
+    hash' i as = case as of
+      [TLitString s] -> go $ encodeUtf8 s
+      [a'] -> go $ toStrict $ encode a'
+      _ -> argsError i as
+      where go = return . tStr . asString . hash
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
   "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
   \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
+  where
+
+    if' :: NativeFun e
+    if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \case
+               TLiteral (LBool c) _ -> reduce (if c then then' else else')
+               t -> evalError' i $ "if: conditional not boolean: " ++ show t
+    if' i as = argsError' i as
+
+
+readDecimalDef :: NativeDef
+readDecimalDef = defRNative "read-decimal" readDecimal
+  (funType tTyDecimal [("key",tTyString)])
+  "Parse KEY string or number value from top level of message data body as decimal.\
+  \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
+  where
+
+    readDecimal :: RNativeFun e
+    readDecimal i [TLitString key] = do
+      (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
+      return $ toTerm a'
+    readDecimal i as = argsError i as
 
 
 langDefs :: NativeModule
@@ -260,12 +337,6 @@ langDefs =
 a :: Type n
 a = mkTyVar "a" []
 
-if' :: NativeFun e
-if' i as@[cond,then',else'] = gasUnreduced i as $ reduce cond >>= \cm -> case cm of
-           TLiteral (LBool c) _ -> reduce (if c then then' else else')
-           t -> evalError' i $ "if: conditional not boolean: " ++ show t
-if' i as = argsError' i as
-
 map' :: NativeFun e
 map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
@@ -355,21 +426,6 @@ compose i as = argsError' i as
 
 
 
-format :: RNativeFun e
-format i [TLitString s,TList es _ _] = do
-  let parts = T.splitOn "{}" s
-      plen = length parts
-      rep (TLitString t) = t
-      rep t = pack $ show t
-  if plen == 1
-  then return $ tStr s
-  else if plen - length es > 1
-       then evalError' i "format: not enough arguments for template"
-       else return $ tStr $
-            foldl' (\r (e,t) -> r <> rep e <> t)  (head parts) (zip es (tail parts))
-format i as = argsError i as
-
-
 
 readMsg :: RNativeFun e
 readMsg i [TLitString key] = parseMsgKey i "read-msg" key
@@ -388,18 +444,6 @@ instance FromJSON ParsedDecimal where
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
 
 
-readDecimal :: RNativeFun e
-readDecimal i [TLitString key] = do
-  (ParsedDecimal a') <- parseMsgKey i "read-decimal" key
-  return $ toTerm a'
-readDecimal i as = argsError i as
-
-
-readDecimalDef :: NativeDef
-readDecimalDef = defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
- "Parse KEY string or number value from top level of message data body as decimal.\
- \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
-
 -- | One-off type for 'readInteger', not exported.
 newtype ParsedInteger = ParsedInteger Integer
 instance FromJSON ParsedInteger where
@@ -415,30 +459,6 @@ readInteger i [TLitString key] = do
   (ParsedInteger a') <- parseMsgKey i "read-integer" key
   return $ toTerm a'
 readInteger i as = argsError i as
-
-enforce :: NativeFun e
-enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
-
-enforceOne :: NativeFun e
-enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $ gasUnreduced i as $ do
-  msg' <- reduce msg >>= \m -> case m of
-    TLitString s -> return s
-    _ -> argsError' i as
-  let tryCond r@Just {} _ = return r
-      tryCond Nothing cond = catch (Just <$> reduce cond) (\(_ :: SomeException) -> return Nothing)
-  r <- foldM tryCond Nothing conds
-  case r of
-    Nothing -> failTx (_faInfo i) (unpack msg')
-    Just b -> return b
-enforceOne i as = argsError' i as
-
-
-enforce' :: PureNoDb e => RNativeFun e
-enforce' i [TLiteral (LBool b) _,TLitString msg]
-    | b = return $ TLiteral (LBool True) def
-    | otherwise = failTx (_faInfo i) $ unpack msg
-enforce' i as = argsError i as
-{-# INLINE enforce #-}
 
 
 pactId :: RNativeFun e
@@ -571,13 +591,6 @@ constantly i as = argsError' i as
 identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
-
-hash' :: RNativeFun e
-hash' i as = case as of
-  [TLitString s] -> go $ encodeUtf8 s
-  [a'] -> go $ toStrict $ encode a'
-  _ -> argsError i as
-  where go = return . tStr . asString . hash
 
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
