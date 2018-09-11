@@ -28,12 +28,12 @@ import           Pact.Types.Runtime         (tShow)
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
 
-indent :: Text -> Text
-indent = ("  " <>)
+indent1 :: Text -> Text
+indent1 = ("  " <>)
 
-indent' :: Natural -> Text -> Text
-indent' 0     = id
-indent' times = indent' (pred times) . indent
+indent :: Natural -> Text -> Text
+indent 0     = id
+indent times = indent (pred times) . indent1
 
 showSbv :: (Show a, SymWord a) => SBV a -> Text
 showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
@@ -132,7 +132,7 @@ showEvent
   -> State Natural [Text]
 showEvent ksProvs tags event = do
   lastDepth <- get
-  fmap (fmap (indent' lastDepth)) $
+  fmap (fmap (indent lastDepth)) $
     case event of
       TraceRead (_located -> (tid, _)) ->
         pure [display mtReads tid showRead]
@@ -147,7 +147,7 @@ showEvent ksProvs tags event = do
       TracePushScope _ scopeTy (fmap (view (located.bVid)) -> vids) -> do
         modify succ
         let displayVids show' =
-              (\vid -> indent $ display mtVars vid show') <$> vids
+              (\vid -> indent1 $ display mtVars vid show') <$> vids
 
         pure $ case scopeTy of
           LetScope ->
@@ -180,15 +180,15 @@ showEvent ksProvs tags event = do
 
 showModel :: Model 'Concrete -> Text
 showModel model =
-    T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
+    T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
       [ ["Arguments:"]
-      , indent <$> Foldable.toList (showArg <$> (model ^. modelArgs))
+      , indent1 <$> Foldable.toList (showArg <$> (model ^. modelArgs))
       , []
       , ["Program trace:"]
-      , indent <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
+      , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
       , []
       , ["Result:"]
-      , [indent $ maybe
+      , [indent1 $ maybe
           "Transaction aborted."
           (\tval -> "Return value: " <> showTVal tval)
           mRetval
