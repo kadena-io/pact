@@ -58,6 +58,9 @@ showObject (Object m) = "{ "
 showObjMapping :: Text -> TVal -> Text
 showObjMapping key val = key <> ": " <> showTVal val
 
+showArg :: Located (Unmunged, TVal) -> Text
+showArg (Located _ (Unmunged nm, tval)) = nm <> " = " <> showTVal tval
+
 showVar :: Located (Unmunged, TVal) -> Text
 showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
@@ -143,12 +146,18 @@ showEvent ksProvs tags event = do
         pure [] -- not shown to end-users
       TracePushScope _ scopeTy (fmap (view (located.bVid)) -> vids) -> do
         modify succ
-        pure $
-          (case scopeTy of
-             LetScope         -> "let"
-             ObjectScope      -> "destructuring object"
-             FunctionScope nm -> "entering function " <> nm
-          ) : ((\vid -> indent $ display mtVars vid showVar) <$> vids)
+        let displayVids show' =
+              (\vid -> indent $ display mtVars vid show') <$> vids
+
+        pure $ case scopeTy of
+          LetScope ->
+            "let" : displayVids showVar
+          ObjectScope ->
+            "destructuring object" : displayVids showVar
+          FunctionScope nm ->
+            let header = "entering function " <> nm
+                      <> " with argument" <> if length vids > 1 then "s" else ""
+            in header : (displayVids showArg ++ [""])
       TracePopScope _ scopeTy tid _ -> do
         modify pred
         pure $ case scopeTy of
@@ -169,7 +178,7 @@ showModel :: Model 'Concrete -> Text
 showModel model =
     T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
       [ ["Arguments:"]
-      , indent <$> Foldable.toList (showVar <$> (model ^. modelArgs))
+      , indent <$> Foldable.toList (showArg <$> (model ^. modelArgs))
       , []
       , ["Program trace:"]
       , indent <$> (concat $ evalState (traverse showEvent' traceEvents) 0)

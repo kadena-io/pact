@@ -10,7 +10,7 @@
 module AnalyzeSpec (spec) where
 
 import           Control.Lens                 (at, findOf, ix, matching, (&),
-                                               (.~), (^.), (^..), _2, _Left)
+                                               (.~), (^.), (^..), _Left)
 import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
