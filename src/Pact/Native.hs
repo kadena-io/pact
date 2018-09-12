@@ -568,11 +568,11 @@ hexStringToIntegerFun :: RNativeFun e
 hexStringToIntegerFun i as =
   case as of
     [TLitString s] ->
-      bool (argsError i as) (go . encodeUtf8 $ s) $
+      bool (argsError i as) (go s) $
         T.all isHexDigit s
     _ -> argsError i as 
   where
-    go :: ByteString -> Eval e (Term Name)
+    go :: Text -> Eval e (Term Name)
     go = return . tStr . asString . hexStringToInteger
 
 transactionHash :: RNativeFun e
