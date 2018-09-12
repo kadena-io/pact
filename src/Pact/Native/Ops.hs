@@ -38,6 +38,10 @@ import Pact.Eval
 modDef :: NativeDef
 modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
   "X modulo Y. `(mod 13 8)`"
+  where
+    mod' :: RNativeFun e
+    mod' _ [TLitInteger a, TLitInteger b] = return $ toTerm $ a `mod` b
+    mod' i as = argsError i as
 
 addDef :: NativeDef
 addDef = defRNative "+" plus plusTy
@@ -117,6 +121,11 @@ expDef = defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
      "Absolute value of X. `(abs (- 10 23))`"
+  where
+    abs' :: RNativeFun e
+    abs' _ [TLitInteger a] = return $ toTerm $ abs a
+    abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
+    abs' i as = argsError i as
 
 roundDef :: NativeDef
 roundDef = defTrunc "round" "Performs Banker's rounding" round
@@ -152,6 +161,10 @@ andDef = defLogic "and" (&&) False
 
 notDef :: NativeDef
 notDef = defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
+  where
+    not' :: RNativeFun e
+    not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
+    not' i as = argsError i as
 
 opDefs :: NativeModule
 opDefs = ("Operators",
@@ -209,10 +222,6 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
                        _ -> argsError' i as
         _ -> argsError' i as
       fun i as = argsError' i as
-
-not' :: RNativeFun e
-not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
-not' i as = argsError i as
 
 logicLam :: Type v -> Type v
 logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
@@ -324,13 +333,3 @@ unopd :: (Double -> Double) -> RNativeFun e
 unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
 unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
 unopd _ i as = argsError i as
-
-
-mod' :: RNativeFun e
-mod' _ [TLitInteger a, TLitInteger b] = return $ toTerm $ a `mod` b
-mod' i as = argsError i as
-
-abs' :: RNativeFun e
-abs' _ [TLitInteger a] = return $ toTerm $ abs a
-abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
-abs' i as = argsError i as
