@@ -144,7 +144,8 @@ showEvent ksProvs tags event = do
         pure [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
       TraceSubpathStart _ ->
         pure [] -- not shown to end-users
-      TracePushScope _ scopeTy (fmap (view (located.bVid)) -> vids) -> do
+      TracePushScope _ scopeTy locatedBindings -> do
+        let vids = view (located.bVid) <$> locatedBindings
         modify succ
         let displayVids show' =
               (\vid -> indent1 $ display mtVars vid show') <$> vids
