@@ -344,7 +344,9 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
               funInfo
 
         -- TODO: bring back the query success check when we've resolved the SBV
-        -- query / quantified variables issue.
+        -- query / quantified variables issue:
+        -- https://github.com/LeventErkok/sbv/issues/407
+        --
         -- _ <- hoist SBV.query $ do
         --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
         --   withExceptT (smtToQueryFailure (getInfo check)) $
