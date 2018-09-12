@@ -480,10 +480,10 @@ translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
   let -- Using each of the bindings, we build up a function that takes a 'Term'
       -- of body of clauses to that 'Term' body wrapped in 'Let' bindings
       wrapWithLets :: Term a -> Term a
-      wrapWithLets = foldl'
-        (\wrap (rhsET, _located -> Binding vid _ (Munged munged) _) ->
-          wrap . Let munged vid retTid rhsET)
-        id
+      wrapWithLets tm = foldr
+        (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
+          Let munged vid retTid rhsET body')
+        tm
         (zip rhsETs bindingTs)
 
       nodeVars :: Map Node (Munged, VarId)
