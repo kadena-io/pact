@@ -33,7 +33,7 @@ import           Control.Monad.State.Strict   (MonadState)
 import           Data.Text                    (Text)
 import           Prelude                      hiding (Float)
 
-import           Pact.Types.Info              (HasInfo(..), Info)
+import           Pact.Types.Info              (HasInfo(..))
 import qualified Pact.Types.Typecheck         as TC
 
 import           Pact.Analyze.Types.Languages
@@ -65,21 +65,21 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds !(Prop Bool) !Info -- valid, assuming success
-  | Satisfiable   !(Prop Bool) !Info -- sat,   not assuming success
-  | Valid         !(Prop Bool) !Info -- valid, not assuming success
+  = PropertyHolds !(Located (Prop Bool)) -- valid, assuming success
+  | Satisfiable   !(Located (Prop Bool)) -- sat,   not assuming success
+  | Valid         !(Located (Prop Bool)) -- valid, not assuming success
   deriving Show
 
 instance HasInfo Check where
   getInfo = \case
-    PropertyHolds _ i -> i
-    Satisfiable   _ i -> i
-    Valid         _ i -> i
+    PropertyHolds prop -> _location prop
+    Satisfiable   prop -> _location prop
+    Valid         prop -> _location prop
 
 checkGoal :: Check -> Goal
-checkGoal (PropertyHolds _ _) = Validation
-checkGoal (Satisfiable _ _)   = Satisfaction
-checkGoal (Valid _ _)         = Validation
+checkGoal (PropertyHolds _) = Validation
+checkGoal (Satisfiable _)   = Satisfaction
+checkGoal (Valid _)         = Validation
 
 data Table = Table
   { _tableName       :: Text

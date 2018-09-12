@@ -169,7 +169,7 @@ describeSmtFailure = \case
 describeQueryFailure :: SmtFailure -> Text
 describeQueryFailure = \case
   Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
-  Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one.\n\nGood luck...\n" <> tShow reason
+  Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
   err@SortMismatch{} -> describeSmtFailure err
   Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
   UnexpectedFailure smtE -> T.pack $ show smtE
