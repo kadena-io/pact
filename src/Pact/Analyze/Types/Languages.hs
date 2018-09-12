@@ -208,7 +208,7 @@ instance
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     At _schema k obj _ty     -> parenList [userShow k, userShow obj]
-    ObjectMerge x y          -> parenList ["+", userShow x, userShow y]
+    ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
 
 
@@ -307,7 +307,7 @@ instance UserShow a => UserShow (PropSpecific a) where
       [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShow x]
     TableWrite tab          -> parenList [STableWritten, userShow tab]
     TableRead  tab          -> parenList [STableRead, userShow tab]
-    ColumnWrite tab col     -> parenList ["column-write", userShow tab, userShow col]
+    ColumnWrite tab col     -> parenList ["column-written", userShow tab, userShow col]
     ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
     IntCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
     DecCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
