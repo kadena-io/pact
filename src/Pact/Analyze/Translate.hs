@@ -511,7 +511,7 @@ translateNode astNode = astContext astNode $ case astNode of
 
       tagVarBinding varInfo unmungedVarName varType vid
 
-      body' <- translateNode $ AST_Let node bindingsRest body
+      body' <- translateNode $ mkLet node bindingsRest body
       pure $ case body' of
         ESimple bodyTy bodyTm -> ESimple bodyTy (Let varName vid rhsETerm bodyTm)
         EObject bodyTy bodyTm -> EObject bodyTy (Let varName vid rhsETerm bodyTm)

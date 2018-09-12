@@ -3,19 +3,7 @@
 resolver: lts-8.15
 
 packages:
-- '.'
-- location:
-    git: https://github.com/slpopejoy/snap-cors.git
-    commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
-  extra-dep: true
-- location:
-    git: https://github.com/kadena-io/thyme.git
-    commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
-  extra-dep: true
-- location:
-    git: https://github.com/LeventErkok/sbv.git
-    commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
-  extra-dep: true
+  - '.'
 
 extra-deps:
   - bound-2
@@ -24,7 +12,9 @@ extra-deps:
   - parser-combinators-1.0.0
   - algebraic-graphs-0.1.1.1
   - digit-0.7
-
-flags: {}
-
-extra-package-dbs: []
+  - git: https://github.com/slpopejoy/snap-cors.git
+    commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
+  - git: https://github.com/kadena-io/thyme.git
+    commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
+  - git: https://github.com/LeventErkok/sbv.git
+    commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
