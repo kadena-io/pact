@@ -522,7 +522,7 @@ expToCheck
   -- ^ Exp to convert
   -> Either String Check
 expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
-  flip PropertyHolds (getInfo body) . prenexConvert
+  PropertyHolds . prenexConvert
     <$> expToProp tableEnv' genStart nameEnv idEnv propDefs TBool body
 
 expToProp

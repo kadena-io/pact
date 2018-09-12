@@ -174,15 +174,13 @@ expectFalsified code = do
   res <- runIO $ runVerification $ wrap code
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
-expectPass :: Text -> (Info -> Check) -> Spec
-expectPass code preCheck = do
-  let check = preCheck dummyInfo
+expectPass :: Text -> Check -> Spec
+expectPass code check = do
   res <- runIO $ runCheck (wrap code) check
   it (show check) $ handlePositiveTestResult res
 
-expectFail :: Text -> (Info -> Check) -> Spec
-expectFail code preCheck = do
-  let check = preCheck dummyInfo
+expectFail :: Text -> Check -> Spec
+expectFail code check = do
   res <- runIO $ runCheck (wrap code) check
   it (show check) $ res `shouldSatisfy` isJust
 
@@ -1964,7 +1962,7 @@ spec = describe "analyze" $ do
 
         expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
         expectTrace code prop tests = do
-          res <- runIO $ runCheck (wrap code) $ Valid prop dummyInfo
+          res <- runIO $ runCheck (wrap code) $ Valid prop
           it "produces the correct trace" $
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
