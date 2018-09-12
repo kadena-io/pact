@@ -14,8 +14,12 @@ module Pact.Types.Hash
 
 import Prelude hiding (null)
 
+import Control.Lens (prism')
+
 import Data.ByteString (ByteString, null, foldl')
+import Data.Digit (integralHexadecimal, charHeXaDeCiMaL)
 import Data.Text (Text, append)
+import Data.Text.Lens (text)
 import Data.Word (Word8)
 
 import Pact.Types.Util
@@ -49,13 +53,12 @@ verifyHash h b = if hash b == h
 initialHash :: Hash
 initialHash = hash mempty
 
--- | Compute the numeric hash base-a of a given ByteString.
 numericBasedHash
   :: Integer -- ^ base a
-  -> ByteString -- ^ ByteString to hash 
+  -> ByteString -- ^ ByteString to hash
   -> Either Text Integer -- ^ Left : Err, Right : Success
 numericBasedHash base =
-    hashAsBasedInteger base toBase . hash 
+    hashAsBasedInteger base toBase 
   where
     toBase :: Word8 -> Integer
     toBase = (`mod` base) . fromIntegral 
@@ -89,14 +92,14 @@ hexadecimalHash = numericBasedHash 16
 hashAsBasedInteger
   :: Integer -- ^ The base specification
   -> (Word8 -> Integer) -- ^ the a-valued representation for a given character
-  -> Hash -- ^ The string to convert to integral base-a
+  -> ByteString -- ^ The string to convert to integral base-a
   -> Either Text Integer
 hashAsBasedInteger base k h 
   | base <= 1 = Left $
     "readStringAtBase: applied to unsupported base - " `append` asString base
-  | null (unHash h) = Left $
-    "readStringAtBase: applied to empty hash - " `append` (asString . unHash $ h)
-  | otherwise = Right . foldl' go 0 . unHash $ h
+  | null h = Left $
+    "readStringAtBase: applied to empty hash - " `append` asString h
+  | otherwise = Right $ foldl' go 0 h
     where
       go :: Integer -> Word8 -> Integer
       go acc w = base * acc + (k w) 
@@ -104,11 +107,8 @@ hashAsBasedInteger base k h
 
 -- | Computes the integer value of a hexadecimal string
 hexStringToInteger
-  :: ByteString
-  -> Integer
-hexStringToInteger = foldl' go 0 
-  where
-    go :: Integer -> Word8 -> Integer
-    go acc w = 16 * acc + (hex w)
-    hex :: Word8 -> Integer
-    hex = (`mod` 16) . fromIntegral
+  :: Text
+  -> Maybe Integer
+hexStringToInteger = text
+  
+    

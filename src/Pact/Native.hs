@@ -26,7 +26,7 @@ import Control.Monad.Reader (asks)
 import Control.Monad.Catch
 
 import Data.Bool (bool)
-import Data.Char (isDigit)
+import Data.Char (isHexDigit)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.HashMap.Strict as M
@@ -569,7 +569,7 @@ hexStringToIntegerFun i as =
   case as of
     [TLitString s] ->
       bool (argsError i as) (go . encodeUtf8 $ s) $
-        T.all (\a -> isDigit a || a `elem` ['a'..'f']) s
+        T.all isHexDigit s
     _ -> argsError i as 
   where
     go :: ByteString -> Eval e (Term Name)

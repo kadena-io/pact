@@ -124,6 +124,7 @@ library
                      , data-default >= 0.7.1.1 && < 0.8
                      , data-dword >= 0.3 && < 0.3.2.2
                      , deepseq >= 1.4.2.0 && < 1.5
+                     , digit >= 0.6 && < 0.8
                      , directory >= 1.2.6.2 && < 1.4
                      , exceptions >= 0.8.3 && < 0.11
                      , filepath >= 1.4.1.0 && < 1.5
