@@ -1,8 +1,7 @@
-{ rpRef ? "80236ad3769602813d1c963e2bd90edd3147734b", rpSha ?  "13l46z12i1bdwl9w76vl0cw860syvjkm8a4zgc0610f98h18dqh1" }:
+{ rpRef ? "503519c3188a54e02ac82b76fee5b9530a731f9b", rpSha ?  "00b3cjwy6h4pvjvclscwyjkd0p730nwsxbfh9v7f48w05b6bzpi5" }:
 
 let rp = (import <nixpkgs> {}).fetchFromGitHub {
-           # This repo gives us toolOverrides
-           owner = "adetokunbo";
+           owner = "reflex-frp";
            repo = "reflex-platform";
            rev = rpRef;
            sha256 = rpSha;
@@ -112,7 +111,7 @@ in
       };
 
     };
-    toolOverrides = ghc: super: {
+    shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;
       stack = pkgs.stack;
     };
