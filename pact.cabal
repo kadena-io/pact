@@ -1,3 +1,4 @@
+
 name:                pact
 version:             2.5.0
 synopsis:            Smart contract language library and REPL
@@ -229,6 +230,7 @@ test-suite hspec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
+                HashSpec
   if !impl(ghcjs)
     other-modules:
         DocgenSpec

@@ -109,7 +109,6 @@ in
         rev    = "dd6599224fe7eb224477ef8e9269602fb6b79fe0";
         sha256 = "11cpfzlb6vl0r5i7vbhp147cfxds248fm5xq8pwxk92d1f5g9pxm";
       };
-
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;

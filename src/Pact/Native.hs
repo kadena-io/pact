@@ -21,24 +21,24 @@
 --
 -- Pact builtins/standard library.
 --
-
 module Pact.Native
-    (natives
-    ,nativeDefs
-    ,moduleToMap)
-    where
+  ( natives
+  , nativeDefs
+  , moduleToMap
+  ) where
 
+import Control.Arrow hiding (app)
 import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
+
+import Data.Bool (bool)
+import Data.Char (isHexDigit)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
-import Prelude
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T
-import Safe
-import Control.Arrow hiding (app)
+import qualified Data.Text as T (isInfixOf, length, all, splitOn, take)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Decimal
@@ -47,6 +47,7 @@ import Data.Function (on)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
 
+import Safe
 
 import Pact.Eval
 import Pact.Native.Db
@@ -57,17 +58,18 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash
+import Pact.Types.Hash (hash, hexStringToInteger)
+
 
 -- | All production native modules.
 natives :: [NativeModule]
-natives = [
-  langDefs,
-  dbDefs,
-  timeDefs,
-  opDefs,
-  keyDefs]
-
+natives =
+  [ langDefs
+  , dbDefs
+  , timeDefs
+  , opDefs
+  , keyDefs
+  ]
 
 -- | Production native modules as a dispatch map.
 nativeDefs :: M.HashMap Name Ref
@@ -75,8 +77,6 @@ nativeDefs = mconcat $ map moduleToMap natives
 
 moduleToMap :: NativeModule -> M.HashMap Name Ref
 moduleToMap = M.fromList . map (((`Name` def) . asString) *** Direct) . snd
-
-
 
 langDefs :: NativeModule
 langDefs =
@@ -162,28 +162,34 @@ langDefs =
     ,defRNative "read-decimal" readDecimal (funType tTyDecimal [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as decimal.\
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
+
     ,defRNative "read-integer" readInteger (funType tTyInteger [("key",tTyString)])
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
+
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, \
      \List -> value, Object -> value. NB value types are not introspectable in pact. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
-    ,defRNative "tx-hash" txHash (funType tTyString [])
+    ,defRNative "tx-hash" transactionHash (funType tTyString [])
      "Obtain hash of current transaction as a string. `(tx-hash)`"
 
     ,defNative (specialForm Bind) bind
      (funType a [("src",tTyObject row),("binding",TySchema TyBinding row)])
      "Special form evaluates SRC to an object which is bound to with BINDINGS over subsequent body statements. \
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
+
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
+
     ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
+
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
+
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
@@ -213,10 +219,12 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-    ,defRNative "hash" hash' (funType tTyString [("value",a)])
+    ,defRNative "hash" stringHashNativeFun (funType tTyString [("value",a)])
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
+    ,defRNative "hex-str-to-int" hexStringToIntegerFun (funType tTyInteger [("value", a)])
+     "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -539,13 +547,29 @@ identity :: RNativeFun e
 identity _ [a] = return a
 identity i as = argsError i as
 
-hash' :: RNativeFun e
-hash' i as = case as of
-  [TLitString s] -> go $ encodeUtf8 s
-  [a] -> go $ toStrict $ encode a
-  _ -> argsError i as
+stringHashNativeFun :: RNativeFun e
+stringHashNativeFun i as =
+  case as of
+    [TLitString s] -> go $ encodeUtf8 s
+    [a] -> go $ toStrict $ encode a
+    _ -> argsError i as
   where go = return . tStr . asString . hash
 
-txHash :: RNativeFun e
-txHash _ [] = (tStr . asString) <$> view eeHash
-txHash i as = argsError i as
+hexStringToIntegerFun :: RNativeFun e
+hexStringToIntegerFun i as =
+  case as of
+    [TLitString s] ->
+      bool (argsError i as) (go . T.take 128 $ s) $ -- truncate at 128 chars
+        T.all isHexDigit s
+    _ -> argsError i as 
+  where
+    go :: Text -> Eval e (Term Name)
+    go t =
+      case hexStringToInteger t of
+        Left _ -> argsError i as
+        Right n -> return . tStr . asString $ n
+
+transactionHash :: RNativeFun e
+transactionHash _ [] = (tStr . asString) <$> view eeHash
+transactionHash i as = argsError i as
+

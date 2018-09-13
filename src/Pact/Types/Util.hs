@@ -161,8 +161,7 @@ instance AsString String where asString = pack
 instance AsString Text where asString = id
 instance AsString B.ByteString where asString = asString . decodeUtf8
 instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
-
-
+instance AsString Integer where asString = pack . show
 
 -- | Pure version of 'modifyMVar_'
 modifyMVar' :: MVar a -> (a -> a) -> IO ()
