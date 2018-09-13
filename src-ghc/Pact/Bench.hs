@@ -24,7 +24,6 @@ import Data.Default
 import Pact.Types.Logger
 import System.CPUTime
 import Pact.MockDb
-import Data.String
 import qualified Data.Map.Strict as M
 import Pact.Persist.MockPersist
 import Pact.Persist
@@ -92,7 +91,7 @@ benchKeySet = KeySet [PublicKey "benchadmin"] (Name ">" def)
 acctRow :: Columns Persistable
 acctRow = Columns $ M.fromList [("balance",PLiteral (LDecimal 100.0))]
 
-benchRead :: (IsString k,FromJSON v) => Domain k v -> k -> Method () (Maybe v)
+benchRead :: Domain k v -> k -> Method () (Maybe v)
 benchRead KeySets _ = rc (Just benchKeySet)
 benchRead UserTables {} _ = rc (Just acctRow)
 benchRead _ _ = rc Nothing
