@@ -28,13 +28,15 @@ module Pact.Types.Hash
 
 import Prelude hiding (null)
 
-import Control.Lens (Traversal', Prism', foldMapOf, re)
+import Control.Lens (Traversal', Prism', Const, foldMapOf, re, (^?))
 
 import qualified Data.ByteString as BS (ByteString, null, foldl')
 import Data.Digit 
+import Data.Functor.Compose (Compose(..))
 import Data.Monoid (Product(..))
 import Data.Text (Text, append)
 import Data.Text.Lens (IsText(..), text)
+import Data.Validation (Validation(..))
 import Data.Word (Word8)
 
 import Pact.Types.Util
@@ -166,29 +168,30 @@ binaryStringToInteger = getProduct . go
   where
     go :: Text -> Product Integer
     go = foldMapOf (binaryDigits . re integralBinary) Product
-    
+
 -- | Create the Traversal' optics for converting 'Char' to mixed
 -- case hexadecimal digits using prisms over Text
 mixedHexDigits
   :: IsText a
   => Traversal' a HeXDigit
 mixedHexDigits =
-  text . (charHeXaDeCiMaL :: Prism' Char HeXDigit)
+  text . charHeXaDeCiMaL
 
 octalDigits
   :: IsText a
   => Traversal' a OctDigit
 octalDigits = 
-  text . (charOctal :: Prism' Char OctDigit)
+  text . charOctal
 
 decimalDigits
   :: IsText a
   => Traversal' a DecDigit
 decimalDigits =
-  text . (charDecimal :: Prism' Char DecDigit)
+  text . charDecimal
 
 binaryDigits
   :: IsText a
   => Traversal' a BinDigit
 binaryDigits =
-  text . (charBinary :: Prism' Char BinDigit)
+  text . charBinary 
+  
