@@ -406,7 +406,7 @@ iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
   :: forall a b
-  .  (Integral a, HasKind a, Num a, SymWord a, HasKind b, Num b, SymWord b)
+  . (Integral a, SymWord a, Num b, SymWord b)
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral

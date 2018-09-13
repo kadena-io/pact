@@ -80,7 +80,7 @@ class sub :<: sup where
   inject  :: sub a -> sup a
   project :: sup a -> Maybe (sub a)
 
-instance Functor f => f :<: f where
+instance f :<: f where
   inject  = id
   project = Just
 

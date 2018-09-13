@@ -429,8 +429,9 @@ inferPreProp preProp = case preProp of
       Just (DefinedProperty argTys body) -> do
         when (length args /= length argTys) $
           throwErrorIn preProp "wrong number of arguments"
-        propArgs <- for (zip args argTys) $ \(arg, (name, EType ty)) ->
-          (name,) . ESimple ty <$> checkPreProp ty arg
+        propArgs <- for (zip args argTys) $ \case
+          (arg, (name, EType ty)) -> (name,) . ESimple ty <$> checkPreProp ty arg
+          _ -> throwErrorIn preProp "Internal pattern match failure."
 
         -- inline the function, removing it from `definedProps` so it can't
         -- recursively call itself.

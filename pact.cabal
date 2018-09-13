@@ -121,6 +121,7 @@ library
                      , bound >= 2 && < 2.1
                      , bytestring >=0.10.8.1 && < 0.11
                      , cereal >=0.5.4.0 && < 0.6
+                     , compactable >= 0.1 && < 0.2
                      , containers >= 0.5.7 && < 0.6
                      , data-default >= 0.7.1.1 && < 0.8
                      , data-dword >= 0.3 && < 0.3.2.2
@@ -174,7 +175,7 @@ library
 
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall -O2 -Werror
+  ghc-options:         -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
 
 executable pact
@@ -183,7 +184,7 @@ executable pact
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
-  ghc-options:         -Wall -threaded -rtsopts
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
@@ -192,15 +193,16 @@ executable bench
   build-depends:       base
                      , pact
   hs-source-dirs:      executables
-  ghc-options:         -Wall -threaded -rtsopts
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
 test-suite hspec
-  type: exitcode-stdio-1.0
-  main-is: hspec.hs
-  hs-source-dirs: tests
+  type:             exitcode-stdio-1.0
+  main-is:          hspec.hs
+  hs-source-dirs:   tests
   default-language: Haskell2010
+  ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
               , hspec

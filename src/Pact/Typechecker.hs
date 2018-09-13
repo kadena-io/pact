@@ -51,6 +51,7 @@ import Data.String
 import Data.List
 import Data.Monoid
 import Data.Maybe (isJust)
+import Control.Compactable (traverseMaybe)
 
 
 import Pact.Types.Typecheck
@@ -267,8 +268,7 @@ applySchemas Pre ast = case ast of
     return ast
   (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> forM bs
-      (\(Named _ node ni, Prim _ (PrimLit (LString bn))) -> (bn,) <$> ((Var node,ni,) <$> lookupTy node))
+    pmap <- M.fromList <$> traverseMaybe lookupNode bs
     validateSchema sch pmap
     return ast
   _ -> return ast
@@ -280,7 +280,13 @@ applySchemas Pre ast = case ast of
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocAstTy (_aNode v) (either id id u)
+
+    -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
+    lookupNode (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
+    lookupNode _ = pure Nothing
+
     lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
+
     findSchema n act = do
       ty <- lookupTy n
       case ty of
@@ -579,8 +585,8 @@ unifyTypes l r = case (l,r) of
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
         (TypeVar _ ac,TyVar sv@(TypeVar _ bc)) -> case unifyConstraints ac bc of
-          Just (Left uc) -> Just $ vWrap $ TyVar $ v { _tvConstraint = uc }
-          Just (Right uc) -> Just $ sWrap $ TyVar $ sv { _tvConstraint = uc }
+          Just (Left uc)  -> Just . vWrap . TyVar $ set tvConstraint uc v
+          Just (Right uc) -> Just . sWrap . TyVar $ set tvConstraint uc sv
           Nothing -> Nothing
         (TypeVar _ ac,_) | checkConstraints s ac -> Just useS
         _ -> Nothing

@@ -188,7 +188,7 @@ viewLibState f = modifyLibState (id &&& f)
 setop :: LibOp -> Eval LibState ()
 setop v = setLibState $ set rlsOp v
 
-setenv :: Show a => Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
+setenv :: Setter' (EvalEnv LibState) a -> a -> Eval LibState ()
 setenv l v = setop $ UpdateEnv $ Endo (set l v)
 
 
@@ -365,6 +365,8 @@ verify i as = case as of
             [Text.unpack $ describeCheckFailure checkFailure]
           Left (TypeTranslationFailure msg ty) -> setop $ TcErrors
             [Text.unpack $ msg <> ": " <> tShow ty]
+          Left (InvalidRefType) -> setop $ TcErrors
+            ["Invalid reference type given to typechecker."]
           Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
             let propResults'      = propResults      ^.. traverse . each
                 invariantResults' = invariantResults ^.. traverse . traverse . each
