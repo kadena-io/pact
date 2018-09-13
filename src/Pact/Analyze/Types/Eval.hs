@@ -471,7 +471,7 @@ ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues
 
 symArrayAt
   :: forall array k v
-   . (SymWord k, SymWord v, SymArray array)
+   . (SymWord v, SymArray array)
   => S k -> Lens' (array k v) (SBV v)
 symArrayAt (S _ symKey) = lens getter setter
   where
@@ -482,14 +482,14 @@ symArrayAt (S _ symKey) = lens getter setter
     setter arr = writeArray arr symKey
 
 nameAuthorized
-  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S Bool)
 nameAuthorized sKsn = fmap sansProv $
   readArray <$> view ksAuths <*> (_sSbv <$> resolveKeySet sKsn)
 
 resolveKeySet
-  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  :: (MonadReader r m, HasAnalyzeEnv r)
   => S KeySetName
   -> m (S KeySet)
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
@@ -497,7 +497,7 @@ resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
 
 -- TODO: switch to lens
 resolveDecimal
-  :: (MonadReader r m, HasAnalyzeEnv r, MonadError AnalyzeFailure m)
+  :: (MonadReader r m, HasAnalyzeEnv r)
   => S String
   -> m (S Decimal)
 resolveDecimal sDn = fmap sansProv $

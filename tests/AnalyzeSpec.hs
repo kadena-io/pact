@@ -1017,9 +1017,10 @@ spec = describe "analyze" $ do
                 find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
               (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
-            let negativeWrite (Object m) =
-                  let (_bal, AVal _ sval) = m Map.! "balance"
-                  in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+            let negativeWrite (Object m) = case m Map.! "balance" of
+                  (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                  _ -> False
+
             balanceWrite <- pure $ find negativeWrite
               $ writes ^.. traverse . located . accObject
 
