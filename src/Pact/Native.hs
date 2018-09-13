@@ -30,13 +30,12 @@ import Data.Char (isHexDigit)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T (isInfixOf, length, all, splitOn)
+import qualified Data.Text as T (isInfixOf, length, all, splitOn, take)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Decimal
 import Data.List
 import Data.Function (on)
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Text.Encoding
 
@@ -51,7 +50,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash (hash, numericBasedHash, hexStringToInteger)
+import Pact.Types.Hash (hash, hexStringToInteger)
 
 
 -- | All production native modules.
@@ -215,10 +214,6 @@ langDefs =
     ,defRNative "hash" stringHashNativeFun (funType tTyString [("value",a)])
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
-
-    ,defRNative "based-hash" hashStringToBasedInteger (funType tTyInteger [("value", a), ("base", tTyInteger)])
-     "Compute the BLAKE2b 512-bit hash of VALUE in base BASE, returning a value of type Integer. Strings are converted \
-     \directly, while other values are converted using their JSON representation. `(based-hash \"hello\" 16)`"
 
     ,defRNative "hex-str-to-int" hexStringToIntegerFun (funType tTyInteger [("value", a)])
      "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
@@ -545,35 +540,26 @@ identity _ [a] = return a
 identity i as = argsError i as
 
 stringHashNativeFun :: RNativeFun e
-stringHashNativeFun i as = case as of
-  [TLitString s] -> go $ encodeUtf8 s
-  [a] -> go $ toStrict $ encode a
-  _ -> argsError i as
-  where go = return . tStr . asString . hash
-
-hashStringToBasedInteger :: RNativeFun e
-hashStringToBasedInteger i as =
+stringHashNativeFun i as =
   case as of
-    [TLitString s, TLitInteger b] ->
-      go b (encodeUtf8 s)
-    _   -> argsError i as
-    where
-      go :: Integer -> ByteString -> Eval e (Term Name)
-      go base bs =
-        case numericBasedHash base bs of
-          Left  e -> const (argsError i as) e
-          Right a -> return . tStr . asString $ a
+    [TLitString s] -> go $ encodeUtf8 s
+    [a] -> go $ toStrict $ encode a
+    _ -> argsError i as
+  where go = return . tStr . asString . hash
 
 hexStringToIntegerFun :: RNativeFun e
 hexStringToIntegerFun i as =
   case as of
     [TLitString s] ->
-      bool (argsError i as) (go s) $
+      bool (argsError i as) (go . T.take 128 $ s) $ -- truncate at 128 chars
         T.all isHexDigit s
     _ -> argsError i as 
   where
     go :: Text -> Eval e (Term Name)
-    go = return . tStr . asString . hexStringToInteger
+    go t =
+      case hexStringToInteger t of
+        Left _ -> argsError i as
+        Right n -> return . tStr . asString $ n
 
 transactionHash :: RNativeFun e
 transactionHash _ [] = (tStr . asString) <$> view eeHash

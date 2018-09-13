@@ -17,18 +17,6 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 ```
 
 
-### based-hash {#based-hash}
-
-*value*&nbsp;`<a>` *base*&nbsp;`integer` *&rarr;*&nbsp;`integer`
-
-
-Compute the BLAKE2b 512-bit hash of VALUE in base BASE, returning a value of type Integer. Strings are converted directly, while other values are converted using their JSON representation. 
-```lisp
-pact> (based-hash "hello" 16)
-"35836682118407329298633981669414804813902389474853184534605075063526324843204"
-```
-
-
 ### bind {#bind}
 
 *src*&nbsp;`object:<{row}>` *binding*&nbsp;`binding:<{row}>` *&rarr;*&nbsp;`<a>`
@@ -203,7 +191,7 @@ pact> (hash { 'foo: 1 })
 Compute the compute the integer value of a string of hexidecimal numbers. 
 ```lisp
 pact> (hex-str-to-int "abcdef12345")
-"1250999477061"
+"11806310474565"
 ```
 
 

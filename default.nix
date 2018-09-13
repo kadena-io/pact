@@ -109,14 +109,6 @@ in
         rev    = "dd6599224fe7eb224477ef8e9269602fb6b79fe0";
         sha256 = "11cpfzlb6vl0r5i7vbhp147cfxds248fm5xq8pwxk92d1f5g9pxm";
       };
-
-      digit = pkgs.fetchFromGitHub {
-        owner  = "qfpl";
-        repo   = "digit";
-        rev    = "cf63d0736bee89c213c545acb26348d51f9567f4";
-        sha256 = "10hwv41scny283r1afa21zgaz68fgycri042j4hp9ffv29sd768x";
-      };
- 
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;
