@@ -136,13 +136,23 @@ ceilDef = defTrunc "ceiling" "Rounds up" ceiling
 floorDef :: NativeDef
 floorDef = defTrunc "floor" "Rounds down" floor
 
-gtDef, ltDef, gteDef, lteDef, eqDef, neqDef :: NativeDef
+gtDef :: NativeDef
 gtDef = defCmp ">" (cmp (== GT))
+
+ltDef :: NativeDef
 ltDef = defCmp "<" (cmp (== LT))
+
+gteDef :: NativeDef
 gteDef = defCmp ">=" (cmp (`elem` [GT,EQ]))
+
+lteDef :: NativeDef
 lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
+
+eqDef :: NativeDef
 eqDef = defRNative "=" (eq id) eqTy
   "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
+
+neqDef :: NativeDef
 neqDef = defRNative "!=" (eq not) eqTy
   "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
 
