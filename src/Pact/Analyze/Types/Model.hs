@@ -23,7 +23,7 @@ import           Pact.Analyze.Types.Shared
 
 -- | An argument to a function
 data Arg = Arg
-  { argName  :: Text
+  { argName  :: Unmunged
   , argVarId :: VarId
   , argNode  :: TC.Node
   , argType  :: EType
@@ -69,13 +69,20 @@ instance Monoid Recoverability where
   mempty = Unrecoverable
   mappend = (<>)
 
+data ScopeType
+  = LetScope
+  | ObjectScope
+  | FunctionScope Text
+  deriving (Eq, Show)
+
 data TraceEvent
   = TraceRead (Located (TagId, Schema))
   | TraceWrite (Located (TagId, Schema))
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
-  | TraceBind (Located (VarId, Text, EType))
   | TraceSubpathStart Path
+  | TracePushScope Natural ScopeType [Located Binding]
+  | TracePopScope Natural ScopeType TagId EType
   deriving (Eq, Show)
 
 -- | An @ExecutionGraph@ is produced by translation, and contains all
@@ -113,7 +120,7 @@ data Authorization
 
 data ModelTags (c :: Concreteness)
   = ModelTags
-    { _mtVars    :: Map VarId (Located (Text, TVal))
+    { _mtVars    :: Map VarId (Located (Unmunged, TVal))
     -- ^ each intermediate variable binding
     , _mtReads   :: Map TagId (Located Access)
     -- ^ one per each read
@@ -131,12 +138,14 @@ data ModelTags (c :: Concreteness)
     -- each conditional. after a conditional, the path from before the
     -- conditional is resumed. we also split execution for each case of
     -- @enforce-one@.
+    , _mtReturns :: Map TagId TVal
+    -- ^ return values from function calls
     }
   deriving (Eq, Show)
 
 data Model (c :: Concreteness)
   = Model
-    { _modelArgs           :: Map VarId (Located (Text, TVal))
+    { _modelArgs           :: Map VarId (Located (Unmunged, TVal))
     -- ^ one free value per input the function; allocatd post-translation.
     , _modelTags           :: ModelTags c
     -- ^ free values to be constrained to equal values during analysis;

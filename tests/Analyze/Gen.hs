@@ -400,7 +400,7 @@ genKeySetName = do
   pure k
 
 genDecimalName
-  :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m)
+  :: (MonadGen m, MonadState GenState m)
   => NumBound -> m String
 genDecimalName size = do
   idGen %= succ
@@ -449,7 +449,7 @@ genAnyTerm' :: Gen (ETerm, GenState)
 genAnyTerm' = runReaderT (runStateT genAnyTerm emptyGenState) genEnv
 
 safeGenAnyTerm
-  :: (Monad m, MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
+  :: (MonadCatch m, HasCallStack) => PropertyT m (ETerm, GenState)
 safeGenAnyTerm = (do
   (etm, gState) <- forAll genAnyTerm'
   pure $ show etm `deepseq` (etm, gState)

@@ -221,7 +221,7 @@ pTokenEpsilon test mtoken = ParsecT $ \s@(State input (pos:|z) tp w) _ _ eok eer
           in eok x newstate mempty -- this is the only change from 'token'
 
 -- | Call commit continuation with current state.
-pCommit :: forall e s m . Stream s => ParsecT e s m ()
+pCommit :: forall e s m. ParsecT e s m ()
 pCommit = ParsecT $ \s cok _ _ _ -> cok () s mempty
 
 -- | Commit any previous recognitions.

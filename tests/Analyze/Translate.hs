@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -254,7 +255,7 @@ toAnalyze ty tm = do
       state0     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
         Map.empty mempty path0 Map.empty
 
-      translateEnv = TranslateEnv dummyInfo Map.empty mempty (pure 0) (pure 0)
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
 
   hoist generalize $
     exceptToMaybeT $

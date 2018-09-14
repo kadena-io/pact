@@ -6,6 +6,7 @@
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
@@ -17,7 +18,7 @@ module Pact.Analyze.Model.Tags
   ) where
 
 import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
-                                       (<&>), (?~), (^.), _1, _2)
+                                       (<&>), (?~), (^.), _1, _2, _3)
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -26,7 +27,6 @@ import           Data.SBV             (SBV, SymWord, Symbolic, constrain,
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
-import           Data.Text            (Text)
 import           Data.Traversable     (for)
 
 import qualified Pact.Types.Typecheck as TC
@@ -57,7 +57,13 @@ allocAVal = \case
       let digitShift = 10 ^ (255 :: Int)
       in (/ digitShift) . sFromIntegral . sRealToSInteger . (* digitShift)
 
-allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Text, TVal)))
+allocTVal :: EType -> Symbolic TVal
+allocTVal ety = (ety,) <$> allocAVal ety
+
+allocForETerm :: ETerm -> Symbolic TVal
+allocForETerm (existentialType -> ety) = allocTVal ety
+
+allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
@@ -72,6 +78,7 @@ allocModelTags locatedTm graph = ModelTags
     <*> allocAuths
     <*> allocResult
     <*> allocPaths
+    <*> allocReturns
 
   where
     -- For the purposes of symbolic value allocation, we just grab all of the
@@ -79,11 +86,11 @@ allocModelTags locatedTm graph = ModelTags
     events :: [TraceEvent]
     events = toListOf (egEdgeEvents.traverse.traverse) graph
 
-    allocVars :: Symbolic (Map VarId (Located (Text, TVal)))
+    allocVars :: Symbolic (Map VarId (Located (Unmunged, TVal)))
     allocVars = fmap Map.fromList $
-      for (toListOf (traverse._TraceBind) events) $
-        \(Located info (vid, nm, ety)) ->
-          allocAVal ety <&> \av -> (vid, Located info (nm, (ety, av)))
+      for (toListOf (traverse._TracePushScope._3.traverse) events) $
+        \(Located info (Binding vid nm _ ety)) ->
+          allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
 
     allocS :: SymWord a => Symbolic (S a)
     allocS = sansProv <$> alloc
@@ -114,12 +121,7 @@ allocModelTags locatedTm graph = ModelTags
         (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
 
     allocResult :: Symbolic (Located TVal)
-    allocResult = sequence $ locatedTm <&> \case
-      ESimple ty _ ->
-        let ety = EType ty
-        in (ety,) <$> allocAVal ety
-      EObject sch _ ->
-        (EObjectTy sch,) . AnObj <$> allocSchema sch
+    allocResult = sequence $ allocForETerm <$> locatedTm
 
     -- NOTE: the root path we manually set to true. translation only emits the
     -- start of "subpaths" on either side of a conditional. the root path is
@@ -135,6 +137,11 @@ allocModelTags locatedTm graph = ModelTags
           when (p == rootPath) $ SBV.constrain sbool
           pure (p, sbool)
 
+    allocReturns :: Symbolic (Map TagId TVal)
+    allocReturns = fmap Map.fromList $
+      for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
+        (tid,) <$> allocTVal ety
+
 -- | Builds a new 'Model' by querying the SMT model to concretize the provided
 -- symbolic 'Model'.
 saturateModel :: Model 'Symbolic -> SBV.Query (Model 'Concrete)
@@ -147,6 +154,7 @@ saturateModel =
     traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
     traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
+    traverseOf (modelTags.mtReturns.traversed)         fetchTVal   >=>
     traverseOf (modelKsProvs.traversed)                fetchProv
 
   where

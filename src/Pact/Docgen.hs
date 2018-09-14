@@ -3,6 +3,11 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ViewPatterns      #-}
 
+-- TODO This is to silence a warning caused by usage of the `Feature` pattern.
+-- The pattern only seems to be used in one place, and could probably be
+-- factored out. When done, remove this pragma.
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
+
 -- |
 -- Module      :  Pact.Docgen
 -- Copyright   :  (C) 2016 Stuart Popejoy

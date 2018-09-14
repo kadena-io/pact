@@ -9,25 +9,31 @@ module Pact.Analyze.Model.Text
   ( showModel
   ) where
 
-import           Control.Lens             (Lens', at, ifoldr, (^.))
-import qualified Data.Foldable            as Foldable
-import           Data.Map.Strict          (Map)
-import qualified Data.Map.Strict          as Map
-import           Data.Monoid              ((<>))
-import           Data.SBV                 (SBV, SymWord)
-import qualified Data.SBV                 as SBV
-import qualified Data.SBV.Internals       as SBVI
-import           Data.Text                (Text)
-import qualified Data.Text                as T
+import           Control.Lens               (Lens', at, ifoldr, view, (^.))
+import           Control.Monad.State.Strict (State, evalState, get, modify)
+import qualified Data.Foldable              as Foldable
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (SBV, SymWord)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           GHC.Natural                (Natural)
 
-import qualified Pact.Types.Info          as Pact
-import           Pact.Types.Runtime       (tShow)
+import qualified Pact.Types.Info            as Pact
+import           Pact.Types.Runtime         (tShow)
 
-import           Pact.Analyze.Model.Graph (linearize)
+import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
 
-indent :: Text -> Text
-indent = ("  " <>)
+indent1 :: Text -> Text
+indent1 = ("  " <>)
+
+indent :: Natural -> Text -> Text
+indent 0     = id
+indent times = indent (pred times) . indent1
 
 showSbv :: (Show a, SymWord a) => SBV a -> Text
 showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
@@ -52,8 +58,11 @@ showObject (Object m) = "{ "
 showObjMapping :: Text -> TVal -> Text
 showObjMapping key val = key <> ": " <> showTVal val
 
-showVar :: Located (Text, TVal) -> Text
-showVar (Located _ (nm, tval)) = nm <> " := " <> showTVal tval
+showArg :: Located (Unmunged, TVal) -> Text
+showArg (Located _ (Unmunged nm, tval)) = nm <> " = " <> showTVal tval
+
+showVar :: Located (Unmunged, TVal) -> Text
+showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
 --
 -- TODO: this should display the table name
@@ -111,27 +120,57 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
           <> showS sRk <> ")"
       Just (FromNamedKs sKsn) ->
         ks <> " named " <> showKsn sKsn
-      Just (FromInput arg) ->
+      Just (FromInput (Unmunged arg)) ->
         ks <> " from argument " <> arg
 
 -- TODO: after factoring Location out of TraceEvent, include source locations
 --       in trace
-showEvent :: Map TagId Provenance -> ModelTags 'Concrete -> TraceEvent -> [Text]
-showEvent ksProvs tags = \case
-    TraceRead (_located -> (tid, _)) ->
-      [display mtReads tid showRead]
-    TraceWrite (_located -> (tid, _)) ->
-      [display mtWrites tid showWrite]
-    TraceAssert recov (_located -> tid) ->
-      [display mtAsserts tid (showAssert recov)]
-    TraceAuth recov (_located -> tid) ->
-      [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
-    TraceBind (_located -> (vid, _, _)) ->
-      [display mtVars vid showVar]
-    TraceSubpathStart _ ->
-      [] -- not shown to end-users
+showEvent
+  :: Map TagId Provenance
+  -> ModelTags 'Concrete
+  -> TraceEvent
+  -> State Natural [Text]
+showEvent ksProvs tags event = do
+  lastDepth <- get
+  fmap (fmap (indent lastDepth)) $
+    case event of
+      TraceRead (_located -> (tid, _)) ->
+        pure [display mtReads tid showRead]
+      TraceWrite (_located -> (tid, _)) ->
+        pure [display mtWrites tid showWrite]
+      TraceAssert recov (_located -> tid) ->
+        pure [display mtAsserts tid (showAssert recov)]
+      TraceAuth recov (_located -> tid) ->
+        pure [display mtAuths tid (showAuth recov $ tid `Map.lookup` ksProvs)]
+      TraceSubpathStart _ ->
+        pure [] -- not shown to end-users
+      TracePushScope _ scopeTy locatedBindings -> do
+        let vids = view (located.bVid) <$> locatedBindings
+        modify succ
+        let displayVids show' =
+              (\vid -> indent1 $ display mtVars vid show') <$> vids
+
+        pure $ case scopeTy of
+          LetScope ->
+            "let" : displayVids showVar
+          ObjectScope ->
+            "destructuring object" : displayVids showVar
+          FunctionScope nm ->
+            let header = "entering function " <> nm
+                      <> " with argument" <> if length vids > 1 then "s" else ""
+            in header : (displayVids showArg ++ [emptyLine])
+      TracePopScope _ scopeTy tid _ -> do
+        modify pred
+        pure $ case scopeTy of
+          LetScope -> []
+          ObjectScope -> []
+          FunctionScope _ ->
+            ["returning with " <> display mtReturns tid showTVal, emptyLine]
 
   where
+    emptyLine :: Text
+    emptyLine = ""
+
     display
       :: Ord k
       => Lens' (ModelTags 'Concrete) (Map k v)
@@ -142,15 +181,15 @@ showEvent ksProvs tags = \case
 
 showModel :: Model 'Concrete -> Text
 showModel model =
-    T.intercalate "\n" $ T.intercalate "\n" . map indent <$>
+    T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
       [ ["Arguments:"]
-      , indent <$> Foldable.toList (showVar <$> (model ^. modelArgs))
+      , indent1 <$> Foldable.toList (showArg <$> (model ^. modelArgs))
       , []
       , ["Program trace:"]
-      , indent <$> (showEvent' =<< traceEvents)
+      , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
       , []
       , ["Result:"]
-      , [indent $ maybe
+      , [indent1 $ maybe
           "Transaction aborted."
           (\tval -> "Return value: " <> showTVal tval)
           mRetval

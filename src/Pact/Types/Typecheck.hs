@@ -34,6 +34,7 @@ module Pact.Types.Typecheck
     Fun (..),fInfo,fName,fTypes,fSpecial,fType,fArgs,fBody,
     Node (..),aId,aTy,
     Named (..),
+    AstBindType (..),
     AST (..),aNode,aAppFun,aAppArgs,aBindings,aBody,aBindType,aList,aObject,aPrimValue,aEntity,aExec,aRollback,aTableName,
     Visit(..),Visitor
   ) where
@@ -47,6 +48,7 @@ import Control.Monad.State
 import Data.Aeson hiding (Object)
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Data.Monoid
 
 import Pact.Types.Lang
@@ -256,6 +258,25 @@ instance (Show i) => Show (Named i) where
   show (Named na no _) = show na ++ "(" ++ show no ++ ")"
 instance (Pretty i) => Pretty (Named i) where pretty (Named na no _) = dquotes (pretty na) <+> parens (pretty no)
 
+data AstBindType n =
+  -- | Normal "let" bind
+  AstBindLet |
+  -- | Schema-style binding, with string value for key
+  AstBindSchema n |
+  -- | Synthetic binding for function call arguments introduced during inlining
+  -- to force call-by-value semantics
+  AstBindInlinedCallArgs
+  deriving (Eq,Functor,Foldable,Traversable,Ord)
+
+instance (Show n) => Show (AstBindType n) where
+  show AstBindLet = "let"
+  show (AstBindSchema b) = "bind" ++ show b
+  show AstBindInlinedCallArgs = "inlinedCallArgs"
+instance (Pretty n) => Pretty (AstBindType n) where
+  pretty AstBindLet = "let"
+  pretty (AstBindSchema b) = "bind" PP.<> pretty b
+  pretty AstBindInlinedCallArgs = "inlinedCallArgs"
+
 -- | Inlined AST.
 data AST n =
   App {
@@ -267,7 +288,7 @@ data AST n =
   _aNode :: n,
   _aBindings :: [(Named n,AST n)],
   _aBody :: [AST n],
-  _aBindType :: BindType n
+  _aBindType :: AstBindType n
   } |
   List {
   _aNode :: n,

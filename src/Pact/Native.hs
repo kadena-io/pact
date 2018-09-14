@@ -97,7 +97,7 @@ enforceDef = defNative "enforce" enforce
     enforce :: NativeFun e
     enforce i as = runPure $ gasUnreduced i as $ mapM reduce as >>= enforce' i
 
-    enforce' :: PureNoDb e => RNativeFun e
+    enforce' :: RNativeFun e
     enforce' i [TLiteral (LBool b) _,TLitString msg]
         | b = return $ TLiteral (LBool True) def
         | otherwise = failTx (_faInfo i) $ unpack msg

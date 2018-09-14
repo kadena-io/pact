@@ -6,6 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- |
 -- Module      :  Pact.Typechecker
@@ -50,6 +51,7 @@ import Data.String
 import Data.List
 import Data.Monoid
 import Data.Maybe (isJust)
+import Control.Compactable (traverseMaybe)
 
 
 import Pact.Types.Typecheck
@@ -264,10 +266,9 @@ applySchemas Pre ast = case ast of
       (\(k,v) -> (,) <$> asPrimString k <*> ((v,_aId (_aNode k),) <$> lookupTy (_aNode v)))
     validateSchema sch pmap
     return ast
-  (Binding _ bs _ (BindSchema n)) -> findSchema n $ \sch -> do
+  (Binding _ bs _ (AstBindSchema n)) -> findSchema n $ \sch -> do
     debug $ "applySchemas: " ++ show (n,sch)
-    pmap <- M.fromList <$> forM bs
-      (\(Named _ node ni, Prim _ (PrimLit (LString bn))) -> (bn,) <$> ((Var node,ni,) <$> lookupTy node))
+    pmap <- M.fromList <$> traverseMaybe lookupNode bs
     validateSchema sch pmap
     return ast
   _ -> return ast
@@ -279,7 +280,13 @@ applySchemas Pre ast = case ast of
         Just aty -> case unifyTypes aty vty of
           Nothing -> addFailure (_aId (_aNode v)) $ "Unable to unify field type: " ++ show (k,aty,vty,v)
           Just u -> assocAstTy (_aNode v) (either id id u)
+
+    -- TODO Handle the type mismatch in some other way? `TC` does have a MonadThrow instance.
+    lookupNode (Named _ node ni, Prim _ (PrimLit (LString bn))) = Just . (bn,) . (Var node,ni,) <$> lookupTy node
+    lookupNode _ = pure Nothing
+
     lookupTy a = resolveTy =<< (snd <$> lookupAst "lookupTy" (_aId a))
+
     findSchema n act = do
       ty <- lookupTy n
       case ty of
@@ -330,7 +337,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
         Just spec -> case (spec,args) of
           -- bindings
           ((_,SBinding b),_) -> case b of
-            (Binding bn _ _ (BindSchema sn)) -> do
+            (Binding bn _ _ (AstBindSchema sn)) -> do
               -- assoc binding with app return
               assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
@@ -363,6 +370,52 @@ assocTyWithAppArg tl t@(App _ _ as) offset = debug ("assocTyWithAppArg: " ++ sho
   Nothing -> return ()
 assocTyWithAppArg _ _ _ = return ()
 
+-- | Inlines function call arguments into a defun, returning the new body. We
+-- introduce a synthetic 'Binding' to let-bind all arguments before inlining to
+-- achieve call-by-value semantics, and the correct behavior for effectful
+-- argument expressions.
+inlineAppArgs
+  :: Node             -- ^ function application 'Node'
+  -> FunType UserType -- ^ type of the function being applied
+  -> [Named Node]     -- ^ arglist of the defun
+  -> [AST Node]       -- ^ body of the defun
+  -> [AST Node]       -- ^ arguments being passed into the function
+  -> TC [AST Node]    -- ^ updated, inlined body
+inlineAppArgs appNode defunType defunArgs defunBody args = do
+  let FunType argTys retTy = mangleFunType (_aId appNode) defunType
+
+  assocAstTy appNode retTy
+
+  let appInfo  = _tiInfo $ _aId appNode
+      bindType = AstBindInlinedCallArgs :: AstBindType Node
+  letId <- freshId appInfo (pack $ show bindType)
+  letNode <- trackIdNode letId
+  assocAstTy letNode retTy
+
+  letBinders :: [Named Node] <- forM (zip args argTys) $
+    \(arg, Arg nm argTy info) -> do
+      let uniqueName = tShow letId `pfx` nm
+      varId <- freshId info uniqueName
+      let varTy = mangleType varId argTy
+      varNode <- trackNode varTy varId
+      assocAST varId arg
+      pure $ Named nm varNode varId
+
+  let letBindings :: [(Named Node, AST Node)]
+      letBindings = zip letBinders args
+
+      vars :: [AST Node]
+      vars = Var . _nnNamed <$> letBinders
+
+      subs :: [(TcId, AST Node)]
+      subs = zip (_aId . _nnNamed <$> defunArgs) vars
+
+      substitute :: (TcId, AST Node) -> AST Node -> TC (AST Node)
+      substitute sub = walkAST (substAppDefun (Just sub))
+
+  body' <- forM defunBody $ \bodyExpr -> foldM (flip substitute) bodyExpr subs
+  return $ [Binding letNode letBindings body' bindType]
+
 -- | Visitor to process Apps of user defuns.
 -- We want to a) replace AST nodes with the app arg ASTs,
 -- b) associate the AST nodes to check and track their related types
@@ -370,21 +423,14 @@ substAppDefun :: Maybe (TcId, AST Node) -> Visitor TC Node
 substAppDefun (Just (defArg,appAst)) Pre t@Var {..}
   | defArg == _aId _aNode = assocAST defArg appAst >> return appAst
   | otherwise = return t
-substAppDefun Nothing Post (App appNode appFun appArgs) = do -- Post, to allow AST subs first
-    af <- case appFun of
-      FNative {} -> return appFun -- noop
-      FDefun {..} -> do
-        -- assemble substitutions, and also associate fun ty with app args
-        let mangledFty = mangleFunType (_aId appNode) _fType
-        subArgs <- forM (zip3 _fArgs appArgs (_ftArgs mangledFty)) $ \(fa,aa,_ft) -> -- do
-          -- assocAstTy (_aNode aa) (_aType ft) -- this was causing recursive var refs, bailing for now
-          return (_aId (_nnNamed fa),aa)
-        -- associate fun return ty with app
-        assocAstTy appNode (_ftReturn mangledFty)
-        let subDefArg b fa = walkAST (substAppDefun (Just fa)) b
-        fb' <- forM _fBody $ \bAst -> foldM subDefArg bAst subArgs
-        return $ set fBody fb' appFun
-    return (App appNode af appArgs)
+substAppDefun Nothing Post (App appNode fun args) = do -- Post, to allow AST subs first
+    fun' <- case fun of
+      FNative {} ->
+        return fun -- noop
+      FDefun {_fType,_fArgs,_fBody} -> do
+        body' <- inlineAppArgs appNode _fType _fArgs _fBody args
+        return $ set fBody body' fun
+    return (App appNode fun' args)
 substAppDefun _ _ t = return t
 
 -- | Track AST as a TypeVar pointing to a Types. If the provided node type is already a var use that,
@@ -539,8 +585,8 @@ unifyTypes l r = case (l,r) of
         (TypeVar {},TyVar SchemaVar {}) -> Nothing
         (TypeVar {},TyUser {}) -> Nothing
         (TypeVar _ ac,TyVar sv@(TypeVar _ bc)) -> case unifyConstraints ac bc of
-          Just (Left uc) -> Just $ vWrap $ TyVar $ v { _tvConstraint = uc }
-          Just (Right uc) -> Just $ sWrap $ TyVar $ sv { _tvConstraint = uc }
+          Just (Left uc)  -> Just . vWrap . TyVar $ set tvConstraint uc v
+          Just (Right uc) -> Just . sWrap . TyVar $ set tvConstraint uc sv
           Nothing -> Nothing
         (TypeVar _ ac,_) | checkConstraints s ac -> Just useS
         _ -> Nothing
@@ -696,15 +742,13 @@ toAST TBinding {..} = do
         _fieldName <- asPrimString v'
         return (Named n an aid,v')
   bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
+  assocAST bi (last bb)
   bt <- case _tBindType of
-    BindLet -> do
-      assocAST bi (last bb)
-      return BindLet
+    BindLet -> return AstBindLet
     BindSchema sty -> do
-      assocAST bi (last bb)
       sty' <- mangleType bi <$> traverse toUserType sty
       sn <- trackNode sty' =<< freshId _tInfo (pack $ show bi ++ "schema")
-      return $ BindSchema sn
+      return $ AstBindSchema sn
   return $ Binding bn bs bb bt
 
 toAST TList {..} = do

@@ -89,7 +89,7 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty
         -- this 'Located TVal' is never forced so we don't provide it
         (error "analyzeEval: Located TVal unexpectedly forced")
-        Map.empty
+        Map.empty Map.empty
 
   Just aEnv <- pure $ mkAnalyzeEnv tables args tags dummyInfo
 

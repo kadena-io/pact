@@ -537,6 +537,22 @@ spec = describe "analyze" $ do
       Inj (RowWrite "tokens" (PVar 1 "row")) ==>
         Inj (RowEnforced "tokens" "ks" (PVar 1 "row"))
 
+  describe "call-by-value semantics for inlining" $ do
+    let code =
+          [text|
+            (defun id:string (s:string)
+              s
+              s)
+
+            (defun test:string ()
+              @model (properties [ (my-column-delta 1) ])
+              (id
+                (write accounts "bob"
+                  {"balance": (+ 1 (at 'balance (read accounts "bob")))})
+                ))
+          |]
+    expectVerified code
+
   describe "enforce-one.1" $ do
     let code =
           [text|
@@ -996,16 +1012,17 @@ spec = describe "analyze" $ do
 
             case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
               [CheckFailure _ (SmtFailure (Invalid model))] -> do
-                let (Model args (ModelTags _ _ writes _ _ _ _) ksProvs _) = model
+                let (Model args (ModelTags _ _ writes _ _ _ _ _) ksProvs _) = model
 
                 it "should have a negative amount" $ do
                   Just (Located _ (_, (_, AVal _prov amount))) <- pure $
-                    find (\(Located _ (nm, _)) -> nm == "amount") $ args ^.. traverse
+                    find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse
                   (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
-                let negativeWrite (Object m) =
-                      let (_bal, AVal _ sval) = m Map.! "balance"
-                      in (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                let negativeWrite (Object m) = case m Map.! "balance" of
+                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                      _                   -> False
+
                 balanceWrite <- pure $ find negativeWrite
                   $ writes ^.. traverse . located . accObject
 
@@ -1945,13 +1962,14 @@ spec = describe "analyze" $ do
     expectFalsified code'
 
   describe "execution trace" $ do
-    let read, write, assert, {-auth,-} var :: TraceEvent -> Bool
+    let read, write, assert {-auth,-} :: TraceEvent -> Bool
         read   = isRight . matching _TraceRead
         write  = isRight . matching _TraceWrite
         assert = isRight . matching _TraceAssert
         -- auth= isRight . matching _TraceAuth
-        var    = isRight . matching _TraceBind
         path   = isRight . matching _TraceSubpathStart
+        push   = isRight . matching _TracePushScope
+        pop    = isRight . matching _TracePopScope
 
         match :: [a -> Bool] -> [a] -> Bool
         tests `match` items
@@ -1988,7 +2006,7 @@ spec = describe "analyze" $ do
             |]
 
       expectTrace code (bnot Success')
-        [read, var, read, var, assert, assert, write, write]
+        [read, read, push, assert, assert, write, write, pop]
 
     describe "doesn't include events excluded by a conditional" $ do
       let code =

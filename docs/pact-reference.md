@@ -50,7 +50,7 @@ The format of the JSON to be encoded is as follows.
 ```
 
 When assembling the message, this JSON should be "stringified" and provided for the `cmd` field.
-If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field, along 
+If you inspect the output of the [request formatter in the pact tool](#api-request-formatter), you will see that the `"cmd"` field, along
 with any code supplied, are a String of encoded, escaped JSON.
 
 ### `cont` Payload {#cont-payload}
@@ -60,11 +60,11 @@ whether to rollback or continue the pact, the step number, and any step data nee
 
 - The pact id is equivalent to the id of the transaction where the pact was instantiated from.
 
-- Only one pact can be instantiated per transaction.  
+- Only one pact can be instantiated per transaction.
 
 - If the pact is being rolled back, the step number must correspond to step that just executed.
 
-- If the pact is being continued, the step number must correspond to one more than the step that just executed.  
+- If the pact is being continued, the step number must correspond to one more than the step that just executed.
 
 Like the `exec` payload fields, the `cont` payload fields must also be encoded as strings. The [send](#send) endpoint
 supports this payload type in the `cmd` field. The format of the JSON to be encoded is as follows.
@@ -84,7 +84,7 @@ supports this payload type in the `cmd` field. The format of the JSON to be enco
   }
 }
 ```
- 
+
 Endpoints
 ---
 
@@ -880,7 +880,7 @@ Pacts
 can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
 and [pact-state](#pact-state) repl functions to simulate pact executions.
 
-It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml) 
+It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml)
 yaml files into API requests with a `cont` payload.
 
 Dependency Management {#dependency-management}
@@ -1167,7 +1167,7 @@ Arguments are in scope for BODY, one or more expressions.
 
 ### defconst {#defconst}
 ```lisp
-(defun NAME VALUE [DOC-OR-META])
+(defconst NAME VALUE [DOC-OR-META])
 ```
 
 Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon module load and "memoized".

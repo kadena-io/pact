@@ -140,6 +140,7 @@ data VerificationFailure
   = ModuleParseFailure ParseFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
+  | InvalidRefType
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -267,7 +268,7 @@ inNewAssertionStack act = do
     pop  = lift $ SBV.pop 1
 
 -- Produces args for analysis from model args
-analysisArgs :: Map VarId (Located (Text, TVal)) -> Map VarId AVal
+analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
 verifyFunctionInvariants'
@@ -448,58 +449,69 @@ moduleFunChecks
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-moduleFunChecks tables modTys propDefs = for modTys $
-  \(ref@(Ref defn), Pact.FunType argTys resultTy) -> do
+moduleFunChecks tables modTys propDefs = for modTys $ \case
+  -- TODO How better to handle the type mismatch?
+  (Pact.Direct _, _) -> throwError InvalidRefType
+  (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
 
-  let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
-      --       not there yet:
-      vids = VarId <$> [1..]
+    let -- TODO: Ideally we wouldn't have any ad-hoc VID generation, but we're
+        --       not there yet:
+        vids = VarId <$> [1..]
 
-  -- TODO(joel): this relies on generating the same unique ids as
-  -- @checkFunction@. We need to more carefully enforce this is true!
-  argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
-    case maybeTranslateType ty of
-      Just ety -> pure (name, ety)
+    -- TODO(joel): this relies on generating the same unique ids as
+    -- @checkFunction@. We need to more carefully enforce this is true!
+    argTys' <- for argTys $ \(Pact.Arg name ty _info) ->
+      case maybeTranslateType ty of
+        Just ety -> pure (Unmunged name, ety)
+        Nothing  -> throwError $
+          TypeTranslationFailure "couldn't translate argument type" ty
+
+    resultBinding <- case maybeTranslateType resultTy of
+      Just ety -> pure $ Binding 0 (Unmunged "result") (Munged "result") ety
       Nothing  -> throwError $
-        TypeTranslationFailure "couldn't translate argument type" ty
+        TypeTranslationFailure "couldn't translate result type" resultTy
 
-  resultTy' <- case maybeTranslateType resultTy of
-    Just ety -> pure ("result", 0, ety)
-    Nothing  -> throwError $
-      TypeTranslationFailure "couldn't translate result type" resultTy
+    -- NOTE: At the moment, we leave all variables except for the toplevel args
+    -- under analysis as the original munged/SSA'd variable names. And result,
+    -- which we introduce. We also rely on this assumption in Translate's
+    -- mkTranslateEnv.
 
-  let env :: [(Text, VarId, EType)]
-      env = resultTy' :
-        ((\(vid, (text, ty)) -> (text, vid, ty)) <$> zip vids argTys')
+    let env :: [Binding]
+        env = resultBinding :
+          ((\(vid, (Unmunged nm, ty)) -> Binding vid (Unmunged nm) (Munged nm) ty) <$>
+            zip vids argTys')
 
-      nameEnv :: Map Text VarId
-      nameEnv = Map.fromList $ fmap (\(name, vid, _) -> (name, vid)) env
+        --
+        -- TODO: should the map sent to parsing should be Un/Munged, instead of Text?
+        --
+        nameVids :: Map Text VarId
+        nameVids = Map.fromList $ fmap (\(Binding vid (Unmunged nm) _ _) -> (nm, vid)) env
 
-      idEnv :: Map VarId EType
-      idEnv = Map.fromList $ fmap (\(_, vid, ty) -> (vid, ty)) env
+        vidTys :: Map VarId EType
+        vidTys = Map.fromList $ fmap (\(Binding vid _ _ ty) -> (vid, ty)) env
 
-      vidStart = VarId (length env)
+        vidStart = VarId (length env)
 
-      tableEnv = TableMap $ Map.fromList $
-        tables <&> \Table { _tableName, _tableType } ->
-          let fields = _utFields _tableType
-              colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
-                \(Pact.Arg argName ty _) ->
-                  (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
-          in (TableName (T.unpack _tableName), colMap)
+        tableEnv = TableMap $ Map.fromList $
+          tables <&> \Table { _tableName, _tableType } ->
+            let fields = _utFields _tableType
+                colMap = ColumnMap $ Map.fromList $ flip mapMaybe fields $
+                  \(Pact.Arg argName ty _) ->
+                    (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
+            in (TableName (T.unpack _tableName), colMap)
 
-  checks <- case defn ^? tMeta . mModel . _Just of
-    -- no model = no properties
-    Nothing    -> pure []
-    Just model -> withExcept ModuleParseFailure $ liftEither $ do
-      let model'        = expToMapping model
-          expProperties = model' ^? _Just . ix "properties"
-          expProperty   = model' ^? _Just . ix "property"
-      exps <- collectExps "properties" expProperties expProperty
-      runExpParserOver exps $
-        expToCheck tableEnv vidStart nameEnv idEnv propDefs
+    checks <- case defn ^? tMeta . mModel . _Just of
+      -- no model = no properties
+      Nothing    -> pure []
+      Just model -> withExcept ModuleParseFailure $ liftEither $ do
+        let model'        = expToMapping model
+            expProperties = model' ^? _Just . ix "properties"
+            expProperty   = model' ^? _Just . ix "property"
+        exps <- collectExps "properties" expProperties expProperty
+        runExpParserOver exps $
+          expToCheck tableEnv vidStart nameVids vidTys propDefs
 
-  pure (ref, Right checks)
+    pure (ref, Right checks)
 
 -- | Given an exp like '(k v)', convert it to a singleton map
 expToMapping :: Exp Info -> Maybe (Map Text (Exp Info))

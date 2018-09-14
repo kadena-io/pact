@@ -276,7 +276,7 @@ data OriginatingCell
 data Provenance
   = FromCell    OriginatingCell
   | FromNamedKs (S KeySetName)
-  | FromInput   Text
+  | FromInput   Unmunged
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -484,7 +484,7 @@ iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
   :: forall a b
-  .  (Integral a, HasKind a, Num a, SymWord a, HasKind b, Num b, SymWord b)
+  . (Integral a, SymWord a, Num b, SymWord b)
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
@@ -559,6 +559,27 @@ downcastQType = \case
 newtype VarId
   = VarId Int
   deriving (Show, Eq, Enum, Num, Ord)
+
+-- | Identifier name that is guaranteed to be unique because it contains a
+-- unique identifier. These names are generated upstream in the typechecker
+-- (using 'freshId').
+newtype Munged
+  = Munged Text
+  deriving (Eq, Show)
+
+-- | A user-supplied (i.e. non-unique) identifer name.
+newtype Unmunged
+  = Unmunged Text
+  deriving (Eq, Show)
+
+data Binding
+  = Binding
+    { _bVid   :: VarId
+    , _buName :: Unmunged
+    , _bmName :: Munged
+    , _bType  :: EType
+    }
+  deriving (Eq, Show)
 
 -- | The type of a pact data type we can't reason about -- see 'TAny'.
 data Any = Any
@@ -663,6 +684,7 @@ makeLenses ''Object
 makeLenses ''OriginatingCell
 makePrisms ''Provenance
 makeLenses ''S
+makeLenses ''Binding
 makeLenses ''TableMap
 
 type instance Index (ColumnMap a) = ColumnName

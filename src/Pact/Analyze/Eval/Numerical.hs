@@ -23,7 +23,7 @@ import           Pact.Analyze.Types.Eval
 --    @markFailure@. Thus our codomain is extended with failure.
 
 evalNumerical
-  :: (Analyzer m, S :<: TermOf m)
+  :: (Analyzer m)
   => Numerical (TermOf m) a -> m (S a)
 evalNumerical (DecArithOp op x y)      = evalDecArithOp op x y
 evalNumerical (IntArithOp op x y)      = evalIntArithOp op x y
@@ -200,7 +200,7 @@ evalRoundingLikeOp1 op x = do
 -- return: SReal        := -100.15
 evalRoundingLikeOp2
   :: forall m
-   . (Analyzer m, S :<: TermOf m)
+   . (Analyzer m)
   => RoundingLikeOp
   -> TermOf m Decimal
   -> TermOf m Integer

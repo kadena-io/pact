@@ -180,6 +180,13 @@ tagResult av = do
   tag <- view $ aeModelTags.mtResult.located._2
   addConstraint $ sansProv $ tag .== av
 
+tagReturn :: TagId -> AVal -> Analyze ()
+tagReturn tid av = do
+  mTag <- preview $ aeModelTags.mtReturns.at tid._Just._2
+  case mTag of
+    Nothing    -> pure ()
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
@@ -246,7 +253,6 @@ evalTermO = \case
     rowReadCount tn sRk += 1
     tagAccessKey mtReads tid sRk
 
-
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
       sDirty <- use $ cellWritten tn cn sRk
@@ -274,11 +280,13 @@ evalTermO = \case
 
     pure $ Object aValFields
 
-  Let _name vid eterm body -> do
+  Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
-    local (scope.at vid ?~ av) $
-      evalTermO body
+    local (scope.at vid ?~ av) $ do
+      obj <- evalTermO body
+      tagReturn retTid $ AnObj obj
+      pure obj
 
   Sequence eterm objT -> evalETerm eterm *> evalTermO objT
 
@@ -418,11 +426,13 @@ evalTerm = \case
     --
     pure $ literalS "Write succeeded"
 
-  Let _name vid eterm body -> do
+  Let _name vid retTid eterm body -> do
     av <- evalETerm eterm
     tagVarBinding vid av
-    local (scope.at vid ?~ av) $
-      evalTerm body
+    local (scope.at vid ?~ av) $ do
+      res <- evalTerm body
+      tagReturn retTid $ mkAVal res
+      pure res
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> evalTerm str
   ReadDecimal str -> resolveDecimal =<< evalTerm str

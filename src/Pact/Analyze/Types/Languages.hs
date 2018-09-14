@@ -47,8 +47,7 @@ module Pact.Analyze.Types.Languages
   ) where
 
 import           Data.Map.Strict              (Map)
-import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               SymWord)
+import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
 import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
@@ -94,7 +93,7 @@ class sub :<: sup where
   inject  :: sub a -> sup a
   project :: sup a -> Maybe (sub a)
 
-instance Functor f => f :<: f where
+instance f :<: f where
   inject  = id
   project = Just
 
@@ -481,7 +480,7 @@ data Term ret where
   IfThenElse      :: Term Bool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
-  Let             :: Text -> VarId -> ETerm -> Term a -> Term a
+  Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
 
   -- Control flow
   Sequence        :: ETerm     -> Term a ->           Term a
@@ -519,7 +518,7 @@ instance UserShow a => UserShow (Term a) where
   userShowsPrec _ = \case
     CoreTerm tm                -> userShow tm
     IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
-    Let var _ x y              -> parenList ["let", userShow var, userShow x, userShow y]
+    Let var _ _ x y            -> parenList ["let", userShow var, userShow x, userShow y]
     Sequence x y               -> Text.unlines [userShow x, userShow y]
 
     EnforceOne (Left _)        -> parenList
@@ -591,5 +590,5 @@ instance Num (Term Decimal) where
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
 
-lit :: SymWord a => a -> Term a
+lit :: a -> Term a
 lit = CoreTerm . Lit
