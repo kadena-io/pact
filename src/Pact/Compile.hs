@@ -174,24 +174,19 @@ app = do
 -- binding is encountered, all following terms are subsumed into the
 -- binding body, and bound/abstracted etc.
 bindingForm :: Compile (Term Name)
-bindingForm = braced >>= uncurry subsumeBody
+bindingForm = do
+  (bindings, info) <- braced
+  body <- abstractBody (fst <$> bindings)
+  return $ TBinding bindings body (BindSchema TyAny) info
   where
     pair :: Compile (Arg (Term Name), Term Name)
     pair = do
       col <- term
       a <- sep ColonEquals *> arg
-      return (a, col)
-      
+      return (a, col)      
     braced :: Compile ([(Arg (Term Name), Term Name)], Info)
     braced =  withList' Braces $
       (,) <$> (pair `sepBy1` sep Comma) <*> contextInfo
-      
-    subsumeBody :: [(Arg (Term Name), Term Name)] -> Info -> Compile (Term Name)
-    subsumeBody bindings info =
-          TBinding bindings
-        <$> abstractBody (map fst bindings)
-        <*> return (BindSchema TyAny)
-        <*> return info
     
 varAtom :: Compile (Term Name)
 varAtom = do
@@ -525,7 +520,7 @@ _compileStr' sfun code = do
 
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty
-OA
+
 _parseF :: FilePath -> IO (TF.Result ([Exp Parsed],String))
 _parseF fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx exprsOnly fp
 
