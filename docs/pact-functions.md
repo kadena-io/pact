@@ -183,18 +183,6 @@ pact> (hash { 'foo: 1 })
 ```
 
 
-### hex-str-to-int {#hex-str-to-int}
-
-*value*&nbsp;`<a>` *&rarr;*&nbsp;`integer`
-
-
-Compute the compute the integer value of a string of hexidecimal numbers. 
-```lisp
-pact> (hex-str-to-int "abcdef12345")
-"11806310474565"
-```
-
-
 ### identity {#identity}
 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`

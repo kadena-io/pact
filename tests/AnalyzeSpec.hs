@@ -1011,6 +1011,9 @@ spec = describe "analyze" $ do
               propResults `shouldBe` HM.singleton "test" []
 
             case invariantResults ^.. ix "test" . ix "accounts" . ix 0 . _Left of
+              -- see https://github.com/Z3Prover/z3/issues/1819
+              [CheckFailure _ (SmtFailure (SortMismatch msg))] ->
+                it "...nevermind..." $ pendingWith msg
               [CheckFailure _ (SmtFailure (Invalid model))] -> do
                 let (Model args (ModelTags _ _ writes _ _ _ _ _) ksProvs _) = model
 
