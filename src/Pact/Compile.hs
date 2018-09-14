@@ -103,8 +103,7 @@ compileExps
   => MkInfo
   -> t (Exp Parsed)
   -> Either PactError (t (Term Name))
-compileExps mi = traverse (compile mi)
-
+compileExps = traverse . compile
 
 currentModule :: Compile (ModuleName,Hash)
 currentModule =
@@ -116,20 +115,16 @@ currentModule =
         Nothing -> context >>= tokenErr' "Must be declared within module"
         Just a -> return a
 
-currentModule'
-  :: Compile ModuleName
+currentModule' :: Compile ModuleName
 currentModule' =
   fst <$> currentModule
 
-freshTyVar
-  :: Compile (Type (Term Name))
+freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
   c <- state (view (psUser . csFresh) &&& over (psUser . csFresh) succ)
   return $ mkTyVar (cToTV c) []
 
-cToTV
-  :: Int
-  -> TypeVarName
+cToTV :: Int -> TypeVarName
 cToTV n | n < 26 = fromString [toC n]
         | n <= 26 * 26 = fromString [toC (pred (n `div` 26)), toC (n `mod` 26)]
         | otherwise = fromString $ toC (n `mod` 26) : show ((n - (26 * 26)) `div` 26)
@@ -144,8 +139,7 @@ term =
   <|> listLiteral
   <|> objectLiteral
 
-specialForm
-  :: Compile (Term Name)
+specialForm :: Compile (Term Name)
 specialForm =
   bareAtom >>= go
     where
@@ -171,7 +165,8 @@ app :: Compile (Term Name)
 app = do
   termName <- varAtom
   body <- many (term <|> bindingForm)
-  TApp termName body <$> contextInfo
+  gamma <- contextInfo 
+  return $ TApp termName body gamma 
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
 -- following body form as a sexp, instead letting the body contents
@@ -530,7 +525,7 @@ _compileStr' sfun code = do
 
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty
-
+OA
 _parseF :: FilePath -> IO (TF.Result ([Exp Parsed],String))
 _parseF fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx exprsOnly fp
 
