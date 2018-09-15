@@ -79,7 +79,7 @@ instance UserShow PreProp where
       "(" <> SExistentialQuantification <> " (" <> name <> ":" <>
         userShow qty <> ") " <> userShow prop <> ")"
     PreApp name applicands ->
-      "(" <> name <> " " <> T.unwords ((map userShow) applicands) <> ")"
+      "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
       "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
     PreLiteralObject obj ->

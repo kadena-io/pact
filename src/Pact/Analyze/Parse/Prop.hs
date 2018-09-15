@@ -343,7 +343,7 @@ inferPreProp preProp = case preProp of
         userShow (existentialType a') <> " and " <>
         userShow (existentialType b') <> ")"
 
-  PreApp op'@(toOp logicalOpP -> Just op) args -> do
+  PreApp op'@(toOp logicalOpP -> Just op) args ->
     ESimple TBool <$> case (op, args) of
       (NotOp, [a])    -> PNot <$> checkPreProp TBool a
       (AndOp, [a, b]) -> PAnd <$> checkPreProp TBool a <*> checkPreProp TBool b

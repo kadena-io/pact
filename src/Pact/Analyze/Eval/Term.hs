@@ -169,8 +169,7 @@ tagFork pathL pathR reachable lPasses = do
       mTag <- preview $ aeModelTags.mtPaths.at p._Just
       case mTag of
         Nothing  -> pure ()
-        Just sbv -> do
-          addConstraint $ sansProv $ sbv .== _sSbv active
+        Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv active
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -310,8 +309,7 @@ validateWrite writeType sch@(Schema sm) obj@(Object om) = do
 
   let requiresFullWrite = writeType `elem` [Pact.Insert, Pact.Write]
 
-  when (requiresFullWrite && Map.size om /= Map.size sm) $
-    invalid
+  when (requiresFullWrite && Map.size om /= Map.size sm) invalid
 
 evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
 evalTerm = \case
@@ -328,7 +326,7 @@ evalTerm = \case
   -- TODO: check that the body of enforce is pure
   Enforce mTid cond -> do
     cond' <- evalTerm cond
-    maybe (pure ()) (\tid -> tagAssert tid cond') mTid
+    maybe (pure ()) (`tagAssert` cond') mTid
     succeeds %= (&&& cond')
     pure true
 

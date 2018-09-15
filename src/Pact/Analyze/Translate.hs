@@ -415,7 +415,7 @@ extendPath = do
 -- 'tsPendingEvents' is currently empty.
 joinPaths :: [(Vertex, Path)] -> TranslateM ()
 joinPaths branches = do
-  let vs = fst $ unzip branches
+  let vs = map fst branches
   v' <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for_ branches $ \(v, path) -> do

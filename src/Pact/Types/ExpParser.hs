@@ -104,7 +104,7 @@ instance Stream Cursor where
 
 -- | Capture last-parsed Exp, plus arbitrary state.
 data ParseState a = ParseState
-  { _psCurrent :: (Exp Info)
+  { _psCurrent :: Exp Info
   , _psUser :: a
   }
 makeLenses ''ParseState
@@ -143,7 +143,7 @@ runCompile act cs a =
       Tokens (x :| _) -> doErr (getInfo x) $ showExpect expect
     (Left e) -> doErr def (show e)
     where doErr i s = Left $ PactError SyntaxError i def (pack s)
-          showExpect e = case (labelText $ S.toList e) of
+          showExpect e = case labelText $ S.toList e of
             [] -> show (S.toList e)
             ss -> intercalate "," ss
           labelText [] = []
@@ -163,12 +163,12 @@ tokenErr s = tokenErr' s . Just
 {-# INLINE tokenErr' #-}
 tokenErr' :: String -> Maybe (Exp Info) -> ExpParse s a
 tokenErr' ty i = failure
-  (fmap (\e -> (Tokens (e:|[]))) i)
+  (fmap (\e -> Tokens (e:|[])) i)
   (S.singleton (strErr ty))
 
 {-# INLINE context #-}
 context :: ExpParse s (Maybe (Exp Info))
-context = (fmap snd . _cContext) <$> getInput
+context = fmap snd . _cContext <$> getInput
 
 {-# INLINE contextInfo #-}
 contextInfo :: ExpParse s Info

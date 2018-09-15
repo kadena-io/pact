@@ -59,9 +59,7 @@ instance FromJSON a => FromJSON (ApiResponse a) where
     else ApiFailure <$> o .: "error"
   parseJSON _ = mempty
 
-data RequestKeys = RequestKeys
-  { _rkRequestKeys :: ![RequestKey]
-  } deriving (Show, Eq, Ord, Generic)
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: [RequestKey] } deriving (Show, Eq, Ord, Generic)
 makeLenses ''RequestKeys
 
 instance ToJSON RequestKeys where
@@ -71,10 +69,9 @@ instance FromJSON RequestKeys where
 
 
 -- | Submit new commands for execution
-data SubmitBatch = SubmitBatch
-  { _sbCmds :: ![Command Text]
-  } deriving (Eq,Generic,Show)
+newtype SubmitBatch = SubmitBatch { _sbCmds :: [Command Text] } deriving (Eq,Generic,Show)
 makeLenses ''SubmitBatch
+
 instance ToJSON SubmitBatch where
   toJSON = lensyToJSON 3
 instance FromJSON SubmitBatch where
@@ -101,7 +98,7 @@ instance FromJSON ApiResult where parseJSON = lensyParseJSON 3
 instance ToJSON ApiResult where toJSON = lensyToJSON 3
 
 -- | What you get back from a Poll
-data PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
+newtype PollResponses = PollResponses (HM.HashMap RequestKey ApiResult)
 instance ToJSON PollResponses where
   toJSON (PollResponses m) = object $ map (requestKeyToB16Text *** toJSON) $ HM.toList m
 instance FromJSON PollResponses where
