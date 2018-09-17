@@ -428,6 +428,7 @@ evalTerm = \case
 
   ReadKeySet str -> resolveKeySet =<< symKsName <$> evalTerm str
   ReadDecimal str -> resolveDecimal =<< evalTerm str
+  ReadInteger str -> resolveInteger =<< evalTerm str
 
   KsAuthorized tid ksT -> do
     ks <- evalTerm ksT

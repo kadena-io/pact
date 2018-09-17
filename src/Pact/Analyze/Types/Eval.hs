@@ -68,6 +68,7 @@ data AnalyzeEnv
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
     , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
+    , _aeIntegers  :: !(SFunArray String Integer)    -- read-only
     , _invariants  :: !(TableMap [Located (Invariant Bool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !(ModelTags 'Symbolic)
@@ -85,6 +86,7 @@ mkAnalyzeEnv tables args tags info = do
   let keySets'    = mkFreeArray "envKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
       decimals    = mkFreeArray "envDecimals"
+      integers    = mkFreeArray "envIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
@@ -98,8 +100,8 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args keySets' keySetAuths decimals invariants' columnIds'
-    tags info
+  pure $ AnalyzeEnv args keySets' keySetAuths decimals integers invariants'
+    columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -318,6 +320,9 @@ class HasAnalyzeEnv a where
   envDecimals :: Lens' a (SFunArray String Decimal)
   envDecimals = analyzeEnv.aeDecimals
 
+  envIntegers :: Lens' a (SFunArray String Integer)
+  envIntegers = analyzeEnv.aeIntegers
+
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
@@ -495,10 +500,16 @@ resolveKeySet
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
--- TODO: switch to lens
 resolveDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S String
   -> m (S Decimal)
 resolveDecimal sDn = fmap sansProv $
   readArray <$> view envDecimals <*> pure (_sSbv sDn)
+
+resolveInteger
+  :: (MonadReader r m, HasAnalyzeEnv r)
+  => S String
+  -> m (S Integer)
+resolveInteger sSn = fmap sansProv $
+  readArray <$> view envIntegers <*> pure (_sSbv sSn)

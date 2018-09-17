@@ -628,8 +628,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
     ESimple TStr nameT <- translateNode nameA
     return $ ESimple TDecimal $ ReadDecimal nameT
 
-  AST_ReadInteger _ -> throwError' $ UnexpectedNode astNode
-  AST_ReadMsg _     -> throwError' $ UnexpectedNode astNode
+  AST_ReadInteger nameA -> do
+    ESimple TStr nameT <- translateNode nameA
+    return $ ESimple TInt $ ReadInteger nameT
+
+  AST_ReadMsg _ -> throwError' $ UnexpectedNode astNode
 
   AST_Enforce _ cond -> do
     ESimple TBool condTerm <- translateNode cond
