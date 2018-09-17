@@ -4,7 +4,7 @@ module Analyze.Eval where
 
 import           Bound                    (closed)
 import           Control.DeepSeq
-import           Control.Exception        (ArithException (DivideByZero))
+import           Control.Exception        (ArithException (DivideByZero), throw)
 import           Control.Lens             hiding (op, (...))
 import           Control.Monad.Catch      (catch)
 import           Control.Monad.Except     (runExcept)
@@ -47,7 +47,9 @@ data EvalResult
 -- Evaluate a term via Pact
 pactEval :: ETerm -> GenState -> IO EvalResult
 pactEval etm gState = (do
-    let Just pactTm = runReaderT (toPactTm etm) (genEnv, gState)
+    pactTm <- case runReaderT (toPactTm etm) (genEnv, gState) of
+      Just tm -> pure tm
+      Nothing -> error $ "failed to convert term to pact " ++ show etm
     evalEnv <- liftIO $ mkEvalEnv gState
 
     let evalState = Default.def
@@ -63,8 +65,10 @@ pactEval etm gState = (do
     --
     -- future work here is to make sure that if one side throws, the other
     -- does as well.
-    `catch` (\(DivideByZero :: ArithException) ->
-      pure $ EvalErr "division by zero")
+    `catch` (\(e :: ArithException) -> case e of
+      DivideByZero -> pure $ EvalErr "division by zero"
+      _            -> throw e
+      )
     `catch` (\(pe@(PactError err _ _ msg) :: PactError) ->
       case err of
         EvalError ->
