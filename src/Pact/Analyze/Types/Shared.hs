@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -22,6 +23,7 @@ import           Control.Lens                 (At (at), Index, Iso, Iso',
                                                view, (%~), (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
+import           Data.Coerce                  (Coercible)
 import           Data.Data                    (Data)
 import qualified Data.Decimal                 as Decimal
 import           Data.Function                (on)
@@ -38,9 +40,8 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                SymWord, Symbolic, forAll_,
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
-                                               oneIf, sFromIntegral,
-                                               sRealToSInteger, unliteral, (.<),
-                                               (.==), (%))
+                                               oneIf, sFromIntegral, unliteral,
+                                               (%), (.<), (.==))
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
@@ -56,10 +57,11 @@ import           Prelude                      hiding (Float)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, ks, obj, time)
+import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow
+
 
 data Located a
   = Located
@@ -126,16 +128,28 @@ mkConcreteInteger = SBVI.SBV
 newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
 
 decimalIso :: PactIso Decimal.Decimal Decimal
-decimalIso = PactIso $ iso mkDecimal unMkDecimal
+decimalIso = PactIso $ iso literalD unMkDecimal
   where
-    mkDecimal :: Decimal.Decimal -> Decimal
-    mkDecimal (Decimal.Decimal places mantissa) = fromRational $
-      mantissa % 10 ^ places
-
     unMkDecimal :: Decimal -> Decimal.Decimal
-    unMkDecimal algReal = case Decimal.eitherFromRational (toRational algReal) of
+    unMkDecimal (Decimal dec) = case Decimal.eitherFromRational (dec % 10 ^ decimalPrecision) of
       Left err -> error err
       Right d  -> d
+
+instance SymbolicDecimal (S Decimal) where
+  type IntegerOf (S Decimal) = S Integer
+  negateD (S _ a)            = sansProv (negateD a)
+  S _ a .+ S _ b             = sansProv (a .+ b)
+  S _ a .- S _ b             = sansProv (a .- b)
+  S _ a .* S _ b             = sansProv (a .* b)
+  S _ a ./ S _ b             = sansProv (a ./ b)
+  fromIntegerD               = literalS . fromIntegerD
+  fromIntegerD' (S _ a)      = sansProv (fromIntegerD' a)
+  literalD                   = literalS . literalD
+  lShiftD  i       (S _ d)   = sansProv (lShiftD  i d)
+  lShiftD' (S _ i) (S _ d)   = sansProv (lShiftD' i d)
+  rShiftD  i       (S _ d)   = sansProv (rShiftD  i d)
+  rShiftD' (S _ i) (S _ d)   = sansProv (rShiftD' i d)
+  floorD (S _ d)             = sansProv (floorD d)
 
 fromPact :: PactIso a b -> a -> b
 fromPact = view . unPactIso
@@ -473,11 +487,11 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
-coerceSBV :: SBV a -> SBV b
-coerceSBV = SBVI.SBV . SBVI.unSBV
-
-coerceS :: S a -> S b
+coerceS :: Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
+
+unsafeCoerceS :: S a -> S b
+unsafeCoerceS (S mProv a) = S mProv $ unsafeCoerceSBV a
 
 iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
@@ -488,9 +502,6 @@ fromIntegralS
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
-
-realToIntegerS :: S Decimal -> S Integer
-realToIntegerS = over s2Sbv sRealToSInteger
 
 oneIfS :: (Num a, SymWord a) => S Bool -> S a
 oneIfS = over s2Sbv oneIf

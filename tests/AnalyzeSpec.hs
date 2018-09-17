@@ -19,7 +19,7 @@ import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (isJust, isNothing)
+import           Data.Maybe                   (fromJust, isJust, isNothing)
 import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
@@ -40,6 +40,7 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
+import           Pact.Analyze.Eval.Numerical  (banker'sMethod)
 import qualified Pact.Analyze.Model           as Model
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
@@ -203,6 +204,42 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+  describe "decimal arithmetic" $ do
+    let unlit :: S Decimal -> Decimal
+        unlit = fromJust . unliteralS
+
+    it "+"      $ unlit (literalD 1.1    .+ literalD 2.2   ) == literalD 3.3
+    it "* + +"  $ unlit (literalD 1.5    .* literalD 1.5   ) == literalD 2.25
+    it "* + -"  $ unlit (literalD 1.5    .* literalD (-1.5)) == literalD (-2.25)
+    it "* - +"  $ unlit (literalD (-1.5) .* literalD 1.5   ) == literalD (-2.25)
+    it "* - -"  $ unlit (literalD (-1.5) .* literalD (-1.5)) == literalD 2.25
+
+    it "negate" $ unlit (negateD (literalD 1.5))             == literalD (-1.5)
+    it "negate" $ unlit (negateD (literalD (-1.5)))          == literalD 1.5
+
+    it "shifts" $ unlit (literalD 1.5    .* fromIntegerD 10) == literalD 15
+    it "shifts" $ unlit (literalD (-1.5) .* fromIntegerD 10) == literalD (-15)
+    it "shifts" $ lShift255D (rShift255D (literalD 1.5))     == literalD @Decimal 1
+
+    it "floor" $ floorD @Decimal (literalD 0)            == 0
+    it "floor" $ floorD @Decimal (literalD (1.5))        == 1
+    it "floor" $ floorD @Decimal (literalD (-1.5))       == -2
+
+  describe "decimal division" $ do
+    let unlit = fromJust . unliteralS
+
+    it "can be one half" $ unlit (literalD 1 ./ literalD 2) == literalD @Decimal 0.5
+    it "handles the last decimal correctly" $
+      unlit (literalD 1581138830084.1918464 ./ literalD 1581138830084)
+      ==
+      literalD 1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
+
+  describe "banker's method" $ do
+    let unlit = fromJust . unliteralS
+
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (literalD 1.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (literalD 2.5)) == 2
+
   describe "result" $ do
     let code =
           [text|
@@ -1020,10 +1057,10 @@ spec = describe "analyze" $ do
                 it "should have a negative amount" $ do
                   Just (Located _ (_, (_, AVal _prov amount))) <- pure $
                     find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse
-                  (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
+                  (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< literalD 0))
 
                 let negativeWrite (Object m) = case m Map.! "balance" of
-                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
+                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< literalD 0)
                       _                   -> False
 
                 balanceWrite <- pure $ find negativeWrite
@@ -1367,6 +1404,12 @@ spec = describe "analyze" $ do
                   (* 0.0000000000000000000000000000000000000000000000000000000000000000000000000000001
                      0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001)
                   0.0) "this is one digit from significant")
+
+                (enforce (=
+                  (/
+                    1581138830084.1918464
+                    1581138830084)
+                  1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864))
               ))
           |]
     in expectPass code $ Valid $ bnot Abort'
@@ -1665,7 +1708,7 @@ spec = describe "analyze" $ do
 
       textToProp TDecimal "(+ 0.0 1.0)"
         `shouldBe`
-        Right (Inj (DecArithOp Add (PLit 0) (PLit 1)))
+        Right (Inj (DecArithOp Add (PLit (literalD 0)) (PLit (literalD 1))))
 
       textToProp TDecimal "(+ 0 1)"
         `shouldBe`
@@ -1785,13 +1828,13 @@ spec = describe "analyze" $ do
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
-      userShow (PreIntegerLit 1)    `shouldBe` "1"
-      userShow (PreStringLit "foo") `shouldBe` "\"foo\""
-      userShow (PreDecimalLit 1)    `shouldBe` "1.0"
+      userShow (PreIntegerLit 1)            `shouldBe` "1"
+      userShow (PreStringLit "foo")         `shouldBe` "\"foo\""
+      userShow (PreDecimalLit (literalD 1)) `shouldBe` "1.0"
       -- TODO: test rendering time literals
       -- userShow (PreTimeLit _) `shouldBe` _
-      userShow (PreBoolLit True)    `shouldBe` "true"
-      userShow (PreBoolLit False)   `shouldBe` "false"
+      userShow (PreBoolLit True)            `shouldBe` "true"
+      userShow (PreBoolLit False)           `shouldBe` "false"
 
     it "renders quantifiers how you would expect" $ do
       userShow (PreForall 0 "foo" (EType TBool) (PreVar 0 "foo"))

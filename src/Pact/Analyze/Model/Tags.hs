@@ -22,8 +22,7 @@ import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.SBV             (SBV, SymWord, Symbolic, constrain,
-                                       sFromIntegral, sRealToSInteger, (.==))
+import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
@@ -43,19 +42,8 @@ allocSchema (Schema fieldTys) = Object <$>
 allocAVal :: EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
-  EType TDecimal -> do
-    d <- alloc :: Symbolic (SBV Decimal)
-    -- This number must be 0 beyond 255 decimal digits.
-    constrain $ dropRemainder d .== d
-    pure $ mkAVal $ sansProv d
   EType (_ :: Type t) -> mkAVal . sansProv <$>
     (alloc :: Symbolic (SBV t))
-
-  where
-    dropRemainder :: SBV Decimal -> SBV Decimal
-    dropRemainder =
-      let digitShift = 10 ^ (255 :: Int)
-      in (/ digitShift) . sFromIntegral . sRealToSInteger . (* digitShift)
 
 allocTVal :: EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety

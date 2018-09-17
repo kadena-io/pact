@@ -1,13 +1,16 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE Rank2Types          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 module Pact.Analyze.Eval.Numerical where
 
-import           Control.Lens            (over)
+import           Data.Coerce             (Coercible)
 import           Data.SBV                (EqSymbolic ((.==)), SymWord, sDiv,
-                                          sMod, (.<), (.^))
+                                          sMod, (.<))
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
@@ -21,20 +24,7 @@ import           Pact.Analyze.Types.Eval
 -- 2. Errors. Division can fail if the denominator is 0. Rounding can fail if
 --    the precision is negative. In either case we mark failure via
 --    @markFailure@. Thus our codomain is extended with failure.
-
-evalNumerical
-  :: (Analyzer m)
-  => Numerical (TermOf m) a -> m (S a)
-evalNumerical (DecArithOp op x y)      = evalDecArithOp op x y
-evalNumerical (IntArithOp op x y)      = evalIntArithOp op x y
-evalNumerical (IntDecArithOp op x y)   = evalIntDecArithOp op x y
-evalNumerical (DecIntArithOp op x y)   = evalDecIntArithOp op x y
-evalNumerical (IntUnaryArithOp op x)   = evalUnaryArithOp op x
-evalNumerical (DecUnaryArithOp op x)   = evalUnaryArithOp op x
-evalNumerical (ModOp x y)              = evalModOp x y
-evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
-evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
-
+--
 -- Note [Rounding]
 --
 -- The key is this quote from "Data.Decimal":
@@ -42,37 +32,23 @@ evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 -- "Decimal numbers are represented as m*10^(-e) where m and e are integers. The
 -- exponent e is an unsigned Word8. Hence the smallest value that can be
 -- represented is 10^-255."
---
--- Thus in this implementation, after any decimal arithmetic operation, we
--- shift left 255 decimal digits, drop the remainder, then shift back right.
-dropRemainder :: S Decimal -> S Decimal
-dropRemainder =
-  let digitShift = 10 ^ (255 :: Int)
-  in (/ digitShift) . fromIntegralS . decRound . (* digitShift)
 
--- round decimals by taking the floor of `x + 0.5`
-decRound :: S Decimal -> S Integer
-decRound = realToIntegerS . (+ 0.5)
-
-evalDecArithOp
+evalNumerical
   :: Analyzer m
-  => ArithOp
-  -> TermOf m Decimal
-  -> TermOf m Decimal
-  -> m (S Decimal)
-evalDecArithOp op xT yT = do
-  x <- eval xT
-  y <- eval yT
-  case op of
-    Add -> pure $ dropRemainder $ x + y
-    Sub -> pure $ dropRemainder $ x - y
-    Mul -> pure $ dropRemainder $ x * y
-    Div -> do
-      markFailure $ y .== 0
-      pure $ dropRemainder $ x / y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
+  => Numerical (TermOf m) a -> m (S a)
+evalNumerical (IntArithOp op x y)      = evalIntArithOp op x y
+evalNumerical (DecArithOp op x y)      = evalDecArithOp op x y
+evalNumerical (IntDecArithOp op x y)   = evalDecArithOp op x y
+evalNumerical (DecIntArithOp op x y)   = evalDecArithOp op x y
+evalNumerical (IntUnaryArithOp op x)   = evalUnaryArithOp op x
+evalNumerical (DecUnaryArithOp op x)   = evalUnaryArithOp op x
+evalNumerical (ModOp x y)              = evalModOp x y
+evalNumerical (RoundingLikeOp1 op x)   = evalRoundingLikeOp1 op x
+evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
+-- In principle this could share an implementation with evalDecArithOp. In
+-- practice, evaluation can be slower because you're multiplying both inputs by
+-- (10 ^ 255), so we stick to this mroe efficient implementation.
 evalIntArithOp
   :: Analyzer m
   => ArithOp
@@ -92,52 +68,38 @@ evalIntArithOp op xT yT = do
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-evalIntDecArithOp
-  :: Analyzer m
+evalDecArithOp
+  :: ( Analyzer m
+     , DecimalRepresentable a, Show a, SymWord a
+     , DecimalRepresentable b, Show b, SymWord b
+     )
   => ArithOp
-  -> TermOf m Integer
-  -> TermOf m Decimal
+  -> TermOf m a
+  -> TermOf m b
   -> m (S Decimal)
-evalIntDecArithOp op xT yT = do
-  x <- eval xT
-  y <- eval yT
-  case op of
-    Add -> pure $ dropRemainder $ fromIntegralS x + y
-    Sub -> pure $ dropRemainder $ fromIntegralS x - y
-    Mul -> pure $ dropRemainder $ fromIntegralS x * y
+evalDecArithOp op xT yT = do
+  x <- widenToDecimal <$> eval xT
+  y <- widenToDecimal <$> eval yT
+  coerceS <$> case op of
+    Add -> pure $ x .+ y
+    Sub -> pure $ x .- y
+    Mul -> pure $ x .* y
     Div -> do
-      markFailure $ y .== 0
-      pure $ dropRemainder $ fromIntegralS x / y
+      markFailure $ y .== literalD 0
+      pure $ x ./ y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
-evalDecIntArithOp
-  :: Analyzer m
-  => ArithOp
-  -> TermOf m Decimal
-  -> TermOf m Integer
-  -> m (S Decimal)
-evalDecIntArithOp op xT yT = do
-  x <- eval xT
-  y <- eval yT
-  case op of
-    Add -> pure $ dropRemainder $ x + fromIntegralS y
-    Sub -> pure $ dropRemainder $ x - fromIntegralS y
-    Mul -> pure $ dropRemainder $ x * fromIntegralS y
-    Div -> do
-      markFailure $ y .== 0
-      pure $ dropRemainder $ x / fromIntegralS y
-    Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
-    Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
-
+-- In practice (a ~ Decimal) or (a ~ Integer).
 evalUnaryArithOp
-  :: (Analyzer m, Num a, Show a, SymWord a)
+  :: forall m a
+   . (Analyzer m, Show a, SymWord a, Coercible a Integer)
   => UnaryArithOp
   -> TermOf m a
   -> m (S a)
 evalUnaryArithOp op term = do
-  x <- eval term
-  case op of
+  x <- coerceS @a @Integer <$> eval term
+  coerceS @Integer @a <$> case op of
     Negate -> pure $ negate x
     Sqrt   -> throwErrorNoLoc $ UnsupportedUnaryOp op
     Ln     -> throwErrorNoLoc $ UnsupportedUnaryOp op
@@ -156,19 +118,6 @@ evalModOp xT yT = do
   markFailure $ y .== 0
   pure $ sMod x y
 
--- Round a real exactly between two integers (_.5) to the nearest even
-banker'sMethod :: S Decimal -> S Integer
-banker'sMethod x =
-  let wholePart      = realToIntegerS x
-      wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-      isExactlyHalf  = sansProv $ fromIntegralS wholePart + 1 / 2 .== x
-
-  in iteS isExactlyHalf
-    -- nearest even number!
-    (wholePart + oneIfS wholePartIsOdd)
-    -- otherwise we round
-    (decRound x)
-
 evalRoundingLikeOp1
   :: Analyzer m
   => RoundingLikeOp
@@ -177,13 +126,11 @@ evalRoundingLikeOp1
 evalRoundingLikeOp1 op x = do
   x' <- eval x
   pure $ case op of
-    -- The only SReal -> SInteger conversion function that sbv provides is
-    -- sRealToSInteger (which realToIntegerS wraps), which computes the floor.
-    Floor   -> realToIntegerS x'
+    Floor   -> floorD x'
 
     -- For ceiling we use the identity:
     -- ceil(x) = -floor(-x)
-    Ceiling -> negate (realToIntegerS (negate x'))
+    Ceiling -> negate (floorD (negateD x'))
 
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
@@ -193,24 +140,60 @@ evalRoundingLikeOp1 op x = do
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.
 --
--- x': SReal            := -100.15234
--- precision': SInteger := 2
--- x'': SReal           := -10015.234
--- x''': SInteger       := -10015
--- return: SReal        := -100.15
+-- x: SReal            := -100.15234
+-- precision: SInteger := 2
+-- return: SReal       := -100.15
 evalRoundingLikeOp2
   :: forall m
-   . (Analyzer m)
+   . Analyzer m
   => RoundingLikeOp
   -> TermOf m Decimal
   -> TermOf m Integer
   -> m (S Decimal)
-evalRoundingLikeOp2 op x precision = do
-  x'         <- eval x
-  precision' <- eval precision
+evalRoundingLikeOp2 op xT precisionT = do
+  x         <- eval xT
+  precision <- eval precisionT
   -- Precision must be >= 0
-  markFailure (precision' .< 0)
-  let digitShift = over s2Sbv (10 .^) precision' :: S Integer
-      x''        = x' * fromIntegralS digitShift
-  x''' <- evalRoundingLikeOp1 op (inject x'' :: TermOf m Decimal)
-  pure $ fromIntegralS x''' / fromIntegralS digitShift
+  markFailure (precision .< 0)
+  rShiftD' precision . fromIntegerD' <$>
+    evalRoundingLikeOp1 op (inject (lShiftD' precision x))
+
+-- Round a real exactly between two integers (_.5) to the nearest even
+banker'sMethod :: S Decimal -> S Integer
+banker'sMethod x = iteS isExactlyHalf
+  -- nearest even number!
+  (wholePart + oneIfS wholePartIsOdd)
+  -- otherwise we round
+  (decRound x)
+
+  where
+    wholePart      = floorD x
+    wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
+    isExactlyHalf  = sansProv $ fractionalPart .== literalD 0.5
+
+    halfIntRep :: S Integer
+    halfIntRep = 5 * 10 ^ (decimalPrecision - 1)
+
+    fractionalPart :: S Decimal
+    fractionalPart = coerceS $
+      coerceS x `sMod` (10 ^ decimalPrecision :: S Integer)
+
+    -- round decimals by taking the floor of `x + 0.5`
+    decRound :: S Decimal -> S Integer
+    decRound = floorD . coerceS @Integer @Decimal . (+ halfIntRep) . coerceS
+
+-- When doing binary arithmetic involving:
+-- * decimal x decimal
+-- * integer x decimal
+-- * decimal x integer
+--
+-- We widen / downcast the integer to be a decimal. This just requires shifting
+-- the number left 255 decimal digits in the case of an integer.
+class DecimalRepresentable a where
+  widenToDecimal :: S a -> S Decimal
+
+instance DecimalRepresentable Integer where
+  widenToDecimal = lShift255D . coerceS
+
+instance DecimalRepresentable Decimal where
+  widenToDecimal = id

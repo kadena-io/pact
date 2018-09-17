@@ -23,7 +23,6 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
-import           Pact.Types.Runtime         (tShow)
 
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
@@ -35,10 +34,10 @@ indent :: Natural -> Text -> Text
 indent 0     = id
 indent times = indent (pred times) . indent1
 
-showSbv :: (Show a, SymWord a) => SBV a -> Text
-showSbv sbv = maybe "[ERROR:symbolic]" tShow (SBV.unliteral sbv)
+showSbv :: (UserShow a, SymWord a) => SBV a -> Text
+showSbv sbv = maybe "[ERROR:symbolic]" userShow (SBV.unliteral sbv)
 
-showS :: (Show a, SymWord a) => S a -> Text
+showS :: (UserShow a, SymWord a) => S a -> Text
 showS = showSbv . _sSbv
 
 showTVal :: TVal -> Text

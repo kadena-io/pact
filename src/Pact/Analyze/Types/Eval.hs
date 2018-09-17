@@ -253,9 +253,9 @@ mkInitialAnalyzeState tables = AnalyzeState
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
-    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
+    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const (fromIntegerD 0)))
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
-    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) 0
+    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) (fromIntegerD 0)
     cellsEnforced
       = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))

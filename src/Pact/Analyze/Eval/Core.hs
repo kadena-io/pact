@@ -18,8 +18,8 @@ import qualified Data.Text                   as T
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
-import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
 
@@ -65,7 +65,7 @@ evalDecAddTime timeT secsT = do
   if isConcreteS secs
   -- Convert seconds to milliseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
-  then pure $ time + fromIntegralS (banker'sMethod (secs * 1000000))
+  then pure $ time + fromIntegralS (banker'sMethod (secs .* fromIntegerD' 1000000))
   else throwErrorNoLoc $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
