@@ -81,6 +81,7 @@ data TranslateFailureNoLoc
   | NoPacts (AST Node)
   | NoLists (AST Node)
   | NoKeys (AST Node)
+  | NoReadMsg (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving (Eq, Show)
@@ -108,6 +109,7 @@ describeTranslateFailureNoLoc = \case
   NoPacts _node -> "Analysis of pacts is not yet supported"
   NoLists _node -> "Analysis of lists is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
+  NoReadMsg _ -> "`read-msg` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
 data TranslateEnv
@@ -632,7 +634,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     ESimple TStr nameT <- translateNode nameA
     return $ ESimple TInt $ ReadInteger nameT
 
-  AST_ReadMsg _ -> throwError' $ UnexpectedNode astNode
+  AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_Enforce _ cond -> do
     ESimple TBool condTerm <- translateNode cond
