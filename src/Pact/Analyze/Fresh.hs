@@ -16,14 +16,17 @@ module Pact.Analyze.Fresh
   , runConstFreshT
   ) where
 
-import Control.Monad.Except      (ExceptT, MonadError)
-import Control.Monad.Reader      (ReaderT, MonadReader (ask, reader, local),
-                                  mapReaderT, runReaderT)
-import Control.Monad.State       (StateT, MonadState (get, put, state), modify,
-                                  evalStateT, execStateT, runStateT)
-import Control.Monad.Trans       (MonadTrans (lift))
-import Control.Monad.Trans.Maybe (MaybeT)
-import Control.Monad.Writer      (WriterT, MonadWriter)
+import           Control.Monad.Except        (ExceptT, MonadError)
+import           Control.Monad.Reader        (MonadReader (ask, reader, local),
+                                              ReaderT, mapReaderT, runReaderT)
+import qualified Control.Monad.State.Lazy    as LS
+import           Control.Monad.State.Strict  (MonadState (get, put, state),
+                                              StateT, modify, evalStateT,
+                                              execStateT, runStateT)
+import           Control.Monad.Trans         (MonadTrans (lift))
+import           Control.Monad.Trans.Maybe   (MaybeT)
+import           Control.Monad.Writer.Strict (WriterT, MonadWriter)
+import qualified Control.Monad.Writer.Lazy   as LW
 
 -- NOTE: Indexed by the ID type so users can generate more than one type of ID
 --       in a program.
@@ -37,7 +40,9 @@ instance MonadFresh i m             => MonadFresh i (ExceptT e m)
 instance MonadFresh i m             => MonadFresh i (MaybeT m)
 instance MonadFresh i m             => MonadFresh i (ReaderT r m)
 instance MonadFresh i m             => MonadFresh i (StateT s m)
+instance MonadFresh i m             => MonadFresh i (LS.StateT s m)
 instance (MonadFresh i m, Monoid w) => MonadFresh i (WriterT w m)
+instance (MonadFresh i m, Monoid w) => MonadFresh i (LW.WriterT w m)
 
 -- * Standard/auto-incrementing fresh ID generation
 
