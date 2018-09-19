@@ -382,10 +382,6 @@ evalTerm = \case
 
       case aval' of
         AVal mProv sVal -> do
-          -- Note: writeDeltaI and writeDeltaD are exactly the same, except
-          -- that they use integer addition and decimal addition (also
-          -- subtraction) respectively. This is necessary because `Decimal` is
-          -- not an instance of `Num`. For why see note [SymbolicDecimal].
           let writeDeltaI
                 :: (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S Integer))
                 -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S Integer))
@@ -412,17 +408,17 @@ evalTerm = \case
                 let next = mkS mProv sVal
                 prev <- use cell
                 cell .= next
-                let diff = next .- prev
-                mkCellDeltaL tn cn sRk %= (.+ diff)
-                mkColDeltaL  tn cn     %= (.+ diff)
+                let diff = next - prev
+                mkCellDeltaL tn cn sRk += diff
+                mkColDeltaL  tn cn     += diff
 
           case fieldType of
             EType TInt     -> writeDeltaI intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv sVal
+            EType TBool    -> boolCell   tn cn sRk true .= mkS mProv sVal
             EType TDecimal -> writeDeltaD decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv sVal
-            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv sVal
-            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv sVal
+            EType TTime    -> timeCell   tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell     tn cn sRk true .= mkS mProv sVal
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 

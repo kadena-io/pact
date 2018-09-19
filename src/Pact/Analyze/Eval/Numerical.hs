@@ -48,7 +48,7 @@ evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 
 -- In principle this could share an implementation with evalDecArithOp. In
 -- practice, evaluation can be slower because you're multiplying both inputs by
--- (10 ^ 255), so we stick to this mroe efficient implementation.
+-- (10 ^ 255), so we stick to this more efficient implementation.
 evalIntArithOp
   :: Analyzer m
   => ArithOp
@@ -81,12 +81,12 @@ evalDecArithOp op xT yT = do
   x <- widenToDecimal <$> eval xT
   y <- widenToDecimal <$> eval yT
   coerceS <$> case op of
-    Add -> pure $ x .+ y
-    Sub -> pure $ x .- y
-    Mul -> pure $ x .* y
+    Add -> pure $ x + y
+    Sub -> pure $ x - y
+    Mul -> pure $ x * y
     Div -> do
-      markFailure $ y .== literalD 0
-      pure $ x ./ y
+      markFailure $ y .== 0
+      pure $ x / y
     Pow -> throwErrorNoLoc $ UnsupportedDecArithOp op
     Log -> throwErrorNoLoc $ UnsupportedDecArithOp op
 
@@ -130,7 +130,7 @@ evalRoundingLikeOp1 op x = do
 
     -- For ceiling we use the identity:
     -- ceil(x) = -floor(-x)
-    Ceiling -> negate (floorD (negateD x'))
+    Ceiling -> negate (floorD (negate x'))
 
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
@@ -155,7 +155,7 @@ evalRoundingLikeOp2 op xT precisionT = do
   precision <- eval precisionT
   -- Precision must be >= 0
   markFailure (precision .< 0)
-  rShiftD' precision . fromIntegerD' <$>
+  rShiftD' precision . fromInteger' <$>
     evalRoundingLikeOp1 op (inject (lShiftD' precision x))
 
 -- Round a real exactly between two integers (_.5) to the nearest even
@@ -169,7 +169,7 @@ banker'sMethod x = iteS isExactlyHalf
   where
     wholePart      = floorD x
     wholePartIsOdd = sansProv $ wholePart `sMod` 2 .== 1
-    isExactlyHalf  = sansProv $ fractionalPart .== literalD 0.5
+    isExactlyHalf  = sansProv $ fractionalPart .== 0.5
 
     halfIntRep :: S Integer
     halfIntRep = 5 * 10 ^ (decimalPrecision - 1)

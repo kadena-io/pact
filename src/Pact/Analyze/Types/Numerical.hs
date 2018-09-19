@@ -19,7 +19,7 @@ import           Data.SBV                    (HasKind (kindOf),
                                               SDivisible (..), SymWord (..),
                                               oneIf, (.>=), (.^))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
-import           Data.SBV.Dynamic            (svPlus, svTimes, svUNeg)
+import           Data.SBV.Dynamic            (svPlus, svTimes, svUNeg, svAbs)
 import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
                                               SBV (SBV), SVal (SVal),
                                               genMkSymVar, normCW)
@@ -38,36 +38,17 @@ import           Pact.Analyze.Types.UserShow
 newtype Decimal = Decimal { unDecimal :: Integer }
   deriving (Enum, Eq, Ord, Show)
 
--- Note [SymbolicDecimal]:
---
--- Decimal used to be an instance of Num, and it almost still could be. The
--- only problem is that sbv automatically builds an instance `instance (Ord a,
--- Num a, SymWord a) => Num (SBV a)`, which ignores your own `Num` instance. In
--- our case we need to do shifting aound multiplications and divisions so the
--- default instance doesn't work.
-class SymbolicDecimal d where
-  type IntegerOf d :: *
-  negateD       ::                d -> d
-  (.+)          ::           d -> d -> d
-  (.-)          ::           d -> d -> d
-  (.*)          ::           d -> d -> d
-  (./)          ::           d -> d -> d
-  fromIntegerD  :: Integer          -> d
-  fromIntegerD' :: IntegerOf d      -> d
-  literalD      :: Decimal.Decimal  -> d
-  lShiftD       :: Int         -> d -> d
-  lShiftD'      :: IntegerOf d -> d -> d
-  rShiftD       :: Int         -> d -> d
-  rShiftD'      :: IntegerOf d -> d -> d
-  floorD        ::      d -> IntegerOf d
+instance Num Decimal where
+  negate (Decimal d)    = Decimal (negate d)
+  Decimal a + Decimal b = Decimal (a + b)
+  Decimal a - Decimal b = Decimal (a - b)
+  Decimal a * Decimal b = rShift255D (Decimal (a * b))
+  fromInteger           = lShift255D . Decimal
+  abs                   = Decimal . abs . unDecimal
+  signum                = lShift255D . Decimal . signum . unDecimal
 
-instance SymbolicDecimal Decimal where
-  type IntegerOf Decimal = Integer
-  negateD (Decimal d)    = Decimal (negate d)
-  Decimal a .+ Decimal b = Decimal (a + b)
-  Decimal a .- Decimal b = Decimal (a - b)
-  Decimal a .* Decimal b = rShift255D (Decimal (a * b))
-  a         ./ Decimal b =
+instance Fractional Decimal where
+  a / Decimal b =
     -- first make the numerator 10^255 times larger
     let Decimal a'     = lShift255D a
         -- now get the quotient and remainder
@@ -75,33 +56,55 @@ instance SymbolicDecimal Decimal where
         -- if the remainder is more than half of the divisor, round up
         adjustment     = if modAb * 2 >= b then 1 else 0
     in Decimal $ divAb + adjustment
-  fromIntegerD i        = lShift255D (Decimal i)
-  fromIntegerD'         = fromIntegerD
-  literalD (Decimal.Decimal places mantissa)
-    = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+
+  fromRational rat =
+    let (Decimal.Decimal places mantissa) = fromRational rat
+    in lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+
+class SymbolicDecimal d where
+  type IntegerOf d :: *
+  fromInteger' :: IntegerOf d      -> d
+  lShiftD      :: Int         -> d -> d
+  lShiftD'     :: IntegerOf d -> d -> d
+  rShiftD      :: Int         -> d -> d
+  rShiftD'     :: IntegerOf d -> d -> d
+  floorD       ::      d -> IntegerOf d
+
+instance SymbolicDecimal Decimal where
+  type IntegerOf Decimal = Integer
+  fromInteger'         = fromInteger
   lShiftD n (Decimal d) = Decimal (d * 10 ^ n)
   lShiftD' n            = lShiftD (fromIntegral n)
   rShiftD n (Decimal d) = Decimal (d `div` 10 ^ n)
   rShiftD' n            = rShiftD (fromIntegral n)
   floorD                = unDecimal . rShift255D
 
-instance SymbolicDecimal (SBV Decimal) where
-  type IntegerOf (SBV Decimal) = SBV Integer
-  negateD (SBVI.SBV a)         = SBVI.SBV (svUNeg a)
-  SBVI.SBV a .+ SBVI.SBV b     = SBVI.SBV (svPlus a b)
-  SBVI.SBV a .- SBVI.SBV b     = SBVI.SBV (svPlus a (svUNeg b))
-  SBVI.SBV a .* SBVI.SBV b     = rShift255D (SBVI.SBV (svTimes a b))
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Num (SBV Decimal) where
+  negate (SBVI.SBV a)     = SBVI.SBV $ svUNeg a
+  SBVI.SBV a + SBVI.SBV b = SBVI.SBV $ svPlus a b
+  SBVI.SBV a - SBVI.SBV b = SBVI.SBV $ svPlus a $ svUNeg b
+  SBVI.SBV a * SBVI.SBV b = rShift255D $ SBVI.SBV $ svTimes a b
+  fromInteger             = literal . fromInteger
+  abs (SBVI.SBV a)        = SBVI.SBV $ svAbs a
+  signum = lShift255D . coerceSBV . signum . coerceSBV @Decimal @Integer
 
-  a ./ b =
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
+  a / b =
     let (divAb, modAb) = sDivMod
           (coerceSBV @_ @Integer (lShift255D a))
           (coerceSBV @_ @Integer b)
         adjustment = oneIf $ coerceSBV modAb * 2 .>= coerceSBV @_ @Integer b
     in coerceSBV $ divAb + adjustment
+  fromRational = literal . fromRational
 
-  fromIntegerD  = literal . fromIntegerD
-  fromIntegerD' = lShift255D . coerceSBV
-  literalD      = literal . literalD
+instance SymbolicDecimal (SBV Decimal) where
+  type IntegerOf (SBV Decimal) = SBV Integer
+
+  fromInteger' = lShift255D . coerceSBV
 
   lShiftD  n = coerceSBV . (*       10  ^ n)  . coerceSBV @Decimal @Integer
   lShiftD' n = coerceSBV . (*       10 .^ n)  . coerceSBV @Decimal @Integer
