@@ -14,9 +14,6 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 
--- Note(joel): this is an abomination
-{-# LANGUAGE IncoherentInstances        #-}
-
 module Pact.Analyze.Types.Shared where
 
 import           Control.Lens                 (At (at), Index, Iso, Iso',

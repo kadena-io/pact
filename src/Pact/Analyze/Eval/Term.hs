@@ -382,14 +382,28 @@ evalTerm = \case
 
       case aval' of
         AVal mProv sVal -> do
-          let writeDelta :: forall t
-                          . (Num t, SymWord t)
-                         => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
-                         -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
-                         -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
-                         -> Analyze ()
-              writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
-                let cell :: Lens' AnalyzeState (S t)
+          let writeDeltaI
+                :: (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S Integer))
+                -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S Integer))
+                -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S Integer))
+                -> Analyze ()
+              writeDeltaI mkCellL mkCellDeltaL mkColDeltaL = do
+                let cell :: Lens' AnalyzeState (S Integer)
+                    cell = mkCellL tn cn sRk true
+                let next = mkS mProv sVal
+                prev <- use cell
+                cell .= next
+                let diff = next - prev
+                mkCellDeltaL tn cn sRk += diff
+                mkColDeltaL  tn cn     += diff
+
+          let writeDeltaD
+                :: (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S Decimal))
+                -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S Decimal))
+                -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S Decimal))
+                -> Analyze ()
+              writeDeltaD mkCellL mkCellDeltaL mkColDeltaL = do
+                let cell :: Lens' AnalyzeState (S Decimal)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv sVal
                 prev <- use cell
@@ -399,9 +413,9 @@ evalTerm = \case
                 mkColDeltaL  tn cn     += diff
 
           case fieldType of
-            EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
+            EType TInt     -> writeDeltaI intCell intCellDelta intColumnDelta
             EType TBool    -> boolCell   tn cn sRk true .= mkS mProv sVal
-            EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
+            EType TDecimal -> writeDeltaD decimalCell decCellDelta decColumnDelta
             EType TTime    -> timeCell   tn cn sRk true .= mkS mProv sVal
             EType TStr     -> stringCell tn cn sRk true .= mkS mProv sVal
             EType TKeySet  -> ksCell     tn cn sRk true .= mkS mProv sVal
