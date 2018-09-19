@@ -208,37 +208,37 @@ spec = describe "analyze" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
 
-    it "+"      $ unlit (literalD 1.1    .+ literalD 2.2   ) == literalD 3.3
-    it "* + +"  $ unlit (literalD 1.5    .* literalD 1.5   ) == literalD 2.25
-    it "* + -"  $ unlit (literalD 1.5    .* literalD (-1.5)) == literalD (-2.25)
-    it "* - +"  $ unlit (literalD (-1.5) .* literalD 1.5   ) == literalD (-2.25)
-    it "* - -"  $ unlit (literalD (-1.5) .* literalD (-1.5)) == literalD 2.25
+    it "+"      $ unlit (1.1  +   2.2)  == 3.3
+    it "* + +"  $ unlit (1.5  *   1.5)  == 2.25
+    it "* + -"  $ unlit (1.5  * (-1.5)) == -2.25
+    it "* - +"  $ unlit (-1.5 *   1.5)  == -2.25
+    it "* - -"  $ unlit (-1.5 * (-1.5)) == 2.25
 
-    it "negate" $ unlit (negateD (literalD 1.5))             == literalD (-1.5)
-    it "negate" $ unlit (negateD (literalD (-1.5)))          == literalD 1.5
+    it "negate" $ unlit (negate 1.5)    == -1.5
+    it "negate" $ unlit (negate (-1.5)) == 1.5
 
-    it "shifts" $ unlit (literalD 1.5    .* fromIntegerD 10) == literalD 15
-    it "shifts" $ unlit (literalD (-1.5) .* fromIntegerD 10) == literalD (-15)
-    it "shifts" $ lShift255D (rShift255D (literalD 1.5))     == literalD @Decimal 1
+    it "shifts" $ unlit ( 1.5 * fromInteger 10) == 15
+    it "shifts" $ unlit (-1.5 * fromInteger 10) == -15
+    it "shifts" $ lShift255D (rShift255D 1.5)   == (1 :: Decimal)
 
-    it "floor" $ floorD @Decimal (literalD 0)            == 0
-    it "floor" $ floorD @Decimal (literalD (1.5))        == 1
-    it "floor" $ floorD @Decimal (literalD (-1.5))       == -2
+    it "floor" $ floorD @Decimal 0      == 0
+    it "floor" $ floorD @Decimal 1.5    == 1
+    it "floor" $ floorD @Decimal (-1.5) == -2
 
   describe "decimal division" $ do
-    let unlit = fromJust . unliteralS
+    let unlit = fromJust . unliteralS @Decimal
 
-    it "can be one half" $ unlit (literalD 1 ./ literalD 2) == literalD @Decimal 0.5
+    it "can be one half" $ unlit (1 / 2) == 0.5
     it "handles the last decimal correctly" $
-      unlit (literalD 1581138830084.1918464 ./ literalD 1581138830084)
+      unlit (1581138830084.1918464 / 1581138830084)
       ==
-      literalD 1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
+      1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
 
   describe "banker's method" $ do
     let unlit = fromJust . unliteralS
 
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (literalD 1.5)) == 2
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (literalD 2.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
 
   describe "result" $ do
     let code =
@@ -1057,10 +1057,10 @@ spec = describe "analyze" $ do
                 it "should have a negative amount" $ do
                   Just (Located _ (_, (_, AVal _prov amount))) <- pure $
                     find (\(Located _ (Unmunged nm, _)) -> nm == "amount") $ args ^.. traverse
-                  (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< literalD 0))
+                  (SBV amount :: SBV Decimal) `shouldSatisfy` (`isConcretely` (< 0))
 
                 let negativeWrite (Object m) = case m Map.! "balance" of
-                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< literalD 0)
+                      (_bal, AVal _ sval) -> (SBV sval :: SBV Decimal) `isConcretely` (< 0)
                       _                   -> False
 
                 balanceWrite <- pure $ find negativeWrite
@@ -1708,7 +1708,7 @@ spec = describe "analyze" $ do
 
       textToProp TDecimal "(+ 0.0 1.0)"
         `shouldBe`
-        Right (Inj (DecArithOp Add (PLit (literalD 0)) (PLit (literalD 1))))
+        Right (Inj (DecArithOp Add (PLit 0) (PLit 1)))
 
       textToProp TDecimal "(+ 0 1)"
         `shouldBe`
@@ -1830,7 +1830,7 @@ spec = describe "analyze" $ do
     it "renders literals how you would expect" $ do
       userShow (PreIntegerLit 1)            `shouldBe` "1"
       userShow (PreStringLit "foo")         `shouldBe` "\"foo\""
-      userShow (PreDecimalLit (literalD 1)) `shouldBe` "1.0"
+      userShow (PreDecimalLit 1) `shouldBe` "1.0"
       -- TODO: test rendering time literals
       -- userShow (PreTimeLit _) `shouldBe` _
       userShow (PreBoolLit True)            `shouldBe` "true"
