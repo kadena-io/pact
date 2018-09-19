@@ -66,6 +66,7 @@ library
       Pact.Analyze.Check
       Pact.Analyze.Errors
       Pact.Analyze.Feature
+      Pact.Analyze.Fresh
       Pact.Analyze.LegacySFunArray
       Pact.Analyze.Model
       Pact.Analyze.Model.Dot
