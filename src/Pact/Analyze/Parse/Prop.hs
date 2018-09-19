@@ -36,7 +36,6 @@ import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
 import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
-import           Control.Monad.State.Strict   (evalStateT)
 import           Data.Foldable                (asum)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
@@ -57,6 +56,7 @@ import           Pact.Types.Lang              hiding (KeySet, KeySetName,
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
+import           Pact.Analyze.Fresh           (evalFreshT, gen)
 import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.PrenexNormalize
 import           Pact.Analyze.Types
@@ -100,7 +100,7 @@ expToPreProp = \case
   ELiteral' (LBool b)    -> pure (PreBoolLit b)
 
   ParenList [EAtom' (textToQuantifier -> Just q), ParenList bindings, body] -> do
-    bindings' <- parseBindings (\name ty -> (, name, ty) <$> genVarId) bindings
+    bindings' <- parseBindings (\name ty -> (, name, ty) <$> gen) bindings
     let theseBindingsMap = Map.fromList $
           fmap (\(vid, name, _ty) -> (name, vid)) bindings'
     body'     <- local (Map.union theseBindingsMap) (expToPreProp body)
@@ -577,7 +577,7 @@ parseToPreProp
   -> Exp Info
   -> Either String (PreProp, t (DefinedProperty PreProp))
 parseToPreProp genStart nameEnv propDefs body =
-  (`evalStateT` genStart) $ (`runReaderT` nameEnv) $ do
+  (`evalFreshT` genStart) $ (`runReaderT` nameEnv) $ do
     body'     <- expToPreProp body
     propDefs' <- for propDefs $ \(DefinedProperty args argBody) ->
       DefinedProperty args <$> expToPreProp argBody

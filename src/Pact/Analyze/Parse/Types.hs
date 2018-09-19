@@ -9,7 +9,6 @@ module Pact.Analyze.Parse.Types where
 import           Control.Lens               (makeLenses)
 import           Control.Monad.Except       (MonadError (throwError))
 import           Control.Monad.Reader       (ReaderT)
-import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map                   (Map)
 import           Data.Semigroup             ((<>))
@@ -27,6 +26,7 @@ import           Pact.Types.Typecheck       (UserType)
 import           Pact.Types.Util            (tShow)
 
 import           Pact.Analyze.Feature       hiding (Type, Var, ks, obj, str)
+import           Pact.Analyze.Fresh         (FreshT)
 import           Pact.Analyze.Types
 
 -- @PreProp@ stands between @Exp@ and @Prop@.
@@ -118,7 +118,7 @@ data PropCheckEnv = PropCheckEnv
 
 type ParseEnv = Map Text VarId
 
-type PropParse      = ReaderT ParseEnv (StateT VarId (Either String))
+type PropParse      = ReaderT ParseEnv (FreshT VarId (Either String))
 type PropCheck      = ReaderT PropCheckEnv (Either String)
 type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 
