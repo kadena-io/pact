@@ -128,28 +128,16 @@ mkConcreteInteger = SBVI.SBV
 newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
 
 decimalIso :: PactIso Decimal.Decimal Decimal
-decimalIso = PactIso $ iso literalD unMkDecimal
+decimalIso = PactIso $ iso mkDecimal unMkDecimal
   where
     unMkDecimal :: Decimal -> Decimal.Decimal
     unMkDecimal (Decimal dec) = case Decimal.eitherFromRational (dec % 10 ^ decimalPrecision) of
       Left err -> error err
       Right d  -> d
 
-instance SymbolicDecimal (S Decimal) where
-  type IntegerOf (S Decimal) = S Integer
-  negateD (S _ a)            = sansProv (negateD a)
-  S _ a .+ S _ b             = sansProv (a .+ b)
-  S _ a .- S _ b             = sansProv (a .- b)
-  S _ a .* S _ b             = sansProv (a .* b)
-  S _ a ./ S _ b             = sansProv (a ./ b)
-  fromIntegerD               = literalS . fromIntegerD
-  fromIntegerD' (S _ a)      = sansProv (fromIntegerD' a)
-  literalD                   = literalS . literalD
-  lShiftD  i       (S _ d)   = sansProv (lShiftD  i d)
-  lShiftD' (S _ i) (S _ d)   = sansProv (lShiftD' i d)
-  rShiftD  i       (S _ d)   = sansProv (rShiftD  i d)
-  rShiftD' (S _ i) (S _ d)   = sansProv (rShiftD' i d)
-  floorD (S _ d)             = sansProv (floorD d)
+    mkDecimal :: Decimal.Decimal -> Decimal
+    mkDecimal (Decimal.Decimal places mantissa)
+      = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
 
 fromPact :: PactIso a b -> a -> b
 fromPact = view . unPactIso
@@ -336,6 +324,29 @@ instance Boolean (S Bool) where
 instance IsString (S String) where
   fromString = sansProv . fromString
 
+instance SymbolicDecimal (S Decimal) where
+  type IntegerOf (S Decimal) = S Integer
+  fromInteger' (S _ a)       = sansProv (fromInteger' a)
+  lShiftD  i       (S _ d)   = sansProv (lShiftD  i d)
+  lShiftD' (S _ i) (S _ d)   = sansProv (lShiftD' i d)
+  rShiftD  i       (S _ d)   = sansProv (rShiftD  i d)
+  rShiftD' (S _ i) (S _ d)   = sansProv (rShiftD' i d)
+  floorD (S _ d)             = sansProv (floorD d)
+
+-- Caution [OverlappingInstances]: Though it looks like this instance is
+-- exactly the same as the one below, do not be deceived, it is not. In this
+-- instance `*` resolves to `*` from `instance Num (SBV Decimal)`, which has an
+-- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
+-- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
+-- does to include the shift. *This instance must be selected for decimals*.
+instance {-# OVERLAPPING #-} Num (S Decimal) where
+  S _ x + S _ y  = sansProv $ x + y
+  S _ x * S _ y  = sansProv $ x * y
+  abs (S _ x)    = sansProv $ abs x
+  signum (S _ x) = sansProv $ signum x
+  fromInteger i  = sansProv $ fromInteger i
+  negate (S _ x) = sansProv $ negate x
+
 instance (Num a, SymWord a) => Num (S a) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
@@ -343,6 +354,12 @@ instance (Num a, SymWord a) => Num (S a) where
   signum (S _ x) = sansProv $ signum x
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
+
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Fractional (S Decimal) where
+  fromRational  = literalS . fromRational
+  S _ x / S _ y = sansProv $ x / y
 
 instance (Fractional a, SymWord a) => Fractional (S a) where
   fromRational = literalS . fromRational
