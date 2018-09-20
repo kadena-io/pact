@@ -33,12 +33,11 @@ import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
 
-import Data.Bool (bool)
 import Data.Char (isHexDigit)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T (isInfixOf, length, all, splitOn, take)
+import qualified Data.Text as T (isInfixOf, length, all, splitOn)
 import Data.Foldable
 import Data.Aeson hiding ((.=))
 import Data.Decimal
@@ -224,7 +223,8 @@ langDefs =
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
     ,defRNative "hex-str-to-int" hexStringToIntegerFun (funType tTyInteger [("value", a)])
-     "Compute the compute the integer value of a string of hexidecimal numbers. `(hex-str-to-int \"abcdef12345\")`"
+     "Compute the compute the integer value of a string of length <= 128 chars consisting of  hexidecimal \
+     \numbers. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -559,16 +559,18 @@ hexStringToIntegerFun :: RNativeFun e
 hexStringToIntegerFun i as =
   case as of
     [TLitString s] ->
-      bool (argsError i as) (go . T.take 128 $ s) $ -- truncate at 128 chars
-        T.all isHexDigit s
+      if T.all isHexDigit s
+      then go i s 
+      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
     _ -> argsError i as 
   where
-    go :: Text -> Eval e (Term Name)
-    go t =
-      case hexStringToInteger t of
-        Left _ -> argsError i as
-        Right n -> return . tStr . asString $ n
-
+    go :: FunApp -> Text -> Eval e (Term Name)
+    go f t
+      | T.length t <= 128 = 
+        case hexStringToInteger t of
+          Left _ -> argsError i as
+          Right n -> return . tStr . asString $ n
+      | otherwise = evalError' f $ "Invalid input: unsupported string length: " ++ (unpack t)  
 transactionHash :: RNativeFun e
 transactionHash _ [] = (tStr . asString) <$> view eeHash
 transactionHash i as = argsError i as

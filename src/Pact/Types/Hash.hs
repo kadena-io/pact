@@ -9,9 +9,6 @@ module Pact.Types.Hash
 
   -- Integer hashing
   , hashAsBasedInteger
-  , decimalStringToInteger
-  , binaryStringToInteger
-  , octalStringToInteger
   , hexStringToInteger
   ) where
 
@@ -83,23 +80,3 @@ hexStringToInteger =
   hashAsBasedInteger 16 (fromIntegral . digitToInt)
 {-# INLINE hexStringToInteger #-}
 
-decimalStringToInteger
-  :: Text
-  -> Either Text Integer
-decimalStringToInteger =
-  hashAsBasedInteger 10 (fromIntegral . digitToInt)
-{-# INLINE decimalStringToInteger #-}
-
-octalStringToInteger
-  :: Text
-  -> Either Text Integer
-octalStringToInteger =
-  hashAsBasedInteger 8 (fromIntegral . digitToInt)
-{-# INLINE octalStringToInteger #-}
-
-binaryStringToInteger
-  :: Text
-  -> Either Text Integer
-binaryStringToInteger =
-  hashAsBasedInteger 2 (fromIntegral . digitToInt)
-{-# INLINE binaryStringToInteger #-}
