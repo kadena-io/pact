@@ -86,15 +86,19 @@ instance SymbolicDecimal Decimal where
   rShiftD' n            = rShiftD (fromIntegral n)
   floorD                = unDecimal . rShift255D
 
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
 instance {-# OVERLAPPING #-} Num (SBV Decimal) where
-  negate (SBVI.SBV a)     = SBVI.SBV (svUNeg a)
-  SBVI.SBV a + SBVI.SBV b = SBVI.SBV (svPlus a b)
-  SBVI.SBV a - SBVI.SBV b = SBVI.SBV (svPlus a (svUNeg b))
-  SBVI.SBV a * SBVI.SBV b = rShift255D (SBVI.SBV (svTimes a b))
+  negate (SBVI.SBV a)     = SBVI.SBV $ svUNeg a
+  SBVI.SBV a + SBVI.SBV b = SBVI.SBV $ svPlus a b
+  SBVI.SBV a - SBVI.SBV b = SBVI.SBV $ svPlus a $ svUNeg b
+  SBVI.SBV a * SBVI.SBV b = rShift255D $ SBVI.SBV $ svTimes a b
   fromInteger             = literal . fromInteger
-  abs (SBVI.SBV a)        = SBVI.SBV (svAbs a)
+  abs (SBVI.SBV a)        = SBVI.SBV $ svAbs a
   signum = lShift255D . coerceSBV . signum . coerceSBV @Decimal @Integer
 
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
 instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
   a / b =
     let (divAb, modAb) = sDivMod

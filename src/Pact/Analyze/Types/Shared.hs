@@ -333,6 +333,12 @@ instance SymbolicDecimal (S Decimal) where
   rShiftD' (S _ i) (S _ d)   = sansProv (rShiftD' i d)
   floorD (S _ d)             = sansProv (floorD d)
 
+-- Caution [OverlappingInstances]: Though it looks like this instance is
+-- exactly the same as the one below, do not be deceived, it is not. In this
+-- instance `*` resolves to `*` from `instance Num (SBV Decimal)`, which has an
+-- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
+-- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
+-- does to include the shift. *This instance must be selected for decimals*.
 instance {-# OVERLAPPING #-} Num (S Decimal) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
@@ -349,6 +355,8 @@ instance (Num a, SymWord a) => Num (S a) where
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
 
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
 instance {-# OVERLAPPING #-} Fractional (S Decimal) where
   fromRational  = literalS . fromRational
   S _ x / S _ y = sansProv $ x / y
