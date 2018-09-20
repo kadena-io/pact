@@ -94,7 +94,7 @@ runAnalysis' query tables args tm tags info = do
 
   aEnv <- case mkAnalyzeEnv tables args tags info of
     Just env -> pure env
-    Nothing  -> throwError $ AnalyzeFailure info $ fromString $
+    Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
 
   (funResult, state1, ()) <- hoist generalize $

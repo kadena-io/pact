@@ -59,10 +59,10 @@ compileDot m = Alga.export style graph
           ]
       , defaultEdgeAttributes =
           []
-      , vertexName = \v ->
-          tShow $ fromEnum v
-      , vertexAttributes = \_v ->
-          []
+      , vertexName =
+          tShow . fromEnum
+      , vertexAttributes =
+          const []
       , edgeAttributes = curry $ \e ->
           [ "color" := "blue"
           | reachable e

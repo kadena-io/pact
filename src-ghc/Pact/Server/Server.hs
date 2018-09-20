@@ -73,7 +73,7 @@ serve configFile = do
   link asyncHist  -- Must be individually killed with uninterruptibleCancel
   runServer
 
-setupServer :: FilePath -> IO ((IO (), Async (), Async ()))
+setupServer :: FilePath -> IO (IO (), Async (), Async ())
 setupServer configFile = do
   Config {..} <- Y.decodeFileEither configFile >>= \case
     Left e -> do
@@ -105,7 +105,7 @@ startCmdThread cmdConfig inChan histChan (ReplayFromDisk rp) debugFn = do
     -- we wait for the history service to light up, possibly giving us backups from disk to replay
     replayFromDisk' <- liftIO $ takeMVar rp
     when (null replayFromDisk') $ liftIO $ debugFn "[disk replay]: No replay found"
-    unless (null replayFromDisk') $ do
+    unless (null replayFromDisk') $
       forM_ replayFromDisk' $ \cmd -> do
         liftIO $ debugFn $ "[disk replay]: replaying => " ++ show cmd
         txid <- state (\i -> (i,succ i))

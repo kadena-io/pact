@@ -82,7 +82,7 @@ persister = Persister {
   ,
   rollbackTx = \s -> return $ (,()) $ set temp (_committed s) s
   ,
-  queryKeys = \t kq s -> ((s,) . map fst) <$> qry t kq s
+  queryKeys = \t kq s -> (s,) . map fst <$> qry t kq s
   ,
   query = \t kq s -> fmap (s,) $ qry t kq s >>= mapM (\(k,v) -> (k,) <$> conv v)
   ,

@@ -104,7 +104,7 @@ mkAnalyzeEnv tables args tags info = do
         \(Table tname _ut someInvariants) ->
           (TableName (T.unpack tname), someInvariants)
 
-  columnIds <- for tables $ \(Table tname ut _) -> do
+  columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
       Just (EObjectTy (Schema schema)) -> Just
         (TableName (T.unpack tname), varIdColumns schema)

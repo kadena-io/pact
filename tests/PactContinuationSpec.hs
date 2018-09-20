@@ -29,23 +29,23 @@ spec = describe "pacts in dev server" $ do
   describe "testNestedPacts" testNestedPacts
 
 testNestedPacts :: Spec
-testNestedPacts = before_ flushDb $ after_ flushDb $ do
+testNestedPacts = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
-    
+
     moduleCmd <- mkExec (T.unpack (threeStepPactCode "nestedPact"))
                  (object ["admin-keyset" .= [_kpPublic adminKeys]])
                  Nothing [adminKeys] (Just "test1")
     nestedExecPactCmd <- mkExec ("(nestedPact.tester)" ++ " (nestedPact.tester)")
                          Null Nothing [adminKeys] (Just "test2")
     allResults <- runAll [moduleCmd, nestedExecPactCmd]
-    
+
     let allChecks = [makeCheck moduleCmd False Nothing,
-                     makeCheck nestedExecPactCmd True $
-                     (Just "(defpact tester ()\n  (step \"st...: Failure: Nested pact execution, aborting")]
+                     makeCheck nestedExecPactCmd True
+                      (Just "(defpact tester ()\n  (step \"st...: Failure: Nested pact execution, aborting")]
 
     allResults `shouldMatch` allChecks
-    
+
 
 -- CONTINUATIONS TESTS
 
@@ -61,7 +61,7 @@ testPactContinuation = before_ flushDb $ after_ flushDb $ do
       testCorrectNextStep
 
   context "when provided with incorrect next step" $
-    it "throws error and does not update pact's state" 
+    it "throws error and does not update pact's state"
       testIncorrectNextStep
 
   context "when last step of a pact executed" $
@@ -94,14 +94,14 @@ testCorrectNextStep = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
-  
+
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
       checkStateCheck   = makeCheck checkStateCmd True
                           (Just "Invalid continuation step value: Received 1 but expected 2")
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck, checkStateCheck]
-      
+
   allResults `shouldMatch` allChecks
 
 
@@ -118,7 +118,7 @@ testIncorrectNextStep = do
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
   allResults        <- runAll [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
-  
+
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
       incorrectStepCheck = makeCheck incorrectStepCmd True
@@ -153,7 +153,7 @@ testLastStep = do
                            (Just "applyContinuation: txid not found: 1")
       allChecks          = [moduleCheck, executePactCheck, contNextStep1Check,
                             contNextStep2Check, checkStateCheck]
- 
+
   allResults `shouldMatch` allChecks
 
 
@@ -177,7 +177,7 @@ testErrStep = do
       checkStateCheck    = makeCheck checkStateCmd True
                            (Just "Invalid continuation step value: Received 2 but expected 1")
       allChecks          = [moduleCheck, executePactCheck, contErrStepCheck, checkStateCheck]
- 
+
   allResults `shouldMatch` allChecks
 
 
@@ -191,7 +191,7 @@ testPactRollback = before_ flushDb $ after_ flushDb $ do
       testCorrectRollbackStep
 
   context "when provided with incorrect rollback step" $
-    it "throws error and does not delete pact from state" 
+    it "throws error and does not delete pact from state"
       testIncorrectRollbackStep
 
   context "when error occurs when executing rollback function" $
@@ -199,7 +199,7 @@ testPactRollback = before_ flushDb $ after_ flushDb $ do
       testRollbackErr
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs that no rollback function exists for step and deletes pact from state" 
+    it "outputs that no rollback function exists for step and deletes pact from state"
       testNoRollbackFunc
 
 
@@ -227,7 +227,7 @@ testCorrectRollbackStep = do
                           (Just "applyContinuation: txid not found: 1")
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            rollbackStepCheck, checkStateCheck]
- 
+
   allResults `shouldMatch` allChecks
 
 
@@ -250,12 +250,12 @@ testIncorrectRollbackStep = do
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       contNextStepCheck = makeCheck contNextStepCmd False $ Just "step 1"
-      incorrectRbCheck  = makeCheck incorrectRbCmd True 
+      incorrectRbCheck  = makeCheck incorrectRbCmd True
                           (Just "Invalid rollback step value: Received 2 but expected 1")
       checkStateCheck   = makeCheck checkStateCmd False $ Just "step 2"
       allChecks         = [moduleCheck, executePactCheck, contNextStepCheck,
                            incorrectRbCheck, checkStateCheck]
- 
+
   allResults `shouldMatch` allChecks
 
 
@@ -282,7 +282,7 @@ testRollbackErr = do
       checkStateCheck    = makeCheck checkStateCmd False $ Just "step 2"
       allChecks          = [moduleCheck, executePactCheck, contNextStepCheck,
                             rollbackErrCheck, checkStateCheck]
- 
+
   allResults `shouldMatch` allChecks
 
 
@@ -320,7 +320,7 @@ testNoRollbackFunc = do
 testPactYield :: Spec
 testPactYield = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
-    it "resumes value" 
+    it "resumes value"
       testValidYield
 
   context "when previous step does not yield value" $
@@ -330,7 +330,7 @@ testPactYield = before_ flushDb $ after_ flushDb $ do
   it "resets yielded values after each step"
     testResetYield
 
-    
+
 testValidYield :: Expectation
 testValidYield = do
   let moduleName = "testValidYield"
@@ -351,14 +351,14 @@ testValidYield = do
       executePactCheck    = makeCheck executePactCmd False $ Just "testing->Step0"
       resumeAndYieldCheck = makeCheck resumeAndYieldCmd False $ Just "testing->Step0->Step1"
       resumeOnlyCheck     = makeCheck resumeOnlyCmd False $ Just "testing->Step0->Step1->Step2"
-      checkStateCheck     = makeCheck checkStateCmd True 
+      checkStateCheck     = makeCheck checkStateCmd True
                             (Just "applyContinuation: txid not found: 1")
       allChecks           = [moduleCheck, executePactCheck, resumeAndYieldCheck,
                              resumeOnlyCheck, checkStateCheck]
 
   allResults `shouldMatch` allChecks
 
-    
+
 testNoYield :: Expectation
 testNoYield = do
   let moduleName = "testNoYield"
@@ -395,7 +395,7 @@ testResetYield = do
   moduleCmd        <- mkExec (T.unpack (pactWithSameNameYield moduleName))
                         (object ["admin-keyset" .= [_kpPublic adminKeys]])
                         Nothing [adminKeys] (Just "test1")
-  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)") 
+  executePactCmd   <- mkExec ("(" ++ moduleName ++ ".tester)")
                         Null Nothing [adminKeys] (Just "test2")
   yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   resumeStepCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
@@ -407,7 +407,7 @@ testResetYield = do
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
       yieldSameKeyCheck = makeCheck yieldSameKeyCmd False $ Just "step 1"
       resumeStepCheck   = makeCheck resumeStepCmd False $ Just "step 1"
-      checkStateCheck   = makeCheck checkStateCmd True 
+      checkStateCheck   = makeCheck checkStateCmd True
                            (Just "applyContinuation: txid not found: 1")
       allChecks         = [moduleCheck, executePactCheck, yieldSameKeyCheck,
                            resumeStepCheck, checkStateCheck]
@@ -440,15 +440,15 @@ testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
   context "when both debtor and creditor finish together" $
     it "finishes escrow if final price stays the same or negotiated down"
       testValidEscrowFinish
-      
+
 testDebtorPreTimeoutCancel :: Expectation
 testDebtorPreTimeoutCancel = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
-  
+
   (_, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
   (_, checkStillEscrowCmd) <- mkApiReq (testPath ++ "02-balance.yaml")
   let allCmds = [tryCancelCmd, checkStillEscrowCmd]
-  
+
   let cancelMsg = T.concat ["(enforce-one\n        \"Cancel c...: Failure:",
                             " Tx Failed: Cancel can only be effected by",
                             " creditor, or debitor after timeout"]
@@ -494,12 +494,12 @@ testFinishAlone :: Expectation
 testFinishAlone = do
   let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
       testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
-  
+
   (_, tryCredAloneCmd) <- mkApiReq (testPathCred ++ "01-cont.yaml")
   (_, tryDebAloneCmd)  <- mkApiReq (testPathDeb ++ "01-cont.yaml")
   let allCmds = [tryCredAloneCmd, tryDebAloneCmd]
-  
-  let tryCredAloneCheck = makeCheck tryCredAloneCmd True 
+
+  let tryCredAloneCheck = makeCheck tryCredAloneCmd True
                           (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
       tryDebAloneCheck  = makeCheck tryDebAloneCmd True
                           (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
@@ -510,7 +510,7 @@ testFinishAlone = do
 testPriceNegUp :: Expectation
 testPriceNegUp = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
-  
+
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
   let tryNegUpCheck = makeCheck tryNegUpCmd True
                       (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
@@ -525,22 +525,22 @@ testValidEscrowFinish = do
   (_, credBalanceCmd) <- mkApiReq (testPath ++ "02-cred-balance.yaml")
   (_, debBalanceCmd) <- mkApiReq (testPath ++ "03-deb-balance.yaml")
   let allCmds = [tryNegDownCmd, credBalanceCmd, debBalanceCmd]
-  
+
   let tryNegDownCheck  = makeCheck tryNegDownCmd False
                          (Just "Escrow completed with 1.75 paid and 0.25 refunded")
       credBalanceCheck = makeCheck credBalanceCmd False $ Just "1.75"
       debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
-       
+
   twoPartyEscrow allCmds allChecks
 
 twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Expectation
-twoPartyEscrow testCmds testChecks = do 
+twoPartyEscrow testCmds testChecks = do
   let setupPath = testDir ++ "cont-scripts/setup-"
-  
-  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml") 
+
+  (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
   (_, acctModuleCmd) <- mkApiReq (setupPath ++ "02-accounts.yaml")
-  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")                  
+  (_, testModuleCmd) <- mkApiReq (setupPath ++ "03-test.yaml")
   (_, createAcctCmd) <- mkApiReq (setupPath ++ "04-create.yaml")
   (_, resetTimeCmd)  <- mkApiReq (setupPath ++ "05-reset.yaml")
   (_, runEscrowCmd)  <- mkApiReq (setupPath ++ "06-escrow.yaml")
@@ -561,5 +561,3 @@ twoPartyEscrow testCmds testChecks = do
                             : balanceCheck : testChecks
 
   allResults `shouldMatch` allChecks
-
-  

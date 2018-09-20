@@ -196,7 +196,7 @@ instance (ToJSON v) => ToJSON (Columns v) where
     {-# INLINE toJSON #-}
 instance (FromJSON v) => FromJSON (Columns v) where
     parseJSON = withObject "Columns" $ \o ->
-                (Columns . M.fromList) <$>
+                Columns . M.fromList <$>
                  forM (HM.toList o)
                   (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
     {-# INLINE parseJSON #-}

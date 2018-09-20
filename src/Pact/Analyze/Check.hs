@@ -431,9 +431,9 @@ parseDefprops exp = Left (exp, "expected set of defproperty")
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
 moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
-  Ref (TDef {})   -> True
-  Ref (TConst {}) -> True
-  _               -> False
+  Ref TDef{}   -> True
+  Ref TConst{} -> True
+  _            -> False
 
 -- Get the set of properties defined in this module
 modulePropDefs
@@ -550,7 +550,7 @@ verifyFunctionProps tables ref props = do
   let failures = tcState ^. tcFailures
 
   case fun of
-    TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
+    TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
       then for props $ verifyFunctionProperty _fInfo tables _fArgs _fBody
       else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
@@ -565,7 +565,7 @@ verifyFunctionInvariants tables ref = do
   let failures = tcState ^. tcFailures
 
   case fun of
-    TopFun (FDefun {_fInfo, _fArgs, _fBody}) _ ->
+    TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
       then verifyFunctionInvariants' _fInfo tables _fArgs _fBody
       else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
@@ -599,8 +599,7 @@ verifyModule modules moduleData = runExceptT $ do
           HM.keys
         $ HM.filter (> (1 :: Int))
         $ foldl (\acc k -> acc & at k %~ (Just . maybe 0 succ)) HM.empty
-        $ concatMap HM.keys
-        $ allModulePropDefs
+        $ concatMap HM.keys allModulePropDefs
 
       propDefs :: HM.HashMap Text (DefinedProperty (Exp Info))
       propDefs = HM.unions allModulePropDefs
@@ -636,7 +635,7 @@ verifyModule modules moduleData = runExceptT $ do
     Right funChecks'' -> pure funChecks''
 
   funChecks''' <- lift $ traverse verifyFunProps funChecks''
-  invariantChecks <- for typecheckedRefs $ \ref -> do
+  invariantChecks <- for typecheckedRefs $ \ref ->
     withExceptT ModuleCheckFailure $ ExceptT $
       verifyFunctionInvariants tables ref
 
