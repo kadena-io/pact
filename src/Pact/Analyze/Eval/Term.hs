@@ -19,7 +19,7 @@ import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               runExcept)
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
-import           Control.Monad.State.Strict  (MonadState, modify')
+import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
@@ -31,8 +31,9 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite)
+                                              constrain, false, ite, (.<))
 import qualified Data.SBV.String             as SBV
+import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
@@ -54,6 +55,7 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
+
 newtype Analyze a
   = Analyze
     { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
@@ -69,6 +71,7 @@ instance Analyzer Analyze where
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
+  markFailure b = succeeds %= (&&& sansProv (bnot b))
 
 evalTermLogicalOp
   :: LogicalOp
@@ -191,7 +194,7 @@ tagVarBinding vid av = do
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
 symKsName :: S String -> S KeySetName
-symKsName = coerceS
+symKsName = unsafeCoerceS
 
 ksAuthorized :: S KeySet -> Analyze (S Bool)
 ksAuthorized sKs = do
@@ -225,11 +228,14 @@ applyInvariants tn aValFields addInvariants = do
     (Just invariants', Just columnIds) -> do
       let aValFields' = reindex columnIds aValFields
       invariants'' <- for invariants' $ \(Located info invariant) ->
-        case runReaderT (unInvariantCheck (eval invariant))
+        case runReaderT (runStateT (unInvariantCheck (eval invariant)) true)
                         (Located info aValFields') of
           -- Use the location of the invariant
           Left  (AnalyzeFailure _ err) -> throwError $ AnalyzeFailure info err
-          Right inv -> pure inv
+          -- though it's important that the query succeeds, we don't check that
+          -- here. it's checked when we query invariants. if it passes there,
+          -- it'll pass here. if not, we won't get here.
+          Right (inv, _querySucceeds) -> pure inv
       addInvariants invariants''
     _ -> pure ()
 
@@ -374,29 +380,33 @@ evalTerm = \case
 
       case aval' of
         AVal mProv sVal -> do
-          let writeDelta :: forall t
-                          . (Num t, SymWord t)
-                         => (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
-                         -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
-                         -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
-                         -> Analyze ()
-              writeDelta mkCellL mkCellDeltaL mkColDeltaL = do
+          -- Note: The reason for taking `plus` and `minus` as arguments is to
+          -- avoid overlapping instances. GHC is willing to pick `+` and `-`
+          -- for each of the two instantiations of this function.
+          let writeDelta
+                :: forall t
+                 . (S t -> S t -> S t) -> (S t -> S t -> S t)
+                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
+                -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
+                -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
+                -> Analyze ()
+              writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv sVal
                 prev <- use cell
                 cell .= next
-                let diff = next - prev
-                mkCellDeltaL tn cn sRk += diff
-                mkColDeltaL  tn cn     += diff
+                let diff = next `minus` prev
+                mkCellDeltaL tn cn sRk %= plus diff
+                mkColDeltaL  tn cn     %= plus diff
 
           case fieldType of
-            EType TInt     -> writeDelta intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell    tn cn sRk true .= mkS mProv sVal
-            EType TDecimal -> writeDelta decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell    tn cn sRk true .= mkS mProv sVal
-            EType TStr     -> stringCell  tn cn sRk true .= mkS mProv sVal
-            EType TKeySet  -> ksCell      tn cn sRk true .= mkS mProv sVal
+            EType TInt     -> writeDelta (+) (-) intCell intCellDelta intColumnDelta
+            EType TBool    -> boolCell   tn cn sRk true .= mkS mProv sVal
+            EType TDecimal -> writeDelta (+) (-) decimalCell decCellDelta decColumnDelta
+            EType TTime    -> timeCell   tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell     tn cn sRk true .= mkS mProv sVal
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
@@ -451,7 +461,9 @@ evalTerm = \case
       ESimple TStr  str  -> Left          <$> eval str
       ESimple TInt  int  -> Right . Left  <$> eval int
       ESimple TBool bool -> Right . Right <$> eval bool
-      _                  -> throwErrorNoLoc "We can only analyze calls to `format` formatting {string,integer,bool}"
+      etm                -> throwErrorNoLoc $ fromString $ T.unpack $
+        "We can only analyze calls to `format` formatting {string,integer,bool}" <>
+        " (not " <> userShow etm <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
       Just concreteStr -> case format concreteStr args' of
@@ -463,7 +475,7 @@ evalTerm = \case
     time'      <- eval time
     case (unliteralS formatStr', unliteralS time') of
       (Just formatStr'', Just time'') -> pure $ literalS $
-        formatTime defaultTimeLocale formatStr'' (unMkTime time'')
+        formatTime defaultTimeLocale formatStr'' (toPact timeIso time'')
       _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
 
   ParseTime mFormatStr timeStr -> do
@@ -475,7 +487,7 @@ evalTerm = \case
       (Just formatStr'', Just timeStr'') ->
         case parseTime defaultTimeLocale formatStr'' timeStr'' of
           Nothing   -> succeeds .= false >> pure 0
-          Just time -> pure $ literalS $ mkTime time
+          Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do
@@ -526,7 +538,9 @@ format s tms = do
       rep = \case
         Left  str          -> str
         Right (Right bool) -> ite (_sSbv bool) "true" "false"
-        Right (Left int)   -> sansProv (SBV.natToStr (_sSbv int))
+        Right (Left int)   ->
+          ite (int .< 0) "-" "" .++
+          sansProv (SBV.natToStr (_sSbv (abs int)))
   if plen == 1
   then Right (literalS s)
   else if plen - length tms > 1

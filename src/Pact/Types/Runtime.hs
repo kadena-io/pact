@@ -84,6 +84,7 @@ data PactErrorType
   | TxFailure
   | SyntaxError
   | GasError
+  deriving Show
 
 data PactError = PactError
   { peType :: PactErrorType

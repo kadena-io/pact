@@ -39,6 +39,7 @@ import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import qualified Data.HashMap.Strict       as HM
+import           Data.List                 (isPrefixOf)
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
@@ -58,8 +59,8 @@ import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
                                             renderParsed, tMeta)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
+import           Pact.Types.Runtime        (Exp, ModuleData,
+                                            ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
@@ -101,6 +102,7 @@ data SmtFailure
   = Invalid (Model 'Concrete)
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
+  | SortMismatch String
   | UnexpectedFailure SBV.SMTException
   deriving Show
 
@@ -118,6 +120,7 @@ data CheckFailureNoLoc
   | TranslateFailure' TranslateFailureNoLoc
   | AnalyzeFailure' AnalyzeFailureNoLoc
   | SmtFailure SmtFailure
+  | QueryFailure SmtFailure
   deriving (Eq, Show)
 
 data CheckFailure = CheckFailure
@@ -153,9 +156,23 @@ describeParseFailure (exp, info)
 
 describeSmtFailure :: SmtFailure -> Text
 describeSmtFailure = \case
-  Invalid model  -> "Invalidating model found:\n" <> showModel model
-  Unsatisfiable  -> "This property is unsatisfiable"
-  Unknown reason -> "The solver returned 'unknown':\n" <> tShow reason
+  Invalid model    -> "Invalidating model found:\n" <> showModel model
+  Unsatisfiable    -> "This property is unsatisfiable"
+  Unknown reason   -> "The solver returned 'unknown':\n" <> tShow reason
+  SortMismatch msg -> T.unlines
+    [ "The solver returned a sort mismatch:"
+    , T.pack msg
+    , "This may be the result of a bug in z3 versions 4.8.0 and earlier."
+    , "Specifically, before commit a37d05d54b9ca10d4c613a4bb3a980f1bb0c1c4a."
+    ]
+  UnexpectedFailure smtE -> T.pack $ show smtE
+
+describeQueryFailure :: SmtFailure -> Text
+describeQueryFailure = \case
+  Invalid model  -> "Wow. We (the compiler) have bad news for you. You know that property / invariant you wrote? It's great. Really. It's just that it divides by zero or somesuch and we don't know what to do with this. Good news is we have a model which may (fingers crossed) help debug the problem:\n" <> showModel model
+  Unknown reason -> "You've written a hell of a property here. Usually properties are simple things, like \"is positive\" or \"conserves mass\". But not this bad boy. This here property broke the SMT solver. Wish we could help but you're on your own with this one (actually, please report this as an issue: https://github.com/kadena-io/pact/issues).\n\nGood luck...\n" <> tShow reason
+  err@SortMismatch{} -> describeSmtFailure err
+  Unsatisfiable  -> "Unsatisfiable query failure: please report this as a bug"
   UnexpectedFailure smtE -> T.pack $ show smtE
 
 describeCheckFailure :: CheckFailure -> Text
@@ -172,6 +189,7 @@ describeCheckFailure (CheckFailure info failure) =
             TranslateFailure' err -> describeTranslateFailureNoLoc err
             AnalyzeFailure' err   -> describeAnalyzeFailureNoLoc err
             SmtFailure err        -> describeSmtFailure err
+            QueryFailure err      -> describeQueryFailure err
       in T.pack (renderParsed (infoToParsed info)) <> ":Warning: " <> str
 
 describeCheckResult :: CheckResult -> Text
@@ -193,6 +211,9 @@ analyzeToCheckFailure (AnalyzeFailure info err)
 smtToCheckFailure :: Info -> SmtFailure -> CheckFailure
 smtToCheckFailure info = CheckFailure info . SmtFailure
 
+smtToQueryFailure :: Info -> SmtFailure -> CheckFailure
+smtToQueryFailure info = CheckFailure info . QueryFailure
+
 --
 -- TODO: implement machine-friendly JSON output for CheckResult
 --
@@ -208,13 +229,19 @@ resultQuery goal model0 = do
       case satResult of
         SBV.Sat   -> throwError . Invalid =<< lift (saturateModel model0)
         SBV.Unsat -> pure ProvedTheorem
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+        SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
 
     Satisfaction ->
       case satResult of
         SBV.Sat   -> SatisfiedProperty <$> lift (saturateModel model0)
         SBV.Unsat -> throwError Unsatisfiable
-        SBV.Unk   -> throwError . Unknown =<< lift SBV.getUnknownReason
+        SBV.Unk   -> throwError . mkUnknown =<< lift SBV.getUnknownReason
+
+  where mkUnknown = \case
+          SBV.UnknownOther explanation
+            | "Sort mismatch" `isPrefixOf` explanation
+            -> SortMismatch explanation
+          other -> Unknown other
 
 -- -- Assumes sat mode. It might be a decent idea for us to introduce an indexed
 -- -- type to denote which things assume certain modes.
@@ -228,8 +255,8 @@ resultQuery goal model0 = do
 
 -- SBV also provides 'inNewAssertionStack', but in 'Query'
 inNewAssertionStack
-  :: ExceptT a SBV.Query CheckSuccess
-  -> ExceptT a SBV.Query CheckSuccess
+  :: ExceptT a SBV.Query b
+  -> ExceptT a SBV.Query b
 inNewAssertionStack act = do
     push
     result <- act `catchError` \e -> pop *> throwError e
@@ -264,11 +291,15 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
       -- assertion stack.
       ExceptT $ fmap Right $
         SBV.query $
-          for2 resultsTable $ \(Located info (AnalysisResult prop ksProvs)) -> do
-            queryResult <- runExceptT $
-              inNewAssertionStack $ do
-                void $ lift $ SBV.constrain $ SBV.bnot prop
-                resultQuery goal $ Model modelArgs' tags ksProvs graph
+          for2 resultsTable $ \(Located info (AnalysisResult querySucceeds prop ksProvs)) -> do
+            _ <- runExceptT $ inNewAssertionStack $ do
+              void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+              withExceptT (smtToQueryFailure info) $
+                resultQuery Validation $ Model modelArgs' tags ksProvs graph
+
+            queryResult <- runExceptT $ inNewAssertionStack $ do
+              void $ lift $ SBV.constrain $ SBV.bnot prop
+              resultQuery goal $ Model modelArgs' tags ksProvs graph
 
             -- Either SmtFailure CheckSuccess -> CheckResult
             pure $ case queryResult of
@@ -308,11 +339,24 @@ verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
-        AnalysisResult prop ksProvs <- withExceptT analyzeToCheckFailure $
-          runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags funInfo
+        AnalysisResult _querySucceeds prop ksProvs
+          <- withExceptT analyzeToCheckFailure $
+            runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
+              funInfo
+
+        -- TODO: bring back the query success check when we've resolved the SBV
+        -- query / quantified variables issue:
+        -- https://github.com/LeventErkok/sbv/issues/407
+        --
+        -- _ <- hoist SBV.query $ do
+        --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+        --   withExceptT (smtToQueryFailure (getInfo check)) $
+        --     resultQuery Validation model
+
         void $ lift $ SBV.output prop
-        hoist SBV.query $ withExceptT (smtToCheckFailure propInfo) $
-          resultQuery goal $ Model modelArgs' tags ksProvs graph
+        hoist SBV.query $
+          withExceptT (smtToCheckFailure propInfo) $
+            resultQuery goal $ Model modelArgs' tags ksProvs graph
 
   where
     goal :: Goal

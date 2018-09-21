@@ -16,10 +16,10 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, use, view, (%=), (%~), (.=),
-                                             (.~), (<&>), (<&>), (?=), (^.),
-                                             (^?), (<>~), (+~))
-import           Control.Monad              (replicateM, (>=>))
+                                             to, use, view, zoom, (%=), (%~),
+                                             (+~), (.=), (.~), (<&>), (<>~),
+                                             (?=), (^.), (^?))
+import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
@@ -54,12 +54,13 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+
 -- * Translation types
 
 data TranslateFailure = TranslateFailure
   { _translateFailureInfo :: !Info
   , _translateFailure     :: !TranslateFailureNoLoc
-  }
+  } deriving Show
 
 data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
@@ -118,10 +119,16 @@ data TranslateEnv
     , _teNodeVars       :: Map Node (Munged, VarId)
     , _teRecoverability :: Recoverability
     , _teScopesEntered  :: Natural
+
+    -- How to generate the next tag and vertex ids. Usually this is via @genId@
+    -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
+    , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
+    , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
     }
 
 mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars mempty 0
+mkTranslateEnv info args
+  = TranslateEnv info nodeVars mempty 0 (genId id) (genId id)
   where
     -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
     -- function arguments are the only variables for which we do not use munged
@@ -272,7 +279,7 @@ withNewScope scopeType bindings retTid act = local (teScopesEntered +~ 1) $ do
   pure res
 
 genTagId :: TranslateM TagId
-genTagId = genId tsNextTagId
+genTagId = TranslateM $ zoom tsNextTagId $ join $ view teGenTagId
 
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
@@ -383,7 +390,7 @@ throwError' err = do
 -- 'Vertex' to the graph.
 issueVertex :: TranslateM Vertex
 issueVertex = do
-  v <- genId tsNextVertex
+  v <- TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
   tsPathHead .= v
   pure v
 
@@ -579,15 +586,16 @@ translateNode astNode = withAstContext astNode $ case astNode of
   -- Int
   AST_NegativeLit l -> case l of
     LInteger i -> pure $ ESimple TInt (inject $ IntUnaryArithOp Negate (lit i))
-    LDecimal d -> pure $ ESimple TDecimal (inject $ DecUnaryArithOp Negate (lit (mkDecimal d)))
+    LDecimal d -> pure $ ESimple TDecimal
+      (inject $ DecUnaryArithOp Negate (lit (fromPact decimalIso d)))
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
     LInteger i -> pure $ ESimple TInt (lit i)
     LBool b    -> pure $ ESimple TBool (lit b)
     LString s  -> pure $ ESimple TStr (lit $ T.unpack s)
-    LDecimal d -> pure $ ESimple TDecimal (lit (mkDecimal d))
-    LTime t    -> pure $ ESimple TTime (lit (mkTime t))
+    LDecimal d -> pure $ ESimple TDecimal (lit (fromPact decimalIso d))
+    LTime t    -> pure $ ESimple TTime (lit (fromPact timeIso t))
 
   AST_NegativeVar node -> do
     Just (Munged name, vid) <- view $ teNodeVars.at node
@@ -718,7 +726,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ESimple TTime $ lit (mkTime timeLit')
+    -> pure $ ESimple TTime $ lit (fromPact timeIso timeLit')
 
   AST_NFun_Basic SModulus [a, b] ->  do
     ESimple TInt a' <- translateNode a
@@ -847,6 +855,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
+
+  AST_NFun _node "length" [a] -> do
+    ESimple TStr a' <- translateNode a
+    pure $ ESimple TInt $ CoreTerm $ StrLength a'
 
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row

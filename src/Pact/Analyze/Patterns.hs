@@ -17,6 +17,8 @@ import           Pact.Types.Typecheck (AstBindType (..),
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature
+import           Pact.Analyze.Types   (arithOpP, comparisonOpP, logicalOpP,
+                                       roundingLikeOpP, unaryArithOpP)
 
 ofBasicOp :: Text -> Maybe Text
 ofBasicOp s = if isBasicOp then Just s else Nothing

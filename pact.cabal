@@ -86,6 +86,7 @@ library
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
       Pact.ApiReq
       Pact.Bench
@@ -217,6 +218,9 @@ test-suite hspec
               , bytestring
               , mtl
               , text
+              , hedgehog == 0.6.*
+              , hw-hspec-hedgehog == 0.1.*
+              , intervals
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
@@ -226,7 +230,6 @@ test-suite hspec
       , crypto-api
       , wreq
   other-modules:
-                AnalyzeSpec
                 Blake2Spec
                 KeysetSpec
                 TypesSpec
@@ -240,3 +243,9 @@ test-suite hspec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner
+      , AnalyzeProperties
+      , AnalyzeSpec
+      , Analyze.Eval
+      , Analyze.Gen
+      , Analyze.TimeGen
+      , Analyze.Translate

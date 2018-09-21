@@ -13,8 +13,12 @@
 --
 
 module Pact.Native.Time
-    (timeDefs)
-    where
+    ( timeDefs
+    , defAddTime
+    , defFormatTime
+    , parseTimeDef
+    , timeDef
+    ) where
 
 import Control.Monad
 import Prelude
@@ -31,25 +35,74 @@ import Pact.Native.Internal
 timedoc :: Text
 timedoc = "See [\"Time Formats\" docs](#time-formats) for supported formats."
 
-timeDefs :: NativeModule
-timeDefs = ("Time", timeDef)
+defAddTime :: NativeDef
+defAddTime = defRNative "add-time" addTime
+  ( funType tTyTime [("time", tTyTime),("seconds", tTyDecimal)]
+  <> funType tTyTime [("time", tTyTime),("seconds", tTyInteger)]
+  )
+  $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
+  <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
   where
-    timeDef =
-        [ defRNative "time" time
-            (funType tTyTime [("utcval", tTyString)])
-            $ "Construct time from UTCVAL using ISO8601 format ("
-            <> pack simpleISO8601 <> "). "
-            <> "`(time \"2016-07-22T11:26:35Z\")`"
-        , defRNative "parse-time" parseTime'
-            (funType tTyTime [("format", tTyString),("utcval", tTyString)])
-            $ "Construct time from UTCVAL using FORMAT. " <> timedoc
-            <> "`(parse-time \"%F\" \"2016-09-12\")`"
-        , defRNative "add-time" addTime
-            ( funType tTyTime [("time", tTyTime),("seconds", tTyDecimal)]
-            <> funType tTyTime [("time", tTyTime),("seconds", tTyInteger)]
-            )
-            $ "Add SECONDS to TIME; SECONDS can be integer or decimal. "
-            <> "`(add-time (time \"2016-07-22T12:00:00Z\") 15)`"
+
+    addTime :: RNativeFun e
+    addTime _ [TLiteral (LTime t) _,TLiteral (LDecimal r) _]
+      = return $ doTimeAdd t r
+    addTime _ [TLiteral (LTime t) _,TLitInteger n]
+      = return $ doTimeAdd t (fromIntegral n)
+    addTime i as = argsError i as
+
+    doTimeAdd :: UTCTime -> Decimal -> Term Name
+    doTimeAdd t r = toTerm (t .+^ fromSeconds r)
+
+defFormatTime :: NativeDef
+defFormatTime = defRNative "format-time" formatTime'
+  (funType tTyString [("format", tTyString),("time", tTyTime)])
+  $ "Format TIME using FORMAT. " <> timedoc
+  <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"
+  where
+
+    formatTime' :: RNativeFun e
+    formatTime' _ [TLitString fmt,TLiteral (LTime t) _] =
+      return $ toTerm $ pack $ formatTime defaultTimeLocale (unpack fmt) t
+    formatTime' i as = argsError i as
+
+parseTimeDef :: NativeDef
+parseTimeDef = defRNative "parse-time" parseTime'
+  (funType tTyTime [("format", tTyString),("utcval", tTyString)])
+  $ "Construct time from UTCVAL using FORMAT. " <> timedoc
+  <> "`(parse-time \"%F\" \"2016-09-12\")`"
+  where
+
+    parseTime' :: RNativeFun e
+    parseTime' i [TLitString fmt,TLitString s] =
+      case parseTime defaultTimeLocale (unpack fmt) (unpack s) of
+        Nothing -> evalError' i $ "Failed to parse time '" ++ unpack s ++ "' with format: " ++ unpack fmt
+        Just t -> return (tLit (LTime t))
+    parseTime' i as = argsError i as
+
+timeDef :: NativeDef
+timeDef = defRNative "time" time
+  (funType tTyTime [("utcval", tTyString)])
+  $ "Construct time from UTCVAL using ISO8601 format ("
+  <> pack simpleISO8601 <> "). "
+  <> "`(time \"2016-07-22T11:26:35Z\")`"
+  where
+
+    time :: RNativeFun e
+    time i [TLitString s] =
+      case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
+        Nothing -> evalError' i $
+          "Invalid time, expecting '" ++ simpleISO8601 ++ "': " ++ unpack s
+        Just t -> return (tLit (LTime t))
+    time i as = argsError i as
+
+timeDefs :: NativeModule
+timeDefs = ("Time", defs)
+  where
+    defs =
+        [ timeDef
+        , parseTimeDef
+        , defAddTime
         , defRNative "diff-time" diffTime
             (funType tTyDecimal [("time1", tTyTime),("time2", tTyTime)])
             $ "Compute difference between TIME1 and TIME2 in seconds. "
@@ -67,42 +120,12 @@ timeDefs = ("Time", timeDef)
             multType
             $ "N days, for use with 'add-time' "
             <> "`(add-time (time \"2016-07-22T12:00:00Z\") (days 1))`"
-        , defRNative "format-time" formatTime'
-            (funType tTyString [("format", tTyString),("time", tTyTime)])
-            $ "Format TIME using FORMAT. " <> timedoc
-            <> "`(format-time \"%F\" (time \"2016-07-22T12:00:00Z\"))`"
+        , defFormatTime
         ]
     multType = funType tTyDecimal [("n", tTyDecimal)]
         <> funType tTyDecimal [("n", tTyInteger)]
 
 
-time :: RNativeFun e
-time i [TLitString s] =
-  case parseTime defaultTimeLocale simpleISO8601 (unpack s) of
-    Nothing -> evalError' i $ "Invalid time, expecting '" ++ simpleISO8601 ++ "': " ++ unpack s
-    Just t -> return (tLit (LTime t))
-time i as = argsError i as
-
-parseTime' :: RNativeFun e
-parseTime' i [TLitString fmt,TLitString s] =
-  case parseTime defaultTimeLocale (unpack fmt) (unpack s) of
-    Nothing -> evalError' i $ "Failed to parse time '" ++ unpack s ++ "' with format: " ++ unpack fmt
-    Just t -> return (tLit (LTime t))
-parseTime' i as = argsError i as
-
-formatTime' :: RNativeFun e
-formatTime' _ [TLitString fmt,TLiteral (LTime t) _] =
-  return $ toTerm $ pack $ formatTime defaultTimeLocale (unpack fmt) t
-formatTime' i as = argsError i as
-
-
-addTime :: RNativeFun e
-addTime _ [TLiteral (LTime t) _,TLiteral (LDecimal r) _] = return $ doTimeAdd t r
-addTime _ [TLiteral (LTime t) _,TLitInteger n] = return $ doTimeAdd t (fromIntegral n)
-addTime i as = argsError i as
-
-doTimeAdd :: UTCTime -> Decimal -> Term Name
-doTimeAdd t r = toTerm (t .+^ fromSeconds r)
 
 diffTime :: RNativeFun e
 diffTime _ [TLiteral (LTime t1) _,TLiteral (LTime t2) _] = return $ toTerm (toSeconds (t1 .-. t2) :: Decimal)

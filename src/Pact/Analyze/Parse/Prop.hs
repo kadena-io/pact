@@ -93,10 +93,10 @@ parseColumnName bad = throwError $ T.unpack $
 -- for these operators.
 expToPreProp :: Exp Info -> PropParse PreProp
 expToPreProp = \case
-  ELiteral' (LDecimal d) -> pure (PreDecimalLit (mkDecimal d))
+  ELiteral' (LDecimal d) -> pure (PreDecimalLit (fromPact decimalIso d))
   ELiteral' (LInteger i) -> pure (PreIntegerLit i)
   ELiteral' (LString s)  -> pure (PreStringLit s)
-  ELiteral' (LTime t)    -> pure (PreTimeLit (mkTime t))
+  ELiteral' (LTime t)    -> pure (PreTimeLit (fromPact timeIso t))
   ELiteral' (LBool b)    -> pure (PreBoolLit b)
 
   ParenList [EAtom' (textToQuantifier -> Just q), ParenList bindings, body] -> do

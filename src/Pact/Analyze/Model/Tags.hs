@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
@@ -16,19 +17,18 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
-import           Control.Lens            (Prism', toListOf, traverseOf,
-                                          traversed, (<&>), (?~), (^.), _1, _2,
-                                          _3)
-import           Control.Monad           (when, (>=>))
-import           Data.Map.Strict         (Map)
-import qualified Data.Map.Strict         as Map
-import           Data.SBV                (SBV, SymWord, Symbolic)
-import qualified Data.SBV                as SBV
-import qualified Data.SBV.Control        as SBV
-import qualified Data.SBV.Internals      as SBVI
-import           Data.Traversable        (for)
+import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
+                                       (<&>), (?~), (^.), _1, _2, _3)
+import           Control.Monad        (when, (>=>))
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
+import           Data.SBV             (SBV, SymWord, Symbolic)
+import qualified Data.SBV             as SBV
+import qualified Data.SBV.Control     as SBV
+import qualified Data.SBV.Internals   as SBVI
+import           Data.Traversable     (for)
 
-import qualified Pact.Types.Typecheck    as TC
+import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Types
 

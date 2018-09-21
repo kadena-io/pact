@@ -1,12 +1,152 @@
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 module Pact.Analyze.Types.Numerical where
 
-import           Data.SBV (AlgReal)
+import           Control.Lens                (Prism')
+import           Data.Coerce                 (Coercible)
+import qualified Data.Decimal                as Decimal
+import           Data.SBV                    (HasKind (kindOf),
+                                              Kind (KUnbounded),
+                                              SDivisible (..), SymWord (..),
+                                              oneIf, (.>=), (.^))
+import           Data.SBV.Control            (SMTValue (sexprToVal))
+import           Data.SBV.Dynamic            (svPlus, svTimes, svUNeg, svAbs)
+import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
+                                              SBV (SBV), SVal (SVal),
+                                              genMkSymVar, normCW)
+import qualified Data.SBV.Internals          as SBVI
+import           Data.Text                   (Text)
+import           GHC.Real                    ((%))
 
--- Pact uses Data.Decimal which is arbitrary-precision
-type Decimal = AlgReal
+import           Pact.Types.Util             (tShow)
+
+import           Pact.Analyze.Feature        hiding (dec)
+import           Pact.Analyze.Types.UserShow
+
+
+-- We model decimals as integers. The value of a decimal is the value of the
+-- integer, shifted right 255 decimal places.
+newtype Decimal = Decimal { unDecimal :: Integer }
+  deriving (Enum, Eq, Ord, Show)
+
+instance Num Decimal where
+  negate (Decimal d)    = Decimal (negate d)
+  Decimal a + Decimal b = Decimal (a + b)
+  Decimal a - Decimal b = Decimal (a - b)
+  Decimal a * Decimal b = rShift255D (Decimal (a * b))
+  fromInteger           = lShift255D . Decimal
+  abs                   = Decimal . abs . unDecimal
+  signum                = lShift255D . Decimal . signum . unDecimal
+
+instance Fractional Decimal where
+  a / Decimal b =
+    -- first make the numerator 10^255 times larger
+    let Decimal a'     = lShift255D a
+        -- now get the quotient and remainder
+        (divAb, modAb) = divMod a' b
+        -- if the remainder is more than half of the divisor, round up
+        adjustment     = if modAb * 2 >= b then 1 else 0
+    in Decimal $ divAb + adjustment
+
+  fromRational rat =
+    let (Decimal.Decimal places mantissa) = fromRational rat
+    in lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+
+class SymbolicDecimal d where
+  type IntegerOf d :: *
+  fromInteger' :: IntegerOf d      -> d
+  lShiftD      :: Int         -> d -> d
+  lShiftD'     :: IntegerOf d -> d -> d
+  rShiftD      :: Int         -> d -> d
+  rShiftD'     :: IntegerOf d -> d -> d
+  floorD       ::      d -> IntegerOf d
+
+instance SymbolicDecimal Decimal where
+  type IntegerOf Decimal = Integer
+  fromInteger'         = fromInteger
+  lShiftD n (Decimal d) = Decimal (d * 10 ^ n)
+  lShiftD' n            = lShiftD (fromIntegral n)
+  rShiftD n (Decimal d) = Decimal (d `div` 10 ^ n)
+  rShiftD' n            = rShiftD (fromIntegral n)
+  floorD                = unDecimal . rShift255D
+
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Num (SBV Decimal) where
+  negate (SBVI.SBV a)     = SBVI.SBV $ svUNeg a
+  SBVI.SBV a + SBVI.SBV b = SBVI.SBV $ svPlus a b
+  SBVI.SBV a - SBVI.SBV b = SBVI.SBV $ svPlus a $ svUNeg b
+  SBVI.SBV a * SBVI.SBV b = rShift255D $ SBVI.SBV $ svTimes a b
+  fromInteger             = literal . fromInteger
+  abs (SBVI.SBV a)        = SBVI.SBV $ svAbs a
+  signum = lShift255D . coerceSBV . signum . coerceSBV @Decimal @Integer
+
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
+  a / b =
+    let (divAb, modAb) = sDivMod
+          (coerceSBV @_ @Integer (lShift255D a))
+          (coerceSBV @_ @Integer b)
+        adjustment = oneIf $ coerceSBV modAb * 2 .>= coerceSBV @_ @Integer b
+    in coerceSBV $ divAb + adjustment
+  fromRational = literal . fromRational
+
+instance SymbolicDecimal (SBV Decimal) where
+  type IntegerOf (SBV Decimal) = SBV Integer
+
+  fromInteger' = lShift255D . coerceSBV
+
+  lShiftD  n = coerceSBV . (*       10  ^ n)  . coerceSBV @Decimal @Integer
+  lShiftD' n = coerceSBV . (*       10 .^ n)  . coerceSBV @Decimal @Integer
+  rShiftD  n = coerceSBV . (`sDiv` (10  ^ n)) . coerceSBV @Decimal @Integer
+  rShiftD' n = coerceSBV . (`sDiv` (10 .^ n)) . coerceSBV @Decimal @Integer
+  floorD     = coerceSBV . rShift255D
+
+decimalPrecision :: Int
+decimalPrecision = 255
+
+lShift255D :: SymbolicDecimal d => d -> d
+lShift255D = lShiftD decimalPrecision
+
+rShift255D :: SymbolicDecimal d => d -> d
+rShift255D = rShiftD decimalPrecision
+
+-- Note: we require a redundant `Coercible` constraint here. `a` and `b` are
+-- both phantom, so this is not actually required to do the conversion, but it
+-- seems right morally. We also provide the unsafe version for conversions like
+-- `Text` -> `String`.
+coerceSBV :: Coercible a b => SBV a -> SBV b
+coerceSBV = SBVI.SBV . SBVI.unSBV
+
+unsafeCoerceSBV :: SBV a -> SBV b
+unsafeCoerceSBV = SBVI.SBV . SBVI.unSBV
+
+instance HasKind Decimal where kindOf _ = KUnbounded
+instance SymWord Decimal where
+  mkSymWord  = genMkSymVar KUnbounded
+  literal a  = SBV . SVal KUnbounded . Left . normCW $ CW KUnbounded (CWInteger (unDecimal a))
+  fromCW (CW _ (CWInteger x)) = Decimal x
+  fromCW x = error $ "in instance SymWord Decimal: expected CWInteger, found: " ++ show x
+
+instance SMTValue Decimal where sexprToVal = fmap Decimal . sexprToVal
+
+instance UserShow Decimal where
+  userShowsPrec _ (Decimal dec) =
+    case Decimal.eitherFromRational (dec % (10 ^ decimalPrecision)) of
+      Left err                    -> error err
+      -- Make sure to show ".0":
+      Right (Decimal.Decimal 0 i) -> tShow $ Decimal.Decimal 1 (i * 10 :: Integer)
+      Right d                     -> tShow d
 
 -- Operations that apply to a pair of either integer or decimal, resulting in
 -- the same:
@@ -25,6 +165,19 @@ data ArithOp
   | Log -- ^ Logarithm
   deriving (Show, Eq, Ord)
 
+arithOpP :: Prism' Text ArithOp
+arithOpP = mkOpNamePrism
+  [ (SAddition,       Add)
+  , (SSubtraction,    Sub)
+  , (SMultiplication, Mul)
+  , (SDivision,       Div)
+  , (SExponentiation, Pow)
+  , (SLogarithm,      Log)
+  ]
+
+instance UserShow ArithOp where
+  userShowsPrec _ = toText arithOpP
+
 -- integer -> integer
 -- decimal -> decimal
 data UnaryArithOp
@@ -38,6 +191,19 @@ data UnaryArithOp
            -- instance.
   deriving (Show, Eq, Ord)
 
+unaryArithOpP :: Prism' Text UnaryArithOp
+unaryArithOpP = mkOpNamePrism
+  [ (SNumericNegation,  Negate)
+  , (SSquareRoot,       Sqrt)
+  , (SNaturalLogarithm, Ln)
+  , (SExponential,      Exp)
+  , (SAbsoluteValue,    Abs)
+  -- explicitly no signum
+  ]
+
+instance UserShow UnaryArithOp where
+  userShowsPrec _ = toText unaryArithOpP
+
 -- decimal -> integer -> decimal
 -- decimal -> decimal
 data RoundingLikeOp
@@ -46,6 +212,16 @@ data RoundingLikeOp
   | Ceiling -- ^ Round to the next integer
   | Floor   -- ^ Round to the previous integer
   deriving (Show, Eq, Ord)
+
+roundingLikeOpP :: Prism' Text RoundingLikeOp
+roundingLikeOpP = mkOpNamePrism
+  [ (SBankersRound, Round)
+  , (SCeilingRound, Ceiling)
+  , (SFloorRound,   Floor)
+  ]
+
+instance UserShow RoundingLikeOp where
+  userShowsPrec _ = toText roundingLikeOpP
 
 -- | Arithmetic ops
 --
@@ -80,6 +256,19 @@ data Numerical t a where
   ModOp           :: t Integer      -> t Integer ->              Numerical t Integer
   RoundingLikeOp1 :: RoundingLikeOp -> t Decimal ->              Numerical t Integer
   RoundingLikeOp2 :: RoundingLikeOp -> t Decimal -> t Integer -> Numerical t Decimal
+
+instance (UserShow (t Integer), UserShow (t Decimal))
+  => UserShow (Numerical t a) where
+  userShowsPrec _ = parenList . \case
+    DecArithOp op a b      -> [userShow op, userShow a, userShow b]
+    IntArithOp op a b      -> [userShow op, userShow a, userShow b]
+    DecUnaryArithOp op a   -> [userShow op, userShow a]
+    IntUnaryArithOp op a   -> [userShow op, userShow a]
+    DecIntArithOp op a b   -> [userShow op, userShow a, userShow b]
+    IntDecArithOp op a b   -> [userShow op, userShow a, userShow b]
+    ModOp a b              -> ["mod", userShow a, userShow b]
+    RoundingLikeOp1 op a   -> [userShow op, userShow a]
+    RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 
 deriving instance (Show (t Decimal), Show (t Integer), Show a) => Show (Numerical t a)
 deriving instance (Eq (t Decimal), Eq (t Integer), Eq a) => Eq (Numerical t a)
