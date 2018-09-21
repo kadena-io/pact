@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
@@ -50,8 +51,8 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Util            (dummyInfo, (...))
 
 
-wrap :: Text -> Text
-wrap code =
+wrap :: Text -> Text -> Text
+wrap code model =
   [text|
     (env-keys ["admin"])
     (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
@@ -68,7 +69,9 @@ wrap code =
          ; precedence
          (defproperty balance (> 0 1))
          (defproperty bad-recursive-prop bad-recursive-prop)
-         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))]
+         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))
+         $model
+        ]
       (defschema account
         "Row type for accounts table."
          balance:integer
@@ -167,23 +170,29 @@ handlePositiveTestResult = \case
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: Text -> Spec
-expectVerified code = do
-  res <- runIO $ runVerification $ wrap code
+expectVerified = expectVerified' ""
+
+expectVerified' :: Text -> Text -> Spec
+expectVerified' model code = do
+  res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ handlePositiveTestResult res
 
 expectFalsified :: Text -> Spec
-expectFalsified code = do
-  res <- runIO $ runVerification $ wrap code
+expectFalsified = expectFalsified' ""
+
+expectFalsified' :: Text -> Text -> Spec
+expectFalsified' model code = do
+  res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
-  res <- runIO $ runCheck (wrap code) check
+  res <- runIO $ runCheck (wrap code "") check
   it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
-  res <- runIO $ runCheck (wrap code) check
+  res <- runIO $ runCheck (wrap code "") check
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
@@ -1942,7 +1951,7 @@ spec = describe "analyze" $ do
           |]
 
     -- TODO replace this check with expectVerified after 'pending' is removed
-    res <- runIO $ runVerification $ wrap code
+    res <- runIO $ runVerification $ wrap code ""
     it "passes in-code checks" $ do
       pendingWith "separate parser for props"
       res `shouldSatisfy` isNothing
@@ -2049,7 +2058,7 @@ spec = describe "analyze" $ do
 
         expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
         expectTrace code prop tests = do
-          res <- runIO $ runCheck (wrap code) $ Valid prop
+          res <- runIO $ runCheck (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
@@ -2112,3 +2121,24 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+
+  describe "module-scoped properties verify" $ do
+    let okay = [text|
+          (defun okay:string (from:string to:string)
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+        bad = [text|
+          (defun bad:string ()
+            (with-read accounts "joel" { "balance" := bal }
+              (update accounts "joel" { "balance": (+ bal 1000000000) })))
+          |]
+        conservesBalance = "(property conserves-balance)"
+
+    expectVerified'  conservesBalance okay
+    expectFalsified' conservesBalance bad
+    expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
+    expectFalsified' conservesBalance $ T.unlines [ okay, bad ]

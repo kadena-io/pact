@@ -38,6 +38,7 @@ import           Control.Monad.Except      (Except, ExceptT (ExceptT),
 import           Control.Monad.Morph       (generalize, hoist)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Class (MonadTrans (lift))
+import           Data.Either               (partitionEithers)
 import qualified Data.HashMap.Strict       as HM
 import           Data.List                 (isPrefixOf)
 import           Data.Map.Strict           (Map)
@@ -412,21 +413,27 @@ moduleTables modules (_mod, modRefs) = do
 
     pure $ Table tabName schema invariants
 
--- | Parse a property definition like
+-- | Parse a property definition or property like
 --
 -- * '(defproperty foo (> 1 0))'
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
-parseDefprops :: Exp Info -> Either ParseFailure [(Text, DefinedProperty (Exp Info))]
-parseDefprops (SquareList exps) = traverse parseDefprops' exps where
+-- * '(property foo)'
+parseModelDecl
+  :: Exp Info
+  -> Either ParseFailure [Either (Text, DefinedProperty (Exp Info)) (Exp Info)]
+parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
+
   parseDefprops' exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, ParenList args, body ] -> do
       args' <- parseBindings (curry Right) args & _Left %~ (exp,)
-      pure (propname, DefinedProperty args' body)
+      pure $ Left (propname, DefinedProperty args' body)
     [ EAtom' propname,              body ] ->
-      pure (propname, DefinedProperty [] body)
+      pure $ Left (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
+  parseDefprops' (ParenList [ EAtom' "property", body ]) = pure $ Right body
   parseDefprops' exp = Left (exp, "expected set of defproperty")
-parseDefprops exp = Left (exp, "expected set of defproperty")
+
+parseModelDecl exp = Left (exp, "expected set of defproperty")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
@@ -435,21 +442,29 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
   Ref TConst{} -> True
   _            -> False
 
--- Get the set of properties defined in this module
-modulePropDefs
-  :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty (Exp Info)))
-modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
+data ModelDecl = ModelDecl
+  { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
+  , _moduleProperties    :: ![Exp Info]
+  }
+
+-- Get the model defined in this module
+moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
+moduleModelDecl (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
   = case model of
-      Just model' -> HM.fromList <$> parseDefprops model'
-      Nothing     -> Right HM.empty
+      Just model' -> do
+        lst <- parseModelDecl model'
+        let (propList, checkList) = partitionEithers lst
+        pure $ ModelDecl (HM.fromList propList) checkList
+      Nothing     -> Right $ ModelDecl HM.empty []
 
 moduleFunChecks
   :: [Table]
+  -> [Exp Info]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-moduleFunChecks tables modTys propDefs = for modTys $ \case
+moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
   -- TODO How better to handle the type mismatch?
   (Pact.Direct _, _) -> throwError InvalidRefType
   (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
@@ -500,16 +515,16 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
 
-    checks <- case defn ^? tMeta . mModel . _Just of
-      -- no model = no properties
-      Nothing    -> pure []
-      Just model -> withExcept ModuleParseFailure $ liftEither $ do
-        let model'        = expToMapping model
-            expProperties = model' ^? _Just . ix "properties"
-            expProperty   = model' ^? _Just . ix "property"
-        exps <- collectExps "properties" expProperties expProperty
-        runExpParserOver exps $
-          expToCheck tableEnv vidStart nameVids vidTys propDefs
+    checks <- withExcept ModuleParseFailure $ liftEither $ do
+      exps <- case defn ^? tMeta . mModel . _Just of
+        Just model ->
+          let model'        = expToMapping model
+              expProperties = model' ^? _Just . ix "properties"
+              expProperty   = model' ^? _Just . ix "property"
+          in collectExps "properties" expProperties expProperty
+        Nothing -> pure []
+      runExpParserOver (modCheckExps <> exps) $
+        expToCheck tableEnv vidStart nameVids vidTys propDefs
 
     pure (ref, Right checks)
 
@@ -589,11 +604,17 @@ verifyModule modules moduleData = runExceptT $ do
       -- is undefined and in particular not the same as their import order.
       allModules = moduleData : HM.elems modules
 
-  allModulePropDefs <-
+  allModuleModelDecls <-
     withExceptT ModuleParseFailure $ liftEither $
-      traverse modulePropDefs allModules
+      traverse moduleModelDecl allModules
 
-  let -- how many times have these names been defined across all in-scope
+  ModelDecl _ checkExps <-
+    withExceptT ModuleParseFailure $ liftEither $
+      moduleModelDecl moduleData
+
+  let allModulePropDefs = fmap _moduleDefProperties allModuleModelDecls
+
+      -- how many times have these names been defined across all in-scope
       -- modules
       allModulePropNameDuplicates =
           HM.keys
@@ -622,7 +643,7 @@ verifyModule modules moduleData = runExceptT $ do
     typecheckedRefs
 
   (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables funTypes propDefs
+    <- hoist generalize $ moduleFunChecks tables checkExps funTypes propDefs
 
   let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks
