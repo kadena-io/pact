@@ -420,6 +420,7 @@ data Term ret where
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet
   ReadDecimal     :: Term String -> Term Decimal
+  ReadInteger     :: Term String -> Term Integer
 
   -- TODO: ReadInteger, ReadMsg
 

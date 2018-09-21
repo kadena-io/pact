@@ -311,6 +311,10 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid (Inj Success)
 
+  --
+  -- TODO: test use of read-keyset from property once possible
+  --
+
   describe "enforce-keyset.name.static" $ do
     let code =
           [text|
@@ -343,8 +347,6 @@ spec = describe "analyze" $ do
 
     expectFail code $ Valid $ bnot (Inj (KsNameAuthorized "different-ks")) ==> Abort'
 
-  -- just a sanity check -- we can't prove much until we can talk about
-  -- read-decimal in properties
   describe "read-decimal" $ do
     let code =
           [text|
@@ -353,6 +355,25 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Satisfiable $ CoreProp $ DecimalComparison Eq (Inj Result) 0
     expectPass code $ Satisfiable $ CoreProp $ DecimalComparison Eq (Inj Result) 1
+
+  --
+  -- TODO: test use of read-decimal from property once possible
+  --
+
+  describe "read-integer" $ do
+    let code =
+          [text|
+            (defun test:integer ()
+              (+ (read-integer "key")
+                 (read-integer (+ "ke" "y"))))
+          |]
+    expectPass code $ Satisfiable $ CoreProp $ IntegerComparison Eq (Inj Result) 0
+    expectFail code $ Satisfiable $ CoreProp $ IntegerComparison Eq (Inj Result) 1 -- <- FAIL
+    expectPass code $ Satisfiable $ CoreProp $ IntegerComparison Eq (Inj Result) 2
+
+  --
+  -- TODO: test use of read-integer from property once possible
+  --
 
   describe "enforce-keyset.row-level.read" $ do
     let code =
