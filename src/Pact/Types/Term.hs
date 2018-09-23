@@ -228,6 +228,22 @@ instance FromJSON Module where
     o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing Nothing) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
+-- | Interface data for Pact modules. These are ML-style Signatures which
+-- pact modules must satisfy at compile time.
+--
+-- e.g.
+--  (interface foo
+--  (defun list-clients:[string] ())
+--  (defun client-count:integer ()))
+-- 
+data Interface = Interface
+  { _iName :: !InterfaceName
+  , _iMeta :: !Meta
+  , _iHash :: !Hash
+  , _iCode :: !Code
+  }
+  deriving (Eq)
+  
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
@@ -250,6 +266,11 @@ data Term n =
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
+    TInterface {
+      _tInterfaceDef :: Interface
+    , _tInterfaceBody :: !(Scope () Term n)
+    , _tInfo :: !Info
+    } | 
     TList {
       _tList :: ![Term n]
     , _tListType :: Type (Term n)

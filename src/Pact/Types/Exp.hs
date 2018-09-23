@@ -23,6 +23,7 @@
 module Pact.Types.Exp
  (
    ModuleName(..),
+   InterfaceName(..),
    Name(..),
    Literal(..),
    _LString,_LInteger,_LDecimal,_LBool,_LTime,
@@ -68,6 +69,13 @@ import Pact.Types.Type
 newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
+
+-- | Text wrapper for named interfaces
+newtype InterfaceName = InterfaceName Text
+  deriving (Eq, Ord, IsString, ToJSON, FromJSON, AsString, Hashable, Pretty)
+
+instance Show InterfaceName where
+  show (InterfaceName t) = show t
 
 -- | A named reference from source.
 data Name =
