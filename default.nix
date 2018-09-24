@@ -16,7 +16,12 @@ in
        in {
             pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
             aeson = self.callHackage "aeson" "1.1.2.0" {};
-            blake2 = guardGhcjs super.blake2;
+            blake2 = guardGhcjs (self.callCabal2nix "blake2" (pkgs.fetchFromGitHub {
+              owner = "kadena-io";
+              repo = "blake2";
+              rev = "88f2f4df5a49ca50d349a003edc52e3681c78bd3";
+              sha256 = "07b1mbnpa3wkga3s3gh1kw0g4qyx7gmbkmplmqm11k59b67myl46";
+            }) {});
             haskeline = guardGhcjs super.haskeline;
 
             # Needed to get around a requirement on `hspec-discover`.
