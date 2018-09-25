@@ -15,7 +15,12 @@ in
        in {
             pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
             aeson = self.callHackage "aeson" "1.1.2.0" {};
-            blake2 = guardGhcjs super.blake2;
+            blake2 = guardGhcjs (self.callCabal2nix "blake2" (pkgs.fetchFromGitHub {
+              owner = "kadena-io";
+              repo = "blake2";
+              rev = "88f2f4df5a49ca50d349a003edc52e3681c78bd3";
+              sha256 = "07b1mbnpa3wkga3s3gh1kw0g4qyx7gmbkmplmqm11k59b67myl46";
+            }) {});
             haskeline = guardGhcjs super.haskeline;
 
             # Needed to get around a requirement on `hspec-discover`.
@@ -48,6 +53,12 @@ in
             haskell-src-meta = self.callHackage "haskell-src-meta" "0.8.0.2" {};
             # needed to match haskell-src-exts
             haskell-src-exts-util = self.callHackage "haskell-src-exts-util" "0.2.2" {};
+            hedgehog = self.callCabal2nix "hedgehog" (pkgs.fetchFromGitHub {
+              owner = "hedgehogqa";
+              repo = "haskell-hedgehog";
+              rev = "38146de29c97c867cff52fb36367ff9a65306d76";
+              sha256 = "1z8d3hqrgld1z1fvjd0czksga9lma83caa2fycw0a5gfbs8sh4zh";
+            } + "/hedgehog") {};
             hlint = self.callHackage "hlint" "2.0.14" {};
             hoogle = self.callHackage "hoogle" "5.0.15" {};
 
