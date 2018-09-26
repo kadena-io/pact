@@ -218,12 +218,12 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-    ,defRNative "hash" stringHashNativeFun (funType tTyString [("value",a)])
+    ,defRNative "hash" hash' (funType tTyString [("value",a)])
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
-    ,defRNative "hex-str-to-int" hexStringToIntegerFun (funType tTyInteger [("value", a)])
-     "Compute the compute the integer value of a string of length <= 128 chars consisting of  hexidecimal \
+    ,defRNative "hex-str-to-int" hexStrToInt (funType tTyInteger [("value", a)])
+     "Compute the integer value of a string of length <= 128 chars consisting of  hexadecimal \
      \numbers. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
@@ -547,30 +547,29 @@ identity :: RNativeFun e
 identity _ [a] = return a
 identity i as = argsError i as
 
-stringHashNativeFun :: RNativeFun e
-stringHashNativeFun i as =
+hash' :: RNativeFun e
+hash' i as =
   case as of
     [TLitString s] -> go $ encodeUtf8 s
     [a] -> go $ toStrict $ encode a
     _ -> argsError i as
   where go = return . tStr . asString . hash
 
-hexStringToIntegerFun :: RNativeFun e
-hexStringToIntegerFun i as =
+hexStrToInt :: RNativeFun e
+hexStrToInt i as =
   case as of
     [TLitString s] ->
       if T.all isHexDigit s
-      then go i s 
-      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
-    _ -> argsError i as 
-  where
-    go :: FunApp -> Text -> Eval e (Term Name)
-    go f t
-      | T.length t <= 128 = 
-        case hexStringToInteger t of
+      then 
+        if T.length s <= 128
+        then case hexStringToInteger s of
           Left _ -> argsError i as
           Right n -> return . tStr . asString $ n
-      | otherwise = evalError' f $ "Invalid input: unsupported string length: " ++ (unpack t)  
+        else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack s)
+      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
+    _ -> argsError i as 
+
+
 transactionHash :: RNativeFun e
 transactionHash _ [] = (tStr . asString) <$> view eeHash
 transactionHash i as = argsError i as
