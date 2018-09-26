@@ -223,8 +223,8 @@ langDefs =
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
     ,defRNative "hex-str-to-int" hexStrToInt (funType tTyInteger [("value", a)])
-     "Compute the integer value of a string of length <= 128 chars consisting of  hexadecimal \
-     \numbers. `(hex-str-to-int \"abcdef12345\")`"
+     "Compute the integer value of a string of length <= 128 chars consisting of hexadecimal \
+     \characters. `(hex-str-to-int \"abcdef12345\")`"
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
