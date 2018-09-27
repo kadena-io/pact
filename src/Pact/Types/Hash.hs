@@ -8,7 +8,7 @@ module Pact.Types.Hash
   , initialHash
 
   -- Integer hashing
-  , hashAsBasedInteger
+  , basedStringToInteger
   , hexStringToInteger
   ) where
 
@@ -50,24 +50,22 @@ verifyHash h b = if hash b == h
 initialHash :: Hash
 initialHash = hash mempty
 
--- | Reads 'Hash' as a non-negative 'Integral' number using the base
--- specified by the first argument, and character representation
--- specified by the second argument
-hashAsBasedInteger
+-- | Reads 'Hash' as a non-negative 'Integral' number using the base <= 16
+-- specified by the first argument
+basedStringToInteger
   :: Integer -- ^ The base specification
-  -> (Char -> Integer) -- ^ the a-valued representation for a given character
   -> Text -- ^ The string to convert to integral base-a
   -> Either Text Integer
-hashAsBasedInteger base k h 
-  | base <= 1 = Left $
+basedStringToInteger base h 
+  | base <= 1 || base >= 16 = Left $
     "readStringAtBase: applied to unsupported base - " `append` asString base
   | null h = Left $
     "readStringAtBase: applied to empty hash - " `append` asString h
   | otherwise = Right $ foldl' go 0 h
     where
       go :: Integer -> Char -> Integer
-      go acc w = base * acc + (k w) 
-{-# INLINE hashAsBasedInteger #-}
+      go acc w = base * acc + (fromIntegral . digitToInt $ w) 
+{-# INLINE basedStringToInteger #-}
 
 -- | Computes the integer value of a hexadecimal string by lensing
 -- through text and converting all the chars into their corresponding
@@ -77,6 +75,6 @@ hexStringToInteger
   :: Text
   -> Either Text Integer
 hexStringToInteger =
-  hashAsBasedInteger 16 (fromIntegral . digitToInt)
+  basedStringToInteger 16 
 {-# INLINE hexStringToInteger #-}
 

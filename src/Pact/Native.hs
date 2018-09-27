@@ -57,7 +57,7 @@ import Pact.Native.Keysets
 import Pact.Types.Runtime
 import Pact.Parse
 import Pact.Types.Version
-import Pact.Types.Hash (hash, hexStringToInteger)
+import Pact.Types.Hash (hash, hexStringToInteger, basedStringToInteger)
 
 
 -- | All production native modules.
@@ -225,6 +225,11 @@ langDefs =
     ,defRNative "hex-str-to-int" hexStrToInt (funType tTyInteger [("value", a)])
      "Compute the integer value of a string of length <= 128 chars consisting of hexadecimal \
      \characters. `(hex-str-to-int \"abcdef12345\")`"
+
+    ,defRNative "based-str-to-int" basedStrToInt (funType tTyInteger [("value", tTyString), ("base", tTyInteger)])
+     "Compute the integer value after change of base of a string of length <= 128 chars consisting of \
+     \base-2 through base-16 (hexadecimal) characters. Only bases 2-16 are supported. `(based-str-to-int \"abcdef\" 2)`"
+     
     ])
     where a = mkTyVar "a" []
           b = mkTyVar "b" []
@@ -569,6 +574,19 @@ hexStrToInt i as =
       else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
     _ -> argsError i as 
 
+basedStrToInt :: RNativeFun e
+basedStrToInt i as =
+  case as of
+    [TLitString s, TLitInteger base] ->
+      if T.all isHexDigit s
+      then
+        if T.length s <= 128
+        then case basedStringToInteger base s of
+          Left _ -> argsError i as
+          Right n -> return . tStr . asString $ n
+       else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack s)
+      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
+    _ -> argsError i as
 
 transactionHash :: RNativeFun e
 transactionHash _ [] = (tStr . asString) <$> view eeHash
