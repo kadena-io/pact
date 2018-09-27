@@ -222,13 +222,13 @@ langDefs =
      "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
      \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
 
-    ,defRNative "hex-str-to-int" hexStrToInt (funType tTyInteger [("value", a)])
+    ,defRNative "hex-str-to-int" hexStrToInt (funType tTyInteger [("value", tTyString)])
      "Compute the integer value of a string of length <= 128 chars consisting of hexadecimal \
      \characters. `(hex-str-to-int \"abcdef12345\")`"
 
-    ,defRNative "based-str-to-int" basedStrToInt (funType tTyInteger [("value", tTyString), ("base", tTyInteger)])
+    ,defRNative "based-str-to-int" basedStrToInt (funType tTyInteger [("base", tTyInteger), ("value", tTyString)])
      "Compute the integer value after change of base of a string of length <= 128 chars consisting of \
-     \base-2 through base-16 (hexadecimal) characters. Only bases 2-16 are supported. `(based-str-to-int \"abcdef\" 2)`"
+     \base-2 through base-16 (hexadecimal) characters. Only bases 2-16 are supported. `(based-str-to-int 2 \"abcdef\")`"
      
     ])
     where a = mkTyVar "a" []
@@ -577,14 +577,14 @@ hexStrToInt i as =
 basedStrToInt :: RNativeFun e
 basedStrToInt i as =
   case as of
-    [TLitString s, TLitInteger base] ->
+    [TLitInteger base, TLitString s] ->
       if T.all isHexDigit s
       then
         if T.length s <= 128
         then case basedStringToInteger base s of
           Left _ -> argsError i as
           Right n -> return . tStr . asString $ n
-       else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack s)
+        else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack s)
       else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack s)
     _ -> argsError i as
 

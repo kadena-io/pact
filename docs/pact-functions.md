@@ -19,12 +19,12 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 ### based-str-to-int {#based-str-to-int}
 
-*value*&nbsp;`string` *base*&nbsp;`integer` *&rarr;*&nbsp;`integer`
+*base*&nbsp;`integer` *value*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
 Compute the integer value after change of base of a string of length <= 128 chars consisting of base-2 through base-16 (hexadecimal) characters. Only bases 2-16 are supported. 
 ```lisp
-pact> (based-str-to-int "abcdef" 2)
+pact> (based-str-to-int 2 "abcdef")
 "687"
 ```
 
@@ -197,7 +197,7 @@ pact> (hash { 'foo: 1 })
 
 ### hex-str-to-int {#hex-str-to-int}
 
-*value*&nbsp;`<a>` *&rarr;*&nbsp;`integer`
+*value*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
 Compute the integer value of a string of length <= 128 chars consisting of hexadecimal characters. 
