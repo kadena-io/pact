@@ -18,8 +18,8 @@ in
             blake2 = guardGhcjs (self.callCabal2nix "blake2" (pkgs.fetchFromGitHub {
               owner = "kadena-io";
               repo = "blake2";
-              rev = "88f2f4df5a49ca50d349a003edc52e3681c78bd3";
-              sha256 = "07b1mbnpa3wkga3s3gh1kw0g4qyx7gmbkmplmqm11k59b67myl46";
+              rev = "6c106bcf0f3e85448cec08353e4e7d34e086e296";
+              sha256 = "0pjfhy4sf4qqz0h2b658r4qy92qx82cssvdh1wkrrimzk9q1icvi";
             }) {});
             haskeline = guardGhcjs super.haskeline;
 

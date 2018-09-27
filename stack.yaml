@@ -21,4 +21,4 @@ extra-deps:
   - git: https://github.com/LeventErkok/sbv.git
     commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
   - git: https://github.com/vaibhavsagar/blake2.git
-    commit: 88f2f4df5a49ca50d349a003edc52e3681c78bd3 # with less inlining
+    commit: 6c106bcf0f3e85448cec08353e4e7d34e086e296 # with less inlining
