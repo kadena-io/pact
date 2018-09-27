@@ -228,6 +228,7 @@ test-suite hspec
       , async
       , ed25519-donna
       , crypto-api
+      , http-client
       , wreq
   other-modules:
                 Blake2Spec
