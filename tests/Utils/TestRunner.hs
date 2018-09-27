@@ -33,6 +33,7 @@ import Test.Hspec
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Control.Exception as Exception
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
 import Control.Lens
@@ -70,7 +71,18 @@ startServer configFile = do
   asyncServer <- async runServer
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
+  waitUntilStarted
   return (asyncServer, asyncCmd, asyncHist)
+
+waitUntilStarted :: IO ()
+waitUntilStarted = do
+  r <- get $ _serverPath ++ "poll"
+  let s = r ^. responseStatus . statusCode
+  if s == 200
+    then return ()
+    else do
+      threadDelay 500
+      waitUntilStarted
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
 stopServer (asyncServer, asyncCmd, asyncHist) = do
