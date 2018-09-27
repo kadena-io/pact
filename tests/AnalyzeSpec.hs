@@ -2142,3 +2142,14 @@ spec = describe "analyze" $ do
     expectFalsified' conservesBalance bad
     expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
     expectFalsified' conservesBalance $ T.unlines [ okay, bad ]
+
+    expectVerified' "(except [bad] (property conserves-balance))" $
+      T.unlines [ okay, bad ]
+    expectVerified' "(within [good] (property conserves-balance))" $
+      T.unlines [ okay, bad ]
+
+    expectVerified'  "(except [] (property conserves-balance))" okay
+    expectFalsified' "(except [] (property conserves-balance))" bad
+
+    expectVerified'  "(within []    (property conserves-balance))" bad
+    expectFalsified' "(within [bad] (property conserves-balance))" bad

@@ -15,7 +15,14 @@
     [(defproperty conserves-mass
        (= (column-delta 'accounts 'balance) 0.0))
      (defproperty auth-required
-       (authorized-by 'accounts-admin-keyset))]
+       (authorized-by 'accounts-admin-keyset))
+     (within [read-account-admin]                       (property auth-required))
+     (except [create-account fund-account debit credit] (property conserves-mass))
+     (within [read-account-user read-account-admin check-balance]
+       (property (not (table-written 'accounts))))
+     (within [create-account]
+       (property (not (table-read 'accounts))))
+    ]
 
   (defschema account
     @doc   "Row type for accounts table."
@@ -44,8 +51,7 @@
     ))
 
   (defun transfer (src:string dest:string amount:decimal)
-    @doc   "transfer AMOUNT from SRC to DEST"
-    @model (property conserves-mass)
+    "transfer AMOUNT from SRC to DEST"
     (debit src amount)
     (credit dest amount))
 
@@ -61,8 +67,7 @@
       ))
 
   (defun read-account-admin (id)
-    @doc   "Read data for account ID, admin version"
-    @model (property auth-required)
+    "Read data for account ID, admin version"
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 

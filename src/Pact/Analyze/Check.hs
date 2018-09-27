@@ -59,7 +59,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
-                                            renderParsed, tMeta)
+                                            renderParsed, tMeta, _tDefName)
 import           Pact.Types.Runtime        (Exp, ModuleData,
                                             ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
@@ -413,6 +413,25 @@ moduleTables modules (_mod, modRefs) = do
 
     pure $ Table tabName schema invariants
 
+data PropertyScope
+  = Everywhere
+  | Excluding !(Set Text)
+  | Including !(Set Text)
+
+data ModuleProperty = ModuleProperty
+  { _moduleProperty      :: !(Exp Info)
+  , _modulePropertyScope :: !PropertyScope
+  }
+
+applicableCheck :: Text -> ModuleProperty -> Bool
+applicableCheck funName (ModuleProperty _ propScope) = case propScope of
+  Everywhere      -> True
+  Excluding names -> funName `Set.notMember` names
+  Including names -> funName `Set.member`    names
+
+pattern PropertyExp :: Exp i -> Exp i
+pattern PropertyExp body <- ParenList [ EAtom' "property", body ]
+
 -- | Parse a property definition or property like
 --
 -- * '(defproperty foo (> 1 0))'
@@ -420,7 +439,7 @@ moduleTables modules (_mod, modRefs) = do
 -- * '(property foo)'
 parseModelDecl
   :: Exp Info
-  -> Either ParseFailure [Either (Text, DefinedProperty (Exp Info)) (Exp Info)]
+  -> Either ParseFailure [Either (Text, DefinedProperty (Exp Info)) ModuleProperty]
 parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
 
   parseDefprops' exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
@@ -430,8 +449,21 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
     [ EAtom' propname,              body ] ->
       pure $ Left (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
-  parseDefprops' (ParenList [ EAtom' "property", body ]) = pure $ Right body
+  parseDefprops' (PropertyExp body)
+    = pure $ Right $ ModuleProperty body Everywhere
+  parseDefprops' (ParenList [ EAtom' "except", names, PropertyExp body ])
+    = Right . ModuleProperty body <$> (Excluding <$> parseNames names)
+  parseDefprops' (ParenList [ EAtom' "within", names, PropertyExp body ])
+    = Right . ModuleProperty body <$> (Including <$> parseNames names)
   parseDefprops' exp = Left (exp, "expected set of defproperty")
+
+  parseNames :: Exp Info -> Either ParseFailure (Set Text)
+  parseNames (SquareList names) = fmap Set.fromList $ traverse parseName names
+  parseNames exp                = Left (exp, "expected a list of names")
+
+  parseName :: Exp Info -> Either ParseFailure Text
+  parseName (EAtom' name) = Right name
+  parseName exp           = Left (exp, "expected a bare word name")
 
 parseModelDecl exp = Left (exp, "expected set of defproperty")
 
@@ -444,7 +476,7 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
-  , _moduleProperties    :: ![Exp Info]
+  , _moduleProperties    :: ![ModuleProperty]
   }
 
 -- Get the model defined in this module
@@ -459,7 +491,7 @@ moduleModelDecl (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
 
 moduleFunChecks
   :: [Table]
-  -> [Exp Info]
+  -> [ModuleProperty]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
@@ -523,7 +555,10 @@ moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
               expProperty   = model' ^? _Just . ix "property"
           in collectExps "properties" expProperties expProperty
         Nothing -> pure []
-      runExpParserOver (modCheckExps <> exps) $
+      let funName = _tDefName defn
+          applicableModuleChecks = map _moduleProperty $
+            filter (applicableCheck funName) modCheckExps
+      runExpParserOver (applicableModuleChecks <> exps) $
         expToCheck tableEnv vidStart nameVids vidTys propDefs
 
     pure (ref, Right checks)
