@@ -23,21 +23,21 @@ import Control.Arrow ((&&&))
 import Data.Default
 import Data.Semigroup
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Map as M
 import Control.Monad.Reader
 import Control.Monad.Catch
-import Control.Monad.State.Strict (get)
 import Control.Lens
 import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
-import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
+import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
+import qualified Data.Map as M
+import qualified Data.Text as Text
 import Pact.Analyze.Check
 #if MIN_VERSION_statistics(0,14,0)
 import Statistics.Types (Estimate(..))
