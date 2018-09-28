@@ -12,7 +12,7 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
                                               (&), (+=), (.=), (.~), (<&>),
-                                              (?~), (^.), (^?), _2, _Just)
+                                              (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
@@ -176,7 +176,9 @@ tagFork pathL pathR reachable lPasses = do
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
-  tag <- view $ aeModelTags.mtResult.located._2
+  tid <- view $ aeModelTags.mtResult._1
+  tagReturn tid av
+  tag <- view $ aeModelTags.mtResult._2.located._2
   addConstraint $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()

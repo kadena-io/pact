@@ -108,8 +108,10 @@ allocModelTags locatedTm graph = ModelTags
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
 
-    allocResult :: Symbolic (Located TVal)
-    allocResult = sequence $ allocForETerm <$> locatedTm
+    allocResult :: Symbolic (TagId, Located TVal)
+    allocResult = do
+      let tid :: TagId = last $ toListOf (traverse._TracePopScope._3) events
+      fmap (tid,) $ sequence $ allocForETerm <$> locatedTm
 
     -- NOTE: the root path we manually set to true. translation only emits the
     -- start of "subpaths" on either side of a conditional. the root path is
@@ -140,7 +142,7 @@ saturateModel =
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
     traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
     traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
-    traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
+    traverseOf (modelTags.mtResult._2.located)         fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)         fetchTVal   >=>
     traverseOf (modelKsProvs.traversed)                fetchProv

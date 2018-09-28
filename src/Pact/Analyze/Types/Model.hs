@@ -131,7 +131,7 @@ data ModelTags (c :: Concreteness)
     , _mtAuths   :: Map TagId (Located Authorization)
     -- ^ one per each authorization check. note that this includes uses of
     -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
-    , _mtResult  :: Located TVal
+    , _mtResult  :: (TagId, Located TVal)
     -- ^ return value of the function being checked
     , _mtPaths   :: Map Path (SBV Bool)
     -- ^ one at the start of the program, and on either side of the branches of

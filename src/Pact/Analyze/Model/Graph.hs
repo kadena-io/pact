@@ -8,7 +8,7 @@ module Pact.Analyze.Model.Graph
   , linearize
   ) where
 
-import           Control.Lens       (Traversal', at, to, (^.), (^?), _Just)
+import           Control.Lens       (Traversal', at, to, (^.), (^?), _2, _Just)
 import           Data.Bool          (bool)
 import           Data.Map.Strict    (Map)
 import qualified Data.Map.Strict    as Map
@@ -67,7 +67,7 @@ linearize model = go traceEvents
                handleEnforce recov $ mtAuths.at tid._Just.located.authSuccess
              _ ->
                continue)
-      (ExecutionTrace [] (Just $ model ^. modelTags.mtResult.located))
+      (ExecutionTrace [] (Just $ model ^. modelTags.mtResult._2.located))
 
     -- NOTE: 'Map' is ordered, so our @(Vertex, Vertex)@ 'Edge' representation
     -- over monotonically increasing 'Vertex's across the execution graph
