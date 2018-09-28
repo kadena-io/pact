@@ -182,13 +182,7 @@ showModel model =
     T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
       [ ["Program trace:"]
       , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
-      , []
-      , ["Result:"]
-      , [indent1 $ maybe
-          "Transaction aborted."
-          (\tval -> "Return value: " <> showTVal tval)
-          mRetval
-        ]
+      , [maybe "\nTransaction aborted." (const "") mRetval]
       ]
 
   where

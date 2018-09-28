@@ -16,8 +16,10 @@
        (= (column-delta 'accounts 'balance) 0.0))
      (defproperty auth-required
        (authorized-by 'accounts-admin-keyset))
-     (within [read-account-admin]                       (property auth-required))
-     (except [fund-account debit credit] (property conserves-mass))
+     (within [read-account-admin]
+       (property auth-required))
+     (except [fund-account debit credit] ; TODO: fix create-account
+       (property conserves-mass))
      (within [read-account-user read-account-admin check-balance]
        (property (not (table-written 'accounts))))
      (within [create-account]

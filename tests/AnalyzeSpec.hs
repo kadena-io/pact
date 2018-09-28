@@ -2084,7 +2084,7 @@ spec = describe "analyze" $ do
             |]
 
       expectTrace code (bnot Success')
-        [read, read, push, assert, assert, write, write, pop]
+        [push, read, read, push, assert, assert, write, write, pop, pop]
 
     describe "doesn't include events excluded by a conditional" $ do
       let code =
@@ -2094,7 +2094,7 @@ spec = describe "analyze" $ do
                   (insert accounts "stu" {"balance": 5}) ; impossible
                   "didn't write"))
             |]
-      expectTrace code (PLit False) [{- else -} path]
+      expectTrace code (PLit False) [push, {- else -} path, pop]
 
     describe "doesn't include events after a failed enforce" $ do
       let code =
@@ -2104,7 +2104,7 @@ spec = describe "analyze" $ do
                 (enforce false)
                 (at 'balance (read accounts "test")))
             |]
-      expectTrace code Success' [write, assert]
+      expectTrace code Success' [push, write, assert]
 
     describe "doesn't include cases after a successful enforce-one case" $ do
       let code =
@@ -2117,7 +2117,7 @@ spec = describe "analyze" $ do
                   ]))
             |]
       expectTrace code (bnot Success')
-        [assert, {- failure -} path, {- success -} path]
+        [push, assert, {- failure -} path, {- success -} path, pop]
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
