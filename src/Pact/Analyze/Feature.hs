@@ -103,6 +103,7 @@ data Feature
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
+  | FRowExists
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
@@ -910,6 +911,22 @@ doc FRowWriteCount = Doc
         ]
         (TyCon int)
   ]
+doc FRowExists = Doc
+  "row-exists"
+  CDatabase
+  PropOnly
+  "Whether a row exists prior to the transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-exists t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon bool)
+  ]
 
 -- Authorization features
 
@@ -1025,6 +1042,7 @@ PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)
 PAT(SRowWriteCount, FRowWriteCount)
+PAT(SRowExists, FRowExists)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 

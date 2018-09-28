@@ -180,6 +180,10 @@ evalPropSpecific (RowWriteCount tn pRk) = do
   sRk <- evalProp pRk
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.rowWriteCount tn' sRk
+evalPropSpecific (RowExists tn pRk) = do
+  sRk <- evalProp pRk
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.rowExists tn' sRk
 
 -- Authorization
 evalPropSpecific (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn

@@ -274,6 +274,8 @@ data PropSpecific a where
   RowWrite      :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
   -- | Number of times a row is written
   RowWriteCount :: Prop TableName  -> Prop RowKey -> PropSpecific Integer
+  -- | Whether a row exists prior to the transaction
+  RowExists     :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
 
   --
   -- TODO: StaleRead?

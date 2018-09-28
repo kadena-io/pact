@@ -76,8 +76,8 @@ data ScopeType
   deriving (Eq, Show)
 
 data TraceEvent
-  = TraceRead (Located (TagId, Schema))
-  | TraceWrite (Located (TagId, Schema))
+  = TraceRead Schema (Located TagId)
+  | TraceWrite Schema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
   | TraceSubpathStart Path
@@ -106,8 +106,9 @@ data Concreteness
 
 data Access
   = Access
-    { _accRowKey :: S RowKey
-    , _accObject :: Object
+    { _accRowKey  :: S RowKey
+    , _accObject  :: Object
+    , _accSuccess :: SBV Bool
     }
   deriving (Eq, Show)
 

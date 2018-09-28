@@ -18,7 +18,7 @@
        (authorized-by 'accounts-admin-keyset))
      (within [read-account-admin]
        (property auth-required))
-     (except [fund-account debit credit] ; TODO: fix create-account
+     (except [fund-account debit credit create-account]
        (property conserves-mass))
      (within [read-account-user read-account-admin check-balance]
        (property (not (table-written 'accounts))))

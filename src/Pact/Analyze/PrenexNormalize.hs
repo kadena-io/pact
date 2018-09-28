@@ -160,8 +160,9 @@ floatBoolQuantifiers p = case p of
   PNot a       -> bimap (fmap flipQuantifier) PNot (float a)
   CoreProp (Logical _ _) -> error ("ill-defined logical op: " ++ show p)
 
-  PropSpecific (RowRead  tn pRk) -> PropSpecific . RowRead  tn <$> float pRk
-  PropSpecific (RowWrite tn pRk) -> PropSpecific . RowWrite tn <$> float pRk
+  PropSpecific (RowRead  tn pRk)  -> PropSpecific . RowRead   tn <$> float pRk
+  PropSpecific (RowWrite tn pRk)  -> PropSpecific . RowWrite  tn <$> float pRk
+  PropSpecific (RowExists tn pRk) -> PropSpecific . RowExists tn <$> float pRk
 
 reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
 reassembleFloated qs prop =

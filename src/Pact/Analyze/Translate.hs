@@ -295,13 +295,13 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (Located (TagId, Schema) -> TraceEvent)
+  :: (Schema -> Located TagId -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
+  emit $ mkEvent schema (Located (nodeInfo node) tid)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId

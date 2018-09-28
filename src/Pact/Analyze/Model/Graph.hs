@@ -29,6 +29,17 @@ linearize model = go traceEvents
         let continue = ExecutionTrace (event : futureEvents) mRes
             stop     = ExecutionTrace [event] Nothing
 
+            handleDbAccess
+              :: Traversal' (ModelTags 'Concrete) (SBV Bool)
+              -> ExecutionTrace
+            handleDbAccess tagsBool =
+              let mSucceeds = model ^? modelTags . tagsBool . to SBV.unliteral . _Just
+              in case mSucceeds of
+                   Nothing    ->
+                     error "impossible: missing db access tag, or symbolic value"
+                   Just False -> stop
+                   Just True  -> continue
+
             handleEnforce
               :: Recoverability
               -> Traversal' (ModelTags 'Concrete) (SBV Bool)
@@ -65,6 +76,10 @@ linearize model = go traceEvents
                handleEnforce recov $ mtAsserts.at tid._Just.located
              TraceAuth recov (_located -> tid) ->
                handleEnforce recov $ mtAuths.at tid._Just.located.authSuccess
+             TraceRead _schema (Located _i tid) ->
+               handleDbAccess $ mtReads.at tid._Just.located.accSuccess
+             TraceWrite _schema (Located _i tid) ->
+               handleDbAccess $ mtWrites.at tid._Just.located.accSuccess
              _ ->
                continue)
       (ExecutionTrace [] (Just $ model ^. modelTags.mtResult._2.located))

@@ -84,13 +84,14 @@ allocModelTags locatedTm graph = ModelTags
     allocS = sansProv <$> alloc
 
     allocAccesses
-      :: Prism' TraceEvent (Located (TagId, Schema))
+      :: Prism' TraceEvent (Schema, Located TagId)
       -> Symbolic (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(Located info (tid, schema)) -> do
+      for (toListOf (traverse.p) events) $ \(schema, Located info tid) -> do
         srk <- allocS
         obj <- allocSchema schema
-        pure (tid, Located info (Access srk obj))
+        suc <- alloc
+        pure (tid, Located info (Access srk obj suc))
 
     allocReads :: Symbolic (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
@@ -168,10 +169,11 @@ saturateModel =
     fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
     fetchAccess :: Access -> SBV.Query Access
-    fetchAccess (Access sRk obj) = do
+    fetchAccess (Access sRk obj suc) = do
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
-      pure $ Access sRk' obj'
+      suc' <- fetchSbv suc
+      pure $ Access sRk' obj' suc'
 
     fetchAuth :: Authorization -> SBV.Query Authorization
     fetchAuth (Authorization sKs sbool) = Authorization <$>

@@ -62,19 +62,32 @@ showArg (Located _ (Unmunged nm, tval)) = nm <> " = " <> showTVal tval
 showVar :: Located (Unmunged, TVal) -> Text
 showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
+data AccessType = ReadAccess | WriteAccess
+
+showDbAccessSuccess :: AccessType -> SBV Bool -> Text
+showDbAccessSuccess accTy successSbv
+  = maybe "[ERROR:symbolic]" (\case True -> "succeeds"; False -> "fails")
+    (SBV.unliteral successSbv)
+  <> " "
+  <> (case accTy of
+        ReadAccess  -> "because the row was not present"
+        WriteAccess -> "because the row was already present")
+
 --
 -- TODO: this should display the table name
 --
 showRead :: Located Access -> Text
-showRead (Located _ (Access srk obj)) = "read " <> showObject obj
-                                     <> " for key " <> showS srk
+showRead (Located _ (Access srk obj suc))
+  = "read " <> showObject obj <> " for key " <> showS srk <> " "
+  <> showDbAccessSuccess ReadAccess suc
 
 --
 -- TODO: this should display the table name
 --
 showWrite :: Located Access -> Text
-showWrite (Located _ (Access srk obj)) = "write " <> showObject obj
-                                      <> " to key " <> showS srk
+showWrite (Located _ (Access srk obj suc))
+  = "write " <> showObject obj <> " to key " <> showS srk <> " "
+  <> showDbAccessSuccess WriteAccess suc
 
 showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
@@ -132,9 +145,9 @@ showEvent ksProvs tags event = do
   lastDepth <- get
   fmap (fmap (indent lastDepth)) $
     case event of
-      TraceRead (_located -> (tid, _)) ->
+      TraceRead _ (_located -> tid) ->
         pure [display mtReads tid showRead]
-      TraceWrite (_located -> (tid, _)) ->
+      TraceWrite _ (_located -> tid) ->
         pure [display mtWrites tid showWrite]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]

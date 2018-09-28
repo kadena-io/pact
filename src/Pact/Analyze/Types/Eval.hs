@@ -181,6 +181,7 @@ data LatticeAnalyzeState
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
     , _lasTableCells          :: TableMap SymbolicCells
+    , _lasRowExists           :: TableMap (SFunArray RowKey Bool)
     , _lasRowsRead            :: TableMap (SFunArray RowKey Integer)
     , _lasRowsWritten         :: TableMap (SFunArray RowKey Integer)
     , _lasCellsEnforced       :: TableMap (ColumnMap (SFunArray RowKey Bool))
@@ -239,6 +240,7 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasIntColumnDeltas     = intColumnDeltas
         , _lasDecColumnDeltas     = decColumnDeltas
         , _lasTableCells          = mkSymbolicCells tables
+        , _lasRowExists           = mkRowExists
         , _lasRowsRead            = mkPerTableSFunArray 0
         , _lasRowsWritten         = mkPerTableSFunArray 0
         , _lasCellsEnforced       = cellsEnforced
@@ -261,6 +263,9 @@ mkInitialAnalyzeState tables = AnalyzeState
     cellsEnforced
       = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
+
+    mkRowExists = TableMap $ Map.fromList $ tableNames <&> \tn@(TableName tn')
+      -> (tn, mkFreeArray $ "row_exists__" <> T.pack tn')
 
     mkTableColumnMap
       :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
@@ -417,6 +422,10 @@ rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
 
 rowWriteCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
 rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
+  symArrayAt sRk.sbv2S
+
+rowExists :: TableName -> S RowKey -> Lens' AnalyzeState (S Bool)
+rowExists tn sRk = latticeState.lasRowExists.singular (ix tn).
   symArrayAt sRk.sbv2S
 
 cellEnforced

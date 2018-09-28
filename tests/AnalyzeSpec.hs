@@ -22,7 +22,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (fromJust, isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>), (<=>)),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -776,7 +776,9 @@ spec = describe "analyze" $ do
                 (enforce (= stu-name "stu") "name is stu")
                 (enforce (= stu-balance 5) "balance is 5")))
           |]
-    in expectPass code $ Valid $ Inj Success
+    in expectPass code $ Valid $
+      PNot (PropSpecific (RowExists "tokens" (PLit "stu")))
+      ==> Inj Success
 
   describe "table-read.one-read" $
     let code =
@@ -794,7 +796,9 @@ spec = describe "analyze" $ do
                 )
               )
           |]
-    in expectPass code $ Valid $ bnot Abort'
+    in expectPass code $ Valid $
+         PNot (PropSpecific (RowExists "tokens" (PLit "stu")))
+         ==> bnot Abort'
 
   describe "at.dynamic-key" $ do
     let code =
@@ -893,12 +897,10 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ Inj $ TableWrite "tokens"
+    expectPass code $ Valid $ Inj (TableWrite "tokens") <=> Success'
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
-    --
-    -- TODO: actually, this can fail when the key already exists! this is wrong:
-    --
-    expectPass code $ Valid (Inj Success)
+    expectPass code $ Valid $
+      Success' <=> PNot (Inj (RowExists "tokens" (PLit "stu")))
 
   describe "table-written.insert.partial" $ do
     let code =
@@ -920,7 +922,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (update tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ Inj $ TableWrite "tokens"
+    expectPass code $ Valid $ Success' <=> Inj (TableWrite "tokens")
 
   describe "table-written.update.partial" $ do
     let code =
@@ -931,10 +933,8 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (update tokens "stu" {}))
           |]
-    --
-    -- TODO: actually, this can fail when the key does not yet exist! this is wrong:
-    --
-    expectPass code $ Valid (Inj Success)
+    expectPass code $ Valid $
+      PropSpecific (RowExists "tokens" (PLit "stu")) <=> Success'
 
   describe "table-written.write" $ do
     let code =
@@ -1158,7 +1158,8 @@ spec = describe "analyze" $ do
                 (enforce (= bal 10) "Read after write failed")))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct")) <=> Success'
 
   describe "with-read.nested" $ do
     let code =
@@ -1171,7 +1172,8 @@ spec = describe "analyze" $ do
                   (enforce (= bal 10) "Shadowing failed"))))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct")) <=> Success'
 
   describe "with-read.overlapping-names" $ do
     let code =
@@ -1189,7 +1191,8 @@ spec = describe "analyze" $ do
                   num)))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PNot (Inj (RowExists "owners" (PLit "bob"))) <=> Success'
 
   describe "bind.from-read" $ do
     let code =
@@ -1202,7 +1205,8 @@ spec = describe "analyze" $ do
                   bal)))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PLit "bob")) <=> Success'
 
   describe "bind.from-literal" $ do
     let code =
@@ -2083,7 +2087,8 @@ spec = describe "analyze" $ do
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectTrace code (bnot Success')
+      expectTrace code
+        (bnot Success')
         [push, read, read, push, assert, assert, write, write, pop, pop]
 
     describe "doesn't include events excluded by a conditional" $ do

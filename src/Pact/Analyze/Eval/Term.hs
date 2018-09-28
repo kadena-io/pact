@@ -120,12 +120,15 @@ tagAccessKey
   :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> S RowKey
+  -> S Bool
   -> Analyze ()
-tagAccessKey lens' tid srk = do
-  mSrk <- preview $ aeModelTags.lens'.at tid._Just.located.accRowKey
-  case mSrk of
+tagAccessKey lens' tid srk accessSucceeds = do
+  mAcc <- preview $ aeModelTags.lens'.at tid._Just.located
+  case mAcc of
     Nothing     -> pure ()
-    Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
+    Just (Access tagSrk _object tagSuccess) -> do
+      addConstraint $ sansProv $ srk .== tagSrk
+      addConstraint $ sansProv $ accessSucceeds .== sansProv tagSuccess
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
@@ -252,7 +255,9 @@ evalTermO = \case
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= true
     rowReadCount tn sRk += 1
-    tagAccessKey mtReads tid sRk
+
+    readSucceeds <- use $ rowExists tn sRk
+    tagAccessKey mtReads tid sRk readSucceeds
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
@@ -371,9 +376,17 @@ evalTerm = \case
     obj@(Object fields) <- evalTermO objT
     validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
-    tableWritten tn .= true
+
+    thisRowExists <- use $ rowExists tn sRk
+    let writeSucceeds = case writeType of
+          Pact.Insert -> bnot thisRowExists
+          Pact.Write  -> true
+          Pact.Update -> thisRowExists
+    succeeds %= (&&& writeSucceeds)
+
+    tableWritten tn .= writeSucceeds
     rowWriteCount tn sRk += 1
-    tagAccessKey mtWrites tid sRk
+    tagAccessKey mtWrites tid sRk writeSucceeds
 
     aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
