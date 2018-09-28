@@ -17,7 +17,7 @@
      (defproperty auth-required
        (authorized-by 'accounts-admin-keyset))
      (within [read-account-admin]                       (property auth-required))
-     (except [create-account fund-account debit credit] (property conserves-mass))
+     (except [fund-account debit credit] (property conserves-mass))
      (within [read-account-user read-account-admin check-balance]
        (property (not (table-written 'accounts))))
      (within [create-account]

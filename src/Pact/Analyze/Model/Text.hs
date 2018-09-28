@@ -11,7 +11,6 @@ module Pact.Analyze.Model.Text
 
 import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
-import qualified Data.Foldable              as Foldable
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
 import           Data.Monoid                ((<>))
@@ -155,8 +154,8 @@ showEvent ksProvs tags event = do
           ObjectScope ->
             "destructuring object" : displayVids showVar
           FunctionScope nm ->
-            let header = "entering function " <> nm
-                      <> " with argument" <> if length vids > 1 then "s" else ""
+            let header = "entering function " <> nm <> " with "
+                      <> if length vids > 1 then "arguments" else "argument"
             in header : (displayVids showArg ++ [emptyLine])
       TracePopScope _ scopeTy tid _ -> do
         modify pred
@@ -181,10 +180,7 @@ showEvent ksProvs tags event = do
 showModel :: Model 'Concrete -> Text
 showModel model =
     T.intercalate "\n" $ T.intercalate "\n" . map indent1 <$>
-      [ ["Arguments:"]
-      , indent1 <$> Foldable.toList (showArg <$> (model ^. modelArgs))
-      , []
-      , ["Program trace:"]
+      [ ["Program trace:"]
       , indent1 <$> (concat $ evalState (traverse showEvent' traceEvents) 0)
       , []
       , ["Result:"]

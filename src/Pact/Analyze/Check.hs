@@ -30,7 +30,7 @@ import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
                                             (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left)
+                                            _Left, ifor)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -273,14 +273,15 @@ analysisArgs :: Map VarId (Located (Unmunged, TVal)) -> Map VarId AVal
 analysisArgs = fmap (view (located._2._2))
 
 verifyFunctionInvariants'
-  :: Info
+  :: Text
+  -> Info
   -> [Table]
   -> [Named Node]
   -> [AST Node]
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
+verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
     (args, tm, graph) <- hoist generalize $
-      withExcept translateToCheckFailure $ runTranslation funInfo pactArgs body
+      withExcept translateToCheckFailure $ runTranslation funName funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       modelArgs' <- lift $ allocArgs args
@@ -326,17 +327,18 @@ verifyFunctionInvariants' funInfo tables pactArgs body = runExceptT $ do
     runSymbolic = SBV.runSMTWith config
 
 verifyFunctionProperty
-  :: Info
+  :: Text
+  -> Info
   -> [Table]
   -> [Named Node]
   -> [AST Node]
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
-verifyFunctionProperty funInfo tables pactArgs body (Located propInfo check) =
+verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo check) =
     runExceptT $ do
       (args, tm, graph) <- hoist generalize $
         withExcept translateToCheckFailure $
-          runTranslation funInfo pactArgs body
+          runTranslation funName funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ allocArgs args
         tags <- lift $ allocModelTags (Located funInfo tm) graph
@@ -594,30 +596,31 @@ runExpParserOver exps parser = sequence $ exps <&> \meta -> case parser meta of
   Left err   -> Left (meta, err)
   Right good -> Right (Located (getInfo meta) good)
 
-verifyFunctionProps :: [Table] -> Ref -> [Located Check] -> IO [CheckResult]
-verifyFunctionProps tables ref props = do
+verifyFunctionProps :: [Table] -> Ref -> Text -> [Located Check] -> IO [CheckResult]
+verifyFunctionProps tables ref name props = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
   case fun of
     TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
-      then for props $ verifyFunctionProperty _fInfo tables _fArgs _fBody
+      then for props $ verifyFunctionProperty name _fInfo tables _fArgs _fBody
       else pure [Left (CheckFailure _fInfo (TypecheckFailure failures))]
     _ -> pure []
 
 verifyFunctionInvariants
   :: [Table]
   -> Ref
+  -> Text
   -> IO (Either CheckFailure (TableMap [CheckResult]))
-verifyFunctionInvariants tables ref = do
+verifyFunctionInvariants tables ref name = do
   (fun, tcState) <- runTC 0 False $ typecheckTopLevel ref
   let failures = tcState ^. tcFailures
 
   case fun of
     TopFun FDefun {_fInfo, _fArgs, _fBody} _ ->
       if Set.null failures
-      then verifyFunctionInvariants' _fInfo tables _fArgs _fBody
+      then verifyFunctionInvariants' name _fInfo tables _fArgs _fBody
       else pure $ Left $ CheckFailure _fInfo (TypecheckFailure failures)
     _ -> pure $ Right $ TableMap Map.empty
 
@@ -683,17 +686,18 @@ verifyModule modules moduleData = runExceptT $ do
   let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks
 
-      verifyFunProps :: (Ref, [Located Check]) -> IO [CheckResult]
-      verifyFunProps = uncurry (verifyFunctionProps tables)
+      verifyFunProps :: Ref -> Text -> [Located Check] -> IO [CheckResult]
+      verifyFunProps = verifyFunctionProps tables
 
   funChecks'' <- case funChecks' of
     Left errs         -> throwError $ ModuleParseFailure errs
     Right funChecks'' -> pure funChecks''
 
-  funChecks''' <- lift $ traverse verifyFunProps funChecks''
-  invariantChecks <- for typecheckedRefs $ \ref ->
+  funChecks''' <- lift $ ifor funChecks'' $ \name (ref, check) ->
+    verifyFunProps ref name check
+  invariantChecks <- ifor typecheckedRefs $ \name ref ->
     withExceptT ModuleCheckFailure $ ExceptT $
-      verifyFunctionInvariants tables ref
+      verifyFunctionInvariants tables ref name
 
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
@@ -715,5 +719,5 @@ verifyCheck moduleData funName check = do
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
-      Right . head <$> verifyFunctionProps tables funRef [Located info check]
+      Right . head <$> verifyFunctionProps tables funRef funName [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
