@@ -16,14 +16,22 @@
        (= (column-delta 'accounts 'balance) 0.0))
      (defproperty auth-required
        (authorized-by 'accounts-admin-keyset))
-     (within [read-account-admin]
-       (property auth-required))
-     (except [fund-account debit credit create-account]
-       (property conserves-mass))
-     (within [read-account-user read-account-admin check-balance]
-       (property (not (table-written 'accounts))))
-     (within [create-account]
-       (property (not (table-read 'accounts))))
+
+     ; we have two admin functions
+     (property auth-required
+       {'within: ['read-account-admin, 'fund-account]})
+
+     ; every function should conserve mass except for the admin fund-account,
+     ; and debit / credit which should be private
+     (property conserves-mass
+       {'except: ['fund-account, 'debit, 'credit]})
+
+     ; reading functions do not write
+     (property (not (table-written 'accounts))
+       {'within: ['read-account-user, 'read-account-admin, 'check-balance]})
+
+     (property (not (table-read 'accounts))
+       {'within: ['create-account]})
     ]
 
   (defschema account

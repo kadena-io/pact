@@ -59,7 +59,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
-                                            renderParsed, tMeta, _tDefName)
+                                            renderParsed, tMeta, _tDefName, pattern ColonExp)
 import           Pact.Types.Runtime        (Exp, ModuleData,
                                             ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
@@ -431,9 +431,6 @@ applicableCheck funName (ModuleProperty _ propScope) = case propScope of
   Excluding names -> funName `Set.notMember` names
   Including names -> funName `Set.member`    names
 
-pattern PropertyExp :: Exp i -> Exp i
-pattern PropertyExp body <- ParenList [ EAtom' "property", body ]
-
 -- | Parse a property definition or property like
 --
 -- * '(defproperty foo (> 1 0))'
@@ -451,21 +448,29 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
     [ EAtom' propname,              body ] ->
       pure $ Left (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
-  parseDefprops' (PropertyExp body)
-    = pure $ Right $ ModuleProperty body Everywhere
-  parseDefprops' (ParenList [ EAtom' "except", names, PropertyExp body ])
-    = Right . ModuleProperty body <$> (Excluding <$> parseNames names)
-  parseDefprops' (ParenList [ EAtom' "within", names, PropertyExp body ])
-    = Right . ModuleProperty body <$> (Including <$> parseNames names)
-  parseDefprops' exp = Left (exp, "expected set of defproperty")
+  parseDefprops' exp = do
+    (body, propScope) <- parsePropertyExp exp
+    pure $ Right $ ModuleProperty body propScope
 
   parseNames :: Exp Info -> Either ParseFailure (Set Text)
   parseNames (SquareList names) = fmap Set.fromList $ traverse parseName names
   parseNames exp                = Left (exp, "expected a list of names")
 
   parseName :: Exp Info -> Either ParseFailure Text
-  parseName (EAtom' name) = Right name
-  parseName exp           = Left (exp, "expected a bare word name")
+  parseName (EStrLiteral' name) = Right name
+  parseName exp                 = Left (exp, "expected a bare word name")
+
+  parsePropertyExp :: Exp Info -> Either ParseFailure (Exp Info, PropertyScope)
+  parsePropertyExp exp = case exp of
+    ParenList (EAtom' "property" : rest) -> case rest of
+      [ exp' ]
+        -> pure (exp', Everywhere)
+      [ exp', BraceList [ EStrLiteral' "except", ColonExp, names ] ]
+        -> (exp',) . Excluding <$> parseNames names
+      [ exp', BraceList [ EStrLiteral' "within", ColonExp, names ] ]
+        -> (exp',) . Including <$> parseNames names
+      _ -> Left (exp, "malformed property definition")
+    _ -> Left (exp, "expected a set of property / defproperty")
 
 parseModelDecl exp = Left (exp, "expected set of defproperty")
 

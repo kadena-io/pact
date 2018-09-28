@@ -20,7 +20,7 @@ import           Prelude                    hiding (exp)
 
 import           Pact.Types.Lang            (AtomExp (..), Exp (..),
                                              ListDelimiter (..), ListExp (..),
-                                             Literal, LiteralExp (..),
+                                             Literal(LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
@@ -138,6 +138,9 @@ pattern EAtom' name <- EAtom (AtomExp name [] _i)
 
 pattern ELiteral' :: Literal -> Exp t
 pattern ELiteral' lit <- ELiteral (LiteralExp lit _i)
+
+pattern EStrLiteral' :: Text -> Exp t
+pattern EStrLiteral' lit <- ELiteral (LiteralExp (LString lit) _i)
 
 pattern Colon' :: Exp t
 pattern Colon' <- ESeparator (SeparatorExp Colon _i)
