@@ -65,13 +65,12 @@ showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 data AccessType = ReadAccess | WriteAccess
 
 showDbAccessSuccess :: AccessType -> SBV Bool -> Text
-showDbAccessSuccess accTy successSbv
-  = maybe "[ERROR:symbolic]" (\case True -> "succeeds"; False -> "fails")
-    (SBV.unliteral successSbv)
-  <> " "
-  <> (case accTy of
-        ReadAccess  -> "because the row was not present"
-        WriteAccess -> "because the row was already present")
+showDbAccessSuccess accTy successSbv = case SBV.unliteral successSbv of
+  Nothing    -> "[ERROR:symbolic]"
+  Just True  -> "succeeds"
+  Just False -> case accTy of
+    ReadAccess  -> "fails because the row was not present"
+    WriteAccess -> "fails because the row was already present"
 
 --
 -- TODO: this should display the table name
