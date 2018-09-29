@@ -122,13 +122,13 @@ tagAccessKey
   -> S RowKey
   -> S Bool
   -> Analyze ()
-tagAccessKey lens' tid srk accessSucceeds = do
+tagAccessKey lens' tid rowKey accessSucceeds = do
   mAcc <- preview $ aeModelTags.lens'.at tid._Just.located
   case mAcc of
-    Nothing     -> pure ()
-    Just (Access tagSrk _object tagSuccess) -> do
-      addConstraint $ sansProv $ srk .== tagSrk
-      addConstraint $ sansProv $ accessSucceeds .== sansProv tagSuccess
+    Nothing -> pure ()
+    Just (Access tagRowKey _object tagSuccess) -> do
+      addConstraint $ sansProv $ rowKey               .== tagRowKey
+      addConstraint $ sansProv $ _sSbv accessSucceeds .== tagSuccess
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
