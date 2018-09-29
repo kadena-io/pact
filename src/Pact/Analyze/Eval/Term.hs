@@ -399,8 +399,8 @@ evalTerm = \case
           -- avoid overlapping instances. GHC is willing to pick `+` and `-`
           -- for each of the two instantiations of this function.
           let writeDelta
-                :: forall t
-                 . (S t -> S t -> S t) -> (S t -> S t -> S t)
+                :: forall t. (SymWord t, Num t)
+                => (S t -> S t -> S t) -> (S t -> S t -> S t)
                 -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
                 -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
                 -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
@@ -409,7 +409,13 @@ evalTerm = \case
                 let cell :: Lens' AnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv sVal
-                prev <- use cell
+
+                -- (only) in the case of an insert, we know the cell did not
+                -- previously exist
+                prev <- if writeType == Pact.Insert
+                  then pure (literalS 0)
+                  else use cell
+
                 cell .= next
                 let diff = next `minus` prev
                 mkCellDeltaL tn cn sRk %= plus diff

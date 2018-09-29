@@ -1007,6 +1007,17 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Inj Success ==> intConserves "accounts" "balance"
 
+  describe "conserves-mass.integer.insert" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              "create a new account with 0 balance"
+              (insert accounts "stu" { "balance": 0 }))
+          |]
+
+    expectPass code $ Valid $
+      Inj Success ==> intConserves "accounts" "balance"
+
   describe "conserves-mass.integer.without-uniqueness" $ do
     let code =
           [text|
@@ -1045,6 +1056,23 @@ spec = describe "analyze" $ do
 
     expectVerified code
     expectPass code $ Valid $ Inj Success ==> decConserves "accounts2" "balance"
+
+  describe "conserves-mass.decimal.insert" $ do
+    let code =
+          [text|
+            (defschema account2
+              @doc   "accounts schema"
+              @model (invariant (>= balance 0.0))
+              balance:decimal)
+            (deftable accounts2:{account2})
+
+            (defun test:string ()
+              "create a new account with 0 balance"
+              (insert accounts2 "stu" { "balance": 0.0 }))
+          |]
+
+    expectPass code $ Valid $
+      Inj Success ==> decConserves "accounts2" "balance"
 
   describe "conserves-mass.decimal.failing-invariant" $ do
     let code =
