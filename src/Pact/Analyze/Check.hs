@@ -27,10 +27,10 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (at, ifoldrM, itraversed, ix,
+import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
                                             (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left, ifor)
+                                            _Left)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -41,6 +41,7 @@ import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Either               (partitionEithers)
 import qualified Data.HashMap.Strict       as HM
 import           Data.List                 (isPrefixOf)
+import qualified Data.List                 as List
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
@@ -58,10 +59,11 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
-                                            renderParsed, tMeta, _tDefName, pattern ColonExp)
-import           Pact.Types.Runtime        (Exp, ModuleData,
-                                            ModuleName, Ref (Ref),
+import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
+                                            Info, mModel, mName, renderInfo,
+                                            renderParsed, tMeta, _tDefName)
+import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
+                                            Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
@@ -314,7 +316,7 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
     goal = Validation
 
     config :: SBV.SMTConfig
-    config = SBV.z3
+    config = SBV.z3 -- { SBVI.verbose = True }
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
@@ -366,7 +368,7 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
     goal = checkGoal check
 
     config :: SBV.SMTConfig
-    config = SBV.z3
+    config = SBV.z3 -- { SBVI.verbose = True }
 
     -- Discharges impure 'SMTException's from sbv.
     catchingExceptions
@@ -425,11 +427,34 @@ data ModuleProperty = ModuleProperty
   , _modulePropertyScope :: !PropertyScope
   }
 
+-- Does this (module-scoped) property apply to this function?
 applicableCheck :: Text -> ModuleProperty -> Bool
 applicableCheck funName (ModuleProperty _ propScope) = case propScope of
   Everywhere      -> True
   Excluding names -> funName `Set.notMember` names
   Including names -> funName `Set.member`    names
+
+-- List literals are valid either with no commas or with commas interspersed
+-- between each element. Remove all commas.
+normalizeListLit :: [Exp i] -> Maybe [Exp i]
+normalizeListLit lits = case lits of
+  _ : CommaExp : _ -> removeCommas lits
+  _                ->
+    let isComma = \case { CommaExp -> True; _ -> False }
+    in case List.find isComma lits of
+         Nothing     -> Just lits
+         Just _comma -> Nothing
+
+  where
+
+    -- invariant: the input is the previous input *after a comma*, meaning the
+    -- empty list is not valid
+    removeCommas :: [Exp i] -> Maybe [Exp i]
+    removeCommas = \case
+      x : CommaExp : xs -> (x:) <$> removeCommas xs
+      [CommaExp]        -> Nothing
+      [x]               -> Just [x]
+      _                 -> Nothing
 
 -- | Parse a property definition or property like
 --
@@ -453,7 +478,9 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
     pure $ Right $ ModuleProperty body propScope
 
   parseNames :: Exp Info -> Either ParseFailure (Set Text)
-  parseNames (SquareList names) = fmap Set.fromList $ traverse parseName names
+  parseNames exp@(SquareList names) = case normalizeListLit names of
+    Just names' -> fmap Set.fromList $ traverse parseName names'
+    Nothing     -> Left (exp, "expected a list of names")
   parseNames exp                = Left (exp, "expected a list of names")
 
   parseName :: Exp Info -> Either ParseFailure Text
