@@ -6,6 +6,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -16,13 +17,15 @@
 module Pact.Analyze.Types.Shared where
 
 import           Control.Lens                 (At (at), Index, Iso, Iso',
-                                               IxValue, Ixed (ix), Lens', both,
-                                               from, iso, lens, makeLenses,
-                                               makePrisms, over, view, (%~),
-                                               (&))
+                                               IxValue, Ixed (ix), Lens',
+                                               Prism', both, from, iso, lens,
+                                               makeLenses, makePrisms, over,
+                                               view, (%~), (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
+import           Data.Coerce                  (Coercible)
 import           Data.Data                    (Data)
+import qualified Data.Decimal                 as Decimal
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
 import           Data.Map.Strict              (Map)
@@ -37,9 +40,8 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                SymWord, Symbolic, forAll_,
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
-                                               oneIf, sFromIntegral,
-                                               sRealToSInteger, unliteral, (.<),
-                                               (.==))
+                                               oneIf, sFromIntegral, unliteral,
+                                               (%), (.<), (.==))
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
@@ -55,8 +57,11 @@ import           Prelude                      hiding (Float)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
+import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.UserShow
+
 
 data Located a
   = Located
@@ -83,10 +88,14 @@ data Existential (tm :: * -> *) where
 --   EObject sa pa == EObject sb pb = sa == sb && pa == pb
 --   _ == _ = False
 
-mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
-mapExistential f term = case term of
+transformExistential
+  :: (forall a. tm1 a -> tm2 a) -> Existential tm1 -> Existential tm2
+transformExistential f term = case term of
   ESimple ty  term' -> ESimple ty  (f term')
   EObject sch term' -> EObject sch (f term')
+
+mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
+mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
@@ -116,6 +125,26 @@ mkConcreteInteger = SBVI.SBV
                   . SBVI.CW KUnbounded
                   . SBVI.CWInteger
 
+newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
+
+decimalIso :: PactIso Decimal.Decimal Decimal
+decimalIso = PactIso $ iso mkDecimal unMkDecimal
+  where
+    unMkDecimal :: Decimal -> Decimal.Decimal
+    unMkDecimal (Decimal dec) = case Decimal.eitherFromRational (dec % 10 ^ decimalPrecision) of
+      Left err -> error err
+      Right d  -> d
+
+    mkDecimal :: Decimal.Decimal -> Decimal
+    mkDecimal (Decimal.Decimal places mantissa)
+      = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+
+fromPact :: PactIso a b -> a -> b
+fromPact = view . unPactIso
+
+toPact :: PactIso a b -> b -> a
+toPact = view . from . unPactIso
+
 newtype KeySetName
   = KeySetName Text
   deriving (Eq,Ord,IsString,AsString,ToJSON,FromJSON)
@@ -132,6 +161,9 @@ instance HasKind KeySetName where
 
 instance SMTValue KeySetName where
   sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
+
+instance UserShow KeySetName where
+  userShowsPrec _ (KeySetName name) = "'" <> name
 
 newtype TableName
   = TableName String
@@ -167,14 +199,14 @@ type RowKey = String
 
 type Time = Int64
 
-mkTime :: UTCTime -> Time
-mkTime utct = view microseconds (utct .-. toEnum 0)
+timeIso :: PactIso UTCTime Time
+timeIso = PactIso $ iso mkTime unMkTime
+  where
+    mkTime :: UTCTime -> Time
+    mkTime utct = view microseconds (utct .-. toEnum 0)
 
-unMkTime :: Time -> UTCTime
-unMkTime time = toEnum 0 .+^ view (from microseconds) time
-
-timeIso :: Iso' UTCTime Time
-timeIso = iso mkTime unMkTime
+    unMkTime :: Time -> UTCTime
+    unMkTime time = toEnum 0 .+^ view (from microseconds) time
 
 data LogicalOp
   = AndOp -- ^ Conjunction
@@ -182,10 +214,32 @@ data LogicalOp
   | NotOp -- ^ Negation
   deriving (Show, Eq, Ord)
 
+logicalOpP :: Prism' Text LogicalOp
+logicalOpP = mkOpNamePrism
+  [ (SLogicalConjunction, AndOp)
+  , (SLogicalDisjunction, OrOp)
+  , (SLogicalNegation,    NotOp)
+  -- NOTE: that we don't include logical implication here, which only exists in
+  -- the invariant and property languages (not term), and is desugared to a
+  -- combination of negation and disjunction during parsing.
+  ]
+
+instance UserShow LogicalOp where
+  userShowsPrec _ = toText logicalOpP
+
 data EqNeq
   = Eq'  -- ^ Equal
   | Neq' -- ^ Not equal
   deriving (Show, Eq, Ord)
+
+eqNeqP :: Prism' Text EqNeq
+eqNeqP = mkOpNamePrism
+  [ (SEquality,   Eq')
+  , (SInequality, Neq')
+  ]
+
+instance UserShow EqNeq where
+  userShowsPrec _ = toText eqNeqP
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -195,6 +249,19 @@ data ComparisonOp
   | Eq  -- ^ Equal
   | Neq -- ^ Not equal
   deriving (Show, Eq, Ord)
+
+comparisonOpP :: Prism' Text ComparisonOp
+comparisonOpP = mkOpNamePrism
+  [ (SGreaterThan,        Gt)
+  , (SLessThan,           Lt)
+  , (SGreaterThanOrEqual, Gte)
+  , (SLessThanOrEqual,    Lte)
+  , (SEquality,           Eq)
+  , (SInequality,         Neq)
+  ]
+
+instance UserShow ComparisonOp where
+  userShowsPrec _ = toText comparisonOpP
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
@@ -211,7 +278,7 @@ data OriginatingCell
 data Provenance
   = FromCell    OriginatingCell
   | FromNamedKs (S KeySetName)
-  | FromInput   Text
+  | FromInput   Unmunged
   deriving (Eq, Show)
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
@@ -257,6 +324,29 @@ instance Boolean (S Bool) where
 instance IsString (S String) where
   fromString = sansProv . fromString
 
+instance SymbolicDecimal (S Decimal) where
+  type IntegerOf (S Decimal) = S Integer
+  fromInteger' (S _ a)       = sansProv (fromInteger' a)
+  lShiftD  i       (S _ d)   = sansProv (lShiftD  i d)
+  lShiftD' (S _ i) (S _ d)   = sansProv (lShiftD' i d)
+  rShiftD  i       (S _ d)   = sansProv (rShiftD  i d)
+  rShiftD' (S _ i) (S _ d)   = sansProv (rShiftD' i d)
+  floorD (S _ d)             = sansProv (floorD d)
+
+-- Caution [OverlappingInstances]: Though it looks like this instance is
+-- exactly the same as the one below, do not be deceived, it is not. In this
+-- instance `*` resolves to `*` from `instance Num (SBV Decimal)`, which has an
+-- `rShift255D`. In the instance below, `*` resolves to `*` from `*` from
+-- `instance (Ord a, Num a, SymWord a) => Num (SBV a)`, included in sbv, which
+-- does to include the shift. *This instance must be selected for decimals*.
+instance {-# OVERLAPPING #-} Num (S Decimal) where
+  S _ x + S _ y  = sansProv $ x + y
+  S _ x * S _ y  = sansProv $ x * y
+  abs (S _ x)    = sansProv $ abs x
+  signum (S _ x) = sansProv $ signum x
+  fromInteger i  = sansProv $ fromInteger i
+  negate (S _ x) = sansProv $ negate x
+
 instance (Num a, SymWord a) => Num (S a) where
   S _ x + S _ y  = sansProv $ x + y
   S _ x * S _ y  = sansProv $ x * y
@@ -264,6 +354,12 @@ instance (Num a, SymWord a) => Num (S a) where
   signum (S _ x) = sansProv $ signum x
   fromInteger i  = sansProv $ fromInteger i
   negate (S _ x) = sansProv $ negate x
+
+-- Caution: see note [OverlappingInstances] *This instance must be selected for
+-- decimals*.
+instance {-# OVERLAPPING #-} Fractional (S Decimal) where
+  fromRational  = literalS . fromRational
+  S _ x / S _ y = sansProv $ x / y
 
 instance (Fractional a, SymWord a) => Fractional (S a) where
   fromRational = literalS . fromRational
@@ -305,6 +401,9 @@ newtype Object
   = Object (Map Text TVal)
   deriving (Eq, Show)
 
+instance UserShow Object where
+  userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
+
 instance Monoid Object where
   mempty = Object Map.empty
 
@@ -326,6 +425,10 @@ instance Monoid Schema where
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
   Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
+
+-- Note: this doesn't exactly match the pact syntax
+instance UserShow Schema where
+  userShowsPrec d (Schema schema) = userShowsPrec d schema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -349,6 +452,12 @@ data AVal
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
+
+instance UserShow AVal where
+  userShowsPrec _ = \case
+    AVal _ sVal -> tShow sVal
+    AnObj obj   -> userShow obj
+    OpaqueVal   -> "[opaque]"
 
 instance EqSymbolic Object where
   Object fields .== Object fields' =
@@ -395,11 +504,11 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
-coerceSBV :: SBV a -> SBV b
-coerceSBV = SBVI.SBV . SBVI.unSBV
-
-coerceS :: S a -> S b
+coerceS :: Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
+
+unsafeCoerceS :: S a -> S b
+unsafeCoerceS (S mProv a) = S mProv $ unsafeCoerceSBV a
 
 iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
@@ -411,9 +520,6 @@ fromIntegralS
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
 
-realToIntegerS :: S Decimal -> S Integer
-realToIntegerS = over s2Sbv sRealToSInteger
-
 oneIfS :: (Num a, SymWord a) => S Bool -> S a
 oneIfS = over s2Sbv oneIf
 
@@ -423,7 +529,7 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 -- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a)
+type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a)
 
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
@@ -482,9 +588,33 @@ newtype VarId
   = VarId Int
   deriving (Show, Eq, Enum, Num, Ord)
 
+-- | Identifier name that is guaranteed to be unique because it contains a
+-- unique identifier. These names are generated upstream in the typechecker
+-- (using 'freshId').
+newtype Munged
+  = Munged Text
+  deriving (Eq, Show)
+
+-- | A user-supplied (i.e. non-unique) identifer name.
+newtype Unmunged
+  = Unmunged Text
+  deriving (Eq, Show)
+
+data Binding
+  = Binding
+    { _bVid   :: VarId
+    , _buName :: Unmunged
+    , _bmName :: Munged
+    , _bType  :: EType
+    }
+  deriving (Eq, Show)
+
 -- | The type of a pact data type we can't reason about -- see 'TAny'.
 data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
+
+instance UserShow Any where
+  userShowsPrec _ Any = "*"
 
 instance HasKind Any
 instance SymWord Any
@@ -492,7 +622,7 @@ instance SMTValue Any
 
 newtype KeySet
   = KeySet Integer
-  deriving (Eq, Ord, Data, Show, Read)
+  deriving (Eq, Ord, Data, Show, Read, UserShow)
 
 instance SymWord KeySet where
   mkSymWord = SBVI.genMkSymVar KUnbounded
@@ -528,12 +658,6 @@ typeEq TAny     TAny     = Just Refl
 typeEq TKeySet  TKeySet  = Just Refl
 typeEq _        _        = Nothing
 
-class UserShow a where
-  userShowsPrec :: Int -> a -> Text
-
-  userShowList :: [a] -> Text
-  userShowList as = "[" <> T.intercalate ", " (userShow <$> as) <> "]"
-
 instance UserShow (Type a) where
   userShowsPrec _ = \case
     TInt     -> "integer"
@@ -543,21 +667,6 @@ instance UserShow (Type a) where
     TDecimal -> "decimal"
     TKeySet  -> "keyset"
     TAny     -> "*"
-
-instance UserShow ArithOp where
-  userShowsPrec _d = \case
-    Add -> "+"
-    Sub -> "-"
-    Mul -> "*"
-    Div -> "/"
-    Pow -> "^"
-    Log -> "log"
-
-instance UserShow (Pact.Exp Pact.Info) where
-  userShowsPrec _ = tShow
-
-instance UserShow (Pact.Exp Pact.Parsed) where
-  userShowsPrec _ = tShow
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
@@ -591,18 +700,6 @@ instance UserShow TableName where
 instance UserShow ColumnName where
   userShowsPrec _ (ColumnName cn) = T.pack cn
 
-instance UserShow a => UserShow (Map Text a) where
-  userShowsPrec _ m =
-    let go result k a = result <> ", " <> k <> ": " <> userShow a
-    in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
-
--- Note: this doesn't exactly match the pact syntax
-instance UserShow Schema where
-  userShowsPrec d (Schema schema) = userShowsPrec d schema
-
-userShow :: UserShow a => a -> Text
-userShow = userShowsPrec 0
-
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]
   , propertyBody :: a
@@ -615,6 +712,7 @@ makeLenses ''Object
 makeLenses ''OriginatingCell
 makePrisms ''Provenance
 makeLenses ''S
+makeLenses ''Binding
 makeLenses ''TableMap
 
 type instance Index (ColumnMap a) = ColumnName

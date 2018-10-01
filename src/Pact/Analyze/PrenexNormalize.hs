@@ -88,7 +88,7 @@ floatIntegerQuantifiers p = case p of
     -> PropSpecific . RowWriteCount tn   <$> float pRk
   PropSpecific (RowReadCount tn pRk)
     -> PropSpecific . RowReadCount tn    <$> float pRk
-  PropSpecific (IntColumnDelta{}) -> ([], p)
+  PropSpecific IntColumnDelta{} -> ([], p)
 
 floatDecimalQuantifiers :: Prop Decimal -> ([Quantifier], Prop Decimal)
 floatDecimalQuantifiers p = case p of
@@ -105,7 +105,7 @@ floatDecimalQuantifiers p = case p of
     -> PNumerical ... RoundingLikeOp2 op <$> float a <*> float b
   PropSpecific (DecCellDelta tn cn a)
     -> PropSpecific . DecCellDelta tn cn  <$> float a
-  PropSpecific (DecColumnDelta{}) -> ([], p)
+  PropSpecific DecColumnDelta{} -> ([], p)
 
 floatStringQuantifiers :: Prop String -> ([Quantifier], Prop String)
 floatStringQuantifiers p = case p of

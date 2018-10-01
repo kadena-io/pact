@@ -16,10 +16,10 @@ module Pact.Analyze.Translate where
 import qualified Algebra.Graph              as Alga
 import           Control.Applicative        (Alternative (empty))
 import           Control.Lens               (Lens', at, cons, makeLenses, snoc,
-                                             to, use, view, (%=), (%~), (.=),
-                                             (.~), (<&>), (<&>), (?=), (?~),
-                                             (^.), (^?), (<>~))
-import           Control.Monad              (replicateM, (>=>))
+                                             to, use, view, zoom, (%=), (%~),
+                                             (+~), (.=), (.~), (<&>), (<>~),
+                                             (?=), (^.), (^?))
+import           Control.Monad              (join, replicateM, (>=>))
 import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
@@ -37,6 +37,7 @@ import qualified Data.Text                  as T
 import           Data.Thyme                 (parseTime)
 import           Data.Traversable           (for)
 import           Data.Type.Equality         ((:~:) (Refl))
+import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
@@ -53,12 +54,13 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
+
 -- * Translation types
 
 data TranslateFailure = TranslateFailure
   { _translateFailureInfo :: !Info
   , _translateFailure     :: !TranslateFailureNoLoc
-  }
+  } deriving Show
 
 data TranslateFailureNoLoc
   = BranchesDifferentTypes EType EType
@@ -80,6 +82,7 @@ data TranslateFailureNoLoc
   | NoPacts (AST Node)
   | NoLists (AST Node)
   | NoKeys (AST Node)
+  | NoReadMsg (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   deriving (Eq, Show)
@@ -107,22 +110,37 @@ describeTranslateFailureNoLoc = \case
   NoPacts _node -> "Analysis of pacts is not yet supported"
   NoLists _node -> "Analysis of lists is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
+  NoReadMsg _ -> "`read-msg` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
 
 data TranslateEnv
   = TranslateEnv
     { _teInfo           :: Info
-    , _teNodeVars       :: Map Node (Text, VarId)
+    , _teNodeVars       :: Map Node (Munged, VarId)
     , _teRecoverability :: Recoverability
+    , _teScopesEntered  :: Natural
+
+    -- How to generate the next tag and vertex ids. Usually this is via @genId@
+    -- (see @mkTranslateEnv@) but in testing these return a constant @0@.
+    , _teGenTagId       :: forall m. MonadState TagId  m => m TagId
+    , _teGenVertex      :: forall m. MonadState Vertex m => m Vertex
     }
 
 mkTranslateEnv :: Info -> [Arg] -> TranslateEnv
-mkTranslateEnv info args = TranslateEnv info nodeVars mempty
+mkTranslateEnv info args
+  = TranslateEnv info nodeVars mempty 0 (genId id) (genId id)
   where
+    -- NOTE: like in Check's moduleFunChecks, this assumes that toplevel
+    -- function arguments are the only variables for which we do not use munged
+    -- names:
     nodeVars = foldl'
-      (\m (Arg nm vid node _ety) -> Map.insert node (nm, vid) m)
+      (\m (Arg nm vid node _ety) ->
+        Map.insert node (coerceUnmungedToMunged nm, vid) m)
       Map.empty
       args
+
+    coerceUnmungedToMunged :: Unmunged -> Munged
+    coerceUnmungedToMunged (Unmunged nm) = Munged nm
 
 data TranslateState
   = TranslateState
@@ -232,19 +250,36 @@ instance MonadFail TranslateM where
 
 -- * Translation
 
--- | Call when entering a node to set the current context
-nodeContext :: Node -> TranslateM a -> TranslateM a
-nodeContext node = local (envInfo .~ nodeToInfo node)
-
--- | Call when entering an ast node to set the current context
-astContext :: AST Node -> TranslateM a -> TranslateM a
-astContext ast = local (envInfo .~ astToInfo ast)
-
 emit :: TraceEvent -> TranslateM ()
 emit event = modify' $ tsPendingEvents %~ flip snoc event
 
+-- | Call when entering a node to set the current context
+withNodeContext :: Node -> TranslateM a -> TranslateM a
+withNodeContext node = local (envInfo .~ nodeToInfo node)
+
+-- | Call when entering an ast node to set the current context
+withAstContext :: AST Node -> TranslateM a -> TranslateM a
+withAstContext ast = local (envInfo .~ astToInfo ast)
+
+withNestedRecoverability :: Recoverability -> TranslateM a -> TranslateM a
+withNestedRecoverability r = local $ teRecoverability <>~ r
+
+withNewScope
+  :: ScopeType
+  -> [Located Binding]
+  -> TagId
+  -> TranslateM ETerm
+  -> TranslateM ETerm
+withNewScope scopeType bindings retTid act = local (teScopesEntered +~ 1) $ do
+  depth <- view teScopesEntered
+  emit $ TracePushScope depth scopeType bindings
+  res <- act
+  let ty = existentialType res
+  emit $ TracePopScope depth scopeType retTid ty
+  pure res
+
 genTagId :: TranslateM TagId
-genTagId = genId tsNextTagId
+genTagId = TranslateM $ zoom tsNextTagId $ join $ view teGenTagId
 
 nodeInfo :: Node -> Info
 nodeInfo node = node ^. aId . Pact.tiInfo
@@ -290,13 +325,8 @@ tagAuth node = do
   emit $ TraceAuth recov $ Located (nodeInfo node) tid
   pure tid
 
-tagVarBinding :: Info -> Text -> EType -> VarId -> TranslateM ()
-tagVarBinding info nm ety vid = emit $ TraceBind (Located info (vid, nm, ety))
-
-withNewVarId :: Node -> Text -> (VarId -> TranslateM a) -> TranslateM a
-withNewVarId varNode varName action = do
-  vid <- genVarId
-  local (teNodeVars.at varNode ?~ (varName, vid)) (action vid)
+withNodeVars :: Map Node (Munged, VarId) -> TranslateM a -> TranslateM a
+withNodeVars nodeVars = local (teNodeVars %~ unionPreferring nodeVars)
 
 -- Map.union is left-biased. The more explicit name makes this extra clear.
 unionPreferring :: Ord k => Map k v -> Map k v -> Map k v
@@ -360,7 +390,7 @@ throwError' err = do
 -- 'Vertex' to the graph.
 issueVertex :: TranslateM Vertex
 issueVertex = do
-  v <- genId tsNextVertex
+  v <- TranslateM $ zoom tsNextVertex $ join $ view teGenVertex
   tsPathHead .= v
   pure v
 
@@ -394,7 +424,7 @@ extendPath = do
 -- 'tsPendingEvents' is currently empty.
 joinPaths :: [(Vertex, Path)] -> TranslateM ()
 joinPaths branches = do
-  let vs = fst $ unzip branches
+  let vs = map fst branches
   v' <- issueVertex
   tsGraph %= Alga.overlay (Alga.vertices vs `Alga.connect` pure v')
   for_ branches $ \(v, path) -> do
@@ -402,9 +432,6 @@ joinPaths branches = do
     let rejoinEdge = (v, v')
     tsEdgeEvents.at rejoinEdge ?= [TraceSubpathStart path | isNewPath]
     addPathEdge path rejoinEdge
-
-withNestedRecoverability :: Recoverability -> TranslateM ETerm -> TranslateM ETerm
-withNestedRecoverability r = local $ teRecoverability <>~ r
 
 translateType
   :: (MonadError TranslateFailure m, MonadReader r m, HasInfo r)
@@ -425,7 +452,7 @@ translateArg
 translateArg (Named nm node _) = do
   vid <- genVarId
   ety <- translateType node
-  pure (Arg nm vid node ety)
+  pure (Arg (Unmunged nm) vid node ety)
 
 translateSchema :: Node -> TranslateM Schema
 translateSchema node = do
@@ -433,6 +460,14 @@ translateSchema node = do
   case ty of
     EType _primTy    -> throwError' $ NotConvertibleToSchema $ _aTy node
     EObjectTy schema -> pure schema
+
+translateBinding :: Named Node -> TranslateM (Located Binding)
+translateBinding (Named unmunged' node _) = do
+  vid <- genVarId
+  let munged = node ^. aId.tiName.to Munged
+      info = node ^. aId . Pact.tiInfo
+  varType <- translateType node
+  pure $ Located info $ Binding vid (Unmunged unmunged') munged varType
 
 translateBody :: [AST Node] -> TranslateM ETerm
 translateBody = \case
@@ -447,80 +482,103 @@ translateBody = \case
       ESimple ty astsT -> ESimple ty $ Sequence ast' astsT
       EObject ty astsO -> EObject ty $ Sequence ast' astsO
 
+translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
+translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
+  bindingTs <- traverse translateBinding bindingAs
+  rhsETs <- traverse translateNode rhsAs
+
+  retTid <- genTagId
+
+  let -- Wrap the 'Term' body of clauses in a 'Let' for each of the bindings
+      wrapWithLets :: Term a -> Term a
+      wrapWithLets tm = foldr
+        (\(rhsET, Located _ (Binding vid _ (Munged munged) _)) body' ->
+          Let munged vid retTid rhsET body')
+        tm
+        (zip rhsETs bindingTs)
+
+      nodeVars :: Map Node (Munged, VarId)
+      nodeVars = Map.fromList
+        [ (node, (munged, vid))
+        | ((Named _ node _), _located -> Binding vid _ munged _)
+            <- zip bindingAs bindingTs
+        ]
+
+  fmap (mapExistential wrapWithLets) $
+    withNewScope scopeTy bindingTs retTid $
+      withNodeVars nodeVars $
+        translateBody body
+
 translateObjBinding
   :: [(Named Node, AST Node)]
   -> Schema
   -> [AST Node]
   -> ETerm
   -> TranslateM ETerm
-translateObjBinding bindingsA schema bodyA rhsT = do
-  (bindings :: [(String, EType, (Node, Text, VarId))]) <- for bindingsA $
-    \(Named unmungedVarName varNode _, colAst) -> do
-      let varName = varNode ^. aId.tiName
-          varInfo = varNode ^. aId . Pact.tiInfo
-      varType <- translateType varNode
-      vid     <- genVarId
-      tagVarBinding varInfo unmungedVarName varType vid
-      case colAst of
-        AST_StringLit colName ->
-          pure (T.unpack colName, varType, (varNode, varName, vid))
-        _ -> nodeContext varNode $ throwError' $ NonStringLitInBinding colAst
+translateObjBinding pairs schema bodyA rhsT = do
+  let bindingAs = fst $ unzip pairs
+  bindingTs <- traverse translateBinding bindingAs
+  cols <- for pairs $ \case
+    (_, AST_StringLit colName) ->
+      pure $ T.unpack colName
+    (Named _ node _, x) ->
+      withNodeContext node $ throwError' $ NonStringLitInBinding x
 
-  bindingId <- genVarId
-  let freshVar = CoreTerm $ Var bindingId "binding"
+  retTid <- genTagId
 
-  let translateLet :: Term a -> Term a
-      translateLet innerBody = Let "binding" bindingId rhsT $
+  -- We create one synthetic binding for the object, which then only the column
+  -- bindings use.
+  objBindingId <- genVarId
+  let objVar = CoreTerm $ Var objBindingId "binding"
+
+  --
+  -- TODO: we might want to only create a single Let here, with a binding for
+  --       each column. at the moment we create a new Let for each binding. a
+  --       single let would be slightly more elegant for generating assertions
+  --       for tags during evaluation as well. with this current elaboration,
+  --       we would generate @n@ extra/unnecessary assertions for @n@ columns
+  --       (because we currently generate @n+1@ lets -- one synthetic binding
+  --       for the object, and one for each column.
+  --
+
+  let wrapWithLets :: Term a -> Term a
+      wrapWithLets innerBody = Let "binding" objBindingId retTid rhsT $
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
-          (\body (colName, varType, (_varNode, varName, vid)) ->
+          (\body (colName, _located -> Binding vid _ (Munged varName) varType) ->
             let colTerm = lit colName
-            in Let varName vid
-              (case varType of
-                 EType ty ->
-                   ESimple ty  (CoreTerm (At schema colTerm freshVar varType))
-                 EObjectTy sch ->
-                   EObject sch (CoreTerm (At schema colTerm freshVar varType)))
-              body)
+                rhs = case varType of
+                  EType ty ->
+                    ESimple ty  (CoreTerm (At schema colTerm objVar varType))
+                  EObjectTy sch ->
+                    EObject sch (CoreTerm (At schema colTerm objVar varType))
+            in Let varName vid retTid rhs body)
           innerBody
-          bindings
+          (zip cols bindingTs)
 
-      nodeToNameVid = Map.fromList $
-        (\(_, _, (node', name, vid)) -> (node', (name, vid))) <$> bindings
+      nodeVars :: Map Node (Munged, VarId)
+      nodeVars = Map.fromList
+        [ (node, (munged, vid))
+        | ((Named _ node _), _located -> Binding vid _ munged _)
+            <- zip bindingAs bindingTs
+        ]
 
-  fmap (mapExistential translateLet) $
-    local (teNodeVars %~ unionPreferring nodeToNameVid) $
-      translateBody bodyA
+  fmap (mapExistential wrapWithLets) $
+    withNewScope ObjectScope bindingTs retTid $
+      withNodeVars nodeVars $
+        translateBody bodyA
 
 translateNode :: AST Node -> TranslateM ETerm
-translateNode astNode = astContext astNode $ case astNode of
-  AST_Let _ [] body -> translateBody body
+translateNode astNode = withAstContext astNode $ case astNode of
+  AST_Let bindings body ->
+    translateLet LetScope bindings body
 
-  AST_Let node ((Named unmungedVarName varNode _, rhsNode):bindingsRest) body -> do
-    rhsETerm <- translateNode rhsNode
-    let varName = varNode ^. aId.tiName
-    withNewVarId varNode varName $ \vid -> do
-      --
-      -- TODO: do we only want to allow subsequent bindings to reference
-      --       earlier ones if we know it's let* rather than let? or has this
-      --       been enforced by earlier stages for us?
-      --
-
-      let varInfo = varNode ^. aId . Pact.tiInfo
-          varType = existentialType rhsETerm
-
-      tagVarBinding varInfo unmungedVarName varType vid
-
-      body' <- translateNode $ mkLet node bindingsRest body
-      pure $ case body' of
-        ESimple bodyTy bodyTm -> ESimple bodyTy (Let varName vid rhsETerm bodyTm)
-        EObject bodyTy bodyTm -> EObject bodyTy (Let varName vid rhsETerm bodyTm)
-
-  AST_InlinedApp body -> translateBody body
+  AST_InlinedApp nm bindings body ->
+    translateLet (FunctionScope nm) bindings body
 
   AST_Var node -> do
-    Just (varName, vid) <- view $ teNodeVars.at node
-    ty      <- translateType node
+    Just (Munged varName, vid) <- view $ teNodeVars.at node
+    ty <- translateType node
     pure $ case ty of
       EType ty'        -> ESimple ty'    $ CoreTerm $ Var vid varName
       EObjectTy schema -> EObject schema $ CoreTerm $ Var vid varName
@@ -528,18 +586,19 @@ translateNode astNode = astContext astNode $ case astNode of
   -- Int
   AST_NegativeLit l -> case l of
     LInteger i -> pure $ ESimple TInt (inject $ IntUnaryArithOp Negate (lit i))
-    LDecimal d -> pure $ ESimple TDecimal (inject $ DecUnaryArithOp Negate (lit (mkDecimal d)))
+    LDecimal d -> pure $ ESimple TDecimal
+      (inject $ DecUnaryArithOp Negate (lit (fromPact decimalIso d)))
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
     LInteger i -> pure $ ESimple TInt (lit i)
     LBool b    -> pure $ ESimple TBool (lit b)
     LString s  -> pure $ ESimple TStr (lit $ T.unpack s)
-    LDecimal d -> pure $ ESimple TDecimal (lit (mkDecimal d))
-    LTime t    -> pure $ ESimple TTime (lit (mkTime t))
+    LDecimal d -> pure $ ESimple TDecimal (lit (fromPact decimalIso d))
+    LTime t    -> pure $ ESimple TTime (lit (fromPact timeIso t))
 
   AST_NegativeVar node -> do
-    Just (name, vid) <- view $ teNodeVars.at node
+    Just (Munged name, vid) <- view $ teNodeVars.at node
     EType ty <- translateType node
     case ty of
       TInt     -> pure $ ESimple TInt $ inject $ IntUnaryArithOp Negate $
@@ -579,8 +638,11 @@ translateNode astNode = astContext astNode $ case astNode of
     ESimple TStr nameT <- translateNode nameA
     return $ ESimple TDecimal $ ReadDecimal nameT
 
-  AST_ReadInteger _ -> throwError' $ UnexpectedNode astNode
-  AST_ReadMsg _     -> throwError' $ UnexpectedNode astNode
+  AST_ReadInteger nameA -> do
+    ESimple TStr nameT <- translateNode nameA
+    return $ ESimple TInt $ ReadInteger nameT
+
+  AST_ReadMsg _ -> throwError' $ NoReadMsg astNode
 
   AST_Enforce _ cond -> do
     ESimple TBool condTerm <- translateNode cond
@@ -664,7 +726,7 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ESimple TTime $ lit (mkTime timeLit')
+    -> pure $ ESimple TTime $ lit (fromPact timeIso timeLit')
 
   AST_NFun_Basic SModulus [a, b] ->  do
     ESimple TInt a' <- translateNode a
@@ -794,6 +856,10 @@ translateNode astNode = astContext astNode $ case astNode of
   AST_NFun_Basic fn@(toOp arithOpP -> Just _) args
     -> throwError' $ MalformedArithOp fn args
 
+  AST_NFun _node "length" [a] -> do
+    ESimple TStr a' <- translateNode a
+    pure $ ESimple TInt $ CoreTerm $ StrLength a'
+
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
@@ -825,13 +891,13 @@ translateNode astNode = astContext astNode $ case astNode of
     ESimple TStr key' <- translateNode key
     tid               <- tagRead node schema
     let readT = EObject schema $ Read tid (TableName (T.unpack table)) schema key'
-    nodeContext node $
+    withNodeContext node $
       translateObjBinding bindings schema body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     schema  <- translateSchema schemaNode
     objectT <- translateNode objectA
-    nodeContext node $
+    withNodeContext node $
       translateObjBinding bindings schema body objectT
 
   AST_AddTime time seconds

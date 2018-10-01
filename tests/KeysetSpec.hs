@@ -8,8 +8,7 @@ import Data.Aeson
 import Data.Default (def)
 
 spec :: Spec
-spec = do
-  describe "fromJSON" testFromJSON
+spec = describe "fromJSON" testFromJSON
 
 testFromJSON :: Spec
 testFromJSON = do

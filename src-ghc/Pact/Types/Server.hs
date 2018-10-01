@@ -103,7 +103,7 @@ data CommandEnv p = CommandEnv {
     }
 $(makeLenses ''CommandEnv)
 
-data CommandException = CommandException String deriving (Typeable)
+newtype CommandException = CommandException String deriving (Typeable)
 instance Show CommandException where show (CommandException e) = e
 instance Exception CommandException
 

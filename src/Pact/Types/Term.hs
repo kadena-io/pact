@@ -219,7 +219,7 @@ instance Show Module where
   show Module {..} =
     "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
 instance ToJSON Module where
-  toJSON Module {..} = object $
+  toJSON Module {..} = object
     ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed, "meta" .= _mMeta ]
 -- | TODO when we figure out how/if we're storing modules in the database we can
 -- address _mMeta not having a FromJSON, for now harmless
@@ -444,7 +444,7 @@ instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b
     parseJSON (String s) = return $ toTerm s
-    parseJSON (Array a) = (toTList TyAny def . toList) <$> mapM parseJSON a
+    parseJSON (Array a) = toTList TyAny def . toList <$> mapM parseJSON a
     parseJSON (Object o) = toTObject TyAny def <$> mapM (traverse parseJSON . first toTerm) (HM.toList o)
     parseJSON v = return $ toTerm v
     {-# INLINE parseJSON #-}

@@ -14,8 +14,14 @@
 
 
 module Pact.Native.Ops
-    (opDefs)
-    where
+    ( opDefs
+    , orDef, andDef, notDef
+    , modDef, addDef, subDef, mulDef
+    , divDef, powDef, logDef
+    , sqrtDef, lnDef, expDef, absDef
+    , roundDef, ceilDef, floorDef
+    , gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
+    ) where
 
 
 import Data.Decimal
@@ -29,61 +35,177 @@ import Pact.Types.Runtime
 import Pact.Eval
 
 
+modDef :: NativeDef
+modDef = defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger)
+  "X modulo Y. `(mod 13 8)`"
+  where
+    mod' :: RNativeFun e
+    mod' _ [TLitInteger a, TLitInteger b] = return $ toTerm $ a `mod` b
+    mod' i as = argsError i as
+
+addDef :: NativeDef
+addDef = defRNative "+" plus plusTy
+     "Add numbers, concatenate strings/lists, or merge objects. \
+     \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
+     \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
+  where
+
+    plus :: RNativeFun e
+    plus _ [TLitString a,TLitString b] = return (tStr $ a <> b)
+    plus _ [TList a aty _,TList b bty _] = return $ TList
+      (a <> b)
+      (if aty == bty then aty else TyAny)
+      def
+    plus _ [TObject as aty _,TObject bs bty _] =
+      let reps (a,b) = (abbrev a,(a,b))
+          mapit = M.fromList . map reps
+      in return $ TObject
+           (M.elems $ M.union (mapit as) (mapit bs))
+           (if aty == bty then aty else TyAny)
+           def
+    plus i as = binop' (+) (+) i as
+    {-# INLINE plus #-}
+
+    plusTy :: FunTypes n
+    plusTy = coerceBinNum <> binTy plusA plusA plusA
+
+subDef :: NativeDef
+subDef = defRNative "-" minus (coerceBinNum <> unaryNumTys)
+     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
+  where
+
+    minus :: RNativeFun e
+    minus _ [TLiteral (LInteger n) _] = return (toTerm (negate n))
+    minus _ [TLiteral (LDecimal n) _] = return (toTerm (negate n))
+    minus i as = binop' (-) (-) i as
+    {-# INLINE minus #-}
+
+    unaryNumTys :: FunTypes n
+    unaryNumTys = unaryTy numA numA
+
+mulDef :: NativeDef
+mulDef = defRNative "*" (binop' (*) (*)) coerceBinNum
+     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
+
+divDef :: NativeDef
+divDef = defRNative "/" divide' coerceBinNum
+     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
+  where
+    divide' :: RNativeFun e
+    divide' = binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
+                    (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
+
+powDef :: NativeDef
+powDef = defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
+  where
+    pow :: RNativeFun e
+    pow = binop (\a b -> liftDecF (**) a b)
+                (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
+
+logDef :: NativeDef
+logDef = defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
+  where
+    log' :: RNativeFun e
+    log' = binop (\a b -> liftDecF logBase a b)
+                 (\a b -> liftIntF logBase a b)
+
+sqrtDef :: NativeDef
+sqrtDef = defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
+
+lnDef :: NativeDef
+lnDef = defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
+
+expDef :: NativeDef
+expDef = defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
+
+absDef :: NativeDef
+absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
+     "Absolute value of X. `(abs (- 10 23))`"
+  where
+    abs' :: RNativeFun e
+    abs' _ [TLitInteger a] = return $ toTerm $ abs a
+    abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
+    abs' i as = argsError i as
+
+roundDef :: NativeDef
+roundDef = defTrunc "round" "Performs Banker's rounding" round
+
+ceilDef :: NativeDef
+ceilDef = defTrunc "ceiling" "Rounds up" ceiling
+
+floorDef :: NativeDef
+floorDef = defTrunc "floor" "Rounds down" floor
+
+gtDef :: NativeDef
+gtDef = defCmp ">" (cmp (== GT))
+
+ltDef :: NativeDef
+ltDef = defCmp "<" (cmp (== LT))
+
+gteDef :: NativeDef
+gteDef = defCmp ">=" (cmp (`elem` [GT,EQ]))
+
+lteDef :: NativeDef
+lteDef = defCmp "<=" (cmp (`elem` [LT,EQ]))
+
+eqDef :: NativeDef
+eqDef = defRNative "=" (eq id) eqTy
+  "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
+
+neqDef :: NativeDef
+neqDef = defRNative "!=" (eq not) eqTy
+  "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
+
+eqTy :: FunTypes n
+eqTy = binTy tTyBool eqA eqA
+
+eqA :: Type n
+eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
+  TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
+
+orDef :: NativeDef
+orDef = defLogic "or" (||) True
+
+andDef :: NativeDef
+andDef = defLogic "and" (&&) False
+
+notDef :: NativeDef
+notDef = defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
+  where
+    not' :: RNativeFun e
+    not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
+    not' i as = argsError i as
+
 opDefs :: NativeModule
 opDefs = ("Operators",
-    [defCmp ">" (cmp (== GT))
-    ,defCmp "<" (cmp (== LT))
-    ,defCmp ">=" (cmp (`elem` [GT,EQ]))
-    ,defCmp "<=" (cmp (`elem` [LT,EQ]))
-    ,defRNative "=" (eq id) eqTy
-     "True if X equals Y. `(= [1 2 3] [1 2 3])` `(= 'foo \"foo\")` `(= { 1: 2 } { 1: 2})`"
-    ,defRNative "!=" (eq not) eqTy
-     "True if X does not equal Y. `(!= \"hello\" \"goodbye\")`"
-    ,defLogic "or" (||) True
-    ,defLogic "and" (&&) False
-    ,defRNative "not" not' (unaryTy tTyBool tTyBool) "Boolean logic. `(not (> 1 2))`"
-
-    ,liftLogic "or?" (||) "or" True
+    [liftLogic "or?" (||) "or" True
     ,liftLogic "and?" (&&) "and" False
     ,defNative "not?" liftNot
      (funType tTyBool [("app",logicLam r),("value",r)])
      ("Apply logical 'not' to the results of applying VALUE to APP. " <>
       "`(not? (> 20) 15)`")
 
-
-    ,defRNative "-" minus (coerceBinNum <> unaryNumTys)
-     "Negate X, or subtract Y from X. `(- 1.0)` `(- 3 2)`"
-    ,defRNative "+" plus plusTy
-     "Add numbers, concatenate strings/lists, or merge objects. \
-     \`(+ 1 2)` `(+ 5.0 0.5)` `(+ \"every\" \"body\")` `(+ [1 2] [3 4])` \
-     \`(+ { \"foo\": 100 } { \"foo\": 1, \"bar\": 2 })`"
-    ,defRNative "*" (binop' (*) (*)) coerceBinNum
-     "Multiply X by Y. `(* 0.5 10.0)` `(* 3 5)`"
-    ,defRNative "/" divide' coerceBinNum
-     "Divide X by Y. `(/ 10.0 2.0)` `(/ 8 3)`"
-    ,defRNative "^" pow coerceBinNum "Raise X to Y power. `(^ 2 3)`"
-    ,defRNative "sqrt" (unopd sqrt) unopTy "Square root of X. `(sqrt 25)`"
-    ,defRNative "mod" mod' (binTy tTyInteger tTyInteger tTyInteger) "X modulo Y. `(mod 13 8)`"
-    ,defRNative "log" log' coerceBinNum "Log of Y base X. `(log 2 256)`"
-    ,defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
-    ,defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
-    ,defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)
-     "Absolute value of X. `(abs (- 10 23))`"
-    ,defTrunc "round" "Performs Banker's rounding" round
-    ,defTrunc "ceiling" "Rounds up" ceiling
-    ,defTrunc "floor" "Rounds down" floor
+    ,orDef, andDef, notDef
+    ,gtDef, ltDef, gteDef, lteDef, eqDef, neqDef
+    ,addDef, subDef, mulDef, divDef, powDef, logDef
+    ,modDef, sqrtDef, lnDef, expDef, absDef, roundDef, ceilDef, floorDef
     ])
-    where eqTy = binTy tTyBool eqA eqA
-          eqA = mkTyVar "a" [tTyInteger,tTyString,tTyTime,tTyDecimal,tTyBool,
-                           TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o"),tTyKeySet]
-          numA = numV "a"
-          r = mkTyVar "r" []
-          numV a = mkTyVar a [tTyInteger,tTyDecimal]
-          coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
-          unaryNumTys = unaryTy numA numA
-          plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
-          plusTy = coerceBinNum <> binTy plusA plusA plusA
-          unopTy = unaryTy numA numA
+    where r = mkTyVar "r" []
+
+unopTy :: FunTypes n
+unopTy = unaryTy numA numA
+
+numA :: Type n
+numA = numV "a"
+
+numV :: TypeVarName -> Type n
+numV a = mkTyVar a [tTyInteger,tTyDecimal]
+
+coerceBinNum :: FunTypes n
+coerceBinNum = binTy numA numA numA <> binTy tTyDecimal numA (numV "b")
+
+plusA :: Type n
+plusA = mkTyVar "a" [tTyString,TyList (mkTyVar "l" []),TySchema TyObject (mkSchemaVar "o")]
 
 defTrunc :: NativeDefName -> Text -> (Decimal -> Integer) -> NativeDef
 defTrunc n desc op = defRNative n fun (funType tTyDecimal [("x",tTyDecimal),("prec",tTyInteger)] <>
@@ -110,10 +232,6 @@ defLogic n bop shortC = defNative n fun (binTy tTyBool tTyBool tTyBool) $
                        _ -> argsError' i as
         _ -> argsError' i as
       fun i as = argsError' i as
-
-not' :: RNativeFun e
-not' _ [TLiteral (LBool a) _] = return $ toTerm $ not a
-not' i as = argsError i as
 
 logicLam :: Type v -> Type v
 logicLam argTy = TyFun $ funType' tTyBool [("x",argTy)]
@@ -203,29 +321,9 @@ binop dop iop fi as@[TLiteral a _,TLiteral b _] = do
 binop _ _ fi as = argsError fi as
 {-# INLINE binop #-}
 
-plus :: RNativeFun e
-plus _ [TLitString a,TLitString b] = return (tStr $ a <> b)
-plus _ [TList a aty _,TList b bty _] = return (TList (a <> b) (if aty == bty then aty else TyAny) def)
-plus _ [TObject as aty _,TObject bs bty _] =
-  let reps (a,b) = (abbrev a,(a,b))
-      mapit = M.fromList . map reps
-  in return $ TObject (M.elems $ M.union (mapit as) (mapit bs)) (if aty == bty then aty else TyAny) def
-plus i as = binop' (+) (+) i as
-{-# INLINE plus #-}
-
-minus :: RNativeFun e
-minus _ [TLiteral (LInteger n) _] = return (toTerm (negate n))
-minus _ [TLiteral (LDecimal n) _] = return (toTerm (negate n))
-minus i as = binop' (-) (-) i as
-{-# INLINE minus #-}
-
 assert :: Bool -> String -> Either String a -> Either String a
 assert test msg act | test = act
                     | otherwise = Left msg
-
-divide' :: RNativeFun e
-divide' = binop (\a b -> assert (b /= 0) "Division by 0" $ liftOp (/) a b)
-                (\a b -> assert (b /= 0) "Division by 0" $ liftOp div a b)
 
 
 dec2F :: Decimal -> Double
@@ -241,25 +339,7 @@ liftDecF f a b = Right $ f2Dec (dec2F a `f` dec2F b)
 liftIntF :: (Double -> Double -> Double) -> Integer -> Integer -> Either String Integer
 liftIntF f a b = Right $ f2Int (int2F a `f` int2F b)
 
-pow :: RNativeFun e
-pow = binop (\a b -> liftDecF (**) a b)
-            (\a b -> assert (b >= 0) "Integral power must be >= 0" $ liftOp (^) a b)
-
-log' :: RNativeFun e
-log' = binop (\a b -> liftDecF logBase a b)
-             (\a b -> liftIntF logBase a b)
-
 unopd :: (Double -> Double) -> RNativeFun e
 unopd op _ [TLitInteger i] = return $ toTerm $ f2Dec $ op $ int2F i
 unopd op _ [TLiteral (LDecimal n) _] = return $ toTerm $ f2Dec $ op $ dec2F n
 unopd _ i as = argsError i as
-
-
-mod' :: RNativeFun e
-mod' _ [TLitInteger a, TLitInteger b] = return $ toTerm $ a `mod` b
-mod' i as = argsError i as
-
-abs' :: RNativeFun e
-abs' _ [TLitInteger a] = return $ toTerm $ abs a
-abs' _ [TLiteral (LDecimal n) _] = return $ toTerm $ abs n
-abs' i as = argsError i as

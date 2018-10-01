@@ -144,9 +144,9 @@ solveOverloads :: TC ()
 solveOverloads = do
 
   overs <- use tcOverloads >>=
-           traverse (traverse (\i -> ((i,) . fst) <$> lookupAst "solveOverloads" (_aId (_aNode i))))
+           traverse (traverse (\i -> (i,) . fst <$> lookupAst "solveOverloads" (_aId (_aNode i))))
 
-  let runSolve os = forM os $ \(o@Overload {..}) -> case _oSolved of
+  let runSolve os = forM os $ \o@Overload {..} -> case _oSolved of
         Just {} -> return o
         Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
 
@@ -657,7 +657,7 @@ toFun TDef {..} = do -- TODO currently creating new vars every time, is this ide
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody _tInfo (map (\ai -> Var (_nnNamed ai)) args) _tDefBody
+  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) _tDefBody
   funType <- traverse toUserType _tFunType
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
@@ -703,9 +703,9 @@ toAST TApp {..} = do
         _ -> return fun
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
-        (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST -> do
+        (\f -> zipWithM f (_ftArgs funType) args) $ \(Arg _ argTy _) argAST ->
           case (argTy,argAST) of
-            (TyFun lambdaTy,App{}) -> do
+            (TyFun lambdaTy,App{}) ->
               (\f -> foldM f argAST (_ftArgs lambdaTy)) $ \argAST' (Arg lamArgName _ _) -> do
                 freshArg <- trackIdNode =<<
                   freshId (_tiInfo (_aId (_aNode argAST')))
@@ -741,7 +741,7 @@ toAST TBinding {..} = do
       BindSchema _ -> do
         _fieldName <- asPrimString v'
         return (Named n an aid,v')
-  bb <- scopeToBody _tInfo (map ((\ai -> Var (_nnNamed ai)).fst) bs) _tBindBody
+  bb <- scopeToBody _tInfo (map (Var . _nnNamed . fst) bs) _tBindBody
   assocAST bi (last bb)
   bt <- case _tBindType of
     BindLet -> return AstBindLet

@@ -62,8 +62,8 @@ instance UserShow PreProp where
   userShowsPrec prec = \case
     PreIntegerLit i -> tShow i
     PreStringLit t  -> tShow t
-    PreDecimalLit d -> tShow d
-    PreTimeLit t    -> tShow (Pact.LTime (unMkTime t))
+    PreDecimalLit d -> userShow d
+    PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
     PreBoolLit b    -> tShow (Pact.LBool b)
 
     PreAbort        -> STransactionAborts
@@ -79,7 +79,7 @@ instance UserShow PreProp where
       "(" <> SExistentialQuantification <> " (" <> name <> ":" <>
         userShow qty <> ") " <> userShow prop <> ")"
     PreApp name applicands ->
-      "(" <> name <> " " <> T.unwords ((map userShow) applicands) <> ")"
+      "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
       "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
     PreLiteralObject obj ->

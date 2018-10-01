@@ -1,5 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -49,13 +47,13 @@ expr = do
         end <- position
         let len = bytes end - bytes delt
         return $ Parsed delt (fromIntegral len)
-      separator t s = symbol t >> ((ESeparator . SeparatorExp s) <$> inf)
+      separator t s = symbol t >> (ESeparator . SeparatorExp s <$> inf)
   msum
     [ TF.try (ELiteral <$> (LiteralExp <$> token number <*> inf)) <?> "number"
     , ELiteral <$> (LiteralExp . LString <$> stringLiteral <*> inf) <?> "string"
     , ELiteral <$> (LiteralExp . LString <$> (symbolic '\'' >> ident style) <*> inf) <?> "symbol"
     , ELiteral <$> (LiteralExp <$> bool <*> inf) <?> "bool"
-    , (qualifiedAtom >>= \(a,qs) -> (EAtom . AtomExp a qs) <$> inf) <?> "atom"
+    , (qualifiedAtom >>= \(a,qs) -> EAtom . AtomExp a qs <$> inf) <?> "atom"
     , EList <$> (ListExp <$> parens (many expr) <*> pure Parens <*> inf) <?> "(list)"
     , EList <$> (ListExp <$> braces (many expr) <*> pure Braces <*> inf) <?> "[list]"
     , EList <$> (ListExp <$> brackets (many expr) <*> pure Brackets <*> inf) <?> "{list}"
@@ -77,7 +75,7 @@ number = do
   neg <- maybe id (const negate) <$> optional (char '-')
   num <- some digit
   dec <- optional (dot *> some digit)
-  let strToNum start = foldl' (\x d -> 10*x + toInteger (digitToInt d)) start
+  let strToNum = foldl' (\x d -> 10*x + toInteger (digitToInt d))
   case dec of
     Nothing -> return $ LInteger (neg (strToNum 0 num))
     Just d -> return $ LDecimal $ Decimal
@@ -100,16 +98,16 @@ bool = msum
 
 
 -- | Parse one or more Pact expressions.
-exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [(Exp Parsed)]
+exprs :: (TokenParsing m, DeltaParsing m) => PactParser m [Exp Parsed]
 exprs = some expr
 
 -- | Parse one or more Pact expressions and EOF.
 -- Unnecessary with Atto's 'parseOnly'.
-exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [(Exp Parsed)]
+exprsOnly :: (Monad m, TokenParsing m, DeltaParsing m) => m [Exp Parsed]
 exprsOnly = unPactParser $ whiteSpace *> exprs <* TF.eof
 
 -- | "Production" parser: atto, parse multiple exps.
-parseExprs :: Text -> Either String [(Exp Parsed)]
+parseExprs :: Text -> Either String [Exp Parsed]
 parseExprs = AP.parseOnly (unPactParser (whiteSpace *> exprs))
 
 _parseF :: TF.Parser a -> FilePath -> IO (TF.Result (a,String))
@@ -119,5 +117,5 @@ _parseF p fp = readFile fp >>= \s -> fmap (,s) <$> TF.parseFromFileEx p fp
 _parseS :: String -> TF.Result [Exp Parsed]
 _parseS = TF.parseString exprsOnly mempty
 
-_parseAccounts :: IO (Result ([(Exp Parsed)],String))
+_parseAccounts :: IO (Result ([Exp Parsed], String))
 _parseAccounts = _parseF exprsOnly "examples/accounts/accounts.pact"

@@ -20,7 +20,7 @@ computeGas i args = do
     (info,name) = either id (_faInfo &&& _faName) i
     g1 = g0 + runGasModel _geGasModel name args
   evalGas .= g1
-  if (g1 > fromIntegral _geGasLimit) then
+  if g1 > fromIntegral _geGasLimit then
     throwErr GasError info $ "Gas limit (" <> tShow _geGasLimit <> ") exceeded: " <> tShow g1
     else return g1
 
