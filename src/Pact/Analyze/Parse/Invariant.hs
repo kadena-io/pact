@@ -41,10 +41,10 @@ expToInvariant ty exp = case (ty, exp) of
           " where " <> userShow ty <> " was expected"
       _ -> throwErrorT $ "couldn't find column named " <> varName
 
-  (TDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (mkDecimal d))
+  (TDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (fromPact decimalIso d))
   (TInt, ELiteral' (LInteger i))     -> pure (ILiteral i)
   (TStr, ELiteral' (LString s))      -> pure (ILiteral (T.unpack s))
-  (TTime, ELiteral' (LTime t))       -> pure (ILiteral (mkTime t))
+  (TTime, ELiteral' (LTime t))       -> pure (ILiteral (fromPact timeIso t))
   (TBool, ELiteral' (LBool b))       -> pure (ILiteral b)
   (_, ELiteral _)                    ->
     throwErrorIn exp "literal of unexpected type"

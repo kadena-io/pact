@@ -14,17 +14,18 @@
 module Pact.Analyze.Types.Eval where
 
 import           Control.Applicative          (ZipList (..))
-import           Control.Lens                 (Lens', at, ifoldl, ix, lens,
+import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
                                                makeLenses, singular, view, (&),
                                                (<&>), (?~))
+import           Control.Lens.Wrapped
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
 import           Data.Monoid                  ((<>))
-import           Data.SBV                     (Boolean (true), HasKind,
-                                               Mergeable, SBV, SBool,
+import           Data.SBV                     (Boolean (bnot, true, (&&&)),
+                                               HasKind, Mergeable, SBV, SBool,
                                                SymArray (readArray, writeArray),
                                                SymWord, Symbolic, false,
                                                uninterpret)
@@ -48,12 +49,25 @@ import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 
+newtype SymbolicSuccess = SymbolicSuccess { successBool :: SBV Bool }
+  deriving (Show, Generic, Mergeable)
+
+instance Boolean SymbolicSuccess where
+  true = SymbolicSuccess true
+  bnot = SymbolicSuccess . bnot . successBool
+  SymbolicSuccess x &&& SymbolicSuccess y = SymbolicSuccess (x &&& y)
+
+instance Wrapped SymbolicSuccess where
+  type Unwrapped SymbolicSuccess = SBV Bool
+  _Wrapped' = iso successBool SymbolicSuccess
+
 class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
   type TermOf m   :: * -> *
   eval            :: (Show a, SymWord a) => TermOf m a -> m (S a)
   evalO           :: TermOf m Object -> m Object
   throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
   getVar          :: VarId -> m (Maybe AVal)
+  markFailure     :: SBV Bool -> m ()
 
   -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
   -- their monad stack, they can't use `ite`, which we need to use to implement
@@ -68,6 +82,7 @@ data AnalyzeEnv
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
     , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
+    , _aeIntegers  :: !(SFunArray String Integer)    -- read-only
     , _invariants  :: !(TableMap [Located (Invariant Bool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !(ModelTags 'Symbolic)
@@ -85,12 +100,13 @@ mkAnalyzeEnv tables args tags info = do
   let keySets'    = mkFreeArray "envKeySets"
       keySetAuths = mkFreeArray "keySetAuths"
       decimals    = mkFreeArray "envDecimals"
+      integers    = mkFreeArray "envIntegers"
 
       invariants' = TableMap $ Map.fromList $ tables <&>
         \(Table tname _ut someInvariants) ->
           (TableName (T.unpack tname), someInvariants)
 
-  columnIds <- for tables $ \(Table tname ut _) -> do
+  columnIds <- for tables $ \(Table tname ut _) ->
     case maybeTranslateUserType' ut of
       Just (EObjectTy (Schema schema)) -> Just
         (TableName (T.unpack tname), varIdColumns schema)
@@ -98,8 +114,8 @@ mkAnalyzeEnv tables args tags info = do
 
   let columnIds' = TableMap (Map.fromList columnIds)
 
-  pure $ AnalyzeEnv args keySets' keySetAuths decimals invariants' columnIds'
-    tags info
+  pure $ AnalyzeEnv args keySets' keySetAuths decimals integers invariants'
+    columnIds' tags info
 
 mkFreeArray :: (SymWord a, HasKind b) => Text -> SFunArray a b
 mkFreeArray = mkSFunArray . uninterpret . T.unpack . sbvIdentifier
@@ -150,7 +166,7 @@ deriving instance Mergeable SymbolicCells
 -- Checking state that is split before, and merged after, conditionals.
 data LatticeAnalyzeState
   = LatticeAnalyzeState
-    { _lasSucceeds            :: SBV Bool
+    { _lasSucceeds            :: SymbolicSuccess
     , _lasPurelyReachable     :: SBV Bool
     --
     -- TODO: instead of having a single boolean here, we should probably use
@@ -195,7 +211,8 @@ data AnalyzeState
 
 data AnalysisResult
   = AnalysisResult
-    { _arProposition   :: SBV Bool
+    { _arEvalSuccess   :: SymbolicSuccess
+    , _arProposition   :: SBV Bool
     , _arKsProvenances :: Map TagId Provenance
     }
   deriving (Show)
@@ -238,9 +255,9 @@ mkInitialAnalyzeState tables = AnalyzeState
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
     intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
-    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const 0))
+    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const (fromInteger 0)))
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
-    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) 0
+    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) (fromInteger 0)
     cellsEnforced
       = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
@@ -318,12 +335,15 @@ class HasAnalyzeEnv a where
   envDecimals :: Lens' a (SFunArray String Decimal)
   envDecimals = analyzeEnv.aeDecimals
 
+  envIntegers :: Lens' a (SFunArray String Integer)
+  envIntegers = analyzeEnv.aeIntegers
+
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 -- | Whether the program will successfully run to completion without aborting.
 succeeds :: Lens' AnalyzeState (S Bool)
-succeeds = latticeState.lasSucceeds.sbv2S
+succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 
 -- | Whether execution will reach a given point in the program according to
 -- conditionals, *without taking transaction failures into account*. This is
@@ -495,10 +515,16 @@ resolveKeySet
 resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
   readArray <$> view keySets <*> pure (_sSbv sKsn)
 
--- TODO: switch to lens
 resolveDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
   => S String
   -> m (S Decimal)
 resolveDecimal sDn = fmap sansProv $
   readArray <$> view envDecimals <*> pure (_sSbv sDn)
+
+resolveInteger
+  :: (MonadReader r m, HasAnalyzeEnv r)
+  => S String
+  -> m (S Integer)
+resolveInteger sSn = fmap sansProv $
+  readArray <$> view envIntegers <*> pure (_sSbv sSn)

@@ -18,8 +18,8 @@ import qualified Data.Text                   as T
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
-import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Types
+import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
 
@@ -65,7 +65,7 @@ evalDecAddTime timeT secsT = do
   if isConcreteS secs
   -- Convert seconds to milliseconds /before/ conversion to Integer (see note
   -- [Time Representation]).
-  then pure $ time + fromIntegralS (banker'sMethod (secs * 1000000))
+  then pure $ time + fromIntegralS (banker'sMethod (secs * fromInteger' 1000000))
   else throwErrorNoLoc $ PossibleRoundoff
     "A time being added is not concrete, so we can't guarantee that roundoff won't happen when it's converted to an integer."
 
@@ -154,7 +154,7 @@ evalCore (Var vid name) = do
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
-    Just (OpaqueVal)       -> throwErrorNoLoc OpaqueValEncountered
+    Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 
 evalAt
   :: (Analyzer m, SymWord a)
@@ -237,7 +237,7 @@ evalCoreO (Var vid name) = do
     Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
     Just (AnObj obj)   -> pure obj
-    Just (OpaqueVal)   -> throwErrorNoLoc OpaqueValEncountered
+    Just OpaqueVal     -> throwErrorNoLoc OpaqueValEncountered
 
 -- TODO(joel): I don't think an object can appear hear. Get more clarity on
 -- this.
@@ -254,4 +254,3 @@ evalExistential = \case
   EObject ty prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')
-

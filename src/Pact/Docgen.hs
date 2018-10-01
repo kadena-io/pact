@@ -124,14 +124,14 @@ renderProperties h = do
 
         -- TODO: potentially move some of this presentation logic elsewhere
         case formType of
-          Analyze.Sym ty -> do
+          Analyze.Sym ty ->
             hPutStrLn h  $ "* of type " <> showType ty
           Analyze.Fun mBindings argTys retTy -> do
             for_ mBindings $ \case
               Analyze.BindVar (Analyze.Var (unpack -> var)) (showType -> bTy) ->
                 hPutStrLn h $ "* binds `" <> var <> "` of type " <> bTy
               Analyze.BindObject ->
-                hPutStrLn h $ "* destructures the provided object"
+                hPutStrLn h "* destructures the provided object"
             for_ argTys $ \(Analyze.Var (unpack -> arg), showType -> aTy) ->
               hPutStrLn h $ "* takes `" <> arg <> "` of type " <> aTy
             hPutStrLn h $ "* produces type " <> showType retTy
@@ -143,7 +143,7 @@ renderProperties h = do
                           Analyze.OneOf [ct1, ct2] -> "of type "
                             <> showConTy ct1 <> " or " <> showConTy ct2
                           Analyze.OneOf (reverse -> last' : xs) -> "of type "
-                            <> join (fmap ((<> ", ") . showConTy) (reverse xs))
+                            <> (reverse xs >>= ((<> ", ") . showConTy))
                             <> " or " <> showConTy last'
                           Analyze.OneOf _ -> "ERROR"
         hPutStrLn h ""

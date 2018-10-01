@@ -109,7 +109,7 @@ verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of
     (ppcmdSigs' :: [(UserSig,Bool)]) = (\u -> (u,verifyUserSig _cmdHash u)) <$> _cmdSigs
     ppcmdHash' = verifyHash _cmdHash _cmdPayload
     mSigIssue = if all snd ppcmdSigs' then Nothing
-      else Just $ "Invalid sig(s) found: " ++ show ((A.encode . fst) <$> filter (not.snd) ppcmdSigs')
+      else Just $ "Invalid sig(s) found: " ++ show (A.encode . fst <$> filter (not.snd) ppcmdSigs')
     toErrStr :: Either String a -> String
     toErrStr (Right _) = ""
     toErrStr (Left s) = s ++ "; "
@@ -187,9 +187,8 @@ instance ToJSON CommandError where
                  , "error" .= m ] ++
         maybe [] ((:[]) . ("detail" .=)) d
 
-data CommandSuccess a = CommandSuccess {
-      _csData :: a
-    }
+newtype CommandSuccess a = CommandSuccess { _csData :: a }
+
 instance (ToJSON a) => ToJSON (CommandSuccess a) where
     toJSON (CommandSuccess a) =
         object [ "status" .= ("success" :: String)

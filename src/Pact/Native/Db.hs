@@ -250,7 +250,7 @@ withDefaultRead :: NativeFun e
 withDefaultRead fi as@[table',key',defaultRow',b@(TBinding ps bd (BindSchema _) _)] = do
   (!g0,!tkd) <- preGas fi [table',key',defaultRow']
   case tkd of
-    ([table@TTable {..},TLitString key,TObject defaultRow _ _]) -> do
+    [table@TTable {..}, TLitString key, TObject defaultRow _ _] -> do
       guardTable fi table
       mrow <- readRow (_faInfo fi) (userTable table) (RowKey key)
       case mrow of
@@ -274,7 +274,7 @@ withRead fi as = argsError' fi as
 
 bindToRow :: [(Arg (Term Ref),Term Ref)] ->
              Scope Int Term Ref -> Term Ref -> Columns Persistable -> Eval e (Term Name)
-bindToRow ps bd b (Columns row) = do
+bindToRow ps bd b (Columns row) =
   bindReduce ps bd (_tInfo b) (\s -> toTerm <$> M.lookup (ColumnId s) row)
 
 keys' :: GasRNativeFun e
@@ -310,7 +310,7 @@ keylog g i [table@TTable {..},TLitString key,TLitInteger utid] = do
   gasPostReads i g postProc $ do
     guardTable i table
     tids <- txids (_faInfo i) (userTable' table) (fromIntegral utid)
-    logs <- fmap concat $ forM tids $ \tid -> fmap (map (tid,)) $ getTxLog (_faInfo i) (userTable table) (fromIntegral tid)
+    logs <- fmap concat $ forM tids $ \tid -> map (tid,) <$> getTxLog (_faInfo i) (userTable table) tid
     return $ filter (\(_,TxLog {..}) -> _txKey == key) logs
 
 keylog _ i as = argsError i as
@@ -358,7 +358,7 @@ enforceBlessedHashes i mn h = do
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
-    Just (Module{..})
+    Just Module{..}
       | h == _mHash -> return () -- current version ok
       | h `HS.member` _mBlessed -> return () -- hash is blessed
       | otherwise -> evalError' i $

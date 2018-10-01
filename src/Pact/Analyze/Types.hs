@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
@@ -8,6 +9,7 @@ module Pact.Analyze.Types
   , module Pact.Analyze.Types.Model
   , module Pact.Analyze.Types.Numerical
   , module Pact.Analyze.Types.Shared
+  , module Pact.Analyze.Types.UserShow
 
   , Check(..)
   , Float(float)
@@ -37,6 +39,7 @@ import           Pact.Analyze.Types.Languages
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.UserShow
 
 data Quantifier
   = Forall' VarId Text QType
@@ -61,9 +64,9 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds (Prop Bool) -- valid, assuming success
-  | Satisfiable   (Prop Bool) -- sat,   not assuming success
-  | Valid         (Prop Bool) -- valid, not assuming success
+  = PropertyHolds !(Prop Bool) -- valid, assuming success
+  | Satisfiable   !(Prop Bool) -- sat,   not assuming success
+  | Valid         !(Prop Bool) -- valid, not assuming success
   deriving Show
 
 checkGoal :: Check -> Goal

@@ -196,7 +196,7 @@ instance (ToJSON v) => ToJSON (Columns v) where
     {-# INLINE toJSON #-}
 instance (FromJSON v) => FromJSON (Columns v) where
     parseJSON = withObject "Columns" $ \o ->
-                (Columns . M.fromList) <$>
+                Columns . M.fromList <$>
                  forM (HM.toList o)
                   (\(k,v) -> ((,) <$> pure (ColumnId k) <*> parseJSON v))
     {-# INLINE parseJSON #-}
@@ -246,7 +246,7 @@ data WriteType =
   -- | Update an existing row, or insert a new row if not found.
   --   Requires complete row value, enforced by pact runtime.
   Write
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show,Enum,Bounded)
 
 
 

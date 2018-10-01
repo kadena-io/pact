@@ -35,7 +35,7 @@ linearize model = go traceEvents
               -> ExecutionTrace
             handleEnforce recov tagsBool =
               let mPassesEnforce =
-                    model ^? modelTags.tagsBool.to (SBV.unliteral)._Just
+                    model ^? modelTags . tagsBool . to SBV.unliteral . _Just
                  in case mPassesEnforce of
                    Nothing ->
                      error "impossible: missing enforce tag, or symbolic value"

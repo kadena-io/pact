@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Utils.TestRunner
   ( ApiResultCheck (..)
@@ -66,7 +67,7 @@ runAll cmds = Exception.bracket
 startServer :: FilePath -> IO (Async (), Async (), Async ())
 startServer configFile = do
   (runServer, asyncCmd, asyncHist) <- setupServer configFile
-  asyncServer <- async (runServer)
+  asyncServer <- async runServer
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
   return (asyncServer, asyncCmd, asyncHist)
@@ -77,14 +78,11 @@ stopServer (asyncServer, asyncCmd, asyncHist) = do
   uninterruptibleCancel asyncHist
   uninterruptibleCancel asyncServer
   mapM_ checkFinished [asyncServer, asyncCmd, asyncHist]
-  where checkFinished asy = do
-          asyPoll <- poll asy
-          case asyPoll of
-            Nothing -> Exception.evaluate $ error $ ("Thread " ++
-                                                      (show (asyncThreadId asy)) ++
-                                                      " could not be cancelled.")
-            _ -> return ()
-          
+  where checkFinished asy = poll asy >>= \case
+          Nothing -> Exception.evaluate $ error $
+                    "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
+          _ -> return ()
+
 run :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
 run cmds = do
   sendResp <- doSend $ SubmitBatch cmds
@@ -95,27 +93,25 @@ run cmds = do
       case results of
         Nothing -> Exception.evaluate (error "Received empty poll. Timeout in retrying.")
         Just res -> return res
-      
+
   where helper reqKeys = do
           pollResp <- doPoll $ Poll reqKeys
           case pollResp of
             ApiFailure err -> Exception.evaluate (error err)
-            ApiSuccess (PollResponses apiResults) -> do
+            ApiSuccess (PollResponses apiResults) ->
               if null apiResults then helper reqKeys
               else return apiResults
 
 doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
-doSend req = do
-  view responseBody <$> doSend' req
-    
+doSend req = view responseBody <$> doSend' req
+
 doSend' :: (ToJSON req) => req -> IO (Response (ApiResponse RequestKeys))
 doSend' req = do
   sendResp <- post (_serverPath ++ "send") (toJSON req)
   asJSON sendResp
 
 doPoll :: (ToJSON req) => req -> IO (ApiResponse PollResponses)
-doPoll req = do
-  view responseBody <$> doPoll' req
+doPoll req = view responseBody <$> doPoll' req
 
 doPoll' :: (ToJSON req) => req -> IO (Response (ApiResponse PollResponses))
 doPoll' req = do
@@ -124,7 +120,7 @@ doPoll' req = do
 
 
 flushDb :: IO ()
-flushDb = mapM_ deleteIfExists _logFiles 
+flushDb = mapM_ deleteIfExists _logFiles
   where deleteIfExists filename = do
           let fp = _testLogDir ++ filename
           isFile <- doesFileExist fp
@@ -135,7 +131,7 @@ genKeys = do
   g :: SystemRandom <- newGenIO
   case generateKeyPair g of
     Left _ -> error "Something went wrong in genKeys"
-    Right (s,p,_) -> return $ KeyPair s p 
+    Right (s,p,_) -> return $ KeyPair s p
 
 
 
@@ -154,7 +150,7 @@ checkResult isFailure expect result =
 
 checkIfSuccess :: Object -> Maybe Value -> Expectation
 checkIfSuccess h Nothing = HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
-checkIfSuccess h (Just expect) = do 
+checkIfSuccess h (Just expect) = do
   HM.lookup (T.pack "status") h `shouldBe` (Just . String . T.pack) "success"
   HM.lookup (T.pack "data") h `shouldBe` Just (toJSON expect)
 
@@ -177,7 +173,7 @@ threeStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
                 (step "step 0")
                 (step "step 1")
                 (step "step 2")))
-              |] 
+              |]
 
 errorStepPactCode :: String -> T.Text
 errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
@@ -188,7 +184,7 @@ errorStepPactCode moduleName = T.concat [begCode, T.pack moduleName, endCode]
                 (step "step 0")
                 (step (+ "will throw error in step 1"))
                 (step "step 2")))
-              |] 
+              |]
 
 pactWithRollbackCode :: String -> T.Text
 pactWithRollbackCode moduleName = T.concat [begCode, T.pack moduleName, endCode]

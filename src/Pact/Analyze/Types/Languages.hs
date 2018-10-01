@@ -1,13 +1,16 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE UndecidableInstances  #-} -- UserShow (Core tm a)
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
@@ -21,7 +24,8 @@ module Pact.Analyze.Types.Languages
   , Term(..)
 
   , lit
-  , mkDecimal
+  , toPact
+  , fromPact
 
   , pattern ILiteral
   , pattern ILogicalOp
@@ -42,20 +46,23 @@ module Pact.Analyze.Types.Languages
   , pattern PVar
   ) where
 
-import qualified Data.Decimal                 as Decimal
 import           Data.Map.Strict              (Map)
-import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
-                                               SymWord, (%))
+import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)))
+import           Data.Semigroup               ((<>))
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
+import qualified Data.Text                    as Text
 import           Data.Typeable                ((:~:) (Refl))
 import           Prelude                      hiding (Float)
 
 import           Pact.Types.Persistence       (WriteType)
+import           Pact.Types.Util              (tShow)
 
+import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, dec)
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
 #define EQ_EXISTENTIAL(tm)                                \
@@ -66,11 +73,17 @@ instance Eq (Existential tm) where                        \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
 
-#define SHOW_EXISTENTIAL(tm)                                         \
-instance Show (Existential tm) where                                 \
-  show (ESimple ty inv) = "(" ++ show inv ++ ": " ++ show ty ++ ")"; \
-  show (EObject ty obj) = "(" ++ show obj ++ ": " ++ show ty ++ ")";
-
+#define SHOW_EXISTENTIAL(tm)                                                   \
+instance Show (Existential tm) where {                                         \
+  showsPrec d e = showParen (d > 10) $ case e of                               \
+    ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
+      . showsPrec 11 inv;                                                      \
+    EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
+      . showsPrec 11 obj; };                                                   \
+instance UserShow (Existential tm) where                                       \
+  userShowsPrec d e = case e of                                                \
+    ESimple _ty a -> userShowsPrec d a;                                        \
+    EObject _ty a -> userShowsPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
 --
@@ -143,6 +156,9 @@ data Core t a where
   -- | A 'ComparisonOp' expression over two 'String' expressions
   StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
+  --
+  -- note: this is more broad than the set ({=, !=}) of comparisons pact
+  -- supports on bools.
   BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
 
   KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
@@ -161,6 +177,38 @@ data Core t a where
 
 deriving instance Eq a   => Eq   (Core Prop a)
 deriving instance Show a => Show (Core Prop a)
+
+instance
+  ( UserShow a
+  , UserShow (tm String)
+  , UserShow (tm Integer)
+  , UserShow (tm Time)
+  , UserShow (tm Decimal)
+  , UserShow (tm Bool)
+  , UserShow (tm KeySet)
+  , UserShow (tm Object)
+  , UserShow (Existential tm)
+  ) => UserShow (Core tm a) where
+  userShowsPrec d = \case
+    Lit a                    -> userShowsPrec d a
+    Sym s                    -> tShow s
+    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
+    StrLength str            -> parenList [SStringLength, userShow str]
+    Numerical tm             -> userShowsPrec d tm
+    IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
+    IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    DecimalComparison op x y -> parenList [userShow op, userShow x, userShow y]
+    TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
+    BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
+    Logical op args          -> parenList $ userShow op : fmap userShow args
+    Var _vid name            -> name
+    KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
+    ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
+    At _schema k obj _ty     -> parenList [userShow k, userShow obj]
+    ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
+    LiteralObject obj        -> userShow obj
 
 
 -- | Property-specific constructions.
@@ -247,6 +295,35 @@ data Prop a
   | CoreProp     (Core Prop a)
   deriving (Show, Eq)
 
+instance UserShow a => UserShow (PropSpecific a) where
+  userShowsPrec _d = \case
+    Abort                   -> STransactionAborts
+    Success                 -> STransactionSucceeds
+    Result                  -> SFunctionResult
+    Forall _ var ty x       -> parenList
+      [SUniversalQuantification, parens (var <> ":" <> userShow ty), userShow x]
+    Exists _ var ty x       -> parenList
+      [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShow x]
+    TableWrite tab          -> parenList [STableWritten, userShow tab]
+    TableRead  tab          -> parenList [STableRead, userShow tab]
+    ColumnWrite tab col     -> parenList ["column-written", userShow tab, userShow col]
+    ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
+    IntCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
+    DecCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
+    IntColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
+    DecColumnDelta tab col  -> parenList [SColumnDelta, userShow tab, userShow col]
+    RowRead tab rk          -> parenList [SRowRead, userShow tab, userShow rk]
+    RowReadCount tab rk     -> parenList [SRowReadCount, userShow tab, userShow rk]
+    RowWrite tab rk         -> parenList [SRowWritten, userShow tab, userShow rk]
+    RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
+    KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
+    RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
+
+instance UserShow a => UserShow (Prop a) where
+  userShowsPrec d = \case
+    PropSpecific p -> userShowsPrec d p
+    CoreProp     p -> userShowsPrec d p
+
 instance S :<: Prop where
   inject = CoreProp . Sym
   project = \case
@@ -293,7 +370,7 @@ instance Num (Prop Integer) where
   negate      = inject .   IntUnaryArithOp Negate
 
 instance Num (Prop Decimal) where
-  fromInteger = PLit . mkDecimal . fromInteger
+  fromInteger = PLit . fromPact decimalIso . fromInteger
   (+)         = inject ... DecArithOp Add
   (*)         = inject ... DecArithOp Mul
   abs         = inject .   DecUnaryArithOp Abs
@@ -346,10 +423,6 @@ pattern POr a b = CoreProp (Logical OrOp [a, b])
 pattern PNot :: Prop Bool -> Prop Bool
 pattern PNot a = CoreProp (Logical NotOp [a])
 
-mkDecimal :: Decimal.Decimal -> Decimal
-mkDecimal (Decimal.Decimal places mantissa) = fromRational $
-  mantissa % 10 ^ places
-
 
 -- | The schema invariant language.
 --
@@ -376,6 +449,9 @@ instance S :<: Invariant where
   project = \case
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
+
+instance UserShow a => UserShow (Invariant a) where
+  userShowsPrec d (CoreInvariant a) = userShowsPrec d a
 
 type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
@@ -404,7 +480,7 @@ data Term ret where
   IfThenElse      :: Term Bool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
-  Let             :: Text -> VarId -> ETerm -> Term a -> Term a
+  Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
 
   -- Control flow
   Sequence        :: ETerm     -> Term a ->           Term a
@@ -420,6 +496,7 @@ data Term ret where
   -- Reading from environment
   ReadKeySet      :: Term String -> Term KeySet
   ReadDecimal     :: Term String -> Term Decimal
+  ReadInteger     :: Term String -> Term Integer
 
   -- TODO: ReadInteger, ReadMsg
 
@@ -437,6 +514,44 @@ data Term ret where
   FormatTime      :: Term String         -> Term Time   -> Term String
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
   Hash            :: ETerm                              -> Term String
+
+instance UserShow a => UserShow (Term a) where
+  userShowsPrec _ = \case
+    CoreTerm tm                -> userShow tm
+    IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
+    Let var _ _ x y            -> parenList ["let", userShow var, userShow x, userShow y]
+    Sequence x y               -> Text.unlines [userShow x, userShow y]
+
+    EnforceOne (Left _)        -> parenList
+      [ "enforce-one"
+      , "\"(generated enforce-one)\""
+      , userShowList ([] :: [Integer])
+      ]
+    EnforceOne (Right x)       -> parenList
+      [ "enforce-one"
+      , "\"(generated enforce-one)\""
+      , userShowList $ fmap snd x
+      ]
+
+    Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
+    Enforce _ (NameAuthorized _ x) -> parenList ["enforce-keyset", userShow x]
+    Enforce _ x                    -> parenList ["enforce", userShow x]
+    KsAuthorized   _ _
+      -> error "KsAuthorized should only appear inside of an Enforce"
+    NameAuthorized _ _
+      -> error "NameAuthorized should only appear inside of an Enforce"
+
+    Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
+    Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
+    PactVersion          -> parenList ["pact-version"]
+    Format x y           -> parenList ["format", userShow x, userShowList y]
+    FormatTime x y       -> parenList ["format", userShow x, userShow y]
+    ParseTime Nothing y  -> parenList ["parse-time", userShow y]
+    ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
+    Hash x               -> parenList ["hash", userShow x]
+    ReadKeySet name      -> parenList ["read-keyset", userShow name]
+    ReadDecimal name     -> parenList ["read-decimal", userShow name]
+    ReadInteger name     -> parenList ["read-integer", userShow name]
 
 deriving instance Eq a   => Eq (Term a)
 deriving instance Eq a   => Eq (Core Term a)
@@ -470,12 +585,12 @@ instance Num (Term Integer) where
   negate = inject .   IntUnaryArithOp Negate
 
 instance Num (Term Decimal) where
-  fromInteger = lit . mkDecimal . fromInteger
+  fromInteger = lit . fromPact decimalIso . fromInteger
   (+)    = inject ... DecArithOp Add
   (*)    = inject ... DecArithOp Mul
   abs    = inject .   DecUnaryArithOp Abs
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
 
-lit :: SymWord a => a -> Term a
-lit = CoreTerm . Sym . literalS
+lit :: a -> Term a
+lit = CoreTerm . Lit
