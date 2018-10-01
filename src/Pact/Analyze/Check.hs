@@ -494,7 +494,7 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
         -> pure (exp', Everywhere)
       [ exp', BraceList [ EStrLiteral' "except", ColonExp, names ] ]
         -> (exp',) . Excluding <$> parseNames names
-      [ exp', BraceList [ EStrLiteral' "within", ColonExp, names ] ]
+      [ exp', BraceList [ EStrLiteral' "only",   ColonExp, names ] ]
         -> (exp',) . Including <$> parseNames names
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")

@@ -19,7 +19,7 @@
 
      ; we have two admin functions
      (property auth-required
-       {'within: ['read-account-admin, 'fund-account]})
+       {'only: ['read-account-admin, 'fund-account]})
 
      ; every function should conserve mass except for the admin fund-account,
      ; and debit / credit which should be private
@@ -28,10 +28,10 @@
 
      ; reading functions do not write
      (property (not (table-written 'accounts))
-       {'within: ['read-account-user, 'read-account-admin, 'check-balance]})
+       {'only: ['read-account-user, 'read-account-admin, 'check-balance]})
 
      (property (not (table-read 'accounts))
-       {'within: ['create-account]})
+       {'only: ['create-account]})
     ]
 
   (defschema account
