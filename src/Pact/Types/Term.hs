@@ -44,7 +44,7 @@ module Pact.Types.Term
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
-   tInterfaceBody, tInterfaceDef,
+   tInterfaceDef,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -230,6 +230,7 @@ instance FromJSON Module where
     o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing Nothing) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
+
 -- | Interface data for Pact modules. These are ML-style Signatures which
 -- pact modules must satisfy at compile time.
 --
@@ -243,8 +244,8 @@ data Interface = Interface
   , _iMeta :: !Meta
   , _iHash :: !Hash
   , _iCode :: !Code
-  }
-  deriving (Eq)
+  } deriving (Eq)
+
 instance Show Interface where
   show Interface{..} =
     "(Interface " ++ asString' _iName ++ " " ++ show _iHash ++ ")"
@@ -273,7 +274,7 @@ data Term n =
     } |
     TInterface {
       _tInterfaceDef :: Interface
-    , _tInterfaceBody :: !(Scope () Term n)
+    , _tFunDefs :: FunTypes (Term n)
     , _tInfo :: !Info
     } | 
     TList {

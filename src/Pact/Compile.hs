@@ -125,6 +125,7 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "defun" -> commit >> defun
     "defpact" -> commit >> defpact
     "module" -> commit >> moduleForm
+    "interface" -> commit >> interfaceForm
     _ -> expected "special form"
 
 
@@ -283,6 +284,30 @@ moduleForm = do
   return $ TModule
     (Module modName (KeySetName keyset) m code modHash blessed)
     (abstract (const Nothing) (TList bd TyAny bi)) i
+
+interfaceForm :: Compile (Term Name)
+interfaceForm = do
+  iName' <- _atomAtom <$> bareAtom
+  m <- meta
+  use (psUser . csModule) >>= \cm -> case cm of
+    Just {} -> syntaxError "Invalid nested interface"
+    Nothing -> return ()
+  info <- contextInfo
+  let code = case i of
+        Info Nothing -> "<code unavailable>"
+        Info (Just (c,_)) -> c
+      iName = InterfaceName iName'
+      iHash = hash $ encodeUtf8 $ _unCode code
+  (psUser . csModule) .= Just (iName,iHash)
+  (bd,bi) <- bodyForm'
+  eof
+  abstracted <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
+    TDef {} -> return []
+    TConst {} -> return []
+    _ -> syntaxError "Only defun and constants allowed in interface"
+  return $ TInterface
+    (Interface iName m iHash code)
+    (abstract (const Nothing) (TList bd TyAny bi)) info
 
 step :: Compile (Term Name)
 step = do

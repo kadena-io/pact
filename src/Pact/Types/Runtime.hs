@@ -22,13 +22,13 @@ module Pact.Types.Runtime
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData,
-   RefStore(..),rsNatives,rsModules,updateRefStore,
+   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStoreModules,updateRefStoreInterfaces,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsNew,
+   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules, rsNewInterfaces,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
@@ -110,9 +110,9 @@ instance AsString KeyPredBuiltins where
   asString KeysAll = "keys-all"
   asString KeysAny = "keys-any"
   asString Keys2 = "keys-2"
+  
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
-
 
 
 newtype PactId = PactId Text
@@ -128,15 +128,28 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
-type ModuleData = (Module,HM.HashMap Text Ref)
+-- | Module ref store 
+data ModuleData = ModuleData
+  { _mdModule :: Module
+  , _mdRefMap :: HM.HashMap Text Ref
+  } deriving (Eq, Show)
 
--- | Storage for loaded modules and natives.
+
+-- | Interface ref store
+data InterfaceData = Interface
+  { _idInterface :: Interface
+  , _iddRefMap :: HM.HashMap Text Ref
+  } deriving (Eq, Show)
+
+
+-- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
+    , _rsInterfaces :: HM.HashMap InterfaceName InterfaceData
     } deriving (Eq,Show)
 makeLenses ''RefStore
-instance Default RefStore where def = RefStore HM.empty HM.empty
+instance Default RefStore where def = RefStore HM.empty HM.empty HM.empty
 
 
 newtype EntityName = EntityName Text
@@ -207,19 +220,26 @@ data RefState = RefState {
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
+      -- | Signatures that were loaded.
+    , _rsLoadedInterfaces :: HM.HashMap InterfaceName Interface
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNew :: [(ModuleName,ModuleData)]
-    }
-                deriving (Eq,Show)
+    , _rsNewModules :: [(ModuleName,ModuleData)]
+      -- | Interfaces that were compiled and loaded in this tx.
+    , _rsNewInterfaces :: [(InterfaceName, InterfaceData)]
+    } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty def
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty def def
 
 -- | Update for newly-loaded modules.
-updateRefStore :: RefState -> RefStore -> RefStore
-updateRefStore RefState {..}
-  | null _rsNew = id
-  | otherwise = over rsModules $ HM.union $ HM.fromList _rsNew
+updateRefStoreModules :: RefState -> RefStore -> RefStore
+updateRefStoreModules RefState {..}
+  | null _rsNewModules = id
+  | otherwise = over $ rsModules $ HM.union $ HM.fromList _rsNewModules
 
+updateRefStoreInterfaces :: RefState -> RefStore -> RefStore
+updateRefStoreInterfaces RefState{..}
+  | null _rsNewInterfaces = id
+  | otherwise = over rsInterfaces HM.union $ HM.fromList _rsNewInterfaces
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.
