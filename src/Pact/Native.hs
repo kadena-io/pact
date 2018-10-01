@@ -571,7 +571,7 @@ strToInt i as =
         if T.length txt <= 128 
         then case baseStrToInt base' txt of
           Left _ -> argsError i as
-          Right n -> return . tStr . asString $ n
+          Right n -> return (toTerm n)
         else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
       else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
       
