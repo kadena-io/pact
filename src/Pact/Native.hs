@@ -586,17 +586,14 @@ txHash i as = argsError i as
 --   -- hexadecimal to decimal
 --   baseStrToInt 10 "abcdef123456" = 188900967593046
 -- 
-baseStrToInt
-  :: Integer -- ^ The base specification
-  -> Text -- ^ The string to convert to integral base-a
-  -> Either Text Integer
-baseStrToInt base h =
+baseStrToInt :: Integer -> Text -> Either Text Integer
+baseStrToInt base t =
   if base <= 1 || base > 16
   then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
   else
-    if T.null h
-    then Left $ "baseStringToInt - empty text: " `T.append` asString h
-    else Right $ T.foldl' go 0 h
+    if T.null t
+    then Left $ "baseStringToInt - empty text: " `T.append` asString t
+    else Right $ T.foldl' go 0 t
   where
     go :: Integer -> Char -> Integer
     go acc w = base * acc + (fromIntegral . digitToInt $ w) 
