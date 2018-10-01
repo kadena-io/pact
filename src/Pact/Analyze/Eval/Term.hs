@@ -258,6 +258,7 @@ evalTermO = \case
 
     readSucceeds <- use $ rowExists tn sRk
     tagAccessKey mtReads tid sRk readSucceeds
+    succeeds %= (&&& readSucceeds)
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
