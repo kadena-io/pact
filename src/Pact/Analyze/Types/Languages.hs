@@ -320,6 +320,7 @@ instance UserShow a => UserShow (PropSpecific a) where
     RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
+    RowExists tn rk         -> parenList [SRowExists, userShow tn, userShow rk]
 
 instance UserShow a => UserShow (Prop a) where
   userShowsPrec d = \case
