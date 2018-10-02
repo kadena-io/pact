@@ -107,14 +107,14 @@ data SmtFailure
   | Unsatisfiable
   | Unknown SBV.SMTReasonUnknown
   | SortMismatch String
-  | UnexpectedFailure SBV.SBVException
+  | UnexpectedFailure SBV.SMTException
   deriving Show
 
 instance Eq SmtFailure where
   Invalid m1    == Invalid m2    = m1 == m2
   Unsatisfiable == Unsatisfiable = True
 
-  -- SMTReasonUnknown and SBVException don't provide instances of Eq, so we
+  -- SMTReasonUnknown and SMTException don't provide instances of Eq, so we
   -- always return 'False' in these cases.
   _             ==             _ = False
 
@@ -327,7 +327,7 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
     catchingExceptions
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
-    catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
+    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
       pure $ Left $ CheckFailure funInfo $ SmtFailure $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a
@@ -379,7 +379,7 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
     catchingExceptions
       :: IO (Either CheckFailure b)
       -> IO (Either CheckFailure b)
-    catchingExceptions act = act `E.catch` \(e :: SBV.SBVException) ->
+    catchingExceptions act = act `E.catch` \(e :: SBV.SMTException) ->
       pure $ Left $ smtToCheckFailure propInfo $ UnexpectedFailure e
 
     runSymbolic :: Symbolic a -> IO a

@@ -13,7 +13,7 @@ import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord, ite)
 import qualified Data.SBV.String             as SBVS
-import qualified Data.SBV.List               as SBVL
+-- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
@@ -150,8 +150,8 @@ evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
-evalCore (LiteralList xs)                  =
-  sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
+evalCore (LiteralList xs)                  = undefined
+  -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
 evalCore (StringContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack
