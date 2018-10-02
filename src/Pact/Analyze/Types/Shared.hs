@@ -77,6 +77,7 @@ instance Mergeable a => Mergeable (Located a) where
 
 data Existential (tm :: * -> *) where
   ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
+  EList   :: SimpleType a => Type a -> tm [a]    -> Existential tm
   EObject ::                 Schema -> tm Object -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
@@ -528,11 +529,12 @@ isConcreteS = isConcrete . _sSbv
 data QKind = QType | QAny
 
 -- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a, Typeable a, UserShow a)
+type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
 
 data Quantifiable :: QKind -> * where
   -- TODO: parametrize over constraint
   EType     :: SimpleType a =>                    Type a -> Quantifiable q
+  EListType :: SimpleType a =>                    Type a -> Quantifiable q
   EObjectTy ::                                    Schema -> Quantifiable q
   QTable    ::                                              Quantifiable 'QAny
   QColumnOf :: TableName                                 -> Quantifiable 'QAny
@@ -636,13 +638,14 @@ instance SMTValue KeySet where
 
 -- The type of a simple type
 data Type a where
-  TInt     :: Type Integer
-  TBool    :: Type Bool
-  TStr     :: Type String
-  TTime    :: Type Time
-  TDecimal :: Type Decimal
-  TKeySet  :: Type KeySet
-  TAny     :: Type Any
+  TInt     ::                           Type Integer
+  TBool    ::                           Type Bool
+  TStr     ::                           Type String
+  TTime    ::                           Type Time
+  TDecimal ::                           Type Decimal
+  TKeySet  ::                           Type KeySet
+  TAny     ::                           Type Any
+  -- XXX should this go away give EListType?
   TList    :: SimpleType a => Type a -> Type [a]
 
 deriving instance Show (Type a)

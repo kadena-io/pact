@@ -54,7 +54,7 @@ import           Prelude                      hiding (exp)
 
 import           Pact.Types.Lang              hiding (KeySet, KeySetName,
                                                SchemaVar, TKeySet, TableName,
-                                               Type, TList)
+                                               Type, TList, EList)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)
@@ -203,7 +203,7 @@ parseType = \case
     -- TODO: look up quantified table names
     -> pure $ QColumnOf $ TableName $ T.unpack tabName
   SquareList [ty]  -> case parseType ty of
-    Just (EType ty) -> pure $ EType $ TList ty
+    Just (EType ty) -> pure $ EListType ty
     _               -> Nothing
   SquareList _     -> Nothing
 
@@ -247,18 +247,18 @@ inferVar vid name prop = do
 
 -- TODO: generalize this / doit from Translate
 doit :: [EProp] -> Maybe (Existential (Core Prop))
-doit [] = Just $ ESimple (TList TAny) (LiteralList [])
-doit (ESimple ty1 x : xs) = foldr
+doit [] = Just $ EList TAny (LiteralList [])
+doit (ESimple ty0 x : xs) = foldr
   (\case
     EObject{} -> \_ -> Nothing
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
-      Just (ESimple listTy@(TList ty') (LiteralList ys)) -> case typeEq ty ty' of
+      Just (EList ty' (LiteralList ys)) -> case typeEq ty ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (ESimple listTy (LiteralList (y:ys)))
+        Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (ESimple (TList ty1) (LiteralList [x])))
+  (Just (EList ty0 (LiteralList [x])))
   xs
 
 --

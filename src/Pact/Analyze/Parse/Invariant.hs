@@ -95,6 +95,6 @@ expToInvariant ty exp = case (ty, exp) of
       _ -> throwErrorIn exp $ "logical op with wrong number of args: " <> op
 
   (_, EAtom {})        -> throwErrorIn exp "illegal invariant form"
-  (_, EList {})        -> throwErrorIn exp "illegal invariant form"
+  (_, Pact.EList {})   -> throwErrorIn exp "illegal invariant form"
   (_, BraceList {})    -> throwErrorIn exp "illegal invariant form"
   (_, ESeparator {})   -> throwErrorIn exp "illegal invariant form"

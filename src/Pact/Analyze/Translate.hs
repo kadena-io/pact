@@ -379,7 +379,7 @@ maybeTranslateType' f = \case
   --
   TyPrim TyValue   -> empty
   TyList a         -> maybeTranslateType' f a >>= \case
-    EType t -> pure $ EType $ TList t
+    EType t -> pure $ EListType t
     _       -> empty
   TyFun _          -> empty
 
@@ -1022,7 +1022,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   _ -> throwError' $ UnexpectedNode astNode
 
 doit :: [ETerm] -> Maybe (Existential (Core Term))
-doit [] = Just $ ESimple (TList TAny) (LiteralList [])
+doit [] = Just $ EList TAny (LiteralList [])
 doit (ESimple ty1 x : xs) = foldr
   (\case
     EObject{} -> \_ -> Nothing
@@ -1033,7 +1033,7 @@ doit (ESimple ty1 x : xs) = foldr
         Nothing   -> Nothing
         Just Refl -> Just (ESimple listTy (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (ESimple (TList ty1) (LiteralList [x])))
+  (Just (EList ty1 (LiteralList [x])))
   xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph

@@ -17,7 +17,7 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (AtomExp (..), Exp (..),
+import           Pact.Types.Lang            (AtomExp (..), Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
@@ -135,13 +135,13 @@ type InvariantParse = ReaderT [(Pact.Arg UserType, VarId)] (Either String)
 makeLenses ''PropCheckEnv
 
 pattern ParenList :: [Exp t] -> Exp t
-pattern ParenList elems <- EList (ListExp elems Parens _i)
+pattern ParenList elems <- Pact.EList (ListExp elems Parens _i)
 
 pattern BraceList :: [Exp t] -> Exp t
-pattern BraceList elems <- EList (ListExp elems Braces _i)
+pattern BraceList elems <- Pact.EList (ListExp elems Braces _i)
 
 pattern SquareList :: [Exp t] -> Exp t
-pattern SquareList elems <- EList (ListExp elems Brackets _i)
+pattern SquareList elems <- Pact.EList (ListExp elems Brackets _i)
 
 pattern EAtom' :: Text -> Exp t
 pattern EAtom' name <- EAtom (AtomExp name [] _i)
