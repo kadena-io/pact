@@ -27,10 +27,11 @@ import Pact.Types.Util
 
 #if !defined(ghcjs_HOST_OS)
 
-import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
+import qualified Data.ByteArray as ByteArray
+import qualified Crypto.Hash as Crypto
 
 hash :: ByteString -> Hash
-hash = Hash . BLAKE.hash hashLengthAsBS mempty
+hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_512
 {-# INLINE hash #-}
 
 #else
