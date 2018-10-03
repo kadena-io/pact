@@ -48,6 +48,12 @@ in
             haskell-src-meta = self.callHackage "haskell-src-meta" "0.8.0.2" {};
             # needed to match haskell-src-exts
             haskell-src-exts-util = self.callHackage "haskell-src-exts-util" "0.2.2" {};
+            hedgehog = self.callCabal2nix "hedgehog" (pkgs.fetchFromGitHub {
+              owner = "hedgehogqa";
+              repo = "haskell-hedgehog";
+              rev = "38146de29c97c867cff52fb36367ff9a65306d76";
+              sha256 = "1z8d3hqrgld1z1fvjd0czksga9lma83caa2fycw0a5gfbs8sh4zh";
+            } + "/hedgehog") {};
             hlint = self.callHackage "hlint" "2.0.14" {};
             hoogle = self.callHackage "hoogle" "5.0.15" {};
 
