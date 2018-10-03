@@ -263,10 +263,8 @@ mkInitialAnalyzeState tables = AnalyzeState
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
-      -- | Include this column in the mapping?
-      :: (Pact.Type Pact.UserType -> Bool)
-      -- | Default value
-      -> a
+      :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
+      -> a                                 -- ^ Default value
       -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableType } ->
