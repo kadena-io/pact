@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -11,8 +12,10 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Pact.Analyze.Types.Shared where
 
@@ -41,17 +44,19 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (%), (.<), (.==))
+                                               (%), (.<), (.==), SArray)
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
+import qualified Data.SBV.Dynamic             as SBVD
 import qualified Data.SBV.String              as SBV
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
-import           Data.Type.Equality           ((:~:) (Refl), apply)
+import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (Float)
+import Data.Proxy
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
@@ -61,6 +66,32 @@ import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow
 
+
+data Fold a where
+  AndFold :: Fold Bool
+  AddFold :: Fold Integer
+
+data ListInfo (tm :: Ty -> *) (a :: Ty) where
+  LitList      :: [tm a]     -> ListInfo tm ('TyList a)
+  LenInfo      :: tm 'TyInteger -> ListInfo tm ('TyList a)
+
+  -- FoldInfo
+  --   :: SimpleType b
+  --   -- consuming a list of a, where we operate on bs
+  --   => (tm a -> tm b)
+  --   -- fold
+  --   -> Fold b
+  --   -- result
+  --   -> tm b
+  --   -> ListInfo tm a
+
+  AtInfo       :: tm 'TyInteger -> tm a -> ListInfo tm ('TyList a)
+  ContainsInfo :: tm a               -> ListInfo tm ('TyList a)
+
+  -- MapInfo :: (tm a -> tm b) -> tm b -> ListInfo tm a
+
+deriving instance (Eq   (tm a), Eq   (tm 'TyInteger)) => Eq   (ListInfo tm ('TyList a))
+deriving instance (Show (tm a), Show (tm 'TyInteger)) => Show (ListInfo tm ('TyList a))
 
 data Located a
   = Located
@@ -75,10 +106,11 @@ instance Mergeable a => Mergeable (Located a) where
   symbolicMerge f t (Located i a) (Located i' a') =
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
-data Existential (tm :: * -> *) where
-  ESimple :: SimpleType a => Type a -> tm a      -> Existential tm
-  EList   :: SimpleType a => Type a -> tm [a]    -> Existential tm
-  EObject ::                 Schema -> tm Object -> Existential tm
+data Existential (tm :: Ty -> *) where
+  ESimple :: SimpleType (Concrete a) => SingTy a -> tm a           -> Existential tm
+  -- TODO: combine with ESimple?
+  EList   :: SimpleType (Concrete a) => SingTy a -> tm ('TyList a) -> Existential tm
+  EObject ::                            Schema   -> tm 'TyObject   -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -99,6 +131,7 @@ mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
+-- existentialType (EList   ety _) = EType (SList ety) -- EListType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
@@ -195,6 +228,9 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
+-- newtype Str = Str String
+--   deriving (Show, Eq, Ord, IsString, UserShow)
+
 type RowKey = String
 
 type Time = Int64
@@ -283,7 +319,7 @@ data Provenance
 
 -- Symbolic value carrying provenance, for tracking if values have come from a
 -- particular table+row.
-data S a
+data S (a :: *)
   = S
     { _sProv :: Maybe Provenance
     , _sSbv  :: SBV a }
@@ -295,7 +331,7 @@ sansProv = S Nothing
 withProv :: Provenance -> SBV a -> S a
 withProv prov sym = S (Just prov) sym
 
-instance SymWord a => Mergeable (S a) where
+instance (SymWord a) => Mergeable (S a) where
   symbolicMerge f t (S mProv1 x) (S mProv2 y)
     | mProv1 == mProv2 = S mProv1 $ symbolicMerge f t x y
     | otherwise        = sansProv $ symbolicMerge f t x y
@@ -379,7 +415,7 @@ instance Provable PredicateS where
 
 -- Until SBV adds a typeclass for strConcat/(.++):
 (.++) :: S String -> S String -> S String
-S _ a .++ S _ b = sansProv $ SBV.concat a b
+S _ a .++ S _ b = sansProv $ coerceSBV $ SBV.concat (coerceSBV a) (coerceSBV b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
 sbv2S :: Iso (SBV a) (SBV b) (S a) (S b)
@@ -449,9 +485,20 @@ varIdArgs args =
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
+  | AList SBVI.SVal SBVD.SArr
   | AnObj Object
   | OpaqueVal
-  deriving (Eq, Show)
+
+-- data SList a = SList (SBV Integer) (SArray Integer a)
+
+mkAList :: SBV Integer -> SArray Integer a -> AVal
+mkAList (SBVI.SBV len) (SBVI.SArray arr) = AList len arr
+
+instance Eq AVal where
+  _ == _ = False -- TODO
+
+instance Show AVal where
+  show _ = "TODO: Show AVal"
 
 instance UserShow AVal where
   userShowsPrec _ = \case
@@ -504,7 +551,7 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
 
-coerceS :: Coercible a b => S a -> S b
+coerceS :: forall a b. Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
 
 unsafeCoerceS :: S a -> S b
@@ -514,8 +561,7 @@ iteS :: Mergeable a => S Bool -> a -> a -> a
 iteS sbool = ite (_sSbv sbool)
 
 fromIntegralS
-  :: forall a b
-  . (Integral a, SymWord a, Num b, SymWord b)
+  :: forall a b. (Integral a, SymWord a, Num b, SymWord b)
   => S a
   -> S b
 fromIntegralS = over s2Sbv sFromIntegral
@@ -532,19 +578,18 @@ data QKind = QType | QAny
 type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
 
 data Quantifiable :: QKind -> * where
-  -- TODO: parametrize over constraint
-  EType     :: SimpleType a =>                    Type a -> Quantifiable q
-  EListType :: SimpleType a =>                    Type a -> Quantifiable q
-  EObjectTy ::                                    Schema -> Quantifiable q
-  QTable    ::                                              Quantifiable 'QAny
-  QColumnOf :: TableName                                 -> Quantifiable 'QAny
+  EType     :: SimpleType (Concrete a) => SingTy a  -> Quantifiable q
+  -- EListType :: SingTy a  -> Quantifiable q
+  EObjectTy :: Schema    -> Quantifiable q
+  QTable    ::              Quantifiable 'QAny
+  QColumnOf :: TableName -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
 instance Eq (Quantifiable q) where
-  EType a == EType b = case typeEq a b of
-    Just _refl -> True
-    Nothing    -> False
+  EType a == EType b = case singEq a b of
+    Just Refl -> True
+    Nothing   -> False
   EObjectTy a == EObjectTy b = a == b
   QTable      == QTable      = True
   QColumnOf a == QColumnOf b = a == b
@@ -559,11 +604,13 @@ type QType = Quantifiable 'QAny
 coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
+  -- EListType ty     -> EListType ty
   EObjectTy schema -> EObjectTy schema
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
   EType ty         -> Just $ EType ty
+  -- EListType ty     -> Just $ EListType ty
   EObjectTy schema -> Just $ EObjectTy schema
   _                -> Nothing
 
@@ -636,47 +683,28 @@ instance HasKind KeySet where
 instance SMTValue KeySet where
   sexprToVal = fmap KeySet . sexprToVal
 
--- The type of a simple type
-data Type a where
-  TInt     ::                           Type Integer
-  TBool    ::                           Type Bool
-  TStr     ::                           Type String
-  TTime    ::                           Type Time
-  TDecimal ::                           Type Decimal
-  TKeySet  ::                           Type KeySet
-  TAny     ::                           Type Any
-  -- XXX should this go away give EListType?
-  TList    :: SimpleType a => Type a -> Type [a]
+type family Concrete (a :: Ty) where
+  Concrete 'TyInteger  = Integer
+  Concrete 'TyBool     = Bool
+  Concrete 'TyStr      = String
+  Concrete 'TyTime     = Time
+  Concrete 'TyDecimal  = Decimal
+  Concrete 'TyKeySet   = KeySet
+  Concrete 'TyAny      = Any
+  Concrete ('TyList a) = [Concrete a]
+  Concrete 'TyObject   = Object
 
-deriving instance Show (Type a)
-deriving instance Eq (Type a)
-
--- data List a = List [a]
---   deriving (Show, Eq, Ord)
-
--- instance SMTValue (List a)
-
-typeEq :: Type a -> Type b -> Maybe (a :~: b)
-typeEq TInt     TInt       = Just Refl
-typeEq TBool    TBool      = Just Refl
-typeEq TStr     TStr       = Just Refl
-typeEq TTime    TTime      = Just Refl
-typeEq TDecimal TDecimal   = Just Refl
-typeEq TAny     TAny       = Just Refl
-typeEq TKeySet  TKeySet    = Just Refl
-typeEq (TList a) (TList b) = apply Refl <$> typeEq a b
-typeEq _        _          = Nothing
-
-instance UserShow (Type a) where
-  userShowsPrec _ = \case
-    TInt     -> "integer"
-    TBool    -> "bool"
-    TStr     -> "string"
-    TTime    -> "time"
-    TDecimal -> "decimal"
-    TKeySet  -> "keyset"
-    TAny     -> "*"
-    TList a  -> "[" <> userShow a <> "]"
+singConcrete :: SingTy ty -> Proxy (Concrete ty)
+singConcrete = \case
+  SInteger -> Proxy
+  SBool    -> Proxy
+  SStr     -> Proxy
+  STime    -> Proxy
+  SDecimal -> Proxy
+  SKeySet  -> Proxy
+  SAny     -> Proxy
+  SList _  -> Proxy
+  SObject  -> Proxy
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema
@@ -708,6 +736,7 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowsPrec d = \case
     EType ty     -> userShowsPrec d ty
+    -- EListType ty -> brackets $ userShowsPrec 0 ty
     EObjectTy ty -> userShowsPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"

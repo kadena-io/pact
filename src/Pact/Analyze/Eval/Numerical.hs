@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE DataKinds             #-}
 module Pact.Analyze.Eval.Numerical where
 
 import           Data.Coerce             (Coercible)
@@ -35,7 +36,7 @@ import           Pact.Analyze.Types.Eval
 
 evalNumerical
   :: Analyzer m
-  => Numerical (TermOf m) a -> m (S a)
+  => Numerical (TermOf m) a -> m (S (Concrete a))
 evalNumerical (IntArithOp op x y)      = evalIntArithOp op x y
 evalNumerical (DecArithOp op x y)      = evalDecArithOp op x y
 evalNumerical (IntDecArithOp op x y)   = evalDecArithOp op x y
@@ -52,8 +53,8 @@ evalNumerical (RoundingLikeOp2 op x p) = evalRoundingLikeOp2 op x p
 evalIntArithOp
   :: Analyzer m
   => ArithOp
-  -> TermOf m Integer
-  -> TermOf m Integer
+  -> TermOf m 'TyInteger
+  -> TermOf m 'TyInteger
   -> m (S Integer)
 evalIntArithOp op xT yT = do
   x <- eval xT
@@ -70,8 +71,10 @@ evalIntArithOp op xT yT = do
 
 evalDecArithOp
   :: ( Analyzer m
-     , DecimalRepresentable a, Show a, SymWord a
-     , DecimalRepresentable b, Show b, SymWord b
+     , a' ~ Concrete a
+     , b' ~ Concrete b
+     , DecimalRepresentable a', Show a', SymWord a'
+     , DecimalRepresentable b', Show b', SymWord b'
      )
   => ArithOp
   -> TermOf m a
@@ -92,14 +95,16 @@ evalDecArithOp op xT yT = do
 
 -- In practice (a ~ Decimal) or (a ~ Integer).
 evalUnaryArithOp
-  :: forall m a
-   . (Analyzer m, Show a, SymWord a, Coercible a Integer)
+  :: forall m a a'
+   . (Analyzer m
+     , a' ~ Concrete a
+     , Show a', SymWord a', Coercible a' Integer)
   => UnaryArithOp
   -> TermOf m a
-  -> m (S a)
+  -> m (S a')
 evalUnaryArithOp op term = do
-  x <- coerceS @a @Integer <$> eval term
-  coerceS @Integer @a <$> case op of
+  x <- coerceS @a' @Integer <$> eval term
+  coerceS @Integer @a' <$> case op of
     Negate -> pure $ negate x
     Sqrt   -> throwErrorNoLoc $ UnsupportedUnaryOp op
     Ln     -> throwErrorNoLoc $ UnsupportedUnaryOp op
@@ -109,8 +114,8 @@ evalUnaryArithOp op term = do
 
 evalModOp
   :: Analyzer m
-  => TermOf m Integer
-  -> TermOf m Integer
+  => TermOf m 'TyInteger
+  -> TermOf m 'TyInteger
   -> m (S Integer)
 evalModOp xT yT = do
   x <- eval xT
@@ -121,21 +126,21 @@ evalModOp xT yT = do
 evalRoundingLikeOp1
   :: Analyzer m
   => RoundingLikeOp
-  -> TermOf m Decimal
+  -> TermOf m 'TyDecimal
   -> m (S Integer)
-evalRoundingLikeOp1 op x = do
-  x' <- eval x
+evalRoundingLikeOp1 op xT = do
+  x <- eval xT
   pure $ case op of
-    Floor   -> floorD x'
+    Floor   -> floorD x
 
     -- For ceiling we use the identity:
     -- ceil(x) = -floor(-x)
-    Ceiling -> negate (floorD (negate x'))
+    Ceiling -> negate (floorD (negate x))
 
     -- Round is much more complicated because pact uses the banker's method,
     -- where a real exactly between two integers (_.5) is rounded to the
     -- nearest even.
-    Round   -> banker'sMethodS x'
+    Round   -> banker'sMethodS x
 
 -- In the decimal rounding operations we shift the number left by `precision`
 -- digits, round using the integer method, and shift back right.
@@ -147,16 +152,16 @@ evalRoundingLikeOp2
   :: forall m
    . Analyzer m
   => RoundingLikeOp
-  -> TermOf m Decimal
-  -> TermOf m Integer
+  -> TermOf m 'TyDecimal
+  -> TermOf m 'TyInteger
   -> m (S Decimal)
 evalRoundingLikeOp2 op xT precisionT = do
-  x         <- eval xT
+  (x :: S Decimal)         <- eval xT
   precision <- eval precisionT
   -- Precision must be >= 0
   markFailure (precision .< 0)
   rShiftD' precision . fromInteger' <$>
-    evalRoundingLikeOp1 op (inject (lShiftD' precision x))
+    evalRoundingLikeOp1 op (inject' (lShiftD' precision x))
 
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethodS :: S Decimal -> S Integer

@@ -64,6 +64,7 @@ newtype Analyze a
 instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
+  -- evalL            = evalTermL
   evalO            = evalTermO
   evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
@@ -74,7 +75,7 @@ instance Analyzer Analyze where
 
 evalTermLogicalOp
   :: LogicalOp
-  -> [Term Bool]
+  -> [Term 'TyBool]
   -> Analyze (S Bool)
 evalTermLogicalOp AndOp [a, b] = do
   a' <- eval a
@@ -246,7 +247,7 @@ applyInvariants tn aValFields addInvariants = do
 evalETerm :: ETerm -> Analyze AVal
 evalETerm tm = snd <$> evalExistential tm
 
-evalTermO :: Term Object -> Analyze Object
+evalTermO :: Term 'TyObject -> Analyze Object
 evalTermO = \case
   CoreTerm a -> evalCoreO a
 
@@ -265,13 +266,13 @@ evalTermO = \case
       sDirty <- use $ cellWritten tn cn sRk
 
       av <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
-        EType TAny     -> pure OpaqueVal
+        EType SInteger -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
+        EType SBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
+        EType SStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
+        EType SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
+        EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
+        EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
+        EType SAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
         --       the correct provenance into AVals all the way down into
@@ -325,7 +326,12 @@ validateWrite writeType sch@(Schema sm) obj@(Object om) = do
 
   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
 
-evalTerm :: (Show a, SymWord a) => Term a -> Analyze (S a)
+evalTermL
+  :: (a' ~ Concrete a, SymWord a')
+  => Term ('TyList a) -> Analyze (S [a'])
+evalTermL (CoreTerm tm) = evalCoreL tm
+
+evalTerm :: (a' ~ Concrete a, Show a', SymWord a') => Term a -> Analyze (S a')
 evalTerm = \case
   CoreTerm a -> evalCore a
 
@@ -425,13 +431,13 @@ evalTerm = \case
                 mkColDeltaL  tn cn     %= plus diff
 
           case fieldType of
-            EType TInt     -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
-            EType TBool    -> boolCell   id tn cn sRk true .= mkS mProv sVal
-            EType TDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
-            EType TTime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
-            EType TStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
-            EType TKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
-            EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
+            EType SInteger -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
+            EType SBool    -> boolCell   id tn cn sRk true .= mkS mProv sVal
+            EType SDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
+            EType STime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
+            EType SStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
+            EType SKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
+            EType SAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
           pure aval'
@@ -482,10 +488,10 @@ evalTerm = \case
   Format formatStr args -> do
     formatStr' <- eval formatStr
     args' <- for args $ \case
-      ESimple TStr  str  -> Left          <$> eval str
-      ESimple TInt  int  -> Right . Left  <$> eval int
-      ESimple TBool bool -> Right . Right <$> eval bool
-      etm                -> throwErrorNoLoc $ fromString $ T.unpack $
+      ESimple SStr     str  -> Left          <$> eval str
+      ESimple SInteger int  -> Right . Left  <$> eval int
+      ESimple SBool    bool -> Right . Right <$> eval bool
+      etm                   -> throwErrorNoLoc $ fromString $ T.unpack $
         "We can only analyze calls to `format` formatting {string,integer,bool}" <>
         " (not " <> userShow etm <> ")"
     case unliteralS formatStr' of
@@ -520,15 +526,15 @@ evalTerm = \case
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
-      ESimple TStr tm -> eval tm <&> unliteralS >>= \case
+      ESimple SStr tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
-      ESimple TInt tm -> eval tm <&> unliteralS >>= \case
+      ESimple SInteger tm -> eval tm <&> unliteralS >>= \case
         Nothing  -> throwError notStaticErr
         Just int -> pure $ sHash $ toStrict $ Aeson.encode int
-      ESimple TBool tm -> eval tm <&> unliteralS >>= \case
+      ESimple SBool tm -> eval tm <&> unliteralS >>= \case
         Nothing   -> throwError notStaticErr
         Just bool -> pure $ sHash $ toStrict $ Aeson.encode bool
 
@@ -536,7 +542,7 @@ evalTerm = \case
       -- able to convert them back into Decimal.Decimal decimals (from SBV's
       -- Real representation). This is probably possible if we think about it
       -- hard enough.
-      ESimple TDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
+      ESimple SDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
       ESimple _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
       EObject _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"

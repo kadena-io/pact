@@ -12,8 +12,12 @@
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ViewPatterns          #-}
 
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE KindSignatures        #-}
+
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
+  , (:*<:)(inject', project')
   , EInvariant
   , EProp
   , ETerm
@@ -68,7 +72,7 @@ import           Pact.Analyze.Util
 
 #define EQ_EXISTENTIAL(tm)                                \
 instance Eq (Existential tm) where                        \
-  ESimple ta ia == ESimple tb ib = case typeEq ta tb of { \
+  ESimple sa ia == ESimple sb ib = case singEq sa sb of { \
     Just Refl -> ia == ib;                                \
     Nothing   -> False};                                  \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
@@ -90,7 +94,7 @@ instance UserShow (Existential tm) where                                       \
 --
 -- This can be read as "subtype", where we can always 'inject' the subtype into
 -- its supertype and sometimes 'project' the supertype down.
-class sub :<: sup where
+class (sub :: Ty -> *) :<: (sup :: Ty -> *) where
   inject  :: sub a -> sup a
   project :: sup a -> Maybe (sub a)
 
@@ -101,6 +105,10 @@ instance f :<: f where
 pattern Inj :: sub :<: sup => sub a -> sup a
 pattern Inj a <- (project -> Just a) where
   Inj a = inject a
+
+class (sub :: * -> *) :*<: (sup :: Ty -> *) where
+  inject'  :: sub (Concrete a) -> sup a
+  project' :: sup a            -> Maybe (sub (Concrete a))
 
 -- | Core terms.
 --
@@ -120,10 +128,10 @@ pattern Inj a <- (project -> Just a) where
 -- * string length and concatenation
 -- * 'add-time'
 -- * 'at'
-data Core t a where
-  Lit :: a -> Core t a
+data Core (t :: Ty -> *) (a :: Ty) where
+  Lit :: Concrete a -> Core t a
   -- | Injects a symbolic value into the language
-  Sym :: S a -> Core t a
+  Sym :: S (Concrete a) -> Core t a
 
   -- | Refers to a function argument, universally/existentially-quantified
   -- variable, or column
@@ -131,86 +139,109 @@ data Core t a where
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> Core t String
+  StrConcat :: t 'TyStr -> t 'TyStr -> Core t 'TyStr
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> Core t Integer
+  StrLength :: t 'TyStr                     -> Core t 'TyInteger
 
   -- numeric ops
   Numerical :: Numerical t a -> Core t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
-  IntAddTime :: t Time -> t Integer -> Core t Time
+  IntAddTime :: t 'TyTime -> t 'TyInteger -> Core t 'TyTime
   -- | Adds a 'Decimal' expression to a 'Time' expression
-  DecAddTime :: t Time -> t Decimal -> Core t Time
+  DecAddTime :: t 'TyTime -> t 'TyDecimal -> Core t 'TyTime
 
   -- comparison. Note that while it's cumbersome to define five different
   -- monomorphized comparisons, the alternative is implementing Eq by hand
   -- here.
 
   -- | A 'ComparisonOp' expression over two 'Integer' expressions
-  IntegerComparison :: ComparisonOp -> t Integer -> t Integer -> Core t Bool
+  IntegerComparison :: ComparisonOp -> t 'TyInteger -> t 'TyInteger -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Decimal' expressions
-  DecimalComparison :: ComparisonOp -> t Decimal -> t Decimal -> Core t Bool
+  DecimalComparison :: ComparisonOp -> t 'TyDecimal -> t 'TyDecimal -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Time' expressions
-  TimeComparison    :: ComparisonOp -> t Time    -> t Time    -> Core t Bool
+  TimeComparison    :: ComparisonOp -> t 'TyTime    -> t 'TyTime    -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t String  -> t String  -> Core t Bool
+  StringComparison  :: ComparisonOp -> t 'TyStr  -> t 'TyStr  -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
   --
   -- note: this is more broad than the set ({=, !=}) of comparisons pact
   -- supports on bools.
-  BoolComparison    :: ComparisonOp -> t Bool    -> t Bool    -> Core t Bool
+  BoolComparison    :: ComparisonOp -> t 'TyBool    -> t 'TyBool    -> Core t 'TyBool
 
-  KeySetEqNeq :: EqNeq -> t KeySet -> t KeySet -> Core t Bool
-  ObjectEqNeq :: EqNeq -> t Object -> t Object -> Core t Bool
-  -- ListEqNeq   :: EqNeq -> t [a]    -> t [a]    -> Core t Bool
-  ListEqNeq   :: EqNeq -> Existential t    -> Existential t    -> Core t Bool
+  KeySetEqNeq :: EqNeq -> t 'TyKeySet -> t 'TyKeySet -> Core t 'TyBool
+  ObjectEqNeq :: EqNeq -> t 'TyObject -> t 'TyObject -> Core t 'TyBool
+  -- ListEqNeq   :: EqNeq -> t [a]    -> t [a]    -> Core t 'TyBool
+  ListEqNeq   :: EqNeq -> Existential t    -> Existential t    -> Core t 'TyBool
 
-  ObjAt :: Schema -> t String -> t Object -> EType -> Core t a
-  ListAt :: t Integer -> t [a] -> Core t a
+  ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
+  ListAt :: t 'TyInteger -> t ('TyList a) -> Core t a
 
-  -- TODO: ListContains   :: forall t a. SimpleType a => t a -> t [a] -> Core t Bool
-  ObjContains    :: Schema -> Existential t -> Core t Bool
-  StringContains :: t String -> t String -> Core t Bool
+  -- TODO: ListContains   :: forall t a. SimpleType a => t a -> t [a] -> Core t 'TyBool
+  ObjContains    :: Schema -> Existential t -> Core t 'TyBool
+  TyStringingContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
 
-  ListDrop :: t Integer -> t [a] -> Core t [a]
-  ObjDrop :: Schema -> t String -> t Object -> Core t Object
+  ListDrop :: t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+  ObjDrop :: Schema -> t 'TyStr -> t 'TyObject -> Core t 'TyObject
 
   -- ListFilter ::
   -- ListFold ::
   -- ListMap ::
   -- MkList ?
-  -- MakeList :: t a -> t Integer -> Core t [a]
-  ListReverse :: t [a] -> Core t [a]
-  ListSort    :: t [a] -> Core t [a]
-  ListTake    :: t Integer -> t [a] -> Core t [a]
-  ObjTake     :: Schema -> t [String] -> t Object -> Core t Object
-  ListConcat  :: t [a] -> t [a] -> Core t [a]
+  -- MakeList :: t a -> t 'TyInteger -> Core t [a]
+  -- LiTyStringeverse :: t [a] -> Core t [a]
+  -- ListSort    :: t [a] -> Core t [a]
+  -- ListTake    :: t 'TyInteger -> t [a] -> Core t [a]
 
-  ObjectMerge :: t Object -> t Object -> Core t Object
+  ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
-  LiteralObject :: Map Text (Existential t) -> Core t Object
+  -- ListConcat  :: t [a] -> t [a] -> Core t [a]
 
-  LiteralList   :: forall a t. SimpleType a => [t a] -> Core t [a]
+  ObjectMerge :: t 'TyObject -> t 'TyObject -> Core t 'TyObject
+
+  LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
+
+  LiteralList   :: forall (a :: Ty) (t :: Ty -> *).
+    SimpleType (Concrete a) => [t a] -> Core t ('TyList a)
+
+  -- ListInfo :: ListInfo t ('TyList a) -> Core t ('TyList a)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
-  Logical :: LogicalOp -> [t Bool] -> Core t Bool
+  Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
-deriving instance Eq a   => Eq   (Core Prop a)
-deriving instance Show a => Show (Core Prop a)
+deriving instance Eq (Concrete a) => Eq (Core Prop a)
+
+-- instance Eq (Core Prop Object) where
+-- instance Eq (Core Prop Integer) where
+-- instance Eq (Core Prop Bool) where
+-- instance Eq (Core Prop String) where
+-- instance Eq (Core Prop Time) where
+-- instance Eq (Core Prop Decimal) where
+-- instance Eq (Core Prop KeySet) where
+-- instance Eq (Core Prop Any) where
+
+-- instance Eq (Core Prop [Integer]) where
+-- instance Eq (Core Prop [Bool]) where
+-- instance Eq (Core Prop [String]) where
+-- instance Eq (Core Prop [Time]) where
+-- instance Eq (Core Prop [Decimal]) where
+-- instance Eq (Core Prop [KeySet]) where
+-- instance Eq (Core Prop [Any]) where
+
+deriving instance Show (Concrete a) => Show (Core Prop a)
 
 instance
-  ( UserShow a
-  , UserShow (tm String)
-  , UserShow (tm Integer)
-  , UserShow (tm Time)
-  , UserShow (tm Decimal)
-  , UserShow (tm Bool)
-  , UserShow (tm KeySet)
-  , UserShow (tm Object)
+  ( UserShow (Concrete a)
+  , UserShow (tm 'TyStr)
+  , UserShow (tm 'TyInteger)
+  , UserShow (tm 'TyTime)
+  , UserShow (tm 'TyDecimal)
+  , UserShow (tm 'TyBool)
+  , UserShow (tm 'TyKeySet)
+  , UserShow (tm 'TyObject)
   , UserShow (Existential tm)
   ) => UserShow (Core tm a) where
   userShowsPrec d = \case
@@ -248,7 +279,7 @@ instance UserShow BeforeOrAfter where
 --
 -- This encompasses every construction that can appear in a 'Prop' that's not
 -- in 'Core'.
-data PropSpecific a where
+data PropSpecific (a :: Ty) where
 
   -- TX success/failure
 
@@ -257,58 +288,58 @@ data PropSpecific a where
   --
 
   -- | Whether a transaction aborts (does not succeed)
-  Abort   :: PropSpecific Bool
+  Abort   :: PropSpecific 'TyBool
   -- | Whether a transaction succeeds (does not abort)
-  Success :: PropSpecific Bool
+  Success :: PropSpecific 'TyBool
   -- | The return value of the function under examination
   Result  :: PropSpecific a
 
   -- Abstraction
 
   -- | Introduces a universally-quantified variable over another property
-  Forall :: VarId -> Text -> QType -> Prop Bool -> PropSpecific Bool
+  Forall :: VarId -> Text -> QType -> Prop 'TyBool -> PropSpecific 'TyBool
   -- | Introduces an existentially-quantified variable over another property
-  Exists :: VarId -> Text -> QType -> Prop Bool -> PropSpecific Bool
+  Exists :: VarId -> Text -> QType -> Prop 'TyBool -> PropSpecific 'TyBool
 
   -- DB properties
 
   -- | True when anything in the table is written
-  TableWrite :: Prop TableName  ->                PropSpecific Bool
+  TableWrite :: Prop TyTableName  ->                PropSpecific 'TyBool
   -- | True when anything in the table is read
-  TableRead  :: Prop TableName  ->                PropSpecific Bool
+  TableRead  :: Prop TyTableName  ->                PropSpecific 'TyBool
 
   --
   -- NOTE: it's possible that in a standard library we could implement these in
   --       terms of "CellRead"/"CellWrite" and existential quantification.
   --
   -- | Whether a column is written
-  ColumnWritten :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
+  ColumnWritten :: Prop TyTableName  -> Prop TyColumnName  -> PropSpecific 'TyBool
   -- | Whether a column is read
-  ColumnRead    :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
+  ColumnRead    :: Prop TyTableName  -> Prop TyColumnName  -> PropSpecific 'TyBool
 
   --
   -- TODO: rewrite these in terms of CellBefore, CellAfter, ColumnSumBefore,
   --       ColumnSumAfter:
   --
   -- | The difference (@after-before@) in a cell's integer value across a transaction
-  IntCellDelta   :: Prop TableName  -> Prop ColumnName  -> Prop RowKey -> PropSpecific Integer
+  IntCellDelta   :: Prop TyTableName  -> Prop TyColumnName  -> Prop TyRowKey -> PropSpecific 'TyInteger
   -- | The difference (@after-before@) in a cell's decimal value across a transaction
-  DecCellDelta   :: Prop TableName  -> Prop ColumnName  -> Prop RowKey -> PropSpecific Decimal
+  DecCellDelta   :: Prop TyTableName  -> Prop TyColumnName  -> Prop TyRowKey -> PropSpecific 'TyDecimal
   -- | The difference (@after-before@) in a column's integer sum across a transaction
-  IntColumnDelta :: Prop TableName  -> Prop ColumnName                 -> PropSpecific Integer
+  IntColumnDelta :: Prop TyTableName  -> Prop TyColumnName                 -> PropSpecific 'TyInteger
   -- | The difference (@after-before@) in a column's decimal sum across a transaction
-  DecColumnDelta :: Prop TableName  -> Prop ColumnName                 -> PropSpecific Decimal
+  DecColumnDelta :: Prop TyTableName  -> Prop TyColumnName                 -> PropSpecific 'TyDecimal
 
   -- | Whether a row is read
-  RowRead       :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
+  RowRead       :: Prop TyTableName  -> Prop TyRowKey -> PropSpecific 'TyBool
   -- | Number of times a row is read
-  RowReadCount  :: Prop TableName  -> Prop RowKey -> PropSpecific Integer
+  RowReadCount  :: Prop TyTableName  -> Prop TyRowKey -> PropSpecific 'TyInteger
   -- | Whether a row is written
-  RowWrite      :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
+  RowWrite      :: Prop TyTableName  -> Prop TyRowKey -> PropSpecific 'TyBool
   -- | Number of times a row is written
-  RowWriteCount :: Prop TableName  -> Prop RowKey -> PropSpecific Integer
+  RowWriteCount :: Prop TyTableName  -> Prop TyRowKey -> PropSpecific 'TyInteger
   -- | Whether a row exists prior to the transaction
-  RowExists     :: Prop TableName  -> Prop RowKey -> BeforeOrAfter -> PropSpecific Bool
+  RowExists     :: Prop TyTableName  -> Prop TyRowKey -> BeforeOrAfter -> PropSpecific 'TyBool
 
   --
   -- TODO: StaleRead?
@@ -317,23 +348,39 @@ data PropSpecific a where
   -- Authorization
 
   -- | Whether a transaction contains a signature that satisfied the named key set
-  KsNameAuthorized :: KeySetName      ->                                   PropSpecific Bool
+  KsNameAuthorized :: KeySetName      ->                                   PropSpecific 'TyBool
   -- | Whether a row has its keyset @enforce@d in a transaction
-  RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> PropSpecific Bool
-
+  RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
   PropRead :: BeforeOrAfter -> Schema -> Prop TableName -> Prop RowKey -> PropSpecific Object
 
-deriving instance Eq a   => Eq   (PropSpecific a)
-deriving instance Show a => Show (PropSpecific a)
+deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
+deriving instance Show (Concrete a) => Show (PropSpecific a)
 
 
-data Prop a
+data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
-  deriving (Show, Eq)
 
-instance UserShow a => UserShow (PropSpecific a) where
+deriving instance Show (Concrete a) => Show (Prop a)
+
+deriving instance Eq (Concrete a) => Eq (Prop a)
+
+-- deriving instance         Eq (Prop 'TyObject)
+-- deriving instance         Eq (Prop 'TyInteger)
+-- deriving instance         Eq (Prop 'TyBool)
+-- deriving instance         Eq (Prop 'TyStr)
+-- deriving instance         Eq (Prop 'TyTime)
+-- deriving instance         Eq (Prop 'TyDecimal)
+-- deriving instance         Eq (Prop 'TyKeySet)
+-- deriving instance         Eq (Prop 'TyAny)
+
+
+-- deriving instance Eq a => Eq (Prop ('TyList a))
+-- deriving instance         Eq (Prop TableName)
+-- deriving instance         Eq (Prop ColumnName)
+
+instance UserShow (Concrete a) => UserShow (PropSpecific a) where
   userShowsPrec _d = \case
     Abort                   -> STransactionAborts
     Success                 -> STransactionSucceeds
@@ -359,14 +406,14 @@ instance UserShow a => UserShow (PropSpecific a) where
     RowExists tn rk ba      -> parenList [SRowExists, userShow tn, userShow rk, userShow ba]
     PropRead ba _sch tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
 
-instance UserShow a => UserShow (Prop a) where
+instance UserShow (Concrete a) => UserShow (Prop a) where
   userShowsPrec d = \case
     PropSpecific p -> userShowsPrec d p
     CoreProp     p -> userShowsPrec d p
 
-instance S :<: Prop where
-  inject = CoreProp . Sym
-  project = \case
+instance S :*<: Prop where
+  inject' = CoreProp . Sym
+  project' = \case
     CoreProp (Sym a) -> Just a
     _                -> Nothing
 
@@ -388,23 +435,17 @@ instance Numerical Prop :<: Prop where
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
-instance IsString (Prop TableName) where
+instance IsString (Prop 'TyStr) where
   fromString = PLit . fromString
 
-instance IsString (Prop ColumnName) where
-  fromString = PLit . fromString
-
-instance IsString (Prop RowKey) where
-  fromString = PLit . fromString
-
-instance Boolean (Prop Bool) where
+instance Boolean (Prop 'TyBool) where
   true      = PLit True
   false     = PLit False
   bnot p    = CoreProp $ Logical NotOp [p]
   p1 &&& p2 = PAnd p1 p2
   p1 ||| p2 = POr  p1 p2
 
-instance Num (Prop Integer) where
+instance Num (Prop 'TyInteger) where
   fromInteger = PLit . fromInteger
   (+)         = inject ... IntArithOp Add
   (*)         = inject ... IntArithOp Mul
@@ -412,7 +453,7 @@ instance Num (Prop Integer) where
   signum      = inject .   IntUnaryArithOp Signum
   negate      = inject .   IntUnaryArithOp Negate
 
-instance Num (Prop Decimal) where
+instance Num (Prop 'TyDecimal) where
   fromInteger = PLit . fromPact decimalIso . fromInteger
   (+)         = inject ... DecArithOp Add
   (*)         = inject ... DecArithOp Mul
@@ -424,7 +465,7 @@ type EProp = Existential Prop
 EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
-pattern PLit :: a -> Prop a
+pattern PLit :: Concrete a -> Prop a
 pattern PLit a = CoreProp (Lit a)
 
 pattern PVar :: VarId -> Text -> Prop t
@@ -433,37 +474,37 @@ pattern PVar vid name = CoreProp (Var vid name)
 pattern PNumerical :: Numerical Prop t -> Prop t
 pattern PNumerical x = CoreProp (Numerical x)
 
-pattern PStrConcat :: Prop String -> Prop String -> Prop String
+pattern PStrConcat :: Prop 'TyStr -> Prop 'TyStr -> Prop 'TyStr
 pattern PStrConcat x y = CoreProp (StrConcat x y)
 
-pattern PIntAddTime :: Prop Time -> Prop Integer -> Prop Time
+pattern PIntAddTime :: Prop 'TyTime -> Prop 'TyInteger -> Prop 'TyTime
 pattern PIntAddTime x y = CoreProp (IntAddTime x y)
 
-pattern PDecAddTime :: Prop Time -> Prop Decimal -> Prop Time
+pattern PDecAddTime :: Prop 'TyTime -> Prop 'TyDecimal -> Prop 'TyTime
 pattern PDecAddTime x y = CoreProp (DecAddTime x y)
 
-pattern PObjAt :: Schema -> Prop String -> Prop Object -> EType -> Prop t
+pattern PObjAt :: Schema -> Prop 'TyStr -> Prop 'TyObject -> EType -> Prop t
 pattern PObjAt a b c d = CoreProp (ObjAt a b c d)
 
-pattern PKeySetEqNeq :: EqNeq -> Prop KeySet -> Prop KeySet -> Prop Bool
+pattern PKeySetEqNeq :: EqNeq -> Prop 'TyKeySet -> Prop 'TyKeySet -> Prop 'TyBool
 pattern PKeySetEqNeq op x y = CoreProp (KeySetEqNeq op x y)
 
-pattern PObjectEqNeq :: EqNeq -> Prop Object -> Prop Object -> Prop Bool
+pattern PObjectEqNeq :: EqNeq -> Prop 'TyObject -> Prop 'TyObject -> Prop 'TyBool
 pattern PObjectEqNeq op x y = CoreProp (ObjectEqNeq op x y)
 
-pattern PLogical :: LogicalOp -> [Prop Bool] -> Prop Bool
+pattern PLogical :: LogicalOp -> [Prop 'TyBool] -> Prop 'TyBool
 pattern PLogical op args = CoreProp (Logical op args)
 
-pattern PStrLength :: Prop String -> Prop Integer
+pattern PStrLength :: Prop 'TyStr -> Prop 'TyInteger
 pattern PStrLength str = CoreProp (StrLength str)
 
-pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
+pattern PAnd :: Prop 'TyBool -> Prop 'TyBool -> Prop 'TyBool
 pattern PAnd a b = CoreProp (Logical AndOp [a, b])
 
-pattern POr :: Prop Bool -> Prop Bool -> Prop Bool
+pattern POr :: Prop 'TyBool -> Prop 'TyBool -> Prop 'TyBool
 pattern POr a b = CoreProp (Logical OrOp [a, b])
 
-pattern PNot :: Prop Bool -> Prop Bool
+pattern PNot :: Prop 'TyBool -> Prop 'TyBool
 pattern PNot a = CoreProp (Logical NotOp [a])
 
 
@@ -472,10 +513,12 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 -- This language is pure / stateless. It includes exactly the same
 -- constructions as 'Core'.
 newtype Invariant a = CoreInvariant (Core Invariant a)
-  deriving (Show, Eq)
 
-deriving instance Eq a   => Eq   (Core Invariant a)
-deriving instance Show a => Show (Core Invariant a)
+deriving instance Eq   (Concrete a) => Eq   (Core Invariant a)
+deriving instance Show (Concrete a) => Show (Core Invariant a)
+
+deriving instance Eq   (Concrete a) => Eq   (Invariant a)
+deriving instance Show (Concrete a) => Show (Invariant a)
 
 instance Core Invariant :<: Invariant where
   inject                    = CoreInvariant
@@ -487,30 +530,30 @@ instance Numerical Invariant :<: Invariant where
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
-instance S :<: Invariant where
-  inject = CoreInvariant . Sym
-  project = \case
+instance S :*<: Invariant where
+  inject' = CoreInvariant . Sym
+  project' = \case
     CoreInvariant (Sym a) -> Just a
     _                     -> Nothing
 
-instance UserShow a => UserShow (Invariant a) where
+instance UserShow (Concrete a) => UserShow (Invariant a) where
   userShowsPrec d (CoreInvariant a) = userShowsPrec d a
 
 type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
 SHOW_EXISTENTIAL(Invariant)
 
-pattern ILiteral :: a -> Invariant a
+pattern ILiteral :: Concrete a -> Invariant a
 pattern ILiteral a = CoreInvariant (Lit a)
 
-pattern ILogicalOp :: LogicalOp -> [Invariant Bool] -> Invariant Bool
+pattern ILogicalOp :: LogicalOp -> [Invariant 'TyBool] -> Invariant 'TyBool
 pattern ILogicalOp op args = CoreInvariant (Logical op args)
 
 type ETerm = Existential Term
 EQ_EXISTENTIAL(Term)
 SHOW_EXISTENTIAL(Term)
 
-data Term ret where
+data Term (a :: Ty) where
   CoreTerm        :: Core Term a -> Term a
 
   -- In principle, this should be a pure term, however, the analyze monad needs
@@ -520,7 +563,7 @@ data Term ret where
   -- TODO(joel): In principle this could be pure and applied to all the
   -- languages. Unfortunately, we can't add this to props because `Query` has
   -- `Symbolic` in its stack, so it can't do an `ite`.
-  IfThenElse      :: Term Bool -> (Path, Term a) -> (Path, Term a) -> Term a
+  IfThenElse      :: Term 'TyBool -> (Path, Term a) -> (Path, Term a) -> Term a
 
   -- Variable binding
   Let             :: Text -> VarId -> TagId -> ETerm -> Term a -> Term a
@@ -529,36 +572,36 @@ data Term ret where
   Sequence        :: ETerm     -> Term a ->           Term a
 
   -- Conditional transaction abort
-  Enforce         :: Maybe TagId -> Term Bool   -> Term Bool -- Only a TagId for an assertion; i.e. not keyset enforcement
+  Enforce         :: Maybe TagId -> Term 'TyBool   -> Term 'TyBool -- Only a TagId for an assertion; i.e. not keyset enforcement
   -- Left to be tagged if the list of cases is empty. We do this because we
   -- need a way to signal a failure due to this particular scenario in model
   -- reporting. Right _1 to be tagged if the case fails, Right _2 to be tagged
   -- if the case succeeds:
-  EnforceOne      :: Either TagId [((Path, Path), Term Bool)] -> Term Bool
+  EnforceOne      :: Either TagId [((Path, Path), Term 'TyBool)] -> Term 'TyBool
 
   -- Reading from environment
-  ReadKeySet      :: Term String -> Term KeySet
-  ReadDecimal     :: Term String -> Term Decimal
-  ReadInteger     :: Term String -> Term Integer
+  ReadKeySet      :: Term 'TyStr -> Term 'TyKeySet
+  ReadDecimal     :: Term 'TyStr -> Term 'TyDecimal
+  ReadInteger     :: Term 'TyStr -> Term 'TyInteger
 
   -- TODO: ReadInteger, ReadMsg
 
   -- Keyset access
-  KsAuthorized    :: TagId -> Term KeySet -> Term Bool
-  NameAuthorized  :: TagId -> Term String -> Term Bool
+  KsAuthorized    :: TagId -> Term 'TyKeySet -> Term 'TyBool
+  NameAuthorized  :: TagId -> Term 'TyStr -> Term 'TyBool
 
   -- Table access
-  Read            ::              TagId -> TableName -> Schema -> Term String ->                Term Object
-  Write           :: WriteType -> TagId -> TableName -> Schema -> Term String -> Term Object -> Term String
+  Read            ::              TagId -> TableName -> Schema -> Term 'TyStr ->                Term 'TyObject
+  Write           :: WriteType -> TagId -> TableName -> Schema -> Term 'TyStr -> Term 'TyObject -> Term 'TyStr
 
-  PactVersion     :: Term String
+  PactVersion     :: Term 'TyStr
 
-  Format          :: Term String         -> [ETerm]     -> Term String
-  FormatTime      :: Term String         -> Term Time   -> Term String
-  ParseTime       :: Maybe (Term String) -> Term String -> Term Time
-  Hash            :: ETerm                              -> Term String
+  Format          :: Term 'TyStr         -> [ETerm]     -> Term 'TyStr
+  FormatTime      :: Term 'TyStr         -> Term 'TyTime   -> Term 'TyStr
+  ParseTime       :: Maybe (Term 'TyStr) -> Term 'TyStr -> Term 'TyTime
+  Hash            :: ETerm                              -> Term 'TyStr
 
-instance UserShow a => UserShow (Term a) where
+instance UserShow (Concrete a) => UserShow (Term a) where
   userShowsPrec _ = \case
     CoreTerm tm                -> userShow tm
     IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
@@ -596,14 +639,15 @@ instance UserShow a => UserShow (Term a) where
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
     ReadInteger name     -> parenList ["read-integer", userShow name]
 
-deriving instance Eq a   => Eq (Term a)
-deriving instance Eq a   => Eq (Core Term a)
-deriving instance Show a => Show (Term a)
-deriving instance Show a => Show (Core Term a)
+deriving instance Eq   (Concrete a) => Eq   (Core Term a)
+deriving instance Show (Concrete a) => Show (Core Term a)
 
-instance S :<: Term where
-  inject = CoreTerm . Sym
-  project = \case
+deriving instance Eq   (Concrete a) => Eq   (Term a)
+deriving instance Show (Concrete a) => Show (Term a)
+
+instance S :*<: Term where
+  inject' = CoreTerm . Sym
+  project' = \case
     CoreTerm (Sym a) -> Just a
     _                -> Nothing
 
@@ -619,7 +663,7 @@ instance Numerical Term :<: Term where
     Inj (Numerical a) -> Just a
     _                 -> Nothing
 
-instance Num (Term Integer) where
+instance Num (Term 'TyInteger) where
   fromInteger = lit . fromInteger
   (+)    = inject ... IntArithOp Add
   (*)    = inject ... IntArithOp Mul
@@ -627,7 +671,7 @@ instance Num (Term Integer) where
   signum = inject .   IntUnaryArithOp Signum
   negate = inject .   IntUnaryArithOp Negate
 
-instance Num (Term Decimal) where
+instance Num (Term 'TyDecimal) where
   fromInteger = lit . fromPact decimalIso . fromInteger
   (+)    = inject ... DecArithOp Add
   (*)    = inject ... DecArithOp Mul
@@ -635,7 +679,7 @@ instance Num (Term Decimal) where
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
 
-lit :: a -> Term a
+lit :: Concrete a -> Term a
 lit = CoreTerm . Lit
 
 valueToProp :: ETerm -> Either String EProp

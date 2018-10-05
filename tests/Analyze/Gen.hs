@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE DataKinds             #-}
 module Analyze.Gen where
 
 import           Control.DeepSeq
@@ -125,55 +126,55 @@ unaryArithSize op size = case op of
   Exp    -> error "not yet implemented: we don't symbolically interpret this operator"
   Signum -> error "not yet implemented: we don't symbolically interpret this operator"
 
-mkInt :: MonadGen m => Core Analyze.Term Integer -> m ETerm
-mkInt = pure . ESimple TInt . Inj
+mkInt :: MonadGen m => Core Analyze.Term 'TyInteger -> m ETerm
+mkInt = pure . ESimple SInteger . Inj
 
-mkDec :: MonadGen m => Numerical Analyze.Term Decimal -> m ETerm
-mkDec = pure . ESimple TDecimal . Inj . Numerical
+mkDec :: MonadGen m => Numerical Analyze.Term 'TyDecimal -> m ETerm
+mkDec = pure . ESimple SDecimal . Inj . Numerical
 
-mkBool :: MonadGen m => Core Analyze.Term Bool -> m ETerm
-mkBool = pure . ESimple TBool . Inj
+mkBool :: MonadGen m => Core Analyze.Term 'TyBool -> m ETerm
+mkBool = pure . ESimple SBool . Inj
 
 -- | When we know what type we'll be receiving from an existential we can
 -- unsafely extract it.
 class Extract a where
   extract :: HasCallStack => ETerm -> Analyze.Term a
 
-instance Extract Integer where
+instance Extract 'TyInteger where
   extract = \case
-    ESimple TInt x -> x
+    ESimple SInteger x -> x
     other -> error (show other)
 
-instance Extract Decimal where
+instance Extract 'TyDecimal where
   extract = \case
-    ESimple TDecimal x -> x
+    ESimple SDecimal x -> x
     other -> error (show other)
 
-instance Extract String where
+instance Extract 'TyStr where
   extract = \case
-    ESimple TStr x -> x
+    ESimple SStr x -> x
     other -> error (show other)
 
-instance Extract Bool where
+instance Extract 'TyBool where
   extract = \case
-    ESimple TBool x -> x
+    ESimple SBool x -> x
     other -> error (show other)
 
-instance Extract Time where
+instance Extract 'TyTime where
   extract = \case
-    ESimple TTime x -> x
+    ESimple STime x -> x
     other -> error (show other)
 
-instance Extract KeySet where
+instance Extract 'TyKeySet where
   extract = \case
-    ESimple TKeySet x -> x
+    ESimple SKeySet x -> x
     other -> error (show other)
 
 -- TODO: cover Var, objects
 -- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
-    ESimple TInt . CoreTerm . Lit <$> genInteger size
+    ESimple SInteger . CoreTerm . Lit <$> genInteger size
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e3))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
@@ -191,7 +192,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
 genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
-    ESimple TDecimal . CoreTerm . Lit <$> genDecimal size
+    ESimple SDecimal . CoreTerm . Lit <$> genDecimal size
   ] $ scale 4 <$> [
     do op <- genArithOp
        let (size1, size2) = arithSize op size
@@ -216,15 +217,15 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
-    ESimple TStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
+    ESimple SStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
       (genCore (BoundedString (len `div` 2))) $ \x y ->
-        pure $ ESimple TStr $ Inj $ StrConcat (extract x) (extract y)
+        pure $ ESimple SStr $ Inj $ StrConcat (extract x) (extract y)
   ]
 genCore BoundedBool = Gen.recursive Gen.choice [
-    ESimple TBool . CoreTerm . Lit <$> Gen.bool
+    ESimple SBool . CoreTerm . Lit <$> Gen.bool
   ] $ scale 4 <$> [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
@@ -248,14 +249,14 @@ genCore BoundedBool = Gen.recursive Gen.choice [
       mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
-    ESimple TTime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
+    ESimple STime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedInt 1e9)) $ \x y ->
-      pure $ ESimple TTime $ Inj $ IntAddTime (extract x) (extract y)
+      pure $ ESimple STime $ Inj $ IntAddTime (extract x) (extract y)
   , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
-      pure $ ESimple TTime $ Inj $ DecAddTime (extract x) (extract y)
+      pure $ ESimple STime $ Inj $ DecAddTime (extract x) (extract y)
   ]
-genCore BoundedKeySet = ESimple TKeySet . CoreTerm . Lit . KeySet
+genCore BoundedKeySet = ESimple SKeySet . CoreTerm . Lit . KeySet
   <$> genInteger (0 ... 2)
 
 intSize, decSize, strSize :: BoundedType
@@ -295,24 +296,24 @@ genTermSpecific BoundedBool       = Gen.choice
   [
   -- TODO: temporarily disabled pending
   -- https://github.com/kadena-io/pact/issues/207
-  -- [ ESimple TBool . Enforce (Just 0) . extract <$> genTerm BoundedBool
+  -- [ ESimple SBool . Enforce (Just 0) . extract <$> genTerm BoundedBool
   -- , do xs <- Gen.list (Range.linear 0 4) (genTerm BoundedBool)
-  --      pure $ ESimple TBool $ EnforceOne $ case xs of
+  --      pure $ ESimple SBool $ EnforceOne $ case xs of
   --        [] -> Left 0
   --        _  -> Right $ fmap (((Path 0, Path 0),) . extract) xs
 
   -- TODO(joel): cover these
   -- , do tagId <- genTagId
-  --      ESimple TBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
+  --      ESimple SBool . KsAuthorized tagId . extract <$> genTerm BoundedKeySet
   -- , do tagId <- genTagId
-  --      ESimple TBool . NameAuthorized tagId . extract <$> genTerm strSize
+  --      ESimple SBool . NameAuthorized tagId . extract <$> genTerm strSize
 
   -- HACK(joel): Right now we "dilute" this choice with literal bools.
   -- Otherwise this tends to hang forever. Fix this properly (why does scale
   -- not work?).
-    ESimple TBool . CoreTerm . Lit <$> Gen.bool
-  , ESimple TBool . CoreTerm . Lit <$> Gen.bool
-  , ESimple TBool . CoreTerm . Lit <$> Gen.bool
+    ESimple SBool . CoreTerm . Lit <$> Gen.bool
+  , ESimple SBool . CoreTerm . Lit <$> Gen.bool
+  , ESimple SBool . CoreTerm . Lit <$> Gen.bool
   , genTermSpecific' BoundedBool
   ]
 genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
@@ -324,7 +325,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   --      tagId <- genTagId
   --      Write writeType tagId table schema
   -- Write
-  [ pure $ ESimple TStr PactVersion
+  [ pure $ ESimple SStr PactVersion
   , do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
@@ -349,34 +350,34 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
               str <- Gen.element ["{} {} {}", "{} / {} / {}", "{} - {} - {}"]
               pure (lit str, [tm1, tm2, tm3])
          ]
-       pure $ ESimple TStr $ Format str tms
+       pure $ ESimple SStr $ Format str tms
   , scale 4 $ do
        -- just generate literal format strings here so this tests something
        -- interesting
        format           <- genFormat
-       ESimple TTime t2 <- genTerm BoundedTime
-       pure $ ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
+       ESimple STime t2 <- genTerm BoundedTime
+       pure $ ESimple SStr $ FormatTime (lit (showTimeFormat format)) t2
   , let genHashableTerm = Gen.choice
           [ genTerm intSize
           , genTerm strSize
           , genTerm BoundedBool
           ]
-    in ESimple TStr . Hash <$> genHashableTerm
+    in ESimple SStr . Hash <$> genHashableTerm
   , genTermSpecific' size
   ]
 genTermSpecific BoundedKeySet = scale 2 $
-  ESimple TKeySet . ReadKeySet . lit <$> genKeySetName
+  ESimple SKeySet . ReadKeySet . lit <$> genKeySetName
 genTermSpecific (BoundedDecimal len) = scale 2 $
-  ESimple TDecimal . ReadDecimal . lit <$> genDecimalName len
+  ESimple SDecimal . ReadDecimal . lit <$> genDecimalName len
 genTermSpecific BoundedTime = scale 8 $ Gen.choice
   [ do
        format  <- genFormat
        timeStr <- genTimeOfFormat format
-       pure $ ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
+       pure $ ESimple STime $ ParseTime (Just (lit (showTimeFormat format))) $
          lit timeStr
   , do
        timeStr <- genTimeOfFormat standardTimeFormat
-       pure $ ESimple TTime $ ParseTime Nothing $ lit timeStr
+       pure $ ESimple STime $ ParseTime Nothing $ lit timeStr
   ]
 
 genWriteType :: MonadGen m => m WriteType
@@ -425,18 +426,18 @@ genTermSpecific' boundedTy = scale 8 $ Gen.choice
   --      ESimple ty tm <- genTerm boundedTy
   --      pure $ ESimple ty $ Sequence eTm tm
   [ do
-       ESimple TBool b <- genTerm BoundedBool
+       ESimple SBool b <- genTerm BoundedBool
        ESimple tyt1 t1 <- genTerm boundedTy
        ESimple tyt2 t2 <- genTerm boundedTy
-       case typeEq tyt1 tyt2 of
+       case singEq tyt1 tyt2 of
          Just Refl -> pure $ ESimple tyt1 $ IfThenElse b (Path 0, t1) (Path 0, t2)
          Nothing   -> error "t1 and t2 must have the same type"
   ]
 
 genType :: MonadGen m => m EType
 genType = Gen.element
-  [ EType TInt, EType TDecimal, EType TBool, EType TStr, EType TTime
-  , EType TKeySet
+  [ EType SInteger, EType SDecimal, EType SBool, EType SStr, EType STime
+  , EType SKeySet
   ]
 
 describeAnalyzeFailure :: AnalyzeFailure -> String
@@ -458,17 +459,17 @@ safeGenAnyTerm = (do
 genFormatTime :: Gen (ETerm, GenState)
 genFormatTime = do
   format <- genFormat
-  (ESimple TTime t2, gState) <- runReaderT
+  (ESimple STime t2, gState) <- runReaderT
     (runStateT (genTerm BoundedTime) emptyGenState)
     genEnv
-  let etm = ESimple TStr $ FormatTime (lit (showTimeFormat format)) t2
+  let etm = ESimple SStr $ FormatTime (lit (showTimeFormat format)) t2
   pure (etm, gState)
 
 genParseTime :: Gen (ETerm, GenState)
 genParseTime = do
   format  <- genFormat
   timeStr <- genTimeOfFormat format
-  let etm = ESimple TTime $ ParseTime (Just (lit (showTimeFormat format))) $
+  let etm = ESimple STime $ ParseTime (Just (lit (showTimeFormat format))) $
         lit timeStr
   pure (etm, emptyGenState)
 
@@ -479,8 +480,8 @@ bob   = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"
 genEnv :: GenEnv
 genEnv = GenEnv
   [("accounts", Schema $ Map.fromList
-    [ ("balance", EType TInt)
-    , ("name",    EType TStr)
+    [ ("balance", EType SInteger)
+    , ("name",    EType SStr)
     ])]
   [ (Pact.KeySet [alice, bob] (Name "keys-all" dummyInfo), KeySet 0)
   , (Pact.KeySet [alice, bob] (Name "keys-any" dummyInfo), KeySet 1)

@@ -40,109 +40,109 @@ toPactTm :: ETerm -> ReaderT (GenEnv, GenState) Maybe (Pact.Term Pact.Ref)
 toPactTm = \case
   -- core terms:
 
-  ESimple TDecimal (Inj (DecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
+  ESimple SDecimal (Inj (DecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple SDecimal x, ESimple SDecimal y]
 
-  ESimple TDecimal (Inj (DecUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [ESimple TDecimal x]
+  ESimple SDecimal (Inj (DecUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [ESimple SDecimal x]
 
-  ESimple TInt (Inj (IntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [ESimple TInt x, ESimple TInt y]
+  ESimple SInteger (Inj (IntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple SInteger x, ESimple SInteger y]
 
-  ESimple TInt (Inj (IntUnaryArithOp op x)) ->
-    mkApp (unaryArithOpToDef op) [ESimple TInt x]
+  ESimple SInteger (Inj (IntUnaryArithOp op x)) ->
+    mkApp (unaryArithOpToDef op) [ESimple SInteger x]
 
-  ESimple TInt (Inj (RoundingLikeOp1 op x)) ->
-    mkApp (roundingLikeOpToDef op) [ESimple TDecimal x]
+  ESimple SInteger (Inj (RoundingLikeOp1 op x)) ->
+    mkApp (roundingLikeOpToDef op) [ESimple SDecimal x]
 
-  ESimple TDecimal (Inj (RoundingLikeOp2 op x y)) ->
-    mkApp (roundingLikeOpToDef op) [ESimple TDecimal x, ESimple TInt y]
+  ESimple SDecimal (Inj (RoundingLikeOp2 op x y)) ->
+    mkApp (roundingLikeOpToDef op) [ESimple SDecimal x, ESimple SInteger y]
 
-  ESimple TDecimal (Inj (DecIntArithOp op x y)) ->
-    mkApp (arithOpToDef op) [ESimple TDecimal x, ESimple TInt y]
+  ESimple SDecimal (Inj (DecIntArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple SDecimal x, ESimple SInteger y]
 
-  ESimple TDecimal (Inj (IntDecArithOp op x y)) ->
-    mkApp (arithOpToDef op) [ESimple TInt x, ESimple TDecimal y]
+  ESimple SDecimal (Inj (IntDecArithOp op x y)) ->
+    mkApp (arithOpToDef op) [ESimple SInteger x, ESimple SDecimal y]
 
-  ESimple TInt (Inj (ModOp x y)) ->
-    mkApp modDef [ESimple TInt x, ESimple TInt y]
+  ESimple SInteger (Inj (ModOp x y)) ->
+    mkApp modDef [ESimple SInteger x, ESimple SInteger y]
 
-  ESimple TInt (Inj (StrLength x)) ->
-    mkApp lengthDef [ESimple TStr x]
+  ESimple SInteger (Inj (StrLength x)) ->
+    mkApp lengthDef [ESimple SStr x]
 
-  ESimple TStr (Inj (StrConcat x y)) ->
-    mkApp addDef [ESimple TStr x, ESimple TStr y]
+  ESimple SStr (Inj (StrConcat x y)) ->
+    mkApp addDef [ESimple SStr x, ESimple SStr y]
 
-  ESimple TBool (Inj (IntegerComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [ESimple TInt x, ESimple TInt y]
+  ESimple SBool (Inj (IntegerComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple SInteger x, ESimple SInteger y]
 
-  ESimple TBool (Inj (DecimalComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [ESimple TDecimal x, ESimple TDecimal y]
+  ESimple SBool (Inj (DecimalComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple SDecimal x, ESimple SDecimal y]
 
-  ESimple TBool (Inj (StringComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [ESimple TStr x, ESimple TStr y]
+  ESimple SBool (Inj (StringComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple SStr x, ESimple SStr y]
 
-  ESimple TBool (Inj (BoolComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [ESimple TBool x, ESimple TBool y]
+  ESimple SBool (Inj (BoolComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple SBool x, ESimple SBool y]
 
-  ESimple TBool (Inj (TimeComparison op x y)) ->
-    mkApp (comparisonOpToDef op) [ESimple TTime x, ESimple TTime y]
+  ESimple SBool (Inj (TimeComparison op x y)) ->
+    mkApp (comparisonOpToDef op) [ESimple STime x, ESimple STime y]
 
-  ESimple TTime (Inj (IntAddTime x y)) ->
-    mkApp defAddTime [ESimple TTime x, ESimple TInt y]
+  ESimple STime (Inj (IntAddTime x y)) ->
+    mkApp defAddTime [ESimple STime x, ESimple SInteger y]
 
-  ESimple TTime (Inj (DecAddTime x y)) ->
-    mkApp defAddTime [ESimple TTime x, ESimple TDecimal y]
+  ESimple STime (Inj (DecAddTime x y)) ->
+    mkApp defAddTime [ESimple STime x, ESimple SDecimal y]
 
-  ESimple TBool (Inj (Logical op args)) ->
-    mkApp (logicalOpToDef op) (ESimple TBool <$> args)
+  ESimple SBool (Inj (Logical op args)) ->
+    mkApp (logicalOpToDef op) (ESimple SBool <$> args)
 
-  ESimple TInt     (CoreTerm (Lit x))
+  ESimple SInteger     (CoreTerm (Lit x))
     -> pure $ TLiteral (LInteger x) dummyInfo
-  ESimple TDecimal (CoreTerm (Lit x))
+  ESimple SDecimal (CoreTerm (Lit x))
     -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
-  ESimple TStr     (CoreTerm (Lit x))
+  ESimple SStr     (CoreTerm (Lit x))
     -> pure $ TLiteral (LString (T.pack x)) dummyInfo
-  ESimple TBool    (CoreTerm (Lit x))
+  ESimple SBool    (CoreTerm (Lit x))
     -> pure $ TLiteral (LBool x) dummyInfo
-  ESimple TTime    (CoreTerm (Lit x))
+  ESimple STime    (CoreTerm (Lit x))
     -> pure $ TLiteral (LTime (toPact timeIso x)) dummyInfo
 
-  ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
+  ESimple SKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
       Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
-  ESimple TBool (Enforce _ x)
-    -> mkApp enforceDef [ESimple TBool x, ESimple TStr $ CoreTerm $ Lit "(enforce)"]
-  ESimple TBool (EnforceOne Left{})
-    -> mkApp' enforceOneDef (ESimple TStr $ CoreTerm $ Lit "(enforce-one)") []
+  ESimple SBool (Enforce _ x)
+    -> mkApp enforceDef [ESimple SBool x, ESimple SStr $ CoreTerm $ Lit "(enforce)"]
+  ESimple SBool (EnforceOne Left{})
+    -> mkApp' enforceOneDef (ESimple SStr $ CoreTerm $ Lit "(enforce-one)") []
 
-  ESimple TBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
-    (ESimple TStr $ CoreTerm $ Lit "(enforce-one)")
-    (ESimple TBool . snd <$> xs)
+  ESimple SBool (EnforceOne (Right xs)) -> mkApp' enforceOneDef
+    (ESimple SStr $ CoreTerm $ Lit "(enforce-one)")
+    (ESimple SBool . snd <$> xs)
 
-  -- ESimple TBool (KsAuthorized x)
-  -- ESimple TBool (NameAuthorized x)
+  -- ESimple SBool (KsAuthorized x)
+  -- ESimple SBool (NameAuthorized x)
 
-  ESimple TStr PactVersion -> mkApp pactVersionDef []
-  ESimple TStr (Format template vals)
-    -> mkApp' formatDef (ESimple TStr template) vals
-  ESimple TStr (FormatTime x y)
-    -> mkApp defFormatTime [ESimple TStr x, ESimple TTime y]
-  ESimple TStr (Hash x) -> mkApp hashDef [x]
+  ESimple SStr PactVersion -> mkApp pactVersionDef []
+  ESimple SStr (Format template vals)
+    -> mkApp' formatDef (ESimple SStr template) vals
+  ESimple SStr (FormatTime x y)
+    -> mkApp defFormatTime [ESimple SStr x, ESimple STime y]
+  ESimple SStr (Hash x) -> mkApp hashDef [x]
 
-  ESimple TKeySet (ReadKeySet x) -> mkApp readKeysetDef [ESimple TStr x]
+  ESimple SKeySet (ReadKeySet x) -> mkApp readKeysetDef [ESimple SStr x]
 
-  ESimple TDecimal (ReadDecimal x) -> mkApp readDecimalDef [ESimple TStr x]
+  ESimple SDecimal (ReadDecimal x) -> mkApp readDecimalDef [ESimple SStr x]
 
-  ESimple TTime (ParseTime Nothing x) ->
-    mkApp timeDef [ESimple TStr x]
+  ESimple STime (ParseTime Nothing x) ->
+    mkApp timeDef [ESimple SStr x]
 
-  ESimple TTime (ParseTime (Just x) y) ->
-    mkApp parseTimeDef [ESimple TStr x, ESimple TStr y]
+  ESimple STime (ParseTime (Just x) y) ->
+    mkApp parseTimeDef [ESimple SStr x, ESimple SStr y]
 
   -- ESimple ty (Sequence etm tm) -> do
   --   t1 <- toPactTm etm
@@ -156,7 +156,7 @@ toPactTm = \case
 --       t2 undefined dummyInfo
 
   ESimple ty (IfThenElse t1 (_, t2) (_, t3)) ->
-    mkApp ifDef [ESimple TBool t1, ESimple ty t2, ESimple ty t3]
+    mkApp ifDef [ESimple SBool t1, ESimple ty t2, ESimple ty t3]
 
   tm -> error $ "TODO: toPactTm " ++ show tm
 
@@ -247,15 +247,15 @@ toAnalyze ty tm = do
       translateNodeNoGraph ast
 
 -- This is limited to simple types for now
-reverseTranslateType :: Type a -> Pact.Type b
+reverseTranslateType :: SingTy a -> Pact.Type b
 reverseTranslateType = \case
-  TBool    -> Pact.TyPrim Pact.TyBool
-  TDecimal -> Pact.TyPrim Pact.TyDecimal
-  TInt     -> Pact.TyPrim Pact.TyInteger
-  TStr     -> Pact.TyPrim Pact.TyString
-  TTime    -> Pact.TyPrim Pact.TyTime
-  TKeySet  -> Pact.TyPrim Pact.TyKeySet
-  TAny     -> Pact.TyAny
+  SBool    -> Pact.TyPrim Pact.TyBool
+  SDecimal -> Pact.TyPrim Pact.TyDecimal
+  SInteger -> Pact.TyPrim Pact.TyInteger
+  SStr     -> Pact.TyPrim Pact.TyString
+  STime    -> Pact.TyPrim Pact.TyTime
+  SKeySet  -> Pact.TyPrim Pact.TyKeySet
+  SAny     -> Pact.TyAny
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
 fromPactVal (EType ty)  = runMaybeT . toAnalyze (reverseTranslateType ty)

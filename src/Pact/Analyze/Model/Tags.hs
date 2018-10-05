@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE FlexibleContexts    #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
@@ -42,8 +43,9 @@ allocSchema (Schema fieldTys) = Object <$>
 allocAVal :: EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
-  EType (_ :: Type t) -> mkAVal . sansProv <$>
-    (alloc :: Symbolic (SBV t))
+
+  EType (_ :: SingTy ty) -> mkAVal . sansProv <$>
+    (alloc :: Symbolic (SBV (Concrete ty)))
 
 allocTVal :: EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -158,8 +160,8 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        go (EType (_ :: Type t)) (AVal _mProv sval) = mkAVal' . SBV.literal <$>
-          SBV.getValue (SBVI.SBV sval :: SBV t)
+        go (EType (_ :: SingTy t)) (AVal _mProv sval) = mkAVal' . SBV.literal
+          <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"
 

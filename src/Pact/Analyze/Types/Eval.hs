@@ -36,8 +36,8 @@ import           Data.Traversable             (for)
 import           GHC.Generics                 (Generic)
 
 import           Pact.Types.Lang              (Info)
-import           Pact.Types.Runtime           (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
-                                               Type (TyPrim))
+import           Pact.Types.Runtime           -- (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
+                                              (Type (TyPrim))
 import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
@@ -62,20 +62,24 @@ instance Wrapped SymbolicSuccess where
   type Unwrapped SymbolicSuccess = SBV Bool
   _Wrapped' = iso successBool SymbolicSuccess
 
-class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
-  type TermOf m   :: * -> *
-  eval            :: (Show a, SymWord a) => TermOf m a -> m (S a)
-  evalO           :: TermOf m Object -> m Object
-  throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
-  getVar          :: VarId -> m (Maybe AVal)
-  markFailure     :: SBV Bool -> m ()
+class (MonadError AnalyzeFailure m , S :*<: TermOf m) => Analyzer m where
+  type TermOf m :: Ty -> *
+  eval          :: (a' ~ Concrete a, Show a', SymWord a')
+                => TermOf m a         -> m (S a')
+  evalO         :: TermOf m 'TyObject -> m Object
+
+  -- evalL           :: (Show a, SymWord a) => TermOf m ('TyList a) -> m (S ('TyList a))
 
   -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
   -- their monad stack, they can't use `ite`, which we need to use to implement
   -- short-circuiting ops correctly for (effectful) terms. Though, luckily the
   -- invariant and prop languages are pure, so we're fine to implement them in
   -- terms of `|||` / `&&&`.
-  evalLogicalOp   :: LogicalOp -> [TermOf m Bool] -> m (S Bool)
+  evalLogicalOp   :: LogicalOp -> [TermOf m 'TyBool] -> m (S Bool)
+
+  throwErrorNoLoc :: AnalyzeFailureNoLoc                    -> m a
+  getVar          :: VarId                                  -> m (Maybe AVal)
+  markFailure     :: SBV Bool                               -> m ()
 
 data AnalyzeEnv
   = AnalyzeEnv
@@ -84,7 +88,7 @@ data AnalyzeEnv
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
     , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
     , _aeIntegers  :: !(SFunArray String Integer)    -- read-only
-    , _invariants  :: !(TableMap [Located (Invariant Bool)])
+    , _invariants  :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !(ModelTags 'Symbolic)
     , _aeInfo      :: !Info
@@ -291,12 +295,12 @@ mkInitialAnalyzeState tables = AnalyzeState
     tableNames :: [TableName]
     tableNames = map (TableName . T.unpack . view Types.tableName) tables
 
-    intCellDeltas = mkTableColumnMap (== TyPrim TyInteger) (mkSFunArray (const 0))
-    decCellDeltas = mkTableColumnMap (== TyPrim TyDecimal) (mkSFunArray (const (fromInteger 0)))
-    intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
-    decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) (fromInteger 0)
+    intCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyInteger) (mkSFunArray (const 0))
+    decCellDeltas   = mkTableColumnMap (== TyPrim Pact.TyDecimal) (mkSFunArray (const (fromInteger 0)))
+    intColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyInteger) 0
+    decColumnDeltas = mkTableColumnMap (== TyPrim Pact.TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
+      = mkTableColumnMap (== TyPrim Pact.TyKeySet) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
@@ -343,12 +347,12 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
             mkArray  = mkFreeArray $ "cells__" <> tableName <> "__" <> colName
 
         in cells & case ty of
-             TyPrim TyInteger -> scIntValues.at col     ?~ mkArray
-             TyPrim TyBool    -> scBoolValues.at col    ?~ mkArray
-             TyPrim TyDecimal -> scDecimalValues.at col ?~ mkArray
-             TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
-             TyPrim TyString  -> scStringValues.at col  ?~ mkArray
-             TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
+             TyPrim Pact.TyInteger -> scIntValues.at col     ?~ mkArray
+             TyPrim Pact.TyBool    -> scBoolValues.at col    ?~ mkArray
+             TyPrim Pact.TyDecimal -> scDecimalValues.at col ?~ mkArray
+             TyPrim Pact.TyTime    -> scTimeValues.at col    ?~ mkArray
+             TyPrim Pact.TyString  -> scStringValues.at col  ?~ mkArray
+             TyPrim Pact.TyKeySet  -> scKsValues.at col      ?~ mkArray
              --
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.

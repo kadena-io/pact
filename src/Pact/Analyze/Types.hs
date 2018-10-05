@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE DataKinds       #-}
 
 module Pact.Analyze.Types
   ( module Pact.Analyze.Types.Languages
@@ -64,9 +65,9 @@ genVarId :: (MonadState s m, HasVarId s) => m VarId
 genVarId = genId varId
 
 data Check
-  = PropertyHolds !(Prop Bool) -- valid, assuming success
-  | Satisfiable   !(Prop Bool) -- sat,   not assuming success
-  | Valid         !(Prop Bool) -- valid, not assuming success
+  = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
+  | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
+  | Valid         !(Prop 'TyBool) -- valid, not assuming success
   deriving Show
 
 checkGoal :: Check -> Goal
@@ -77,13 +78,13 @@ checkGoal (Valid _)         = Validation
 data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
-  , _tableInvariants :: [Located (Invariant Bool)]
+  , _tableInvariants :: [Located (Invariant 'TyBool)]
   } deriving (Show)
 
-pattern TableNameLit :: String -> Prop TableName
-pattern TableNameLit str = PLit (TableName str)
+pattern TableNameLit :: String -> Prop TyTableName
+pattern TableNameLit str = PLit str
 
-pattern ColumnNameLit :: String -> Prop ColumnName
-pattern ColumnNameLit str = PLit (ColumnName str)
+pattern ColumnNameLit :: String -> Prop TyColumnName
+pattern ColumnNameLit str = PLit str
 
 makeLenses ''Table

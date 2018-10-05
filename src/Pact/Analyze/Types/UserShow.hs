@@ -24,6 +24,9 @@ userShow = userShowsPrec 0
 parens :: Text -> Text
 parens t = "(" <> t <> ")"
 
+brackets :: Text -> Text
+brackets t = "[" <> t <> "]"
+
 parenList :: [Text] -> Text
 parenList = parens . T.unwords
 

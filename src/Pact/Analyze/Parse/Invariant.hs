@@ -21,73 +21,73 @@ import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-expToInvariant :: Type a -> Exp Info -> InvariantParse (Invariant a)
+expToInvariant :: SingTy a -> Exp Info -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
   (_, EAtom' varName) -> do
     schemaTys <- ask
     case find (\(arg, _vid) -> arg ^. aName == varName) schemaTys of
       Just (Pact.Arg _name (TyPrim primTy) _info, vid) -> case (ty, primTy) of
-        (TInt,     TyInteger) -> pure (CoreInvariant (Var vid varName))
-        (TDecimal, TyDecimal) -> pure (CoreInvariant (Var vid varName))
-        (TTime,    TyTime)    -> pure (CoreInvariant (Var vid varName))
-        (TStr,     TyString)  -> pure (CoreInvariant (Var vid varName))
-        (TBool,    TyBool)    -> pure (CoreInvariant (Var vid varName))
-        (TKeySet,  TyKeySet)  -> pure (CoreInvariant (Var vid varName))
-        (_,        TyValue)   -> throwErrorIn exp
+        (SInteger, Pact.TyInteger) -> pure (CoreInvariant (Var vid varName))
+        (SDecimal, Pact.TyDecimal) -> pure (CoreInvariant (Var vid varName))
+        (STime,    Pact.TyTime)    -> pure (CoreInvariant (Var vid varName))
+        (SStr,     Pact.TyString)  -> pure (CoreInvariant (Var vid varName))
+        (SBool,    Pact.TyBool)    -> pure (CoreInvariant (Var vid varName))
+        (SKeySet,  Pact.TyKeySet)  -> pure (CoreInvariant (Var vid varName))
+        (_,        Pact.TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $
           "found variable " <> varName <> " of type " <> tShow primTy <>
           " where " <> userShow ty <> " was expected"
       _ -> throwErrorT $ "couldn't find column named " <> varName
 
-  (TDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (fromPact decimalIso d))
-  (TInt, ELiteral' (LInteger i))     -> pure (ILiteral i)
-  (TStr, ELiteral' (LString s))      -> pure (ILiteral (T.unpack s))
-  (TTime, ELiteral' (LTime t))       -> pure (ILiteral (fromPact timeIso t))
-  (TBool, ELiteral' (LBool b))       -> pure (ILiteral b)
-  (_, ELiteral _)                    ->
+  (SDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (fromPact decimalIso d))
+  (SInteger, ELiteral' (LInteger i)) -> pure (ILiteral i)
+  (SStr,     ELiteral' (LString s))  -> pure (ILiteral (T.unpack s))
+  (STime,    ELiteral' (LTime t))    -> pure (ILiteral (fromPact timeIso t))
+  (SBool,    ELiteral' (LBool b))    -> pure (ILiteral b)
+  (_,        ELiteral _)             ->
     throwErrorIn exp "literal of unexpected type"
 
-  (TInt, ParenList [EAtom' SStringLength, str])
-    -> CoreInvariant . StrLength <$> expToInvariant TStr str
-  (TStr, ParenList [EAtom' SStringConcatenation, a, b]) -> CoreInvariant ... StrConcat
-    <$> expToInvariant TStr a <*> expToInvariant TStr b
+  (SInteger, ParenList [EAtom' SStringLength, str])
+    -> CoreInvariant . StrLength <$> expToInvariant SStr str
+  (SStr, ParenList [EAtom' SStringConcatenation, a, b]) -> CoreInvariant ... StrConcat
+    <$> expToInvariant SStr a <*> expToInvariant SStr b
 
-  (TDecimal, ParenList [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum
-    [ Inj ... DecArithOp    op <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
-    , Inj ... DecIntArithOp op <$> expToInvariant TDecimal a <*> expToInvariant TInt b
-    , Inj ... IntDecArithOp op <$> expToInvariant TInt a     <*> expToInvariant TDecimal b
+  (SDecimal, ParenList [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum
+    [ Inj ... DecArithOp    op <$> expToInvariant SDecimal a <*> expToInvariant SDecimal b
+    , Inj ... DecIntArithOp op <$> expToInvariant SDecimal a <*> expToInvariant SInteger b
+    , Inj ... IntDecArithOp op <$> expToInvariant SInteger a <*> expToInvariant SDecimal b
     ] <|> throwErrorIn exp "unexpected argument types"
-  (TInt, ParenList [EAtom' (toOp arithOpP -> Just op), a, b])
-    -> Inj ... IntArithOp op <$> expToInvariant TInt a <*> expToInvariant TInt b
-  (TDecimal, ParenList [EAtom' (toOp unaryArithOpP -> Just op), a])
-    -> Inj . DecUnaryArithOp op <$> expToInvariant TDecimal a
-  (TInt, ParenList [EAtom' (toOp unaryArithOpP -> Just op), a])
-    -> Inj . IntUnaryArithOp op <$> expToInvariant TInt a
+  (SInteger, ParenList [EAtom' (toOp arithOpP -> Just op), a, b])
+    -> Inj ... IntArithOp op    <$> expToInvariant SInteger a <*> expToInvariant SInteger b
+  (SDecimal, ParenList [EAtom' (toOp unaryArithOpP -> Just op), a])
+    -> Inj . DecUnaryArithOp op <$> expToInvariant SDecimal a
+  (SInteger, ParenList [EAtom' (toOp unaryArithOpP -> Just op), a])
+    -> Inj . IntUnaryArithOp op <$> expToInvariant SInteger a
 
-  (TBool, ParenList [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum
+  (SBool, ParenList [EAtom' op'@(toOp comparisonOpP -> Just op), a, b]) -> asum
     [ CoreInvariant ... IntegerComparison op
-      <$> expToInvariant TInt a     <*> expToInvariant TInt b
+      <$> expToInvariant SInteger a <*> expToInvariant SInteger b
     , CoreInvariant ... DecimalComparison op
-      <$> expToInvariant TDecimal a <*> expToInvariant TDecimal b
+      <$> expToInvariant SDecimal a <*> expToInvariant SDecimal b
     , CoreInvariant ... TimeComparison op
-      <$> expToInvariant TTime a    <*> expToInvariant TTime b
+      <$> expToInvariant STime a    <*> expToInvariant STime b
     , CoreInvariant ... BoolComparison op
-      <$> expToInvariant TBool a    <*> expToInvariant TBool b
+      <$> expToInvariant SBool a    <*> expToInvariant SBool b
     , CoreInvariant ... StringComparison op
-      <$> expToInvariant TStr a     <*> expToInvariant TStr b
+      <$> expToInvariant SStr a     <*> expToInvariant SStr b
     , case toOp eqNeqP op' of
       Just eqNeq -> CoreInvariant ... KeySetEqNeq eqNeq
-        <$> expToInvariant TKeySet a
-        <*> expToInvariant TKeySet b
+        <$> expToInvariant SKeySet a
+        <*> expToInvariant SKeySet b
       Nothing -> throwErrorIn exp $
         op' <> " is an invalid operation for keysets (only " <> SEquality <>
         " or " <> SInequality <> " allowed)"
     ] <|> throwErrorIn exp "unexpected argument types"
 
-  (TBool, ParenList (EAtom' op:args))
+  (SBool, ParenList (EAtom' op:args))
     | Just op' <- toOp logicalOpP op -> do
-    operands' <- traverse (expToInvariant TBool) args
+    operands' <- traverse (expToInvariant SBool) args
     case (op', operands') of
       (AndOp, [a, b]) -> pure (ILogicalOp AndOp [a, b])
       (OrOp, [a, b])  -> pure (ILogicalOp OrOp [a, b])

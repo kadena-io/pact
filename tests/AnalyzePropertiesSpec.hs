@@ -54,7 +54,7 @@ testDualEvaluation etm@(ESimple ty _tm) gState = do
       ESimple ty'' (CoreTerm (Lit sval')) <- pure $ analyzeVal
 
       -- compare results
-      case typeEq ty' ty'' of
+      case singEq ty' ty'' of
         Just Refl -> sval' === pactSval
         Nothing   -> EType ty' === EType ty'' -- this'll fail
 testDualEvaluation EObject{} _ = do

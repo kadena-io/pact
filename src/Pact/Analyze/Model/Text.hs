@@ -4,6 +4,7 @@
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 module Pact.Analyze.Model.Text
   ( showModel
@@ -44,8 +45,8 @@ showTVal (ety, av) = case av of
   OpaqueVal   -> "[opaque]"
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
-    EObjectTy _         -> error "showModel: impossible object type for AVal"
-    EType (_ :: Type t) -> showSbv (SBVI.SBV sval :: SBV t)
+    EObjectTy _           -> error "showModel: impossible object type for AVal"
+    EType (_ :: SingTy t) -> showSbv (SBVI.SBV sval :: SBV (Concrete t))
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

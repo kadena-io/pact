@@ -4,6 +4,7 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE DataKinds                  #-}
 module Pact.Analyze.Eval.Prop where
 
 import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
@@ -74,8 +75,8 @@ expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
-getLitTableName :: Prop TableName -> Query TableName
-getLitTableName (PLit tn) = pure tn
+getLitTableName :: Prop TyTableName -> Query TableName
+getLitTableName (PLit tn) = pure $ TableName tn
 getLitTableName (CoreProp (Var vid name)) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
@@ -87,8 +88,8 @@ getLitTableName (PropSpecific Result)
 getLitTableName CoreProp{} = throwErrorNoLoc "Core values can't be table names"
 
 
-getLitColName :: Prop ColumnName -> Query ColumnName
-getLitColName (PLit cn) = pure cn
+getLitColName :: Prop TyColumnName -> Query ColumnName
+getLitColName (PLit cn) = pure $ ColumnName cn
 getLitColName (CoreProp (Var vid name)) = do
   mCn <- view $ qeColumnScope . at vid
   case mCn of
@@ -100,7 +101,7 @@ getLitColName (PropSpecific Result)
 getLitColName CoreProp{} = throwErrorNoLoc "Core values can't be column names"
 
 
-evalProp :: (SymWord a, Show a) => Prop a -> Query (S a)
+evalProp :: (a' ~ Concrete a, SymWord a', Show a') => Prop a -> Query (S a')
 evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
@@ -109,7 +110,7 @@ beforeAfterLens = \case
   Before -> before
   After  -> after
 
-evalPropO :: Prop Object -> Query Object
+evalPropO :: Prop 'TyObject -> Query Object
 evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
 evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
@@ -146,12 +147,12 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
 
   pure $ Object aValFields
 
-evalPropSpecific :: PropSpecific a -> Query (S a)
+evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
-evalPropSpecific (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
+evalPropSpecific (Forall vid _name (EType (_ :: Types.SingTy ty)) p) = do
+  sbv <- liftSymbolic (forall_ :: Symbolic (SBV (Concrete ty)))
   local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
 evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
@@ -166,8 +167,8 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
   pure $ foldr (&&&) true bools
-evalPropSpecific (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
+evalPropSpecific (Exists vid _name (EType (_ :: Types.SingTy ty)) p) = do
+  sbv <- liftSymbolic (exists_ :: Symbolic (SBV (Concrete ty)))
   local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
 evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"

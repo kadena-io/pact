@@ -416,7 +416,7 @@ moduleTables modules ModuleData{..} = do
       Just model -> liftEither $ do
         exps <- collectExps "invariant" model
         runExpParserOver exps $
-          flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
+          flip runReaderT (varIdArgs _utFields) . expToInvariant SBool
 
     pure $ Table tabName schema invariants
 

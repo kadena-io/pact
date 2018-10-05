@@ -8,9 +8,16 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE ConstraintKinds            #-}
+
+{-# LANGUAGE DataKinds               #-}
+
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 module Pact.Analyze.Types.Numerical where
 
+import Data.Semigroup ((<>))
+import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Control.Lens                (Prism')
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
@@ -33,6 +40,82 @@ import           Pact.Types.Util             (tShow)
 import           Pact.Analyze.Feature        hiding (dec)
 import           Pact.Analyze.Types.UserShow
 
+
+-- TODO: merge with PrimType?
+data Ty
+  = TyInteger
+  | TyBool
+  | TyStr
+  | TyTime
+  | TyDecimal
+  | TyKeySet
+  | TyAny
+  | TyList Ty
+  | TyObject
+
+type TyTableName  = 'TyStr
+type TyColumnName = 'TyStr
+type TyRowKey     = 'TyStr
+type TyKeySetName = 'TyStr
+
+data SingTy :: Ty -> * where
+  SInteger ::             SingTy 'TyInteger
+  SBool    ::             SingTy 'TyBool
+  SStr     ::             SingTy 'TyStr
+  STime    ::             SingTy 'TyTime
+  SDecimal ::             SingTy 'TyDecimal
+  SKeySet  ::             SingTy 'TyKeySet
+  SAny     ::             SingTy 'TyAny
+  SList    :: SingTy a -> SingTy ('TyList a)
+  SObject  ::             SingTy 'TyObject
+
+instance Show (SingTy ty) where
+  showsPrec p = \case
+    SInteger -> showString "SInteger"
+    SBool    -> showString "SBool"
+    SStr     -> showString "SStr"
+    STime    -> showString "STime"
+    SDecimal -> showString "SDecimal"
+    SKeySet  -> showString "SKeySet"
+    SAny     -> showString "SAny"
+    SList a  -> showParen (p > 10) $ showString "SAny " . showsPrec 11 a
+    SObject  -> showString "SObject"
+
+instance UserShow (SingTy ty) where
+  userShowsPrec _ = \case
+    SInteger     -> "integer"
+    SBool    -> "bool"
+    SStr     -> "string"
+    STime    -> "time"
+    SDecimal -> "decimal"
+    SKeySet  -> "keyset"
+    SAny     -> "*"
+    SList a  -> "[" <> userShow a <> "]"
+    SObject  -> "object"
+
+singEq :: SingTy a -> SingTy b -> Maybe (a :~: b)
+singEq SInteger  SInteger  = Just Refl
+singEq SBool     SBool     = Just Refl
+singEq SStr      SStr      = Just Refl
+singEq STime     STime     = Just Refl
+singEq SDecimal  SDecimal  = Just Refl
+singEq SKeySet   SKeySet   = Just Refl
+singEq SAny      SAny      = Just Refl
+singEq (SList a) (SList b) = apply Refl <$> singEq a b
+singEq SObject   SObject   = Just Refl
+singEq _         _         = Nothing
+
+data Dict ctxt where
+  Dict :: ctxt => Dict ctxt
+
+showish :: Dict (Show a) -> a -> String
+showish Dict = show
+
+userShowish :: Dict (UserShow a) -> a -> Text
+userShowish Dict = userShow
+
+eqish :: Dict (Eq a) -> a -> a -> Bool
+eqish Dict = (==)
 
 -- We model decimals as integers. The value of a decimal is the value of the
 -- integer, shifted right 255 decimal places.
@@ -281,18 +364,18 @@ instance UserShow RoundingLikeOp where
 -- - RoundingLikeOp2: Rounding decimals to decimals with a specified level of
 --   precision.
 --   - Operations: { round floor ceiling }
-data Numerical t a where
-  DecArithOp      :: ArithOp        -> t Decimal -> t Decimal -> Numerical t Decimal
-  IntArithOp      :: ArithOp        -> t Integer -> t Integer -> Numerical t Integer
-  DecUnaryArithOp :: UnaryArithOp   -> t Decimal ->              Numerical t Decimal
-  IntUnaryArithOp :: UnaryArithOp   -> t Integer ->              Numerical t Integer
-  DecIntArithOp   :: ArithOp        -> t Decimal -> t Integer -> Numerical t Decimal
-  IntDecArithOp   :: ArithOp        -> t Integer -> t Decimal -> Numerical t Decimal
-  ModOp           :: t Integer      -> t Integer ->              Numerical t Integer
-  RoundingLikeOp1 :: RoundingLikeOp -> t Decimal ->              Numerical t Integer
-  RoundingLikeOp2 :: RoundingLikeOp -> t Decimal -> t Integer -> Numerical t Decimal
+data Numerical t (a :: Ty) where
+  DecArithOp      :: ArithOp         -> t 'TyDecimal -> t 'TyDecimal -> Numerical t 'TyDecimal
+  IntArithOp      :: ArithOp         -> t 'TyInteger -> t 'TyInteger -> Numerical t 'TyInteger
+  DecUnaryArithOp :: UnaryArithOp    -> t 'TyDecimal ->                 Numerical t 'TyDecimal
+  IntUnaryArithOp :: UnaryArithOp    -> t 'TyInteger ->                 Numerical t 'TyInteger
+  DecIntArithOp   :: ArithOp         -> t 'TyDecimal -> t 'TyInteger -> Numerical t 'TyDecimal
+  IntDecArithOp   :: ArithOp         -> t 'TyInteger -> t 'TyDecimal -> Numerical t 'TyDecimal
+  ModOp           :: t 'TyInteger    -> t 'TyInteger ->                 Numerical t 'TyInteger
+  RoundingLikeOp1 :: RoundingLikeOp  -> t 'TyDecimal ->                 Numerical t 'TyInteger
+  RoundingLikeOp2 :: RoundingLikeOp  -> t 'TyDecimal -> t 'TyInteger -> Numerical t 'TyDecimal
 
-instance (UserShow (t Integer), UserShow (t Decimal))
+instance (UserShow (t 'TyInteger), UserShow (t 'TyDecimal))
   => UserShow (Numerical t a) where
   userShowsPrec _ = parenList . \case
     DecArithOp op a b      -> [userShow op, userShow a, userShow b]
@@ -305,5 +388,5 @@ instance (UserShow (t Integer), UserShow (t Decimal))
     RoundingLikeOp1 op a   -> [userShow op, userShow a]
     RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 
-deriving instance (Show (t Decimal), Show (t Integer), Show a) => Show (Numerical t a)
-deriving instance (Eq (t Decimal), Eq (t Integer), Eq a) => Eq (Numerical t a)
+deriving instance (Show (t 'TyDecimal), Show (t 'TyInteger)) => Show (Numerical t a)
+deriving instance (Eq   (t 'TyDecimal), Eq   (t 'TyInteger)) => Eq   (Numerical t a)
