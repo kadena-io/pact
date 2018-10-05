@@ -357,6 +357,9 @@ instance IsString (Prop TableName) where
 instance IsString (Prop ColumnName) where
   fromString = PLit . fromString
 
+instance IsString (Prop RowKey) where
+  fromString = PLit . fromString
+
 instance Boolean (Prop Bool) where
   true      = PLit True
   false     = PLit False
