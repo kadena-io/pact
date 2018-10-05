@@ -21,14 +21,15 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   ModuleData,
-   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStoreModules,updateRefStoreInterfaces,
+   ModuleData(..), mdModule, mdRefMap,
+   InterfaceData(..), idInterface, idRefMap,
+   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStoreModules,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules, rsNewInterfaces,
+   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
@@ -133,14 +134,14 @@ data ModuleData = ModuleData
   { _mdModule :: Module
   , _mdRefMap :: HM.HashMap Text Ref
   } deriving (Eq, Show)
-
+makeLenses ''ModuleData
 
 -- | Interface ref store
-data InterfaceData = Interface
+data InterfaceData = InterfaceData
   { _idInterface :: Interface
-  , _iddRefMap :: HM.HashMap Text Ref
+  , _idRefMap :: HM.HashMap Text Ref
   } deriving (Eq, Show)
-
+makeLenses ''InterfaceData
 
 -- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
@@ -223,23 +224,17 @@ data RefState = RefState {
       -- | Signatures that were loaded.
     , _rsLoadedInterfaces :: HM.HashMap InterfaceName Interface
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNewModules :: [(ModuleName,ModuleData)]
-      -- | Interfaces that were compiled and loaded in this tx.
-    , _rsNewInterfaces :: [(InterfaceName, InterfaceData)]
+    , _rsNewModules :: HM.HashMap ModuleName ModuleData
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty def def
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty HM.empty
 
 -- | Update for newly-loaded modules.
 updateRefStoreModules :: RefState -> RefStore -> RefStore
 updateRefStoreModules RefState {..}
-  | null _rsNewModules = id
-  | otherwise = over $ rsModules $ HM.union $ HM.fromList _rsNewModules
+  | HM.null _rsNewModules = id
+  | otherwise = over rsModules $ HM.union _rsNewModules
 
-updateRefStoreInterfaces :: RefState -> RefStore -> RefStore
-updateRefStoreInterfaces RefState{..}
-  | null _rsNewInterfaces = id
-  | otherwise = over rsInterfaces HM.union $ HM.fromList _rsNewInterfaces
 -- | Interpreter mutable state.
 data EvalState = EvalState {
       -- | New or imported modules and defs.

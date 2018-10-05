@@ -241,6 +241,12 @@ defun = do
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
+defun' :: Compile (Term Name)
+defun' = do
+  (dname,rty) <- first _atomAtom <$> typedAtom
+  args <- withList' Parense $ man arg
+  m <- meta
+  TDef 
 
 defpact :: Compile (Term Name)
 defpact = do
@@ -287,28 +293,18 @@ moduleForm = do
 
 interfaceForm :: Compile (Term Name)
 interfaceForm = do
-  iName' <- _atomAtom <$> bareAtom
-  m <- meta
-  use (psUser . csModule) >>= \cm -> case cm of
-    Just {} -> syntaxError "Invalid nested interface"
-    Nothing -> return ()
+  iname <- _atomAtom <$> typedAtom
+  defs <- many defun'
   info <- contextInfo
-  let code = case i of
-        Info Nothing -> "<code unavailable>"
-        Info (Just (c,_)) -> c
-      iName = InterfaceName iName'
-      iHash = hash $ encodeUtf8 $ _unCode code
-  (psUser . csModule) .= Just (iName,iHash)
-  (bd,bi) <- bodyForm'
-  eof
-  abstracted <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
-    TDef {} -> return []
-    TConst {} -> return []
-    _ -> syntaxError "Only defun and constants allowed in interface"
-  return $ TInterface
-    (Interface iName m iHash code)
-    (abstract (const Nothing) (TList bd TyAny bi)) info
-
+  return $ TInterface (InterfaceName iname) defs   
+  where
+    defun' = do
+      (dn,rty) <- first _atomAtom <$> typedAtom
+      args <- withList' Parens $ man arg
+      m <- meta
+      return (dn, FunType args rty, m)
+      
+  
 step :: Compile (Term Name)
 step = do
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>

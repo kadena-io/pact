@@ -161,16 +161,17 @@ eval t = enscope t >>= reduce
 
 evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
 evalUse mn h i = do
-  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  mm <- HM.lookup mn <$> view (eeRefStore . rsModules)
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
-    Just m@(Module{..},_) -> do
+    Just md -> do
+      let mdHash = view (mdModule . mHash) md  
       case h of
         Nothing -> return ()
-        Just mh | mh == _mHash -> return ()
+        Just mh | mh == mdHash -> return ()
                 | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
-                               show mh ++ ", " ++ show _mHash
-      installModule m
+                               show mh ++ ", " ++ show mdHash
+      installModule md
 
 
 -- | Make table of module definitions for storage in namespace/RefStore.
@@ -229,23 +230,23 @@ loadModule m bod1 mi g0 = do
       evalConstRef r@Ref {} = runPure $ evalConsts r
       evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
-  installModule (m,evaluatedDefs)
-  (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
-  return (g1,modDefs1)
-
+  let md = ModuleData m evaluatedDefs
+  installModule md 
+  (evalRefs . rsNewModules) %= HM.insert (_mName m) md
+  return (g1, modDefs1)
 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n _) = do
-  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n
+resolveRef qn@(QName q n _) = do -- just a lookup - figure this out damnit
+  dsm <- asks $ firstOf $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
+    Nothing -> firstOf (evalRefs .rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
-  nm <- asks $ firstOf $ eeRefStore.rsNatives.ix nn
+  nm <- asks $ firstOf $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
+    Nothing -> firstOf (evalRefs . rsLoaded . ix nn) <$> get
 
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
@@ -292,6 +293,7 @@ reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
 reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
+reduce t@TInterface {} = evalError (_tInfo t) "Interface only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
@@ -391,9 +393,9 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 installModule :: ModuleData ->  Eval e ()
-installModule (m,defs) = do
-  (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ defs)
-  (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
+installModule ModuleData{..} = do 
+  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap) 
+  (evalRefs . rsLoadedModules) %= HM.insert (_mName _mdModule) _mdModule
 
 msg :: Text -> Term n
 msg = toTerm

@@ -770,6 +770,7 @@ toAST TTable {..} = do
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
+toAST TInterface{..} = die _tInfo "Interfaces not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TBless {..} = die _tInfo "Bless not supported"
 toAST TStep {..} = do
@@ -939,9 +940,9 @@ typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abb
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
-typecheckModule dbg (Module {..},refs) = do
-  debug' dbg $ "Typechecking module " ++ show _mName
+typecheckModule dbg ModuleData{..} = do
+  debug' dbg $ "Typechecking module " ++ show (_mName _mdModule)
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
-  fst <$> foldM tc (([],[]),0) (HM.elems refs)
+  fst <$> foldM tc (([],[]),0) (HM.elems _mdRefMap)

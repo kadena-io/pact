@@ -36,7 +36,6 @@ module Pact.Types.Term
    BindType(..),
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
-   Interface(..),iName,iHash,iMeta,iCode,
    ConstVal(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
@@ -44,7 +43,7 @@ module Pact.Types.Term
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
-   tInterfaceDef,
+   tInterfaceDef,tFunDefs,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -231,25 +230,6 @@ instance FromJSON Module where
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 
--- | Interface data for Pact modules. These are ML-style Signatures which
--- pact modules must satisfy at compile time.
---
--- e.g.
---  (interface foo
---    (defun list-clients:[string] ())
---    (defun client-count:integer ()))
--- 
-data Interface = Interface
-  { _iName :: !InterfaceName
-  , _iMeta :: !Meta
-  , _iHash :: !Hash
-  , _iCode :: !Code
-  } deriving (Eq)
-
-instance Show Interface where
-  show Interface{..} =
-    "(Interface " ++ asString' _iName ++ " " ++ show _iHash ++ ")"
-    
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
@@ -273,10 +253,10 @@ data Term n =
     , _tInfo :: !Info
     } |
     TInterface {
-      _tInterfaceDef :: Interface
-    , _tFunDefs :: FunTypes (Term n)
+      _tInterfaceName :: InterfaceName
+    , _tInterfaceDefuns :: ![(Text, FunType (Term n), Meta)]
     , _tInfo :: !Info
-    } | 
+    } |
     TList {
       _tList :: ![Term n]
     , _tListType :: Type (Term n)
@@ -373,7 +353,7 @@ instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
     show TInterface {..} =
-      "(TInterface " ++ show _tInterfaceDef ++ " " ++ show (unscope _tInterfaceBody) ++ ")"
+      "(TInterface " ++ show _tInterfaceDef ++ " " ++ showFunTypes _tFunDefs ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
@@ -451,7 +431,7 @@ instance Applicative Term where
 instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule m (b >>>= f) i
-    TInterface i body info >>= f = TInterface i (body >>>= f) info 
+    TInterface i fs info >>= f = TInterface i (fmap (fmap (>>= f)) fs) info 
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
@@ -604,4 +584,3 @@ makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
-makeLenses ''Interface

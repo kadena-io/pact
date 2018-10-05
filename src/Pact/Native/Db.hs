@@ -147,9 +147,9 @@ descKeySet i as = argsError i as
 
 descModule :: RNativeFun e
 descModule i [TLitString t] = do
-  mods <- view (eeRefStore.rsModules.at (ModuleName t))
-  case mods of
-    Just (Module{..},_) ->
+  mods <- view (eeRefStore . rsModules . at (ModuleName t))
+  case _mdModule <$> mods of
+    Just Module{..} ->
       return $ TObject [(tStr "name",tStr $ asString _mName),
                          (tStr "hash", tStr $ asString _mHash),
                          (tStr "keyset", tStr $ asString _mKeySet),
@@ -354,7 +354,7 @@ guardTable i t = evalError' i $ "Internal error: guardTable called with non-tabl
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
-  mmRs <- fmap fst . HM.lookup mn <$> view (eeRefStore.rsModules)
+  mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules) -- fmap fst . HM.lookup mn <$> view (eeRefStore.rsModules)
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
   case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
