@@ -40,6 +40,7 @@ import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
                                              Type (..))
 import qualified Pact.Types.Lang            as Pact
@@ -307,8 +308,8 @@ tagDbAccess mkEvent node schema = do
 tagRead :: Node -> Schema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess TraceWrite
+tagWrite :: WriteType -> Node -> Schema -> TranslateM TagId
+tagWrite = tagDbAccess . TraceWrite
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -862,7 +863,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
-    tid                 <- tagWrite node schema
+    tid                 <- tagWrite writeType node schema
     pure $ ESimple TStr $
       Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 

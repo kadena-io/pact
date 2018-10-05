@@ -22,6 +22,7 @@ import qualified Data.Text                  as T
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact
+import qualified Pact.Types.Persistence     as Pact
 
 import           Pact.Analyze.Model.Graph   (linearize)
 import           Pact.Analyze.Types
@@ -62,15 +63,15 @@ showArg (Located _ (Unmunged nm, tval)) = nm <> " = " <> showTVal tval
 showVar :: Located (Unmunged, TVal) -> Text
 showVar (Located _ (Unmunged nm, tval)) = nm <> " := " <> showTVal tval
 
-data AccessType = ReadAccess | WriteAccess
+data ExpectPresent = ExpectPresent | ExpectNotPresent
 
-showDbAccessSuccess :: AccessType -> SBV Bool -> Text
-showDbAccessSuccess accTy successSbv = case SBV.unliteral successSbv of
+showDbAccessSuccess :: SBV Bool -> ExpectPresent -> Text
+showDbAccessSuccess successSbv expectPresent = case SBV.unliteral successSbv of
   Nothing    -> "[ERROR:symbolic]"
   Just True  -> "succeeds"
-  Just False -> case accTy of
-    ReadAccess  -> "fails because the row was not present"
-    WriteAccess -> "fails because the row was already present"
+  Just False -> case expectPresent of
+    ExpectPresent    -> "fails because the row was not present"
+    ExpectNotPresent -> "fails because the was already present"
 
 --
 -- TODO: this should display the table name
@@ -78,15 +79,23 @@ showDbAccessSuccess accTy successSbv = case SBV.unliteral successSbv of
 showRead :: Located Access -> Text
 showRead (Located _ (Access srk obj suc))
   = "read " <> showObject obj <> " for key " <> showS srk <> " "
-  <> showDbAccessSuccess ReadAccess suc
+  <> showDbAccessSuccess suc ExpectPresent
 
 --
 -- TODO: this should display the table name
 --
-showWrite :: Located Access -> Text
-showWrite (Located _ (Access srk obj suc))
-  = "write " <> showObject obj <> " to key " <> showS srk <> " "
-  <> showDbAccessSuccess WriteAccess suc
+showWrite :: Pact.WriteType -> Located Access -> Text
+showWrite writeType (Located _ (Access srk obj suc))
+  = let writeTypeT = case writeType of
+          Pact.Insert -> "insert"
+          Pact.Update -> "update"
+          Pact.Write  -> "write"
+        expectPresent = case writeType of
+          Pact.Insert -> ExpectNotPresent
+          Pact.Update -> ExpectPresent
+          Pact.Write  -> error "invariant violation: write should never fail"
+    in writeTypeT <> " " <> showObject obj <> " to key " <> showS srk <> " "
+       <> showDbAccessSuccess suc expectPresent
 
 showKsn :: S KeySetName -> Text
 showKsn sKsn = case SBV.unliteral (_sSbv sKsn) of
@@ -146,8 +155,8 @@ showEvent ksProvs tags event = do
     case event of
       TraceRead _ (_located -> tid) ->
         pure [display mtReads tid showRead]
-      TraceWrite _ (_located -> tid) ->
-        pure [display mtWrites tid showWrite]
+      TraceWrite writeType _ (_located -> tid) ->
+        pure [display mtWrites tid (showWrite writeType)]
       TraceAssert recov (_located -> tid) ->
         pure [display mtAsserts tid (showAssert recov)]
       TraceAuth recov (_located -> tid) ->

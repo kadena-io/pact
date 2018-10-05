@@ -17,8 +17,8 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
-import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
-                                       (<&>), (?~), (^.), _1, _2, _3)
+import           Control.Lens         (Traversal', toListOf, traverseOf,
+                                       traversed, (<&>), (?~), (^.), _1, _2, _3)
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -84,7 +84,7 @@ allocModelTags locatedTm graph = ModelTags
     allocS = sansProv <$> alloc
 
     allocAccesses
-      :: Prism' TraceEvent (Schema, Located TagId)
+      :: Traversal' TraceEvent (Schema, Located TagId)
       -> Symbolic (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $ \(schema, Located info tid) -> do
@@ -96,8 +96,13 @@ allocModelTags locatedTm graph = ModelTags
     allocReads :: Symbolic (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
 
+    traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
+    traceWriteT f event = case event of
+      TraceWrite _writeType schema tagid -> const event <$> f (schema, tagid)
+      _                                  -> pure event
+
     allocWrites :: Symbolic (Map TagId (Located Access))
-    allocWrites = allocAccesses _TraceWrite
+    allocWrites = allocAccesses traceWriteT
 
     allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $

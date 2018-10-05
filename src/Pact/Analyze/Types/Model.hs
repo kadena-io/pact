@@ -17,6 +17,7 @@ import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)
 
+import           Pact.Types.Persistence    (WriteType)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Types.Shared
@@ -77,7 +78,7 @@ data ScopeType
 
 data TraceEvent
   = TraceRead Schema (Located TagId)
-  | TraceWrite Schema (Located TagId)
+  | TraceWrite WriteType Schema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
   | TraceSubpathStart Path
