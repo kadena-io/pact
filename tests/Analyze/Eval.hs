@@ -87,7 +87,7 @@ analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
 analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
   -- analyze setup
   let tables = []
-      args = Map.empty
+      args   = Map.empty
       state0 = mkInitialAnalyzeState tables
 
       tags = ModelTags Map.empty Map.empty Map.empty Map.empty Map.empty

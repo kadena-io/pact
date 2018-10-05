@@ -58,9 +58,9 @@ import           Pact.Analyze.Util
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
+    { runAnalyze :: RWST AnalyzeEnv () EvalAnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
-            MonadState AnalyzeState, MonadError AnalyzeFailure)
+            MonadState EvalAnalyzeState, MonadError AnalyzeFailure)
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
@@ -256,7 +256,7 @@ evalTermO = \case
     tableRead tn .= true
     rowReadCount tn sRk += 1
 
-    readSucceeds <- use $ rowExists tn sRk
+    readSucceeds <- use $ rowExists id tn sRk
     tagAccessKey mtReads tid sRk readSucceeds
     succeeds %= (&&& readSucceeds)
 
@@ -265,12 +265,12 @@ evalTermO = \case
       sDirty <- use $ cellWritten tn cn sRk
 
       av <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
+        EType TInt     -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -378,12 +378,13 @@ evalTerm = \case
     validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
 
-    thisRowExists <- use $ rowExists tn sRk
+    thisRowExists <- use $ rowExists id tn sRk
     let writeSucceeds = case writeType of
           Pact.Insert -> bnot thisRowExists
           Pact.Write  -> true
           Pact.Update -> thisRowExists
     succeeds %= (&&& writeSucceeds)
+    rowExists id tn sRk .= true
 
     tableWritten tn .= writeSucceeds
     rowWriteCount tn sRk += 1
@@ -402,12 +403,12 @@ evalTerm = \case
           let writeDelta
                 :: forall t. (SymWord t, Num t)
                 => (S t -> S t -> S t) -> (S t -> S t -> S t)
-                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
-                -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
-                -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
+                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' EvalAnalyzeState (S t))
+                -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S t))
+                -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S t))
                 -> Analyze ()
               writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
-                let cell :: Lens' AnalyzeState (S t)
+                let cell :: Lens' EvalAnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv sVal
 
@@ -423,12 +424,12 @@ evalTerm = \case
                 mkColDeltaL  tn cn     %= plus diff
 
           case fieldType of
-            EType TInt     -> writeDelta (+) (-) intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell   tn cn sRk true .= mkS mProv sVal
-            EType TDecimal -> writeDelta (+) (-) decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell   tn cn sRk true .= mkS mProv sVal
-            EType TStr     -> stringCell tn cn sRk true .= mkS mProv sVal
-            EType TKeySet  -> ksCell     tn cn sRk true .= mkS mProv sVal
+            EType TInt     -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
+            EType TBool    -> boolCell   id tn cn sRk true .= mkS mProv sVal
+            EType TDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
+            EType TTime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 

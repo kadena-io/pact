@@ -79,6 +79,12 @@ parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
 parseColumnName bad = throwError $ T.unpack $
   "invalid table name: " <> userShow bad
 
+parseBeforeAfter :: PreProp -> PropCheck BeforeAfter
+parseBeforeAfter (PreStringLit str)
+  | str == "before" = pure Before
+  | str == "after"  = pure After
+parseBeforeAfter other = throwErrorIn other "expected 'before / 'after"
+
 -- The conversion from @Exp@ to @PreProp@
 --
 --
@@ -184,7 +190,7 @@ parseType exp = case exp of
   -- TODO
   -- # object schema type
   -- # table schema type
-  _ -> Nothing
+  _                -> Nothing
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
@@ -412,10 +418,12 @@ inferPreProp preProp = case preProp of
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
     ESimple TInt . PropSpecific . RowWriteCount tn' <$> checkPreProp TStr rk
-  PreApp s [tn, rk] | s == SRowExists -> do
+  PreApp s [tn, rk, beforeAfter] | s == SRowExists -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
-    ESimple TBool . PropSpecific . RowExists tn' <$> checkPreProp TStr rk
+    (ESimple TBool . PropSpecific) ... RowExists tn'
+      <$> checkPreProp TStr rk
+      <*> parseBeforeAfter beforeAfter
   PreApp s [PreStringLit ks] | s == SAuthorizedBy ->
     pure $ ESimple TBool (PropSpecific (KsNameAuthorized (KeySetName ks)))
   PreApp s [tn, cn, rk] | s == SRowEnforced -> do

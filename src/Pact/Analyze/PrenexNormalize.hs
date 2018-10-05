@@ -162,7 +162,8 @@ floatBoolQuantifiers p = case p of
 
   PropSpecific (RowRead  tn pRk)  -> PropSpecific . RowRead   tn <$> float pRk
   PropSpecific (RowWrite tn pRk)  -> PropSpecific . RowWrite  tn <$> float pRk
-  PropSpecific (RowExists tn pRk) -> PropSpecific . RowExists tn <$> float pRk
+  PropSpecific (RowExists tn pRk beforeAfter)
+    -> PropSpecific ... RowExists tn <$> float pRk <*> pure beforeAfter
 
 reassembleFloated :: [Quantifier] -> Prop Bool -> Prop Bool
 reassembleFloated qs prop =

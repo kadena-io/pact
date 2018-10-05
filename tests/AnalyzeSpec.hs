@@ -5,9 +5,8 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE ViewPatterns      #-}
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module AnalyzeSpec (spec) where
 
@@ -22,7 +21,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (fromJust, isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>), (<=>)),
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (<=>), (==>)),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -771,14 +770,14 @@ spec = describe "analyze" $ do
 
             (defun test:bool ()
               (insert tokens "stu" {"balance": 5, "name": "stu"})
-              (let ((stu-name    (at 'name (read tokens "stu")))
+              (let ((stu-name    (at 'name    (read tokens "stu")))
                     (stu-balance (at 'balance (read tokens "stu"))))
                 (enforce (= stu-name "stu") "name is stu")
                 (enforce (= stu-balance 5) "balance is 5")))
           |]
     in expectPass code $ Valid $
-      PNot (PropSpecific (RowExists "tokens" (PLit "stu")))
-      ==> Inj Success
+      PNot (PropSpecific (RowExists "tokens" "stu" Before))
+      ==> Success'
 
   describe "table-read.one-read" $
     let code =
@@ -797,7 +796,7 @@ spec = describe "analyze" $ do
               )
           |]
     in expectPass code $ Valid $
-         PNot (PropSpecific (RowExists "tokens" (PLit "stu")))
+         PNot (PropSpecific (RowExists "tokens" "stu" Before))
          ==> bnot Abort'
 
   describe "at.dynamic-key" $ do
@@ -900,7 +899,7 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ Inj (TableWrite "tokens") <=> Success'
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
     expectPass code $ Valid $
-      Success' <=> PNot (Inj (RowExists "tokens" (PLit "stu")))
+      Success' <=> PNot (Inj (RowExists "tokens" "stu" Before))
 
   describe "table-written.insert.partial" $ do
     let code =
@@ -934,7 +933,7 @@ spec = describe "analyze" $ do
               (update tokens "stu" {}))
           |]
     expectPass code $ Valid $
-      PropSpecific (RowExists "tokens" (PLit "stu")) <=> Success'
+      PropSpecific (RowExists "tokens" "stu" Before) <=> Success'
 
   describe "table-written.write" $ do
     let code =
@@ -1187,7 +1186,7 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid $
-      Inj (RowExists "accounts" (PVar 1 "acct")) <=> Success'
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) ==> Success'
 
   describe "with-read.nested" $ do
     let code =
@@ -1201,7 +1200,7 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid $
-      Inj (RowExists "accounts" (PVar 1 "acct")) <=> Success'
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) <=> Success'
 
   describe "with-read.overlapping-names" $ do
     let code =
@@ -1220,7 +1219,7 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid $
-      PNot (Inj (RowExists "owners" (PLit "bob"))) <=> Success'
+      PNot (Inj (RowExists "owners" "bob" Before)) <=> Success'
 
   describe "bind.from-read" $ do
     let code =
@@ -1234,7 +1233,7 @@ spec = describe "analyze" $ do
           |]
 
     expectPass code $ Valid $
-      Inj (RowExists "accounts" (PLit "bob")) <=> Success'
+      Inj (RowExists "accounts" "bob" Before) <=> Success'
 
   describe "bind.from-literal" $ do
     let code =
@@ -1499,7 +1498,8 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before) <=> Success'
 
   describe "schema-invariants.not-equals" $ do
     let code =
@@ -1516,7 +1516,10 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      <=>
+      Success'
 
   describe "schema-invariants.equals" $ do
     let code =
@@ -1533,7 +1536,10 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      <=>
+      Success'
 
   describe "format-time / parse-time" $ do
     let code =
@@ -2133,7 +2139,7 @@ spec = describe "analyze" $ do
       let code =
             [text|
               (defun test:integer ()
-                (insert accounts "test" {"balance": 5})
+                (write accounts "test" {"balance": 5})
                 (enforce false)
                 (at 'balance (read accounts "test")))
             |]
