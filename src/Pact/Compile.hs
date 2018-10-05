@@ -241,13 +241,6 @@ defun = do
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
-defun' :: Compile (Term Name)
-defun' = do
-  (dname,rty) <- first _atomAtom <$> typedAtom
-  args <- withList' Parense $ man arg
-  m <- meta
-  TDef 
-
 defpact :: Compile (Term Name)
 defpact = do
   modName <- currentModule'
