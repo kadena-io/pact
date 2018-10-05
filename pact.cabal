@@ -205,6 +205,10 @@ test-suite hspec
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
+              , bound
+              , Decimal
+              , deepseq
+              , exceptions
               , hspec
               , HUnit
               , pact
@@ -212,6 +216,7 @@ test-suite hspec
               , containers
               , directory
               , filepath
+              , mmorph
               , data-default
               , lens
               , unordered-containers
@@ -219,6 +224,7 @@ test-suite hspec
               , bytestring
               , mtl
               , text
+              , transformers
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
