@@ -17,21 +17,10 @@
      (defproperty auth-required
        (authorized-by 'accounts-admin-keyset))
 
-     ; we have two admin functions
-     (property auth-required
-       {'only: ['read-account-admin, 'fund-account]})
-
      ; every function should conserve mass except for the admin fund-account,
      ; and debit / credit which should be private
      (property conserves-mass
        {'except: ['fund-account, 'debit, 'credit]})
-
-     ; reading functions do not write
-     (property (not (table-written 'accounts))
-       {'only: ['read-account-user, 'read-account-admin, 'check-balance]})
-
-     (property (not (table-read 'accounts))
-       {'only: ['create-account]})
     ]
 
   (defschema account
@@ -52,6 +41,7 @@
   (defconst PACT_REF "ref")
 
   (defun create-account (address:string ccy)
+    @model (property (not (table-read 'accounts)))
     (insert accounts address
       { "balance": 0.0
       , "amount": 0.0
@@ -66,7 +56,8 @@
     (credit dest amount))
 
   (defun read-account-user (id)
-    "Read data for account ID"
+    @doc "Read data for account ID"
+    @model (property (not (table-written 'accounts)))
     (with-read accounts id
               { "balance":= b
               , "ccy":= c
@@ -77,14 +68,20 @@
       ))
 
   (defun read-account-admin (id)
-    "Read data for account ID, admin version"
+    @doc "Read data for account ID, admin version"
+    @model (properties
+      [ auth-required
+      , (not (table-written 'accounts))
+      ])
     (enforce-keyset 'accounts-admin-keyset)
     (read accounts id ['balance 'ccy 'amount]))
 
   (defun check-balance (balance:decimal amount:decimal)
+    @model (property (not (table-written 'accounts)))
     (enforce (<= amount balance) "Insufficient funds"))
 
   (defun fund-account (address amount)
+    @model (property auth-required)
     (enforce-keyset 'accounts-admin-keyset)
     (enforce (>= amount 0.0) "amount must be non-negative")
     (update accounts address
