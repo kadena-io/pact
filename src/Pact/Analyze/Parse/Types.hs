@@ -44,8 +44,13 @@ data PreProp
   | PreAbort
   | PreSuccess
   | PreResult
-  | PreVar     VarId Text
-  | PropDefVar       Text
+
+  -- In conversion from @Exp@ to @PreProp@ we maintain a distinction between
+  -- bound and unbound variables. Bound (@PreVar@) variables are bound inside
+  -- quantifiers. Unbound (@PreGlobalVar@) variables either refer to a property
+  -- definition or a table.
+  | PreVar       VarId Text
+  | PreGlobalVar       Text
 
   -- quantifiers
   | PreForall VarId Text QType PreProp
@@ -61,17 +66,17 @@ data PreProp
 
 instance UserShow PreProp where
   userShowsPrec prec = \case
-    PreIntegerLit i -> tShow i
-    PreStringLit t  -> tShow t
-    PreDecimalLit d -> userShow d
-    PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
-    PreBoolLit b    -> tShow (Pact.LBool b)
+    PreIntegerLit i   -> tShow i
+    PreStringLit t    -> tShow t
+    PreDecimalLit d   -> userShow d
+    PreTimeLit t      -> tShow (Pact.LTime (toPact timeIso t))
+    PreBoolLit b      -> tShow (Pact.LBool b)
 
-    PreAbort        -> STransactionAborts
-    PreSuccess      -> STransactionSucceeds
-    PreResult       -> SFunctionResult
-    PreVar _id name -> name
-    PropDefVar name -> name
+    PreAbort          -> STransactionAborts
+    PreSuccess        -> STransactionSucceeds
+    PreResult         -> SFunctionResult
+    PreVar _id name   -> name
+    PreGlobalVar name -> name
 
     PreForall _vid name qty prop ->
       "(" <> SUniversalQuantification <> " (" <> name <> ":" <> userShow qty <>

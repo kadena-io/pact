@@ -64,7 +64,7 @@ import           Pact.Analyze.Util
 
 
 parseTableName :: PreProp -> PropCheck (Prop TableName)
-parseTableName (PreStringLit str) = pure (fromString (T.unpack str))
+parseTableName (PreGlobalVar var) = pure (fromString (T.unpack var))
 parseTableName (PreVar vid name) = do
   varTy <- view (varTys . at vid)
   case varTy of
@@ -148,7 +148,7 @@ expToPreProp = \case
     mVid <- view (at var)
     pure $ case mVid of
       Just vid -> PreVar vid var
-      Nothing  -> PropDefVar var
+      Nothing  -> PreGlobalVar var
 
   exp -> throwErrorIn exp "expected property"
 
@@ -255,9 +255,9 @@ inferPreProp preProp = case preProp of
   PreSuccess      -> pure (ESimple TBool (PropSpecific Success))
 
   -- identifiers
-  PreResult       -> inferVar 0 SFunctionResult (PropSpecific Result)
-  PreVar vid name -> inferVar vid name (CoreProp (Var vid name))
-  PropDefVar name -> do
+  PreResult         -> inferVar 0 SFunctionResult (PropSpecific Result)
+  PreVar vid name   -> inferVar vid name (CoreProp (Var vid name))
+  PreGlobalVar name -> do
     defn        <- view $ localVars    . at name
     definedProp <- view $ definedProps . at name
     case defn of

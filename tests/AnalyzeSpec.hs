@@ -61,8 +61,8 @@ wrap code model =
       @model
         [; (defproperty dec-conserves-mass (t:table c:column) (= (column-delta t c) 0.0))
          ; (defproperty int-conserves-mass (t:table c:column) (= (column-delta t c) 0))
-         (defproperty my-column-delta (d:integer) (= (column-delta 'accounts 'balance) d))
-         (defproperty conserves-balance (= (column-delta 'accounts 'balance) 0))
+         (defproperty my-column-delta (d:integer) (= (column-delta accounts 'balance) d))
+         (defproperty conserves-balance (= (column-delta accounts 'balance) 0))
          (defproperty conserves-balance2 (my-column-delta 0))
          ; this hash the same name as the column, but the column name takes
          ; precedence
@@ -1150,7 +1150,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               @model
                 (properties [
-                  (not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))
+                  (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
                 ])
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
@@ -1764,16 +1764,16 @@ spec = describe "analyze" $ do
 
     it "infers column-delta" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
-      textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
+      textToPropTableEnv tableEnv TBool "(> (column-delta a 'b) 0)"
         `shouldBe`
         Right (CoreProp $ IntegerComparison Gt (Inj (IntColumnDelta "a" "b")) 0)
 
       let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
-      textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
+      textToPropTableEnv tableEnv' TBool "(> (column-delta a 'b) 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
-      textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
+      textToPropTableEnv tableEnv' TBool "(> (column-delta a \"b\") 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
@@ -1836,7 +1836,7 @@ spec = describe "analyze" $ do
       textToPropTableEnv
         tableEnv
         TBool
-        "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
+        "(not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
           (Inj $ Exists (VarId 1) "row" (EType TStr)
@@ -1848,7 +1848,7 @@ spec = describe "analyze" $ do
       let env1 = Map.singleton "from" (VarId 1)
           env2 = Map.singleton (VarId 1) (EType TStr)
           tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
-      textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
+      textToProp' env1 env2 tableEnv TBool "(row-enforced accounts 'ks from)"
       `shouldBe`
       Right (Inj $ RowEnforced
         (TableNameLit "accounts")
@@ -1857,7 +1857,7 @@ spec = describe "analyze" $ do
 
     it "parses column properties" $
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
-      in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
+      in textToPropTableEnv tableEnv TBool "(= (column-delta accounts 'balance) 0)"
            `shouldBe`
            Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
 
@@ -2206,7 +2206,7 @@ spec = describe "analyze" $ do
   describe "read (property)" $ do
     let code1 = [text|
           (defun test:object{account} (acct:string)
-            @model (property (= result (read 'accounts acct 'before)))
+            @model (property (= result (read accounts acct 'before)))
             (read accounts acct))
           |]
     expectVerified code1
@@ -2214,7 +2214,7 @@ spec = describe "analyze" $ do
     -- reading from a different account
     let code2 = [text|
           (defun test:object{account} (acct:string)
-            @model (property (= result (read 'accounts acct 'before)))
+            @model (property (= result (read accounts acct 'before)))
             (read accounts 'brian))
           |]
     expectFalsified code2
@@ -2223,7 +2223,7 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model (property
               (= 100
-                (at 'balance (read 'accounts acct 'after))))
+                (at 'balance (read accounts acct 'after))))
             (write accounts acct { 'balance: 100 }))
           |]
     expectVerified code3
@@ -2233,7 +2233,7 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model (property
               (= 100
-                (at 'balance (read 'accounts acct 'after))))
+                (at 'balance (read accounts acct 'after))))
             (write accounts acct { 'balance: 0 }))
           |]
     expectFalsified code4
@@ -2242,8 +2242,8 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model (property
               (=
-                (+ (at 'balance (read 'accounts acct 'before)) 100)
-                   (at 'balance (read 'accounts acct 'after))))
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
             (with-read accounts acct { 'balance := bal }
               (write accounts acct { 'balance: (+ 100 bal) })))
           |]
@@ -2254,8 +2254,8 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model (property
               (=
-                (+ (at 'balance (read 'accounts acct 'before)) 100)
-                   (at 'balance (read 'accounts acct 'after))))
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
             (with-read accounts acct { 'balance := bal }
               (write accounts 'brian { 'balance: (+ 100 bal) })))
           |]
@@ -2265,8 +2265,8 @@ spec = describe "analyze" $ do
           (defun test:string (acct:string)
             @model (property
               (=
-                (+ (at 'balance (read 'accounts acct 'before)) 100)
-                   (at 'balance (read 'accounts acct 'after))))
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
             (write accounts acct { 'balance: 0 })
             (with-read accounts acct { 'balance := bal }
               (enforce (> bal 0))
