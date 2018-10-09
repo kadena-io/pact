@@ -104,6 +104,7 @@ data Feature
   | FRowReadCount
   | FRowWriteCount
   | FRowExists
+  | FPropRead
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
@@ -927,6 +928,22 @@ doc FRowExists = Doc
         ]
         (TyCon bool)
   ]
+doc FPropRead = Doc
+  "read"
+  CDatabase
+  PropOnly
+  "The value of a read before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(read t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        ]
+        (TyCon obj)
+  ]
 
 -- Authorization features
 
@@ -1043,6 +1060,7 @@ PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)
 PAT(SRowWriteCount, FRowWriteCount)
 PAT(SRowExists, FRowExists)
+PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 

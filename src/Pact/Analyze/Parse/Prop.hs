@@ -79,7 +79,7 @@ parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
 parseColumnName bad = throwError $ T.unpack $
   "invalid table name: " <> userShow bad
 
-parseBeforeAfter :: PreProp -> PropCheck BeforeAfter
+parseBeforeAfter :: PreProp -> PropCheck BeforeOrAfter
 parseBeforeAfter (PreStringLit str)
   | str == "before" = pure Before
   | str == "after"  = pure After
@@ -117,6 +117,13 @@ expToPreProp = \case
 
   ParenList [EAtom' SObjectProjection, ELiteral' (LString objIx), obj]
     -> PreAt objIx <$> expToPreProp obj
+  ParenList [EAtom' SPropRead, tn, rk, ba] -> PrePropRead
+    <$> expToPreProp tn
+    <*> expToPreProp rk
+    <*> expToPreProp ba
+  exp@(ParenList [EAtom' SPropRead, _tn, _rk]) -> throwErrorIn exp
+    "read must specify a time ('before or 'after). example: (= result (read accounts user 'before))"
+
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
@@ -190,7 +197,7 @@ parseType exp = case exp of
   -- TODO
   -- # object schema type
   -- # table schema type
-  _                -> Nothing
+  _ -> Nothing
 
 -- helper view pattern for checking quantifiers
 viewQ :: PreProp -> Maybe
@@ -289,6 +296,20 @@ inferPreProp preProp = case preProp of
         Just ety@(EObjectTy schemaTy) -> pure $ EObject
           schemaTy
           (PAt objSchema (PLit (T.unpack objIx)) objProp ety)
+
+  PrePropRead tn rk ba -> do
+    tn' <- parseTableName tn
+    case tn' of
+      PLit litTn -> do
+        rk'              <- checkPreProp TStr rk
+        ba'              <- parseBeforeAfter ba
+        cm               <- view $ tableEnv . at litTn
+        case cm of
+          Just cm' -> do
+            let schema = columnMapToSchema cm'
+            pure $ EObject schema $ PropSpecific $ PropRead ba' schema tn' rk'
+          Nothing -> throwErrorT $ "couldn't find table " <> tShow litTn
+      _ -> throwErrorT $ "table name (" <> userShow tn <> ") must be a literal"
 
   PreLiteralObject obj -> do
     obj' <- traverse inferPreProp obj
@@ -432,6 +453,12 @@ inferPreProp preProp = case preProp of
     _   <- expectTableExists tn'
     _   <- expectColumnType tn' cn' TKeySet
     ESimple TBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp TStr rk
+
+  PreApp (toOp arithOpP -> Just _) _ -> asum
+    [ ESimple TInt     <$> checkPreProp TInt     preProp
+    , ESimple TDecimal <$> checkPreProp TDecimal preProp
+    , ESimple TStr     <$> checkPreProp TStr     preProp -- (string concat)
+    ]
 
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do

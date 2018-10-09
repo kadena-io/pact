@@ -49,9 +49,11 @@ instance Float Time where
 instance Float Object where
   float p = case p of
     STANDARD_INSTANCES
-    CoreProp Numerical{} -> vacuousMatch "numerical can't be Object"
+    CoreProp Numerical{}     -> vacuousMatch "numerical can't be Object"
     CoreProp LiteralObject{} -> ([], p)
-    CoreProp ObjectMerge{} -> ([], p)
+    CoreProp ObjectMerge{}   -> ([], p)
+    PropSpecific (PropRead ba schema tn pRk)
+      -> PropSpecific . PropRead ba schema tn <$> float pRk
 
 instance Float KeySet where
   float p = case p of

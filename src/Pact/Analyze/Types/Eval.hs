@@ -17,7 +17,7 @@ module Pact.Analyze.Types.Eval where
 import           Control.Applicative          (ZipList (..))
 import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
                                                makeLenses, singular, view, (&),
-                                               (.~), (<&>), (?~), _1, _2)
+                                               (.~), (<&>), (?~))
 import           Control.Lens.Wrapped
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
@@ -127,7 +127,7 @@ sbvIdentifier = T.replace "-" "_"
 data QueryEnv
   = QueryEnv
     { _qeAnalyzeEnv    :: AnalyzeEnv
-    , _qeAnalyzeState  :: AnalyzeState (CellValues, CellValues)
+    , _qeAnalyzeState  :: QueryAnalyzeState
     , _qeAnalyzeResult :: AVal
     , _qeTableScope    :: Map VarId TableName
     --
@@ -161,6 +161,9 @@ data SymbolicCells
 
 deriving instance Mergeable SymbolicCells
 
+-- In evaluation, we have one copy of @CellValues@, which we update as cells
+-- are written. For querying we have two copies, representing the db state
+-- before and after the transaction being analyzed.
 data CellValues
   = CellValues
     { _cvTableCells :: TableMap SymbolicCells
@@ -216,7 +219,13 @@ data AnalyzeState a
     }
   deriving (Show)
 
-type QueryAnalyzeState = AnalyzeState (CellValues, CellValues)
+data BeforeAndAfter = BeforeAndAfter
+  { _before :: CellValues
+  , _after  :: CellValues
+  }
+
+-- See note on @CellValues@
+type QueryAnalyzeState = AnalyzeState BeforeAndAfter
 type EvalAnalyzeState  = AnalyzeState CellValues
 
 data AnalysisResult
@@ -229,6 +238,7 @@ data AnalysisResult
 
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
+makeLenses ''BeforeAndAfter
 makeLenses ''CellValues
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
@@ -244,8 +254,9 @@ mkQueryEnv
   -> CellValues
   -> AVal
   -> QueryEnv
-mkQueryEnv env state cv0 cv1 result
-  = QueryEnv env (state & latticeState . lasExtra .~ (cv0, cv1)) result Map.empty Map.empty
+mkQueryEnv env state cv0 cv1 result =
+  let state' = state & latticeState . lasExtra .~ BeforeAndAfter cv0 cv1
+  in QueryEnv env state' result Map.empty Map.empty
 
 mkInitialAnalyzeState :: [Table] -> EvalAnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
@@ -445,12 +456,6 @@ rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
 rowWriteCount :: TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
 rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
-
-beforeAfterLens
-  :: BeforeAfter -> Lens' (CellValues, CellValues) CellValues
-beforeAfterLens = \case
-  Before -> _1
-  After  -> _2
 
 rowExists
   :: Lens' a CellValues

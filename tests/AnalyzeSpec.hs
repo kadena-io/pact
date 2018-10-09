@@ -760,7 +760,7 @@ spec = describe "analyze" $ do
       expectPass code $ Valid $ PVar 1 "x" ==> Inj Success
       expectPass code $ Valid $ PNot (PVar 1 "x") ==> PNot (Inj Success)
 
-  describe "table-read.multiple-read" $
+  describe "table-read.multiple-read" $ do
     let code =
           [text|
             (defschema token-row
@@ -775,11 +775,15 @@ spec = describe "analyze" $ do
                 (enforce (= stu-name "stu") "name is stu")
                 (enforce (= stu-balance 5) "balance is 5")))
           |]
-    in expectPass code $ Valid $
+    expectPass code $ Valid $
       PNot (PropSpecific (RowExists "tokens" "stu" Before))
-      ==> Success'
+      <=> Success'
+    expectPass code $ Valid $
+      Success'
+      ==>
+      PropSpecific (RowExists "tokens" "stu" After)
 
-  describe "table-read.one-read" $
+  describe "table-read.one-read" $ do
     let code =
           [text|
             (defschema token-row
@@ -795,9 +799,13 @@ spec = describe "analyze" $ do
                 )
               )
           |]
-    in expectPass code $ Valid $
-         PNot (PropSpecific (RowExists "tokens" "stu" Before))
-         ==> bnot Abort'
+    expectPass code $ Valid $
+       PNot (PropSpecific (RowExists "tokens" "stu" Before))
+       <=> bnot Abort'
+    expectPass code $ Valid $
+       Success'
+       ==>
+       PropSpecific (RowExists "tokens" "stu" After)
 
   describe "at.dynamic-key" $ do
     let code =
@@ -900,6 +908,8 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
     expectPass code $ Valid $
       Success' <=> PNot (Inj (RowExists "tokens" "stu" Before))
+    expectPass code $ Valid $
+      Success' ==> Inj (RowExists "tokens" "stu" After)
 
   describe "table-written.insert.partial" $ do
     let code =
@@ -933,7 +943,7 @@ spec = describe "analyze" $ do
               (update tokens "stu" {}))
           |]
     expectPass code $ Valid $
-      PropSpecific (RowExists "tokens" "stu" Before) <=> Success'
+      Success' <=> PropSpecific (RowExists "tokens" "stu" Before)
 
   describe "table-written.write" $ do
     let code =
@@ -2192,3 +2202,100 @@ spec = describe "analyze" $ do
 
     expectVerified'  "(property conserves-balance {'only:   []    })" bad
     expectFalsified' "(property conserves-balance {'only:   ['bad]})" bad
+
+  describe "read (property)" $ do
+    let code1 = [text|
+          (defun test:object{account} (acct:string)
+            @model (property (= result (read 'accounts acct 'before)))
+            (read accounts acct))
+          |]
+    expectVerified code1
+
+    -- reading from a different account
+    let code2 = [text|
+          (defun test:object{account} (acct:string)
+            @model (property (= result (read 'accounts acct 'before)))
+            (read accounts 'brian))
+          |]
+    expectFalsified code2
+
+    let code3 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (= 100
+                (at 'balance (read 'accounts acct 'after))))
+            (write accounts acct { 'balance: 100 }))
+          |]
+    expectVerified code3
+
+    -- writing to a different account
+    let code4 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (= 100
+                (at 'balance (read 'accounts acct 'after))))
+            (write accounts acct { 'balance: 0 }))
+          |]
+    expectFalsified code4
+
+    let code5 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read 'accounts acct 'before)) 100)
+                   (at 'balance (read 'accounts acct 'after))))
+            (with-read accounts acct { 'balance := bal }
+              (write accounts acct { 'balance: (+ 100 bal) })))
+          |]
+    expectVerified code5
+
+    -- writing to a different account
+    let code6 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read 'accounts acct 'before)) 100)
+                   (at 'balance (read 'accounts acct 'after))))
+            (with-read accounts acct { 'balance := bal }
+              (write accounts 'brian { 'balance: (+ 100 bal) })))
+          |]
+    expectFalsified code6
+
+    let code7 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read 'accounts acct 'before)) 100)
+                   (at 'balance (read 'accounts acct 'after))))
+            (write accounts acct { 'balance: 0 })
+            (with-read accounts acct { 'balance := bal }
+              (enforce (> bal 0))
+              (write accounts acct { 'balance: 100 })))
+          |]
+    let acct           = PVar 1 "acct"
+        schema         = Schema $ Map.singleton "balance" $ EType TInt
+        readBalance ba = PAt schema "balance"
+          (PropSpecific $ PropRead ba schema "accounts" acct)
+          (EType TInt)
+        exists ba      = PropSpecific (RowExists "accounts" acct ba)
+
+    expectPass code7 $ Valid $
+      Success'
+      ==>
+      PAnd (exists Before) (exists After)
+
+    expectPass code7 $ Valid $
+      Success'
+      -- TODO: this arrow should point both ways
+      ==>
+      Inj (IntegerComparison Eq (readBalance After) 100)
+
+    -- this should hold in general (for any contract)
+    expectPass code7 $ Valid $ exists Before ==> exists After
+
+    -- TODO:
+    -- this could be generalized to a property that should hold in general
+    -- expectPass code7 $ Valid $
+    --   Abort'
+    --   ==>
+    --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))

@@ -20,7 +20,7 @@ import           Prelude                    hiding (exp)
 
 import           Pact.Types.Lang            (AtomExp (..), Exp (..),
                                              ListDelimiter (..), ListExp (..),
-                                             Literal(LString), LiteralExp (..),
+                                             Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
@@ -55,6 +55,7 @@ data PreProp
   | PreApp Text [PreProp]
 
   | PreAt Text PreProp
+  | PrePropRead PreProp PreProp PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving Eq
 
@@ -82,6 +83,9 @@ instance UserShow PreProp where
       "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
       "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+    PrePropRead tn rk ba ->
+      "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
+        userShow ba <> ")"
     PreLiteralObject obj ->
       userShowsPrec prec obj
 
