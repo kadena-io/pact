@@ -10,9 +10,9 @@ These are functions available in properties and invariants -- not necessarily in
 (+ x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* takes `y`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Addition of integers and decimals.
@@ -25,9 +25,9 @@ Supported in either invariants or properties.
 (- x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* takes `y`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Subtraction of integers and decimals.
@@ -40,9 +40,9 @@ Supported in either invariants or properties.
 (* x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* takes `y`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Multiplication of integers and decimals.
@@ -55,9 +55,9 @@ Supported in either invariants or properties.
 (/ x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* takes `y`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Division of integers and decimals.
@@ -70,9 +70,9 @@ Supported in either invariants or properties.
 (^ x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* takes `y`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Exponentiation of integers and decimals.
@@ -85,9 +85,9 @@ Supported in either invariants or properties.
 (log b x)
 ```
 
-* takes `b` of type _a_
-* takes `x` of type _a_
-* produces type _a_
+* takes `b`: _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Logarithm of `x` base `b`.
@@ -100,8 +100,8 @@ Supported in either invariants or properties.
 (- x)
 ```
 
-* takes `x` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Negation of integers and decimals.
@@ -114,8 +114,8 @@ Supported in either invariants or properties.
 (sqrt x)
 ```
 
-* takes `x` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Square root of integers and decimals.
@@ -128,8 +128,8 @@ Supported in either invariants or properties.
 (ln x)
 ```
 
-* takes `x` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Logarithm of integers and decimals base e.
@@ -142,8 +142,8 @@ Supported in either invariants or properties.
 (exp x)
 ```
 
-* takes `x` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Exponential of integers and decimals. e raised to the integer or decimal `x`.
@@ -156,8 +156,8 @@ Supported in either invariants or properties.
 (abs x)
 ```
 
-* takes `x` of type _a_
-* produces type _a_
+* takes `x`: _a_
+* produces _a_
 * where _a_ is of type `integer` or `decimal`
 
 Absolute value of integers and decimals.
@@ -170,16 +170,16 @@ Supported in either invariants or properties.
 (round x)
 ```
 
-* takes `x` of type `decimal`
-* produces type `integer`
+* takes `x`: `decimal`
+* produces `integer`
 
 ```lisp
 (round x prec)
 ```
 
-* takes `x` of type `decimal`
-* takes `prec` of type `integer`
-* produces type `integer`
+* takes `x`: `decimal`
+* takes `prec`: `integer`
+* produces `integer`
 
 Banker's rounding value of decimal `x` as integer, or to `prec` precision as decimal.
 
@@ -191,16 +191,16 @@ Supported in either invariants or properties.
 (ceiling x)
 ```
 
-* takes `x` of type `decimal`
-* produces type `integer`
+* takes `x`: `decimal`
+* produces `integer`
 
 ```lisp
 (ceiling x prec)
 ```
 
-* takes `x` of type `decimal`
-* takes `prec` of type `integer`
-* produces type `integer`
+* takes `x`: `decimal`
+* takes `prec`: `integer`
+* produces `integer`
 
 Rounds the decimal `x` up to the next integer, or to `prec` precision as decimal.
 
@@ -212,16 +212,16 @@ Supported in either invariants or properties.
 (floor x)
 ```
 
-* takes `x` of type `decimal`
-* produces type `integer`
+* takes `x`: `decimal`
+* produces `integer`
 
 ```lisp
 (floor x prec)
 ```
 
-* takes `x` of type `decimal`
-* takes `prec` of type `integer`
-* produces type `integer`
+* takes `x`: `decimal`
+* takes `prec`: `integer`
+* produces `integer`
 
 Rounds the decimal `x` down to the previous integer, or to `prec` precision as decimal.
 
@@ -233,9 +233,9 @@ Supported in either invariants or properties.
 (mod x y)
 ```
 
-* takes `x` of type `integer`
-* takes `y` of type `integer`
-* produces type `integer`
+* takes `x`: `integer`
+* takes `y`: `integer`
+* produces `integer`
 
 Integer modulus
 
@@ -249,9 +249,9 @@ Supported in either invariants or properties.
 (> x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer` or `decimal`
 
 True if `x` > `y`
@@ -264,9 +264,9 @@ Supported in either invariants or properties.
 (< x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer` or `decimal`
 
 True if `x` < `y`
@@ -279,9 +279,9 @@ Supported in either invariants or properties.
 (>= x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer` or `decimal`
 
 True if `x` >= `y`
@@ -294,9 +294,9 @@ Supported in either invariants or properties.
 (<= x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer` or `decimal`
 
 True if `x` <= `y`
@@ -309,9 +309,9 @@ Supported in either invariants or properties.
 (= x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer`, `decimal`, `string`, `time`, `bool`, `object`,  or `keyset`
 
 True if `x` = `y`
@@ -324,9 +324,9 @@ Supported in either invariants or properties.
 (!= x y)
 ```
 
-* takes `x` of type _a_
-* takes `y` of type _a_
-* produces type `bool`
+* takes `x`: _a_
+* takes `y`: _a_
+* produces `bool`
 * where _a_ is of type `integer`, `decimal`, `string`, `time`, `bool`, `object`,  or `keyset`
 
 True if `x` != `y`
@@ -339,9 +339,9 @@ Supported in either invariants or properties.
 (and x y)
 ```
 
-* takes `x` of type `bool`
-* takes `y` of type `bool`
-* produces type `bool`
+* takes `x`: `bool`
+* takes `y`: `bool`
+* produces `bool`
 
 Short-circuiting logical conjunction
 
@@ -353,9 +353,9 @@ Supported in either invariants or properties.
 (or x y)
 ```
 
-* takes `x` of type `bool`
-* takes `y` of type `bool`
-* produces type `bool`
+* takes `x`: `bool`
+* takes `y`: `bool`
+* produces `bool`
 
 Short-circuiting logical disjunction
 
@@ -367,8 +367,8 @@ Supported in either invariants or properties.
 (not x)
 ```
 
-* takes `x` of type `bool`
-* produces type `bool`
+* takes `x`: `bool`
+* produces `bool`
 
 Logical negation
 
@@ -380,9 +380,9 @@ Supported in either invariants or properties.
 (when x y)
 ```
 
-* takes `x` of type `bool`
-* takes `y` of type `bool`
-* produces type `bool`
+* takes `x`: `bool`
+* takes `y`: `bool`
+* produces `bool`
 
 Logical implication. Equivalent to `(or (not x) y)`.
 
@@ -396,9 +396,9 @@ Supported in either invariants or properties.
 (at k o)
 ```
 
-* takes `k` of type `string`
-* takes `o` of type `object`
-* produces type `bool`
+* takes `k`: `string`
+* takes `o`: `object`
+* produces `bool`
 
 Object projection
 
@@ -410,9 +410,9 @@ Supported in either invariants or properties.
 (+ x y)
 ```
 
-* takes `x` of type `object`
-* takes `y` of type `object`
-* produces type `object`
+* takes `x`: `object`
+* takes `y`: `object`
+* produces `object`
 
 Object merge
 
@@ -426,8 +426,8 @@ Supported in either invariants or properties.
 (length s)
 ```
 
-* takes `s` of type `string`
-* produces type `integer`
+* takes `s`: `string`
+* produces `integer`
 
 String length
 
@@ -439,9 +439,9 @@ Supported in either invariants or properties.
 (+ s t)
 ```
 
-* takes `s` of type `string`
-* takes `t` of type `string`
-* produces type `string`
+* takes `s`: `string`
+* takes `t`: `string`
+* produces `string`
 
 String concatenation
 
@@ -455,9 +455,9 @@ Supported in either invariants or properties.
 (add-time t s)
 ```
 
-* takes `t` of type `time`
-* takes `s` of type _a_
-* produces type `time`
+* takes `t`: `time`
+* takes `s`: _a_
+* produces `time`
 * where _a_ is of type `integer` or `decimal`
 
 Add seconds to a time
@@ -472,9 +472,9 @@ Supported in either invariants or properties.
 (forall (x:string) y)
 ```
 
-* binds `x` of type _a_
-* takes `y` of type _r_
-* produces type _r_
+* binds `x`: _a_
+* takes `y`: _r_
+* produces _r_
 * where _a_ is _any type_
 * where _r_ is _any type_
 
@@ -488,9 +488,9 @@ Supported in properties only.
 (exists (x:string) y)
 ```
 
-* binds `x` of type _a_
-* takes `y` of type _r_
-* produces type _r_
+* binds `x`: _a_
+* takes `y`: _r_
+* produces _r_
 * where _a_ is _any type_
 * where _r_ is _any type_
 
@@ -545,8 +545,8 @@ Supported in properties only.
 (table-written t)
 ```
 
-* takes `t` of type _a_
-* produces type `bool`
+* takes `t`: _a_
+* produces `bool`
 * where _a_ is of type `table` or `string`
 
 Whether a table is written in the function under analysis
@@ -559,8 +559,8 @@ Supported in properties only.
 (table-read t)
 ```
 
-* takes `t` of type _a_
-* produces type `bool`
+* takes `t`: _a_
+* produces `bool`
 * where _a_ is of type `table` or `string`
 
 Whether a table is read in the function under analysis
@@ -573,10 +573,10 @@ Supported in properties only.
 (cell-delta t c r)
 ```
 
-* takes `t` of type _a_
-* takes `c` of type _b_
-* takes `r` of type `string`
-* produces type _c_
+* takes `t`: _a_
+* takes `c`: _b_
+* takes `r`: `string`
+* produces _c_
 * where _a_ is of type `table` or `string`
 * where _b_ is of type `column` or `string`
 * where _c_ is of type `integer` or `decimal`
@@ -591,9 +591,9 @@ Supported in properties only.
 (column-delta t c)
 ```
 
-* takes `t` of type _a_
-* takes `c` of type _b_
-* produces type _c_
+* takes `t`: _a_
+* takes `c`: _b_
+* produces _c_
 * where _a_ is of type `table` or `string`
 * where _b_ is of type `column` or `string`
 * where _c_ is of type `integer` or `decimal`
@@ -608,9 +608,9 @@ Supported in properties only.
 (row-read t r)
 ```
 
-* takes `t` of type _a_
-* takes `r` of type `string`
-* produces type `bool`
+* takes `t`: _a_
+* takes `r`: `string`
+* produces `bool`
 * where _a_ is of type `table` or `string`
 
 Whether a row is read in the function under analysis
@@ -623,9 +623,9 @@ Supported in properties only.
 (row-written t r)
 ```
 
-* takes `t` of type _a_
-* takes `r` of type `string`
-* produces type `bool`
+* takes `t`: _a_
+* takes `r`: `string`
+* produces `bool`
 * where _a_ is of type `table` or `string`
 
 Whether a row is written in the function under analysis
@@ -638,9 +638,9 @@ Supported in properties only.
 (row-read-count t r)
 ```
 
-* takes `t` of type _a_
-* takes `r` of type `string`
-* produces type `integer`
+* takes `t`: _a_
+* takes `r`: `string`
+* produces `integer`
 * where _a_ is of type `table` or `string`
 
 The number of times a row is read during a transaction
@@ -653,12 +653,44 @@ Supported in properties only.
 (row-write-count t r)
 ```
 
-* takes `t` of type _a_
-* takes `r` of type `string`
-* produces type `integer`
+* takes `t`: _a_
+* takes `r`: `string`
+* produces `integer`
 * where _a_ is of type `table` or `string`
 
 The number of times a row is written during a transaction
+
+Supported in properties only.
+
+### row-exists {#FRowExists}
+
+```lisp
+(row-exists t r)
+```
+
+* takes `t`: _a_
+* takes `r`: `string`
+* takes `time`: one of {"before", "after"}
+* produces `bool`
+* where _a_ is of type `table` or `string`
+
+Whether a row exists before or after a transaction
+
+Supported in properties only.
+
+### read {#FPropRead}
+
+```lisp
+(read t r)
+```
+
+* takes `t`: _a_
+* takes `r`: `string`
+* takes `time`: one of {"before", "after"}
+* produces `object`
+* where _a_ is of type `table` or `string`
+
+The value of a read before or after a transaction
 
 Supported in properties only.
 
@@ -670,8 +702,8 @@ Supported in properties only.
 (authorized-by k)
 ```
 
-* takes `k` of type `string`
-* produces type `bool`
+* takes `k`: `string`
+* produces `bool`
 
 Whether the named keyset is enforced by the function under analysis
 
@@ -683,10 +715,10 @@ Supported in properties only.
 (row-enforced t c r)
 ```
 
-* takes `t` of type _a_
-* takes `c` of type _b_
-* takes `r` of type `string`
-* produces type `bool`
+* takes `t`: _a_
+* takes `c`: _b_
+* takes `r`: `string`
+* produces `bool`
 * where _a_ is of type `table` or `string`
 * where _b_ is of type `column` or `string`
 
