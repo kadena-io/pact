@@ -10,7 +10,7 @@
 \  Version: 0.2                                                                \
 \  Author: Stuart Popejoy"
 
-  ;; mock preview of system library with get-current-time
+  ;; mock preview of system library with get-system-time
   (use system)
 
   (defschema account

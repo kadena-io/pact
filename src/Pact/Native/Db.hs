@@ -70,7 +70,7 @@ dbDefs =
     ,defNative (specialForm WithRead) withRead
      (funType a [("table",tableTy),("key",tTyString),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.\
-     \`$(with-read 'accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
+     \`$(with-read accounts id { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defNative (specialForm WithDefaultRead) withDefaultRead
@@ -78,14 +78,14 @@ dbDefs =
       [("table",tableTy),("key",tTyString),("defaults",rowTy),("bindings",bindTy)])
      "Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. \
      \If row not found, read columns from DEFAULTS, an object with matching key names. \
-     \`$(with-default-read 'accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
+     \`$(with-default-read accounts id { \"balance\": 0, \"ccy\": \"USD\" } { \"balance\":= bal, \"ccy\":= ccy }\n \
      \  (format \"Balance for {} is {} {}\" [id bal ccy]))`"
 
     ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
      "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
-     \`$(read 'accounts id ['balance 'ccy])`"
+     \`$(read accounts id ['balance 'ccy])`"
 
     ,defNative (specialForm Select) select
       (funType (TyList rowTy)  [("table",tableTy),("where",TyFun $ funType' tTyBool [("row",rowTy)])] <>
@@ -96,28 +96,28 @@ dbDefs =
 
     ,defGasRNative "keys" keys'
      (funType (TyList tTyString) [("table",tableTy)])
-     "Return all keys in TABLE. `$(keys 'accounts)`"
+     "Return all keys in TABLE. `$(keys accounts)`"
 
     ,defGasRNative "txids" txids'
      (funType (TyList tTyInteger) [("table",tableTy),("txid",tTyInteger)])
      "Return all txid values greater than or equal to TXID in TABLE. `$(txids accounts 123849535)`"
 
     ,defRNative "write" (write Write) writeArgs
-     (writeDocs "." "(write 'accounts { \"balance\": 100.0 })")
+     (writeDocs "." "(write accounts { \"balance\": 100.0 })")
     ,defRNative "insert" (write Insert) writeArgs
      (writeDocs ", failing if data already exists for KEY."
-     "(insert 'accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
+     "(insert accounts { \"balance\": 0.0, \"note\": \"Created account.\" })")
     ,defRNative "update" (write Update) writeArgs
      (writeDocs ", failing if data does not exist for KEY."
-      "(update 'accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
+      "(update accounts { \"balance\": (+ bal amount), \"change\": amount, \"note\": \"credit\" })")
     ,defGasRNative "txlog" txlog
      (funType (TyList tTyValue) [("table",tableTy),("txid",tTyInteger)])
-      "Return all updates to TABLE performed in transaction TXID. `$(txlog 'accounts 123485945)`"
+      "Return all updates to TABLE performed in transaction TXID. `$(txlog accounts 123485945)`"
     ,defGasRNative "keylog" keylog
      (funType (TyList (tTyObject TyAny)) [("table",tableTy),("key",tTyString),("txid",tTyInteger)])
       "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
       \indexed by txid. \
-      \`$(keylog 'accounts \"Alice\" 123485945)`"
+      \`$(keylog accounts \"Alice\" 123485945)`"
     ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyValue [("table",tableTy)])
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
