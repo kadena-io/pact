@@ -36,13 +36,18 @@ module Pact.Types.Term
    BindType(..),
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
+   ModuleName(..),
+   InterfaceName(..),
+   Name(..),
    ConstVal(..),
+   Interface(..), interfaceCode, interfaceMeta, interfaceName,
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tInterfaceBody, tInterfaceDef,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -55,7 +60,6 @@ module Pact.Types.Term
 import Control.Lens (makeLenses)
 import Control.Applicative
 import Data.List
-import Data.List.NonEmpty (NonEmpty(..))
 import Control.Monad
 import Prelude
 import Control.Arrow ((***),first)
@@ -153,6 +157,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     }
+            
 
 instance Show FunApp where
   show FunApp {..} =
@@ -284,19 +289,12 @@ instance FromJSON Module where
     o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing Nothing) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
-data Signature n = Signature
-  { _sigName :: !SignatureName
-  , _sigFunDef :: !(FunType (Term n))
-  , _sigMeta :: !Meta
-  } deriving (Eq, Show, Functor, Foldable, Traversable)
-
-data Interface n = Interface
+data Interface = Interface
   { _interfaceName :: !InterfaceName
-  , _interfaceDefs :: !(NonEmpty (Signature n))
   , _interfaceCode :: !Code
   , _interfaceMeta :: !Meta
-  } deriving (Eq, Show, Functor, Foldable, Traversable)
-  
+  } deriving (Eq, Show)
+
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
@@ -320,7 +318,8 @@ data Term n =
     , _tInfo :: !Info
     } |
     TInterface {
-      _tInterfaceDef :: Interface n
+      _tInterfaceDef :: Interface
+    , _tInterfaceBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
     TList {
@@ -418,7 +417,7 @@ data Term n =
 instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
-    show i@TInterface {..} =
+    show TInterface {..} =
       "(TInterface " ++ show _tInterfaceDef ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
@@ -497,7 +496,7 @@ instance Applicative Term where
 instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule m (b >>>= f) i
-    TInterface iface i >>= f = TInterface (fmap (>>= f) iface) i
+    TInterface iface b i >>= f = TInterface iface (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
@@ -625,7 +624,7 @@ termEq _ _ = False
 
 abbrev :: Show t => Term t -> String
 abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
-abbrev (TInterface i _ _ ) = "<interface " ++ asString' (_iName i) ++ ">"
+abbrev (TInterface i _ _) = "<interface " ++ asString' (_interfaceName i) ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
@@ -650,3 +649,4 @@ makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
+makeLenses ''Interface

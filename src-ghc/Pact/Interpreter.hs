@@ -88,7 +88,7 @@ setupEvalEnv dbEnv ent mode msgData refStore gasEnv =
         modeToTx Local = Nothing
 
 initRefStore :: RefStore
-initRefStore = RefStore nativeDefs HM.empty
+initRefStore = RefStore nativeDefs HM.empty HM.empty
 
 mkSQLiteEnv :: Logger -> Bool -> PSL.SQLiteConfig -> Loggers -> IO (PactDbEnv (DbEnv PSL.SQLite))
 mkSQLiteEnv initLog deleteOldFile c loggers = do

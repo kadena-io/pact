@@ -286,16 +286,19 @@ moduleForm = do
 
 interfaceForm :: Compile (Term Name)
 interfaceForm = do
-  iname <- _atomAtom <$> typedAtom
-  defs <- many defun'
+  iname' <- _atomAtom <$> bareAtom
+  m <- meta
   info <- contextInfo
-  return $ TInterface (InterfaceName iname) defs   
-  where
-    defun' = do
-      (dn,rty) <- first _atomAtom <$> typedAtom
-      args <- withList' Parens $ man arg
-      m <- meta
-      return (dn, FunType args rty, m)
+  (bd,bi) <- bodyForm'
+  let code = case info of
+        Info Nothing -> "<code unavailable>"
+        Info (Just (c,_)) -> c
+      iname = InterfaceName iname'
+  eof
+  return $ TInterface
+    (Interface iname code m)
+    (abstract (const Nothing) (TList bd TyAny bi)) info 
+    
       
   
 step :: Compile (Term Name)

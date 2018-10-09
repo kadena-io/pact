@@ -208,6 +208,7 @@ data Domain k v where
   UserTables :: !TableName -> Domain RowKey (Columns Persistable)
   KeySets :: Domain KeySetName KeySet
   Modules :: Domain ModuleName Module
+--  Interfaces :: Domain InterfaceName Interface
 deriving instance Eq (Domain k v)
 deriving instance Show (Domain k v)
 instance AsString (Domain k v) where

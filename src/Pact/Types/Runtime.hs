@@ -23,13 +23,13 @@ module Pact.Types.Runtime
    PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData(..), mdModule, mdRefMap,
    InterfaceData(..), idInterface, idRefMap,
-   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStoreModules,
+   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules,
+   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules, rsNewInterfaces,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
@@ -140,7 +140,7 @@ makeLenses ''ModuleData
 data InterfaceData = InterfaceData
   { _idInterface :: Interface
   , _idRefMap :: HM.HashMap Text Ref
-  } deriving (Eq, Show)
+  } deriving (Show, Eq)
 makeLenses ''InterfaceData
 
 -- | Storage for loaded modules, interfaces, and natives.
@@ -148,10 +148,9 @@ data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
     , _rsInterfaces :: HM.HashMap InterfaceName InterfaceData
-    } deriving (Eq,Show)
+    } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty HM.empty
-
 
 newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
@@ -225,15 +224,19 @@ data RefState = RefState {
     , _rsLoadedInterfaces :: HM.HashMap InterfaceName Interface
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
+      -- | Interfaces that were compiled and loaded in this tx.
+    , _rsNewInterfaces :: HM.HashMap InterfaceName InterfaceData
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty HM.empty
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty HM.empty HM.empty
 
--- | Update for newly-loaded modules.
-updateRefStoreModules :: RefState -> RefStore -> RefStore
-updateRefStoreModules RefState {..}
-  | HM.null _rsNewModules = id
-  | otherwise = over rsModules $ HM.union _rsNewModules
+-- | Update for newly-loaded modules and interfaces.
+updateRefStore :: RefState -> RefStore -> RefStore 
+updateRefStore RefState {..} rstore 
+  | HM.null _rsNewModules && HM.null _rsNewInterfaces = rstore
+  | HM.null _rsNewModules = over rsInterfaces (HM.union _rsNewInterfaces) rstore
+  | HM.null _rsNewInterfaces = over rsModules (HM.union _rsNewModules) rstore
+  | otherwise = over rsInterfaces (HM.union _rsNewInterfaces) (over rsModules (HM.union _rsNewModules) rstore) 
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {
@@ -254,6 +257,7 @@ newtype Eval e a =
     Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
     deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
+
 
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
@@ -296,7 +300,7 @@ method i f = do
 readRow :: (IsString k,FromJSON v) => Info -> Domain k v -> k -> Eval e (Maybe v)
 readRow i d k = method i $ \db -> _readRow db d k
 
--- | Invoke '_writeRow'
+-- | Invoke '_writeRow'γ
 writeRow :: (AsString k,ToJSON v) => Info -> WriteType -> Domain k v -> k -> v -> Eval e ()
 writeRow i w d k v = method i $ \db -> _writeRow db w d k v
 
@@ -383,8 +387,11 @@ argsError' i as = throwArgsError i (map (toTerm.pack.abbrev) as) "Invalid argume
 --
 
 newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+
 instance PureNoDb (EnvNoDb e)
+
 newtype EnvSysRead e = EnvSysRead (EvalEnv e)
+
 instance PureSysRead (EnvSysRead e)
 instance PureNoDb (EnvSysRead e)
 
