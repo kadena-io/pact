@@ -602,6 +602,38 @@ The difference in a column's total summed value before and after the transaction
 
 Supported in properties only.
 
+### column-written {#FColumnWritten}
+
+```lisp
+(column-written t c)
+```
+
+* takes `t`: _a_
+* takes `c`: _b_
+* produces `bool`
+* where _a_ is of type `table` or `string`
+* where _b_ is of type `column` or `string`
+
+Whether a column is written to in a transaction
+
+Supported in properties only.
+
+### column-read {#FColumnRead}
+
+```lisp
+(column-read t c)
+```
+
+* takes `t`: _a_
+* takes `c`: _b_
+* produces `bool`
+* where _a_ is of type `table` or `string`
+* where _b_ is of type `column` or `string`
+
+Whether a column is read from in a transaction
+
+Supported in properties only.
+
 ### row-read {#FRowRead}
 
 ```lisp

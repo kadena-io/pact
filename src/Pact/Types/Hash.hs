@@ -27,10 +27,11 @@ import Pact.Types.Util
 
 #if !defined(ghcjs_HOST_OS)
 
-import qualified Crypto.Hash.BLAKE2.BLAKE2b as BLAKE
+import qualified Data.ByteArray as ByteArray
+import qualified Crypto.Hash as Crypto
 
 hash :: ByteString -> Hash
-hash = Hash . BLAKE.hash hashLengthAsBS mempty
+hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_512
 {-# INLINE hash #-}
 
 #else
@@ -38,7 +39,9 @@ hash = Hash . BLAKE.hash hashLengthAsBS mempty
 import Crypto.Hash.Blake2Native
 
 hash :: ByteString -> Hash
-hash bs = let (Right h) = blake2b hashLengthAsBS mempty bs in Hash h
+hash bs = case blake2b hashLengthAsBS mempty bs of
+  Left _ -> error "hashing failed"
+  Right h -> Hash h
 
 #endif
 
@@ -61,7 +64,7 @@ hashAsBasedInteger
   -> (Char -> Integer) -- ^ the a-valued representation for a given character
   -> Text -- ^ The string to convert to integral base-a
   -> Either Text Integer
-hashAsBasedInteger base k h 
+hashAsBasedInteger base k h
   | base <= 1 = Left $
     "readStringAtBase: applied to unsupported base - " `append` asString base
   | null h = Left $

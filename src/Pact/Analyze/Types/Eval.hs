@@ -50,6 +50,7 @@ import           Pact.Analyze.Types           hiding (tableName)
 import qualified Pact.Analyze.Types           as Types
 import           Pact.Analyze.Util
 
+
 newtype SymbolicSuccess = SymbolicSuccess { successBool :: SBV Bool }
   deriving (Show, Generic, Mergeable)
 
@@ -130,11 +131,7 @@ data QueryEnv
     , _qeAnalyzeState  :: QueryAnalyzeState
     , _qeAnalyzeResult :: AVal
     , _qeTableScope    :: Map VarId TableName
-    --
-    -- TODO: implement column quantification. update 'getLitColName', and
-    -- 'evalProp' for @Forall@ and @Exists@ at the same time.
-    --
-    , _qeColumnScope   :: Map VarId ()
+    , _qeColumnScope   :: Map VarId ColumnName
     }
 
 newtype Constraints
@@ -186,6 +183,8 @@ data LatticeAnalyzeState a
     , _lasMaintainsInvariants :: TableMap (ZipList (Located (SBV Bool)))
     , _lasTablesRead          :: SFunArray TableName Bool
     , _lasTablesWritten       :: SFunArray TableName Bool
+    , _lasColumnsRead         :: TableMap (ColumnMap (SBV Bool))
+    , _lasColumnsWritten      :: TableMap (ColumnMap (SBV Bool))
     , _lasIntCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Integer))
     , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
@@ -266,6 +265,8 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasMaintainsInvariants = mkMaintainsInvariants
         , _lasTablesRead          = mkSFunArray $ const false
         , _lasTablesWritten       = mkSFunArray $ const false
+        , _lasColumnsRead         = mkTableColumnMap (const True) false
+        , _lasColumnsWritten      = mkTableColumnMap (const True) false
         , _lasIntCellDeltas       = intCellDeltas
         , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
@@ -298,7 +299,9 @@ mkInitialAnalyzeState tables = AnalyzeState
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
-      :: (Pact.Type Pact.UserType -> Bool) -> a -> TableMap (ColumnMap a)
+      :: (Pact.Type Pact.UserType -> Bool) -- ^ Include this column in the mapping?
+      -> a                                 -- ^ Default value
+      -> TableMap (ColumnMap a)
     mkTableColumnMap f defValue = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableType } ->
         let fields = Pact._utFields _tableType
@@ -424,6 +427,14 @@ tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
 tableWritten :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
+
+columnWritten :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
+columnWritten tn cn = latticeState.lasColumnsWritten.singular (ix tn).
+  singular (ix cn).sbv2S
+
+columnRead :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
+columnRead tn cn = latticeState.lasColumnsRead.singular (ix tn).
+  singular (ix cn).sbv2S
 
 intCellDelta
   :: TableName

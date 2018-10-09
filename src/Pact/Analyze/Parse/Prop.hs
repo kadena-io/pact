@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf            #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TupleSections         #-}
@@ -31,6 +32,7 @@ module Pact.Analyze.Parse.Prop
 -- bidirectional style, so the application is inferred while each argument is
 -- checked.
 
+import           Control.Applicative
 import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
                                                (?~), (^..), (^?))
 import           Control.Monad                (unless, when)
@@ -68,16 +70,21 @@ parseTableName (PreGlobalVar var) = pure (fromString (T.unpack var))
 parseTableName (PreVar vid name) = do
   varTy <- view (varTys . at vid)
   case varTy of
-    Just QTable -> pure (fromString (T.unpack name))
-    _           -> throwError $ T.unpack $
-      "invalid table name: " <> name
+    Just QTable -> pure $ CoreProp $ Var vid name
+    _           -> throwError $ T.unpack $ "invalid table name: " <> name
 parseTableName bad = throwError $ T.unpack $
   "invalid table name: " <> userShow bad
 
 parseColumnName :: PreProp -> PropCheck (Prop ColumnName)
 parseColumnName (PreStringLit str) = pure (fromString (T.unpack str))
+parseColumnName (PreVar vid name) = do
+  varTy <- view (varTys . at vid)
+  case varTy of
+    Just QColumnOf{} -> pure $ CoreProp $ Var vid name
+    _                -> throwError $ T.unpack $
+      "invalid column name: " <> name
 parseColumnName bad = throwError $ T.unpack $
-  "invalid table name: " <> userShow bad
+  "invalid column name: " <> userShow bad
 
 parseBeforeAfter :: PreProp -> PropCheck BeforeOrAfter
 parseBeforeAfter (PreStringLit str)
@@ -193,6 +200,10 @@ parseType exp = case exp of
   -- # list type
   BraceList _      -> Nothing
   SquareList [_ty] -> Nothing -- TyList <$> parseType ty
+  ParenList [EAtom' "column-of", EAtom' _tabName]
+    -> Nothing -- TODO: look up quantified table names
+  ParenList [EAtom' "column-of", ELiteral' (LString tabName)]
+    -> pure $ QColumnOf $ TableName $ T.unpack tabName
 
   -- TODO
   -- # object schema type
@@ -276,8 +287,13 @@ inferPreProp preProp = case preProp of
     let quantifyTable = case ty' of
           QTable -> Set.insert (TableName (T.unpack name))
           _      -> id
-    let modEnv env = env & varTys . at vid  ?~ ty'
-                         & quantifiedTables %~ quantifyTable
+        quantifyColumn = case ty' of
+          QColumnOf{} -> Set.insert (ColumnName (T.unpack name))
+          _           -> id
+
+    let modEnv env = env & varTys . at vid   ?~ ty'
+                         & quantifiedTables  %~ quantifyTable
+                         & quantifiedColumns %~ quantifyColumn
 
     ESimple TBool . PropSpecific . q vid name ty'
       <$> local modEnv (checkPreProp TBool p)
@@ -391,13 +407,16 @@ inferPreProp preProp = case preProp of
     _   <- expectTableExists tn'
     pure $ ESimple TBool (PropSpecific (TableRead tn'))
 
-  --
-  -- NOTE: disabled until implemented on the backend:
-  --
-  -- (TBool, PreApp SColumWritten [PLit tn, PLit cn])
-  --   -> pure (ColumnWrite tn cn)
-  -- (TBool, PreApp SColumnRead [PLit tn, PLit cn])
-  --   -> pure (ColumnRead tn cn)
+  PreApp s [tn, cn] | s == SColumnWritten -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    pure $ ESimple TBool $ PropSpecific $ ColumnWritten tn' cn'
+  PreApp s [tn, cn] | s == SColumnRead -> do
+    tn' <- parseTableName tn
+    cn' <- parseColumnName cn
+    _   <- expectTableExists tn'
+    pure $ ESimple TBool $ PropSpecific $ ColumnRead tn' cn'
 
   PreApp s [tn, cn, rk] | s == SCellDelta -> do
     tn' <- parseTableName tn
@@ -410,7 +429,7 @@ inferPreProp preProp = case preProp of
       , do
           _   <- expectColumnType tn' cn' TDecimal
           ESimple TDecimal . PropSpecific . DecCellDelta tn' cn' <$> checkPreProp TStr rk
-      ]
+      ] <|> throwErrorIn preProp "couldn't find column of appropriate (integer / decimal) type"
   PreApp s [tn, cn] | s == SColumnDelta -> do
     tn' <- parseTableName tn
     cn' <- parseColumnName cn
@@ -422,7 +441,7 @@ inferPreProp preProp = case preProp of
       , do
           _   <- expectColumnType tn' cn' TDecimal
           pure $ ESimple TDecimal (PropSpecific (DecColumnDelta tn' cn'))
-      ]
+      ] <|> throwErrorIn preProp "couldn't find column of appropriate (integer / decimal) type"
   PreApp s [tn, rk] | s == SRowRead -> do
     tn' <- parseTableName tn
     _   <- expectTableExists tn'
@@ -535,6 +554,7 @@ expectColumnType (PLit tn) (PLit cn) expectedTy = do
     _ -> throwErrorT $
       "didn't find expected column " <> userShow cn <> " in table " <> userShow tn
 expectColumnType _ _ _
+  -- TODO(joel): make this better
   = error "table and column names must be concrete at this point"
 
 expectTableExists :: Prop TableName -> PropCheck ()
@@ -543,7 +563,13 @@ expectTableExists (PLit tn) = do
   defined    <- view $ tableEnv . at tn
   unless (isJust quantified || isJust defined) $
     throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
-expectTableExists _ = error "table name must be concrete at this point"
+expectTableExists (PVar vid name) = do
+  ty <- view (varTys . at vid)
+  case ty of
+    Nothing     -> throwErrorT $ "unable to look up variable " <> name <> " (expected table)"
+    Just QTable -> pure ()
+    _           -> throwErrorT $ "expected " <> name <> " to be a table"
+expectTableExists tn = throwError $ "table name must be concrete at this point: " ++ show tn
 
 -- Convert an @Exp@ to a @Check@ in an environment where the variables have
 -- types.
@@ -583,7 +609,7 @@ expToProp
 expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
-  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs HM.empty
   runReaderT (checkPreProp ty preTypedBody) env
 
@@ -604,7 +630,7 @@ inferProp
 inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
-  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty
+  let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
         preTypedPropDefs HM.empty
   runReaderT (inferPreProp preTypedBody) env
 

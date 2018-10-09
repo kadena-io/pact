@@ -258,9 +258,9 @@ data PropSpecific a where
   --       terms of "CellRead"/"CellWrite" and existential quantification.
   --
   -- | Whether a column is written
-  ColumnWrite :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
+  ColumnWritten :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
   -- | Whether a column is read
-  ColumnRead  :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
+  ColumnRead    :: Prop TableName  -> Prop ColumnName  -> PropSpecific Bool
 
   --
   -- TODO: rewrite these in terms of CellBefore, CellAfter, ColumnSumBefore,
@@ -320,7 +320,7 @@ instance UserShow a => UserShow (PropSpecific a) where
       [SExistentialQuantification, parens (var <> ":" <> userShow ty), userShow x]
     TableWrite tab          -> parenList [STableWritten, userShow tab]
     TableRead  tab          -> parenList [STableRead, userShow tab]
-    ColumnWrite tab col     -> parenList ["column-written", userShow tab, userShow col]
+    ColumnWritten tab col   -> parenList ["column-written", userShow tab, userShow col]
     ColumnRead tab col      -> parenList ["column-read", userShow tab, userShow col]
     IntCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]
     DecCellDelta tab col rk -> parenList [SCellDelta, userShow tab, userShow col, userShow rk]

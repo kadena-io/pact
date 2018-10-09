@@ -99,6 +99,8 @@ data Feature
   | FTableRead
   | FCellDelta
   | FColumnDelta
+  | FColumnWritten
+  | FColumnRead
   | FRowRead
   | FRowWritten
   | FRowReadCount
@@ -849,6 +851,46 @@ doc FColumnDelta = Doc
         ]
         c
   ]
+doc FColumnWritten = Doc
+  "column-written"
+  CDatabase
+  PropOnly
+  "Whether a column is written to in a transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(column-written t c)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        ]
+        (TyCon bool)
+  ]
+doc FColumnRead = Doc
+  "column-read"
+  CDatabase
+  PropOnly
+  "Whether a column is read from in a transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(column-read t c)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        ]
+        (TyCon bool)
+  ]
 doc FRowRead = Doc
   "row-read"
   CDatabase
@@ -1058,6 +1100,8 @@ PAT(STableWritten, FTableWritten)
 PAT(STableRead, FTableRead)
 PAT(SCellDelta, FCellDelta)
 PAT(SColumnDelta, FColumnDelta)
+PAT(SColumnWritten, FColumnWritten)
+PAT(SColumnRead, FColumnRead)
 PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)

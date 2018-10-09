@@ -407,13 +407,14 @@ moduleTables modules (_mod, modRefs) = do
     invariants <- case schemas ^? ix schemaName.tMeta.mModel._Just of
       -- no model = no invariants
       Nothing    -> pure []
-      Just model -> liftEither $ do
-        let model'        = expToMapping model
-            expInvariants = model' ^? _Just . ix "invariants"
-            expInvariant  = model' ^? _Just . ix "invariant"
-        exps <- collectExps "invariants" expInvariants expInvariant
-        runExpParserOver exps $
-          flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
+      Just model -> liftEither $ case expToMapping ["invariant", "invariants"] model of
+        Nothing -> throwError (model, "expected \"invariant\" or \"invariants\"")
+        Just model' -> do
+          let expInvariants = model' ^? ix "invariants"
+              expInvariant  = model' ^? ix "invariant"
+          exps <- collectExps "invariants" expInvariants expInvariant
+          runExpParserOver exps $
+            flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
     pure $ Table tabName schema invariants
 
@@ -583,11 +584,12 @@ moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
 
     checks <- withExcept ModuleParseFailure $ liftEither $ do
       exps <- case defn ^? tMeta . mModel . _Just of
-        Just model ->
-          let model'        = expToMapping model
-              expProperties = model' ^? _Just . ix "properties"
-              expProperty   = model' ^? _Just . ix "property"
-          in collectExps "properties" expProperties expProperty
+        Just model -> case expToMapping ["property", "properties"] model of
+          Nothing -> throwError (model, "expected \"property\" or \"properties\"")
+          Just model' ->
+            let expProperties = model' ^? ix "properties"
+                expProperty   = model' ^? ix "property"
+            in collectExps "properties" expProperties expProperty
         Nothing -> pure []
       let funName = _tDefName defn
           applicableModuleChecks = map _moduleProperty $
@@ -597,10 +599,13 @@ moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
 
     pure (ref, Right checks)
 
--- | Given an exp like '(k v)', convert it to a singleton map
-expToMapping :: Exp Info -> Maybe (Map Text (Exp Info))
-expToMapping (ParenList [EAtom' k, v]) = Just $ Map.singleton k v
-expToMapping _                         = Nothing
+-- | Given an exp like '(k v)', and a set (list) of allowed keys, convert it to
+-- a singleton map
+expToMapping :: [Text] -> Exp Info -> Maybe (Map Text (Exp Info))
+expToMapping allowed = \case
+  ParenList [EAtom' k, v]
+    | k `elem` allowed -> Just $ Map.singleton k v
+  _                    -> Nothing
 
 -- | For both properties and invariants you're allowed to use either the
 -- singular ("property") or plural ("properties") name. This helper just
