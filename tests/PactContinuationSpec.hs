@@ -7,6 +7,9 @@ import Test.Hspec
 import Utils.TestRunner
 import qualified Data.HashMap.Strict as HM
 import Data.Aeson
+import qualified Network.HTTP.Client as HTTP
+import Network.Wreq
+import Control.Lens ((&), (.~))
 
 import Pact.ApiReq
 import Pact.Types.API
@@ -22,14 +25,16 @@ shouldMatch results checks = mapM_ match checks
 
 spec :: Spec
 spec = describe "pacts in dev server" $ do
-  describe "testPactContinuation" testPactContinuation
-  describe "testPactRollback" testPactRollback
-  describe "testPactYield" testPactYield
-  describe "testTwoPartyEscrow" testTwoPartyEscrow
-  describe "testNestedPacts" testNestedPacts
+  mgr <- runIO $ HTTP.newManager HTTP.defaultManagerSettings
+  let opts = defaults & manager .~ Right mgr
+  describe "testPactContinuation" $ testPactContinuation opts
+  describe "testPactRollback" $ testPactRollback opts
+  describe "testPactYield" $ testPactYield opts
+  describe "testTwoPartyEscrow" $ testTwoPartyEscrow opts
+  describe "testNestedPacts" $ testNestedPacts opts
 
-testNestedPacts :: Spec
-testNestedPacts = before_ flushDb $ after_ flushDb $
+testNestedPacts :: Options -> Spec
+testNestedPacts opts = before_ flushDb $ after_ flushDb $
   it "throws error when multiple defpact executions occur in same transaction" $ do
     adminKeys <- genKeys
 
@@ -38,7 +43,7 @@ testNestedPacts = before_ flushDb $ after_ flushDb $
                  Nothing [adminKeys] (Just "test1")
     nestedExecPactCmd <- mkExec ("(nestedPact.tester)" ++ " (nestedPact.tester)")
                          Null Nothing [adminKeys] (Just "test2")
-    allResults <- runAll [moduleCmd, nestedExecPactCmd]
+    allResults <- runAll opts [moduleCmd, nestedExecPactCmd]
 
     let allChecks = [makeCheck moduleCmd False Nothing,
                      makeCheck nestedExecPactCmd True
@@ -49,40 +54,40 @@ testNestedPacts = before_ flushDb $ after_ flushDb $
 
 -- CONTINUATIONS TESTS
 
-testPactContinuation :: Spec
-testPactContinuation = before_ flushDb $ after_ flushDb $ do
+testPactContinuation :: Options -> Spec
+testPactContinuation opts = before_ flushDb $ after_ flushDb $ do
   it "sends (+ 1 2) command to locally running dev server" $ do
     let cmdData = (toJSON . CommandSuccess . Number) 3
         expRes = Just $ ApiResult cmdData ((Just . TxId) 0) Nothing
-    testSimpleServerCmd `shouldReturn` expRes
+    testSimpleServerCmd opts `shouldReturn` expRes
 
   context "when provided with correct next step" $
-    it "executes the next step and updates pact's state"
-      testCorrectNextStep
+    it "executes the next step and updates pact's state" $
+      testCorrectNextStep opts
 
   context "when provided with incorrect next step" $
-    it "throws error and does not update pact's state"
-      testIncorrectNextStep
+    it "throws error and does not update pact's state" $
+      testIncorrectNextStep opts
 
   context "when last step of a pact executed" $
-    it "deletes pact from the state"
-      testLastStep
+    it "deletes pact from the state" $
+      testLastStep opts
 
   context "when error occurs when executing pact step" $
-    it "throws error and does not update pact's state"
-      testErrStep
+    it "throws error and does not update pact's state" $
+      testErrStep opts
 
-testSimpleServerCmd :: IO (Maybe ApiResult)
-testSimpleServerCmd = do
+testSimpleServerCmd :: Options -> IO (Maybe ApiResult)
+testSimpleServerCmd opts = do
   simpleKeys <- genKeys
   cmd <- mkExec  "(+ 1 2)" Null Nothing
              [simpleKeys] (Just "test1")
-  allResults <- runAll [cmd]
+  allResults <- runAll opts [cmd]
   return $ HM.lookup (RequestKey (_cmdHash cmd)) allResults
 
 
-testCorrectNextStep :: Expectation
-testCorrectNextStep = do
+testCorrectNextStep :: Options -> Expectation
+testCorrectNextStep opts = do
   let moduleName = "testCorrectNextStep"
   adminKeys <- genKeys
 
@@ -93,7 +98,7 @@ testCorrectNextStep = do
                      Null Nothing [adminKeys] (Just "test2")
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
-  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
+  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
       executePactCheck  = makeCheck executePactCmd False $ Just "step 0"
@@ -105,8 +110,8 @@ testCorrectNextStep = do
   allResults `shouldMatch` allChecks
 
 
-testIncorrectNextStep :: Expectation
-testIncorrectNextStep = do
+testIncorrectNextStep :: Options -> Expectation
+testIncorrectNextStep opts = do
   let moduleName = "testIncorrectNextStep"
   adminKeys <- genKeys
 
@@ -117,7 +122,7 @@ testIncorrectNextStep = do
                        Null Nothing [adminKeys] (Just "test2")
   incorrectStepCmd  <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd     <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test4")
-  allResults        <- runAll [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
+  allResults        <- runAll opts [moduleCmd, executePactCmd, incorrectStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -129,8 +134,8 @@ testIncorrectNextStep = do
   allResults `shouldMatch` allChecks
 
 
-testLastStep :: Expectation
-testLastStep = do
+testLastStep :: Options -> Expectation
+testLastStep opts = do
   let moduleName = "testLastStep"
   adminKeys <- genKeys
 
@@ -142,7 +147,7 @@ testLastStep = do
   contNextStep1Cmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   contNextStep2Cmd <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
-  allResults       <- runAll [moduleCmd, executePactCmd, contNextStep1Cmd,
+  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStep1Cmd,
                               contNextStep2Cmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -157,8 +162,8 @@ testLastStep = do
   allResults `shouldMatch` allChecks
 
 
-testErrStep :: Expectation
-testErrStep = do
+testErrStep :: Options -> Expectation
+testErrStep opts = do
   let moduleName = "testErrStep"
   adminKeys <- genKeys
 
@@ -169,7 +174,7 @@ testErrStep = do
                       Null Nothing [adminKeys] (Just "test2")
   contErrStepCmd   <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
-  allResults       <- runAll [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
+  allResults       <- runAll opts [moduleCmd, executePactCmd, contErrStepCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
       executePactCheck   = makeCheck executePactCmd False $ Just "step 0"
@@ -184,27 +189,27 @@ testErrStep = do
 
 -- ROLLBACK TESTS
 
-testPactRollback :: Spec
-testPactRollback = before_ flushDb $ after_ flushDb $ do
+testPactRollback :: Options -> Spec
+testPactRollback opts = before_ flushDb $ after_ flushDb $ do
   context "when provided with correct rollback step" $
-    it "executes the rollback function and deletes pact from state"
-      testCorrectRollbackStep
+    it "executes the rollback function and deletes pact from state" $
+      testCorrectRollbackStep opts
 
   context "when provided with incorrect rollback step" $
-    it "throws error and does not delete pact from state"
-      testIncorrectRollbackStep
+    it "throws error and does not delete pact from state" $
+      testIncorrectRollbackStep opts
 
   context "when error occurs when executing rollback function" $
-    it "throws error and does not delete pact from state"
-      testRollbackErr
+    it "throws error and does not delete pact from state" $
+      testRollbackErr opts
 
   context "when trying to rollback a step without a rollback function" $
-    it "outputs that no rollback function exists for step and deletes pact from state"
-      testNoRollbackFunc
+    it "outputs that no rollback function exists for step and deletes pact from state" $
+      testNoRollbackFunc opts
 
 
-testCorrectRollbackStep :: Expectation
-testCorrectRollbackStep = do
+testCorrectRollbackStep :: Options -> Expectation
+testCorrectRollbackStep opts = do
   let moduleName = "testCorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -216,7 +221,7 @@ testCorrectRollbackStep = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   rollbackStepCmd <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4") -- rollback = True
   checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
-  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                              rollbackStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -231,8 +236,8 @@ testCorrectRollbackStep = do
   allResults `shouldMatch` allChecks
 
 
-testIncorrectRollbackStep :: Expectation
-testIncorrectRollbackStep = do
+testIncorrectRollbackStep :: Options -> Expectation
+testIncorrectRollbackStep opts = do
   let moduleName = "testIncorrectRollbackStep"
   adminKeys <- genKeys
 
@@ -244,7 +249,7 @@ testIncorrectRollbackStep = do
   contNextStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   incorrectRbCmd  <- mkCont (TxId 1) 2 True Null Nothing [adminKeys] (Just "test4")
   checkStateCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
-  allResults      <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults      <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                              incorrectRbCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -259,8 +264,8 @@ testIncorrectRollbackStep = do
   allResults `shouldMatch` allChecks
 
 
-testRollbackErr :: Expectation
-testRollbackErr = do
+testRollbackErr :: Options -> Expectation
+testRollbackErr opts = do
   let moduleName = "testRollbackErr"
   adminKeys <- genKeys
 
@@ -272,7 +277,7 @@ testRollbackErr = do
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   rollbackErrCmd   <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
-  allResults       <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                               rollbackErrCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -286,8 +291,8 @@ testRollbackErr = do
   allResults `shouldMatch` allChecks
 
 
-testNoRollbackFunc :: Expectation
-testNoRollbackFunc = do
+testNoRollbackFunc :: Options -> Expectation
+testNoRollbackFunc opts = do
   let moduleName = "testNoRollbackFunc"
   adminKeys <- genKeys
 
@@ -299,7 +304,7 @@ testNoRollbackFunc = do
   contNextStepCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   noRollbackCmd    <- mkCont (TxId 1) 1 True Null Nothing [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test5")
-  allResults       <- runAll [moduleCmd, executePactCmd, contNextStepCmd,
+  allResults       <- runAll opts [moduleCmd, executePactCmd, contNextStepCmd,
                               noRollbackCmd, checkStateCmd]
 
   let moduleCheck        = makeCheck moduleCmd False Nothing
@@ -317,22 +322,22 @@ testNoRollbackFunc = do
 
 -- YIELD / RESUME TESTS
 
-testPactYield :: Spec
-testPactYield = before_ flushDb $ after_ flushDb $ do
+testPactYield :: Options -> Spec
+testPactYield opts = before_ flushDb $ after_ flushDb $ do
   context "when previous step yields value" $
-    it "resumes value"
-      testValidYield
+    it "resumes value" $
+      testValidYield opts
 
   context "when previous step does not yield value" $
-    it "throws error when trying to resume, and does not delete pact from state"
-      testNoYield
+    it "throws error when trying to resume, and does not delete pact from state" $
+      testNoYield opts
 
-  it "resets yielded values after each step"
-    testResetYield
+  it "resets yielded values after each step" $
+    testResetYield opts
 
 
-testValidYield :: Expectation
-testValidYield = do
+testValidYield :: Options -> Expectation
+testValidYield opts = do
   let moduleName = "testValidYield"
   adminKeys <- genKeys
 
@@ -344,7 +349,7 @@ testValidYield = do
   resumeAndYieldCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   resumeOnlyCmd      <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
   checkStateCmd      <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
-  allResults         <- runAll [moduleCmd, executePactCmd, resumeAndYieldCmd,
+  allResults         <- runAll opts [moduleCmd, executePactCmd, resumeAndYieldCmd,
                                 resumeOnlyCmd, checkStateCmd]
 
   let moduleCheck         = makeCheck moduleCmd False Nothing
@@ -359,8 +364,8 @@ testValidYield = do
   allResults `shouldMatch` allChecks
 
 
-testNoYield :: Expectation
-testNoYield = do
+testNoYield :: Options -> Expectation
+testNoYield opts = do
   let moduleName = "testNoYield"
   adminKeys <- genKeys
 
@@ -372,7 +377,7 @@ testNoYield = do
   noYieldStepCmd <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   resumeErrCmd   <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test3")
   checkStateCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test5")
-  allResults     <- runAll [moduleCmd, executePactCmd, noYieldStepCmd,
+  allResults     <- runAll opts [moduleCmd, executePactCmd, noYieldStepCmd,
                            resumeErrCmd, checkStateCmd]
 
   let moduleCheck      = makeCheck moduleCmd False Nothing
@@ -387,8 +392,8 @@ testNoYield = do
   allResults `shouldMatch` allChecks
 
 
-testResetYield :: Expectation
-testResetYield = do
+testResetYield :: Options -> Expectation
+testResetYield opts = do
   let moduleName = "testResetYield"
   adminKeys <- genKeys
 
@@ -400,7 +405,7 @@ testResetYield = do
   yieldSameKeyCmd  <- mkCont (TxId 1) 1 False Null Nothing [adminKeys] (Just "test3")
   resumeStepCmd    <- mkCont (TxId 1) 2 False Null Nothing [adminKeys] (Just "test4")
   checkStateCmd    <- mkCont (TxId 1) 3 False Null Nothing [adminKeys] (Just "test5")
-  allResults       <- runAll [moduleCmd, executePactCmd, yieldSameKeyCmd,
+  allResults       <- runAll opts [moduleCmd, executePactCmd, yieldSameKeyCmd,
                               resumeStepCmd, checkStateCmd]
 
   let moduleCheck       = makeCheck moduleCmd False Nothing
@@ -418,31 +423,31 @@ testResetYield = do
 
 -- TWO PARTY ESCROW TESTS
 
-testTwoPartyEscrow :: Spec
-testTwoPartyEscrow = before_ flushDb $ after_ flushDb $ do
+testTwoPartyEscrow :: Options -> Spec
+testTwoPartyEscrow opts = before_ flushDb $ after_ flushDb $ do
   context "when debtor tries to cancel pre-timeout" $
-    it "throws error and money still escrowed"
-      testDebtorPreTimeoutCancel
+    it "throws error and money still escrowed" $
+      testDebtorPreTimeoutCancel opts
 
   context "when debtor tries to cancel after timeout" $
-    it "cancels escrow and deposits escrowed amount back to debtor"
-      testDebtorPostTimeoutCancel
+    it "cancels escrow and deposits escrowed amount back to debtor" $
+      testDebtorPostTimeoutCancel opts
 
-  it "cancels escrow immediately if creditor cancels"
-    testCreditorCancel
+  it "cancels escrow immediately if creditor cancels" $
+    testCreditorCancel opts
 
-  it "throws error when creditor or debtor try to finish alone"
-    testFinishAlone
+  it "throws error when creditor or debtor try to finish alone" $
+    testFinishAlone opts
 
-  it "throws error when final price negotiated up"
-    testPriceNegUp
+  it "throws error when final price negotiated up" $
+    testPriceNegUp opts
 
   context "when both debtor and creditor finish together" $
-    it "finishes escrow if final price stays the same or negotiated down"
-      testValidEscrowFinish
+    it "finishes escrow if final price stays the same or negotiated down" $
+      testValidEscrowFinish opts
 
-testDebtorPreTimeoutCancel :: Expectation
-testDebtorPreTimeoutCancel = do
+testDebtorPreTimeoutCancel :: Options -> Expectation
+testDebtorPreTimeoutCancel opts = do
   let testPath = testDir ++ "cont-scripts/fail-deb-cancel-"
 
   (_, tryCancelCmd)        <- mkApiReq (testPath ++ "01-rollback.yaml")
@@ -456,10 +461,10 @@ testDebtorPreTimeoutCancel = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "98.00"
       allChecks             = [tryCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks
+  twoPartyEscrow allCmds allChecks opts
 
-testDebtorPostTimeoutCancel :: Expectation
-testDebtorPostTimeoutCancel = do
+testDebtorPostTimeoutCancel :: Options -> Expectation
+testDebtorPostTimeoutCancel opts = do
   let testPath = testDir ++ "cont-scripts/pass-deb-cancel-"
 
   (_, setTimeCmd)          <- mkApiReq (testPath ++ "01-set-time.yaml")
@@ -472,10 +477,10 @@ testDebtorPostTimeoutCancel = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
       allChecks = [setTimeCheck, tryCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks
+  twoPartyEscrow allCmds allChecks opts
 
-testCreditorCancel :: Expectation
-testCreditorCancel = do
+testCreditorCancel :: Options -> Expectation
+testCreditorCancel opts = do
   let testPath = testDir ++ "cont-scripts/pass-cred-cancel-"
 
   (_, resetTimeCmd)        <- mkApiReq (testPath ++ "01-reset.yaml")
@@ -488,10 +493,10 @@ testCreditorCancel = do
       checkStillEscrowCheck = makeCheck checkStillEscrowCmd False $ Just "100.00"
       allChecks = [resetTimeCheck, credCancelCheck, checkStillEscrowCheck]
 
-  twoPartyEscrow allCmds allChecks
+  twoPartyEscrow allCmds allChecks opts
 
-testFinishAlone :: Expectation
-testFinishAlone = do
+testFinishAlone :: Options -> Expectation
+testFinishAlone opts = do
   let testPathCred  = testDir ++ "cont-scripts/fail-cred-finish-"
       testPathDeb   = testDir ++ "cont-scripts/fail-deb-finish-"
 
@@ -505,20 +510,20 @@ testFinishAlone = do
                           (Just "(enforce-keyset k): Failure: Tx Failed: Keyset failure (keys-all)")
       allChecks         = [tryCredAloneCheck, tryDebAloneCheck]
 
-  twoPartyEscrow allCmds allChecks
+  twoPartyEscrow allCmds allChecks opts
 
-testPriceNegUp :: Expectation
-testPriceNegUp = do
+testPriceNegUp :: Options -> Expectation
+testPriceNegUp opts = do
   let testPath = testDir ++ "cont-scripts/fail-both-price-up-"
 
   (_, tryNegUpCmd) <- mkApiReq (testPath ++ "01-cont.yaml")
   let tryNegUpCheck = makeCheck tryNegUpCmd True
                       (Just "(enforce (>= escrow-amount pri...: Failure: Tx Failed: Price cannot negotiate up")
 
-  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck]
+  twoPartyEscrow [tryNegUpCmd] [tryNegUpCheck] opts
 
-testValidEscrowFinish :: Expectation
-testValidEscrowFinish = do
+testValidEscrowFinish :: Options -> Expectation
+testValidEscrowFinish opts = do
   let testPath = testDir ++ "cont-scripts/pass-both-price-down-"
 
   (_, tryNegDownCmd)  <- mkApiReq (testPath ++ "01-cont.yaml")
@@ -532,10 +537,10 @@ testValidEscrowFinish = do
       debBalanceCheck  = makeCheck debBalanceCmd False $ Just "98.25"
       allChecks        = [tryNegDownCheck, credBalanceCheck, debBalanceCheck]
 
-  twoPartyEscrow allCmds allChecks
+  twoPartyEscrow allCmds allChecks opts
 
-twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Expectation
-twoPartyEscrow testCmds testChecks = do
+twoPartyEscrow :: [Command T.Text] -> [ApiResultCheck] -> Options -> Expectation
+twoPartyEscrow testCmds testChecks opts = do
   let setupPath = testDir ++ "cont-scripts/setup-"
 
   (_, sysModuleCmd)  <- mkApiReq (setupPath ++ "01-system.yaml")
@@ -547,7 +552,7 @@ twoPartyEscrow testCmds testChecks = do
   (_, balanceCmd)    <- mkApiReq (setupPath ++ "07-balance.yaml")
   let allCmds = sysModuleCmd : acctModuleCmd : testModuleCmd : createAcctCmd
                 : resetTimeCmd : runEscrowCmd : balanceCmd : testCmds
-  allResults <- runAll allCmds
+  allResults <- runAll opts allCmds
 
   let sysModuleCheck      = makeCheck sysModuleCmd False $ Just "system module loaded"
       acctModuleCheck     = makeCheck acctModuleCmd False $ Just "TableCreated"

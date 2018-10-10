@@ -19,11 +19,11 @@ import Control.Monad.Reader
 import Prelude hiding (log)
 import Control.Arrow
 import Data.Maybe
-import Data.List
 #if !defined(ghcjs_HOST_OS)
+import Data.List
+import Data.Monoid
 import Data.Yaml as Y
 #endif
-import Data.Monoid
 import qualified Data.Text as T
 
 import Pact.Types.Util

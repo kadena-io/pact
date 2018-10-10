@@ -155,13 +155,14 @@ library
   if !impl(ghcjs)
     build-depends:
         async
-      , blake2
       , criterion >= 1.1.4 && < 1.5
       , crypto-api
+      , cryptonite
       , direct-sqlite
       , ed25519-donna
       , fast-logger
       , haskeline >= 0.7.3 && < 0.8
+      , memory
       , safe-exceptions >= 0.1.5.0 && < 0.2
       , sbv >= 7.9 && < 7.10
       , snap-core
@@ -204,6 +205,10 @@ test-suite hspec
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   build-depends:
                 base
+              , bound
+              , Decimal
+              , deepseq
+              , exceptions
               , hspec
               , HUnit
               , pact
@@ -211,6 +216,7 @@ test-suite hspec
               , containers
               , directory
               , filepath
+              , mmorph
               , data-default
               , lens
               , unordered-containers
@@ -218,6 +224,7 @@ test-suite hspec
               , bytestring
               , mtl
               , text
+              , transformers
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
@@ -228,6 +235,7 @@ test-suite hspec
       , async
       , ed25519-donna
       , crypto-api
+      , http-client
       , wreq
   other-modules:
                 Blake2Spec

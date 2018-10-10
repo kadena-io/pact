@@ -49,7 +49,6 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
 
 import Pact.Types.ExpParser
-import Pact.Types.Crypto
 import Pact.Types.Exp
 import Pact.Parse (exprsOnly,parseExprs)
 import Pact.Types.Hash
