@@ -165,7 +165,6 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
   \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
   where
-
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ encodeUtf8 s
@@ -321,16 +320,11 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-    ,defRNative "hash" hash' (funType tTyString [("value",a)])
-     "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
-     \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
-
-    ,defRNative "str-to-int" strToInt
+     ,defRNative "str-to-int" strToInt
      (funType tTyInteger [("str-val", tTyString)] <>
       funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
-     "Compute the integer value after change of base of a string of length <= 128 chars consisting of \
-     \base-2 through base-16 (hexadecimal) characters. Only bases 2 through 16 are supported. `(str-to-int 16 \"123456\")` `(str-to-int \"abcdef123456\")`"
-
+     "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
+     \chars in length and BASE must be between 2 and 16. `(str-to-int 16 \"123456\")` `(str-to-int \"abcdef123456\")`"
     ,hashDef
     ])
     where b = mkTyVar "b" []
@@ -602,14 +596,6 @@ constantly i as = argsError' i as
 identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
-
-hash' :: RNativeFun e
-hash' i as =
-  case as of
-    [TLitString s] -> go $ encodeUtf8 s
-    [a] -> go $ toStrict $ encode a
-    _ -> argsError i as
-  where go = return . tStr . asString . hash
 
 strToInt :: RNativeFun e
 strToInt i as =
