@@ -200,9 +200,8 @@ parseType exp = case exp of
   -- # list type
   BraceList _      -> Nothing
   SquareList [_ty] -> Nothing -- TyList <$> parseType ty
-  ParenList [EAtom' "column-of", EAtom' _tabName]
-    -> Nothing -- TODO: look up quantified table names
-  ParenList [EAtom' "column-of", ELiteral' (LString tabName)]
+  ParenList [EAtom' "column-of", EAtom' tabName]
+    -- TODO: look up quantified table names
     -> pure $ QColumnOf $ TableName $ T.unpack tabName
 
   -- TODO
