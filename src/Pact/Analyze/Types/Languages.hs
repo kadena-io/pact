@@ -551,6 +551,7 @@ instance UserShow a => UserShow (Term a) where
     Hash x               -> parenList ["hash", userShow x]
     ReadKeySet name      -> parenList ["read-keyset", userShow name]
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
+    ReadInteger i        -> parenList ["read-integer", userShow i]
 
 deriving instance Eq a   => Eq (Term a)
 deriving instance Eq a   => Eq (Core Term a)
