@@ -34,6 +34,7 @@ module Pact.Eval
     ,checkUserType
     ,deref
     ,installModule
+    ,installInterface
     ,runPure,runPureSys,Purity
     ,liftTerm,apply,apply'
     ,preGas
@@ -141,8 +142,6 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
   evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
-
-
 eval (TModule m bod i) = topLevelCall i "module" (GModule m) $ \g0 -> do
   -- enforce old module keysets
   oldM <- readRow i Modules (_mName m)
@@ -155,7 +154,11 @@ eval (TModule m bod i) = topLevelCall i "module" (GModule m) $ \g0 -> do
   (g,_defs) <- loadModule m bod i g0
   writeRow i Write Modules (_mName m) m
   return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
-
+eval (TInterface i body info) = topLevelCall info "interface" (GInterface i) $ \gas -> do
+  let n = _interfaceName i 
+  (g, _) <- loadInterface i body info gas
+  writeRow info Write Interfaces n i
+  return $ (g, msg $ pack $ "Loaded interface " ++ show n)  
 eval t = enscope t >>= reduce
 
 
@@ -235,6 +238,55 @@ loadModule m bod1 mi g0 = do
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
   return (g1, modDefs1)
 
+-- | Make table of module definitions for storage in namespace/RefStore.
+--
+-- This is equivalent to `loadModule`, but for interfaces
+loadInterface
+  :: Interface
+  -> Scope n Term Name -- ^ Body scope (should be unit - interface sigs have no body)
+  -> Info -- ^ context info
+  -> Gas -- ^ currently, this is a trivial gas model - no work is done by complying to an interface
+  -> Eval e (Gas, HM.HashMap Text (Term Name))
+loadInterface i scope info g0 = do
+  idefs <- case instantiate' scope of
+      (TList bd _ _bi) -> HM.fromList <$> foldM validateDefs [] bd
+      t -> evalError (_tInfo t) "Malformed Interface"
+  cs :: [SCC (Term (Either Text Ref), Text, [Text])] <- resolveNames idefs
+  sorted <- forM cs $ \c -> case c of
+                 AcyclicSCC v -> return v
+                 CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
+  evaluatedDefs <- traverse evalConstRef $ foldl resolveDef HM.empty sorted
+  let idata = InterfaceData i evaluatedDefs
+  installInterface idata
+  (evalRefs . rsNewInterfaces) %= HM.insert (_interfaceName i) idata
+  return (g0, idefs)
+  where
+    resolveDef ds (d, dn, _) = HM.insert dn (Ref (fmap (unify ds) d)) ds
+    evalConstRef r = case r of
+      Direct{} -> runPure $ evalConsts r
+      Ref{} -> runPure $ evalConsts r 
+    validateDefs :: [(Text, Term Name)] -> Term Name -> Eval e [(Text, Term Name)]
+    validateDefs tts sig = do
+      sig' <- case sig of
+        TDef {..} -> return $ Just _tDefName
+        TConst {..} -> return $ Just (_aName _tConstArg)
+        _ -> evalError (_tInfo sig) "Invalid interface signature"
+      case sig' of
+        Nothing -> return tts
+        Just txt -> return $ (txt, sig):tts
+    resolveNames :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
+    resolveNames idefs =
+      fmap stronglyConnCompR $ forM (HM.toList idefs) $ \(defName, d) -> do 
+        d' <- forM d $ \(f :: Name) -> do
+          dm <- resolveRef f
+          case (dm, f) of
+            (Just t, _) -> return (Right t)
+            (Nothing, Name fn _) ->
+              case HM.lookup fn idefs of
+                Just _ -> return (Left fn)
+                Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
+            (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
+        return (d', defName, mapMaybe (either Just (const Nothing)) $ toList d')
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do -- just a lookup - figure this out damnit
@@ -397,6 +449,11 @@ installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap) 
   (evalRefs . rsLoadedModules) %= HM.insert (_mName _mdModule) _mdModule
 
+installInterface :: InterfaceData -> Eval e ()
+installInterface InterfaceData{..} = do
+  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\i k v -> HM.insert (k `Name` def) v i) HM.empty _idRefMap)
+  (evalRefs . rsLoadedInterfaces) %= HM.insert (_interfaceName _idInterface) _idInterface
+  
 msg :: Text -> Term n
 msg = toTerm
 

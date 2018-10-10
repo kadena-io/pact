@@ -46,6 +46,7 @@ data GasArgs
   | GModule Module
   | GModuleMember Module
   | GUser
+  | GInterface Interface
 
 
 newtype GasLimit = GasLimit Word64

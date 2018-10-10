@@ -295,6 +295,19 @@ data Interface = Interface
   , _interfaceMeta :: !Meta
   } deriving (Eq, Show)
 
+instance ToJSON Interface where
+  toJSON Interface{..} = object
+    [ "name" .= _interfaceName
+    , "code" .= _interfaceCode
+    , "meta" .= _interfaceMeta
+    ]
+
+instance FromJSON Interface where
+  parseJSON = withObject "Interface" $ \i -> Interface
+    <$> i .: "name"
+    <*> i .: "code"
+    <*> pure (Meta Nothing Nothing)
+
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
   CVEval { _cvRaw :: !n
