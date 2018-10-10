@@ -289,7 +289,7 @@ loadInterface i scope info g0 = do
         return (d', defName, mapMaybe (either Just (const Nothing)) $ toList d')
 
 resolveRef :: Name -> Eval e (Maybe Ref)
-resolveRef qn@(QName q n _) = do -- just a lookup - figure this out damnit
+resolveRef qn@(QName q n _) = do
   dsm <- asks $ firstOf $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
