@@ -6,7 +6,7 @@
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
-
+{-# LANGUAGE RecordWildCards       #-}
 module Pact.Analyze.Check
   ( verifyModule
   , verifyCheck
@@ -29,8 +29,8 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left)
+                                            (^.), (^?), (^@..), _Just, _Left,
+                                            _2)
 import           Control.Monad             (void)
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
@@ -59,7 +59,7 @@ import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
                                             renderParsed, tMeta)
-import           Pact.Types.Runtime        (Exp, ModuleData,
+import           Pact.Types.Runtime        (Exp, ModuleData(..), mdModule, mdRefMap,
                                             ModuleName, Ref (Ref),
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
@@ -380,15 +380,16 @@ moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
   -> ExceptT ParseFailure IO [Table]
-moduleTables modules (_mod, modRefs) = do
+moduleTables modules ModuleData{..} = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
-  let tables = flip mapMaybe (modules ^@.. traversed . _2 . itraversed) $ \case
+  let tables = flip mapMaybe (modules ^@.. traversed . mdRefMap . itraversed) $ \case
         (name, Ref (table@TTable {})) -> Just (name, table)
         _                             -> Nothing
 
   -- TODO: need mapMaybe for HashMap
-  let schemas = HM.fromList $ flip mapMaybe (HM.toList modRefs) $ \case
+  -- Note(emily): i can handle this in the current PR - lets discuss.
+  let schemas = HM.fromList $ flip mapMaybe (HM.toList _mdRefMap) $ \case
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
 
@@ -411,7 +412,7 @@ moduleTables modules (_mod, modRefs) = do
           flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
     pure $ Table tabName schema invariants
-
+    
 -- | Parse a property definition like
 --
 -- * '(defproperty foo (> 1 0))'
@@ -430,7 +431,7 @@ parseDefprops exp = Left (exp, "expected set of defproperty")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
-moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
+moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
   Ref TDef{}   -> True
   Ref TConst{} -> True
   _            -> False
@@ -438,7 +439,7 @@ moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
 -- Get the set of properties defined in this module
 modulePropDefs
   :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty (Exp Info)))
-modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
+modulePropDefs (ModuleData Pact.Module{Pact._mMeta=Pact.Meta _ model} _)
   = case model of
       Just model' -> HM.fromList <$> parseDefprops model'
       Nothing     -> Right HM.empty
@@ -512,6 +513,7 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
           expToCheck tableEnv vidStart nameVids vidTys propDefs
 
     pure (ref, Right checks)
+
 
 -- | Given an exp like '(k v)', convert it to a singleton map
 expToMapping :: Exp Info -> Maybe (Map Text (Exp Info))
@@ -651,10 +653,10 @@ verifyCheck
   -> ExceptT VerificationFailure IO CheckResult
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
-      moduleName = moduleData ^. _1.mName
+      moduleName = moduleData ^. mdModule . mName
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
-      moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
+      moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
 
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of

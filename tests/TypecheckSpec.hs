@@ -54,7 +54,7 @@ checkFun fp mn fn = do
 checkFuns :: Spec
 checkFuns = describe "pact typecheck" $ do
   let mn = "tests/pact/tc.repl"
-  (_,m) <- runIO $ loadModule mn "tctest"
+  (ModuleData _ m) <- runIO $ loadModule mn "tctest"
   forM_ (HM.toList m) $ \(fn,ref) -> do
     let doTc = runIO $ runTC 0 False (typecheckTopLevel ref)
         n = asString mn <> "." <> fn
@@ -77,7 +77,7 @@ loadModule fp mn = do
     Nothing -> die def $ "Module not found: " ++ show (fp,mn)
 
 loadFun :: FilePath -> ModuleName -> Text -> IO Ref
-loadFun fp mn fn = loadModule fp mn >>= \(_,m) -> case HM.lookup fn m of
+loadFun fp mn fn = loadModule fp mn >>= \(ModuleData _ m) -> case HM.lookup fn m of
   Nothing -> die def $ "Function not found: " ++ show (fp,mn,fn)
   Just f -> return f
 
