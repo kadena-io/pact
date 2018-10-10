@@ -485,8 +485,8 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
   parseNames exp                = Left (exp, "expected a list of names")
 
   parseName :: Exp Info -> Either ParseFailure Text
-  parseName (EStrLiteral' name) = Right name
-  parseName exp                 = Left (exp, "expected a bare word name")
+  parseName (EAtom' name) = Right name
+  parseName exp           = Left (exp, "expected a bare word name")
 
   parsePropertyExp :: Exp Info -> Either ParseFailure (Exp Info, PropertyScope)
   parsePropertyExp exp = case exp of

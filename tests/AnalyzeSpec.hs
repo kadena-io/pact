@@ -2221,16 +2221,16 @@ spec = describe "analyze" $ do
     expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
     expectFalsified' conservesBalance $ T.unlines [ okay, bad ]
 
-    expectVerified' "(property conserves-balance {'except: ['bad]})" $
+    expectVerified' "(property conserves-balance {'except: [bad]})" $
       T.unlines [ okay, bad ]
-    expectVerified' "(property conserves-balance {'only:   ['good]})" $
+    expectVerified' "(property conserves-balance {'only:   [good]})" $
       T.unlines [ okay, bad ]
 
     expectVerified'  "(property conserves-balance {'except: []})" okay
     expectFalsified' "(property conserves-balance {'except: []})" bad
 
     expectVerified'  "(property conserves-balance {'only:   []    })" bad
-    expectFalsified' "(property conserves-balance {'only:   ['bad]})" bad
+    expectFalsified' "(property conserves-balance {'only:   [bad]})" bad
 
   describe "read (property)" $ do
     let code1 = [text|
