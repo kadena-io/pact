@@ -234,8 +234,6 @@ instance Default RefState where def = RefState HM.empty HM.empty HM.empty HM.emp
 updateRefStore :: RefState -> RefStore -> RefStore 
 updateRefStore RefState {..} rstore 
   | HM.null _rsNewModules && HM.null _rsNewInterfaces = rstore
-  | HM.null _rsNewModules = over rsInterfaces (HM.union _rsNewInterfaces) rstore
-  | HM.null _rsNewInterfaces = over rsModules (HM.union _rsNewModules) rstore
   | otherwise = over rsInterfaces (HM.union _rsNewInterfaces) (over rsModules (HM.union _rsNewModules) rstore) 
 
 -- | Interpreter mutable state.

@@ -268,7 +268,7 @@ loadInterface i scope info g0 = do
     validateDefs :: [(Text, Term Name)] -> Term Name -> Eval e [(Text, Term Name)]
     validateDefs tts sig = do
       sig' <- case sig of
-        TDef {..} -> return $ Just _tDefName
+        TDefSig {..} -> return $ Just _tSigName
         TConst {..} -> return $ Just (_aName _tConstArg)
         _ -> evalError (_tInfo sig) "Invalid interface signature"
       case sig' of
@@ -389,7 +389,7 @@ reduceApp TDef {..} as ai = do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
-      Defsig -> evalError _tInfo "Unexpected signature form"
+      Defsig -> evalError _tInfo "Signature declarations not allowed in modules"
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
