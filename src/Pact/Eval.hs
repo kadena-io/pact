@@ -335,6 +335,7 @@ reduce t@TKeySet {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
+reduce t@TDefSig{} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
@@ -388,6 +389,7 @@ reduceApp TDef {..} as ai = do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
+      Defsig -> evalError _tInfo "Unexpected signature form"
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 

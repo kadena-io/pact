@@ -47,7 +47,7 @@ module Pact.Types.Term
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
-   tInterfaceBody, tInterfaceDef,
+   tInterfaceBody, tInterfaceDef, tInterface, tSigName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -139,10 +139,11 @@ newtype KeySetName = KeySetName Text
 instance Show KeySetName where show (KeySetName s) = show s
 
 
-data DefType = Defun | Defpact deriving (Eq,Show)
+data DefType = Defun | Defpact | Defsig deriving (Eq,Show)
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
+defTypeRep Defsig = "def-sig"
 
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString)
@@ -349,6 +350,14 @@ data Term n =
     , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
+    TDefSig {
+      _tSigName :: !Text
+    , _tInterface :: !InterfaceName
+    , _tDefType :: !DefType
+    , _tFunType :: !(FunType (Term n))
+    , _tMeta :: !Meta
+    , _tInfo :: !Info
+    } |
     TNative {
       _tNativeName :: !NativeDefName
     , _tNativeFun :: !NativeDFun
@@ -436,6 +445,8 @@ instance Show n => Show (Term n) where
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
       show _tFunType ++ " " ++ show _tMeta ++ ")"
+    show TDefSig{..} = "(TDefSig " ++ defTypeRep _tDefType ++ " " ++ asString' _tInterface ++
+      "." ++ unpack _tSigName ++ " " ++ show _tFunType ++ " " ++ show _tMeta ++ ")"
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
@@ -472,6 +483,8 @@ instance Eq1 Term where
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
   liftEq eq (TDef a b c d e f g) (TDef m n o p q r s) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
+  liftEq eq (TDefSig a b c d e f) (TDefSig t u v w x y) =
+    a == t && b == u && c == v && liftEq (liftEq eq) d w && e == x && f == y
   liftEq eq (TConst a b c d e) (TConst m n o q r) =
     liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
   liftEq eq (TApp a b c) (TApp m n o) =
@@ -512,6 +525,7 @@ instance Monad Term where
     TInterface iface b i >>= f = TInterface iface (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
+    TDefSig n ifn dt ft m i >>= f = TDefSig n ifn dt (fmap (>>= f) ft) m i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
@@ -581,6 +595,7 @@ typeof t = case t of
       TInterface {} -> Left "interface"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep _tDefType
+      TDefSig {..} -> Left $ pack $ defTypeRep _tDefType
       TNative {..} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {..} -> Left "app"
@@ -640,6 +655,7 @@ abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
 abbrev (TInterface i _ _) = "<interface " ++ asString' (_interfaceName i) ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
+abbrev TDefSig {..} = "<def-sig " ++ unpack _tSigName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
