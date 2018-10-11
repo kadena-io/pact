@@ -1,2 +1,4 @@
 (interface foo
-  (defun foo:bool (x:bool)))
+  (defun foo:bool (x:bool))
+  (defun bar:decimal (x:bool y:integer))
+  (defconst BAZ "A"))
