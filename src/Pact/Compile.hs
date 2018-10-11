@@ -73,7 +73,7 @@ initParseState e = ParseState e $ CompileState 0 Nothing
 
 reserved :: [Text]
 reserved =
-  T.words "use module defun defpact step step-with-rollback true false let let* defconst"
+  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface"
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
