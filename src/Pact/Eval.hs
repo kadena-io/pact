@@ -34,7 +34,6 @@ module Pact.Eval
     ,checkUserType
     ,deref
     ,installModule
-    ,installInterface
     ,runPure,runPureSys,Purity
     ,liftTerm,apply,apply'
     ,preGas
@@ -142,23 +141,29 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
   evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
-eval (TModule m bod i) = topLevelCall i "module" (GModule m) $ \g0 -> do
-  -- enforce old module keysets
-  oldM <- readRow i Modules (_mName m)
-  case oldM of
-    Nothing -> return ()
-    Just om -> enforceKeySetName i (_mKeySet om)
-  -- enforce new module keyset
-  enforceKeySetName i (_mKeySet m)
-  -- build/install module from defs
-  (g,_defs) <- loadModule m bod i g0
-  writeRow i Write Modules (_mName m) m
-  return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
-eval (TInterface i body info) = topLevelCall info "interface" (GInterface i) $ \gas -> do
-  let n = _interfaceName i 
-  (g, _) <- loadInterface i body info gas
-  writeRow info Write Interfaces n i
-  return $ (g, msg $ pack $ "Loaded interface " ++ show n)  
+eval (TModule m bod i) = case m of
+  Module{..} -> topLevelCall i "module" (GModule m) $ \g0 -> do
+    -- enforce old module keysets
+    oldM <- readRow i Modules _mName
+    case oldM of
+      Nothing -> return ()
+      Just om ->
+        case om of
+          Module{..} -> enforceKeySetName i _mKeySet
+          Interface{..} ->
+            evalError i $ "Module " ++ show _mName ++ " does not match " ++ show _interfaceName ++ "."
+    -- enforce new module keyset
+    enforceKeySetName i _mKeySet
+    -- build/install module from defs
+    (g,_defs) <- loadModule m bod i g0
+    writeRow i Write Modules _mName m
+    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)
+    
+  Interface{..} -> topLevelCall i "interface" (GInterface m) $ \gas -> do
+    let n = _interfaceName 
+    (g, _) <- loadModule m bod i gas
+    writeRow i Write Modules n m
+    return $ (g, msg $ pack $ "Loaded interface " ++ show n)  
 eval t = enscope t >>= reduce
 
 
@@ -168,14 +173,20 @@ evalUse mn h i = do
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
-      let mdHash = view (mdModule . mHash) md  
-      case h of
-        Nothing -> return ()
-        Just mh | mh == mdHash -> return ()
-                | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
-                               show mh ++ ", " ++ show mdHash
-      installModule md
+      let m = view mdModule md
+      case m of
+        Module{..} -> 
+          case h of
+            Nothing -> return ()
+            Just mh | mh == _mHash -> return ()
+                    | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
+                               show mh ++ ", " ++ show _mHash
+        Interface{..} ->
+          case h of
+            Nothing -> return ()
+            Just _ -> evalError i $ "Interfaces should not have associated hashes: " ++ show _interfaceName
 
+      installModule md
 
 -- | Make table of module definitions for storage in namespace/RefStore.
 --
@@ -238,56 +249,6 @@ loadModule m bod1 mi g0 = do
   (evalRefs . rsNewModules) %= HM.insert (_mName m) md
   return (g1, modDefs1)
 
--- | Make table of module definitions for storage in namespace/RefStore.
---
--- This is equivalent to `loadModule`, but for interfaces
-loadInterface
-  :: Interface
-  -> Scope n Term Name -- ^ Body scope (should be unit - interface sigs have no body)
-  -> Info -- ^ context info
-  -> Gas -- ^ currently, this is a trivial gas model - no work is done by complying to an interface
-  -> Eval e (Gas, HM.HashMap Text (Term Name))
-loadInterface i scope info g0 = do
-  idefs <- case instantiate' scope of
-      (TList bd _ _bi) -> HM.fromList <$> foldM validateDefs [] bd
-      t -> evalError (_tInfo t) "Malformed Interface"
-  cs :: [SCC (Term (Either Text Ref), Text, [Text])] <- resolveNames idefs
-  sorted <- forM cs $ \c -> case c of
-                 AcyclicSCC v -> return v
-                 CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  evaluatedDefs <- traverse evalConstRef $ foldl resolveDef HM.empty sorted
-  let idata = InterfaceData i evaluatedDefs
-  installInterface idata
-  (evalRefs . rsNewInterfaces) %= HM.insert (_interfaceName i) idata
-  return (g0, idefs)
-  where
-    resolveDef ds (d, dn, _) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-    evalConstRef r = case r of
-      Direct{} -> runPure $ evalConsts r
-      Ref{} -> runPure $ evalConsts r 
-    validateDefs :: [(Text, Term Name)] -> Term Name -> Eval e [(Text, Term Name)]
-    validateDefs tts sig = do
-      sig' <- case sig of
-        TDefSig {..} -> return $ Just _tSigName
-        TConst {..} -> return $ Just (_aName _tConstArg)
-        _ -> evalError (_tInfo sig) "Invalid interface signature"
-      case sig' of
-        Nothing -> return tts
-        Just txt -> return $ (txt, sig):tts
-    resolveNames :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
-    resolveNames idefs =
-      fmap stronglyConnCompR $ forM (HM.toList idefs) $ \(defName, d) -> do 
-        d' <- forM d $ \(f :: Name) -> do
-          dm <- resolveRef f
-          case (dm, f) of
-            (Just t, _) -> return (Right t)
-            (Nothing, Name fn _) ->
-              case HM.lookup fn idefs of
-                Just _ -> return (Left fn)
-                Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
-            (Nothing, _) -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
-        return (d', defName, mapMaybe (either Just (const Nothing)) $ toList d')
-
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
   dsm <- asks $ firstOf $ eeRefStore . rsModules . ix q . mdRefMap . ix n
@@ -335,7 +296,6 @@ reduce t@TKeySet {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
-reduce t@TDefSig{} = return $ toTerm $ pack $ show t
 reduce t@TNative {} = return $ toTerm $ pack $ show t
 reduce TConst {..} = case _tConstVal of
   CVEval _ t -> reduce t
@@ -345,8 +305,10 @@ reduce (TObject ps t i) =
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
-reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
-reduce t@TInterface {} = evalError (_tInfo t) "Interface only allowed at top level"
+reduce TModule{..} =
+  case _tModuleDef of
+    Module{} -> evalError _tInfo "Module only allowed at top level"
+    Interface{} -> evalError _tInfo "Interface only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
@@ -389,7 +351,6 @@ reduceApp TDef {..} as ai = do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
-      Defsig -> evalError _tInfo "Signature declarations not allowed in modules"
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
@@ -451,11 +412,6 @@ installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap) 
   (evalRefs . rsLoadedModules) %= HM.insert (_mName _mdModule) _mdModule
 
-installInterface :: InterfaceData -> Eval e ()
-installInterface InterfaceData{..} = do
-  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\i k v -> HM.insert (k `Name` def) v i) HM.empty _idRefMap)
-  (evalRefs . rsLoadedInterfaces) %= HM.insert (_interfaceName _idInterface) _idInterface
-  
 msg :: Text -> Term n
 msg = toTerm
 

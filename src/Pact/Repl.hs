@@ -81,7 +81,7 @@ initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
   mv <- initLibState neverLog >>= newMVar
-  return $ EvalEnv (RefStore nativeDefs mempty mempty) def Null (Just 0) def def mv repldb def initialHash freeGasEnv
+  return $ EvalEnv (RefStore nativeDefs mempty) def Null (Just 0) def def mv repldb def initialHash freeGasEnv
 
 
 errToUnit :: Functor f => f (Either e a) -> f (Either () a)
@@ -242,9 +242,7 @@ doTx i t n = do
     case t of
       Commit -> do
         newmods <- use (rEvalState . evalRefs . rsNewModules)
-        newifaces <- use (rEvalState . evalRefs . rsNewInterfaces)
         rEnv . eeRefStore . rsModules %= HM.union newmods
-        rEnv . eeRefStore . rsInterfaces %= HM.union newifaces
       _ -> return ()
     rEvalState .= def
     useReplLib

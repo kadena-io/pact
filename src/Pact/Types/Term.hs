@@ -23,7 +23,7 @@
 
 module Pact.Types.Term
  (
-   Meta(..),mDocs,mModel,
+   Meta(..),mDocs,mModel, _Module, _Interface,
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
@@ -36,18 +36,16 @@ module Pact.Types.Term
    BindType(..),
    TableName(..),
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
+   interfaceCode, interfaceMeta, interfaceName,
    ModuleName(..),
-   InterfaceName(..),
    Name(..),
    ConstVal(..),
-   Interface(..), interfaceCode, interfaceMeta, interfaceName,
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
-   tInterfaceBody, tInterfaceDef, tInterface, tSigName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -57,7 +55,7 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses)
+import Control.Lens (makeLenses, makePrisms)
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -139,11 +137,10 @@ newtype KeySetName = KeySetName Text
 instance Show KeySetName where show (KeySetName s) = show s
 
 
-data DefType = Defun | Defpact | Defsig deriving (Eq,Show)
+data DefType = Defun | Defpact deriving (Eq,Show)
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
-defTypeRep Defsig = "def-sig"
 
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString)
@@ -221,20 +218,6 @@ newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
 
--- | Text wrapper for named interfaces
-newtype InterfaceName = InterfaceName Text
-  deriving (Eq, Ord, IsString, ToJSON, FromJSON, AsString, Hashable, Pretty)
-
--- | Text Wrapper for signatures (i.e. function definitions without body)
-instance Show InterfaceName where
-  show (InterfaceName t) = show t
-
-newtype SignatureName = SignatureName Text
-  deriving (Eq, Ord, IsString, ToJSON, FromJSON, AsString, Hashable, Pretty)
-
-instance Show SignatureName where
-  show (SignatureName t) = show t
-  
 -- | A named reference from source.
 data Name =
     QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
@@ -269,45 +252,51 @@ instance Ord Name where
   Name {} `compare` QName {} = LT
   QName {} `compare` Name {} = GT
   
-data Module = Module {
-    _mName :: !ModuleName
-  , _mKeySet :: !KeySetName
-  , _mMeta :: !Meta
-  , _mCode :: !Code
-  , _mHash :: !Hash
-  , _mBlessed :: !(HS.HashSet Hash)
-  } deriving (Eq)
+
+
+data Module
+ = Module
+ { _mName :: !ModuleName
+ , _mKeySet :: !KeySetName
+ , _mMeta :: !Meta
+ , _mCode :: !Code
+ , _mHash :: !Hash
+ , _mBlessed :: !(HS.HashSet Hash)
+ }
+ | Interface
+ { _interfaceName :: !ModuleName
+ , _interfaceCode :: !Code
+ , _interfaceMeta :: !Meta
+ } deriving Eq
+
 instance Show Module where
-  show Module {..} =
-    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+  show m = case m of
+    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
+
+                     
 instance ToJSON Module where
-  toJSON Module {..} = object
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed, "meta" .= _mMeta ]
--- | TODO when we figure out how/if we're storing modules in the database we can
--- address _mMeta not having a FromJSON, for now harmless
-instance FromJSON Module where
-  parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing Nothing) {- o .:? "meta" -} <*>
-    o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
-
-data Interface = Interface
-  { _interfaceName :: !InterfaceName
-  , _interfaceCode :: !Code
-  , _interfaceMeta :: !Meta
-  } deriving (Eq, Show)
-
-instance ToJSON Interface where
+  toJSON Module{..} = object
+    [ "name" .= _mName
+    , "keyset" .= _mKeySet
+    , "meta" .= _mMeta
+    , "hash" .= _mHash
+    , "blessed" .= _mBlessed
+    ]
   toJSON Interface{..} = object
     [ "name" .= _interfaceName
     , "code" .= _interfaceCode
     , "meta" .= _interfaceMeta
     ]
 
-instance FromJSON Interface where
-  parseJSON = withObject "Interface" $ \i -> Interface
-    <$> i .: "name"
-    <*> i .: "code"
-    <*> pure (Meta Nothing Nothing)
+instance FromJSON Module where
+  parseJSON = withObject "Module" $ \o -> Module
+    <$> o .: "name"
+    <*> o .: "keyset"
+    <*> pure (Meta Nothing Nothing) {- o .:? "meta" -}
+    <*> o .: "code"
+    <*> o .: "hash"
+    <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -331,11 +320,6 @@ data Term n =
     , _tModuleBody :: !(Scope () Term n)
     , _tInfo :: !Info
     } |
-    TInterface {
-      _tInterfaceDef :: Interface
-    , _tInterfaceBody :: !(Scope () Term n)
-    , _tInfo :: !Info
-    } |
     TList {
       _tList :: ![Term n]
     , _tListType :: Type (Term n)
@@ -347,14 +331,6 @@ data Term n =
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
     , _tDefBody :: !(Scope Int Term n)
-    , _tMeta :: !Meta
-    , _tInfo :: !Info
-    } |
-    TDefSig {
-      _tSigName :: !Text
-    , _tInterface :: !InterfaceName
-    , _tDefType :: !DefType
-    , _tFunType :: !(FunType (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
     } |
@@ -439,14 +415,10 @@ data Term n =
 instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
-    show TInterface {..} =
-      "(TInterface " ++ show _tInterfaceDef ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
       "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
       show _tFunType ++ " " ++ show _tMeta ++ ")"
-    show TDefSig{..} = "(TDefSig " ++ defTypeRep _tDefType ++ " " ++ asString' _tInterface ++
-      "." ++ unpack _tSigName ++ " " ++ show _tFunType ++ " " ++ show _tMeta ++ ")"
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
@@ -483,8 +455,6 @@ instance Eq1 Term where
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
   liftEq eq (TDef a b c d e f g) (TDef m n o p q r s) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
-  liftEq eq (TDefSig a b c d e f) (TDefSig t u v w x y) =
-    a == t && b == u && c == v && liftEq (liftEq eq) d w && e == x && f == y
   liftEq eq (TConst a b c d e) (TConst m n o q r) =
     liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
   liftEq eq (TApp a b c) (TApp m n o) =
@@ -522,10 +492,8 @@ instance Applicative Term where
 instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule m (b >>>= f) i
-    TInterface iface b i >>= f = TInterface iface (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
-    TDefSig n ifn dt ft m i >>= f = TDefSig n ifn dt (fmap (>>= f) ft) m i
     TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
@@ -592,10 +560,8 @@ typeof :: Term a -> Either Text (Type (Term a))
 typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule {} -> Left "module"
-      TInterface {} -> Left "interface"
       TList {..} -> Right $ TyList _tListType
       TDef {..} -> Left $ pack $ defTypeRep _tDefType
-      TDefSig {..} -> Left $ pack $ defTypeRep _tDefType
       TNative {..} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {..} -> Left "app"
@@ -651,11 +617,12 @@ termEq _ _ = False
 
 
 abbrev :: Show t => Term t -> String
-abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
-abbrev (TInterface i _ _) = "<interface " ++ asString' (_interfaceName i) ++ ">"
+abbrev (TModule m _ _) =
+  case m of
+    Module{..} -> "<module " ++ asString' _mName ++ ">"
+    Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
-abbrev TDefSig {..} = "<def-sig " ++ unpack _tSigName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
@@ -678,4 +645,4 @@ makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
-makeLenses ''Interface
+makePrisms ''Module

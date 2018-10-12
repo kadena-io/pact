@@ -149,12 +149,21 @@ descModule :: RNativeFun e
 descModule i [TLitString t] = do
   mods <- view (eeRefStore . rsModules . at (ModuleName t))
   case _mdModule <$> mods of
-    Just Module{..} ->
-      return $ TObject [(tStr "name",tStr $ asString _mName),
-                         (tStr "hash", tStr $ asString _mHash),
-                         (tStr "keyset", tStr $ asString _mKeySet),
-                         (tStr "blessed", toTList tTyString def (map (tStr . asString) (HS.toList _mBlessed))),
-                         (tStr "code", tStr $ asString _mCode)] TyAny def
+    Just m ->
+      case m of
+        Module{..} -> 
+          return $ TObject
+            [ (tStr "name"   , tStr $ asString _mName)
+            , (tStr "hash"   , tStr $ asString _mHash)
+            , (tStr "keyset" , tStr $ asString _mKeySet)
+            , (tStr "blessed", toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
+            , (tStr "code"   , tStr $ asString _mCode)
+            ] TyAny def
+        Interface{..} ->
+          return $ TObject
+            [ (tStr "name", tStr $ asString _interfaceName)
+            , (tStr "code", tStr $ asString _interfaceCode)
+            ] TyAny def
     Nothing -> evalError' i $ "Module not found: " ++ show t
 descModule i as = argsError i as
 
@@ -186,7 +195,7 @@ read' g0 i as@(table@TTable {}:TLitString key:rest) = do
 
 read' _ i as = argsError i as
 
-gasPostRead :: Readable r =>FunApp -> Gas -> r -> Eval e Gas
+gasPostRead :: Readable r => FunApp -> Gas -> r -> Eval e Gas
 gasPostRead i g0 row = (g0 +) <$> computeGas (Right i) (GPostRead $ readable row)
 
 gasPostRead' :: Readable r => FunApp -> Gas -> r -> Eval e a -> Eval e (Gas,a)
@@ -356,10 +365,14 @@ enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
   mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules) -- fmap fst . HM.lookup mn <$> view (eeRefStore.rsModules)
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
-  case mm of
+  case mm of 
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
-    Just Module{..}
-      | h == _mHash -> return () -- current version ok
-      | h `HS.member` _mBlessed -> return () -- hash is blessed
-      | otherwise -> evalError' i $
-                     "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
+    Just m ->
+      case m of
+        Module{..}
+          | h == _mHash -> return () -- current version ok
+          | h `HS.member` _mBlessed -> return () -- hash is blessed
+          | otherwise -> evalError' i $
+            "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
+        _ -> evalError' i $
+          "Execution aborted, hashes not supported for interfaces " ++ show mn ++ ": " ++ show h 

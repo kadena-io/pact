@@ -1,7 +1,7 @@
 (interface foo
   @meta (property (conserves-dat-mass))
 
-  (def-sig foo:bool (x:bool))
-  (def-sig bar : decimal (x:bool y:integer))
-  (defconst BAR 1 @doc "barring disbelief again")
-  (defconst BAZ "A"))
+  (defun foo:bool (x:bool))
+  (defun bar : decimal (x:bool y:integer))
+  (defconst BAR:integer @doc "barring disbelief again")
+  (defconst BAZ:string))

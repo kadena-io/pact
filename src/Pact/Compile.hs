@@ -62,19 +62,18 @@ import Pact.Types.Runtime (PactError)
 data CompileState = CompileState
   { _csFresh :: Int
   , _csModule :: Maybe (ModuleName,Hash)
-  , _csInterface :: Maybe InterfaceName
   }
 makeLenses ''CompileState
 
 type Compile a = ExpParse CompileState a
 
 initParseState :: Exp Info -> ParseState CompileState
-initParseState e = ParseState e $ CompileState 0 Nothing Nothing
+initParseState e = ParseState e $ CompileState 0 Nothing
 
 
 reserved :: [Text]
 reserved =
-  T.words "use module defun def-sig defpact step step-with-rollback true false let let* defconst interface"
+  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface"
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
@@ -90,11 +89,6 @@ currentModule = use (psUser . csModule) >>= \m -> case m of
 
 currentModule' :: Compile ModuleName
 currentModule' = fst <$> currentModule
-
-currentInterface :: Compile InterfaceName
-currentInterface = use (psUser . csInterface) >>= \i -> case i of
-  Just i' -> return i'
-  Nothing -> context >>= tokenErr' "Must be declared within interface"
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -129,7 +123,6 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "deftable" -> commit >> deftable
     "defschema" -> commit >> defschema
     "defun" -> commit >> defun
-    "def-sig" -> commit >> defsig
     "defpact" -> commit >> defpact
     "module" -> commit >> moduleForm
     "interface" -> commit >> interface
@@ -248,15 +241,6 @@ defun = do
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
-defsig :: Compile (Term Name)
-defsig = do
-  ifn <- currentInterface
-  (signame, returnTy) <- first _atomAtom <$> typedAtom
-  args <- withList' Parens $ many arg
-  m <- meta
-  TDefSig signame ifn Defsig (FunType args returnTy)
-    <$> pure m <*> contextInfo
-    
 defpact :: Compile (Term Name)
 defpact = do
   modName <- currentModule'
@@ -276,7 +260,7 @@ moduleForm = do
   keyset <- str
   m <- meta
   use (psUser . csModule) >>= \cm -> case cm of
-    Just {} -> syntaxError "Invalid nested module"
+    Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
   let code = case i of
@@ -304,18 +288,19 @@ interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
   m <- meta
-  use (psUser . csInterface) >>= \ci -> case ci of
-    Just {} -> syntaxError "invalid nested interface"
+  use (psUser . csModule) >>= \ci -> case ci of
+    Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
   info <- contextInfo
   (bd,bi) <- bodyForm'
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      iname = InterfaceName iname'
-  (psUser . csInterface) .= Just iname
+      iname = ModuleName iname'
+      ihash = hash $ encodeUtf8 (_unCode code)
+  (psUser . csModule) .= Just (iname, ihash)
   eof
-  return $ TInterface
+  return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList bd TyAny bi)) info 
     

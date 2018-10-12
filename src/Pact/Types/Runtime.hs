@@ -22,14 +22,13 @@ module Pact.Types.Runtime
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
    ModuleData(..), mdModule, mdRefMap,
-   InterfaceData(..), idInterface, idRefMap,
-   RefStore(..),rsNatives,rsModules,rsInterfaces,updateRefStore,
+   RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsLoadedInterfaces, rsNewModules, rsNewInterfaces,
+   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
@@ -136,21 +135,13 @@ data ModuleData = ModuleData
   } deriving (Eq, Show)
 makeLenses ''ModuleData
 
--- | Interface ref store
-data InterfaceData = InterfaceData
-  { _idInterface :: Interface
-  , _idRefMap :: HM.HashMap Text Ref
-  } deriving (Show, Eq)
-makeLenses ''InterfaceData
-
 -- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
-    , _rsInterfaces :: HM.HashMap InterfaceName InterfaceData
     } deriving (Eq, Show)
 makeLenses ''RefStore
-instance Default RefStore where def = RefStore HM.empty HM.empty HM.empty
+instance Default RefStore where def = RefStore HM.empty HM.empty
 
 newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
@@ -220,21 +211,17 @@ data RefState = RefState {
       _rsLoaded :: HM.HashMap Name Ref
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
-      -- | Signatures that were loaded.
-    , _rsLoadedInterfaces :: HM.HashMap InterfaceName Interface
       -- | Modules that were compiled and loaded in this tx.
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
-      -- | Interfaces that were compiled and loaded in this tx.
-    , _rsNewInterfaces :: HM.HashMap InterfaceName InterfaceData
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty HM.empty HM.empty
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty 
 
 -- | Update for newly-loaded modules and interfaces.
 updateRefStore :: RefState -> RefStore -> RefStore 
-updateRefStore RefState {..} rstore 
-  | HM.null _rsNewModules && HM.null _rsNewInterfaces = rstore
-  | otherwise = over rsInterfaces (HM.union _rsNewInterfaces) (over rsModules (HM.union _rsNewModules) rstore) 
+updateRefStore RefState {..}
+  | HM.null _rsNewModules = id
+  | otherwise = over rsModules (HM.union _rsNewModules)
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {

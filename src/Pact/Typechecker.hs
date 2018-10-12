@@ -676,7 +676,6 @@ toAST :: Term (Either Ref (AST Node)) -> TC (AST Node)
 toAST TNative {..} = die _tInfo "Native in value position"
 toAST TDef {..} = die _tInfo "Def in value position"
 toAST TSchema {..} = die _tInfo "User type in value position"
-toAST TDefSig {..} = die _tInfo "Signature in value position"
 
 toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left (Ref r)) -> toAST (fmap Left r)
@@ -771,7 +770,6 @@ toAST TTable {..} = do
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
-toAST TInterface{..} = die _tInfo "Interfaces not supported"
 toAST TUse {..} = die _tInfo "Use not supported"
 toAST TBless {..} = die _tInfo "Bless not supported"
 toAST TStep {..} = do

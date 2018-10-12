@@ -91,8 +91,6 @@ keysetsTable :: TableId
 keysetsTable = "SYS_keysets"
 modulesTable :: TableId
 modulesTable = "SYS_modules"
-interfacesTable :: TableId
-interfacesTable = "SYS_interfaces"
 userTableInfo :: TableId
 userTableInfo = "SYS_usertables"
 
@@ -117,14 +115,12 @@ pactdb = PactDb
        case d of
            KeySets  -> readSysTable e (DataTable keysetsTable) (asString k)
            Modules  -> readSysTable e (DataTable modulesTable) (asString k)
-           Interfaces -> readSysTable e (DataTable interfacesTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->
        case d of
            KeySets -> writeSys e wt keysetsTable k v
            Modules -> writeSys e wt modulesTable k v
-           Interfaces -> writeSys e wt interfacesTable k v
            (UserTables t) -> writeUser e wt t k v
 
  , _keys = \tn e -> runMVState e
@@ -183,7 +179,6 @@ getLogs d tid = mapM convLog . fromMaybe [] =<< doPersist (\p -> readValue p (tn
     tn :: Domain k v -> TxTable
     tn KeySets = TxTable keysetsTable
     tn Modules = TxTable modulesTable
-    tn Interfaces = TxTable interfacesTable
     tn (UserTables t) = userTxRecord t
     convLog tl = case fromJSON (_txValue tl) of
       Error s -> throwDbError $ "Unexpected value, unable to deserialize log: " ++ s

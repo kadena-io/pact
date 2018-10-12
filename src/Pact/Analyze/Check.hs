@@ -57,13 +57,12 @@ import           Prelude                   hiding (exp)
 
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
-                                            renderParsed, tMeta)
+import           Pact.Types.Lang           (Info, renderInfo, renderParsed, tMeta)
 import           Pact.Types.Runtime        (Exp, ModuleData(..), mdModule, mdRefMap,
-                                            ModuleName, Ref (Ref),
-                                            Term (TConst, TDef, TSchema, TTable),
+                                            Ref (Ref), Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Term           (Module(..), ModuleName, mModel)
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -400,7 +399,7 @@ moduleTables modules ModuleData{..} = do
     let TC.Schema{_utName,_utFields} = schema
         schemaName = asString _utName
 
-    invariants <- case schemas ^? ix schemaName.tMeta.mModel._Just of
+    invariants <- case schemas ^? ix schemaName . tMeta . mModel . _Just of
       -- no model = no invariants
       Nothing    -> pure []
       Just model -> liftEither $ do
@@ -439,10 +438,14 @@ moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
 -- Get the set of properties defined in this module
 modulePropDefs
   :: ModuleData -> Either ParseFailure (HM.HashMap Text (DefinedProperty (Exp Info)))
-modulePropDefs (ModuleData Pact.Module{Pact._mMeta=Pact.Meta _ model} _)
-  = case model of
-      Just model' -> HM.fromList <$> parseDefprops model'
-      Nothing     -> Right HM.empty
+modulePropDefs (ModuleData m _) =
+  case m of
+    Pact.Module{Pact._mMeta=Pact.Meta _ model} -> parseModel model
+    Pact.Interface{Pact._interfaceMeta=Pact.Meta _ model} -> parseModel model
+  where
+    parseModel = maybe (Right HM.empty) (fmap HM.fromList . parseDefprops)
+      
+
 
 moduleFunChecks
   :: [Table]
@@ -653,7 +656,8 @@ verifyCheck
   -> ExceptT VerificationFailure IO CheckResult
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
-      moduleName = moduleData ^. mdModule . mName
+      module'    = moduleData ^. mdModule
+      moduleName = nameOf module' 
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
@@ -663,3 +667,7 @@ verifyCheck moduleData funName check = do
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps tables funRef [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
+  where
+    nameOf m = case m of
+      Interface{..} -> _interfaceName
+      Module{..}    -> _mName

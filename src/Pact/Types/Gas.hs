@@ -44,9 +44,9 @@ data GasArgs
   | GReduced [Term Name]
   | GUse ModuleName (Maybe Hash)
   | GModule Module
+  | GInterface Module
   | GModuleMember Module
   | GUser
-  | GInterface Interface
 
 
 newtype GasLimit = GasLimit Word64
