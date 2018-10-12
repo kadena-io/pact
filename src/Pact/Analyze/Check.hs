@@ -26,58 +26,59 @@ module Pact.Analyze.Check
   , VerificationFailure(..)
   ) where
 
-import           Control.Exception         as E
-import           Control.Lens              (at, ifoldrM, itraversed, ix,
-                                            traversed, view, (%~), (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left)
-import           Control.Monad             (void)
-import           Control.Monad.Except      (Except, ExceptT (ExceptT),
-                                            MonadError, catchError, runExceptT,
-                                            throwError, withExcept, withExceptT)
-import           Control.Monad.Morph       (generalize, hoist)
-import           Control.Monad.Reader      (runReaderT)
-import           Control.Monad.Trans.Class (MonadTrans (lift))
-import qualified Data.HashMap.Strict       as HM
-import           Data.List                 (isPrefixOf)
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Monoid               ((<>))
-import           Data.SBV                  (Symbolic)
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Control          as SBV
-import qualified Data.SBV.Internals        as SBVI
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
-import           Data.Text                 (Text)
-import qualified Data.Text                 as T
-import           Data.Traversable          (for)
-import           Prelude                   hiding (exp)
+import           Control.Exception          as E
+import           Control.Lens               (at, ifoldrM, itraversed, ix,
+                                             traversed, view, (%~), (&), (<&>),
+                                             (?~), (^.), (^?), (^@..), _1, _2,
+                                             _Just, _Left)
+import           Control.Monad              (void, (<=<))
+import           Control.Monad.Except       (Except, ExceptT (ExceptT),
+                                             MonadError, catchError, runExceptT,
+                                             throwError, withExcept,
+                                             withExceptT)
+import           Control.Monad.Morph        (generalize, hoist)
+import           Control.Monad.Reader       (runReaderT)
+import           Control.Monad.State.Strict (evalStateT)
+import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import qualified Data.HashMap.Strict        as HM
+import           Data.List                  (isPrefixOf)
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
+import           Data.Maybe                 (mapMaybe)
+import           Data.Monoid                ((<>))
+import           Data.SBV                   (Symbolic)
+import qualified Data.SBV                   as SBV
+import qualified Data.SBV.Control           as SBV
+import qualified Data.SBV.Internals         as SBVI
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import           Data.Traversable           (for)
+import           Prelude                    hiding (exp)
 
-import           Pact.Analyze.Parse        hiding (tableEnv)
-import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (Info, mModel, mName, renderInfo,
-                                            renderParsed, tMeta)
-import           Pact.Types.Runtime        (Exp, ModuleData,
-                                            ModuleName, Ref (Ref),
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, getInfo, tShow)
-import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Typecheck      (AST,
-                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                            Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Analyze.Parse         hiding (tableEnv)
+import           Pact.Typechecker           (typecheckTopLevel)
+import           Pact.Types.Lang            (Info, mModel, mName, renderInfo,
+                                             renderParsed, tMeta)
+import           Pact.Types.Runtime         (Exp, ModuleData, ModuleName,
+                                             Ref (Ref),
+                                             Term (TConst, TDef, TSchema, TTable),
+                                             asString, getInfo, tShow)
+import qualified Pact.Types.Runtime         as Pact
+import           Pact.Types.Typecheck       (AST, Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                             Named, Node, TcId (_tiInfo),
+                                             TopLevel (TopConst, TopFun, TopTable),
+                                             UserType (_utFields, _utName),
+                                             runTC, tcFailures)
+import qualified Pact.Types.Typecheck       as TC
 
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval         hiding (invariants)
-import           Pact.Analyze.Model        (allocArgs, allocModelTags,
-                                            saturateModel, showModel)
-import           Pact.Analyze.Parse        (expToCheck, expToInvariant,
-                                            parseBindings)
+import           Pact.Analyze.Eval          hiding (invariants)
+import           Pact.Analyze.Model         (allocArgs, allocModelTags,
+                                             saturateModel, showModel)
+import           Pact.Analyze.Parse         (expToCheck, expToInvariant,
+                                             parseBindings)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -141,6 +142,7 @@ data VerificationFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidRefType
+  | FailedConstTranslation String
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -203,6 +205,9 @@ falsifyingModel _                                         = Nothing
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
   = CheckFailure info (TranslateFailure' err)
+
+translateToVerificationFailure :: TranslateFailure -> VerificationFailure
+translateToVerificationFailure = ModuleCheckFailure . translateToCheckFailure
 
 analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
 analyzeToCheckFailure (AnalyzeFailure info err)
@@ -447,10 +452,11 @@ modulePropDefs (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
 moduleFunChecks
   :: [Table]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text EProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-moduleFunChecks tables modTys propDefs = for modTys $ \case
+moduleFunChecks tables funTypes consts propDefs = for funTypes $ \case
   -- TODO How better to handle the type mismatch?
   (Pact.Direct _, _) -> throwError InvalidRefType
   (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
@@ -512,7 +518,7 @@ moduleFunChecks tables modTys propDefs = for modTys $ \case
                 expProperty   = model' ^? ix "property"
             exps <- collectExps "properties" expProperties expProperty
             runExpParserOver exps $
-              expToCheck tableEnv vidStart nameVids vidTys propDefs
+              expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
     pure (ref, Right checks)
 
@@ -616,19 +622,46 @@ verifyModule modules moduleData = runExceptT $ do
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
   --
-  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
+  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
+    consts :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
     (\name ref accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _name funType _args _body) _meta, _tcState)
-          -> HM.insert name (ref, funType) accum
+          -> accum & _1 . at name ?~ (ref, funType)
+        (TopConst _info _qualifiedName _type val _doc, _tcState)
+          -> accum & _2 . at name ?~ val
         _ -> accum
     )
-    HM.empty
+    (HM.empty, HM.empty)
     typecheckedRefs
 
+  let vertex0    = 0
+      nextVertex = succ vertex0
+      path0      = Path 0
+      nextTagId  = succ $ _pathTag path0
+      graph0     = pure vertex0
+      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty
+
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
+
+      translateNode' :: AST TC.Node -> Except VerificationFailure ETerm
+      translateNode' node = withExceptT translateToVerificationFailure $
+        (`evalStateT` translateState) $
+          (`runReaderT` translateEnv) $
+            unTranslateM $ translateNode node
+
+      valueToProp' :: ETerm -> Except VerificationFailure EProp
+      valueToProp' tm = case valueToProp tm of
+        Right prop -> pure prop
+        Left msg   -> throwError $ FailedConstTranslation msg
+
+  consts' <- hoist generalize $
+    traverse (valueToProp' <=< translateNode') consts
+
   (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables funTypes propDefs
+    <- hoist generalize $ moduleFunChecks tables funTypes consts' propDefs
 
   let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks

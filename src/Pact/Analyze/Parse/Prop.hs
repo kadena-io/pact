@@ -543,14 +543,16 @@ expToCheck
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
+  -> HM.HashMap Text EProp
+  -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> Exp Info
   -- ^ Exp to convert
   -> Either String Check
-expToCheck tableEnv' genStart nameEnv idEnv propDefs body =
+expToCheck tableEnv' genStart nameEnv idEnv consts propDefs body =
   PropertyHolds . prenexConvert
-    <$> expToProp tableEnv' genStart nameEnv idEnv propDefs TBool body
+    <$> expToProp tableEnv' genStart nameEnv idEnv consts propDefs TBool body
 
 expToProp
   :: TableEnv
@@ -561,17 +563,19 @@ expToProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
+  -> HM.HashMap Text EProp
+  -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> Type a
   -> Exp Info
   -- ^ Exp to convert
   -> Either String (Prop a)
-expToProp tableEnv' genStart nameEnv idEnv propDefs ty body = do
+expToProp tableEnv' genStart nameEnv idEnv consts propDefs ty body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
-        preTypedPropDefs HM.empty
+        preTypedPropDefs consts
   runReaderT (checkPreProp ty preTypedBody) env
 
 inferProp
@@ -583,16 +587,18 @@ inferProp
   -- ^ Environment mapping names to var IDs
   -> Map VarId EType
   -- ^ Environment mapping var IDs to their types
+  -> HM.HashMap Text EProp
+  -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
   -> Exp Info
   -- ^ Exp to convert
   -> Either String EProp
-inferProp tableEnv' genStart nameEnv idEnv propDefs body = do
+inferProp tableEnv' genStart nameEnv idEnv consts propDefs body = do
   (preTypedBody, preTypedPropDefs)
     <- parseToPreProp genStart nameEnv propDefs body
   let env = PropCheckEnv (coerceQType <$> idEnv) tableEnv' Set.empty Set.empty
-        preTypedPropDefs HM.empty
+        preTypedPropDefs consts
   runReaderT (inferPreProp preTypedBody) env
 
 parseToPreProp
