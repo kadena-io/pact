@@ -1,3 +1,4 @@
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -25,7 +26,7 @@ import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
 
-import Crypto.Random
+import "crypto-api" Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Data.Aeson
