@@ -38,7 +38,6 @@ import           Control.Monad.Except       (Except, ExceptT (ExceptT),
                                              withExceptT)
 import           Control.Monad.Morph        (generalize, hoist)
 import           Control.Monad.Reader       (runReaderT)
-import           Control.Monad.State.Strict (evalStateT)
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (isPrefixOf)
@@ -636,29 +635,16 @@ verifyModule modules moduleData = runExceptT $ do
     (HM.empty, HM.empty)
     typecheckedRefs
 
-  let vertex0    = 0
-      nextVertex = succ vertex0
-      path0      = Path 0
-      nextTagId  = succ $ _pathTag path0
-      graph0     = pure vertex0
-      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
-        Map.empty mempty path0 Map.empty
-
-      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
-
-      translateNode' :: AST TC.Node -> Except VerificationFailure ETerm
-      translateNode' node = withExceptT translateToVerificationFailure $
-        (`evalStateT` translateState) $
-          (`runReaderT` translateEnv) $
-            unTranslateM $ translateNode node
-
-      valueToProp' :: ETerm -> Except VerificationFailure EProp
+  let valueToProp' :: ETerm -> Except VerificationFailure EProp
       valueToProp' tm = case valueToProp tm of
         Right prop -> pure prop
         Left msg   -> throwError $ FailedConstTranslation msg
 
+      translateNode''
+        = withExceptT translateToVerificationFailure . translateNode'
+
   consts' <- hoist generalize $
-    traverse (valueToProp' <=< translateNode') consts
+    traverse (valueToProp' <=< translateNode'') consts
 
   (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
     <- hoist generalize $ moduleFunChecks tables funTypes consts' propDefs
