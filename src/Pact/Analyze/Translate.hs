@@ -25,7 +25,7 @@ import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
-                                             runStateT)
+                                             runStateT, evalStateT)
 import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
@@ -1005,3 +1005,19 @@ runTranslation info pactArgs body = do
                      <* extendPath -- form final edge for any remaining events
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info args)
+
+translateNode' :: AST Node -> Except TranslateFailure ETerm
+translateNode' node =
+  let vertex0    = 0
+      nextVertex = succ vertex0
+      path0      = Path 0
+      nextTagId  = succ $ _pathTag path0
+      graph0     = pure vertex0
+      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty
+
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
+
+  in (`evalStateT` translateState) $
+       (`runReaderT` translateEnv) $
+         unTranslateM $ translateNode node
