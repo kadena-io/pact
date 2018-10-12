@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE ViewPatterns      #-}
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module AnalyzeSpec (spec) where
 
@@ -43,7 +43,7 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
 import           Pact.Analyze.Check
 import           Pact.Analyze.Eval.Numerical  (banker'sMethod)
 import qualified Pact.Analyze.Model           as Model
-import           Pact.Analyze.Parse           (PreProp(..), TableEnv,
+import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
@@ -1666,7 +1666,8 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1684,7 +1685,8 @@ spec = describe "analyze" $ do
           -> Either String EProp
         inferProp' env1 env2 tableEnv t = case parseExprs' t of
           Right [exp'] ->
-            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -2141,3 +2143,12 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+
+  describe "references to module constants" $ do
+    expectVerified [text|
+      (defconst FOO "FOO")
+
+      (defun test:string ()
+        @model (property (= result FOO))
+        FOO)
+      |]
