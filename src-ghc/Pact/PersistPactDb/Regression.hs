@@ -44,7 +44,7 @@ runRegression p = do
   let mod' = Module "mod1" "mod-admin-keyset" (Meta Nothing Nothing) "code" (H.hash "code") mempty
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
-  assertEquals' "hash of commit 3" (-8810669039792530227) (hashWithSalt 1 <$> commit v)
+  assertEquals' "hash of commit 3" (314509247989860983) (hashWithSalt 1 <$> commit v)
   _t4 <- begin v t3
   tids <- _txids pactdb user1 t1 v
   assertEquals "user txids" [2] tids
