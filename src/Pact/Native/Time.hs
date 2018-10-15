@@ -26,7 +26,7 @@ import Data.Thyme
 import Data.Decimal
 import System.Locale
 import Data.AffineSpace
-import Data.Semigroup
+import Data.Semigroup ()
 
 import Pact.Types.Runtime
 import Pact.Native.Internal

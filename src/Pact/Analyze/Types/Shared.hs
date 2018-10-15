@@ -399,7 +399,7 @@ type TVal = (EType, AVal)
 
 newtype Object
   = Object (Map Text TVal)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Semigroup)
 
 instance UserShow Object where
   userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
@@ -418,7 +418,7 @@ objFields = lens getter setter
 
 newtype Schema
   = Schema (Map Text EType)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Semigroup)
 
 instance Monoid Schema where
   mempty = Schema Map.empty
@@ -678,7 +678,7 @@ columnMapToSchema
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
-  deriving (Show, Functor, Foldable, Traversable, Monoid)
+  deriving (Show, Functor, Foldable, Traversable, Semigroup, Monoid)
 
 instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $

@@ -75,7 +75,8 @@ import Data.Hashable
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
-import Data.Monoid
+import Data.Monoid ()
+import Data.Semigroup ((<>))
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS
@@ -173,10 +174,12 @@ instance Show Ref where
 newtype Gas = Gas Int64
   deriving (Eq,Ord,Num,Real,Integral,Enum)
 instance Show Gas where show (Gas g) = show g
+
+instance Semigroup Gas where
+  (Gas a) <> (Gas b) = Gas $ a + b
+
 instance Monoid Gas where
   mempty = 0
-  (Gas a) `mappend` (Gas b) = Gas $ a + b
-
 
 data NativeDFun = NativeDFun {
       _nativeName :: NativeDefName,

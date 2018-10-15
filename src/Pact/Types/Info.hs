@@ -33,7 +33,7 @@ import Data.Default
 import GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
-import Data.Monoid
+import Data.Monoid ()
 import Data.Semigroup (Semigroup)
 import Control.DeepSeq
 

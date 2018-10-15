@@ -1,18 +1,16 @@
 # stack yaml for ghc builds
 
-resolver: lts-8.15
+resolver: lts-12.9
 
 packages:
   - '.'
 
 extra-deps:
-  - bound-2
+  - algebraic-graphs-0.2
+  - crackNum-2.2
+  - FloatingHex-0.4
   - compactable-0.1.2.2
   - ed25519-donna-0.1.1
-  - megaparsec-6.5.0
-  - parser-combinators-1.0.0
-  - algebraic-graphs-0.1.1.1
-  - hedgehog-0.6
   - hw-hspec-hedgehog-0.1.0.5
   - git: https://github.com/slpopejoy/snap-cors.git
     commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
