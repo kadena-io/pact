@@ -199,7 +199,7 @@ evalUse mn h i = do
 -- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas ->
               Eval e (Gas,HM.HashMap Text (Term Name))
-loadModule m bod1 mi g0 = do
+loadModule m@Module{..} bod1 mi g0 = do
   (g1,modDefs1) <-
     case instantiate' bod1 of
       (TList bd _ _bi) -> do
@@ -246,8 +246,30 @@ loadModule m bod1 mi g0 = do
   evaluatedDefs <- traverse evalConstRef defs
   let md = ModuleData m evaluatedDefs
   installModule md 
-  (evalRefs . rsNewModules) %= HM.insert (_mName m) md
+  (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
+loadModule i@Interface{..} body _ gas0 = do
+  fs <- extractBodyDefs body
+  evaluatedDefs <- traverse (runPure . evalConsts . Direct) fs
+  let md = ModuleData i evaluatedDefs
+  installModule md
+  (evalRefs . rsNewModules) %= HM.insert _interfaceName md
+  return (gas0, fs)
+  where
+    extractBodyDefs :: Scope a Term Name -> Eval e (HM.HashMap Text (Term Name))
+    extractBodyDefs b = case instantiate' b of
+        (TList bd _ _bi) -> HM.fromList <$> foldM extractDefName [] bd
+        t -> evalError (_tInfo t) "Malformed interface"
+    extractDefName :: [(Text, Term Name)] -> Term Name -> Eval e [(Text, Term Name)]
+    extractDefName rs t = do 
+      dnm <- case t of
+        TDef{..} -> return $ Just _tDefName
+        TConst{..} -> return $ Just $ _aName _tConstArg
+        _ -> evalError (_tInfo t) "Invalid interface member"
+      case dnm of
+        Nothing -> return rs
+        Just dn -> return $ (dn,t):rs
+
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do

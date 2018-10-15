@@ -302,8 +302,7 @@ interface = do
   eof
   return $ TModule
     (Interface iname code m)
-    (abstract (const Nothing) (TList bd TyAny bi)) info 
-    
+    (abstract (const Nothing) (TList bd TyAny bi)) info
       
   
 step :: Compile (Term Name)
@@ -414,9 +413,6 @@ bodyForm = do
 
 bodyForm' :: Compile ([Term Name],Info)
 bodyForm' = (,) <$> some term <*> contextInfo
-
-
-
 
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile id
