@@ -109,7 +109,7 @@ instance AsString KeyPredBuiltins where
   asString KeysAll = "keys-all"
   asString KeysAny = "keys-any"
   asString Keys2 = "keys-2"
-  
+
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
@@ -127,7 +127,7 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
--- | Module ref store 
+-- | Module ref store
 data ModuleData = ModuleData
   { _mdModule :: Module
   , _mdRefMap :: HM.HashMap Text Ref
@@ -214,10 +214,10 @@ data RefState = RefState {
     , _rsNewModules :: HM.HashMap ModuleName ModuleData
     } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty HM.empty 
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty
 
 -- | Update for newly-loaded modules and interfaces.
-updateRefStore :: RefState -> RefStore -> RefStore 
+updateRefStore :: RefState -> RefStore -> RefStore
 updateRefStore RefState {..}
   | HM.null _rsNewModules = id
   | otherwise = over rsModules (HM.union _rsNewModules)
@@ -242,10 +242,12 @@ newtype Eval e a =
     deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
 
+instance Semigroup a => Semigroup (Eval e a) where
+  (<>) = liftA2 (<>)
+
 instance Monoid a => Monoid (Eval e a) where
   mempty = pure mempty
-  mappend = liftA2 mappend
-  
+
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
 runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)

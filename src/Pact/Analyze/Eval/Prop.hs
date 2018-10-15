@@ -147,7 +147,7 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
 
   pure $ Object aValFields
 
-evalPropSpecific :: SymWord a => PropSpecific a -> Query (S a)
+evalPropSpecific :: PropSpecific a -> Query (S a)
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
