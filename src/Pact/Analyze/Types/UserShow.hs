@@ -5,7 +5,7 @@ module Pact.Analyze.Types.UserShow where
 import           Data.Map        (Map)
 import qualified Data.Map        as Map
 import           Data.SBV        (AlgReal, Int64)
-import           Data.Semigroup
+import           Data.Semigroup  ()
 import           Data.Text       (Text)
 import qualified Data.Text       as T
 
