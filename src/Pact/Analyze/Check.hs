@@ -640,11 +640,11 @@ verifyModule modules moduleData = runExceptT $ do
         Right prop -> pure prop
         Left msg   -> throwError $ FailedConstTranslation msg
 
-      translateNode''
-        = withExceptT translateToVerificationFailure . translateNode'
+      translateNodeNoGraph'
+        = withExceptT translateToVerificationFailure . translateNodeNoGraph
 
   consts' <- hoist generalize $
-    traverse (valueToProp' <=< translateNode'') consts
+    traverse (valueToProp' <=< translateNodeNoGraph') consts
 
   (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
     <- hoist generalize $ moduleFunChecks tables funTypes consts' propDefs

@@ -12,7 +12,7 @@ import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT, runMaybeT),
                                              exceptToMaybeT)
 import qualified Data.Text                  as T
 
-import           Pact.Analyze.Translate     (translateNode')
+import           Pact.Analyze.Translate     (translateNodeNoGraph)
 import           Pact.Analyze.Types         hiding (Object, Term)
 import           Pact.Analyze.Util          (dummyInfo)
 
@@ -244,7 +244,7 @@ toAnalyze ty tm = do
 
   hoist generalize $
     exceptToMaybeT $
-      translateNode' ast
+      translateNodeNoGraph ast
 
 -- This is limited to simple types for now
 reverseTranslateType :: Type a -> Pact.Type b

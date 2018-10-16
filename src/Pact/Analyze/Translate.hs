@@ -1006,8 +1006,14 @@ runTranslation info pactArgs body = do
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info args)
 
-translateNode' :: AST Node -> Except TranslateFailure ETerm
-translateNode' node =
+-- | Translate a node ignoring the execution graph. This is useful in cases
+-- where we don't show an execution trace. Those two places (currently) are:
+-- * Translating `defconst`s for use in properties. This is for use only in
+-- properties, as opposed to in execution.
+-- * Translating terms for property testing. Here we don't show a trace -- we
+-- just test that pact and analysis come to the same result.
+translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
+translateNodeNoGraph node =
   let vertex0    = 0
       nextVertex = succ vertex0
       path0      = Path 0
