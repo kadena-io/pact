@@ -97,27 +97,13 @@ instance {-# OVERLAPPING #-} Num (SBV Decimal) where
 -- Caution: see note [OverlappingInstances] *This instance must be selected for
 -- decimals*.
 instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
-  a / b =
-    -- Note the strong similarity between this algorithm and the banker's
-    -- method. The reason is that we need to round to the nearest decimal in
-    -- the same way that the banker's method rounds to the nearest int.
-    let aI = coerceSBV @_ @Integer (lShift255D a)
-        bI = coerceSBV @_ @Integer b
-
-        -- @wholePart@ is always less than (or equal to) the answer, so we may
-        -- add a positive adjustment to it.
-        -- @modAb@ is negative when the denominator is negative. So when we use
-        -- it we take the absolute value.
-        (wholePart, modAb)    = sDivMod aI bI
-        exactlyBetweenNumbers = abs modAb * 2 .== abs bI
-        roundsUp              = abs modAb * 2 .>  abs bI
-        wholePartIsOdd        = bnot $ wholePart `sMod` 2 .== 0
-
-    -- We're working in the space of integers 10^255 times bigger than the
-    -- decimals they represent. Possibly add an adjustment to jump to the next
-    -- decimal, then convert to a decimal.
-    in coerceSBV @Integer @Decimal $ wholePart +
-         oneIf (roundsUp ||| exactlyBetweenNumbers &&& wholePartIsOdd)
+  -- Note that we need to round to the nearest decimal in the same way that the
+  -- banker's method rounds to the nearest int. Also note we need to make the
+  -- numerator larger by a factor of 10^255 to offset the larger denominator (1
+  -- * 10^255 represents 1.0).
+  a / b = coerceSBV @Integer @Decimal $ roundingDiv
+    (coerceSBV @_ @Integer (lShift255D a))
+    (coerceSBV @_ @Integer b)
 
   fromRational rat = literal $
     let (Decimal.Decimal places mantissa) = fromRational rat
@@ -125,21 +111,27 @@ instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
 
 -- Convert from decimal to integer by the banker's method. This rounds to the
 -- nearest integer when the decimal happens to land exactly between two
--- integers. See the @Fractional (SBV Decimal)@ instance for more explanation.
+-- integers.
 banker'sMethod :: SBV Decimal -> SBV Integer
-banker'sMethod d =
-  let -- @wholePart@ is always less than (or equal to) the answer, even when
-      -- negative.
-      (wholePart, fractionalPart) =
-        coerceSBV d `sDivMod` (10 ^ decimalPrecision :: SBV Integer)
+banker'sMethod d
+  = roundingDiv (coerceSBV @Decimal @Integer d) (coerceSBV @Decimal @Integer 1)
 
-      halfRep               = coerceSBV @Decimal @Integer 0.5
-      -- note that @fractionalPart@ and @halfRep@ are always non-negative (as
-      -- opposed to the division implementation)
-      exactlyBetweenNumbers = fractionalPart .== halfRep
-      roundsUp              = fractionalPart .>  halfRep
+-- (Banker's method) rounding division for integers.
+roundingDiv :: SBV Integer -> SBV Integer -> SBV Integer
+roundingDiv num denom =
+  let -- @wholePart@ is always less than (or equal to) the answer, so we may
+      -- add a positive adjustment to it.
+      -- @fractionalPart@ is negative when the denominator is negative. So when
+      -- we use it we take the absolute value.
+      (wholePart, fractionalPart) = num `sDivMod` denom
+
+      exactlyBetweenNumbers = abs fractionalPart * 2 .== abs denom
+      roundsUp              = abs fractionalPart * 2 .>  abs denom
       wholePartIsOdd        = bnot $ wholePart `sMod` 2 .== 0
 
+    -- We're working in the space of integers 10^255 times bigger than the
+    -- decimals they represent. Possibly add an adjustment to jump to the next
+    -- decimal, then convert to a decimal.
   in wholePart + oneIf (roundsUp ||| exactlyBetweenNumbers &&& wholePartIsOdd)
 
 instance SymbolicDecimal (SBV Decimal) where
