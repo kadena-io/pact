@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module AnalyzeProperties where
+module AnalyzePropertiesSpec where
 
 import           Control.Monad               ((<=<))
 import           Control.Monad.IO.Class      (liftIO)

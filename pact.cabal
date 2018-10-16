@@ -251,7 +251,7 @@ test-suite hspec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner
-      , AnalyzeProperties
+      , AnalyzePropertiesSpec
       , AnalyzeSpec
       , Analyze.Eval
       , Analyze.Gen
