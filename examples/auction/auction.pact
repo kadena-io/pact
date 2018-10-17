@@ -143,15 +143,15 @@
 
   (defun start-auction:string ()
     "TODO"
-    (let* ((step:string (at 'step (read state-table STATE_ROW)))
-           (okay:bool (= step 'NOT_STARTED)))
-      (enforce okay "must not have already started"))
+    (enforce (=
+      (at 'step (read state-table STATE_ROW))
+      'NOT_STARTED)
+      "must not have already started")
     (write state-table STATE_ROW { 'step: 'RUNNING }))
 
   (defun end-auction:string ()
     "TODO"
-    (let ((step:string (at 'step (read state-table STATE_ROW))))
-      (enforce (= step 'RUNNING) "must be running"))
+    (enforce (= (at 'step (read state-table STATE_ROW)) 'RUNNING) "must be running")
     (write state-table STATE_ROW { 'step: 'ENDED }))
 
   ; TODO:
