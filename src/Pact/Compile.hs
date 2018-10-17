@@ -284,6 +284,19 @@ moduleForm = do
     (Module modName (KeySetName keyset) m code modHash blessed)
     (abstract (const Nothing) (TList bd TyAny bi)) i
 
+-- | interface:
+--
+-- This is the parsing form associated with the `interface` keyword.
+-- The structure of an interface is as follows:
+--
+-- (interface foo
+--   @doc "some documentation"
+--   @model (property (do (some property)))
+--
+--   (defun <name>:<return ty> (a1:<ty1> ... aN:<tyN>) @doc "some doc")
+--   (defconst <NAME>:<return ty> val)
+--
+-- The bodies of `defun` decls must be empty
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
@@ -304,7 +317,11 @@ interface = do
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
     
-
+-- | interfaceForm:
+--
+-- This function parses the body forms declared in an interface
+-- as either an empty function declaration (a function type signature
+-- without body), or as a `defconst` (with value).
 interfaceForm :: Compile ([Term Name], Info)
 interfaceForm = (,) <$> some interfaceForms <*> contextInfo
   where
@@ -315,7 +332,11 @@ interfaceForm = (,) <$> some interfaceForms <*> contextInfo
         "defun" -> commit >> emptyDef 
         "defconst" -> commit >> defconst
         _ -> expected "empty form"
-  
+
+-- | emptyDef:
+--
+-- Same as `defun`, however, instead of parsing an abstract body,
+-- we simply lift the defname and contextual information into a bare Scope.
 emptyDef :: Compile (Term Name)
 emptyDef = do
   modName <- currentModule'

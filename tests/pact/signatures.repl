@@ -7,7 +7,7 @@
   (defun f () "docs work without the doc")
 
   (defconst BAZ "i did a baz, baz thing")
-  (defconst QUX "qux the casbah")
+  (defconst QUX:string "qux the casbah")
   (defconst F @doc "docstrings work with the doc")
 
   (defun g () @model (property stuff))
