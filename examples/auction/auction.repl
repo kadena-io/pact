@@ -1,0 +1,6 @@
+(env-keys ["auction-admin" "user123" "user456"])
+(env-data { "auction-admin-keyset": ["auction-admin"] })
+(begin-tx)
+(load "auction.pact")
+(commit-tx)
+(verify 'auction)
