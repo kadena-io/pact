@@ -29,7 +29,7 @@ import Pact.Types.Command
 import "crypto-api" Crypto.Random
 import Crypto.Ed25519.Pure
 
-import Data.Aeson
+import Data.Aeson hiding (Options)
 import Test.Hspec
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM

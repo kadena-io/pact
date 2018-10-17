@@ -6,7 +6,7 @@ module PactContinuationSpec (spec) where
 import Test.Hspec
 import Utils.TestRunner
 import qualified Data.HashMap.Strict as HM
-import Data.Aeson
+import Data.Aeson hiding (Options)
 import qualified Network.HTTP.Client as HTTP
 import Network.Wreq
 import Control.Lens ((&), (.~))

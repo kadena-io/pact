@@ -1095,8 +1095,7 @@ spec = describe "analyze" $ do
                 it "should have no keyset provenance" $ do
                   ksProvs `shouldBe` Map.empty
 
-              other -> it "didn't find a single CheckFailure" $
-                HUnit.assertFailure $ show other
+              other -> runIO $ HUnit.assertFailure $ show other
 
   describe "cell-delta.integer" $ do
     let code =

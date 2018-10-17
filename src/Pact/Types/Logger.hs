@@ -128,7 +128,7 @@ _test = do
                "  include: [INFO] \n" <>
                "ExcludeINFO:      \n" <>
                "  exclude: [INFO]"
-      rules = either error id $ Y.decodeEither config
+      rules = either (error . show) id $ Y.decodeEither' config
       loggers = initLoggers putStrLn doLog rules
   forM_ (sort $ HM.keys (logRules rules)) $ \ln -> runLogIO (newLogger loggers ln) _stuff
   runLogIO (newLogger loggers "Unconfigured") _stuff
