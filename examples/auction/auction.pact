@@ -7,19 +7,22 @@
 
   @model
     [
-      ; TODO:
-      ; (defproperty implies:bool (a:bool b:bool) (not (and a (not b))))
-      ; TODO: vararg and (fold (and) true [...])
+      ; TODO: it would be convenient to have the equivalent of haskell's and:
+      ; (defproperty and' (bs:[bool]) (fold (and) true bs))
 
       (defproperty implies (a:bool b:bool) (not (and a (not b))))
 
+      ; since the state table is a singleton (ie has only one row), this
+      ; property asserts that we only ever use that row.
       (defproperty state-table-safety
         (and
           ; the state table is a singleton. we only read / write to STATE_ROW.
           (and
             ; TODO: should be able to use STATE_ROW variable
-            (forall (row:string) (implies (row-read    state-table row) (= row 'STATE_ROW)))
-            (forall (row:string) (implies (row-written state-table row) (= row 'STATE_ROW))))
+            (forall (row:string)
+              (implies (row-read    state-table row) (= row 'STATE_ROW)))
+            (forall (row:string)
+              (implies (row-written state-table row) (= row 'STATE_ROW))))
 
           ; additionally, STATE_ROW always exists, but no other row ever does
           ; (and
@@ -48,14 +51,14 @@
       ;     (post (at 'step (read state-table 'STATE_ROW 'after))))
 
       ;   (and
-      ;     ; NOT_STARTED -> RUNNING
+      ;     ; NOT_STARTED -> NOT_STARTED + RUNNING
       ;     (implies
       ;       (= pre 'NOT_STARTED)
       ;       (or
       ;         (= post 'NOT_STARTED)
       ;         (= post 'RUNNING)))
 
-      ;     ; RUNNING -> ENDED
+      ;     ; RUNNING -> RUNNING + ENDED
       ;     (and
       ;       (implies
       ;         (= pre RUNNING)
@@ -70,8 +73,7 @@
       ;   ))
 
 
-
-      ; temporary stand-in
+      ; temporary stand-in. this checks the first step transitions safely.
       (defproperty transition-safety
         ; NOT_STARTED -> RUNNING
         (implies
