@@ -41,9 +41,9 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Eval.Numerical  (banker'sMethod)
+import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
 import qualified Pact.Analyze.Model           as Model
-import           Pact.Analyze.Parse           (PreProp(..), TableEnv,
+import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
 import           Pact.Analyze.PrenexNormalize (prenexConvert)
 import           Pact.Analyze.Types
@@ -238,16 +238,124 @@ spec = describe "analyze" $ do
     let unlit = fromJust . unliteralS @Decimal
 
     it "can be one half" $ unlit (1 / 2) == 0.5
+
     it "handles the last decimal correctly" $
       unlit (1581138830084.1918464 / 1581138830084)
       ==
       1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
 
+    let i256 :: Int
+        i256 = 256
+
+        i255 :: Int
+        i255 = 255
+
+    it "handles the last decimal digit correctly (positive, round up 1)" $
+      unlit (15 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round up 2)" $
+      unlit (17 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round up 3)" $
+      unlit ((-17) / (-(10 ^ i256)))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 1)" $
+      unlit (25 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 2)" $
+      unlit (13 / (10 ^ i256))
+      ==
+      1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 3)" $
+      unlit ((-13) / (-(10 ^ i256)))
+      ==
+      1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 1)" $
+      unlit ((-15) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 2)" $
+      unlit ((-17) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 3)" $
+      unlit (17 / (-(10 ^ i256)))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 1)" $
+      unlit ((-25) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 2)" $
+      unlit ((-13) / (10 ^ i256))
+      ==
+      -1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 3)" $
+      unlit (13 / (-(10 ^ i256)))
+      ==
+      -1 / 10 ^ i255
+
+    it "handles division by a negative number correctly" $
+      unlit (0 / (-1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000))
+      ==
+      0
+
+  describe "big multiplications" $ do
+    let unlit = fromJust . unliteralS @Decimal
+
+    let code =
+          [text|
+            (defun test:bool ()
+              (let ((x:decimal (*
+                  1.58113883008419202353012810347474735209747288392336210205455502815728238592
+                  1.5811388300841925223288550988445549742724468531346309495428665472399639648496680411494875076793255338200521528740886266294574044913261377201695510306266771994578476399139180068539229254218727314228818363809792
+                ))
+                    (y:decimal 2.500000000000008243836642384325766770967352358818865769190857605784112966024663251834475644384046904403556387019539234091871481832161009920035987673979588455403008477585022252399854826133637675727060845285897044645837341219331160090749369830048441622744791))
+                (enforce (= x y))))
+          |]
+    expectPass code $ Valid Success'
+
+    it "rounds up the last digit when appropriate" $
+        unlit (1581138830084.192052937980207914179905763920823196984267407804357031202155885633105058076747359551154153957331638299995511193600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+       * 1581138830084.192220194412674817793768840142081644758814711734437239116786835916965025889939456340088832614965073903903044055232345709136743725518878029119488000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)
+      ==
+
+      2500000000000007812618040.433562734137684699135011741551181715981891159652849247733486729055338549963875582523604695139936764674737736206382376787827325735603006181405156090936148131370459148823374617217523084670407741689762536216481173675491045653179580074788284514172469055900877
+
+    let code' =
+          [text|
+            (defun test:bool ()
+              (let ((x:decimal (*
+                  1581138830084.192052937980207914179905763920823196984267407804357031202155885633105058076747359551154153957331638299995511193600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+                  1581138830084.192220194412674817793768840142081644758814711734437239116786835916965025889939456340088832614965073903903044055232345709136743725518878029119488000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+                ))
+                    (y:decimal 2500000000000007812618040.433562734137684699135011741551181715981891159652849247733486729055338549963875582523604695139936764674737736206382376787827325735603006181405156090936148131370459148823374617217523084670407741689762536216481173675491045653179580074788284514172469055900877))
+                (enforce (= x y))))
+          |]
+    expectPass code' $ Valid Success'
+
   describe "banker's method" $ do
     let unlit = fromJust . unliteralS
 
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS 1.5)    == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS 2.5)    == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS (-1.5)) == -2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS (-2.5)) == -2
 
   describe "result" $ do
     let code =
@@ -1723,7 +1831,8 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1741,7 +1850,8 @@ spec = describe "analyze" $ do
           -> Either String EProp
         inferProp' env1 env2 tableEnv t = case parseExprs' t of
           Right [exp'] ->
-            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -2199,6 +2309,15 @@ spec = describe "analyze" $ do
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+
+  describe "references to module constants" $ do
+    expectVerified [text|
+      (defconst FOO "FOO")
+
+      (defun test:string ()
+        @model (property (= result FOO))
+        FOO)
+      |]
 
   describe "module-scoped properties verify" $ do
     let okay = [text|

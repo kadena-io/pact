@@ -27,6 +27,7 @@ module Pact.Analyze.Types.Languages
   , lit
   , toPact
   , fromPact
+  , valueToProp
 
   , pattern ILiteral
   , pattern ILogicalOp
@@ -613,3 +614,9 @@ instance Num (Term Decimal) where
 
 lit :: a -> Term a
 lit = CoreTerm . Lit
+
+valueToProp :: ETerm -> Either String EProp
+valueToProp = \case
+  EObject{} -> Left "can't (yet) convert objects to props"
+  ESimple ty (CoreTerm (Lit l)) -> Right $ ESimple ty (CoreProp (Lit l))
+  ESimple _ _ -> Left "can only convert (simple) values terms to props"

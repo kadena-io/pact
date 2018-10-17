@@ -29,9 +29,10 @@ module Pact.Analyze.Check
 import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
-                                            (^.), (^?), (^@..), _1, _2, _Just,
-                                            _Left)
-import           Control.Monad             (void)
+                                            (?~), (^.), (^?), (^@..), _1, _2,
+                                            _Just, _Left)
+import           Control.Monad             (void, (<=<))
+
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -70,7 +71,7 @@ import qualified Pact.Types.Runtime        as Pact
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopFun, TopTable),
+                                            TopLevel (TopConst, TopFun, TopTable),
                                             UserType (_utFields, _utName),
                                             runTC, tcFailures)
 import qualified Pact.Types.Typecheck      as TC
@@ -144,6 +145,7 @@ data VerificationFailure
   | ModuleCheckFailure CheckFailure
   | TypeTranslationFailure Text (Pact.Type TC.UserType)
   | InvalidRefType
+  | FailedConstTranslation String
   deriving Show
 
 describeCheckSuccess :: CheckSuccess -> Text
@@ -206,6 +208,9 @@ falsifyingModel _                                         = Nothing
 translateToCheckFailure :: TranslateFailure -> CheckFailure
 translateToCheckFailure (TranslateFailure info err)
   = CheckFailure info (TranslateFailure' err)
+
+translateToVerificationFailure :: TranslateFailure -> VerificationFailure
+translateToVerificationFailure = ModuleCheckFailure . translateToCheckFailure
 
 analyzeToCheckFailure :: AnalyzeFailure -> CheckFailure
 analyzeToCheckFailure (AnalyzeFailure info err)
@@ -528,10 +533,11 @@ moduleFunChecks
   :: [Table]
   -> [ModuleProperty]
   -> HM.HashMap Text (Ref, Pact.FunType TC.UserType)
+  -> HM.HashMap Text EProp
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -> Except VerificationFailure
        (HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
+moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \case
   -- TODO How better to handle the type mismatch?
   (Pact.Direct _, _) -> throwError InvalidRefType
   (ref@(Ref defn), Pact.FunType argTys resultTy) -> do
@@ -595,7 +601,7 @@ moduleFunChecks tables modCheckExps modTys propDefs = for modTys $ \case
           applicableModuleChecks = map _moduleProperty $
             filter (applicableCheck funName) modCheckExps
       runExpParserOver (applicableModuleChecks <> exps) $
-        expToCheck tableEnv vidStart nameVids vidTys propDefs
+        expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
     pure (ref, Right checks)
 
@@ -706,19 +712,33 @@ verifyModule modules moduleData = runExceptT $ do
   -- For each ref, if it typechecks as a function (it'll be either a function
   -- or a constant), keep its signature.
   --
-  (funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType)) <- ifoldrM
+  ( funTypes :: HM.HashMap Text (Ref, Pact.FunType TC.UserType),
+    consts :: HM.HashMap Text (AST TC.Node)) <- ifoldrM
     (\name ref accum -> do
       maybeFun <- lift $ runTC 0 False $ typecheckTopLevel ref
       pure $ case maybeFun of
         (TopFun (FDefun _info _name funType _args _body) _meta, _tcState)
-          -> HM.insert name (ref, funType) accum
+          -> accum & _1 . at name ?~ (ref, funType)
+        (TopConst _info _qualifiedName _type val _doc, _tcState)
+          -> accum & _2 . at name ?~ val
         _ -> accum
     )
-    HM.empty
+    (HM.empty, HM.empty)
     typecheckedRefs
 
+  let valueToProp' :: ETerm -> Except VerificationFailure EProp
+      valueToProp' tm = case valueToProp tm of
+        Right prop -> pure prop
+        Left msg   -> throwError $ FailedConstTranslation msg
+
+      translateNodeNoGraph'
+        = withExceptT translateToVerificationFailure . translateNodeNoGraph
+
+  consts' <- hoist generalize $
+    traverse (valueToProp' <=< translateNodeNoGraph') consts
+
   (funChecks :: HM.HashMap Text (Ref, Either ParseFailure [Located Check]))
-    <- hoist generalize $ moduleFunChecks tables checkExps funTypes propDefs
+    <- hoist generalize $ moduleFunChecks tables checkExps funTypes consts' propDefs
 
   let funChecks' :: Either ParseFailure (HM.HashMap Text (Ref, [Located Check]))
       funChecks' = traverse sequence funChecks

@@ -367,6 +367,8 @@ verify i as = case as of
             [Text.unpack $ msg <> ": " <> tShow ty]
           Left (InvalidRefType) -> setop $ TcErrors
             ["Invalid reference type given to typechecker."]
+          Left (FailedConstTranslation msg) -> setop $ TcErrors
+            [msg]
           Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
             let propResults'      = propResults      ^.. traverse . each
                 invariantResults' = invariantResults ^.. traverse . traverse . each
