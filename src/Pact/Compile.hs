@@ -292,18 +292,48 @@ interface = do
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
   info <- contextInfo
-  (bd,bi) <- bodyForm'
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
+  (defs, defInfo) <- emptyForm
   eof
   return $ TModule
     (Interface iname code m)
-    (abstract (const Nothing) (TList bd TyAny bi)) info
-      
+    (abstract (const Nothing) (TList defs TyAny defInfo)) info
+    
+
+emptyForm :: Compile ([Term Name], Info)
+emptyForm = (,) <$> some emptyTerm <*> contextInfo
+  
+emptyTerm :: Compile (Term Name)
+emptyTerm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
+  "defun" -> commit >> emptyDef 
+  "defconst" -> commit >> emptyConst
+  _ -> expected "empty form"
+  
+emptyDef :: Compile (Term Name)
+emptyDef = do
+  modName <- currentModule'
+  (defName, returnTy) <- first _atomAtom <$> typedAtom
+  args <- withList' Parens $ many arg
+  m <- meta
+  info <- contextInfo
+  return $
+    TDef defName modName Defun
+    (FunType args returnTy) (pure (Name defName info)) m info
+
+emptyConst :: Compile (Term Name)
+emptyConst = do
+  modName <- currentModule'
+  a <- arg
+  m <- meta
+  i <- contextInfo
+  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on defconst"
+  return $ TConst a modName (CVRaw (pure . arg2Name $ a)) m i
+  
   
 step :: Compile (Term Name)
 step = do

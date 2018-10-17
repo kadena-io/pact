@@ -1,7 +1,9 @@
-(interface foo
-  @meta (property (do conserves-dat-mass))
+(interface foo 
+  @doc "do some crazy foo stuff"
+  @model (property (do (crazy stuff)))
 
   (defun foo:bool (x:bool))
   (defun bar:decimal (x:bool y:integer))
   (defconst BAR:integer @doc "barring disbelief again")
-  (defconst BAZ:string))
+  (defconst BAZ:string)
+)
