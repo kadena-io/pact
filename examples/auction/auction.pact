@@ -142,16 +142,15 @@
   (defun noop:string () "" "")
 
   (defun start-auction:string ()
-    "TODO"
-    (enforce (=
-      (at 'step (read state-table STATE_ROW))
-      'NOT_STARTED)
+    "This begins the auction by moving from the NOT_STARTED to RUNNING state"
+    (enforce (= (at 'step (read state-table STATE_ROW)) 'NOT_STARTED)
       "must not have already started")
     (write state-table STATE_ROW { 'step: 'RUNNING }))
 
   (defun end-auction:string ()
-    "TODO"
-    (enforce (= (at 'step (read state-table STATE_ROW)) 'RUNNING) "must be running")
+    "This ends the auction by moving from the RUNNING to ENDED state"
+    (enforce (= (at 'step (read state-table STATE_ROW)) 'RUNNING)
+      "must be running")
     (write state-table STATE_ROW { 'step: 'ENDED }))
 
   ; TODO:
