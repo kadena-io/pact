@@ -157,7 +157,7 @@ what you want when developing. To do incremental builds, you need to enter a nix
 shell. To do that use the following command:
 
 ```
-$ nix-shell -A shells.ghc
+$ nix-shell -A shells.ghc8_0
 ```
 
 This puts you in a shell that has all the necessary dependencies installed. Once
@@ -184,7 +184,7 @@ nice for two reasons:
 To start the hoogle server, run this command from the project root directory.
 
 ```
-nix-shell -A shells.ghc --run 'hoogle server --local'
+nix-shell -A shells.ghc8_0 --run 'hoogle server --local'
 ```
 
 This runs hoogle locally on port 8080.  Running it this way, however, does not
