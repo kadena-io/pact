@@ -298,21 +298,23 @@ interface = do
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
-  (defs, defInfo) <- emptyForm
+  (defs, defInfo) <- interfaceForm
   eof
   return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
     
 
-emptyForm :: Compile ([Term Name], Info)
-emptyForm = (,) <$> some emptyTerm <*> contextInfo
-  
-emptyTerm :: Compile (Term Name)
-emptyTerm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
-  "defun" -> commit >> emptyDef 
-  "defconst" -> commit >> emptyConst
-  _ -> expected "empty form"
+interfaceForm :: Compile ([Term Name], Info)
+interfaceForm = (,) <$> some interfaceForms <*> contextInfo
+  where
+    interfaceForms :: Compile (Term Name)
+    interfaceForms = withList' Parens $ do 
+      AtomExp{..} <- bareAtom
+      case _atomAtom of
+        "defun" -> commit >> emptyDef 
+        "defconst" -> commit >> defconst
+        _ -> expected "empty form"
   
 emptyDef :: Compile (Term Name)
 emptyDef = do
@@ -324,15 +326,6 @@ emptyDef = do
   return $
     TDef defName modName Defun
     (FunType args returnTy) (pure (Name defName info)) m info
-
-emptyConst :: Compile (Term Name)
-emptyConst = do
-  modName <- currentModule'
-  a <- arg
-  m <- meta
-  i <- contextInfo
-  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on defconst"
-  return $ TConst a modName (CVRaw (pure . arg2Name $ a)) m i
   
   
 step :: Compile (Term Name)

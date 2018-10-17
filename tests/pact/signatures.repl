@@ -3,7 +3,13 @@
   @model (property (do (crazy stuff)))
 
   (defun foo:bool (x:bool))
-  (defun bar:decimal (x:bool y:integer))
-  (defconst BAR:integer @doc "barring disbelief again")
-  (defconst BAZ:string)
-)
+  (defun bar:bool (x:decimal y:bool) @doc "i love bars")
+  (defun f () "docs work without the doc")
+
+  (defconst BAZ "i did a baz, baz thing")
+  (defconst QUX "qux the casbah")
+  (defconst F @doc "docstrings work with the doc")
+
+  (defun g () @model (property stuff))
+  (defconst H @model (property stuff)))
+
