@@ -962,7 +962,7 @@ doc FRowExists = Doc
   "Whether a row exists before or after a transaction"
   [ let a = TyVar $ TypeVar "a"
     in Usage
-      "(row-exists t r)"
+      "(row-exists t r time)"
       (Map.fromList [("a", OneOf [tbl, str])])
       $ Fun
         Nothing

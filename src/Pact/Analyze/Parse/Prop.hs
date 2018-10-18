@@ -128,8 +128,9 @@ expToPreProp = \case
     <$> expToPreProp tn
     <*> expToPreProp rk
     <*> expToPreProp ba
-  exp@(ParenList [EAtom' SPropRead, _tn, _rk]) -> throwErrorIn exp
-    "read must specify a time ('before or 'after). example: (= result (read accounts user 'before))"
+  exp@(ParenList [EAtom' SPropRead, _tn, _rk]) -> throwErrorIn exp $
+    SPropRead <> " must specify a time ('before or 'after). example: " <>
+    "(= result (read accounts user 'before))"
 
   exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
@@ -316,9 +317,9 @@ inferPreProp preProp = case preProp of
     tn' <- parseTableName tn
     case tn' of
       PLit litTn -> do
-        rk'              <- checkPreProp TStr rk
-        ba'              <- parseBeforeAfter ba
-        cm               <- view $ tableEnv . at litTn
+        rk' <- checkPreProp TStr rk
+        ba' <- parseBeforeAfter ba
+        cm  <- view $ tableEnv . at litTn
         case cm of
           Just cm' -> do
             let schema = columnMapToSchema cm'
