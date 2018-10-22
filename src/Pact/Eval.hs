@@ -244,6 +244,7 @@ loadModule m@Module{..} bod1 mi g0 = do
       evalConstRef r@Ref {} = runPure $ evalConsts r
       evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
+  -- match against implemented members
   let md = ModuleData m evaluatedDefs
   installModule md 
   (evalRefs . rsNewModules) %= HM.insert _mName md
@@ -429,6 +430,8 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " ++ show fv
              Just d -> return d
 
+-- Install must handle interfaces
+-- strip out everything except consts
 installModule :: ModuleData ->  Eval e ()
 installModule ModuleData{..} = do 
   (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap) 

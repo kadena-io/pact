@@ -35,7 +35,7 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,
    interfaceCode, interfaceMeta, interfaceName,
    ModuleName(..),
    Name(..),
@@ -262,6 +262,7 @@ data Module
  , _mCode :: !Code
  , _mHash :: !Hash
  , _mBlessed :: !(HS.HashSet Hash)
+ , _mInterfaces :: [ModuleName]
  }
  | Interface
  { _interfaceName :: !ModuleName
@@ -282,6 +283,7 @@ instance ToJSON Module where
     , "meta" .= _mMeta
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
+    , "interfaces" .= _mInterfaces
     ]
   toJSON Interface{..} = object
     [ "name" .= _interfaceName
@@ -297,6 +299,7 @@ instance FromJSON Module where
     <*> o .: "code"
     <*> o .: "hash"
     <*> (HS.fromList <$> o .: "blessed")
+    <*> o .: "interfaces"
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |

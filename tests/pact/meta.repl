@@ -24,4 +24,13 @@
 
   (deftable tbl @doc "a table")
   (deftable tbl2 "a table")
+
+  (defun abs2:decimal (num:decimal)
+    @doc "Ensure positive result"
+    @model (properties [(>= result 0.0)])
+    (if (= (- (* num num) 6.0) 0.0)
+        (- 1.0)
+        (abs num)
+    )
+  )
 )

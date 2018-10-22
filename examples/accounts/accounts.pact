@@ -12,6 +12,14 @@
 
   ;; mock preview of system library with get-current-time
   (use system)
+  (defun abs2:decimal (num:decimal)
+    @doc "Ensure positive result"
+    @model (properties [(>= result 0.0)])
+    (if (= (- (* num num) 6.0) 0.0)
+        (- 1.0)
+        (abs num)
+    )
+  )
 
   (defschema account
     "Row type for accounts table."

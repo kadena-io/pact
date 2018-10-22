@@ -73,7 +73,7 @@ initParseState e = ParseState e $ CompileState 0 Nothing
 
 reserved :: [Text]
 reserved =
-  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface"
+  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface implements"
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
@@ -269,6 +269,7 @@ moduleForm = do
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
+  interfaces <- optional implements
   (bd,bi) <- bodyForm'
   eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
@@ -281,8 +282,20 @@ moduleForm = do
     TBless {..} -> return [_tBlessed]
     _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash blessed)
+    (Module modName (KeySetName keyset) m code modHash blessed (maybe [] id interfaces))
     (abstract (const Nothing) (TList bd TyAny bi)) i
+
+implements :: Compile [ModuleName]
+implements = withList' Parens $ do
+  AtomExp{..} <- bareAtom
+  case _atomAtom of
+    "implements" -> commit >> implStr
+    _ -> expected "implementation declarations"
+  where
+    implStr :: Compile [ModuleName]
+    implStr = do
+      as <- withList' Parens $ many arg
+      return $ fmap (ModuleName . _aName) as
 
 -- | interface:
 --
