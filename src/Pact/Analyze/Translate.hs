@@ -40,6 +40,7 @@ import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
                                              Type (..))
 import qualified Pact.Types.Lang            as Pact
@@ -53,7 +54,6 @@ import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
 
 -- * Translation types
 
@@ -296,20 +296,20 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (Located (TagId, Schema) -> TraceEvent)
+  :: (Schema -> Located TagId -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
+  emit $ mkEvent schema (Located (nodeInfo node) tid)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess TraceWrite
+tagWrite :: WriteType -> Node -> Schema -> TranslateM TagId
+tagWrite = tagDbAccess . TraceWrite
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -863,7 +863,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
-    tid                 <- tagWrite node schema
+    tid                 <- tagWrite writeType node schema
     pure $ ESimple TStr $
       Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 
@@ -977,11 +977,12 @@ mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     (_tsPathEdges st)
 
 runTranslation
-  :: Info
+  :: Text
+  -> Info
   -> [Named Node]
   -> [AST Node]
   -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation info pactArgs body = do
+runTranslation name info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
     (tm, graph) <- runBodyTranslation args translationVid
     pure (args, tm, graph)
@@ -1001,8 +1002,13 @@ runTranslation info pactArgs body = do
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
-          translation = translateBody body
-                     <* extendPath -- form final edge for any remaining events
+          translation = do
+            retTid    <- genTagId
+            bindingTs <- traverse translateBinding pactArgs
+            res <- withNewScope (FunctionScope name) bindingTs retTid $
+              translateBody body
+            _ <- extendPath -- form final edge for any remaining events
+            pure res
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info args)
 

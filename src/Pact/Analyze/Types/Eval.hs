@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -16,7 +17,7 @@ module Pact.Analyze.Types.Eval where
 import           Control.Applicative          (ZipList (..))
 import           Control.Lens                 (Lens', at, ifoldl, iso, ix, lens,
                                                makeLenses, singular, view, (&),
-                                               (<&>), (?~))
+                                               (.~), (<&>), (?~))
 import           Control.Lens.Wrapped
 import           Control.Monad.Except         (MonadError)
 import           Control.Monad.Reader         (MonadReader)
@@ -127,14 +128,11 @@ sbvIdentifier = T.replace "-" "_"
 data QueryEnv
   = QueryEnv
     { _qeAnalyzeEnv    :: AnalyzeEnv
-    , _qeAnalyzeState  :: AnalyzeState
+    , _qeAnalyzeState  :: QueryAnalyzeState
     , _qeAnalyzeResult :: AVal
     , _qeTableScope    :: Map VarId TableName
     , _qeColumnScope   :: Map VarId ColumnName
     }
-
-mkQueryEnv :: AnalyzeEnv -> AnalyzeState -> AVal -> QueryEnv
-mkQueryEnv env state result = QueryEnv env state result Map.empty Map.empty
 
 newtype Constraints
   = Constraints { runConstraints :: Symbolic () }
@@ -160,8 +158,20 @@ data SymbolicCells
 
 deriving instance Mergeable SymbolicCells
 
+-- In evaluation, we have one copy of @CellValues@, which we update as cells
+-- are written. For querying we have two copies, representing the db state
+-- before and after the transaction being analyzed.
+data CellValues
+  = CellValues
+    { _cvTableCells :: TableMap SymbolicCells
+    , _cvRowExists  :: TableMap (SFunArray RowKey Bool)
+    }
+  deriving (Generic, Show)
+
+deriving instance Mergeable CellValues
+
 -- Checking state that is split before, and merged after, conditionals.
-data LatticeAnalyzeState
+data LatticeAnalyzeState a
   = LatticeAnalyzeState
     { _lasSucceeds            :: SymbolicSuccess
     , _lasPurelyReachable     :: SBV Bool
@@ -179,7 +189,6 @@ data LatticeAnalyzeState
     , _lasDecCellDeltas       :: TableMap (ColumnMap (SFunArray RowKey Decimal))
     , _lasIntColumnDeltas     :: TableMap (ColumnMap (S Integer))
     , _lasDecColumnDeltas     :: TableMap (ColumnMap (S Decimal))
-    , _lasTableCells          :: TableMap SymbolicCells
     , _lasRowsRead            :: TableMap (SFunArray RowKey Integer)
     , _lasRowsWritten         :: TableMap (SFunArray RowKey Integer)
     , _lasCellsEnforced       :: TableMap (ColumnMap (SFunArray RowKey Bool))
@@ -188,10 +197,11 @@ data LatticeAnalyzeState
     -- has been overwritten and *then* enforced, that does not constitute valid
     -- enforcement of the keyset.
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
+    , _lasExtra               :: a
     }
   deriving (Generic, Show)
 
-deriving instance Mergeable LatticeAnalyzeState
+deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
@@ -201,12 +211,21 @@ data GlobalAnalyzeState
     }
   deriving (Show)
 
-data AnalyzeState
+data AnalyzeState a
   = AnalyzeState
-    { _latticeState :: LatticeAnalyzeState
+    { _latticeState :: LatticeAnalyzeState a
     , _globalState  :: GlobalAnalyzeState
     }
   deriving (Show)
+
+data BeforeAndAfter = BeforeAndAfter
+  { _before :: CellValues
+  , _after  :: CellValues
+  }
+
+-- See note on @CellValues@
+type QueryAnalyzeState = AnalyzeState BeforeAndAfter
+type EvalAnalyzeState  = AnalyzeState CellValues
 
 data AnalysisResult
   = AnalysisResult
@@ -218,13 +237,27 @@ data AnalysisResult
 
 makeLenses ''AnalyzeEnv
 makeLenses ''AnalyzeState
+makeLenses ''BeforeAndAfter
+makeLenses ''CellValues
 makeLenses ''GlobalAnalyzeState
 makeLenses ''LatticeAnalyzeState
 makeLenses ''SymbolicCells
 makeLenses ''AnalysisResult
 makeLenses ''QueryEnv
 
-mkInitialAnalyzeState :: [Table] -> AnalyzeState
+
+mkQueryEnv
+  :: AnalyzeEnv
+  -> AnalyzeState ()
+  -> CellValues
+  -> CellValues
+  -> AVal
+  -> QueryEnv
+mkQueryEnv env state cv0 cv1 result =
+  let state' = state & latticeState . lasExtra .~ BeforeAndAfter cv0 cv1
+  in QueryEnv env state' result Map.empty Map.empty
+
+mkInitialAnalyzeState :: [Table] -> EvalAnalyzeState
 mkInitialAnalyzeState tables = AnalyzeState
     { _latticeState = LatticeAnalyzeState
         { _lasSucceeds            = true
@@ -238,11 +271,14 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasDecCellDeltas       = decCellDeltas
         , _lasIntColumnDeltas     = intColumnDeltas
         , _lasDecColumnDeltas     = decColumnDeltas
-        , _lasTableCells          = mkSymbolicCells tables
         , _lasRowsRead            = mkPerTableSFunArray 0
         , _lasRowsWritten         = mkPerTableSFunArray 0
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
+        , _lasExtra               = CellValues
+          { _cvTableCells          = mkSymbolicCells tables
+          , _cvRowExists           = mkRowExists
+          }
         }
     , _globalState = GlobalAnalyzeState
         { _gasConstraints   = mempty
@@ -284,6 +320,9 @@ mkInitialAnalyzeState tables = AnalyzeState
     mkMaintainsInvariants = TableMap $ Map.fromList $
       tables <&> \Table { _tableName, _tableInvariants } ->
         (TableName (T.unpack _tableName), ZipList $ const true <$$> _tableInvariants)
+
+    mkRowExists = TableMap $ Map.fromList $ tableNames <&> \tn@(TableName tn')
+      -> (tn, mkFreeArray $ "row_exists__" <> T.pack tn')
 
 mkSymbolicCells :: [Table] -> TableMap SymbolicCells
 mkSymbolicCells tables = TableMap $ Map.fromList cellsList
@@ -344,7 +383,7 @@ instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
 instance HasAnalyzeEnv QueryEnv   where analyzeEnv = qeAnalyzeEnv
 
 -- | Whether the program will successfully run to completion without aborting.
-succeeds :: Lens' AnalyzeState (S Bool)
+succeeds :: Lens' (AnalyzeState a) (S Bool)
 succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 
 -- | Whether execution will reach a given point in the program according to
@@ -377,23 +416,23 @@ succeeds = latticeState.lasSucceeds._Wrapped'.sbv2S
 -- let that code consider 'TraceAssert' and 'TraceAuth' 'TraceEvent's on its
 -- own to determine where linear execution aborts for a concrete program trace.
 --
-purelyReachable :: Lens' AnalyzeState (S Bool)
+purelyReachable :: Lens' (AnalyzeState a) (S Bool)
 purelyReachable = latticeState.lasPurelyReachable.sbv2S
 
-maintainsInvariants :: Lens' AnalyzeState (TableMap (ZipList (Located SBool)))
+maintainsInvariants :: Lens' (AnalyzeState a) (TableMap (ZipList (Located SBool)))
 maintainsInvariants = latticeState.lasMaintainsInvariants
 
-tableRead :: TableName -> Lens' AnalyzeState (S Bool)
+tableRead :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableRead tn = latticeState.lasTablesRead.symArrayAt (literalS tn).sbv2S
 
-tableWritten :: TableName -> Lens' AnalyzeState (S Bool)
+tableWritten :: TableName -> Lens' (AnalyzeState a) (S Bool)
 tableWritten tn = latticeState.lasTablesWritten.symArrayAt (literalS tn).sbv2S
 
-columnWritten :: TableName -> ColumnName -> Lens' AnalyzeState (S Bool)
+columnWritten :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
 columnWritten tn cn = latticeState.lasColumnsWritten.singular (ix tn).
   singular (ix cn).sbv2S
 
-columnRead :: TableName -> ColumnName -> Lens' AnalyzeState (S Bool)
+columnRead :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Bool)
 columnRead tn cn = latticeState.lasColumnsRead.singular (ix tn).
   singular (ix cn).sbv2S
 
@@ -401,7 +440,7 @@ intCellDelta
   :: TableName
   -> ColumnName
   -> S RowKey
-  -> Lens' AnalyzeState (S Integer)
+  -> Lens' (AnalyzeState a) (S Integer)
 intCellDelta tn cn sRk = latticeState.lasIntCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
@@ -409,31 +448,39 @@ decCellDelta
   :: TableName
   -> ColumnName
   -> S RowKey
-  -> Lens' AnalyzeState (S Decimal)
+  -> Lens' (AnalyzeState a) (S Decimal)
 decCellDelta tn cn sRk = latticeState.lasDecCellDeltas.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-intColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Integer)
+intColumnDelta :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Integer)
 intColumnDelta tn cn = latticeState.lasIntColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-decColumnDelta :: TableName -> ColumnName -> Lens' AnalyzeState (S Decimal)
+decColumnDelta :: TableName -> ColumnName -> Lens' (AnalyzeState a) (S Decimal)
 decColumnDelta tn cn = latticeState.lasDecColumnDeltas.singular (ix tn).
   singular (ix cn)
 
-rowReadCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
+rowReadCount :: TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
 rowReadCount tn sRk = latticeState.lasRowsRead.singular (ix tn).
   symArrayAt sRk.sbv2S
 
-rowWriteCount :: TableName -> S RowKey -> Lens' AnalyzeState (S Integer)
+rowWriteCount :: TableName -> S RowKey -> Lens' (AnalyzeState a) (S Integer)
 rowWriteCount tn sRk = latticeState.lasRowsWritten.singular (ix tn).
   symArrayAt sRk.sbv2S
+
+rowExists
+  :: Lens' a CellValues
+  -> TableName
+  -> S RowKey
+  -> Lens' (AnalyzeState a) (S Bool)
+rowExists cellValues tn sRk = latticeState.lasExtra.cellValues.
+  cvRowExists.singular (ix tn).symArrayAt sRk.sbv2S
 
 cellEnforced
   :: TableName
   -> ColumnName
   -> S RowKey
-  -> Lens' AnalyzeState (S Bool)
+  -> Lens' (AnalyzeState a) (S Bool)
 cellEnforced tn cn sRk = latticeState.lasCellsEnforced.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
@@ -441,62 +488,74 @@ cellWritten
   :: TableName
   -> ColumnName
   -> S RowKey
-  -> Lens' AnalyzeState (S Bool)
+  -> Lens' (AnalyzeState a) (S Bool)
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
 intCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S Integer)
-intCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scIntValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+  -> Lens' (AnalyzeState a) (S Integer)
+intCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scIntValues.singular (ix cn).
+  symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 boolCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S Bool)
-boolCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scBoolValues.
+  -> Lens' (AnalyzeState a) (S Bool)
+boolCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scBoolValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 stringCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S String)
-stringCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scStringValues.
+  -> Lens' (AnalyzeState a) (S String)
+stringCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scStringValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 decimalCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S Decimal)
-decimalCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scDecimalValues.
+  -> Lens' (AnalyzeState a) (S Decimal)
+decimalCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scDecimalValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 timeCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S Time)
-timeCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scTimeValues.
+  -> Lens' (AnalyzeState a) (S Time)
+timeCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scTimeValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 ksCell
-  :: TableName
+  :: Lens' a CellValues
+  -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' AnalyzeState (S KeySet)
-ksCell tn cn sRk sDirty = latticeState.lasTableCells.singular (ix tn).scKsValues.
+  -> Lens' (AnalyzeState a) (S KeySet)
+ksCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).scKsValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
 symArrayAt

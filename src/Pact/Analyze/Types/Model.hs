@@ -17,6 +17,7 @@ import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)
 
+import           Pact.Types.Persistence    (WriteType)
 import qualified Pact.Types.Typecheck      as TC
 
 import           Pact.Analyze.Types.Shared
@@ -76,8 +77,8 @@ data ScopeType
   deriving (Eq, Show)
 
 data TraceEvent
-  = TraceRead (Located (TagId, Schema))
-  | TraceWrite (Located (TagId, Schema))
+  = TraceRead Schema (Located TagId)
+  | TraceWrite WriteType Schema (Located TagId)
   | TraceAssert Recoverability (Located TagId)
   | TraceAuth Recoverability (Located TagId)
   | TraceSubpathStart Path
@@ -106,8 +107,9 @@ data Concreteness
 
 data Access
   = Access
-    { _accRowKey :: S RowKey
-    , _accObject :: Object
+    { _accRowKey  :: S RowKey
+    , _accObject  :: Object
+    , _accSuccess :: SBV Bool
     }
   deriving (Eq, Show)
 
@@ -131,7 +133,7 @@ data ModelTags (c :: Concreteness)
     , _mtAuths   :: Map TagId (Located Authorization)
     -- ^ one per each authorization check. note that this includes uses of
     -- @(enforce-keyset ks)@ and @(enforce-keyset "ks")@ calls.
-    , _mtResult  :: Located TVal
+    , _mtResult  :: (TagId, Located TVal)
     -- ^ return value of the function being checked
     , _mtPaths   :: Map Path (SBV Bool)
     -- ^ one at the start of the program, and on either side of the branches of

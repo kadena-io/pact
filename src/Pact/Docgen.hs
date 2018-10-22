@@ -129,12 +129,12 @@ renderProperties h = do
           Analyze.Fun mBindings argTys retTy -> do
             for_ mBindings $ \case
               Analyze.BindVar (Analyze.Var (unpack -> var)) (showType -> bTy) ->
-                hPutStrLn h $ "* binds `" <> var <> "` of type " <> bTy
+                hPutStrLn h $ "* binds `" <> var <> "`: " <> bTy
               Analyze.BindObject ->
                 hPutStrLn h "* destructures the provided object"
             for_ argTys $ \(Analyze.Var (unpack -> arg), showType -> aTy) ->
-              hPutStrLn h $ "* takes `" <> arg <> "` of type " <> aTy
-            hPutStrLn h $ "* produces type " <> showType retTy
+              hPutStrLn h $ "* takes `" <> arg <> "`: " <> aTy
+            hPutStrLn h $ "* produces " <> showType retTy
 
         ifor_ constraints $ \(Analyze.TypeVar (unpack -> tv)) constraint ->
           hPutStrLn h $ "* where _" <> tv <> "_ is "
@@ -164,6 +164,7 @@ renderProperties h = do
     showType :: Analyze.Type -> String
     showType (Analyze.TyCon ct) = showConTy ct
     showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
+    showType (Analyze.TyEnum vals) = "one of {" ++ intercalate ", " (fmap show vals) ++ "}"
 
 escapeText :: String -> String
 escapeText n

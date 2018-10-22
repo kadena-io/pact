@@ -17,7 +17,7 @@ module Pact.Analyze.Eval
 
 
 import           Control.Applicative         (ZipList (..))
-import           Control.Lens                (view, (<&>), (^.))
+import           Control.Lens                (view, (&), (.~), (<&>), (^.))
 import           Control.Monad.Except        (ExceptT, throwError)
 import           Control.Monad.Morph         (generalize, hoist)
 import           Control.Monad.Reader        (runReaderT)
@@ -102,7 +102,10 @@ runAnalysis' query tables args tm tags info = do
 
   lift $ runConstraints $ state1 ^. globalState.gasConstraints
 
-  let qEnv  = mkQueryEnv aEnv state1 funResult
+  let cv0     = state0 ^. latticeState . lasExtra
+      cv1     = state1 ^. latticeState . lasExtra
+      state1' = state1 &  latticeState . lasExtra .~ ()
+      qEnv    = mkQueryEnv aEnv state1' cv0 cv1 funResult
       ksProvs = state1 ^. globalState.gasKsProvenances
 
   (results, querySucceeds)

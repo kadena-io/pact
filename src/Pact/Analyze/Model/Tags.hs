@@ -17,8 +17,8 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
-import           Control.Lens         (Prism', toListOf, traverseOf, traversed,
-                                       (<&>), (?~), (^.), _1, _2, _3)
+import           Control.Lens         (Traversal', toListOf, traverseOf,
+                                       traversed, (<&>), (?~), (^.), _1, _2, _3)
 import           Control.Monad        (when, (>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -84,19 +84,25 @@ allocModelTags locatedTm graph = ModelTags
     allocS = sansProv <$> alloc
 
     allocAccesses
-      :: Prism' TraceEvent (Located (TagId, Schema))
+      :: Traversal' TraceEvent (Schema, Located TagId)
       -> Symbolic (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
-      for (toListOf (traverse.p) events) $ \(Located info (tid, schema)) -> do
+      for (toListOf (traverse.p) events) $ \(schema, Located info tid) -> do
         srk <- allocS
         obj <- allocSchema schema
-        pure (tid, Located info (Access srk obj))
+        suc <- alloc
+        pure (tid, Located info (Access srk obj suc))
 
     allocReads :: Symbolic (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
 
+    traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
+    traceWriteT f event = case event of
+      TraceWrite _writeType schema tagid -> const event <$> f (schema, tagid)
+      _                                  -> pure event
+
     allocWrites :: Symbolic (Map TagId (Located Access))
-    allocWrites = allocAccesses _TraceWrite
+    allocWrites = allocAccesses traceWriteT
 
     allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
@@ -108,8 +114,10 @@ allocModelTags locatedTm graph = ModelTags
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
         (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
 
-    allocResult :: Symbolic (Located TVal)
-    allocResult = sequence $ allocForETerm <$> locatedTm
+    allocResult :: Symbolic (TagId, Located TVal)
+    allocResult = do
+      let tid :: TagId = last $ toListOf (traverse._TracePopScope._3) events
+      fmap (tid,) $ sequence $ allocForETerm <$> locatedTm
 
     -- NOTE: the root path we manually set to true. translation only emits the
     -- start of "subpaths" on either side of a conditional. the root path is
@@ -140,7 +148,7 @@ saturateModel =
     traverseOf (modelTags.mtWrites.traversed.located)  fetchAccess >=>
     traverseOf (modelTags.mtAsserts.traversed.located) fetchSbv    >=>
     traverseOf (modelTags.mtAuths.traversed.located)   fetchAuth   >=>
-    traverseOf (modelTags.mtResult.located)            fetchTVal   >=>
+    traverseOf (modelTags.mtResult._2.located)         fetchTVal   >=>
     traverseOf (modelTags.mtPaths.traversed)           fetchSbv    >=>
     traverseOf (modelTags.mtReturns.traversed)         fetchTVal   >=>
     traverseOf (modelKsProvs.traversed)                fetchProv
@@ -166,10 +174,11 @@ saturateModel =
     fetchObject (Object fields) = Object <$> traverse fetchTVal fields
 
     fetchAccess :: Access -> SBV.Query Access
-    fetchAccess (Access sRk obj) = do
+    fetchAccess (Access sRk obj suc) = do
       sRk' <- fetchS sRk
       obj' <- fetchObject obj
-      pure $ Access sRk' obj'
+      suc' <- fetchSbv suc
+      pure $ Access sRk' obj' suc'
 
     fetchAuth :: Authorization -> SBV.Query Authorization
     fetchAuth (Authorization sKs sbool) = Authorization <$>

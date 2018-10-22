@@ -105,6 +105,8 @@ data Feature
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
+  | FRowExists
+  | FPropRead
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
@@ -179,6 +181,7 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
+  | TyEnum [Text]
   deriving (Eq, Ord, Show)
 
 data Bindings
@@ -952,6 +955,40 @@ doc FRowWriteCount = Doc
         ]
         (TyCon int)
   ]
+doc FRowExists = Doc
+  "row-exists"
+  CDatabase
+  PropOnly
+  "Whether a row exists before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-exists t r time)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon bool)
+  ]
+doc FPropRead = Doc
+  "read"
+  CDatabase
+  PropOnly
+  "The value of a read before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(read t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon obj)
+  ]
 
 -- Authorization features
 
@@ -1069,6 +1106,8 @@ PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)
 PAT(SRowWriteCount, FRowWriteCount)
+PAT(SRowExists, FRowExists)
+PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 

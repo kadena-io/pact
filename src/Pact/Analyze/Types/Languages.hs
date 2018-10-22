@@ -22,6 +22,7 @@ module Pact.Analyze.Types.Languages
   , Prop(..)
   , PropSpecific(..)
   , Term(..)
+  , BeforeOrAfter(..)
 
   , lit
   , toPact
@@ -212,6 +213,14 @@ instance
     LiteralObject obj        -> userShow obj
 
 
+data BeforeOrAfter = Before | After
+  deriving (Eq, Show)
+
+instance UserShow BeforeOrAfter where
+  userShowsPrec _p = \case
+    Before -> "'before"
+    After  -> "'after"
+
 -- | Property-specific constructions.
 --
 -- This encompasses every construction that can appear in a 'Prop' that's not
@@ -275,6 +284,8 @@ data PropSpecific a where
   RowWrite      :: Prop TableName  -> Prop RowKey -> PropSpecific Bool
   -- | Number of times a row is written
   RowWriteCount :: Prop TableName  -> Prop RowKey -> PropSpecific Integer
+  -- | Whether a row exists prior to the transaction
+  RowExists     :: Prop TableName  -> Prop RowKey -> BeforeOrAfter -> PropSpecific Bool
 
   --
   -- TODO: StaleRead?
@@ -286,6 +297,9 @@ data PropSpecific a where
   KsNameAuthorized :: KeySetName      ->                                   PropSpecific Bool
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TableName  -> Prop ColumnName -> Prop RowKey -> PropSpecific Bool
+
+
+  PropRead :: BeforeOrAfter -> Schema -> Prop TableName -> Prop RowKey -> PropSpecific Object
 
 deriving instance Eq a   => Eq   (PropSpecific a)
 deriving instance Show a => Show (PropSpecific a)
@@ -319,6 +333,8 @@ instance UserShow a => UserShow (PropSpecific a) where
     RowWriteCount tab rk    -> parenList [SRowWriteCount, userShow tab, userShow rk]
     KsNameAuthorized name   -> parenList [SAuthorizedBy, userShow name]
     RowEnforced tn cn rk    -> parenList [SRowEnforced, userShow tn, userShow cn, userShow rk]
+    RowExists tn rk ba      -> parenList [SRowExists, userShow tn, userShow rk, userShow ba]
+    PropRead ba _sch tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
 
 instance UserShow a => UserShow (Prop a) where
   userShowsPrec d = \case
@@ -353,6 +369,9 @@ instance IsString (Prop TableName) where
   fromString = PLit . fromString
 
 instance IsString (Prop ColumnName) where
+  fromString = PLit . fromString
+
+instance IsString (Prop RowKey) where
   fromString = PLit . fromString
 
 instance Boolean (Prop Bool) where

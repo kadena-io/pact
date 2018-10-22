@@ -12,7 +12,7 @@ import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
                                               (&), (+=), (.=), (.~), (<&>),
-                                              (?~), (^.), (^?), _2, _Just)
+                                              (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Monad               (void, when)
 import           Control.Monad.Except        (Except, ExceptT (ExceptT),
                                               MonadError (throwError),
@@ -58,9 +58,9 @@ import           Pact.Analyze.Util
 
 newtype Analyze a
   = Analyze
-    { runAnalyze :: RWST AnalyzeEnv () AnalyzeState (Except AnalyzeFailure) a }
+    { runAnalyze :: RWST AnalyzeEnv () EvalAnalyzeState (Except AnalyzeFailure) a }
   deriving (Functor, Applicative, Monad, MonadReader AnalyzeEnv,
-            MonadState AnalyzeState, MonadError AnalyzeFailure)
+            MonadState EvalAnalyzeState, MonadError AnalyzeFailure)
 
 instance Analyzer Analyze where
   type TermOf Analyze = Term
@@ -120,12 +120,15 @@ tagAccessKey
   :: Lens' (ModelTags 'Symbolic) (Map TagId (Located Access))
   -> TagId
   -> S RowKey
+  -> S Bool
   -> Analyze ()
-tagAccessKey lens' tid srk = do
-  mSrk <- preview $ aeModelTags.lens'.at tid._Just.located.accRowKey
-  case mSrk of
-    Nothing     -> pure ()
-    Just tagSrk -> addConstraint $ sansProv $ srk .== tagSrk
+tagAccessKey lens' tid rowKey accessSucceeds = do
+  mAcc <- preview $ aeModelTags.lens'.at tid._Just.located
+  case mAcc of
+    Nothing -> pure ()
+    Just (Access tagRowKey _object tagSuccess) -> do
+      addConstraint $ sansProv $ rowKey               .== tagRowKey
+      addConstraint $ sansProv $ _sSbv accessSucceeds .== tagSuccess
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
@@ -176,7 +179,9 @@ tagFork pathL pathR reachable lPasses = do
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
-  tag <- view $ aeModelTags.mtResult.located._2
+  tid <- view $ aeModelTags.mtResult._1
+  tagReturn tid av
+  tag <- view $ aeModelTags.mtResult._2.located._2
   addConstraint $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()
@@ -250,7 +255,10 @@ evalTermO = \case
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= true
     rowReadCount tn sRk += 1
-    tagAccessKey mtReads tid sRk
+
+    readSucceeds <- use $ rowExists id tn sRk
+    tagAccessKey mtReads tid sRk readSucceeds
+    succeeds %= (&&& readSucceeds)
 
     aValFields <- iforM fields $ \fieldName fieldType -> do
       let cn = ColumnName $ T.unpack fieldName
@@ -258,12 +266,12 @@ evalTermO = \case
       sDirty <- use $ cellWritten tn cn sRk
 
       av <- case fieldType of
-        EType TInt     -> mkAVal <$> use (intCell     tn cn sRk sDirty)
-        EType TBool    -> mkAVal <$> use (boolCell    tn cn sRk sDirty)
-        EType TStr     -> mkAVal <$> use (stringCell  tn cn sRk sDirty)
-        EType TDecimal -> mkAVal <$> use (decimalCell tn cn sRk sDirty)
-        EType TTime    -> mkAVal <$> use (timeCell    tn cn sRk sDirty)
-        EType TKeySet  -> mkAVal <$> use (ksCell      tn cn sRk sDirty)
+        EType TInt     -> mkAVal <$> use (intCell     id tn cn sRk sDirty)
+        EType TBool    -> mkAVal <$> use (boolCell    id tn cn sRk sDirty)
+        EType TStr     -> mkAVal <$> use (stringCell  id tn cn sRk sDirty)
+        EType TDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
+        EType TTime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
+        EType TKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
         EType TAny     -> pure OpaqueVal
         --
         -- TODO: if we add nested object support here, we need to install
@@ -370,9 +378,18 @@ evalTerm = \case
     obj@(Object fields) <- evalTermO objT
     validateWrite writeType schema obj
     sRk <- symRowKey <$> evalTerm rowKey
-    tableWritten tn .= true
+
+    thisRowExists <- use $ rowExists id tn sRk
+    let writeSucceeds = case writeType of
+          Pact.Insert -> bnot thisRowExists
+          Pact.Write  -> true
+          Pact.Update -> thisRowExists
+    succeeds %= (&&& writeSucceeds)
+    rowExists id tn sRk .= true
+
+    tableWritten tn .= writeSucceeds
     rowWriteCount tn sRk += 1
-    tagAccessKey mtWrites tid sRk
+    tagAccessKey mtWrites tid sRk writeSucceeds
 
     aValFields <- iforM fields $ \colName (fieldType, aval') -> do
       let cn = ColumnName (T.unpack colName)
@@ -386,29 +403,35 @@ evalTerm = \case
           -- avoid overlapping instances. GHC is willing to pick `+` and `-`
           -- for each of the two instantiations of this function.
           let writeDelta
-                :: forall t
-                 . (S t -> S t -> S t) -> (S t -> S t -> S t)
-                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' AnalyzeState (S t))
-                -> (TableName -> ColumnName -> S RowKey ->           Lens' AnalyzeState (S t))
-                -> (TableName -> ColumnName ->                       Lens' AnalyzeState (S t))
+                :: forall t. (SymWord t, Num t)
+                => (S t -> S t -> S t) -> (S t -> S t -> S t)
+                -> (TableName -> ColumnName -> S RowKey -> S Bool -> Lens' EvalAnalyzeState (S t))
+                -> (TableName -> ColumnName -> S RowKey ->           Lens' EvalAnalyzeState (S t))
+                -> (TableName -> ColumnName ->                       Lens' EvalAnalyzeState (S t))
                 -> Analyze ()
               writeDelta plus minus mkCellL mkCellDeltaL mkColDeltaL = do
-                let cell :: Lens' AnalyzeState (S t)
+                let cell :: Lens' EvalAnalyzeState (S t)
                     cell = mkCellL tn cn sRk true
                 let next = mkS mProv sVal
-                prev <- use cell
+
+                -- (only) in the case of an insert, we know the cell did not
+                -- previously exist
+                prev <- if writeType == Pact.Insert
+                  then pure (literalS 0)
+                  else use cell
+
                 cell .= next
                 let diff = next `minus` prev
                 mkCellDeltaL tn cn sRk %= plus diff
                 mkColDeltaL  tn cn     %= plus diff
 
           case fieldType of
-            EType TInt     -> writeDelta (+) (-) intCell intCellDelta intColumnDelta
-            EType TBool    -> boolCell   tn cn sRk true .= mkS mProv sVal
-            EType TDecimal -> writeDelta (+) (-) decimalCell decCellDelta decColumnDelta
-            EType TTime    -> timeCell   tn cn sRk true .= mkS mProv sVal
-            EType TStr     -> stringCell tn cn sRk true .= mkS mProv sVal
-            EType TKeySet  -> ksCell     tn cn sRk true .= mkS mProv sVal
+            EType TInt     -> writeDelta (+) (-) (intCell id) intCellDelta intColumnDelta
+            EType TBool    -> boolCell   id tn cn sRk true .= mkS mProv sVal
+            EType TDecimal -> writeDelta (+) (-) (decimalCell id) decCellDelta decColumnDelta
+            EType TTime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
+            EType TStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
+            EType TKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
             EType TAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 

@@ -1,11 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens               (at, ix, view, (%=), (?~))
+import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
+                                             (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
@@ -103,11 +105,47 @@ evalProp :: SymWord a => Prop a -> Query (S a)
 evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
+beforeAfterLens :: BeforeOrAfter -> Lens' BeforeAndAfter CellValues
+beforeAfterLens = \case
+  Before -> before
+  After  -> after
 
 evalPropO :: Prop Object -> Query Object
 evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
+evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
+  tn' <- getLitTableName tn
+  sRk <- evalProp pRk
 
+  -- TODO: there is a lot of duplication between this and the corresponding
+  -- term evaluation code. It would be nice to consolidate these.
+  aValFields <- iforM fields $ \fieldName fieldType -> do
+    let cn = ColumnName $ T.unpack fieldName
+
+    av <- case fieldType of
+      EType TInt     -> mkAVal <$> view
+        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
+      EType TBool    -> mkAVal <$> view
+        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType TStr     -> mkAVal <$> view
+        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
+      EType TDecimal -> mkAVal <$> view
+        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
+      EType TTime    -> mkAVal <$> view
+        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType TKeySet  -> mkAVal <$> view
+        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
+      EType TAny     -> pure OpaqueVal
+      --
+      -- TODO: if we add nested object support here, we need to install
+      --       the correct provenance into AVals all the way down into
+      --       sub-objects.
+      --
+      EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
+
+    pure (fieldType, av)
+
+  pure $ Object aValFields
 
 evalPropSpecific :: SymWord a => PropSpecific a -> Query (S a)
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
@@ -200,6 +238,13 @@ evalPropSpecific (RowWriteCount tn pRk) = do
   sRk <- evalProp pRk
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.rowWriteCount tn' sRk
+evalPropSpecific (RowExists tn pRk beforeAfter) = do
+  sRk <- evalProp pRk
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.
+    rowExists (case beforeAfter of {Before -> before; After -> after}) tn' sRk
+evalPropSpecific PropRead{}
+  = vacuousMatch "an object cannot be a symbolic value"
 
 -- Authorization
 evalPropSpecific (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn
