@@ -697,7 +697,7 @@ Supported in properties only.
 ### row-exists {#FRowExists}
 
 ```lisp
-(row-exists t r)
+(row-exists t r time)
 ```
 
 * takes `t`: _a_
