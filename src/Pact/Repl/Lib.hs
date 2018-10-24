@@ -357,25 +357,7 @@ verify i as = case as of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
         modResult <- liftIO $ verifyModule modules md
-        -- TODO: build describeModuleResult
-        case modResult of
-          Left (ModuleParseFailure failure)  -> setop $ TcErrors
-            [Text.unpack $ describeParseFailure failure]
-          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors
-            [Text.unpack $ describeCheckFailure checkFailure]
-          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors
-            [Text.unpack $ msg <> ": " <> tShow ty]
-          Left (InvalidRefType) -> setop $ TcErrors
-            ["Invalid reference type given to typechecker."]
-          Left (FailedConstTranslation msg) -> setop $ TcErrors
-            [msg]
-          Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
-            let propResults'      = propResults      ^.. traverse . each
-                invariantResults' = invariantResults ^.. traverse . traverse . each
-            in fmap Text.unpack $
-                 (describeCheckResult <$> propResults' <> invariantResults') <>
-                 [describeVerificationWarnings warnings]
-
+        setop $ TcErrors $ fmap Text.unpack $ renderVerifiedModule modResult
         return (tStr "")
 
   _ -> argsError i as

@@ -9,6 +9,7 @@
 
 module Pact.Analyze.Check
   ( verifyModule
+  , renderVerifiedModule
   , verifyCheck
   , describeCheckFailure
   , describeCheckResult
@@ -27,7 +28,8 @@ module Pact.Analyze.Check
   ) where
 
 import           Control.Exception         as E
-import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
+import           Control.Lens              (at, each, ifoldrM, ifor,
+                                            itraversed, ix, toListOf,
                                             traversed, view, (%~), (&), (<&>),
                                             (?~), (^.), (^?), (^@..), _1, _2,
                                             _Just, _Left)
@@ -759,6 +761,24 @@ verifyModule modules moduleData = runExceptT $ do
   let warnings = VerificationWarnings allModulePropNameDuplicates
 
   pure $ ModuleChecks funChecks''' invariantChecks warnings
+
+renderVerifiedModule :: Either VerificationFailure ModuleChecks -> [Text]
+renderVerifiedModule = \case
+  Left (ModuleParseFailure failure)  ->
+    [describeParseFailure failure]
+  Left (ModuleCheckFailure checkFailure) ->
+    [describeCheckFailure checkFailure]
+  Left (TypeTranslationFailure msg ty) ->
+    [msg <> ": " <> tShow ty]
+  Left (InvalidRefType) ->
+    ["Invalid reference type given to typechecker."]
+  Left (FailedConstTranslation msg) ->
+    [T.pack msg]
+  Right (ModuleChecks propResults invariantResults warnings) ->
+    let propResults'      = toListOf (traverse.each)          propResults
+        invariantResults' = toListOf (traverse.traverse.each) invariantResults
+    in (describeCheckResult <$> propResults' <> invariantResults') <>
+         [describeVerificationWarnings warnings]
 
 -- | Verifies a one-off 'Check' for a function.
 verifyCheck
