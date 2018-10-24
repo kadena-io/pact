@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
-
+{-# LANGUAGE FlexibleInstances #-}
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -40,7 +40,7 @@ module Pact.Types.Runtime
    module Pact.Types.Gas
    ) where
 
-
+import Control.Applicative (liftA2)
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
@@ -243,7 +243,10 @@ newtype Eval e a =
     deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
 
-
+instance Monoid a => Monoid (Eval e a) where
+  mempty = pure mempty
+  mappend = liftA2 mappend
+  
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
 runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)

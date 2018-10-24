@@ -244,8 +244,10 @@ loadModule m@Module{..} bod1 mi g0 = do
       evalConstRef r@Ref {} = runPure $ evalConsts r
       evalConstRef r@Direct {} = runPure $ evalConsts r
   evaluatedDefs <- traverse evalConstRef defs
-  -- match against implemented members
-  let md = ModuleData m evaluatedDefs
+  evaluateConstraints m evaluatedDefs mi
+
+  let appendedDefs = appendMetaConstraints m evaluatedDefs
+      md = ModuleData m evaluatedDefs
   installModule md 
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -265,12 +267,116 @@ loadModule i@Interface{..} body _ gas0 = do
     extractDefName rs t = do 
       dnm <- case t of
         TDef{..} -> return $ Just _tDefName
-        TConst{..} -> return $ Just $ _aName _tConstArg
+        TConst{..} -> return $ Just (_aName _tConstArg)
         _ -> evalError (_tInfo t) "Invalid interface member"
       case dnm of
         Nothing -> return rs
         Just dn -> return $ (dn,t):rs
 
+-- | appendMetaConstraints
+--
+-- For each implemented member, there may be overlapping meta
+-- models between the module implementation and the interface
+-- definition - therefore, in order not to step on the user's
+-- implementation, we must concatenate meta constraints and
+-- build the more detailed meta model of the member
+appendMetaConstraints
+  :: forall e
+  .  Module
+  -> HM.HashMap Text Ref
+  -> Info
+  -> Eval e (HM.HashMap Text Ref)
+appendMetaConstraints Interface{} _ info =
+  evalError info $ "Impossible: Interface found while appending meta-constraints to module"
+appendMetaConstraints m hm info =
+  foldMap (appendMetaConstraint hm info m) (_mInterfaces m)
+  where
+    appendMetaConstraint :: HM.HashMap Text Ref -> Info -> Module -> ModuleName -> Eval e (HM.HashMap Text Ref)
+    appendMetaConstraint hm info Module{..} ifn = do
+      mIRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap 
+      case mIRefs of
+        Nothing -> evalError info $
+          "Interface implemented in module, but not defined: " ++ asString' ifn
+        Just iRefs -> HM.foldlWithKey' (appendMeta info) (pure hm) iRefs
+
+appendMeta
+  :: forall e
+  .  Info
+  -> Eval e (HM.HashMap Text Ref)
+  -> Text
+  -> Ref
+  -> Eval e (HM.HashMap Text Ref)
+appendMeta info ehm refName ref = do
+  hm <- ehm
+  case HM.lookup refName hm of
+    Nothing -> pure hm
+    Just ref' ->
+      case (ref, ref') of
+        (Ref t, Ref s) ->
+          case (t, s) of
+            (t'@TDef{}, s'@TDef{}) ->
+              pure $ HM.adjust (set tMeta (view tMeta t' <> view tMeta s')) refName hm
+            _ -> evalError info $ "found overlapping const refs - please resolove: " ++ show t 
+        _ -> evalError info $ "mismatching implementation signatures: \n" ++
+             show ref ++ "\n" ++ show ref'
+             
+-- | evaluateConstraints:
+--
+-- Solve for implemented members, ensuring that for each module
+-- and all implemented members, the types, names, and args
+-- are confluent
+evaluateConstraints
+  :: forall e
+  .  Module
+  -> HM.HashMap Text Ref
+  -> Info
+  -> Eval e ()
+evaluateConstraints Interface{} _ i =
+  evalError i "Cannot solve constraints for interfaces"
+evaluateConstraints Module{..} dm i =
+  foldMap (evalConstraint' dm i) _mInterfaces 
+  where
+    evalConstraint' :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e ()
+    evalConstraint' hm info ifn = do 
+      -- load the interface refmaps via refstore
+      mIRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
+      case mIRefs of
+        -- if nothing found, interface is not loaded, ergo not unfound
+        Nothing -> evalError info $
+          "Interface implemented in module, but not defined: " ++ asString' ifn
+        -- if something found, then we compare.
+        Just iRefs -> HM.foldlWithKey' (solveConstraint hm i) (pure ()) iRefs
+
+-- | solveConstraint:
+--
+-- Does the lookup in the module evaluated defs map for a given
+-- refname in the set of interface refs, discarding malformed data,
+-- and comparing correctly formatted refs
+solveConstraint
+  :: forall e
+  .  HM.HashMap Text Ref
+  -> Info 
+  -> Eval e ()
+  -> Text
+  -> Ref
+  -> Eval e ()
+solveConstraint hm info ev refName ref =
+  case HM.lookup refName hm of
+    -- if nothing is found for the lookup, skip
+    Nothing -> (pure ()) `mappend` ev
+    -- if we find two Ref (Term Ref)'s, then compare their names, deftypes, args, rty's
+    Just ref' ->
+      case (ref, ref') of
+        (Ref t, Ref s) ->
+          case (t, s) of 
+            (TDef n _ dt (FunType args rty) _ _ _,
+             TDef n' _ dt' (FunType args' rty') _ _ _) ->
+              if n == n' && dt == dt' && args == args' && rty == rty'
+              then mempty
+              else evalError info $ "mismatching interface and module implementation definitions: " ++ show t ++ "\n" ++ show s
+            _ -> evalError info $ "found overlapping const refs - please resolove: " ++ show t 
+        _ -> evalError info $ "mismatching implementation signatures: \n" ++
+             show ref ++ "\n" ++ show ref'
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
