@@ -42,7 +42,6 @@ import Prelude
 import Data.Text (Text,pack,unpack)
 import Data.Aeson
 import Data.Char
-import Data.Semigroup
 import Data.Thyme
 import System.Locale
 import Data.Scientific
@@ -169,7 +168,7 @@ data Exp i =
   EList (ListExp i) |
   ESeparator (SeparatorExp i)
   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable)
-  
+
 instance NFData i => NFData (Exp i)
 instance HasInfo (Exp Info) where
   getInfo e = case e of
@@ -177,7 +176,6 @@ instance HasInfo (Exp Info) where
     EAtom a -> getInfo a
     EList l -> getInfo l
     ESeparator s -> getInfo s
-
 
 makePrisms ''Exp
 

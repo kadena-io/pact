@@ -87,6 +87,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
 import Data.Serialize (Serialize)
 
+
 import Pact.Types.Parser
 import Pact.Types.Util
 import Pact.Types.Info
