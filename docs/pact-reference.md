@@ -92,7 +92,7 @@ All endpoints are served from `api/v1`. Thus a `send` call would be sent to <htt
 
 ### /send
 
-Asynchronous submit of one or more *public* (unencrypted) commands to the blockchain.
+Asynchronous submission of one or more *public* (unencrypted) commands to the blockchain.
 See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
@@ -131,8 +131,8 @@ Response JSON:
 
 ### /private
 
-Asynchronous submit of one or more *private* commands to the blockchain, using supplied address info
-to securely encrypt for only sending and receiving entities to read.
+Asynchronous submission of one or more *private* commands to the blockchain, using supplied address info
+to securely encrypt, in order only to send and receive entities for reading.
 See [cmd field format](#cmd-field-and-payloads) regarding the stringified JSON data.
 
 Request JSON:
@@ -524,14 +524,14 @@ encountered, the runtime enforces the type when the expression is evaluated.
 With the [typecheck](#typecheck) repl command, the Pact interpreter will analyze a module
 and attempt to infer types on every variable, function application or const definition.
 Using this in project repl scripts is helpful to aid the developer in adding "just enough types"
-to make the typecheck succeed. Fully successful typecheck is usually a matter of providing
+to make the typecheck succeed. Successful typechecking is usually a matter of providing
 schemas for all tables, and argument types for ancillary functions that call ambiguous or
 overloaded native functions.
 
 ### Formal Verification
 
-Pact's typechecker is designed to output a fully typechecked, inlined AST for use generating
-formal proofs in SMT-LIB2. If the typecheck does not fully succeed, the module is not
+Pact's typechecker is designed to output a fully typechecked and inlined AST for generating
+formal proofs in the SMT-LIB2 language. If the typecheck does not succeed, the module is not
 considered "provable".
 
 We see, then, that Pact code can move its way up a "safety" gradient, starting with no types,
@@ -573,18 +573,18 @@ Examples of valid keyset JSON productions:
 
 ### Keyset Predicates {#keyset-predicates}
 
-A keyset predicate references a function by its (optionally qualified) name which will compare the public keys in the keyset
+A keyset predicate references a function by its (optionally qualified) name, and will compare the public keys in the keyset
 to the key or keys used to sign the blockchain message. The function accepts two arguments,
 "count" and "matched", where "count" is the number of keys in the keyset and "matched" is how many
 keys on the message signature matched a keyset key.
 
 Support for multiple signatures is the responsibility of the blockchain layer, and is a powerful
-feature for Bitcoin-style "multisig" contracts (ie requiring at least two signatures to release funds).
+feature for Bitcoin-style "multisig" contracts (i.e. requiring at least two signatures to release funds).
 
 Pact comes with built-in keyset predicates: [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2).
 Module authors are free to define additional predicates.
 
-If a keyset predicate is not specified, it is defaulted to [keys-all](#keys-all).
+If a keyset predicate is not specified, [keys-all](#keys-all) is used by default.
 
 ### Key rotation {#keyrotation}
 
@@ -595,7 +595,7 @@ and predicate. Once authorized, the keyset can be easily [redefined](#define-key
 
 When [creating](#create-table) a table, a module name must also be specified. By this mechanism,
 tables are "guarded" or "encapsulated" by the module, such that direct access to the table
-via [data-access functions](#Database) is authorized by the module's admin keyset. However,
+via [data-access functions](#Database) is authorized only by the module's admin keyset. However,
 *within module functions*, table access is unconstrained. This gives contract authors great
 flexibility in designing data access, and is intended to enshrine the module as the main
 "user" data access API.
@@ -649,8 +649,6 @@ Module-global constant values can be declared with [defconst](#defconst).
 
 Pact code can be explicitly typed, and is always strongly-typed under the hood as the native
 functions perform strict type checking as indicated in their documented type signatures.
-language, but does use fixed type representations "under the hood"
-and does no coercion of types, so is strongly-typed nonetheless.
 
 Pact's supported types are:
 
