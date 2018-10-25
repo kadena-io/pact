@@ -19,6 +19,7 @@
 
 module Pact.Analyze.Types.Shared where
 
+import Data.Constraint (Dict(Dict))
 import           Control.Lens                 (At (at), Index, Iso, Iso',
                                                IxValue, Ixed (ix), Lens',
                                                Prism', both, from, iso, lens,
@@ -56,12 +57,11 @@ import qualified Data.Text                    as T
 import           Data.Thyme                   (UTCTime, microseconds)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (Float)
-import Data.Proxy
 
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time)
+import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time, str)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.UserShow
@@ -107,10 +107,10 @@ instance Mergeable a => Mergeable (Located a) where
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
 data Existential (tm :: Ty -> *) where
-  ESimple :: SimpleType (Concrete a) => SingTy a -> tm a           -> Existential tm
+  ESimple :: SingTy 'SimpleK a -> tm a           -> Existential tm
   -- TODO: combine with ESimple?
-  EList   :: SimpleType (Concrete a) => SingTy a -> tm ('TyList a) -> Existential tm
-  EObject ::                            Schema   -> tm 'TyObject   -> Existential tm
+  EList   :: SingTy 'ListK a   -> tm ('TyList a) -> Existential tm
+  EObject :: Schema            -> tm 'TyObject   -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -228,10 +228,18 @@ instance HasKind ColumnName where
 instance IsString ColumnName where
   fromString = ColumnName
 
--- newtype Str = Str String
---   deriving (Show, Eq, Ord, IsString, UserShow)
+newtype Str = Str String
+  deriving (Eq, Ord, Show, SMTValue, HasKind, Typeable, IsString)
 
-type RowKey = String
+instance SymWord Str where
+  mkSymWord = SBVI.genMkSymVar KString
+  literal (Str s) = mkConcreteString s
+  fromCW = wrappedStringFromCW Str
+
+instance UserShow Str where
+  userShowsPrec _ (Str str) = "\"" <> T.pack str <> "\""
+
+type RowKey = Str
 
 type Time = Int64
 
@@ -360,6 +368,9 @@ instance Boolean (S Bool) where
 instance IsString (S String) where
   fromString = sansProv . fromString
 
+instance IsString (S Str) where
+  fromString = coerceS @String @Str . fromString
+
 instance SymbolicDecimal (S Decimal) where
   type IntegerOf (S Decimal) = S Integer
   fromInteger' (S _ a)       = sansProv (fromInteger' a)
@@ -414,7 +425,7 @@ instance Provable PredicateS where
   forSome _ = fmap _sSbv
 
 -- Until SBV adds a typeclass for strConcat/(.++):
-(.++) :: S String -> S String -> S String
+(.++) :: S Str -> S Str -> S Str
 S _ a .++ S _ b = sansProv $ coerceSBV $ SBV.concat (coerceSBV a) (coerceSBV b)
 
 -- Beware: not a law-abiding Iso. Drops provenance info.
@@ -427,7 +438,7 @@ fromCell tn cn sRk sDirty = FromCell $ OriginatingCell tn cn sRk sDirty
 fromNamedKs :: S KeySetName -> Provenance
 fromNamedKs = FromNamedKs
 
-symRowKey :: S String -> S RowKey
+symRowKey :: S Str -> S RowKey
 symRowKey = coerceS
 
 -- | Typed symbolic value.
@@ -578,11 +589,11 @@ data QKind = QType | QAny
 type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
 
 data Quantifiable :: QKind -> * where
-  EType     :: SimpleType (Concrete a) => SingTy a  -> Quantifiable q
-  -- EListType :: SingTy a  -> Quantifiable q
-  EObjectTy :: Schema    -> Quantifiable q
-  QTable    ::              Quantifiable 'QAny
-  QColumnOf :: TableName -> Quantifiable 'QAny
+  EType     :: SingTy k a  -> Quantifiable q
+  -- EListType :: SingTy k a  -> Quantifiable q
+  EObjectTy :: Schema      -> Quantifiable q
+  QTable    ::                Quantifiable 'QAny
+  QColumnOf :: TableName   -> Quantifiable 'QAny
 
 deriving instance Show (Quantifiable q)
 
@@ -686,7 +697,7 @@ instance SMTValue KeySet where
 type family Concrete (a :: Ty) where
   Concrete 'TyInteger  = Integer
   Concrete 'TyBool     = Bool
-  Concrete 'TyStr      = String
+  Concrete 'TyStr      = Str
   Concrete 'TyTime     = Time
   Concrete 'TyDecimal  = Decimal
   Concrete 'TyKeySet   = KeySet
@@ -694,17 +705,103 @@ type family Concrete (a :: Ty) where
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
 
-singConcrete :: SingTy ty -> Proxy (Concrete ty)
-singConcrete = \case
-  SInteger -> Proxy
-  SBool    -> Proxy
-  SStr     -> Proxy
-  STime    -> Proxy
-  SDecimal -> Proxy
-  SKeySet  -> Proxy
-  SAny     -> Proxy
-  SList _  -> Proxy
-  SObject  -> Proxy
+liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
+liftC Dict b = b
+
+withEq :: forall a b k. SingTy k a -> (Eq (Concrete a) => b) -> b
+withEq ty = liftC @Eq (singMkEq ty)
+
+singMkEq :: SingTy k a -> Dict (Eq (Concrete a))
+singMkEq = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  SList a  -> case singMkEq a of
+    Dict -> Dict
+  SObject  -> Dict
+
+withShow :: forall a b k. SingTy k a -> (Show (Concrete a) => b) -> b
+withShow ty = liftC @Show (singMkShow ty)
+
+singMkShow :: SingTy k a -> Dict (Show (Concrete a))
+singMkShow = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  SList a  -> case singMkShow a of
+    Dict -> Dict
+  SObject  -> Dict
+
+-- alternate formulation:
+singCase
+  :: (k :~: 'SimpleK -> b)
+  -> (k :~: 'ListK   -> b)
+  -> (k :~: 'ObjectK -> b)
+  -> (SingTy k a     -> b)
+-- singCase
+--   :: (SingTy 'SimpleK a -> b)
+--   -> (SingTy 'ListK   a -> b)
+--   -> (SingTy 'ObjectK a -> b)
+--   -> (SingTy k        a -> b)
+singCase kSimple kList kObject sing = case sing of
+  SInteger -> kSimple Refl
+  SBool    -> kSimple Refl
+  SStr     -> kSimple Refl
+  STime    -> kSimple Refl
+  SDecimal -> kSimple Refl
+  SKeySet  -> kSimple Refl
+  SAny     -> kSimple Refl
+  SList a  -> kList   Refl
+  SObject  -> kObject Refl
+
+singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
+singMkSMTValue = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  -- TODO
+  -- SList a  -> case singMkSMTValue a of
+  --   Dict -> Dict
+  -- SObject  -> Dict
+
+singMkUserShow :: SingTy k a -> Dict (UserShow (Concrete a))
+singMkUserShow = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  SList a  -> case singMkUserShow a of
+    Dict -> Dict
+  SObject  -> Dict
+
+singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
+singMkSymWord = \case
+  SInteger -> Dict
+  SBool    -> Dict
+  SStr     -> Dict
+  STime    -> Dict
+  SDecimal -> Dict
+  SKeySet  -> Dict
+  SAny     -> Dict
+  -- TODO
+  -- SList a  -> case singMkSymWord a of
+  --   Dict -> Dict
+  -- SObject  -> Dict
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema

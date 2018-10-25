@@ -174,7 +174,7 @@ instance Extract 'TyKeySet where
 -- TODO: we might want to reweight these by using `Gen.frequency`.
 genCore :: MonadGen m => BoundedType -> m ETerm
 genCore (BoundedInt size) = Gen.recursive Gen.choice [
-    ESimple SInteger . CoreTerm . Lit <$> genInteger size
+    ESimple SInteger . Lit' <$> genInteger size
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore (BoundedInt size)) (genCore (BoundedInt (1 ... 1e3))) $
       \x y -> mkInt $ Numerical $ ModOp (extract x) (extract y)
@@ -192,7 +192,7 @@ genCore (BoundedInt size) = Gen.recursive Gen.choice [
   , Gen.subtermM (genCore strSize) $ mkInt . StrLength . extract
   ]
 genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
-    ESimple SDecimal . CoreTerm . Lit <$> genDecimal size
+    ESimple SDecimal . Lit' <$> genDecimal size
   ] $ scale 4 <$> [
     do op <- genArithOp
        let (size1, size2) = arithSize op size
@@ -217,7 +217,8 @@ genCore bounded@(BoundedDecimal size) = Gen.recursive Gen.choice [
       mkDec $ RoundingLikeOp2 op (extract x) (extract y)
   ]
 genCore (BoundedString len) = Gen.recursive Gen.choice [
-    ESimple SStr . CoreTerm . Lit <$> Gen.string (Range.exponential 1 len) Gen.unicode
+    ESimple SStr . StrLit
+      <$> Gen.string (Range.exponential 1 len) Gen.unicode
   ] [
     scale 4 $ Gen.subtermM2
       (genCore (BoundedString (len `div` 2)))
@@ -225,7 +226,7 @@ genCore (BoundedString len) = Gen.recursive Gen.choice [
         pure $ ESimple SStr $ Inj $ StrConcat (extract x) (extract y)
   ]
 genCore BoundedBool = Gen.recursive Gen.choice [
-    ESimple SBool . CoreTerm . Lit <$> Gen.bool
+    ESimple SBool . Lit' <$> Gen.bool
   ] $ scale 4 <$> [
     do op <- genComparisonOp
        Gen.subtermM2 (genCore intSize) (genCore intSize) $ \x y -> do
@@ -249,14 +250,14 @@ genCore BoundedBool = Gen.recursive Gen.choice [
       mkBool $ Logical NotOp [extract x]
   ]
 genCore BoundedTime = Gen.recursive Gen.choice [
-    ESimple STime . CoreTerm . Lit <$> Gen.enumBounded -- Gen.int64
+    ESimple STime . Lit' <$> Gen.enumBounded -- Gen.int64
   ] $ scale 4 <$> [
     Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedInt 1e9)) $ \x y ->
       pure $ ESimple STime $ Inj $ IntAddTime (extract x) (extract y)
   , Gen.subtermM2 (genCore BoundedTime) (genCore (BoundedDecimal 1e9)) $ \x y ->
       pure $ ESimple STime $ Inj $ DecAddTime (extract x) (extract y)
   ]
-genCore BoundedKeySet = ESimple SKeySet . CoreTerm . Lit . KeySet
+genCore BoundedKeySet = ESimple SKeySet . Lit' . KeySet
   <$> genInteger (0 ... 2)
 
 intSize, decSize, strSize :: BoundedType
@@ -311,9 +312,9 @@ genTermSpecific BoundedBool       = Gen.choice
   -- HACK(joel): Right now we "dilute" this choice with literal bools.
   -- Otherwise this tends to hang forever. Fix this properly (why does scale
   -- not work?).
-    ESimple SBool . CoreTerm . Lit <$> Gen.bool
-  , ESimple SBool . CoreTerm . Lit <$> Gen.bool
-  , ESimple SBool . CoreTerm . Lit <$> Gen.bool
+    ESimple SBool . Lit' <$> Gen.bool
+  , ESimple SBool . Lit' <$> Gen.bool
+  , ESimple SBool . Lit' <$> Gen.bool
   , genTermSpecific' BoundedBool
   ]
 genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
@@ -337,18 +338,18 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
        (str, tms) <- Gen.choice
          [ scale 2 $ do
               tm <- genFormattableTerm
-              pure (lit "{}", [tm])
+              pure (Lit' "{}", [tm])
          , scale 4 $ do
               tm1 <- genFormattableTerm
               tm2 <- genFormattableTerm
               str <- Gen.element ["{} {}", "{} / {}", "{} - {}"]
-              pure (lit str, [tm1, tm2])
+              pure (Lit' str, [tm1, tm2])
          , scale 8 $ do
               tm1 <- genFormattableTerm
               tm2 <- genFormattableTerm
               tm3 <- genFormattableTerm
               str <- Gen.element ["{} {} {}", "{} / {} / {}", "{} - {} - {}"]
-              pure (lit str, [tm1, tm2, tm3])
+              pure (Lit' str, [tm1, tm2, tm3])
          ]
        pure $ ESimple SStr $ Format str tms
   , scale 4 $ do
@@ -356,7 +357,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
        -- interesting
        format           <- genFormat
        ESimple STime t2 <- genTerm BoundedTime
-       pure $ ESimple SStr $ FormatTime (lit (showTimeFormat format)) t2
+       pure $ ESimple SStr $ FormatTime (StrLit (showTimeFormat format)) t2
   , let genHashableTerm = Gen.choice
           [ genTerm intSize
           , genTerm strSize
@@ -366,18 +367,18 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   , genTermSpecific' size
   ]
 genTermSpecific BoundedKeySet = scale 2 $
-  ESimple SKeySet . ReadKeySet . lit <$> genKeySetName
+  ESimple SKeySet . ReadKeySet . StrLit <$> genKeySetName
 genTermSpecific (BoundedDecimal len) = scale 2 $
-  ESimple SDecimal . ReadDecimal . lit <$> genDecimalName len
+  ESimple SDecimal . ReadDecimal . StrLit <$> genDecimalName len
 genTermSpecific BoundedTime = scale 8 $ Gen.choice
   [ do
        format  <- genFormat
        timeStr <- genTimeOfFormat format
-       pure $ ESimple STime $ ParseTime (Just (lit (showTimeFormat format))) $
-         lit timeStr
+       pure $ ESimple STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
+         StrLit timeStr
   , do
        timeStr <- genTimeOfFormat standardTimeFormat
-       pure $ ESimple STime $ ParseTime Nothing $ lit timeStr
+       pure $ ESimple STime $ ParseTime Nothing $ StrLit timeStr
   ]
 
 genWriteType :: MonadGen m => m WriteType
@@ -462,15 +463,15 @@ genFormatTime = do
   (ESimple STime t2, gState) <- runReaderT
     (runStateT (genTerm BoundedTime) emptyGenState)
     genEnv
-  let etm = ESimple SStr $ FormatTime (lit (showTimeFormat format)) t2
+  let etm = ESimple SStr $ FormatTime (StrLit (showTimeFormat format)) t2
   pure (etm, gState)
 
 genParseTime :: Gen (ETerm, GenState)
 genParseTime = do
   format  <- genFormat
   timeStr <- genTimeOfFormat format
-  let etm = ESimple STime $ ParseTime (Just (lit (showTimeFormat format))) $
-        lit timeStr
+  let etm = ESimple STime $ ParseTime (Just (StrLit (showTimeFormat format))) $
+        StrLit timeStr
   pure (etm, emptyGenState)
 
 alice, bob :: Pact.PublicKey

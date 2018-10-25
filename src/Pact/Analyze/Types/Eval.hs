@@ -86,8 +86,8 @@ data AnalyzeEnv
     { _aeScope     :: !(Map VarId AVal)              -- used as a stack
     , _aeKeySets   :: !(SFunArray KeySetName KeySet) -- read-only
     , _aeKsAuths   :: !(SFunArray KeySet Bool)       -- read-only
-    , _aeDecimals  :: !(SFunArray String Decimal)    -- read-only
-    , _aeIntegers  :: !(SFunArray String Integer)    -- read-only
+    , _aeDecimals  :: !(SFunArray Str Decimal)    -- read-only
+    , _aeIntegers  :: !(SFunArray Str Integer)    -- read-only
     , _invariants  :: !(TableMap [Located (Invariant 'TyBool)])
     , _aeColumnIds :: !(TableMap (Map Text VarId))
     , _aeModelTags :: !(ModelTags 'Symbolic)
@@ -153,7 +153,7 @@ data SymbolicCells
   = SymbolicCells
     { _scIntValues     :: ColumnMap (SFunArray RowKey Integer)
     , _scBoolValues    :: ColumnMap (SFunArray RowKey Bool)
-    , _scStringValues  :: ColumnMap (SFunArray RowKey String)
+    , _scStringValues  :: ColumnMap (SFunArray RowKey Str)
     , _scDecimalValues :: ColumnMap (SFunArray RowKey Decimal)
     , _scTimeValues    :: ColumnMap (SFunArray RowKey Time)
     , _scKsValues      :: ColumnMap (SFunArray RowKey KeySet)
@@ -378,10 +378,10 @@ class HasAnalyzeEnv a where
   ksAuths :: Lens' a (SFunArray KeySet Bool)
   ksAuths = analyzeEnv.aeKsAuths
 
-  envDecimals :: Lens' a (SFunArray String Decimal)
+  envDecimals :: Lens' a (SFunArray Str Decimal)
   envDecimals = analyzeEnv.aeDecimals
 
-  envIntegers :: Lens' a (SFunArray String Integer)
+  envIntegers :: Lens' a (SFunArray Str Integer)
   envIntegers = analyzeEnv.aeIntegers
 
 instance HasAnalyzeEnv AnalyzeEnv where analyzeEnv = id
@@ -525,7 +525,7 @@ stringCell
   -> ColumnName
   -> S RowKey
   -> S Bool
-  -> Lens' (AnalyzeState a) (S String)
+  -> Lens' (AnalyzeState a) (S Str)
 stringCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
   cvTableCells.singular (ix tn).scStringValues.
   singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
@@ -591,14 +591,14 @@ resolveKeySet sKsn = fmap (withProv $ fromNamedKs sKsn) $
 
 resolveDecimal
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S String
+  => S Str
   -> m (S Decimal)
 resolveDecimal sDn = fmap sansProv $
   readArray <$> view envDecimals <*> pure (_sSbv sDn)
 
 resolveInteger
   :: (MonadReader r m, HasAnalyzeEnv r)
-  => S String
+  => S Str
   -> m (S Integer)
 resolveInteger sSn = fmap sansProv $
   readArray <$> view envIntegers <*> pure (_sSbv sSn)

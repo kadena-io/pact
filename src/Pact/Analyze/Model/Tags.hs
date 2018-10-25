@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE TypeApplications    #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
@@ -18,6 +19,7 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
+import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
                                        traversed, (<&>), (?~), (^.), _1, _2, _3)
 import           Control.Monad        (when, (>=>))
@@ -44,8 +46,13 @@ allocAVal :: EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType (_ :: SingTy ty) -> mkAVal . sansProv <$>
-    (alloc :: Symbolic (SBV (Concrete ty)))
+  EType (ty :: SingTy k ty) -> singCase
+    (\Refl -> mkAVal . sansProv <$>
+      (liftC @SymWord (singMkSymWord ty) alloc :: Symbolic (SBV (Concrete ty))))
+    (\listTy -> error "TODO: mkAList")
+    (\_objTy -> error "this is impossible in the current formulation")
+    ty
+
 
 allocTVal :: EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety
@@ -160,8 +167,15 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        go (EType (_ :: SingTy t)) (AVal _mProv sval) = mkAVal' . SBV.literal
-          <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
+        go (EType (ty :: SingTy k t)) (AVal _mProv sval) = singCase
+          (\Refl -> liftC @SymWord (singMkSymWord ty) $
+            liftC @SBV.SMTValue (singMkSMTValue ty) $
+              mkAVal' . SBV.literal
+                <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
+          (\Refl -> error "TODO")
+          (\Refl -> error "TODO")
+          ty
+
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"
 

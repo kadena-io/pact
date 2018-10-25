@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
@@ -142,7 +143,8 @@ evalCore
 evalCore (Lit a)                           = pure (literalS a)
 evalCore (Sym s)                           = pure s
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
-evalCore (StrLength p)                     = over s2Sbv SBVS.length <$> eval p
+evalCore (StrLength p)
+  = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
@@ -167,7 +169,10 @@ evalCore LiteralObject {}                  =
 evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
   case singEq tyA tyB of
     Nothing   -> error "TODO"
-    Just Refl -> evalEqNeq op a b
+    Just Refl -> withEq tyA $
+      liftC @SymWord (singMkSymWord tyA) $
+        withShow tyA $
+          evalEqNeq op a b
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -214,7 +219,7 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
         $ filter (\(_name, ty) -> ty == retType)
         $ Map.toList schemaFields
 
-  colName :: S String <- eval colNameT
+  colName :: S Str <- eval colNameT
 
   firstName:relevantFields' <- case relevantFields of
     [] -> throwErrorNoLoc $ AtHasNoRelevantFields retType schema
@@ -240,7 +245,7 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
   foldrM
     (\fieldName rest -> do
       val <- getObjVal fieldName
-      pure $ ite (colName .== literalS (T.unpack fieldName)) val rest
+      pure $ ite (colName .== literalS (Str (T.unpack fieldName))) val rest
     )
     firstVal
     relevantFields'
@@ -263,7 +268,7 @@ evalObjAtO colNameT objT = do
           Just (_fieldType, AnObj subObj) -> pure subObj
           Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
 
-    case unliteralS sCn of
+    case unliteralS (coerceS @Str @String sCn) of
       Nothing -> throwErrorNoLoc "Unable to determine statically the key used in an object access evaluating to an object (this is an object in an object)"
       Just concreteColName -> getObjVal (T.pack concreteColName)
 
@@ -290,9 +295,10 @@ evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  ESimple ty prop -> do
-    prop' <- eval prop
-    pure (EType ty, mkAVal prop')
+  ESimple ty prop -> withShow ty $
+    liftC @SymWord (singMkSymWord ty) $ do
+      prop' <- eval prop
+      pure (EType ty, mkAVal prop')
   -- EList ty prop -> do
   --   SList len prop' <- evalL prop
   --   pure (EListType ty, mkAList len prop')

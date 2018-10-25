@@ -5,6 +5,7 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeApplications           #-}
 
 module Pact.Analyze.Eval.Term where
 
@@ -198,7 +199,7 @@ tagVarBinding vid av = do
     Nothing    -> pure ()
     Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
-symKsName :: S String -> S KeySetName
+symKsName :: S Str -> S KeySetName
 symKsName = unsafeCoerceS
 
 ksAuthorized :: S KeySet -> Analyze (S Bool)
@@ -466,7 +467,7 @@ evalTerm = \case
       tagReturn retTid $ mkAVal res
       pure res
 
-  ReadKeySet str -> resolveKeySet =<< symKsName <$> evalTerm str
+  ReadKeySet  str -> resolveKeySet  =<< symKsName <$> evalTerm str
   ReadDecimal str -> resolveDecimal =<< evalTerm str
   ReadInteger str -> resolveInteger =<< evalTerm str
 
@@ -483,7 +484,7 @@ evalTerm = \case
     tagAuth tid ks authorized
     pure authorized
 
-  PactVersion -> pure $ literalS $ T.unpack pactVersion
+  PactVersion -> pure $ literalS $ Str $ T.unpack pactVersion
 
   Format formatStr args -> do
     formatStr' <- eval formatStr
@@ -496,7 +497,7 @@ evalTerm = \case
         " (not " <> userShow etm <> ")"
     case unliteralS formatStr' of
       Nothing -> throwErrorNoLoc "We can only analyze calls to `format` with statically determined contents (both arguments)"
-      Just concreteStr -> case format concreteStr args' of
+      Just (Str concreteStr) -> case format concreteStr args' of
         Left err -> throwError err
         Right tm -> pure tm
 
@@ -504,31 +505,31 @@ evalTerm = \case
     formatStr' <- eval formatStr
     time'      <- eval time
     case (unliteralS formatStr', unliteralS time') of
-      (Just formatStr'', Just time'') -> pure $ literalS $
+      (Just (Str formatStr''), Just time'') -> pure $ literalS $ Str $
         formatTime defaultTimeLocale formatStr'' (toPact timeIso time'')
       _ -> throwErrorNoLoc "We can only analyze calls to `format-time` with statically determined contents (both arguments)"
 
   ParseTime mFormatStr timeStr -> do
     formatStr' <- case mFormatStr of
       Just formatStr -> eval formatStr
-      Nothing        -> pure $ literalS Pact.simpleISO8601
+      Nothing        -> pure $ literalS $ Str Pact.simpleISO8601
     timeStr'   <- eval timeStr
     case (unliteralS formatStr', unliteralS timeStr') of
-      (Just formatStr'', Just timeStr'') ->
+      (Just (Str formatStr''), Just (Str timeStr'')) ->
         case parseTime defaultTimeLocale formatStr'' timeStr'' of
           Nothing   -> succeeds .= false >> pure 0
           Just time -> pure $ literalS $ fromPact timeIso time
       _ -> throwErrorNoLoc "We can only analyze calls to `parse-time` with statically determined contents (both arguments)"
 
   Hash value -> do
-    let sHash = literalS . T.unpack . Pact.asString . Pact.hash
+    let sHash = literalS . Str . T.unpack . Pact.asString . Pact.hash
         notStaticErr :: AnalyzeFailure
         notStaticErr = AnalyzeFailure dummyInfo "We can only analyze calls to `hash` with statically determined contents"
     case value of
       -- Note that strings are hashed in a different way from the other types
       ESimple SStr tm -> eval tm <&> unliteralS >>= \case
-        Nothing  -> throwError notStaticErr
-        Just str -> pure $ sHash $ encodeUtf8 $ T.pack str
+        Nothing        -> throwError notStaticErr
+        Just (Str str) -> pure $ sHash $ encodeUtf8 $ T.pack str
 
       -- Everything else is hashed by first converting it to JSON:
       ESimple SInteger tm -> eval tm <&> unliteralS >>= \case
@@ -556,23 +557,23 @@ evalTerm = \case
 -- easy to infer from examples in the docs. We would also like to be able to
 -- format decimals, but that's a little harder (we could still make it work).
 -- Behavior on structured data is not specified.
-type Formattable = Either (S String) (Either (S Integer) (S Bool))
+type Formattable = Either (S Str) (Either (S Integer) (S Bool))
 
 -- This definition was taken from Pact.Native, then modified to be symbolic
-format :: String -> [Formattable] -> Either AnalyzeFailure (S String)
+format :: String -> [Formattable] -> Either AnalyzeFailure (S Str)
 format s tms = do
   -- TODO: don't convert to Text and back. splitOn is provided by both the
   -- split and MissingH packages.
-  let parts = literalS . T.unpack <$> T.splitOn "{}" (pack s)
+  let parts = coerceS @String @Str . literalS . T.unpack <$> T.splitOn "{}" (pack s)
       plen = length parts
       rep = \case
         Left  str          -> str
         Right (Right bool) -> ite (_sSbv bool) "true" "false"
         Right (Left int)   ->
           ite (int .< 0) "-" "" .++
-          sansProv (SBV.natToStr (_sSbv (abs int)))
+          coerceS @String @Str (sansProv (SBV.natToStr (_sSbv (abs int))))
   if plen == 1
-  then Right (literalS s)
+  then Right (literalS (Str s))
   else if plen - length tms > 1
        then Left (AnalyzeFailure dummyInfo "format: not enough arguments for template")
        else Right $ foldl'

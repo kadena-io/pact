@@ -189,22 +189,24 @@ expectFalsified' model code = do
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
   res <- runIO $ runCheck (wrap code "") check
-  it (show check) $ handlePositiveTestResult res
+  -- it (show check) $ handlePositiveTestResult res
+  it "passes" $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
   res <- runIO $ runCheck (wrap code "") check
-  it (show check) $ res `shouldSatisfy` isJust
+  -- it (show check) $ res `shouldSatisfy` isJust
+  it "passes" $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
 intConserves (TableName tn) (ColumnName cn)
   = CoreProp $ IntegerComparison Eq 0 $ Inj $
-    IntColumnDelta (PLit tn) (PLit cn)
+    IntColumnDelta (StrLit tn) (StrLit cn)
 
 decConserves :: TableName -> ColumnName -> Prop 'TyBool
 decConserves (TableName tn) (ColumnName cn)
   = CoreProp $ DecimalComparison Eq 0 $ Inj $
-    DecColumnDelta (PLit tn) (PLit cn)
+    DecColumnDelta (StrLit tn) (StrLit cn)
 
 pattern Success' :: Prop 'TyBool
 pattern Success' = PropSpecific Success
@@ -675,16 +677,16 @@ spec = describe "analyze" $ do
           |]
     expectPass code $ Valid $
       CoreProp $ IntegerComparison Eq
-        (Inj (RowWriteCount "tokens" (PLit "joel"))) 2
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 2
     expectPass code $ Valid $ PNot $
       CoreProp $ IntegerComparison Eq
-        (Inj (RowWriteCount "tokens" (PLit "joel"))) 1
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 1
     expectPass code $ Valid $ PNot $
       CoreProp $ IntegerComparison Eq
-        (Inj (RowWriteCount "tokens" (PLit "joel"))) 3
+        (Inj (RowWriteCount "tokens" (Lit' "joel"))) 3
     expectPass code $ Valid $
       CoreProp $ IntegerComparison Eq
-        (Inj (RowReadCount "tokens" (PLit "joel"))) 0
+        (Inj (RowReadCount "tokens" (Lit' "joel"))) 0
 
   describe "enforce-keyset.row-level.write.invalidation" $ do
     let code =
@@ -942,8 +944,8 @@ spec = describe "analyze" $ do
           Map.fromList [("name", EType SStr), ("balance", EType SInteger)]
         ety    = EType SStr
     expectPass code $ Valid $ CoreProp $ StringComparison Eq
-      (PObjAt schema (PLit "name") (Inj Result) ety)
-      (PLit "stu" :: Prop 'TyStr)
+      (PObjAt schema (Lit' "name") (Inj Result) ety)
+      (Lit' "stu" :: Prop 'TyStr)
 
   describe "at.object-in-object" $
     let code =
@@ -1279,13 +1281,13 @@ spec = describe "analyze" $ do
         (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 2
 
     expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop 'TyStr) (PLit "bob"))
+      CoreProp (StringComparison Neq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 0)
 
     expectPass code $ Valid $ Inj $ Forall 1 "row" (EType SStr) $
-      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop 'TyStr) (PLit "bob"))
+      CoreProp (StringComparison Eq (PVar 1 "row" :: Prop 'TyStr) (Lit' "bob"))
         ==>
         CoreProp (IntegerComparison Eq
           (Inj (IntCellDelta "accounts" "balance" (PVar 1 "row"))) 3)
@@ -1296,7 +1298,7 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid $
       CoreProp (IntegerComparison Eq
-        (Inj (IntCellDelta "accounts" "balance" (PLit "bob"))) 3)
+        (Inj (IntCellDelta "accounts" "balance" (Lit' "bob"))) 3)
 
   describe "with-read" $ do
     let code =
@@ -1816,10 +1818,10 @@ spec = describe "analyze" $ do
       existsA0 ty (existsA1 ty (PAnd a0 a1))
 
     it "lifts forall string" $
-      prenexConvert (PAnd (PLit True)
+      prenexConvert (PAnd (Lit' True)
         (allA0 intTy (CoreProp $ StringComparison Gte a0 a0)))
       `shouldBe`
-      allA0 intTy (PAnd (PLit True) (CoreProp $ StringComparison Gte a0 a0))
+      allA0 intTy (PAnd (Lit' True) (CoreProp $ StringComparison Gte a0 a0))
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]
@@ -1892,7 +1894,7 @@ spec = describe "analyze" $ do
     it "checks +" $ do
       textToProp SStr "(+ \"a\" \"b\")"
         `shouldBe`
-        Right (PStrConcat (PLit "a") (PLit "b"))
+        Right (PStrConcat (Lit' "a") (Lit' "b"))
 
       textToProp SInteger "(+ 0 1)"
         `shouldBe`
@@ -1900,7 +1902,7 @@ spec = describe "analyze" $ do
 
       textToProp SDecimal "(+ 0.0 1.0)"
         `shouldBe`
-        Right (Inj (DecArithOp Add (PLit 0) (PLit 1)))
+        Right (Inj (DecArithOp Add 0 1 :: Numerical Prop 'TyDecimal))
 
       textToProp SDecimal "(+ 0 1)"
         `shouldBe`
@@ -1911,8 +1913,8 @@ spec = describe "analyze" $ do
             Map.fromList [("x", EType SInteger), ("y", EType SInteger)]
           ety = EType SInteger
           litPair = CoreProp $ LiteralObject $ Map.fromList
-            [ ("x", ESimple SInteger (PLit 0))
-            , ("y", ESimple SInteger (PLit 1))
+            [ ("x", ESimple SInteger (Lit' 0))
+            , ("y", ESimple SInteger (Lit' 1))
             ]
 
           nestedObj = CoreProp $ LiteralObject $
@@ -1927,7 +1929,7 @@ spec = describe "analyze" $ do
 
       inferProp'' "(at 'x { 'x: 0, 'y: 1 })"
         `shouldBe`
-        Right (ESimple SInteger (PObjAt pairSchema (PLit "x") litPair ety))
+        Right (ESimple SInteger (PObjAt pairSchema (Lit' "x") litPair ety))
 
       inferProp'' "{ 'foo: { 'x: 0, 'y: 1 } }"
         `shouldBe`
@@ -1960,7 +1962,7 @@ spec = describe "analyze" $ do
       let env1 = Map.singleton "from" (VarId 1)
           env2 = Map.singleton (VarId 1) (EType SStr)
           tableEnv = singletonTableEnv "accounts" "ks" $ EType SKeySet
-      textToProp' env1 env2 tableEnv TBool "(row-enforced accounts 'ks from)"
+      textToProp' env1 env2 tableEnv SBool "(row-enforced accounts 'ks from)"
       `shouldBe`
       Right (Inj $ RowEnforced
         (TableNameLit "accounts")
@@ -2285,7 +2287,7 @@ spec = describe "analyze" $ do
                   (insert accounts "stu" {"balance": 5}) ; impossible
                   "didn't write"))
             |]
-      expectTrace code (PLit False) [push, {- else -} path, pop]
+      expectTrace code (Lit' False) [push, {- else -} path, pop]
 
     describe "doesn't include events after a failed enforce" $ do
       let code =
@@ -2434,10 +2436,10 @@ spec = describe "analyze" $ do
               (write accounts acct { 'balance: 100 })))
           |]
     let acct           = PVar 1 "acct"
-        schema         = Schema $ Map.singleton "balance" $ EType TInt
-        readBalance ba = PAt schema "balance"
+        schema         = Schema $ Map.singleton "balance" $ EType SInteger
+        readBalance ba = PObjAt schema "balance"
           (PropSpecific $ PropRead ba schema "accounts" acct)
-          (EType TInt)
+          (EType SInteger)
         exists ba      = PropSpecific (RowExists "accounts" acct ba)
 
     expectPass code7 $ Valid $

@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE TypeApplications           #-}
 module Pact.Analyze.Eval.Prop where
 
 import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
@@ -76,7 +77,7 @@ expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
     getSVal = flip const
 
 getLitTableName :: Prop TyTableName -> Query TableName
-getLitTableName (PLit tn) = pure $ TableName tn
+getLitTableName (StrLit tn) = pure $ TableName tn
 getLitTableName (CoreProp (Var vid name)) = do
   mTn <- view $ qeTableScope . at vid
   case mTn of
@@ -89,7 +90,7 @@ getLitTableName CoreProp{} = throwErrorNoLoc "Core values can't be table names"
 
 
 getLitColName :: Prop TyColumnName -> Query ColumnName
-getLitColName (PLit cn) = pure $ ColumnName cn
+getLitColName (StrLit cn) = pure $ ColumnName cn
 getLitColName (CoreProp (Var vid name)) = do
   mCn <- view $ qeColumnScope . at vid
   case mCn of
@@ -151,7 +152,8 @@ evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
-evalPropSpecific (Forall vid _name (EType (_ :: Types.SingTy ty)) p) = do
+evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p)
+  = liftC @SymWord (singMkSymWord ty) $ do
   sbv <- liftSymbolic (forall_ :: Symbolic (SBV (Concrete ty)))
   local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
 evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
@@ -167,7 +169,8 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
   pure $ foldr (&&&) true bools
-evalPropSpecific (Exists vid _name (EType (_ :: Types.SingTy ty)) p) = do
+evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy ty)) p)
+  = liftC @SymWord (singMkSymWord ty) $ do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV (Concrete ty)))
   local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
 evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =

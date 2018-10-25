@@ -13,10 +13,8 @@ import           Pact.Types.Info (Info)
 import           Pact.Types.Util (tShow)
 
 class UserShow a where
+  -- TODO: remove s in name
   userShowsPrec :: Int -> a -> Text
-
-  userShowList :: [a] -> Text
-  userShowList as = "[" <> T.intercalate ", " (userShow <$> as) <> "]"
 
 userShow :: UserShow a => a -> Text
 userShow = userShowsPrec 0
@@ -42,8 +40,8 @@ instance UserShow (Exp Info) where
 instance UserShow Bool where
   userShowsPrec _ = tShow
 
-instance UserShow String where
-  userShowsPrec _ = tShow
+-- instance UserShow String where
+--   userShowsPrec _ = tShow
 
 instance UserShow Int64 where
   userShowsPrec _ = tShow
@@ -55,3 +53,7 @@ instance UserShow a => UserShow (Map Text a) where
   userShowsPrec _ m =
     let go result k a = result <> ", " <> k <> ": " <> userShow a
     in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
+
+instance UserShow a => UserShow [a] where
+  userShowsPrec _ l =
+    "[" <> T.intercalate ", " (fmap (userShowsPrec 0) l) <> "]"

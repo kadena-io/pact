@@ -21,7 +21,7 @@ import           Pact.Analyze.Parse.Types
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-expToInvariant :: SingTy a -> Exp Info -> InvariantParse (Invariant a)
+expToInvariant :: SingTy k a -> Exp Info -> InvariantParse (Invariant a)
 expToInvariant ty exp = case (ty, exp) of
   (_, EAtom' varName) -> do
     schemaTys <- ask
@@ -42,7 +42,7 @@ expToInvariant ty exp = case (ty, exp) of
 
   (SDecimal, ELiteral' (LDecimal d)) -> pure (ILiteral (fromPact decimalIso d))
   (SInteger, ELiteral' (LInteger i)) -> pure (ILiteral i)
-  (SStr,     ELiteral' (LString s))  -> pure (ILiteral (T.unpack s))
+  (SStr,     ELiteral' (LString s))  -> pure (ILiteral (Str (T.unpack s)))
   (STime,    ELiteral' (LTime t))    -> pure (ILiteral (fromPact timeIso t))
   (SBool,    ELiteral' (LBool b))    -> pure (ILiteral b)
   (_,        ELiteral _)             ->

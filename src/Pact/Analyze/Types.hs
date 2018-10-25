@@ -68,7 +68,7 @@ data Check
   = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
   | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
   | Valid         !(Prop 'TyBool) -- valid, not assuming success
-  deriving Show
+  -- deriving Show
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation
@@ -79,12 +79,12 @@ data Table = Table
   { _tableName       :: Text
   , _tableType       :: TC.UserType
   , _tableInvariants :: [Located (Invariant 'TyBool)]
-  } deriving (Show)
+  } -- deriving (Show)
 
 pattern TableNameLit :: String -> Prop TyTableName
-pattern TableNameLit str = PLit str
+pattern TableNameLit str = StrLit str
 
 pattern ColumnNameLit :: String -> Prop TyColumnName
-pattern ColumnNameLit str = PLit str
+pattern ColumnNameLit str = StrLit str
 
 makeLenses ''Table

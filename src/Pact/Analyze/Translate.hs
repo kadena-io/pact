@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
+{-# LANGUAGE TypeApplications           #-}
 
 module Pact.Analyze.Translate where
 
@@ -384,7 +385,7 @@ maybeTranslateType' f = \case
     t <- maybeTranslateType' f a
     traceM $ "t: " ++ show t
     case t of
-      -- EType t -> trace "here1" $ pure $ EType $ SList t
+      EType t -> trace "here1" $ pure $ EType $ SList t
       _       -> trace "here2" empty
    -- traceShowId (maybeTranslateType' f (traceShowId a)) >>= \case
    --  EType t -> pure $ EListType (trace ("t: " ++ show t) t)
@@ -558,7 +559,7 @@ translateObjBinding pairs schema bodyA rhsT = do
         -- NOTE: *left* fold for proper shadowing/overlapping name semantics:
         foldl'
           (\body (colName, _located -> Binding vid _ (Munged varName) varType) ->
-            let colTerm = lit colName
+            let colTerm = StrLit colName
                 rhs = case varType of
                   EType ty ->
                     ESimple ty  (CoreTerm (ObjAt schema colTerm objVar varType))
@@ -597,17 +598,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   -- Int
   AST_NegativeLit l -> case l of
-    LInteger i -> pure $ ESimple SInteger (inject $ IntUnaryArithOp Negate (lit i))
-    LDecimal d -> pure $ ESimple SDecimal
-      (inject $ DecUnaryArithOp Negate (lit (fromPact decimalIso d)))
+    LInteger i -> pure $ ESimple SInteger $ inject @(Numerical Term) $
+      IntUnaryArithOp Negate $ Lit' i
+    LDecimal d -> pure $ ESimple SDecimal $ inject @(Numerical Term) $
+      DecUnaryArithOp Negate $ Lit' $ fromPact decimalIso d
     _          -> throwError' $ BadNegationType astNode
 
   AST_Lit l -> case l of
-    LInteger i -> pure $ ESimple SInteger (lit i)
-    LBool b    -> pure $ ESimple SBool (lit b)
-    LString s  -> pure $ ESimple SStr (lit $ T.unpack s)
-    LDecimal d -> pure $ ESimple SDecimal (lit (fromPact decimalIso d))
-    LTime t    -> pure $ ESimple STime (lit (fromPact timeIso t))
+    LInteger i -> pure $ ESimple SInteger (Lit' i)
+    LBool b    -> pure $ ESimple SBool (Lit' b)
+    LString s  -> pure $ ESimple SStr (Lit' $ Str $ T.unpack s)
+    LDecimal d -> pure $ ESimple SDecimal (Lit' (fromPact decimalIso d))
+    LTime t    -> pure $ ESimple STime (Lit' (fromPact timeIso t))
 
   AST_NegativeVar node -> do
     Just (Munged name, vid) <- view $ teNodeVars.at node
@@ -738,7 +740,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _node "time" [AST_Lit (LString timeLit)]
     | Just timeLit'
       <- parseTime defaultTimeLocale Pact.simpleISO8601 (T.unpack timeLit)
-    -> pure $ ESimple STime $ lit (fromPact timeIso timeLit')
+    -> pure $ ESimple STime $ Lit' $ fromPact timeIso timeLit'
 
   AST_NFun_Basic SModulus [a, b] ->  do
     ESimple SInteger a' <- translateNode a
@@ -1041,7 +1043,7 @@ doit (ESimple ty1 x : xs) = foldr
         Nothing   -> Nothing
         Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (EList ty1 (LiteralList [x])))
+  undefined -- (Just (EList ty1 (LiteralList [x])))
   xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph

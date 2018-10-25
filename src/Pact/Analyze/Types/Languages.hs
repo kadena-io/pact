@@ -13,7 +13,9 @@
 {-# LANGUAGE ViewPatterns          #-}
 
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
@@ -28,7 +30,7 @@ module Pact.Analyze.Types.Languages
   , Term(..)
   , BeforeOrAfter(..)
 
-  , lit
+  -- , lit
   , toPact
   , fromPact
   , valueToProp
@@ -41,7 +43,10 @@ module Pact.Analyze.Types.Languages
   , pattern PDecAddTime
   , pattern PIntAddTime
   , pattern PKeySetEqNeq
-  , pattern PLit
+  , pattern Lit'
+  -- , pattern PLit
+  , pattern StrLit
+  , pattern TextLit
   , pattern PLogical
   , pattern PNot
   , pattern PNumerical
@@ -73,7 +78,7 @@ import           Pact.Analyze.Util
 #define EQ_EXISTENTIAL(tm)                                \
 instance Eq (Existential tm) where                        \
   ESimple sa ia == ESimple sb ib = case singEq sa sb of { \
-    Just Refl -> ia == ib;                                \
+    Just Refl -> withEq sa (ia == ib);                    \
     Nothing   -> False};                                  \
   EObject sa pa == EObject sb pb = sa == sb && pa == pb;  \
   _ == _ = False;
@@ -82,12 +87,12 @@ instance Eq (Existential tm) where                        \
 instance Show (Existential tm) where {                                         \
   showsPrec d e = showParen (d > 10) $ case e of                               \
     ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
-      . showsPrec 11 inv;                                                      \
+      . withShow ty (showsPrec 11 inv);                                        \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
       . showsPrec 11 obj; };                                                   \
 instance UserShow (Existential tm) where                                       \
   userShowsPrec d e = case e of                                                \
-    ESimple _ty a -> userShowsPrec d a;                                        \
+    ESimple ty a  -> liftC @UserShow (singMkUserShow ty) (userShowsPrec d a);  \
     EObject _ty a -> userShowsPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
@@ -212,25 +217,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
-deriving instance Eq (Concrete a) => Eq (Core Prop a)
-
--- instance Eq (Core Prop Object) where
--- instance Eq (Core Prop Integer) where
--- instance Eq (Core Prop Bool) where
--- instance Eq (Core Prop String) where
--- instance Eq (Core Prop Time) where
--- instance Eq (Core Prop Decimal) where
--- instance Eq (Core Prop KeySet) where
--- instance Eq (Core Prop Any) where
-
--- instance Eq (Core Prop [Integer]) where
--- instance Eq (Core Prop [Bool]) where
--- instance Eq (Core Prop [String]) where
--- instance Eq (Core Prop [Time]) where
--- instance Eq (Core Prop [Decimal]) where
--- instance Eq (Core Prop [KeySet]) where
--- instance Eq (Core Prop [Any]) where
-
+deriving instance Eq   (Concrete a) => Eq   (Core Prop a)
 deriving instance Show (Concrete a) => Show (Core Prop a)
 
 instance
@@ -352,7 +339,7 @@ data PropSpecific (a :: Ty) where
   -- | Whether a row has its keyset @enforce@d in a transaction
   RowEnforced      :: Prop TyTableName  -> Prop TyColumnName -> Prop TyRowKey -> PropSpecific 'TyBool
 
-  PropRead :: BeforeOrAfter -> Schema -> Prop TableName -> Prop RowKey -> PropSpecific Object
+  PropRead :: BeforeOrAfter -> Schema -> Prop TyTableName -> Prop TyRowKey -> PropSpecific 'TyObject
 
 deriving instance Eq   (Concrete a) => Eq   (PropSpecific a)
 deriving instance Show (Concrete a) => Show (PropSpecific a)
@@ -362,23 +349,8 @@ data Prop (a :: Ty)
   = PropSpecific (PropSpecific a)
   | CoreProp     (Core Prop a)
 
+deriving instance Eq   (Concrete a) => Eq   (Prop a)
 deriving instance Show (Concrete a) => Show (Prop a)
-
-deriving instance Eq (Concrete a) => Eq (Prop a)
-
--- deriving instance         Eq (Prop 'TyObject)
--- deriving instance         Eq (Prop 'TyInteger)
--- deriving instance         Eq (Prop 'TyBool)
--- deriving instance         Eq (Prop 'TyStr)
--- deriving instance         Eq (Prop 'TyTime)
--- deriving instance         Eq (Prop 'TyDecimal)
--- deriving instance         Eq (Prop 'TyKeySet)
--- deriving instance         Eq (Prop 'TyAny)
-
-
--- deriving instance Eq a => Eq (Prop ('TyList a))
--- deriving instance         Eq (Prop TableName)
--- deriving instance         Eq (Prop ColumnName)
 
 instance UserShow (Concrete a) => UserShow (PropSpecific a) where
   userShowsPrec _d = \case
@@ -436,17 +408,17 @@ instance Numerical Prop :<: Prop where
     _                 -> Nothing
 
 instance IsString (Prop 'TyStr) where
-  fromString = PLit . fromString
+  fromString = Lit' . fromString
 
 instance Boolean (Prop 'TyBool) where
-  true      = PLit True
-  false     = PLit False
+  true      = Lit' True
+  false     = Lit' False
   bnot p    = CoreProp $ Logical NotOp [p]
   p1 &&& p2 = PAnd p1 p2
   p1 ||| p2 = POr  p1 p2
 
 instance Num (Prop 'TyInteger) where
-  fromInteger = PLit . fromInteger
+  fromInteger = Lit' . fromInteger
   (+)         = inject ... IntArithOp Add
   (*)         = inject ... IntArithOp Mul
   abs         = inject .   IntUnaryArithOp Abs
@@ -454,7 +426,7 @@ instance Num (Prop 'TyInteger) where
   negate      = inject .   IntUnaryArithOp Negate
 
 instance Num (Prop 'TyDecimal) where
-  fromInteger = PLit . fromPact decimalIso . fromInteger
+  fromInteger = Lit' . fromPact decimalIso . fromInteger
   (+)         = inject ... DecArithOp Add
   (*)         = inject ... DecArithOp Mul
   abs         = inject .   DecUnaryArithOp Abs
@@ -465,8 +437,18 @@ type EProp = Existential Prop
 EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
-pattern PLit :: Concrete a -> Prop a
-pattern PLit a = CoreProp (Lit a)
+pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
+pattern Lit' a <- (project @(Core tm) @tm -> Just (Lit a)) where
+  Lit' a = inject @(Core tm) @tm (Lit a)
+-- maybe this will work in the future:
+-- pattern Lit' a = Inj @(Core tm) @tm (Lit a)
+
+pattern StrLit :: forall tm. Core tm :<: tm => String -> tm 'TyStr
+pattern StrLit str = Lit' (Str str)
+
+pattern TextLit :: forall tm. Core tm :<: tm => Text -> tm 'TyStr
+pattern TextLit text <- Lit' (Str (Text.pack -> text)) where
+  TextLit text = Lit' (Str (Text.unpack text))
 
 pattern PVar :: VarId -> Text -> Prop t
 pattern PVar vid name = CoreProp (Var vid name)
@@ -611,12 +593,12 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     EnforceOne (Left _)        -> parenList
       [ "enforce-one"
       , "\"(generated enforce-one)\""
-      , userShowList ([] :: [Integer])
+      , userShow ([] :: [Integer])
       ]
     EnforceOne (Right x)       -> parenList
       [ "enforce-one"
       , "\"(generated enforce-one)\""
-      , userShowList $ fmap snd x
+      , userShow $ fmap snd x
       ]
 
     Enforce _ (KsAuthorized _ x)   -> parenList ["enforce-keyset", userShow x]
@@ -630,7 +612,7 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
     Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
     PactVersion          -> parenList ["pact-version"]
-    Format x y           -> parenList ["format", userShow x, userShowList y]
+    Format x y           -> parenList ["format", userShow x, userShow y]
     FormatTime x y       -> parenList ["format", userShow x, userShow y]
     ParseTime Nothing y  -> parenList ["parse-time", userShow y]
     ParseTime (Just x) y -> parenList ["parse-time", userShow x, userShow y]
@@ -664,7 +646,7 @@ instance Numerical Term :<: Term where
     _                 -> Nothing
 
 instance Num (Term 'TyInteger) where
-  fromInteger = lit . fromInteger
+  fromInteger = Lit' . fromInteger
   (+)    = inject ... IntArithOp Add
   (*)    = inject ... IntArithOp Mul
   abs    = inject .   IntUnaryArithOp Abs
@@ -672,15 +654,12 @@ instance Num (Term 'TyInteger) where
   negate = inject .   IntUnaryArithOp Negate
 
 instance Num (Term 'TyDecimal) where
-  fromInteger = lit . fromPact decimalIso . fromInteger
+  fromInteger = Lit' . fromPact decimalIso . fromInteger
   (+)    = inject ... DecArithOp Add
   (*)    = inject ... DecArithOp Mul
   abs    = inject .   DecUnaryArithOp Abs
   signum = inject .   DecUnaryArithOp Signum
   negate = inject .   DecUnaryArithOp Negate
-
-lit :: Concrete a -> Term a
-lit = CoreTerm . Lit
 
 valueToProp :: ETerm -> Either String EProp
 valueToProp = \case

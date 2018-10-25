@@ -179,8 +179,7 @@ parseBindings mkBinding = \case
     (nameTy:) <$> parseBindings mkBinding exps
   exp@(EAtom _):_exps -> throwErrorIn exp
     "type annotation required for all property bindings."
-  exp -> throwErrorT $
-    "in " <> userShowList exp <> ", unexpected binding form"
+  exp -> throwErrorT $ "in " <> userShow exp <> ", unexpected binding form"
 
 parseType :: Exp Info -> Maybe QType
 parseType = \case
@@ -241,7 +240,11 @@ inferVar vid name prop = do
   varTy <- view (varTys . at vid)
   case varTy of
     Nothing -> throwErrorT $ "couldn't find property variable " <> name
-    Just (EType varTy')     -> pure (ESimple varTy' prop)
+    Just (EType varTy')     -> singCase
+      (\Refl -> pure (ESimple varTy' prop))
+      (\Refl -> error "TODO")
+      (\Refl -> error "TODO")
+      varTy'
     -- Just (EListType varTy') -> pure (EList varTy' prop)
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
@@ -249,7 +252,7 @@ inferVar vid name prop = do
 
 -- TODO: generalize this / doit from Translate
 doit :: [EProp] -> Maybe (Existential (Core Prop))
-doit [] = Just $ EList SAny (LiteralList [])
+doit [] = Just $ EList (SList SAny) (LiteralList [])
 doit (ESimple ty0 x : xs) = foldr
   (\case
     EObject{} -> \_ -> Nothing
@@ -260,7 +263,7 @@ doit (ESimple ty0 x : xs) = foldr
         Nothing   -> Nothing
         Just Refl -> Just (EList ty' (LiteralList (y:ys)))
       _ -> error "impossible")
-  (Just (EList ty0 (LiteralList [x])))
+  undefined -- (Just (EList ty0 (LiteralList [x])))
   xs
 
 --
@@ -277,11 +280,11 @@ doit (ESimple ty0 x : xs) = foldr
 inferPreProp :: PreProp -> PropCheck EProp
 inferPreProp preProp = case preProp of
   -- literals
-  PreDecimalLit a -> pure (ESimple SDecimal (PLit a))
-  PreIntegerLit a -> pure (ESimple SInteger (PLit a))
-  PreStringLit a  -> pure (ESimple SStr (PLit (T.unpack a)))
-  PreTimeLit a    -> pure (ESimple STime (PLit a))
-  PreBoolLit a    -> pure (ESimple SBool (PLit a))
+  PreDecimalLit a -> pure (ESimple SDecimal (Lit' a))
+  PreIntegerLit a -> pure (ESimple SInteger (Lit' a))
+  PreStringLit a  -> pure (ESimple SStr (TextLit a))
+  PreTimeLit a    -> pure (ESimple STime (Lit' a))
+  PreBoolLit a    -> pure (ESimple SBool (Lit' a))
   PreAbort        -> pure (ESimple SBool (PropSpecific Abort))
   PreSuccess      -> pure (ESimple SBool (PropSpecific Success))
 
@@ -335,18 +338,18 @@ inferPreProp preProp = case preProp of
         Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
         Just ety@(EType ty) -> pure $ ESimple
           ty
-          (PObjAt objSchema (PLit (T.unpack objIx)) objProp ety)
+          (PObjAt objSchema (TextLit objIx) objProp ety)
         Just ety@(EObjectTy schemaTy) -> pure $ EObject
           schemaTy
-          (PObjAt objSchema (PLit (T.unpack objIx)) objProp ety)
+          (PObjAt objSchema (TextLit objIx) objProp ety)
 
   PrePropRead tn rk ba -> do
     tn' <- parseTableName tn
     case tn' of
-      PLit litTn -> do
-        rk' <- checkPreProp TStr rk
+      StrLit litTn -> do
+        rk' <- checkPreProp SStr rk
         ba' <- parseBeforeAfter ba
-        cm  <- view $ tableEnv . at litTn
+        cm  <- view $ tableEnv . at (TableName litTn)
         case cm of
           Just cm' -> do
             let schema = columnMapToSchema cm'
@@ -511,9 +514,9 @@ inferPreProp preProp = case preProp of
     ESimple SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
   PreApp (toOp arithOpP -> Just _) _ -> asum
-    [ ESimple TInt     <$> checkPreProp TInt     preProp
-    , ESimple TDecimal <$> checkPreProp TDecimal preProp
-    , ESimple TStr     <$> checkPreProp TStr     preProp -- (string concat)
+    [ ESimple SInteger <$> checkPreProp SInteger preProp
+    , ESimple SDecimal <$> checkPreProp SDecimal preProp
+    , ESimple SStr     <$> checkPreProp SStr     preProp -- (string concat)
     ]
 
   -- inline property definitions. see note [Inlining].
@@ -537,7 +540,7 @@ inferPreProp preProp = case preProp of
   x -> vacuousMatch $
     "PreForall / PreExists are handled via the viewQ view pattern: " ++ show x
 
-checkPreProp :: SingTy a -> PreProp -> PropCheck (Prop a)
+checkPreProp :: SingTy k a -> PreProp -> PropCheck (Prop a)
 checkPreProp ty preProp
   | inferrable preProp = do
     eprop <- inferPreProp preProp
@@ -578,9 +581,9 @@ typeError preProp a b = throwErrorIn preProp $
   "type error: " <> userShow a <> " vs " <> userShow b
 
 expectColumnType
-  :: Prop TyTableName -> Prop TyColumnName -> SingTy a -> PropCheck ()
-expectColumnType (PLit tn) (PLit cn) expectedTy = do
-  tys <- asks $ toListOf $ tableEnv . ix (TableName tn) . ix (ColumnName cn)
+  :: Prop TyTableName -> Prop TyColumnName -> SingTy k a -> PropCheck ()
+expectColumnType (TextLit tn) (TextLit cn) expectedTy = do
+  tys <- asks $ toListOf $ tableEnv . ix (TableName (T.unpack tn)) . ix (ColumnName (T.unpack cn))
   case tys of
     [EType foundTy] -> case singEq foundTy expectedTy of
       Nothing   -> throwErrorT $
@@ -595,9 +598,10 @@ expectColumnType _ _ _
   = error "table and column names must be concrete at this point"
 
 expectTableExists :: Prop TyTableName -> PropCheck ()
-expectTableExists (PLit tn) = do
-  quantified <- view $ quantifiedTables . at (TableName tn)
-  defined    <- view $ tableEnv . at (TableName tn)
+expectTableExists (TextLit tn) = do
+  let tn' = TableName (T.unpack tn)
+  quantified <- view $ quantifiedTables . at tn'
+  defined    <- view $ tableEnv . at tn'
   unless (isJust quantified || isJust defined) $
     throwErrorT $ "expected table " <> userShow tn <> " but it isn't in scope"
 expectTableExists (PVar vid name) = do
@@ -643,7 +647,7 @@ expToProp
   -- ^ Environment mapping names to constants
   -> HM.HashMap Text (DefinedProperty (Exp Info))
   -- ^ Defined props in the environment
-  -> SingTy a
+  -> SingTy k a
   -> Exp Info
   -- ^ Exp to convert
   -> Either String (Prop a)

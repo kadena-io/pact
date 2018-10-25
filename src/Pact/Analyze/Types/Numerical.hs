@@ -9,9 +9,7 @@
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ConstraintKinds            #-}
-
-{-# LANGUAGE DataKinds               #-}
+{-# LANGUAGE DataKinds                  #-}
 
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 module Pact.Analyze.Types.Numerical where
@@ -22,7 +20,6 @@ import           Control.Lens                (Prism')
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
 import           Data.SBV                    (HasKind (kindOf),
-                                              Kind (KUnbounded),
                                               SDivisible (..), SymWord (..),
                                               bnot, oneIf, (&&&), (.==), (.>),
                                               (.^), (|||))
@@ -58,18 +55,20 @@ type TyColumnName = 'TyStr
 type TyRowKey     = 'TyStr
 type TyKeySetName = 'TyStr
 
-data SingTy :: Ty -> * where
-  SInteger ::             SingTy 'TyInteger
-  SBool    ::             SingTy 'TyBool
-  SStr     ::             SingTy 'TyStr
-  STime    ::             SingTy 'TyTime
-  SDecimal ::             SingTy 'TyDecimal
-  SKeySet  ::             SingTy 'TyKeySet
-  SAny     ::             SingTy 'TyAny
-  SList    :: SingTy a -> SingTy ('TyList a)
-  SObject  ::             SingTy 'TyObject
+data Kind = SimpleK | ListK | ObjectK
 
-instance Show (SingTy ty) where
+data SingTy :: Kind -> Ty -> * where
+  SInteger ::                      SingTy 'SimpleK 'TyInteger
+  SBool    ::                      SingTy 'SimpleK 'TyBool
+  SStr     ::                      SingTy 'SimpleK 'TyStr
+  STime    ::                      SingTy 'SimpleK 'TyTime
+  SDecimal ::                      SingTy 'SimpleK 'TyDecimal
+  SKeySet  ::                      SingTy 'SimpleK 'TyKeySet
+  SAny     ::                      SingTy 'SimpleK 'TyAny
+  SList    :: SingTy 'SimpleK a -> SingTy 'ListK   ('TyList a)
+  SObject  ::                      SingTy 'ObjectK 'TyObject
+
+instance Show (SingTy k ty) where
   showsPrec p = \case
     SInteger -> showString "SInteger"
     SBool    -> showString "SBool"
@@ -81,7 +80,7 @@ instance Show (SingTy ty) where
     SList a  -> showParen (p > 10) $ showString "SAny " . showsPrec 11 a
     SObject  -> showString "SObject"
 
-instance UserShow (SingTy ty) where
+instance UserShow (SingTy k ty) where
   userShowsPrec _ = \case
     SInteger     -> "integer"
     SBool    -> "bool"
@@ -93,7 +92,7 @@ instance UserShow (SingTy ty) where
     SList a  -> "[" <> userShow a <> "]"
     SObject  -> "object"
 
-singEq :: SingTy a -> SingTy b -> Maybe (a :~: b)
+singEq :: SingTy k1 a -> SingTy k2 b -> Maybe (a :~: b)
 singEq SInteger  SInteger  = Just Refl
 singEq SBool     SBool     = Just Refl
 singEq SStr      SStr      = Just Refl
@@ -104,18 +103,6 @@ singEq SAny      SAny      = Just Refl
 singEq (SList a) (SList b) = apply Refl <$> singEq a b
 singEq SObject   SObject   = Just Refl
 singEq _         _         = Nothing
-
-data Dict ctxt where
-  Dict :: ctxt => Dict ctxt
-
-showish :: Dict (Show a) -> a -> String
-showish Dict = show
-
-userShowish :: Dict (UserShow a) -> a -> Text
-userShowish Dict = userShow
-
-eqish :: Dict (Eq a) -> a -> a -> Bool
-eqish Dict = (==)
 
 -- We model decimals as integers. The value of a decimal is the value of the
 -- integer, shifted right 255 decimal places.
@@ -249,10 +236,10 @@ coerceSBV = SBVI.SBV . SBVI.unSBV
 unsafeCoerceSBV :: SBV a -> SBV b
 unsafeCoerceSBV = SBVI.SBV . SBVI.unSBV
 
-instance HasKind Decimal where kindOf _ = KUnbounded
+instance HasKind Decimal where kindOf _ = SBVI.KUnbounded
 instance SymWord Decimal where
-  mkSymWord  = genMkSymVar KUnbounded
-  literal a  = SBV . SVal KUnbounded . Left . normCW $ CW KUnbounded (CWInteger (unDecimal a))
+  mkSymWord  = genMkSymVar SBVI.KUnbounded
+  literal a  = SBV . SVal SBVI.KUnbounded . Left . normCW $ CW SBVI.KUnbounded (CWInteger (unDecimal a))
   fromCW (CW _ (CWInteger x)) = Decimal x
   fromCW x = error $ "in instance SymWord Decimal: expected CWInteger, found: " ++ show x
 
@@ -388,5 +375,5 @@ instance (UserShow (t 'TyInteger), UserShow (t 'TyDecimal))
     RoundingLikeOp1 op a   -> [userShow op, userShow a]
     RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 
-deriving instance (Show (t 'TyDecimal), Show (t 'TyInteger)) => Show (Numerical t a)
 deriving instance (Eq   (t 'TyDecimal), Eq   (t 'TyInteger)) => Eq   (Numerical t a)
+deriving instance (Show (t 'TyDecimal), Show (t 'TyInteger)) => Show (Numerical t a)

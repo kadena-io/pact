@@ -5,11 +5,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Pact.Analyze.Model.Text
   ( showModel
   ) where
 
+import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
 import           Data.Map.Strict            (Map)
@@ -46,7 +48,13 @@ showTVal (ety, av) = case av of
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
     EObjectTy _           -> error "showModel: impossible object type for AVal"
-    EType (_ :: SingTy t) -> showSbv (SBVI.SBV sval :: SBV (Concrete t))
+    EType (ty :: SingTy k t) -> singCase
+      (\Refl -> liftC @UserShow (singMkUserShow ty) $
+        liftC @SymWord (singMkSymWord ty) $
+          showSbv (SBVI.SBV sval :: SBV (Concrete t)))
+      (\Refl -> error "TODO")
+      (\Refl -> error "TODO")
+      ty
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "
@@ -132,10 +140,10 @@ showAuth recov mProv (_located -> Authorization srk sbool) =
     ksDescription = case mProv of
       Nothing ->
         "unknown " <> ks
-      Just (FromCell (OriginatingCell (TableName tn) (ColumnName cn) sRk _)) ->
+      Just (FromCell (OriginatingCell tn cn sRk _)) ->
         ks <> " from database at ("
-          <> T.pack tn <> ", "
-          <> "'" <> T.pack cn <> ", "
+          <> userShow tn <> ", "
+          <> "'" <> userShow cn <> ", "
           <> showS sRk <> ")"
       Just (FromNamedKs sKsn) ->
         ks <> " named " <> showKsn sKsn

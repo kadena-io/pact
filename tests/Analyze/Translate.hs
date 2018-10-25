@@ -10,7 +10,6 @@ import           Control.Monad.Reader       (ReaderT (runReaderT))
 import           Control.Monad.Trans.Class  (MonadTrans (lift))
 import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT, runMaybeT),
                                              exceptToMaybeT)
-import qualified Data.Text                  as T
 
 import           Pact.Analyze.Translate     (translateNodeNoGraph)
 import           Pact.Analyze.Types         hiding (Object, Term)
@@ -101,8 +100,8 @@ toPactTm = \case
     -> pure $ TLiteral (LInteger x) dummyInfo
   ESimple SDecimal (CoreTerm (Lit x))
     -> pure $ TLiteral (LDecimal (toPact decimalIso x)) dummyInfo
-  ESimple SStr     (CoreTerm (Lit x))
-    -> pure $ TLiteral (LString (T.pack x)) dummyInfo
+  ESimple SStr     (TextLit x)
+    -> pure $ TLiteral (LString x) dummyInfo
   ESimple SBool    (CoreTerm (Lit x))
     -> pure $ TLiteral (LBool x) dummyInfo
   ESimple STime    (CoreTerm (Lit x))
