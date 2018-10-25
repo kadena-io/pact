@@ -332,63 +332,6 @@ solveConstraint info ehm refName iref = do
             _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
         _ -> evalError info $ "mismatching implementation signatures: \n" ++ show iref ++ "\n" ++ show mref
              
--- -- | evaluateConstraints:
--- --
--- -- Solve for implemented members, ensuring that for each module
--- -- and all implemented members, the types, names, and args
--- -- are confluent
--- evaluateConstraints
---   :: forall e
---   .  Module
---   -> HM.HashMap Text Ref
---   -> Info
---   -> Eval e ()
--- evaluateConstraints Interface{} _ i =
---   evalError i "Cannot solve constraints for interfaces"
--- evaluateConstraints Module{..} dm i =
---   foldMap (evalConstraint' dm i) _mInterfaces 
---   where
---     evalConstraint' :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e ()
---     evalConstraint' hm info ifn = do 
---       -- load the interface refmaps via refstore
---       mIRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
---       case mIRefs of
---         -- if nothing found, interface is not loaded, ergo not unfound
---         Nothing -> evalError info $
---           "Interface implemented in module, but not defined: " ++ asString' ifn
---         -- if something found, then we compare.
---         Just iRefs -> HM.foldlWithKey' (solveConstraint hm i) (pure ()) iRefs
-
--- -- | solveConstraint:
--- --
--- -- Does the lookup in the module evaluated defs map for a given
--- -- refname in the set of interface refs, discarding malformed data,
--- -- and comparing correctly formatted refs
--- solveConstraint
---   :: forall e
---   .  HM.HashMap Text Ref
---   -> Info 
---   -> Eval e ()
---   -> Text
---   -> Ref
---   -> Eval e ()
--- solveConstraint hm info ev refName ref =
---   case HM.lookup refName hm of
---     -- if nothing is found for the lookup, skip
---     Nothing -> (pure ()) `mappend` ev
---     -- if we find two Ref (Term Ref)'s, then compare their names, deftypes, args, rty's
---     Just ref' ->
---       case (ref, ref') of
---         (Ref t, Ref s) ->
---           case (t, s) of 
---             (TDef n _ dt (FunType args rty) _ _ _,
---              TDef n' _ dt' (FunType args' rty') _ _ _) ->
---               if n == n' && dt == dt' && args == args' && rty == rty'
---               then mempty
---               else evalError info $ "mismatching interface and module implementation definitions: " ++ show t ++ "\n" ++ show s
---             _ -> evalError info $ "found overlapping const refs - please resolove: " ++ show t 
---         _ -> evalError info $ "mismatching implementation signatures: \n" ++
---              show ref ++ "\n" ++ show ref'
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do

@@ -23,7 +23,7 @@
 
 module Pact.Types.Term
  (
-   Meta(..),mDocs,mModel, _Module, _Interface,
+   Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
@@ -55,7 +55,7 @@ module Pact.Types.Term
    ) where
 
 
-import Control.Lens (makeLenses, makePrisms)
+import Control.Lens (makeLenses)
 import Control.Applicative
 import Data.List
 import Control.Monad
@@ -649,4 +649,3 @@ makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
-makePrisms ''Module
