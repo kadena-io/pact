@@ -939,7 +939,7 @@ execute the function.
 .. code:: lisp
 
    (map (+ 2) [1 2 3])
-   (fold (+) ["Concatenate" " " "me"]
+   (fold (+) "" ["Concatenate" " " "me"]
 
 Pact also has `compose <#compose>`__, which allows “chaining”
 applications in a functional style.
@@ -972,8 +972,8 @@ Message Data
 
 Pact expects code to arrive in a message with a JSON payload and
 signatures. Message data is read using `read-msg <#read-msg>`__ and
-related functions, while signatures are not directly readable or
-writable – they are evaluated as part of `keyset
+related functions. While signatures are not directly readable or
+writable, they are evaluated as part of `keyset
 predicate <#keysetpredicates>`__ enforcement.
 
 .. _json:
@@ -1110,8 +1110,8 @@ Yield and Resume
 ~~~~~~~~~~~~~~~~
 
 A step can yield values to the following step using `yield <#yield>`__
-and `resume <#resume>`__. In public, this is an unforgeable value as it
-is maintained within the blockchain pact scope. In private this is
+and `resume <#resume>`__. In public, this is an unforgeable value, as it
+is maintained within the blockchain pact scope. In private, this is
 simply a value sent with a RESUME message from the executed entity.
 
 Pact execution scope and ``pact-id``
