@@ -45,7 +45,7 @@ module Pact.Types.Term
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tInterfaces,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tInterfaceName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -415,7 +415,8 @@ data Term n =
     , _tInfo :: !Info
     } |
     TImplements {
-      _tInterfaces :: ![ModuleName]
+      _tInterfaceName :: !ModuleName
+    , _tModuleName :: !ModuleName
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -450,7 +451,7 @@ instance Show n => Show (Term n) where
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ " " ++ show _tMeta ++ ")"
     show TImplements{..} =
-      "(TImplements " ++ show _tInterfaces
+      "(TImplements " ++ show _tInterfaceName ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -492,7 +493,7 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
-  liftEq _ (TImplements ifs i) (TImplements ifs' i') = ifs == ifs' && i == i' 
+  liftEq _ (TImplements ifs mn i) (TImplements ifs' mn' i') = ifs == ifs' && mn == mn' && i == i'
   liftEq _ _ _ = False
 
 
@@ -519,7 +520,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
-    TImplements ifs i >>= _ = TImplements ifs i 
+    TImplements ifs mn i >>= _ = TImplements ifs mn i 
 
 
 instance FromJSON (Term n) where
@@ -650,7 +651,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TImplements{..} = "<implements " ++ show _tInterfaces ++ ">"
+abbrev TImplements{..} = "<implements " ++ show _tInterfaceName ++ ">"
 
 
 

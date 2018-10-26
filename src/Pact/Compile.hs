@@ -280,9 +280,10 @@ moduleForm = do
     TTable {} -> return []
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
-    _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
+    TImplements{} -> return []
+    t -> syntaxError $ "Only defun, defpact, defconst, deftable, use, bless allowed in module: " ++ abbrev t
   interfaces <- fmap concat $ forM bd $ \d -> case d of
-    TImplements{..} -> return _tInterfaces
+    TImplements{..} -> return [_tInterfaceName]
     _ -> return []
   return $ TModule
     (Module modName (KeySetName keyset) m code modHash blessed interfaces)
@@ -294,9 +295,10 @@ moduleForm = do
 -- 
 implements :: Compile (Term Name)
 implements = do
-  modName <- (ModuleName . _atomAtom) <$> bareAtom
+  modName <- currentModule'
+  ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
-  return $ TImplements [modName] info
+  return $ TImplements ifName modName info
 
 -- | interface:
 --

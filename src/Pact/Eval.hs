@@ -212,6 +212,7 @@ loadModule m@Module{..} bod1 mi g0 = do
                 TTable {..} -> return $ Just $ asString _tTableName
                 TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
                 TBless {..} -> return Nothing
+                TImplements {..} -> return $ Just (asString _tInterfaceName)
                 _ -> evalError (_tInfo t) "Invalid module member"
               case dnm of
                 Nothing -> return (g, rs)
@@ -396,7 +397,7 @@ reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce t@TImplements {} = unsafeReduce t
+reduce t@TImplements {} = unsafeReduce t 
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

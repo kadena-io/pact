@@ -1,3 +1,47 @@
+;; (interface foo 
+;;   @doc "do some crazy foo stuff"
+;;   @model (property (do (crazy stuff)))
+
+;;   (defun foo:bool (x:bool))
+;;   (defun bar:bool (x:decimal y:bool) @doc "i love bars")
+;;   (defun f:string () "docs work without the doc")
+
+;;   (defconst BAZ "i did a baz, baz thing")
+;;   (defconst QUX:string "qux the casbah")
+;;   (defconst F @doc "docstrings work with the doc")
+
+;;   (defun g:bool () @model (property stuff))
+;;   (defconst H 3)
+;; )
+
+;; (interface bar
+;;   @doc "more crazy stuff"
+;;   @model (property (do (foobar)))
+
+;;   (defun foobar:decimal (x:bool))
+;; )
+
+(define-keyset 'k (sig-keyset))
+
+(module mod 'k
+  @doc   "this defines mod"
+  @model (property (do (crazy stuff)))
+
+  (implements foo)
+
+  (defun foo:bool (x:bool) @doc "foo the town" true)
+  (defun bar:bool (x:decimal y:bool) @doc "i love bars" y)
+  (defun f:string () @doc "return" "f")
+  (defun g:bool () true)
+
+  (defun foobar ()
+    "docstrings work without @doc"
+    2)
+
+  (defconst BAR 1 @doc "barring disbelief")
+
+)
+
 (interface foo 
   @doc "do some crazy foo stuff"
   @model (property (do (crazy stuff)))
@@ -11,7 +55,7 @@
   (defconst F @doc "docstrings work with the doc")
 
   (defun g:bool () @model (property stuff))
-  (defconst H @model (property stuff) 3)
+  (defconst H 3)
 )
 
 (interface bar
@@ -19,27 +63,4 @@
   @model (property (do (foobar)))
 
   (defun foobar:decimal (x:bool))
-)
-
-(define-keyset 'k (sig-keyset))
-
-(module mod 'k
-  @doc   "this defines mod"
-  @model (property (do (crazy stuff)))
-
-  (implements "foo")
-
-  (defun foo:bool (x:bool) @doc "foo the town" true)
-  (defun bar:bool (x:decimal y:bool) @doc "i love bars" y)
-  (defun f:string () "return")
-  (defun g:bool () true)
-
-  (defun foobar ()
-    "docstrings work without @doc"
-    2)
-
-  (defconst BAR 1 @doc "barring disbelief")
-
-  (defconst BAZ 2 "docstrings work without @doc")
-
 )
