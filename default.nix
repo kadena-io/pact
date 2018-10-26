@@ -1,11 +1,9 @@
 { rpRef ? "503519c3188a54e02ac82b76fee5b9530a731f9b", rpSha ?  "00b3cjwy6h4pvjvclscwyjkd0p730nwsxbfh9v7f48w05b6bzpi5" }:
 
-let rp = (import <nixpkgs> {}).fetchFromGitHub {
-           owner = "reflex-frp";
-           repo = "reflex-platform";
-           rev = rpRef;
-           sha256 = rpSha;
-         };
+let rp = builtins.fetchTarball {
+  url = "https://github.com/reflex-frp/reflex-platform/archive/${rpRef}.tar.gz";
+  sha256 = rpSha;
+};
 
 in
   (import rp {}).project ({ pkgs, ... }: {
