@@ -126,6 +126,7 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "defpact" -> commit >> defpact
     "module" -> commit >> moduleForm
     "interface" -> commit >> interface
+    "implements" -> commit >> implements
     _ -> expected "special form"
 
 
@@ -269,7 +270,6 @@ moduleForm = do
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
-  interfaces <- optional implements
   (bd,bi) <- bodyForm'
   eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
@@ -281,21 +281,22 @@ moduleForm = do
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
     _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
+  interfaces <- fmap concat $ forM bd $ \d -> case d of
+    TImplements{..} -> return _tInterfaces
+    _ -> return []
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash blessed (maybe [] id interfaces))
+    (Module modName (KeySetName keyset) m code modHash blessed interfaces)
     (abstract (const Nothing) (TList bd TyAny bi)) i
 
-implements :: Compile [ModuleName]
-implements = withList' Parens $ do
-  AtomExp{..} <- bareAtom
-  case _atomAtom of
-    "implements" -> commit >> implStr
-    _ -> expected "implementation declarations"
-  where
-    implStr :: Compile [ModuleName]
-    implStr = do
-      as <- withList' Parens $ many arg
-      return $ fmap (ModuleName . _aName) as
+-- | implements:
+--
+-- This is the parsing form associated with the "implements" keyword
+-- 
+implements :: Compile (Term Name)
+implements = do
+  modName <- (ModuleName . _atomAtom) <$> bareAtom
+  info <- contextInfo
+  return $ TImplements [modName] info
 
 -- | interface:
 --

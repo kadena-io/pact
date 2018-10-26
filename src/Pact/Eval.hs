@@ -271,7 +271,7 @@ loadModule i@Interface{..} body _ gas0 = do
         Nothing -> return rs
         Just dn -> return $ (dn,t):rs
 
--- | evaluateConstraints:
+-- | Evaluate interface constraints in module 
 --
 -- For each implemented member, there may be overlapping meta
 -- models between the module implementation and the interface
@@ -286,8 +286,7 @@ evaluateConstraints
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints Interface{} _ info =
   evalError info $ "Impossible: Interface found while appending meta-constraints to module"
-evaluateConstraints Module{..} evalMap info =
-  foldMap (evaluateConstraint evalMap info) _mInterfaces
+evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMap info) _mInterfaces
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
     evaluateConstraint hm i ifn = do
@@ -299,11 +298,11 @@ evaluateConstraints Module{..} evalMap info =
           "Interface implemented in module, but not defined: " ++ asString' ifn
         Just iRefs -> HM.foldlWithKey' (solveConstraint i) (pure hm) iRefs
 
--- | solveConstraint:
+-- | Compare implemented member signatures and concatenate models
 --
 -- For each reference, we must check that it exists in the interface refmap,
 -- and if it does, we must check that it is both a def, and that we update
--- any model information in the reference map with concatenatation
+-- any model information in the reference map with the concatenatation
 -- of the module models, as well as the interface models.
 solveConstraint
   :: forall e
@@ -321,8 +320,7 @@ solveConstraint info ehm refName iref = do
         -- only Direct if native
         (Ref t, Ref s) ->
           case (t, s) of
-            -- compare TDef only - should never be comparing consts
-            -- since consts are stated in module
+            -- compare TDef only - should never be comparing consts since consts are stated in module xor interface
             (TDef n mn dt (FunType args rty) _ _ _,
              TDef n' mn' dt' (FunType args' rty') _ _ _) ->
               if n == n' && mn == mn' && dt == dt' && args == args' && rty == rty'
@@ -398,6 +396,7 @@ reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce t@TImplements {} = unsafeReduce t
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

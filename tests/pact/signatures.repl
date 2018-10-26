@@ -4,14 +4,14 @@
 
   (defun foo:bool (x:bool))
   (defun bar:bool (x:decimal y:bool) @doc "i love bars")
-  (defun f () "docs work without the doc")
+  (defun f:string () "docs work without the doc")
 
   (defconst BAZ "i did a baz, baz thing")
   (defconst QUX:string "qux the casbah")
   (defconst F @doc "docstrings work with the doc")
 
-  (defun g () @model (property stuff))
-  (defconst H @model (property stuff))
+  (defun g:bool () @model (property stuff))
+  (defconst H @model (property stuff) 3)
 )
 
 (interface bar
@@ -27,11 +27,12 @@
   @doc   "this defines mod"
   @model (property (do (crazy stuff)))
 
-  (implements ("foo", "bar"))
+  (implements "foo")
 
-  (defun foo ()
-    @doc "foo the town"
-    1)
+  (defun foo:bool (x:bool) @doc "foo the town" true)
+  (defun bar:bool (x:decimal y:bool) @doc "i love bars" y)
+  (defun f:string () "return")
+  (defun g:bool () true)
 
   (defun foobar ()
     "docstrings work without @doc"
