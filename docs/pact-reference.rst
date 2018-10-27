@@ -1121,7 +1121,7 @@ Every time a pact is initiated, it is given a unique ID which is
 retrievable using the `pact-id <#pact-id>`__ function, which will return
 the ID of the currently executing pact, or fail if not running within a
 pact scope. This mechanism can thus be used to guard access to
-resources, analogous to the use of keysets and signatures. The classic
+resources, analogous to the use of keysets and signatures. One typical
 use of this is to create escrow accounts that can only be used within
 the context of a given pact, eliminating the need for a trusted third
 party for many use-cases.
@@ -1168,16 +1168,16 @@ module version.
 Inlined Dependencies: “No Leftpad”
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pact inlines all user-code references when a module is loaded, meaning
-that upstream definitions are injected into downstream code. At this
-point, upstream definitions are permanent: the only way to upgrade
-dependencies is to re-load the module code.
+When a module is loaded, all references to foreign modules are resolved,
+and their code is directly inlined. At this point, upstream definitions
+are permanent: the only way to upgrade dependencies is to reload the
+original module.
 
-This permanence is great for downstream/client code: the upstream
-provider cannot change what code gets executed in your module, once
-loaded. It creates a big problem for upstream/provider code, as
-providers cannot upgrade the downstream code to address an exploit, or
-to introduce new features.
+This permanence is great for user code: once a module is loaded, an
+upstream provider cannot change what code is executed within. However,
+this creates a big problem for upstream developers, as they cannot
+upgrade the downstream code themselves in order to address an exploit,
+or to introduce new features.
 
 Blessing hashes
 ~~~~~~~~~~~~~~~
