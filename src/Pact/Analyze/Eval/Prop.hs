@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications           #-}
 module Pact.Analyze.Eval.Prop where
 
+import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
                                              (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
@@ -46,6 +47,7 @@ instance Analyzer Query where
   type TermOf Query = Prop
   eval           = evalProp
   evalO          = evalPropO
+  evalL          = evalPropL
   evalLogicalOp  = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
@@ -56,22 +58,40 @@ instance Analyzer Query where
 liftSymbolic :: Symbolic a -> Query a
 liftSymbolic = Query . lift . lift . lift
 
+-- TODO: this eliminator pattern is tired
 aval
   :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
+  -> ([AVal] -> m a)
   -> (Object -> m a)
   -> AVal
   -> m a
-aval elimVal elimObj = \case
+aval elimVal elimList elimObj = \case
   AVal mProv sval -> elimVal mProv sval
+  AList lst       -> elimList lst
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
 expectVal :: Analyzer m => AVal -> m (S a)
-expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
+expectVal = aval
+  (pure ... mkS)
+  (throwErrorNoLoc . AValUnexpectedlyList)
+  (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: Analyzer m => AVal -> m Object
-expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
+expectObj = aval
+  ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
+  (throwErrorNoLoc . AValUnexpectedlyList)
+  pure
+  where
+    getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
+    getSVal = flip const
+
+expectList :: Analyzer m => AVal -> m [S a]
+expectList = aval
+  ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
+  (traverse expectVal)
+  (throwErrorNoLoc . AValUnexpectedlyObj)
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
@@ -124,19 +144,19 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
     let cn = ColumnName $ T.unpack fieldName
 
     av <- case fieldType of
-      EType TInt     -> mkAVal <$> view
+      EType SInteger -> mkAVal <$> view
         (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
-      EType TBool    -> mkAVal <$> view
+      EType SBool    -> mkAVal <$> view
         (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
-      EType TStr     -> mkAVal <$> view
+      EType SStr     -> mkAVal <$> view
         (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
-      EType TDecimal -> mkAVal <$> view
+      EType SDecimal -> mkAVal <$> view
         (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
-      EType TTime    -> mkAVal <$> view
+      EType STime    -> mkAVal <$> view
         (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
-      EType TKeySet  -> mkAVal <$> view
+      EType SKeySet  -> mkAVal <$> view
         (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
-      EType TAny     -> pure OpaqueVal
+      EType SAny     -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
       --       the correct provenance into AVals all the way down into
@@ -148,14 +168,23 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
 
   pure $ Object aValFields
 
+evalPropL
+  :: (a' ~ Concrete a, SymWord a', Show a')
+  => Prop ('TyList a) -> Query [S a']
+evalPropL (CoreProp tm) = evalCoreL tm
+evalPropL (PropSpecific Result) = expectList =<< view qeAnalyzeResult
+
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
-evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy ty)) p)
-  = liftC @SymWord (singMkSymWord ty) $ do
-  sbv <- liftSymbolic (forall_ :: Symbolic (SBV (Concrete ty)))
-  local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
+evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy k ty)) p)
+  = singCase ty
+  (\Refl -> withSymWord ty $ do
+    sbv <- liftSymbolic (forall_ :: Symbolic (SBV (Concrete ty)))
+    local (scope.at vid ?~ mkAVal' sbv) $ evalProp p)
+  (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
+  (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
 evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 evalPropSpecific (Forall vid _name QTable prop) = do
@@ -169,10 +198,13 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
     let colName' = ColumnName $ T.unpack colName
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
   pure $ foldr (&&&) true bools
-evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy ty)) p)
-  = liftC @SymWord (singMkSymWord ty) $ do
-  sbv <- liftSymbolic (exists_ :: Symbolic (SBV (Concrete ty)))
-  local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
+evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy k ty)) p)
+  = singCase ty
+  (\Refl -> withSymWord ty $ do
+    sbv <- liftSymbolic (exists_ :: Symbolic (SBV (Concrete ty)))
+    local (scope.at vid ?~ mkAVal' sbv) $ evalProp p)
+  (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
+  (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
 evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 evalPropSpecific (Exists vid _name QTable prop) = do

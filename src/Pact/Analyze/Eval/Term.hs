@@ -65,7 +65,7 @@ newtype Analyze a
 instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
-  -- evalL            = evalTermL
+  evalL            = evalTermL
   evalO            = evalTermO
   evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
@@ -328,8 +328,8 @@ validateWrite writeType sch@(Schema sm) obj@(Object om) = do
   when (requiresFullWrite && Map.size om /= Map.size sm) invalid
 
 evalTermL
-  :: (a' ~ Concrete a, SymWord a')
-  => Term ('TyList a) -> Analyze (S [a'])
+  :: (a' ~ Concrete a, SymWord a', Show a')
+  => Term ('TyList a) -> Analyze [S a']
 evalTermL (CoreTerm tm) = evalCoreL tm
 
 evalTerm :: (a' ~ Concrete a, Show a', SymWord a') => Term a -> Analyze (S a')

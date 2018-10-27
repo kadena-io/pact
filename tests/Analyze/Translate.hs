@@ -246,7 +246,7 @@ toAnalyze ty tm = do
       translateNodeNoGraph ast
 
 -- This is limited to simple types for now
-reverseTranslateType :: SingTy a -> Pact.Type b
+reverseTranslateType :: SingTy k a -> Pact.Type b
 reverseTranslateType = \case
   SBool    -> Pact.TyPrim Pact.TyBool
   SDecimal -> Pact.TyPrim Pact.TyDecimal

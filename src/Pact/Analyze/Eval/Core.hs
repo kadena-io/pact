@@ -13,7 +13,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite)
+                                              SymWord, ite, bAll)
 import qualified Data.SBV.String             as SBVS
 -- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
@@ -166,13 +166,15 @@ evalCore LiteralObject {}                  =
 --   needle'   <- eval needle
 --   haystack' <- eval haystack
 --   pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
-evalCore (ListEqNeq op (ESimple tyA a) (ESimple tyB b)) =
-  case singEq tyA tyB of
+evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
+  SList tyA' -> case singEq tyA tyB of
     Nothing   -> error "TODO"
-    Just Refl -> withEq tyA $
-      liftC @SymWord (singMkSymWord tyA) $
-        withShow tyA $
-          evalEqNeq op a b
+    Just Refl -> withEq tyA' $ withSymWord tyA' $ withShow tyA' $ do
+      a' <- evalL a
+      b' <- evalL b
+      pure $ sansProv $ flip bAll (zip a' b') $ uncurry $ case op of
+        Eq'  -> (.==)
+        Neq' -> (./=)
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -185,11 +187,11 @@ evalCore x = error $ "no case for: " ++ show x
 evalCoreL
   :: ( Analyzer m
      , a' ~ Concrete a
-     , SymWord a')
-  => Core (TermOf m) ('TyList a) -> m (S [a'])
-evalCoreL (LiteralList xs) = do
-  -- vals <- traverse (fmap _sSbv . eval) xs
-  undefined
+     , SymWord a', Show a')
+  => Core (TermOf m) ('TyList a) -> m ([S a'])
+evalCoreL (LiteralList _ty xs) = do
+  vals <- traverse (fmap _sSbv . eval) xs
+  pure $ sansProv <$> vals
   -- pure $ SList (fromIntegral (length xs)) vals
   -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
 -- evalCoreL (ListDrop n list) = do
@@ -295,13 +297,12 @@ evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
 evalExistential = \case
-  ESimple ty prop -> withShow ty $
-    liftC @SymWord (singMkSymWord ty) $ do
-      prop' <- eval prop
-      pure (EType ty, mkAVal prop')
-  -- EList ty prop -> do
-  --   SList len prop' <- evalL prop
-  --   pure (EListType ty, mkAList len prop')
+  ESimple ty prop -> withShow ty $ withSymWord ty $ do
+    prop' <- eval prop
+    pure (EType ty, mkAVal prop')
+  EList (SList ty) prop -> withShow ty $ withSymWord ty $ do
+    vals  <- evalL prop
+    pure (EType ty, mkAList vals)
   EObject ty prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')

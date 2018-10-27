@@ -16,6 +16,8 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 module Pact.Analyze.Types.Languages
   ( (:<:)(inject, project)
@@ -88,11 +90,13 @@ instance Show (Existential tm) where {                                         \
   showsPrec d e = showParen (d > 10) $ case e of                               \
     ESimple ty inv -> showString "ESimple " . showsPrec 11 ty . showString " " \
       . withShow ty (showsPrec 11 inv);                                        \
+    EList ty lst   -> showString "EList "   . showsPrec 11 ty . showString " " \
+      . withShow ty (showsPrec 11 lst);                                        \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
       . showsPrec 11 obj; };                                                   \
 instance UserShow (Existential tm) where                                       \
   userShowsPrec d e = case e of                                                \
-    ESimple ty a  -> liftC @UserShow (singMkUserShow ty) (userShowsPrec d a);  \
+    ESimple ty a  -> withUserShow ty (userShowsPrec d a);                      \
     EObject _ty a -> userShowsPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
@@ -181,13 +185,13 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ListEqNeq   :: EqNeq -> Existential t    -> Existential t    -> Core t 'TyBool
 
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
-  ListAt :: t 'TyInteger -> t ('TyList a) -> Core t a
+  ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
 
   -- TODO: ListContains   :: forall t a. SimpleType a => t a -> t [a] -> Core t 'TyBool
   ObjContains    :: Schema -> Existential t -> Core t 'TyBool
-  TyStringingContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
+  StringContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
 
-  ListDrop :: t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+  ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjDrop :: Schema -> t 'TyStr -> t 'TyObject -> Core t 'TyObject
 
   -- ListFilter ::
@@ -207,18 +211,253 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
 
-  LiteralList   :: forall (a :: Ty) (t :: Ty -> *).
-    SimpleType (Concrete a) => [t a] -> Core t ('TyList a)
+  LiteralList :: SingTy 'ListK ('TyList a) -> [t a] -> Core t ('TyList a)
 
-  -- ListInfo :: ListInfo t ('TyList a) -> Core t ('TyList a)
+  -- ListInfo :: SingTy 'ListK ('TyList a) -> ListInfo t ('TyList a) -> Core t ('TyList a)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
-deriving instance Eq   (Concrete a) => Eq   (Core Prop a)
-deriving instance Show (Concrete a) => Show (Core Prop a)
+class
+  ( c (tm 'TyStr)
+  , c (tm 'TyInteger)
+  , c (tm 'TyTime)
+  , c (tm 'TyDecimal)
+  , c (tm 'TyBool)
+  , c (tm 'TyKeySet)
+  , c (tm 'TyObject)
+  , c (tm ('TyList 'TyStr))
+  , c (tm ('TyList 'TyInteger))
+  , c (tm ('TyList 'TyTime))
+  , c (tm ('TyList 'TyDecimal))
+  , c (tm ('TyList 'TyBool))
+  , c (tm ('TyList 'TyKeySet))
+  ) => OfPactTypes c tm where
+instance OfPactTypes Eq Prop      where
+instance OfPactTypes Eq Invariant where
+instance OfPactTypes Eq Term      where
+instance OfPactTypes Show Prop      where
+instance OfPactTypes Show Invariant where
+instance OfPactTypes Show Term      where
+
+uniformlyEq
+  :: OfPactTypes Eq tm
+  => SingTy 'SimpleK a -> tm ('TyList a) -> tm ('TyList a) -> Bool
+uniformlyEq ty t1 t2 = case ty of
+  SStr     -> t1 == t2
+  SInteger -> t1 == t2
+  STime    -> t1 == t2
+  SDecimal -> t1 == t2
+  SBool    -> t1 == t2
+  SKeySet  -> t1 == t2
+
+uniformlyEq'
+  :: OfPactTypes Eq tm
+  => SingTy 'ListK ('TyList a) -> [tm a] -> [tm a] -> Bool
+uniformlyEq' ty t1 t2 = case ty of
+  SList SStr     -> t1 == t2
+  SList SInteger -> t1 == t2
+  SList STime    -> t1 == t2
+  SList SDecimal -> t1 == t2
+  SList SBool    -> t1 == t2
+  SList SKeySet  -> t1 == t2
+
+-- TODO: generalize the above two
+-- uniformly :: OfPactTypes c tm => SingTy 'SimpleK a -> (c tm
+
+instance
+  ( Eq (Concrete a)
+  , Eq (Existential tm)
+  , OfPactTypes Eq tm
+  ) => Eq (Core tm a) where
+
+  Lit a                       == Lit b                       = a == b
+  Sym a                       == Sym b                       = a == b
+  Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
+  StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
+  StrLength a                 == StrLength b                 = a == b
+  Numerical a                 == Numerical b                 = a == b
+  IntAddTime a1 b1            == IntAddTime a2 b2            = a1 == a2 && b1 == b2
+  DecAddTime a1 b1            == DecAddTime a2 b2            = a1 == a2 && b1 == b2
+  IntegerComparison op1 a1 b1 == IntegerComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
+  DecimalComparison op1 a1 b1 == DecimalComparison op2 a2 b2 = op1 == op2 && a1 == a2 && b1 == b2
+  TimeComparison op1 a1 b1    == TimeComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
+  StringComparison op1 a1 b1  == StringComparison op2 a2 b2  = op1 == op2 && a1 == a2 && b1 == b2
+  BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
+  KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
+  ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
+  ListEqNeq op1 a1 b1         == ListEqNeq op2 a2 b2         = op1 == op2 && a1 == a2 && b1 == b2
+  ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
+  ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
+  ObjContains s1 e1           == ObjContains s2 e2           = s1 == s2 && e1 == e2
+  StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
+  ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
+  ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
+  LiteralObject m1            == LiteralObject m2            = m1 == m2
+  LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
+  Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
+
+instance
+  ( Show (Concrete a)
+  , Show (Existential tm)
+  , OfPactTypes Show tm
+  ) => Show (Core tm a) where
+  showsPrec p core = showParen (p > 10) $ case core of
+    Lit a          -> showString "Lit "        . showsPrec 11 a
+    Sym a          -> showString "Sym "        . showsPrec 11 a
+    Var a b        -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
+    StrConcat a b  -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
+    StrLength a    -> showString "StrLength "  . showsPrec 11 a
+    Numerical a    -> showString "Numerical "  . showsPrec 11 a
+    IntAddTime a b -> showString "IntAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
+    DecAddTime a b -> showString "DecAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
+    IntegerComparison op a b ->
+        showString "IntegerComparison "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    DecimalComparison op a b ->
+        showString "DecimalComparison "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    TimeComparison op a b ->
+        showString "TimeComparison "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    StringComparison op a b ->
+        showString "StringComparison "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    BoolComparison op a b ->
+        showString "BoolComparison "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    KeySetEqNeq op a b ->
+        showString "KeySetEqNeq "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    ObjectEqNeq op a b ->
+        showString "ObjectEqNeq "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    ListEqNeq op a b ->
+        showString "ListEqNeq "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+
+    ObjAt s a b t ->
+        showString "ListAt "
+      . showsPrec 11 s
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+      . showString " "
+      . showsPrec 11 t
+    ListAt ty a b ->
+        showString "ListAt "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . (case ty of
+        SStr     -> showsPrec 11 b
+        SInteger -> showsPrec 11 b
+        STime    -> showsPrec 11 b
+        SDecimal -> showsPrec 11 b
+        SBool    -> showsPrec 11 b
+        SKeySet  -> showsPrec 11 b)
+    ObjContains s e ->
+        showString "StringContains "
+      . showsPrec 11 s
+      . showString " "
+      . showsPrec 11 e
+    StringContains a b ->
+        showString "StringContains "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    ListDrop ty i l ->
+        showString "ObjDrop "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 i
+      . showString " "
+      . (case ty of
+        SStr     -> showsPrec 11 l
+        SInteger -> showsPrec 11 l
+        STime    -> showsPrec 11 l
+        SDecimal -> showsPrec 11 l
+        SBool    -> showsPrec 11 l
+        SKeySet  -> showsPrec 11 l)
+    ObjDrop a b c ->
+        showString "ObjDrop "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+      . showString " "
+      . showsPrec 11 c
+    ObjTake a b c ->
+        showString "ObjTake "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+      . showString " "
+      . showsPrec 11 c
+    ObjectMerge a b ->
+        showString "ObjectMerge "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    LiteralObject m -> showString "LiteralObject " . showsPrec 11 m
+    LiteralList ty l ->
+        showString "LiteralList "
+      . showsPrec 11 ty
+      . showString " "
+      . (case ty of
+        SList SStr     -> showsPrec 11 l
+        SList SInteger -> showsPrec 11 l
+        SList STime    -> showsPrec 11 l
+        SList SDecimal -> showsPrec 11 l
+        SList SBool    -> showsPrec 11 l
+        SList SKeySet  -> showsPrec 11 l)
+
+    Logical op args ->
+        showString "Logical "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 args
+
+-- deriving instance (Eq (Prop a), Eq (Concrete a)) => Eq   (Core Prop a)
+-- deriving instance Eq   (Concrete a) => Eq   (Core Prop a)
+-- deriving instance Show (Concrete a) => Show (Core Prop a)
 
 instance
   ( UserShow (Concrete a)
@@ -496,8 +735,8 @@ pattern PNot a = CoreProp (Logical NotOp [a])
 -- constructions as 'Core'.
 newtype Invariant a = CoreInvariant (Core Invariant a)
 
-deriving instance Eq   (Concrete a) => Eq   (Core Invariant a)
-deriving instance Show (Concrete a) => Show (Core Invariant a)
+-- deriving instance Eq   (Concrete a) => Eq   (Core Invariant a)
+-- deriving instance Show (Concrete a) => Show (Core Invariant a)
 
 deriving instance Eq   (Concrete a) => Eq   (Invariant a)
 deriving instance Show (Concrete a) => Show (Invariant a)
@@ -621,8 +860,8 @@ instance UserShow (Concrete a) => UserShow (Term a) where
     ReadDecimal name     -> parenList ["read-decimal", userShow name]
     ReadInteger name     -> parenList ["read-integer", userShow name]
 
-deriving instance Eq   (Concrete a) => Eq   (Core Term a)
-deriving instance Show (Concrete a) => Show (Core Term a)
+-- deriving instance Eq   (Concrete a) => Eq   (Core Term a)
+-- deriving instance Show (Concrete a) => Show (Core Term a)
 
 deriving instance Eq   (Concrete a) => Eq   (Term a)
 deriving instance Show (Concrete a) => Show (Term a)

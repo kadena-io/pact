@@ -240,11 +240,10 @@ inferVar vid name prop = do
   varTy <- view (varTys . at vid)
   case varTy of
     Nothing -> throwErrorT $ "couldn't find property variable " <> name
-    Just (EType varTy')     -> singCase
+    Just (EType varTy')     -> singCase varTy'
       (\Refl -> pure (ESimple varTy' prop))
-      (\Refl -> error "TODO")
-      (\Refl -> error "TODO")
-      varTy'
+      (\Refl -> pure (EList varTy' prop))
+      (\Refl -> throwErrorT "TODO")
     -- Just (EListType varTy') -> pure (EList varTy' prop)
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
@@ -252,18 +251,18 @@ inferVar vid name prop = do
 
 -- TODO: generalize this / doit from Translate
 doit :: [EProp] -> Maybe (Existential (Core Prop))
-doit [] = Just $ EList (SList SAny) (LiteralList [])
+doit [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
 doit (ESimple ty0 x : xs) = foldr
   (\case
     EObject{} -> \_ -> Nothing
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
-      Just (EList ty' (LiteralList ys)) -> case singEq ty ty' of
+      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (EList ty' (LiteralList (y:ys)))
+        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
       _ -> error "impossible")
-  undefined -- (Just (EList ty0 (LiteralList [x])))
+  (Just (EList (SList ty0) (LiteralList (SList ty0) [x])))
   xs
 
 --
@@ -336,9 +335,12 @@ inferPreProp preProp = case preProp of
         userShow ty
       EObject objSchema@(Schema tyMap) objProp -> case tyMap ^? ix objIx of
         Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
-        Just ety@(EType ty) -> pure $ ESimple
-          ty
-          (PObjAt objSchema (TextLit objIx) objProp ety)
+        Just ety@(EType ty) -> singCase ty
+          (\Refl -> pure $ ESimple
+            ty
+            (PObjAt objSchema (TextLit objIx) objProp ety))
+          (\Refl -> error "TODO")
+          (\Refl -> error "TODO")
         Just ety@(EObjectTy schemaTy) -> pure $ EObject
           schemaTy
           (PObjAt objSchema (TextLit objIx) objProp ety)
@@ -528,7 +530,12 @@ inferPreProp preProp = case preProp of
         when (length args /= length argTys) $
           throwErrorIn preProp "wrong number of arguments"
         propArgs <- for (zip args argTys) $ \case
-          (arg, (name, EType ty)) -> (name,) . ESimple ty <$> checkPreProp ty arg
+          (arg, (name, EType ty)) -> do
+            prop <- checkPreProp ty arg
+            singCase ty
+              (\Refl -> pure (name, ESimple ty prop))
+              (\Refl -> error "TODO")
+              (\Refl -> error "TODO")
           _ -> throwErrorIn preProp "Internal pattern match failure."
 
         -- inline the function, removing it from `definedProps` so it can't

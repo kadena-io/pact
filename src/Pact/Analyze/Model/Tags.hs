@@ -19,6 +19,9 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
+import GHC.Stack
+import Debug.Trace
+
 import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
                                        traversed, (<&>), (?~), (^.), _1, _2, _3)
@@ -38,35 +41,44 @@ import           Pact.Analyze.Types
 alloc :: SymWord a => Symbolic (SBV a)
 alloc = SBV.free_
 
-allocSchema :: Schema -> Symbolic Object
+allocSchema :: HasCallStack => Schema -> Symbolic Object
 allocSchema (Schema fieldTys) = Object <$>
   for fieldTys (\ety -> (ety,) <$> allocAVal ety)
 
-allocAVal :: EType -> Symbolic AVal
+allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType (ty :: SingTy k ty) -> singCase
+  EType t@(SList ty) -> error $ show (t, ty)
+  EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
-      (liftC @SymWord (singMkSymWord ty) alloc :: Symbolic (SBV (Concrete ty))))
-    (\listTy -> error "TODO: mkAList")
-    (\_objTy -> error "this is impossible in the current formulation")
-    ty
+      (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
+    (\Refl -> error "this branch is impossible in the current formulation")
+    (\Refl -> error "this branch is impossible in the current formulation")
 
-
-allocTVal :: EType -> Symbolic TVal
+allocTVal :: HasCallStack => EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety
 
-allocForETerm :: ETerm -> Symbolic TVal
-allocForETerm (existentialType -> ety) = allocTVal ety
+allocForETerm :: HasCallStack => ETerm -> Symbolic TVal
+allocForETerm
+  (EList (SList ty :: SingTy 'ListK ty)
+  (CoreTerm (LiteralList _ cells))) = do
+    cells' <- traverse
+      (\_ -> mkAVal . sansProv <$>
+        (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
+      cells
+    pure (EType ty, AList cells')
+allocForETerm (existentialType -> ety) = allocTVal (traceShowId ety)
 
-allocArgs :: [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
+allocArgs :: HasCallStack => [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocModelTags :: Located ETerm -> ExecutionGraph -> Symbolic (ModelTags 'Symbolic)
+allocModelTags
+  :: HasCallStack
+  => Located ETerm -> ExecutionGraph -> Symbolic (ModelTags 'Symbolic)
 allocModelTags locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
@@ -167,14 +179,12 @@ saturateModel =
     fetchTVal (ety, av) = (ety,) <$> go ety av
       where
         go :: EType -> AVal -> SBV.Query AVal
-        go (EType (ty :: SingTy k t)) (AVal _mProv sval) = singCase
-          (\Refl -> liftC @SymWord (singMkSymWord ty) $
-            liftC @SBV.SMTValue (singMkSMTValue ty) $
-              mkAVal' . SBV.literal
-                <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
+        go (EType (ty :: SingTy k t)) (AVal _mProv sval) = singCase ty
+          (\Refl -> withSymWord ty $ withSMTValue ty $
+            mkAVal' . SBV.literal
+              <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
           (\Refl -> error "TODO")
           (\Refl -> error "TODO")
-          ty
 
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go _ _ = error "fetchTVal: impossible"

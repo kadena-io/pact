@@ -65,10 +65,11 @@ instance Wrapped SymbolicSuccess where
 class (MonadError AnalyzeFailure m , S :*<: TermOf m) => Analyzer m where
   type TermOf m :: Ty -> *
   eval          :: (a' ~ Concrete a, Show a', SymWord a')
-                => TermOf m a         -> m (S a')
-  evalO         :: TermOf m 'TyObject -> m Object
+                => TermOf m a           -> m (S a')
+  evalL         :: (a' ~ Concrete a, Show a', SymWord a')
+                => TermOf m ('TyList a) -> m [S a']
+  evalO         :: TermOf m 'TyObject   -> m Object
 
-  -- evalL           :: (Show a, SymWord a) => TermOf m ('TyList a) -> m (S ('TyList a))
 
   -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
   -- their monad stack, they can't use `ite`, which we need to use to implement

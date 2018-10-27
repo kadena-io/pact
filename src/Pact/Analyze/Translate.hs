@@ -55,7 +55,6 @@ import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
-import Debug.Trace
 
 -- * Translation types
 
@@ -383,13 +382,12 @@ maybeTranslateType' f = \case
   TyPrim TyValue   -> empty
   Pact.TyList a    -> do
     t <- maybeTranslateType' f a
-    traceM $ "t: " ++ show t
     case t of
-      EType t -> trace "here1" $ pure $ EType $ SList t
-      _       -> trace "here2" empty
-   -- traceShowId (maybeTranslateType' f (traceShowId a)) >>= \case
-   --  EType t -> pure $ EListType (trace ("t: " ++ show t) t)
-   --  _       -> traceM "here2" >> empty
+      EType t' -> singCase t'
+        (\Refl -> pure $ EType $ SList t')
+        (\Refl -> empty)
+        (\Refl -> empty)
+      _       -> empty
   TyFun _          -> empty
 
 throwError'
@@ -561,8 +559,10 @@ translateObjBinding pairs schema bodyA rhsT = do
           (\body (colName, _located -> Binding vid _ (Munged varName) varType) ->
             let colTerm = StrLit colName
                 rhs = case varType of
-                  EType ty ->
-                    ESimple ty  (CoreTerm (ObjAt schema colTerm objVar varType))
+                  EType ty -> singCase ty
+                    (\Refl -> ESimple ty  (CoreTerm (ObjAt schema colTerm objVar varType)))
+                    (\Refl -> EList   ty  (CoreTerm (ObjAt schema colTerm objVar varType)))
+                    (\Refl -> vacuousMatch "handled below")
                   EObjectTy sch ->
                     EObject sch (CoreTerm (ObjAt schema colTerm objVar varType))
             in Let varName vid retTid rhs body)
@@ -593,7 +593,10 @@ translateNode astNode = withAstContext astNode $ case astNode of
     Just (Munged varName, vid) <- view $ teNodeVars.at node
     ty <- translateType node
     pure $ case ty of
-      EType ty'        -> ESimple ty'    $ CoreTerm $ Var vid varName
+      EType ty'        -> singCase ty'
+        (\Refl -> ESimple ty' $ CoreTerm $ Var vid varName)
+        (\Refl -> EList   ty' $ CoreTerm $ Var vid varName)
+        (\Refl -> vacuousMatch "handled below")
       EObjectTy schema -> EObject schema $ CoreTerm $ Var vid varName
 
   -- Int
@@ -949,12 +952,14 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Read tid (TableName (T.unpack table)) schema key'
 
   AST_At node colName obj -> do
-    -- TODO: list case
     EObject schema obj'   <- translateNode obj
     ESimple SStr colName' <- translateNode colName
-    ty <- translateType node
+    ty                    <- translateType node
     pure $ case ty of
-      EType ty'         -> ESimple ty'     $ CoreTerm $ ObjAt schema colName' obj' ty
+      EType ty'         -> singCase ty'
+        (\Refl -> ESimple ty' $ CoreTerm $ ObjAt schema colName' obj' ty)
+        (\Refl -> EList   ty' $ CoreTerm $ ObjAt schema colName' obj' ty)
+        (\Refl -> vacuousMatch "handled below")
       EObjectTy schema' -> EObject schema' $ CoreTerm $ ObjAt schema colName' obj' ty
 
   AST_Obj node kvs -> do
@@ -986,11 +991,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   -- TODO: object drop
   AST_Drop _node num list -> do
-    ESimple ty' list' <- translateNode list
+    EList ty' list'       <- translateNode list
     ESimple SInteger num' <- translateNode num
     case ty' of
-      SList{} -> pure $ ESimple ty' $ CoreTerm $ ListDrop num' list'
-      _       -> throwError' TODO
+      SList sty -> pure $ EList ty' $ CoreTerm $ ListDrop sty num' list'
+      _         -> throwError' TODO
 
   AST_Reverse _node list -> do
     ESimple ty' list' <- translateNode list
@@ -1032,18 +1037,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
   _ -> throwError' $ UnexpectedNode astNode
 
 doit :: [ETerm] -> Maybe (Existential (Core Term))
-doit [] = Just $ EList SAny (LiteralList [])
+doit [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
 doit (ESimple ty1 x : xs) = foldr
   (\case
     EObject{} -> \_ -> Nothing
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
-      Just (EList ty' (LiteralList ys)) -> case singEq ty ty' of
+      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (EList ty' (LiteralList (y:ys)))
+        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
       _ -> error "impossible")
-  undefined -- (Just (EList ty1 (LiteralList [x])))
+  (Just (EList (SList ty1) (LiteralList (SList ty1) [x])))
   xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph

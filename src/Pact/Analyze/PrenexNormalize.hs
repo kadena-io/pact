@@ -157,7 +157,7 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq   op (ESimple tyA a) (ESimple tyB b)) ->
+  CoreProp (ListEqNeq   op (EList tyA a) (EList tyB b)) ->
     let -- HACK!
         qa = []
         qb = []
@@ -165,7 +165,7 @@ floatBoolQuantifiers p = case p of
         b' = b
     -- let (qa, a') = float a
     --     (qb, b') = float b
-    in (qa ++ qb, CoreProp (ListEqNeq op (ESimple tyA a') (ESimple tyB b')))
+    in (qa ++ qb, CoreProp (ListEqNeq op (EList tyA a') (EList tyB b')))
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b

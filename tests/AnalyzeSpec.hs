@@ -1831,7 +1831,7 @@ spec = describe "analyze" $ do
           :: Map Text VarId
           -> Map VarId EType
           -> TableEnv
-          -> SingTy a
+          -> SingTy k a
           -> Text
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
@@ -1841,7 +1841,7 @@ spec = describe "analyze" $ do
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
-        textToProp :: SingTy a -> Text -> Either String (Prop a)
+        textToProp :: SingTy k a -> Text -> Either String (Prop a)
         textToProp = textToProp'
           (Map.singleton "result" 0)
           (Map.singleton 0 (EType SAny))
@@ -1866,7 +1866,7 @@ spec = describe "analyze" $ do
           (Map.singleton 0 (EType SAny))
           (TableMap mempty)
 
-        textToPropTableEnv :: TableEnv -> SingTy a -> Text -> Either String (Prop a)
+        textToPropTableEnv :: TableEnv -> SingTy k a -> Text -> Either String (Prop a)
         textToPropTableEnv tableEnv = textToProp'
           (Map.singleton "result" 0)
           (Map.singleton 0 (EType SAny))
@@ -2312,6 +2312,7 @@ spec = describe "analyze" $ do
       expectTrace code (bnot Success')
         [push, assert, {- failure -} path, {- success -} path, pop]
 
+  describe "lists" $ do
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
 

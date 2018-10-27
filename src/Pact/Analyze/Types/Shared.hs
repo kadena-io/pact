@@ -45,10 +45,9 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (%), (.<), (.==), SArray)
+                                               (%), (.<), (.==))
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
-import qualified Data.SBV.Dynamic             as SBVD
 import qualified Data.SBV.String              as SBV
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
@@ -73,7 +72,6 @@ data Fold a where
 
 data ListInfo (tm :: Ty -> *) (a :: Ty) where
   LitList      :: [tm a]     -> ListInfo tm ('TyList a)
-  LenInfo      :: tm 'TyInteger -> ListInfo tm ('TyList a)
 
   -- FoldInfo
   --   :: SimpleType b
@@ -107,10 +105,10 @@ instance Mergeable a => Mergeable (Located a) where
     Located (symbolicMerge f t i i') (symbolicMerge f t a a')
 
 data Existential (tm :: Ty -> *) where
-  ESimple :: SingTy 'SimpleK a -> tm a           -> Existential tm
+  ESimple :: SingTy 'SimpleK a -> tm a         -> Existential tm
   -- TODO: combine with ESimple?
-  EList   :: SingTy 'ListK a   -> tm ('TyList a) -> Existential tm
-  EObject :: Schema            -> tm 'TyObject   -> Existential tm
+  EList   :: SingTy 'ListK   a -> tm a         -> Existential tm
+  EObject :: Schema            -> tm 'TyObject -> Existential tm
 
 -- TODO: when we have quantified constraints we can do this (also for Show):
 -- instance (forall a. Eq a => Eq (tm a)) => Eq (Existential tm) where
@@ -131,7 +129,7 @@ mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
--- existentialType (EList   ety _) = EType (SList ety) -- EListType ety
+existentialType (EList   ety _) = EType ety -- EListType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
@@ -496,14 +494,9 @@ varIdArgs args =
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
-  | AList SBVI.SVal SBVD.SArr
+  | AList [AVal]
   | AnObj Object
   | OpaqueVal
-
--- data SList a = SList (SBV Integer) (SArray Integer a)
-
-mkAList :: SBV Integer -> SArray Integer a -> AVal
-mkAList (SBVI.SBV len) (SBVI.SArray arr) = AList len arr
 
 instance Eq AVal where
   _ == _ = False -- TODO
@@ -561,6 +554,9 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
+
+mkAList :: [S a] -> AVal
+mkAList = AList . fmap mkAVal
 
 coerceS :: forall a b. Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a
@@ -705,11 +701,31 @@ type family Concrete (a :: Ty) where
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
 
+type family ListElem (a :: Ty) where
+  ListElem ('TyList a) = a
+
+singCase
+  :: SingTy k a
+  -> (k :~: 'SimpleK -> b)
+  -> (k :~: 'ListK   -> b)
+  -> (k :~: 'ObjectK -> b)
+  -> b
+singCase sing kSimple kList kObject = case sing of
+  SInteger -> kSimple Refl
+  SBool    -> kSimple Refl
+  SStr     -> kSimple Refl
+  STime    -> kSimple Refl
+  SDecimal -> kSimple Refl
+  SKeySet  -> kSimple Refl
+  SAny     -> kSimple Refl
+  SList _  -> kList   Refl
+  SObject  -> kObject Refl
+
 liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
 liftC Dict b = b
 
 withEq :: forall a b k. SingTy k a -> (Eq (Concrete a) => b) -> b
-withEq ty = liftC @Eq (singMkEq ty)
+withEq = liftC . singMkEq
 
 singMkEq :: SingTy k a -> Dict (Eq (Concrete a))
 singMkEq = \case
@@ -725,7 +741,7 @@ singMkEq = \case
   SObject  -> Dict
 
 withShow :: forall a b k. SingTy k a -> (Show (Concrete a) => b) -> b
-withShow ty = liftC @Show (singMkShow ty)
+withShow = liftC . singMkShow
 
 singMkShow :: SingTy k a -> Dict (Show (Concrete a))
 singMkShow = \case
@@ -740,27 +756,10 @@ singMkShow = \case
     Dict -> Dict
   SObject  -> Dict
 
--- alternate formulation:
-singCase
-  :: (k :~: 'SimpleK -> b)
-  -> (k :~: 'ListK   -> b)
-  -> (k :~: 'ObjectK -> b)
-  -> (SingTy k a     -> b)
--- singCase
---   :: (SingTy 'SimpleK a -> b)
---   -> (SingTy 'ListK   a -> b)
---   -> (SingTy 'ObjectK a -> b)
---   -> (SingTy k        a -> b)
-singCase kSimple kList kObject sing = case sing of
-  SInteger -> kSimple Refl
-  SBool    -> kSimple Refl
-  SStr     -> kSimple Refl
-  STime    -> kSimple Refl
-  SDecimal -> kSimple Refl
-  SKeySet  -> kSimple Refl
-  SAny     -> kSimple Refl
-  SList a  -> kList   Refl
-  SObject  -> kObject Refl
+withSMTValue
+  :: forall a b.
+  SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
+withSMTValue = liftC . singMkSMTValue
 
 singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
 singMkSMTValue = \case
@@ -771,10 +770,9 @@ singMkSMTValue = \case
   SDecimal -> Dict
   SKeySet  -> Dict
   SAny     -> Dict
-  -- TODO
-  -- SList a  -> case singMkSMTValue a of
-  --   Dict -> Dict
-  -- SObject  -> Dict
+
+withUserShow :: forall a b k. SingTy k a -> (UserShow (Concrete a) => b) -> b
+withUserShow = liftC . singMkUserShow
 
 singMkUserShow :: SingTy k a -> Dict (UserShow (Concrete a))
 singMkUserShow = \case
@@ -789,6 +787,11 @@ singMkUserShow = \case
     Dict -> Dict
   SObject  -> Dict
 
+withSymWord
+  :: forall a b.
+  SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
+withSymWord = liftC . singMkSymWord
+
 singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
 singMkSymWord = \case
   SInteger -> Dict
@@ -798,10 +801,6 @@ singMkSymWord = \case
   SDecimal -> Dict
   SKeySet  -> Dict
   SAny     -> Dict
-  -- TODO
-  -- SList a  -> case singMkSymWord a of
-  --   Dict -> Dict
-  -- SObject  -> Dict
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema

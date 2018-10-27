@@ -48,13 +48,11 @@ showTVal (ety, av) = case av of
   AnObj obj   -> showObject obj
   AVal _ sval -> case ety of
     EObjectTy _           -> error "showModel: impossible object type for AVal"
-    EType (ty :: SingTy k t) -> singCase
-      (\Refl -> liftC @UserShow (singMkUserShow ty) $
-        liftC @SymWord (singMkSymWord ty) $
-          showSbv (SBVI.SBV sval :: SBV (Concrete t)))
+    EType (ty :: SingTy k t) -> singCase ty
+      (\Refl -> withUserShow ty $ withSymWord ty $
+        showSbv (SBVI.SBV sval :: SBV (Concrete t)))
       (\Refl -> error "TODO")
       (\Refl -> error "TODO")
-      ty
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

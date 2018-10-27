@@ -77,7 +77,7 @@ instance Show (SingTy k ty) where
     SDecimal -> showString "SDecimal"
     SKeySet  -> showString "SKeySet"
     SAny     -> showString "SAny"
-    SList a  -> showParen (p > 10) $ showString "SAny " . showsPrec 11 a
+    SList a  -> showParen (p > 10) $ showString "SList " . showsPrec 11 a
     SObject  -> showString "SObject"
 
 instance UserShow (SingTy k ty) where
