@@ -11,9 +11,14 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE DataKinds                  #-}
 
+{-# LANGUAGE InstanceSigs                  #-}
+{-# LANGUAGE PolyKinds                  #-}
+
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 module Pact.Analyze.Types.Numerical where
 
+import Data.Constraint (Dict(Dict))
+import Data.Constraint.Extras
 import Data.Semigroup ((<>))
 import           Data.Type.Equality           ((:~:) (Refl), apply)
 import           Control.Lens                (Prism')
@@ -34,7 +39,7 @@ import           GHC.Real                    ((%))
 
 import           Pact.Types.Util             (tShow)
 
-import           Pact.Analyze.Feature        hiding (dec)
+import           Pact.Analyze.Feature        hiding (dec, Constraint)
 import           Pact.Analyze.Types.UserShow
 
 
@@ -91,6 +96,79 @@ instance UserShow (SingTy k ty) where
     SAny     -> "*"
     SList a  -> "[" <> userShow a <> "]"
     SObject  -> "object"
+
+instance ArgDict (SingTy k) where
+  type ConstraintsFor (SingTy k) c =
+    ( c 'TyInteger
+    , c 'TyBool
+    , c 'TyStr
+    , c 'TyTime
+    , c 'TyDecimal
+    , c 'TyKeySet
+    , c 'TyAny
+    , c ('TyList 'TyInteger)
+    , c ('TyList 'TyBool)
+    , c ('TyList 'TyStr)
+    , c ('TyList 'TyTime)
+    , c ('TyList 'TyDecimal)
+    , c ('TyList 'TyKeySet)
+    , c ('TyList 'TyAny)
+    , c 'TyObject
+    )
+
+  type ConstraintsFor' (SingTy k) c g =
+    ( c (g 'TyInteger)
+    , c (g 'TyBool)
+    , c (g 'TyStr)
+    , c (g 'TyTime)
+    , c (g 'TyDecimal)
+    , c (g 'TyKeySet)
+    , c (g 'TyAny)
+    , c (g ('TyList 'TyInteger))
+    , c (g ('TyList 'TyBool))
+    , c (g ('TyList 'TyStr))
+    , c (g ('TyList 'TyTime))
+    , c (g ('TyList 'TyDecimal))
+    , c (g ('TyList 'TyKeySet))
+    , c (g ('TyList 'TyAny))
+    , c (g 'TyObject)
+    )
+
+  argDict :: ConstraintsFor (SingTy k) c => SingTy k a -> Dict (c a)
+  argDict = \case
+    SInteger       -> Dict
+    SBool          -> Dict
+    SStr           -> Dict
+    STime          -> Dict
+    SDecimal       -> Dict
+    SKeySet        -> Dict
+    SAny           -> Dict
+    SList SInteger -> Dict
+    SList SBool    -> Dict
+    SList SStr     -> Dict
+    SList STime    -> Dict
+    SList SDecimal -> Dict
+    SList SKeySet  -> Dict
+    SList SAny     -> Dict
+    SObject        -> Dict
+
+  argDict' :: ConstraintsFor' (SingTy k) c g => (SingTy k) a -> Dict (c (g a))
+  argDict' = \case
+    SInteger       -> Dict
+    SBool          -> Dict
+    SStr           -> Dict
+    STime          -> Dict
+    SDecimal       -> Dict
+    SKeySet        -> Dict
+    SAny           -> Dict
+    SList SInteger -> Dict
+    SList SBool    -> Dict
+    SList SStr     -> Dict
+    SList STime    -> Dict
+    SList SDecimal -> Dict
+    SList SKeySet  -> Dict
+    SList SAny     -> Dict
+    SObject        -> Dict
 
 singEq :: SingTy k1 a -> SingTy k2 b -> Maybe (a :~: b)
 singEq SInteger  SInteger  = Just Refl

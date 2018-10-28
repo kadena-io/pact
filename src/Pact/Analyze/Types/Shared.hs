@@ -741,7 +741,7 @@ singMkEq = \case
   SObject  -> Dict
 
 withShow :: forall a b k. SingTy k a -> (Show (Concrete a) => b) -> b
-withShow = liftC . singMkShow
+withShow = liftC . singMkShow -- has' @Eq @Concrete
 
 singMkShow :: SingTy k a -> Dict (Show (Concrete a))
 singMkShow = \case

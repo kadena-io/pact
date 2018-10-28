@@ -20,3 +20,4 @@ extra-deps:
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   - git: https://github.com/LeventErkok/sbv.git
     commit: 3dc60340634c82f39f6c5dca2b3859d10925cfdf # with exposed registerKind
+  - constraints-extras-0.2.0.0

@@ -20,7 +20,6 @@ module Pact.Analyze.Model.Tags
   ) where
 
 import GHC.Stack
-import Debug.Trace
 
 import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
@@ -49,11 +48,11 @@ allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType t@(SList ty) -> error $ show (t, ty)
+  EType t@(SList _ty) -> error $ show t
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
-    (\Refl -> error "this branch is impossible in the current formulation")
+    (\Refl -> error "this branch is not (!) impossible in the current formulation")
     (\Refl -> error "this branch is impossible in the current formulation")
 
 allocTVal :: HasCallStack => EType -> Symbolic TVal
@@ -68,7 +67,8 @@ allocForETerm
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
     pure (EType ty, AList cells')
-allocForETerm (existentialType -> ety) = allocTVal (traceShowId ety)
+allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
+allocForETerm (existentialType -> ety) = allocTVal ety
 
 allocArgs :: HasCallStack => [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do

@@ -152,6 +152,7 @@ library
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.0 && < 1.2
                      , constraints
+                     , constraints-extras
 
   if !impl(ghcjs)
     build-depends:
