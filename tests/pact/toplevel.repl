@@ -1,0 +1,49 @@
+
+;;
+;; toplevel.repl: test that toplevel-only builtins
+;; fail in module context but work in non-module context.
+;; MAINTENANCE NOTE: for every built-in created using "setTopLevelOnly",
+;; please add both "success" and "failure" cases below.
+;;
+
+(begin-tx)
+
+;; define-keyset success case
+(define-keyset 'k (sig-keyset))
+
+(module toplevel 'k
+  (deftable atable)
+  (deftable atable-bad)
+
+  (defun bad-create-table (tbl) (create-table tbl))
+  (defun bad-describe-table (tbl) (describe-table tbl))
+  (defun bad-describe-keyset (k) (describe-keyset k))
+  (defun bad-describe-module (m) (describe-module m))
+  (defun bad-define-keyset (n k) (define-keyset n k))
+  (defun bad-pact-version () (pact-version))
+  (defun bad-list-modules () (list-modules))
+  (defun bad-enforce-pact-version (v) (enforce-pact-version v))
+  )
+
+;; Success cases
+
+(create-table atable)
+(commit-tx)
+(describe-table toplevel.atable)
+(describe-keyset 'k)
+(describe-module "toplevel")
+(pact-version)
+(list-modules)
+(enforce-pact-version (pact-version))
+(use toplevel)
+
+;; failure cases
+
+(expect-failure "bad-create-table" (bad-create-table atable-bad))
+(expect-failure "bad-describe-table" (bad-describe-table atable))
+(expect-failure "bad-describe-keyset" (bad-describe-keyset 'k))
+(expect-failure "bad-describe-module" (bad-describe-module "toplevel"))
+(expect-failure "bad-define-keyset" (bad-define-keyset 'j (sig-keyset)))
+(expect-failure "bad-pact-version" (bad-pact-version))
+(expect-failure "bad-list-modules" (bad-list-modules))
+(expect-failure "bad-enforce-pact-version" (bad-enforce-pact-version (pact-version)))

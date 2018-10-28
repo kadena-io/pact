@@ -132,6 +132,8 @@ pact> (enforce-pact-version "2.3")
 true
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### filter {#filter}
 
@@ -242,6 +244,8 @@ pact> (list 1 2 3)
 
 List modules available for loading.
 
+Top level only: this function will fail if used in module code.
+
 
 ### make-list {#make-list}
 
@@ -285,6 +289,8 @@ Obtain current pact build version.
 pact> (pact-version)
 "2.5.0"
 ```
+
+Top level only: this function will fail if used in module code.
 
 
 ### read-decimal {#read-decimal}
@@ -448,6 +454,8 @@ Create table TABLE.
 (create-table accounts)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### describe-keyset {#describe-keyset}
 
@@ -455,6 +463,8 @@ Create table TABLE.
 
 
 Get metadata for KEYSET
+
+Top level only: this function will fail if used in module code.
 
 
 ### describe-module {#describe-module}
@@ -467,6 +477,8 @@ Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code
 (describe-module 'my-module)
 ```
 
+Top level only: this function will fail if used in module code.
+
 
 ### describe-table {#describe-table}
 
@@ -477,6 +489,8 @@ Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code'
 ```lisp
 (describe-table accounts)
 ```
+
+Top level only: this function will fail if used in module code.
 
 
 ### insert {#insert}
@@ -1099,6 +1113,8 @@ Define keyset as NAME with KEYSET. If keyset NAME already exists, keyset will be
 ```lisp
 (define-keyset 'admin-keyset (read-keyset "keyset"))
 ```
+
+Top level only: this function will fail if used in module code.
 
 
 ### enforce-keyset {#enforce-keyset}

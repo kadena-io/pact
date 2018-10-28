@@ -43,7 +43,8 @@ keyDefs =
     in
     ("Keysets",[
      readKeysetDef
-    ,defRNative "define-keyset" defineKeyset (funType tTyString [("name",tTyString),("keyset",tTyString)])
+    ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
+     (funType tTyString [("name",tTyString),("keyset",tTyString)])
      "Define keyset as NAME with KEYSET. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value.\
      \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
