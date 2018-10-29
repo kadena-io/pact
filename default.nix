@@ -55,20 +55,6 @@ in
         (path: type: !(builtins.elem (baseNameOf path)
            ["result" "dist" "dist-ghcjs" ".git" ".stack-work"]))
         ./.;
-
-      # megaparsec = pkgs.fetchFromGitHub {
-      #   owner  = "mrkkrp";
-      #   repo   = "megaparsec";
-      #   rev    = "7b271a5edc1af59fa435a705349310cfdeaaa7e9";
-      #   sha256 = "0415z18gl8dgms57rxzp870dpz7rcqvy008wrw5r22xw8qq0s13c";
-      # };
-
-      # parser-combinators = pkgs.fetchFromGitHub {
-      #   owner  = "mrkkrp";
-      #   repo   = "parser-combinators";
-      #   rev    = "dd6599224fe7eb224477ef8e9269602fb6b79fe0";
-      #   sha256 = "11cpfzlb6vl0r5i7vbhp147cfxds248fm5xq8pwxk92d1f5g9pxm";
-      # };
     };
     shellToolOverrides = ghc: super: {
       z3 = pkgs.z3;
