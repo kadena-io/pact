@@ -1405,7 +1405,7 @@ Consts
 Special forms
 -------------
 
-Docs and metadata
+Docs and Metadata
 ~~~~~~~~~~~~~~~~~
 
 Many special forms like `defun <#defun>`__ accept optional documentation
@@ -1413,26 +1413,27 @@ strings, in the following form:
 
 .. code:: lisp
 
-   (defun foo (bar)
-     "Do something with BAR"
-     ...)
+   (defun average (a b)
+     "take the average of a and b"
+     (/ (+ a b) 2))
 
-However, in this position an optional *metadata section* can specify
-docs and metadata, where metadata can be tagged with any key desired.
-The following code provides a docstring of “does something with BAR” and
-specifies metadata of type ``property`` and ``example``:
+However, in this position, optional metadata can also be specified. One
+such metadata field is ``@model``, which represents a property that can
+be used by Pact tooling to verify the correctness of the implementation:
 
 .. code:: lisp
 
-   (defun foo (bar)
-     ("does something with BAR"
-       (property [(when something abort)])
-       (example (foo "my house")))
-     ...)
+   (defun average (a b)
+     @doc   "take the average of a and b"
+     @model (property (= (+ a b) (* 2 result)))
+     (/ (+ a b) 2))
 
-Thus, the metadata form is DOC PAIR*, where a PAIR is (ATOM EXPR). The
-Pact language lexer/compiler ignores all EXPR forms, to be
-lexed/compiled at some later stage by whatever tool recognizes ATOM.
+Indeed, a bare docstring like ``"foo"`` is actually just a short form
+for ``@doc "foo"``. More metadata types are expected to be added in
+future.
+
+Specific information on *Properties* can be found in `The Pact Property
+Checking System <pact-properties.html>`__.
 
 bless
 ~~~~~
