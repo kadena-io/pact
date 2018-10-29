@@ -1417,9 +1417,10 @@ strings, in the following form:
      "take the average of a and b"
      (/ (+ a b) 2))
 
-However, in this position, optional metadata can also be specified. One
-such metadata field is ``@model``, which represents a property that can
-be used by Pact tooling to verify the correctness of the implementation:
+However, in this position, extra metadata fields can also be specified.
+One such metadata field is ``@model``, which represents a *property*
+that can be used by Pact tooling to verify the correctness of the
+implementation:
 
 .. code:: lisp
 
@@ -1469,7 +1470,8 @@ DOC-OR-META. Arguments are in scope for BODY, one or more expressions.
 
    (defun add3 (a b c) (+ a (+ b c)))
 
-   (defun scale3 (a b c s) "multiply sum of A B C times s"
+   (defun scale3 (a b c s)
+     "multiply sum of A B C times s"
      (* s (add3 a b c)))
 
 defconst
@@ -1495,12 +1497,12 @@ defpact
 
    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
-Define NAME as a *pact*, a multistep computation intended for private
-transactions. Identical to `defun <#defun>`__ except body must be
-comprised of `steps <#step>`__ to be executed in strict sequential
-order. Steps must uniformly be “public” (no entity indicator) or
-“private” (with entity indicator). With private steps, failures result
-in a reverse-sequence “rollback cascade”.
+Define NAME as a *pact*, a multistep transaction computation. Identical
+to `defun <#defun>`__ except body must be comprised of `steps <#step>`__
+to be executed in strict sequential order. Steps must uniformly be
+“public” (no entity indicator) or “private” (with entity indicator).
+With private steps, failures result in a reverse-sequence “rollback
+cascade”.
 
 .. code:: lisp
 
@@ -1566,10 +1568,10 @@ let\*
 
 ::
 
-   (let\* (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables can
-reference previously declared BINDPAIRS in the same let. ``let\*`` is
+reference previously declared BINDPAIRS in the same let. ``let*`` is
 expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
 ``let`` is preferred where possible.
 
@@ -1588,12 +1590,11 @@ step
    (step EXPR)
    (step ENTITY EXPR)
 
-Define a step within a `defpact <#defpact>`__ such that any prior steps
+Define a step within a `defpact <#defpact>`__, such that any prior steps
 will be executed in prior transactions, and later steps in later
-transactions. With ENTITY, indicates that this step is intended for
-confidential transactions such that only ENTITY will execute the step,
-while other participants will “skip” the step. in order of execution
-specified in containing `defpact <#defpact>`__.
+transactions. Including an ENTITY argument indicates that this step is
+intended for confidential transactions. Therefore, only the ENTITY would
+execute the step, and other participants would “skip” it.
 
 step-with-rollback
 ~~~~~~~~~~~~~~~~~~
@@ -1619,11 +1620,11 @@ use
    (use MODULE)
    (use MODULE HASH)
 
-Import an existing MODULE into namespace. Can only be issued at
+Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
-symbol or bare atom. With HASH, validate that module hash matches HASH,
-failing if not. Use `describe-module <#describe-module>`__ to query for
-the hash of a loaded module on the chain.
+symbol or bare atom. With HASH, validate that the remote module’s hash
+matches HASH, failing if not. Use `describe-module <#describe-module>`__
+to query for the hash of a loaded module on the chain.
 
 .. code:: lisp
 
@@ -1685,8 +1686,8 @@ S-expressions
 ~~~~~~~~~~~~~
 
 S-expressions are formed with parentheses, with the first atom
-determining if the expression is a `special form <#special>`__ or a
-function application, in which case the first atom must refer to a
+determining if the expression is a `special form <#special-forms>`__ or
+a function application, in which case the first atom must refer to a
 definition.
 
 .. _partialapplication:
@@ -1703,8 +1704,8 @@ runtime error.
 References
 ~~~~~~~~~~
 
-References are two atoms joined by a dot ``.`` to directly resolve to
-module definitions.
+References are two atoms joined by a dot ``.`` that directly resolve to
+definitions found in other modules.
 
 ::
 
@@ -1720,9 +1721,9 @@ module definitions.
    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
    SRC to DEST\")"
 
-References are preferred to ``use`` for transactions, as references
-resolve faster. However in module definition, ``use`` is preferred for
-legibility.
+References are preferred over ``use`` for transactions, as references
+resolve faster. However, when defining a module, ``use`` is preferred
+for legibility.
 
 Time formats
 ============
@@ -1849,11 +1850,12 @@ Default format and JSON serialization
 -------------------------------------
 
 The default format is a UTC ISO8601 date+time format:
-“%Y-%m-%dT%H:%M:%SZ”, as accepted by the `time <#time>`__ function.
-While the time object internally supports up to microsecond resolution,
-values returned from the Pact interpreter as JSON will be serialized
-with the default format. When higher resolution is desired, explicitly
-format times with ``%v`` and related.
+“%Y-%m-%dT%H:%M:%SZ”, as accepted by the
+`time <pact-functions.html#id4>`__ function. While the time object
+internally supports up to microsecond resolution, values returned from
+the Pact interpreter as JSON will be serialized with the default format.
+When higher resolution is desired, explicitly format times with ``%v``
+and related codes.
 
 Examples
 --------
