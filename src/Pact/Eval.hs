@@ -150,8 +150,8 @@ eval (TModule m@Module{..} bod i) =
       Just om ->
         case om of
           Module{..} -> enforceKeySetName i _mKeySet
-          Interface{..} ->
-            evalError i $ "Module " ++ show _mName ++ " does not match " ++ show _interfaceName ++ "."
+          Interface{..} -> evalError i $
+            "Name overlap: module " ++ show _mName ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
     enforceKeySetName i _mKeySet
     -- build/install module from defs
@@ -165,12 +165,13 @@ eval (TModule m@Interface{..} bod i) =
       Nothing -> return ()
       Just oi ->
         case oi of
-          Module{..} -> evalError i $ "Interface " ++ show _interfaceName ++ " does not match " ++ show _mName ++ "."
+          Module{..} -> evalError i $
+            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName 
           Interface{..} -> return ()
 
     (g, _) <- loadModule m bod i gas
     writeRow i Write Modules _interfaceName m
-    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
+    return $ (g, msg $ "Loaded interface " ++ _interfaceName)  
 eval t = enscope t >>= reduce
 
 
@@ -297,12 +298,12 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
     evaluateConstraint hm i ifn = do
       -- load the interface refmaps via refstore
-      mIRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap 
-      case mIRefs of
+      iRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap 
+      case iRefs of
         -- if nothing found, interface is not loaded, ergo not unfound
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: " ++ asString' ifn
-        Just iRefs -> HM.foldlWithKey' (solveConstraint i) (pure hm) iRefs
+        Just iRefs' -> HM.foldlWithKey' (solveConstraint i) (pure hm) iRefs'
 
 -- | Compare implemented member signatures and concatenate models
 --
