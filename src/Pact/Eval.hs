@@ -168,10 +168,9 @@ eval (TModule m@Interface{..} bod i) =
           Module{..} -> evalError i $
             "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName 
           Interface{..} -> return ()
-
     (g, _) <- loadModule m bod i gas
     writeRow i Write Modules _interfaceName m
-    return $ (g, msg $ "Loaded interface " ++ _interfaceName)  
+    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
 eval t = enscope t >>= reduce
 
 
@@ -204,8 +203,7 @@ evalUse mn h i = do
 -- to be non-recursive. The graph is walked to unify the Either to
 -- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
 -- the table itself: the topological sort of the graph ensures the reference will be there.
-loadModule :: Module -> Scope n Term Name -> Info -> Gas ->
-              Eval e (Gas,HM.HashMap Text (Term Name))
+loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
 loadModule m@Module{..} bod1 mi g0 = do
   (g1,modDefs1) <-
     case instantiate' bod1 of
@@ -213,7 +211,6 @@ loadModule m@Module{..} bod1 mi g0 = do
         let doDef (g,rs) t = do
               dnm <- case t of
                 TDef {..} -> return $ Just _tDefName
-                TNative {..} -> return $ Just $ asString _tNativeName
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
@@ -257,27 +254,53 @@ loadModule m@Module{..} bod1 mi g0 = do
   installModule md 
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
-loadModule i@Interface{..} body _ gas0 = do
-  fs <- extractBodyDefs body
-  evaluatedDefs <- traverse (runPure . evalConsts . Direct) fs
-  let md = ModuleData i evaluatedDefs
+loadModule i@Interface{..} body info gas0 = do
+  (gas1,idefs) <- case instantiate' body of
+    (TList bd _ _bi) -> do
+      let doDef (g,rs) t = do
+            dnm <- case t of
+              TDef {..} -> return $ Just _tDefName
+              TConst {..} -> return $ Just $ _aName _tConstArg
+              TSchema {..} -> return $ Just $ asString _tSchemaName
+              TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+              _ -> evalError (_tInfo t) "Invalid interface member"
+            case dnm of
+              Nothing -> return (g, rs)
+              Just dn -> do
+                g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember i)
+                return (g + g',(dn,t):rs)
+      second HM.fromList <$> foldM doDef (gas0,[]) bd
+    t -> evalError (_tInfo t) "Malformed interface"
+  cs <- fmap stronglyConnCompR $ forM (HM.toList idefs) $ \(dn,d) ->
+      do
+        d' <- forM d $ \(f :: Name) -> do
+                dm <- resolveRef f
+                case (dm,f) of
+                  (Just t,_) -> return (Right t)
+                  (Nothing,Name fn _) ->
+                      case HM.lookup fn idefs of
+                        Just _ -> return (Left fn)
+                        Nothing -> evalError (_nInfo f) ("Cannot resolve 1 \"" ++ show f ++ "\"")
+                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve 2 \"" ++ show f ++ "\"")
+        return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+  sorted <- forM cs $ \c -> case c of
+              AcyclicSCC v -> return v
+              CyclicSCC vs ->
+                evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
+  let defs :: HM.HashMap Text Ref
+      defs = foldl dresolve HM.empty sorted
+      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
+      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
+      evalConstRef r@Ref {} = runPure $ evalConsts r
+      evalConstRef r@Direct {} = runPure $ evalConsts r
+  evaluatedDefs <- traverse evalConstRef defs
+  solvedDefs <- evaluateConstraints i evaluatedDefs info
+  let md = ModuleData i solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
-  return (gas0, fs)
-  where
-    extractBodyDefs :: Scope a Term Name -> Eval e (HM.HashMap Text (Term Name))
-    extractBodyDefs b = case instantiate' b of
-        (TList bd _ _bi) -> HM.fromList <$> foldM extractDefName [] bd
-        t -> evalError (_tInfo t) "Malformed interface"
-    extractDefName :: [(Text, Term Name)] -> Term Name -> Eval e [(Text, Term Name)]
-    extractDefName rs t = do 
-      dnm <- case t of
-        TDef{..} -> return $ Just _tDefName
-        TConst{..} -> return $ Just (_aName _tConstArg)
-        _ -> evalError (_tInfo t) "Invalid interface member"
-      case dnm of
-        Nothing -> return rs
-        Just dn -> return $ (dn,t):rs
+  return (gas1, idefs)
+
+    
 
 -- | Evaluate interface constraints in module 
 --
@@ -292,13 +315,13 @@ evaluateConstraints
   -> Info
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints Interface{} _ info =
-  evalError info $ "Impossible: Interface found while appending meta-constraints to module"
+  evalError info $ "Impossible: interface found while appending meta-constraints to module"
 evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMap info) _mInterfaces
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
     evaluateConstraint hm i ifn = do
       -- load the interface refmaps via refstore
-      iRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap 
+      iRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
       case iRefs of
         -- if nothing found, interface is not loaded, ergo not unfound
         Nothing -> evalError info $
@@ -343,12 +366,12 @@ resolveRef qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> preview (evalRefs .rsLoaded . ix qn) <$> get
+    Nothing -> firstOf (evalRefs . rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
+    Nothing -> firstOf (evalRefs . rsLoaded . ix nn) <$> get
 
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
