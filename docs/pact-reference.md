@@ -972,7 +972,7 @@ Strings also support multiline by putting a backslash before and after whitespac
 Symbols are string literals representing some unique item in the runtime, like a function or a table name.
 Their representation internally is simply a string literal so their usage is idiomatic.
 
-Symbols are created with a preceding tick, thus they do no support whitespace or multiline.
+Symbols are created with a preceding tick, thus they do not support whitespaces or multilines.
 
 ```
 pact> 'a-symbol
@@ -981,21 +981,24 @@ pact> 'a-symbol
 
 ### Integers {#integers}
 
-Integer literals are unbounded positive naturals. For negative numbers use the unary [-](#-) function.
+Integer literals are unbounded, and can be positive or negative.
 
 ```
 pact> 12345
 12345
+pact> -922337203685477580712387461234
+-922337203685477580712387461234
 ```
 
 ### Decimals {#decimals}
 
-Decimal literals are positive decimals to exact expressed precision.
+Decimal literals have potentially unlimited precision.
+
 ```
 pact> 100.25
 100.25
-pact> 356452.23451872
-356452.23451872
+pact> -356452.234518728287461023856582382983746
+-356452.234518728287461023856582382983746
 ```
 
 ### Booleans {#booleans}
@@ -1108,18 +1111,18 @@ in the following form:
 
 ```lisp
 (defun foo (bar)
-  "Do the thing with BAR"
+  "Do something with BAR"
   ...)
 ```
 
 However, in this position an optional _metadata section_ can specify docs and
 metadata, where metadata can be tagged with any key desired.
-The following code provides a docstring of "does the thing with BAR" and specifies metadata of type
+The following code provides a docstring of "does something with BAR" and specifies metadata of type
 `property` and `example`:
 
 ```lisp
 (defun foo (bar)
-  ("does the thing with BAR"
+  ("does something with BAR"
     (property [(when something abort)])
     (example (foo "my house")))
   ...)
