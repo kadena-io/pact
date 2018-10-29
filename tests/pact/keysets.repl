@@ -81,3 +81,47 @@
 (expect "test enforce-one, keyset read in enforce-one ok" true (test-enforce-one))
 
 (expect-failure "test enforce-one all fail" (test-enforce-one-fail))
+
+;; test keyset redefinition
+
+(begin-tx)
+(env-data { "rotate-me": ["a"]})
+(env-keys ["b"])
+(define-keyset 'rotate-me (read-keyset "rotate-me"))
+(commit-tx)
+
+;; should not be able to rotate without old keys
+
+(begin-tx)
+(env-keys ["b"])
+(env-data { "rotate-me2": ["b"]})
+(expect-failure "should not be able to rotate without satisfying old keyset"
+  (define-keyset 'rotate-me (read-keyset "rotate-me2"))
+)
+(commit-tx)
+
+;; should be able to rotate with old keys
+
+(begin-tx)
+(env-keys ["a"])
+(env-data { "rotate-me3": ["c"] })
+(define-keyset 'rotate-me (read-keyset "rotate-me3"))
+(commit-tx)
+
+;; test that keyset actually updated
+
+(env-keys ["c"])
+(enforce-keyset 'rotate-me)
+
+;; test that rollback doesn't change keyset
+
+(begin-tx)
+(env-keys ["c"])
+(env-data { "rotate-me4": ["a"]})
+(define-keyset 'rotate-me (read-keyset "rotate-me4"))
+(rollback-tx)
+
+;; c should still work after rollback
+
+(env-keys ["c"])
+(enforce-keyset 'rotate-me)
