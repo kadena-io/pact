@@ -141,8 +141,8 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
   evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
-eval (TModule m bod i) = case m of
-  Module{..} -> topLevelCall i "module" (GModule m) $ \g0 -> do
+eval (TModule m@Module{..} bod i) = 
+  topLevelCall i "module" (GModule m) $ \g0 -> do
     -- enforce old module keysets
     oldM <- readRow i Modules _mName
     case oldM of
@@ -157,24 +157,30 @@ eval (TModule m bod i) = case m of
     -- build/install module from defs
     (g,_defs) <- loadModule m bod i g0
     writeRow i Write Modules _mName m
-    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)
-    
-  Interface{..} -> topLevelCall i "interface" (GInterface m) $ \gas -> do
-    let n = _interfaceName 
+    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)  
+eval (TModule m@Interface{..} bod i) =
+  topLevelCall i "interface" (GInterface m) $ \gas -> do
+    oldI <- readRow i Modules _interfaceName
+    case oldI of
+      Nothing -> return ()
+      Just oi ->
+        case oi of
+          Module{..} -> evalError i $ "Interface " ++ show _interfaceName ++ " does not match " ++ show _mName ++ "."
+          Interface{..} -> return ()
+
     (g, _) <- loadModule m bod i gas
-    writeRow i Write Modules n m
-    return $ (g, msg $ pack $ "Loaded interface " ++ show n)  
+    writeRow i Write Modules _interfaceName m
+    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
 eval t = enscope t >>= reduce
 
 
 evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
 evalUse mn h i = do
-  mm <- HM.lookup mn <$> view (eeRefStore . rsModules)
+  mm <- preview $ eeRefStore . rsModules . ix mn
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
-      let m = view mdModule md
-      case m of
+      case view mdModule md of
         Module{..} -> 
           case h of
             Nothing -> return ()
@@ -280,8 +286,7 @@ loadModule i@Interface{..} body _ gas0 = do
 -- implementation, we must concatenate meta constraints and
 -- build the more detailed meta model of the member
 evaluateConstraints
-  :: forall e
-  .  Module
+  :: Module
   -> HM.HashMap Text Ref
   -> Info
   -> Eval e (HM.HashMap Text Ref)
@@ -306,8 +311,7 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
 -- any model information in the reference map with the concatenatation
 -- of the module models, as well as the interface models.
 solveConstraint
-  :: forall e
-  .  Info
+  :: Info
   -> Eval e (HM.HashMap Text Ref)
   -> Text
   -> Ref
@@ -321,7 +325,8 @@ solveConstraint info ehm refName iref = do
         -- only Direct if native
         (Ref t, Ref s) ->
           case (t, s) of
-            -- compare TDef only - should never be comparing consts since consts are stated in module xor interface
+            -- compare TDef only. This should never be comparing consts
+            -- since consts are stated in a module xor interface
             (TDef n mn dt (FunType args rty) _ _ _,
              TDef n' mn' dt' (FunType args' rty') _ _ _) ->
               if n == n' && mn == mn' && dt == dt' && args == args' && rty == rty'
@@ -334,15 +339,15 @@ solveConstraint info ehm refName iref = do
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
-  dsm <- asks $ firstOf $ eeRefStore . rsModules . ix q . mdRefMap . ix n
+  dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs .rsLoaded . ix qn) <$> get
+    Nothing -> preview (evalRefs .rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
-  nm <- asks $ firstOf $ eeRefStore . rsNatives . ix nn
+  nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs . rsLoaded . ix nn) <$> get
+    Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
 
 
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
@@ -495,9 +500,12 @@ resolveFreeVars i b = traverse r b where
 -- strip out everything except consts
 installModule :: ModuleData ->  Eval e ()
 installModule ModuleData{..} = do 
-  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap) 
-  (evalRefs . rsLoadedModules) %= HM.insert (_mName _mdModule) _mdModule
-
+  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap)
+  let n = case _mdModule of
+        Module{..} -> _mName
+        Interface{..} -> _interfaceName
+  (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
+  
 msg :: Text -> Term n
 msg = toTerm
 

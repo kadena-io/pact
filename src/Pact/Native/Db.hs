@@ -153,11 +153,12 @@ descModule i [TLitString t] = do
       case m of
         Module{..} -> 
           return $ TObject
-            [ (tStr "name"   , tStr $ asString _mName)
-            , (tStr "hash"   , tStr $ asString _mHash)
-            , (tStr "keyset" , tStr $ asString _mKeySet)
-            , (tStr "blessed", toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
-            , (tStr "code"   , tStr $ asString _mCode)
+            [ (tStr "name"      , tStr $ asString _mName)
+            , (tStr "hash"      , tStr $ asString _mHash)
+            , (tStr "keyset"    , tStr $ asString _mKeySet)
+            , (tStr "blessed"   , toTList tTyString def $ map (tStr . asString) (HS.toList _mBlessed))
+            , (tStr "code"      , tStr $ asString _mCode)
+            , (tStr "interfaces", toTList tTyString def $ (tStr . asString) <$> _mInterfaces)
             ] TyAny def
         Interface{..} ->
           return $ TObject

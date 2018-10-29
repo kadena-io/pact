@@ -12,7 +12,7 @@
 
   ;; mock preview of system library with get-current-time
   (use system)
-x
+
   (defschema account
     "Row type for accounts table."
      balance:decimal
