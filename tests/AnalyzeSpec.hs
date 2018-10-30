@@ -8,7 +8,6 @@
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
 {-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE FlexibleContexts  #-}
 
 module AnalyzeSpec (spec) where
 

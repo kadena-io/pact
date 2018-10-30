@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
 module AnalyzePropertiesSpec where
 
 import           Control.Monad               ((<=<))
