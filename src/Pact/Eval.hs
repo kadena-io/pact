@@ -326,7 +326,7 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
         -- if nothing found, interface is not loaded, ergo not unfound
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: " ++ asString' ifn
-        Just iRefs' -> HM.foldlWithKey' (solveConstraint i) (pure hm) iRefs'
+        Just iRefs' -> HM.foldrWithKey (solveConstraint i) (pure hm) iRefs'
 
 -- | Compare implemented member signatures and concatenate models
 --
@@ -336,11 +336,11 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
 -- of the module models, as well as the interface models.
 solveConstraint
   :: Info
-  -> Eval e (HM.HashMap Text Ref)
   -> Text
   -> Ref
   -> Eval e (HM.HashMap Text Ref)
-solveConstraint info ehm refName iref = do
+  -> Eval e (HM.HashMap Text Ref)
+solveConstraint info refName iref ehm = do
   hm <- ehm
   case HM.lookup refName hm of
     Nothing -> pure hm
