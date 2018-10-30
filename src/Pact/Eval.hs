@@ -289,11 +289,9 @@ loadModule i@Interface{..} body info gas0 = do
         return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
-              CyclicSCC [v] -> return v
+              --CyclicSCC [v] -> return v
               CyclicSCC vs -> do
-                liftIO $ print vs
                 evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  liftIO $ print sorted
   let unifiedDefs :: Eval e (HM.HashMap Text Ref)
       unifiedDefs = foldl dresolve (pure HM.empty) sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
@@ -305,8 +303,7 @@ loadModule i@Interface{..} body info gas0 = do
       evalConstRef = runPure . evalConsts
   defs <- unifiedDefs
   evaluatedDefs <- traverse evalConstRef defs
-  solvedDefs <- evaluateConstraints i evaluatedDefs info
-  let md = ModuleData i solvedDefs
+  let md = ModuleData i evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
   return (gas1, idefs)
@@ -362,16 +359,21 @@ solveConstraint info refName iref ehm = do
           case (t, s) of
             -- compare TDef only. This should never be comparing consts
             -- since consts are stated in a module xor interface
-            (TDef n mn dt (FunType args rty) _ _ _,
-             TDef n' mn' dt' (FunType args' rty') _ _ _) ->
-              if n == n' && mn == mn' && dt == dt' && args == args' && rty == rty'
-              then pure hm
-              else evalError info $ "mismatching interface and module implementation definitions: " ++
-                   show t ++ "\n" ++ show s
+            (TDef _n _mn dt (FunType args rty) _ _ _,
+             TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
+              -- compare deftype, return type, and if args lists are matching size, compare for correctness
+              when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
+              when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
+              when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
+              -- compare args by matching against name and type
+              forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
+                when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
+                when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
+                return ()
+              pure hm
             _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
         _ -> evalError info $ "mismatching implementation signatures: \n" ++ show iref ++ "\n" ++ show mref
-             
-
+      
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n

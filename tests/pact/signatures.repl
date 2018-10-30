@@ -32,7 +32,7 @@
   @doc   "this defines mod"
   @model (property (do (crazy stuff)))
 
-  (implements foo)
+  (implements foo-interface)
 
   (defun foo:bool (x:bool) @doc "foo the town" true)
   (defun bar:bool (x:decimal y:bool) @doc "i love bars" y)
@@ -44,5 +44,6 @@
     2)
 
   (defconst BAR 1 @doc "barring disbelief")
+  (defconst QUX "noqux the casbah")
 
 )

@@ -362,7 +362,7 @@ emptyDef = do
   info <- contextInfo
   return $
     TDef defName modName Defun
-    (FunType args returnTy) (pure (Name defName info)) m info
+    (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
   
   
 step :: Compile (Term Name)
