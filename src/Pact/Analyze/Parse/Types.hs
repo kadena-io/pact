@@ -65,14 +65,14 @@ data PreProp
   deriving (Eq, Show)
 
 instance UserShow PreProp where
-  userShowsPrec prec = \case
+  userShowPrec prec = \case
     PreIntegerLit i -> tShow i
     PreStringLit t  -> tShow t
     PreDecimalLit d -> userShow d
     PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
     PreBoolLit b    -> tShow (Pact.LBool b)
     PreListLit lst  ->
-      "[" <> T.intercalate ", " (fmap (userShowsPrec 0) lst) <> "]"
+      "[" <> T.intercalate ", " (fmap (userShowPrec 0) lst) <> "]"
 
     PreAbort          -> STransactionAborts
     PreSuccess        -> STransactionSucceeds
@@ -94,7 +94,7 @@ instance UserShow PreProp where
       "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
         userShow ba <> ")"
     PreLiteralObject obj ->
-      userShowsPrec prec obj
+      userShowPrec prec obj
 
 
 throwErrorT :: MonadError String m => Text -> m a

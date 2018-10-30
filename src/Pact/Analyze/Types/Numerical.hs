@@ -86,7 +86,7 @@ instance Show (SingTy k ty) where
     SObject  -> showString "SObject"
 
 instance UserShow (SingTy k ty) where
-  userShowsPrec _ = \case
+  userShowPrec _ = \case
     SInteger     -> "integer"
     SBool    -> "bool"
     SStr     -> "string"
@@ -324,7 +324,7 @@ instance SymWord Decimal where
 instance SMTValue Decimal where sexprToVal = fmap Decimal . sexprToVal
 
 instance UserShow Decimal where
-  userShowsPrec _ (Decimal dec) =
+  userShowPrec _ (Decimal dec) =
     case Decimal.eitherFromRational (dec % (10 ^ decimalPrecision)) of
       Left err                    -> error err
       -- Make sure to show ".0":
@@ -359,7 +359,7 @@ arithOpP = mkOpNamePrism
   ]
 
 instance UserShow ArithOp where
-  userShowsPrec _ = toText arithOpP
+  userShowPrec _ = toText arithOpP
 
 -- integer -> integer
 -- decimal -> decimal
@@ -385,7 +385,7 @@ unaryArithOpP = mkOpNamePrism
   ]
 
 instance UserShow UnaryArithOp where
-  userShowsPrec _ = toText unaryArithOpP
+  userShowPrec _ = toText unaryArithOpP
 
 -- decimal -> integer -> decimal
 -- decimal -> decimal
@@ -404,7 +404,7 @@ roundingLikeOpP = mkOpNamePrism
   ]
 
 instance UserShow RoundingLikeOp where
-  userShowsPrec _ = toText roundingLikeOpP
+  userShowPrec _ = toText roundingLikeOpP
 
 -- | Arithmetic ops
 --
@@ -442,7 +442,7 @@ data Numerical t (a :: Ty) where
 
 instance (UserShow (t 'TyInteger), UserShow (t 'TyDecimal))
   => UserShow (Numerical t a) where
-  userShowsPrec _ = parenList . \case
+  userShowPrec _ = parenList . \case
     DecArithOp op a b      -> [userShow op, userShow a, userShow b]
     IntArithOp op a b      -> [userShow op, userShow a, userShow b]
     DecUnaryArithOp op a   -> [userShow op, userShow a]

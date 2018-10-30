@@ -194,7 +194,7 @@ instance SMTValue KeySetName where
   sexprToVal = fmap (KeySetName . T.pack) . sexprToVal
 
 instance UserShow KeySetName where
-  userShowsPrec _ (KeySetName name) = "'" <> name
+  userShowPrec _ (KeySetName name) = "'" <> name
 
 newtype TableName
   = TableName String
@@ -235,7 +235,7 @@ instance SymWord Str where
   fromCW = wrappedStringFromCW Str
 
 instance UserShow Str where
-  userShowsPrec _ (Str str) = "\"" <> T.pack str <> "\""
+  userShowPrec _ (Str str) = "\"" <> T.pack str <> "\""
 
 type RowKey = Str
 
@@ -267,7 +267,7 @@ logicalOpP = mkOpNamePrism
   ]
 
 instance UserShow LogicalOp where
-  userShowsPrec _ = toText logicalOpP
+  userShowPrec _ = toText logicalOpP
 
 data EqNeq
   = Eq'  -- ^ Equal
@@ -281,7 +281,7 @@ eqNeqP = mkOpNamePrism
   ]
 
 instance UserShow EqNeq where
-  userShowsPrec _ = toText eqNeqP
+  userShowPrec _ = toText eqNeqP
 
 data ComparisonOp
   = Gt  -- ^ Greater than
@@ -303,7 +303,7 @@ comparisonOpP = mkOpNamePrism
   ]
 
 instance UserShow ComparisonOp where
-  userShowsPrec _ = toText comparisonOpP
+  userShowPrec _ = toText comparisonOpP
 
 -- | Metadata about a database cell from which a symbolic value originates.
 -- This is a separate datatype from 'Provenance' so that we avoid partial field
@@ -447,7 +447,7 @@ newtype Object
   deriving (Eq, Show, Semigroup)
 
 instance UserShow Object where
-  userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
+  userShowPrec d (Object m) = userShowPrec d (fmap snd m)
 
 instance Monoid Object where
   mempty = Object Map.empty
@@ -473,7 +473,7 @@ instance Monoid Schema where
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where
-  userShowsPrec d (Schema schema) = userShowsPrec d schema
+  userShowPrec d (Schema schema) = userShowPrec d schema
 
 -- | When given a column mapping, this function gives a canonical way to assign
 -- var ids to each column. Also see 'varIdArgs'.
@@ -500,7 +500,7 @@ data AVal
   deriving (Eq, Show)
 
 instance UserShow AVal where
-  userShowsPrec _ = \case
+  userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
     AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
@@ -664,7 +664,7 @@ data Any = Any
   deriving (Show, Read, Eq, Ord, Data)
 
 instance UserShow Any where
-  userShowsPrec _ Any = "*"
+  userShowPrec _ Any = "*"
 
 instance HasKind Any
 instance SymWord Any
@@ -825,18 +825,18 @@ instance Mergeable a => Mergeable (TableMap a) where
 
 
 instance UserShow (Quantifiable q) where
-  userShowsPrec d = \case
-    EType ty     -> userShowsPrec d ty
-    -- EListType ty -> brackets $ userShowsPrec 0 ty
-    EObjectTy ty -> userShowsPrec d ty
+  userShowPrec d = \case
+    EType ty     -> userShowPrec d ty
+    -- EListType ty -> brackets $ userShowPrec 0 ty
+    EObjectTy ty -> userShowPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"
 
 instance UserShow TableName where
-  userShowsPrec _ (TableName tn) = T.pack tn
+  userShowPrec _ (TableName tn) = T.pack tn
 
 instance UserShow ColumnName where
-  userShowsPrec _ (ColumnName cn) = T.pack cn
+  userShowPrec _ (ColumnName cn) = T.pack cn
 
 data DefinedProperty a = DefinedProperty
   { propertyArgs :: [(Text, QType)]

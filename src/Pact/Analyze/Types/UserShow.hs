@@ -13,11 +13,10 @@ import           Pact.Types.Info (Info)
 import           Pact.Types.Util (tShow)
 
 class UserShow a where
-  -- TODO: remove s in name
-  userShowsPrec :: Int -> a -> Text
+  userShowPrec :: Int -> a -> Text
 
 userShow :: UserShow a => a -> Text
-userShow = userShowsPrec 0
+userShow = userShowPrec 0
 
 parens :: Text -> Text
 parens t = "(" <> t <> ")"
@@ -29,31 +28,31 @@ parenList :: [Text] -> Text
 parenList = parens . T.unwords
 
 instance UserShow Integer where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow AlgReal where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow (Exp Info) where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow Bool where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 -- instance UserShow String where
---   userShowsPrec _ = tShow
+--   userShowPrec _ = tShow
 
 instance UserShow Int64 where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow Text where
-  userShowsPrec _ = tShow
+  userShowPrec _ = tShow
 
 instance UserShow a => UserShow (Map Text a) where
-  userShowsPrec _ m =
+  userShowPrec _ m =
     let go result k a = result <> ", " <> k <> ": " <> userShow a
     in "{ " <> T.drop 2 (Map.foldlWithKey go "" m) <> " }"
 
 instance UserShow a => UserShow [a] where
-  userShowsPrec _ l =
-    "[" <> T.intercalate ", " (fmap (userShowsPrec 0) l) <> "]"
+  userShowPrec _ l =
+    "[" <> T.intercalate ", " (fmap (userShowPrec 0) l) <> "]"

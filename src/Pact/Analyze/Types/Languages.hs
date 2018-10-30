@@ -97,9 +97,9 @@ instance Show (Existential tm) where {                                         \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
       . showsPrec 11 obj; };                                                   \
 instance UserShow (Existential tm) where                                       \
-  userShowsPrec d e = case e of                                                \
-    ESimple ty a  -> withUserShow ty (userShowsPrec d a);                      \
-    EObject _ty a -> userShowsPrec d a;
+  userShowPrec d e = case e of                                                \
+    ESimple ty a  -> withUserShow ty (userShowPrec d a);                      \
+    EObject _ty a -> userShowPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
 --
@@ -472,12 +472,12 @@ instance
   , UserShow (tm 'TyObject)
   , UserShow (Existential tm)
   ) => UserShow (Core tm a) where
-  userShowsPrec d = \case
-    Lit a                    -> userShowsPrec d a
+  userShowPrec d = \case
+    Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
     StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
-    Numerical tm             -> userShowsPrec d tm
+    Numerical tm             -> userShowPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     IntegerComparison op x y -> parenList [userShow op, userShow x, userShow y]
@@ -499,7 +499,7 @@ data BeforeOrAfter = Before | After
   deriving (Eq, Show)
 
 instance UserShow BeforeOrAfter where
-  userShowsPrec _p = \case
+  userShowPrec _p = \case
     Before -> "'before"
     After  -> "'after"
 
@@ -594,7 +594,7 @@ deriving instance Eq   (Concrete a) => Eq   (Prop a)
 deriving instance Show (Concrete a) => Show (Prop a)
 
 instance UserShow (Concrete a) => UserShow (PropSpecific a) where
-  userShowsPrec _d = \case
+  userShowPrec _d = \case
     Abort                   -> STransactionAborts
     Success                 -> STransactionSucceeds
     Result                  -> SFunctionResult
@@ -620,9 +620,9 @@ instance UserShow (Concrete a) => UserShow (PropSpecific a) where
     PropRead ba _sch tn rk  -> parenList [SPropRead, userShow tn, userShow rk, userShow ba]
 
 instance UserShow (Concrete a) => UserShow (Prop a) where
-  userShowsPrec d = \case
-    PropSpecific p -> userShowsPrec d p
-    CoreProp     p -> userShowsPrec d p
+  userShowPrec d = \case
+    PropSpecific p -> userShowPrec d p
+    CoreProp     p -> userShowPrec d p
 
 instance S :*<: Prop where
   inject' = CoreProp . Sym
@@ -775,7 +775,7 @@ instance S :*<: Invariant where
     _                     -> Nothing
 
 instance UserShow (Concrete a) => UserShow (Invariant a) where
-  userShowsPrec d (CoreInvariant a) = userShowsPrec d a
+  userShowPrec d (CoreInvariant a) = userShowPrec d a
 
 type EInvariant = Existential Invariant
 EQ_EXISTENTIAL(Invariant)
@@ -842,7 +842,7 @@ data Term (a :: Ty) where
   Hash            :: ETerm                              -> Term 'TyStr
 
 instance UserShow (Concrete a) => UserShow (Term a) where
-  userShowsPrec _ = \case
+  userShowPrec _ = \case
     CoreTerm tm                -> userShow tm
     IfThenElse x (_, y) (_, z) -> parenList ["if", userShow x, userShow y, userShow z]
     Let var _ _ x y            -> parenList ["let", userShow var, userShow x, userShow y]
