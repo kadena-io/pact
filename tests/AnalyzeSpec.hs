@@ -2312,7 +2312,6 @@ spec = describe "analyze" $ do
       expectTrace code (bnot Success')
         [push, assert, {- failure -} path, {- success -} path, pop]
 
-  describe "lists" $ do
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
 
