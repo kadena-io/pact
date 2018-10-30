@@ -242,12 +242,16 @@ loadModule m@Module{..} bod1 mi g0 = do
               AcyclicSCC v -> return v
               CyclicSCC vs ->
                 evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  let defs :: HM.HashMap Text Ref
-      defs = foldl dresolve HM.empty sorted
+  let unifiedDefs :: Eval e (HM.HashMap Text Ref)
+      unifiedDefs = foldl dresolve (pure HM.empty) sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-      evalConstRef r@Ref {} = runPure $ evalConsts r
-      evalConstRef r@Direct {} = runPure $ evalConsts r
+      dresolve :: Eval e (HM.HashMap Text Ref) -> (Term (Either Text Ref), Text, [Text]) -> Eval e (HM.HashMap Text Ref)
+      dresolve eds (d,dn,_) = do
+        ds <- eds
+        ud <- traverse (unify mi ds) d 
+        return $ HM.insert dn (Ref ud) ds
+      evalConstRef = runPure . evalConsts
+  defs <- unifiedDefs
   evaluatedDefs <- traverse evalConstRef defs
   solvedDefs <- evaluateConstraints m evaluatedDefs mi
   let md = ModuleData m solvedDefs
@@ -280,19 +284,26 @@ loadModule i@Interface{..} body info gas0 = do
                   (Nothing,Name fn _) ->
                       case HM.lookup fn idefs of
                         Just _ -> return (Left fn)
-                        Nothing -> evalError (_nInfo f) ("Cannot resolve 1 \"" ++ show f ++ "\"")
-                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve 2 \"" ++ show f ++ "\"")
+                        Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
+                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
         return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
   sorted <- forM cs $ \c -> case c of
               AcyclicSCC v -> return v
-              CyclicSCC vs ->
+              CyclicSCC [v] -> return v
+              CyclicSCC vs -> do
+                liftIO $ print vs
                 evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  let defs :: HM.HashMap Text Ref
-      defs = foldl dresolve HM.empty sorted
+  liftIO $ print sorted
+  let unifiedDefs :: Eval e (HM.HashMap Text Ref)
+      unifiedDefs = foldl dresolve (pure HM.empty) sorted
       -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-      evalConstRef r@Ref {} = runPure $ evalConsts r
-      evalConstRef r@Direct {} = runPure $ evalConsts r
+      dresolve :: Eval e (HM.HashMap Text Ref) -> (Term (Either Text Ref), Text, [Text]) -> Eval e (HM.HashMap Text Ref)
+      dresolve eds (d,dn,_) = do
+        ds <- eds
+        ud <- traverse (unify info ds) d 
+        return $ HM.insert dn (Ref ud) ds
+      evalConstRef = runPure . evalConsts
+  defs <- unifiedDefs
   evaluatedDefs <- traverse evalConstRef defs
   solvedDefs <- evaluateConstraints i evaluatedDefs info
   let md = ModuleData i solvedDefs
@@ -366,17 +377,19 @@ resolveRef qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs . rsLoaded . ix qn) <$> get
+    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
   nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs . rsLoaded . ix nn) <$> get
+    Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
 
 
-unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
-unify _ (Right d) = d
-unify m (Left f) = m HM.! f
+unify :: Info -> HM.HashMap Text Ref -> Either Text Ref -> Eval e Ref
+unify _ _ (Right d) = pure d
+unify i m (Left f) = case HM.lookup f m of
+  Nothing -> evalError i $ "Ref lookup failed for " ++ show f
+  Just f' -> pure f'
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of

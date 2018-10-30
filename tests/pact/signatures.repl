@@ -1,6 +1,6 @@
 (begin-tx)
 
-(interface foo 
+(interface foo-interface
   @doc "do some crazy foo stuff"
   @model (property (do (crazy stuff)))
 
@@ -8,12 +8,13 @@
   (defun bar:bool (x:decimal y:bool) @doc "i love bars")
   (defun f:string () "docs work without the doc")
 
-  (defconst BAZ "i did a baz, baz thing")
-  (defconst QUX:string "qux the casbah")
-  (defconst F @doc "docstrings work with the doc")
+  (defconst BAZ:bool true)
+  (defconst QUX "qux the casbah")
 
-  (defun g:bool () @model (property stuff))
-  (defconst H 3)
+  (defun g:bool () 
+    @model (property (do (stuff)))
+    @doc "is for great"
+    )
 )
 
 (interface bar
