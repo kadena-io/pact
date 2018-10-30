@@ -48,11 +48,11 @@ allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType t@(SList _ty) -> error $ show t
+  EType t@(SList _ty) -> pure OpaqueVal
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
-    (\Refl -> error "this branch is not (!) impossible in the current formulation")
+    (\Refl -> error "this branch is impossible in the current formulation")
     (\Refl -> error "this branch is impossible in the current formulation")
 
 allocTVal :: HasCallStack => EType -> Symbolic TVal
@@ -66,7 +66,7 @@ allocForETerm
       (\_ -> mkAVal . sansProv <$>
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
-    pure (EType ty, AList cells')
+    pure (EType (SList ty), AList cells')
 allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
 
@@ -186,8 +186,12 @@ saturateModel =
           (\Refl -> error "TODO")
           (\Refl -> error "TODO")
 
+        go (EType (SList ty :: SingTy k t)) (AList avals) =
+          fmap AList $ traverse (go (EType ty)) avals
+        go (EType (SList ty :: SingTy k t)) OpaqueVal = pure OpaqueVal
+
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
-        go _ _ = error "fetchTVal: impossible"
+        go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
 
     -- NOTE: This currently rebuilds an SBV. Not sure if necessary.
     fetchSbv :: (SymWord a, SBV.SMTValue a) => SBV a -> SBV.Query (SBV a)

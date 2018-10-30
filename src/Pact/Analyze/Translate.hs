@@ -976,7 +976,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_List _node elems -> do
     elems' <- traverse translateNode elems
     EList listOfTy litList
-      <- maybe (throwError' BadList) pure $ doit elems'
+      <- maybe (throwError' BadList) pure $ mkLiteralList elems'
     pure $ EList listOfTy $ CoreTerm litList
 
   AST_Contains node val collection -> do
@@ -1035,21 +1035,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun _ "keys" [_] -> throwError' $ NoKeys astNode
 
   _ -> throwError' $ UnexpectedNode astNode
-
-doit :: [ETerm] -> Maybe (Existential (Core Term))
-doit [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
-doit (ESimple ty1 x : xs) = foldr
-  (\case
-    EObject{} -> \_ -> Nothing
-    ESimple ty y -> \case
-      Nothing -> Nothing
-      Just EObject{} -> error "impossible"
-      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
-        Nothing   -> Nothing
-        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
-      _ -> error "impossible")
-  (Just (EList (SList ty1) (LiteralList (SList ty1) [x])))
-  xs
 
 mkExecutionGraph :: Vertex -> Path -> TranslateState -> ExecutionGraph
 mkExecutionGraph vertex0 rootPath st = ExecutionGraph

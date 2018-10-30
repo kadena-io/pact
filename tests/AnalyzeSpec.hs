@@ -2464,6 +2464,7 @@ spec = describe "analyze" $ do
     --   ==>
     --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
 
+  describe "lists verify" $ do
     let code' model = [text|
           (defun test:[integer] ()
             @model $model

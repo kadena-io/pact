@@ -13,7 +13,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, bAll)
+                                              SymWord, ite, bAll, true, false)
 import qualified Data.SBV.String             as SBVS
 -- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
@@ -172,9 +172,13 @@ evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
     Just Refl -> withEq tyA' $ withSymWord tyA' $ withShow tyA' $ do
       a' <- evalL a
       b' <- evalL b
-      pure $ sansProv $ flip bAll (zip a' b') $ uncurry $ case op of
-        Eq'  -> (.==)
-        Neq' -> (./=)
+      pure $ case pair a' b' of
+        Nothing -> case op of
+          Eq'  -> false
+          Neq' -> true
+        Just pairs -> sansProv $ flip bAll pairs $ uncurry $ case op of
+          Eq'  -> (.==)
+          Neq' -> (./=)
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of

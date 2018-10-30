@@ -105,3 +105,8 @@ instance Snoc (SnocList a) (SnocList b) a b where
 
 snocConsList :: Iso (SnocList a) (SnocList b) [a] [b]
 snocConsList = iso Foldable.toList snocList
+
+pair :: [a] -> [b] -> Maybe [(a, b)]
+pair []     []     = Just []
+pair (x:xs) (y:ys) = ((x, y):) <$> pair xs ys
+pair _       _     = Nothing

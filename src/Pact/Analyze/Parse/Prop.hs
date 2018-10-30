@@ -249,22 +249,6 @@ inferVar vid name prop = do
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
 
--- TODO: generalize this / doit from Translate
-doit :: [EProp] -> Maybe (Existential (Core Prop))
-doit [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
-doit (ESimple ty0 x : xs) = foldr
-  (\case
-    EObject{} -> \_ -> Nothing
-    ESimple ty y -> \case
-      Nothing -> Nothing
-      Just EObject{} -> error "impossible"
-      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
-        Nothing   -> Nothing
-        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
-      _ -> error "impossible")
-  (Just (EList (SList ty0) (LiteralList (SList ty0) [x])))
-  xs
-
 --
 -- NOTE: because we have a lot of cases here and we are using pattern synonyms
 -- in conjunction with view patterns for feature symbols (see
@@ -290,7 +274,7 @@ inferPreProp preProp = case preProp of
   PreListLit as   -> do
     as' <- traverse inferPreProp as
     EList listTy litList
-      <- maybe (throwErrorT "TODO: bad list") pure $ doit as'
+      <- maybe (throwErrorT "TODO: bad list") pure $ mkLiteralList as'
 
     pure $ EList listTy $ CoreProp litList
 

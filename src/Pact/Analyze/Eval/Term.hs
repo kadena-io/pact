@@ -23,7 +23,7 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl', foldlM)
+import           Data.Foldable               (foldl', foldlM, for_)
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -183,14 +183,19 @@ tagResult av = do
   tid <- view $ aeModelTags.mtResult._1
   tagReturn tid av
   tag <- view $ aeModelTags.mtResult._2.located._2
-  addConstraint $ sansProv $ tag .== av
+  case (av, tag) of
+    (AList av', AList tag') ->
+      for_ (zipWith (.==) av' tag') (addConstraint . sansProv)
+    _ -> addConstraint $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()
 tagReturn tid av = do
   mTag <- preview $ aeModelTags.mtReturns.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+    Just tagAv -> case (av, tagAv) of
+      (AList av', OpaqueVal) -> pure ()
+      _ -> addConstraint $ sansProv $ tagAv .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do

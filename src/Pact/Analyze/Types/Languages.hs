@@ -57,6 +57,8 @@ module Pact.Analyze.Types.Languages
   , pattern PStrConcat
   , pattern PStrLength
   , pattern PVar
+
+  , mkLiteralList
   ) where
 
 import           Data.Map.Strict              (Map)
@@ -676,6 +678,21 @@ type EProp = Existential Prop
 EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
+mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
+mkLiteralList [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
+mkLiteralList xs@(ESimple ty0 _ : _) = foldr
+  (\case
+    EObject{} -> \_ -> Nothing
+    ESimple ty y -> \case
+      Nothing -> Nothing
+      Just EObject{} -> error "impossible"
+      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
+        Nothing   -> Nothing
+        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
+      _ -> error "impossible")
+  (Just (EList (SList ty0) (LiteralList (SList ty0) [])))
+  xs
+
 pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
 pattern Lit' a <- (project @(Core tm) @tm -> Just (Lit a)) where
   Lit' a = inject @(Core tm) @tm (Lit a)
@@ -773,6 +790,8 @@ pattern ILogicalOp op args = CoreInvariant (Logical op args)
 type ETerm = Existential Term
 EQ_EXISTENTIAL(Term)
 SHOW_EXISTENTIAL(Term)
+
+SHOW_EXISTENTIAL((Core Term))
 
 data Term (a :: Ty) where
   CoreTerm        :: Core Term a -> Term a

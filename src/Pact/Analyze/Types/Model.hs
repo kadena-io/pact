@@ -170,8 +170,7 @@ data ExecutionTrace
 data Goal
   = Satisfaction -- ^ Find satisfying model
   | Validation   -- ^ Prove no invalidating model exists
-
-deriving instance Eq Goal
+  deriving (Eq, Show)
 
 makePrisms ''TraceEvent
 makeLenses ''ExecutionGraph

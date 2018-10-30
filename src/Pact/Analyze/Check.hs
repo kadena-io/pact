@@ -86,7 +86,6 @@ import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
 
--- import Debug.Trace
 
 newtype VerificationWarnings = VerificationWarnings [Text]
   deriving (Eq, Show)
@@ -343,7 +342,7 @@ verifyFunctionProperty
   -> Located Check
   -> IO (Either CheckFailure CheckSuccess)
 verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo check) =
-    runExceptT $ do
+  runExceptT $ do
       (args, tm, graph) <- hoist generalize $
         withExcept translateToCheckFailure $
           runTranslation funName funInfo pactArgs body
@@ -354,7 +353,6 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
           <- withExceptT analyzeToCheckFailure $
             runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
               funInfo
-        -- traceShowM r
 
         -- TODO: bring back the query success check when we've resolved the SBV
         -- query / quantified variables issue:

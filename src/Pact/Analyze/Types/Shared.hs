@@ -497,12 +497,7 @@ data AVal
   | AList [AVal]
   | AnObj Object
   | OpaqueVal
-
-instance Eq AVal where
-  _ == _ = False -- TODO
-
-instance Show AVal where
-  show _ = "TODO: Show AVal"
+  deriving (Eq, Show)
 
 instance UserShow AVal where
   userShowsPrec _ = \case
