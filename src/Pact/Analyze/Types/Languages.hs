@@ -265,8 +265,29 @@ uniformlyEq' ty t1 t2 = case ty of
   SList SBool    -> t1 == t2
   SList SKeySet  -> t1 == t2
 
--- TODO: generalize the above two
--- uniformly :: OfPactTypes c tm => SingTy 'SimpleK a -> (c tm
+uniformlyShows
+  :: OfPactTypes Show tm
+  => SingTy 'SimpleK a -> Int -> tm ('TyList a) -> ShowS
+uniformlyShows ty p t = case ty of
+  SStr     -> showsPrec p t
+  SInteger -> showsPrec p t
+  STime    -> showsPrec p t
+  SDecimal -> showsPrec p t
+  SBool    -> showsPrec p t
+  SKeySet  -> showsPrec p t
+
+uniformlyShows'
+  :: OfPactTypes Show tm
+  => SingTy 'ListK ('TyList a) -> Int -> [tm a] -> ShowS
+uniformlyShows' ty p t = case ty of
+  SList SStr     -> showsPrec p t
+  SList SInteger -> showsPrec p t
+  SList STime    -> showsPrec p t
+  SList SDecimal -> showsPrec p t
+  SList SBool    -> showsPrec p t
+  SList SKeySet  -> showsPrec p t
+
+-- TODO: generalize the uniformly family?
 
 instance
   ( Eq (Concrete a)
@@ -401,14 +422,7 @@ instance
       . showString " "
       . showsPrec 11 a
       . showString " "
-      -- TODO
-      . (case ty of
-        SStr     -> showsPrec 11 b
-        SInteger -> showsPrec 11 b
-        STime    -> showsPrec 11 b
-        SDecimal -> showsPrec 11 b
-        SBool    -> showsPrec 11 b
-        SKeySet  -> showsPrec 11 b)
+      . uniformlyShows ty 11 b
     ObjContains s e ->
         showString "StringContains "
       . showsPrec 11 s
@@ -419,26 +433,27 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    ListContains a b c ->
+    ListContains ty a b ->
         showString "ListContains "
-      . showsPrec 11 a
+      . showsPrec 11 ty
       . showString " "
-      . showString "REDACTED"
+      -- TODO
+      . (case ty of
+        SStr     -> showsPrec 11 a
+        SInteger -> showsPrec 11 a
+        STime    -> showsPrec 11 a
+        SDecimal -> showsPrec 11 a
+        SBool    -> showsPrec 11 a
+        SKeySet  -> showsPrec 11 a)
       . showString " "
-      . showString "REDACTED"
+      . uniformlyShows ty 11 b
     ListDrop ty i l ->
         showString "ObjDrop "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 i
       . showString " "
-      . (case ty of
-        SStr     -> showsPrec 11 l
-        SInteger -> showsPrec 11 l
-        STime    -> showsPrec 11 l
-        SDecimal -> showsPrec 11 l
-        SBool    -> showsPrec 11 l
-        SKeySet  -> showsPrec 11 l)
+      . uniformlyShows ty 11 l
     ObjDrop a b c ->
         showString "ObjDrop "
       . showsPrec 11 a
@@ -453,13 +468,13 @@ instance
       . showsPrec 11 b
       . showString " "
       . showsPrec 11 c
-    ListConcat a b c ->
+    ListConcat ty a b ->
         showString "ListConcat "
-      . showsPrec 11 a
+      . showsPrec 11 ty
       . showString " "
-      . showString "REDACTED"
+      . uniformlyShows ty 11 a
       . showString " "
-      . showString "REDACTED"
+      . uniformlyShows ty 11 b
     ObjectMerge a b ->
         showString "ObjectMerge "
       . showsPrec 11 a
@@ -470,13 +485,7 @@ instance
         showString "LiteralList "
       . showsPrec 11 ty
       . showString " "
-      . (case ty of
-        SList SStr     -> showsPrec 11 l
-        SList SInteger -> showsPrec 11 l
-        SList STime    -> showsPrec 11 l
-        SList SDecimal -> showsPrec 11 l
-        SList SBool    -> showsPrec 11 l
-        SList SKeySet  -> showsPrec 11 l)
+      . uniformlyShows' ty 11 l
 
     Logical op args ->
         showString "Logical "
