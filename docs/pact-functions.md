@@ -378,6 +378,22 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 ```
 
 
+### str-to-int {#str-to-int}
+
+*str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+*base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+
+Compute the integer value after change of base of a string of length <= 128 chars consisting of base-2 through base-16 (hexadecimal) characters. Only bases 2 through 16 are supported. 
+```lisp
+pact> (str-to-int 16 "123456")
+1193046
+pact> (str-to-int "abcdef123456")
+1123455123456
+```
+
+
 ### take {#take}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`
