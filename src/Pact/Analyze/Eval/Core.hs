@@ -13,12 +13,12 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, bAll, true, false)
+                                              SymWord, ite, bAll, true, false, literal, uninterpret)
 import qualified Data.SBV.String             as SBVS
--- import qualified Data.SBV.List               as SBVL
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
+import Safe (atMay)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -179,6 +179,18 @@ evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
         Just pairs -> sansProv $ flip bAll pairs $ uncurry $ case op of
           Eq'  -> (.==)
           Neq' -> (./=)
+evalCore (ListAt tyA i l) = do
+  i' <- eval i
+  l' <- withShow tyA $ evalL l
+  case unliteralS i' of
+    Nothing -> throwErrorNoLoc "Unable to determine list index statically"
+    Just i'' -> case atMay l' (fromInteger i'') of
+      -- TODO:
+      Nothing -> do
+        markFailure true
+        pure $ sansProv $ uninterpret "outOfBounds"
+      Just v -> pure v
+
 evalCore (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -196,12 +208,25 @@ evalCoreL
 evalCoreL (LiteralList _ty xs) = do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv <$> vals
-  -- pure $ SList (fromIntegral (length xs)) vals
-  -- sansProv . SBVL.implode <$> traverse (fmap _sSbv . eval) xs
--- evalCoreL (ListDrop n list) = do
---   n'    <- eval n
---   list' <- eval list
---   pure $ sansProv $ _sSbv n' `SBVL.drop` _sSbv list'
+evalCoreL (ListDrop _ty n list) = do
+  n'    <- eval n
+  list' <- evalL list
+  case unliteralS n' of
+    Nothing -> throwErrorNoLoc "Unable to determine statically the number of list elements to drop"
+    Just n'' -> do
+      let n''' = fromInteger n''
+      markFailure $ literal $ n''' > length list'
+      pure $ drop n''' list'
+evalCoreL (ListTake _ty n list) = do
+  n'    <- eval n
+  list' <- evalL list
+  case unliteralS n' of
+    Nothing -> throwErrorNoLoc "Unable to determine statically the number of list elements to drop"
+    Just n'' -> do
+      let n''' = fromInteger n''
+      markFailure $ literal $ n''' > length list'
+      pure $ take n''' list'
+
 -- evalCoreL ListReverse{} = undefined
 -- evalCoreL ListSort{} = undefined
 -- evalCoreL (ListTake n list) = do

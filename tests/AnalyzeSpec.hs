@@ -188,14 +188,12 @@ expectFalsified' model code = do
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
   res <- runIO $ runCheck (wrap code "") check
-  -- it (show check) $ handlePositiveTestResult res
-  it "passes" $ handlePositiveTestResult res
+  it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
   res <- runIO $ runCheck (wrap code "") check
-  -- it (show check) $ res `shouldSatisfy` isJust
-  it "passes" $ res `shouldSatisfy` isJust
+  it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop 'TyBool
 intConserves (TableName tn) (ColumnName cn)
@@ -218,6 +216,7 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
+  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -2461,6 +2460,7 @@ spec = describe "analyze" $ do
     --   Abort'
     --   ==>
     --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
+-}
 
   describe "lists verify" $ do
     let code' model = [text|
@@ -2470,3 +2470,44 @@ spec = describe "analyze" $ do
           |]
     expectVerified  $ code' "(property (= result [1 2 3]))"
     expectFalsified $ code' "(property (= result [1 2]))"
+
+    let code' model = [text|
+          (defun test:[integer] ()
+            @model $model
+            (drop 2 [1 2 3]))
+          |]
+    expectVerified  $ code' "(property (= result [3]))"
+    expectFalsified $ code' "(property (= result [2 3]))"
+
+    let code' = [text|
+          (defun test:[integer] ()
+            (drop 4 [1 2 3]))
+          |]
+    expectPass code' $ Valid Abort'
+
+    let code' model = [text|
+          (defun test:[integer] ()
+            @model $model
+            (take 2 [1 2 3]))
+          |]
+    expectVerified  $ code' "(property (= result [1 2]))"
+    expectFalsified $ code' "(property (= result [2 3]))"
+
+    let code' = [text|
+          (defun test:[integer] ()
+            (take 4 [1 2 3]))
+          |]
+    expectPass code' $ Valid Abort'
+
+    let code' model = [text|
+          (defun test:integer ()
+            @model $model
+            (at 0 [1 2 3]))
+          |]
+    expectVerified  $ code' "(property (= result 1))"
+
+    let code' = [text|
+          (defun test:integer ()
+            (at 5 [1 2 3]))
+          |]
+    expectPass code' $ Valid Abort'

@@ -9,6 +9,8 @@
 
 module Pact.Analyze.Eval.Term where
 
+-- import Debug.Trace
+
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
@@ -74,6 +76,9 @@ instance Analyzer Analyze where
   getVar vid = view (scope . at vid)
   markFailure b = succeeds %= (&&& sansProv (bnot b))
 
+traceTag :: Show a => String -> a -> a
+traceTag msg a = a -- trace (msg ++ ": " ++ show a) a
+
 evalTermLogicalOp
   :: LogicalOp
   -> [Term 'TyBool]
@@ -128,8 +133,8 @@ tagAccessKey lens' tid rowKey accessSucceeds = do
   case mAcc of
     Nothing -> pure ()
     Just (Access tagRowKey _object tagSuccess) -> do
-      addConstraint $ sansProv $ rowKey               .== tagRowKey
-      addConstraint $ sansProv $ _sSbv accessSucceeds .== tagSuccess
+      addConstraint $ traceTag "1" $ sansProv $ rowKey               .== tagRowKey
+      addConstraint $ traceTag "2" $ sansProv $ _sSbv accessSucceeds .== tagSuccess
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
@@ -144,14 +149,14 @@ tagAccessCell lens' tid fieldName av = do
     aeModelTags.lens'.at tid._Just.located.accObject.objFields.at fieldName._Just._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+    Just tagAv -> addConstraint $ traceTag "3" $ sansProv $ av .== tagAv
 
 tagAssert :: TagId -> S Bool -> Analyze ()
 tagAssert tid sb = do
   mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
   case mTag of
     Nothing  -> pure ()
-    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
+    Just sbv -> addConstraint $ traceTag "4" $ sansProv $ sbv .== _sSbv sb
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
@@ -161,8 +166,8 @@ tagAuth tid sKs sb = do
   case mAuth of
     Nothing  -> pure ()
     Just (Authorization ksTag sbv) -> do
-      addConstraint $ sansProv $ ksTag .== sKs
-      addConstraint $ sansProv $ sbv .== _sSbv sb
+      addConstraint $ traceTag "5" $ sansProv $ ksTag .== sKs
+      addConstraint $ traceTag "6" $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
 tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
@@ -176,7 +181,7 @@ tagFork pathL pathR reachable lPasses = do
       mTag <- preview $ aeModelTags.mtPaths.at p._Just
       case mTag of
         Nothing  -> pure ()
-        Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv active
+        Just sbv -> addConstraint $ traceTag "7" $ sansProv $ sbv .== _sSbv active
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -185,8 +190,9 @@ tagResult av = do
   tag <- view $ aeModelTags.mtResult._2.located._2
   case (av, tag) of
     (AList av', AList tag') ->
-      for_ (zipWith (.==) av' tag') (addConstraint . sansProv)
-    _ -> addConstraint $ sansProv $ tag .== av
+      for_ (zipWith (.==) av' tag') (addConstraint . traceTag "8" . sansProv)
+    (AList av', OpaqueVal) -> pure ()
+    _ -> addConstraint $ traceTag "9" $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()
 tagReturn tid av = do
@@ -195,14 +201,14 @@ tagReturn tid av = do
     Nothing    -> pure ()
     Just tagAv -> case (av, tagAv) of
       (AList av', OpaqueVal) -> pure ()
-      _ -> addConstraint $ sansProv $ tagAv .== av
+      _ -> addConstraint $ traceTag "10" $ sansProv $ tagAv .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
+    Just tagAv -> addConstraint $ traceTag "11" $ sansProv $ av .== tagAv
 
 symKsName :: S Str -> S KeySetName
 symKsName = unsafeCoerceS
@@ -290,7 +296,7 @@ evalTermO = \case
 
       pure (fieldType, av)
 
-    applyInvariants tn (snd <$> aValFields) (mapM_ addConstraint)
+    applyInvariants tn (snd <$> aValFields) (mapM_ (addConstraint . traceTag "12"))
 
     pure $ Object aValFields
 

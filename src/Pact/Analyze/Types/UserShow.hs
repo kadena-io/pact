@@ -39,9 +39,6 @@ instance UserShow (Exp Info) where
 instance UserShow Bool where
   userShowPrec _ = tShow
 
--- instance UserShow String where
---   userShowPrec _ = tShow
-
 instance UserShow Int64 where
   userShowPrec _ = tShow
 

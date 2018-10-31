@@ -181,10 +181,9 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- supports on bools.
   BoolComparison    :: ComparisonOp -> t 'TyBool    -> t 'TyBool    -> Core t 'TyBool
 
-  KeySetEqNeq :: EqNeq -> t 'TyKeySet -> t 'TyKeySet -> Core t 'TyBool
-  ObjectEqNeq :: EqNeq -> t 'TyObject -> t 'TyObject -> Core t 'TyBool
-  -- ListEqNeq   :: EqNeq -> t [a]    -> t [a]    -> Core t 'TyBool
-  ListEqNeq   :: EqNeq -> Existential t    -> Existential t    -> Core t 'TyBool
+  KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
+  ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
+  ListEqNeq   :: EqNeq -> Existential t -> Existential t -> Core t 'TyBool
 
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
   ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
@@ -203,8 +202,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- MakeList :: t a -> t 'TyInteger -> Core t [a]
   -- LiTyStringeverse :: t [a] -> Core t [a]
   -- ListSort    :: t [a] -> Core t [a]
-  -- ListTake    :: t 'TyInteger -> t [a] -> Core t [a]
 
+  ListTake    :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
   -- ListConcat  :: t [a] -> t [a] -> Core t [a]

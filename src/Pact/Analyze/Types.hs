@@ -68,7 +68,7 @@ data Check
   = PropertyHolds !(Prop 'TyBool) -- valid, assuming success
   | Satisfiable   !(Prop 'TyBool) -- sat,   not assuming success
   | Valid         !(Prop 'TyBool) -- valid, not assuming success
-  -- deriving Show
+  deriving Show
 
 checkGoal :: Check -> Goal
 checkGoal (PropertyHolds _) = Validation

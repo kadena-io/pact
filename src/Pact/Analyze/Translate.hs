@@ -951,16 +951,22 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ EObject schema $
       Read tid (TableName (T.unpack table)) schema key'
 
-  AST_At node colName obj -> do
-    EObject schema obj'   <- translateNode obj
-    ESimple SStr colName' <- translateNode colName
-    ty                    <- translateType node
-    pure $ case ty of
-      EType ty'         -> singCase ty'
-        (\Refl -> ESimple ty' $ CoreTerm $ ObjAt schema colName' obj' ty)
-        (\Refl -> EList   ty' $ CoreTerm $ ObjAt schema colName' obj' ty)
-        (\Refl -> vacuousMatch "handled below")
-      EObjectTy schema' -> EObject schema' $ CoreTerm $ ObjAt schema colName' obj' ty
+  AST_At node index obj -> do
+    obj' <- translateNode obj
+    ty   <- translateType node
+    case obj' of
+      EObject schema obj'' -> do
+        ESimple SStr colName <- translateNode index
+        pure $ case ty of
+          EType ty' -> singCase ty'
+            (\Refl -> ESimple ty' $ CoreTerm $ ObjAt schema colName obj'' ty)
+            (\Refl -> EList   ty' $ CoreTerm $ ObjAt schema colName obj'' ty)
+            (\Refl -> vacuousMatch "handled below")
+          EObjectTy schema'
+            -> EObject schema' $ CoreTerm $ ObjAt schema colName obj'' ty
+      EList (SList listOfTy) list -> do
+        ESimple SInteger index' <- translateNode index
+        pure $ ESimple listOfTy $ CoreTerm $ ListAt listOfTy index' list
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -1015,11 +1021,11 @@ translateNode astNode = withAstContext astNode $ case astNode of
         -- Just Refl -> pure $ ESimple ty' $ CoreTerm $ ListSort list'
 
   AST_Take _node num list -> do
-    ESimple ty' list' <- translateNode list
+    EList ty' list'       <- translateNode list
     ESimple SInteger num' <- translateNode num
     case ty' of
-      -- SList{} -> pure $ ESimple ty' $ CoreTerm $ ListTake num' list'
-      _       -> throwError' TODO
+      SList sty -> pure $ EList ty' $ CoreTerm $ ListTake sty num' list'
+      _         -> throwError' TODO
 
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode

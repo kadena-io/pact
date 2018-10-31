@@ -67,7 +67,7 @@ allocForETerm
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
     pure (EType (SList ty), AList cells')
-allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
+-- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
 
 allocArgs :: HasCallStack => [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))

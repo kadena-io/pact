@@ -343,30 +343,30 @@ verifyFunctionProperty
   -> IO (Either CheckFailure CheckSuccess)
 verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo check) =
   runExceptT $ do
-      (args, tm, graph) <- hoist generalize $
-        withExcept translateToCheckFailure $
-          runTranslation funName funInfo pactArgs body
-      ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        modelArgs' <- lift $ allocArgs args
-        tags <- lift $ allocModelTags (Located funInfo tm) graph
-        r@(AnalysisResult _querySucceeds prop ksProvs)
-          <- withExceptT analyzeToCheckFailure $
-            runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
-              funInfo
+    (args, tm, graph) <- hoist generalize $
+      withExcept translateToCheckFailure $
+        runTranslation funName funInfo pactArgs body
+    ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
+      modelArgs' <- lift $ allocArgs args
+      tags <- lift $ allocModelTags (Located funInfo tm) graph
+      r@(AnalysisResult _querySucceeds prop ksProvs)
+        <- withExceptT analyzeToCheckFailure $
+          runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
+            funInfo
 
-        -- TODO: bring back the query success check when we've resolved the SBV
-        -- query / quantified variables issue:
-        -- https://github.com/LeventErkok/sbv/issues/407
-        --
-        -- _ <- hoist SBV.query $ do
-        --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
-        --   withExceptT (smtToQueryFailure (getInfo check)) $
-        --     resultQuery Validation model
+      -- TODO: bring back the query success check when we've resolved the SBV
+      -- query / quantified variables issue:
+      -- https://github.com/LeventErkok/sbv/issues/407
+      --
+      -- _ <- hoist SBV.query $ do
+      --   void $ lift $ SBV.constrain $ SBV.bnot $ successBool querySucceeds
+      --   withExceptT (smtToQueryFailure (getInfo check)) $
+      --     resultQuery Validation model
 
-        void $ lift $ SBV.output prop
-        hoist SBV.query $
-          withExceptT (smtToCheckFailure propInfo) $
-            resultQuery goal $ Model modelArgs' tags ksProvs graph
+      void $ lift $ SBV.output prop
+      hoist SBV.query $
+        withExceptT (smtToCheckFailure propInfo) $
+          resultQuery goal $ Model modelArgs' tags ksProvs graph
 
   where
     goal :: Goal
