@@ -101,4 +101,8 @@
     "example function docstring"
     (and x y))
 
+  ; access to constants defined in signatures
+  ; is allowed via dot-accessor notation.
+  (defun use-consts:integer () 
+    (+ sig-test1.TEST1-C1 sig-test3.TEST3-C2))
 )

@@ -323,7 +323,7 @@ evaluateConstraints
   -> Info
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints Interface{} _ info =
-  evalError info $ "Impossible: interface found while appending meta-constraints to module"
+  evalError info $ "Impossible. interface found while appending meta-constraints to module"
 evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMap info) _mInterfaces
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
@@ -333,7 +333,7 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
       case iRefs of
         -- if nothing found, interface is not loaded, ergo not unfound
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: " ++ asString' ifn
+          "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
         Just iRefs' -> HM.foldrWithKey (solveConstraint i) (pure hm) iRefs'
 
 -- | Compare implemented member signatures and concatenate models
