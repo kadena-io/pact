@@ -225,35 +225,8 @@ loadModule m@Module{..} bod1 mi g0 = do
                   return (g + g',(dn,t):rs)
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
-  cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
-    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
-      do
-        d' <- forM d $ \(f :: Name) -> do
-                dm <- resolveRef f
-                case (dm,f) of
-                  (Just t,_) -> return (Right t)
-                  (Nothing,Name fn _) ->
-                      case HM.lookup fn modDefs1 of
-                        Just _ -> return (Left fn)
-                        Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-        return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
-  sorted <- forM cs $ \c -> case c of
-              AcyclicSCC v -> return v
-              CyclicSCC vs ->
-                evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  let unifiedDefs :: Eval e (HM.HashMap Text Ref)
-      unifiedDefs = foldl dresolve (pure HM.empty) sorted
-      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve :: Eval e (HM.HashMap Text Ref) -> (Term (Either Text Ref), Text, [Text]) -> Eval e (HM.HashMap Text Ref)
-      dresolve eds (d,dn,_) = do
-        ds <- eds
-        ud <- traverse (unify mi ds) d 
-        return $ HM.insert dn (Ref ud) ds
-      evalConstRef = runPure . evalConsts
-  defs <- unifiedDefs
-  evaluatedDefs <- traverse evalConstRef defs
-  solvedDefs <- evaluateConstraints m evaluatedDefs mi
+  evaluatedDefs <- evaluateDefs mi modDefs1
+  solvedDefs <- evaluateConstraints mi m evaluatedDefs
   let md = ModuleData m solvedDefs
   installModule md 
   (evalRefs . rsNewModules) %= HM.insert _mName md
@@ -275,50 +248,56 @@ loadModule i@Interface{..} body info gas0 = do
                 return (g + g',(dn,t):rs)
       second HM.fromList <$> foldM doDef (gas0,[]) bd
     t -> evalError (_tInfo t) "Malformed interface"
-  cs <- fmap stronglyConnCompR $ forM (HM.toList idefs) $ \(dn,d) ->
-      do
-        d' <- forM d $ \(f :: Name) -> do
-                dm <- resolveRef f
-                case (dm,f) of
-                  (Just t,_) -> return (Right t)
-                  (Nothing,Name fn _) ->
-                      case HM.lookup fn idefs of
-                        Just _ -> return (Left fn)
-                        Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-        return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
-  sorted <- forM cs $ \c -> case c of
-              AcyclicSCC v -> return v
-              --CyclicSCC [v] -> return v
-              CyclicSCC vs -> do
-                evalError (if null vs then info else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  let unifiedDefs :: Eval e (HM.HashMap Text Ref)
-      unifiedDefs = foldl dresolve (pure HM.empty) sorted
-      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve :: Eval e (HM.HashMap Text Ref) -> (Term (Either Text Ref), Text, [Text]) -> Eval e (HM.HashMap Text Ref)
-      dresolve eds (d,dn,_) = do
-        ds <- eds
-        ud <- traverse (unify info ds) d 
-        return $ HM.insert dn (Ref ud) ds
-      evalConstRef = runPure . evalConsts
-  defs <- unifiedDefs
-  evaluatedDefs <- traverse evalConstRef defs
+  evaluatedDefs <- evaluateDefs info idefs
   let md = ModuleData i evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
   return (gas1, idefs)
 
-    
+evaluateDefs :: Info -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
+evaluateDefs info defs = do
+  cs <- traverseGraph defs
+  sortedDefs <- detectCycles cs
+  unifiedDefs <- foldl dresolve (pure HM.empty) sortedDefs
+  traverse evalConstRef unifiedDefs
+  where
+    dresolve eds (d,dn,_) = do
+      ds <- eds
+      ud <- traverse (unify info ds) d
+      return $ HM.insert dn (Ref ud) ds
+    evalConstRef = runPure . evalConsts
+    detectCycles sccs = forM sccs $ \c ->
+      case c of
+        AcyclicSCC v -> return v
+        CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
+          "Recursion detected: " ++ show vs
 
+traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
+traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) resolveTerm
+  where
+    resolveTerm (dn,d) = do
+      d' <- forM d resolveTermRef
+      return (d', dn, mapMaybe(either Just (const Nothing)) $ toList d')
+    resolveTermRef (f :: Name) = do
+      dm <- resolveRef f
+      case (dm, f) of
+        (Just t, _) -> return (Right t)
+        (Nothing, Name fn _) ->
+          case HM.lookup fn defs of
+            Just _ -> return (Left fn)
+            Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
+        (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
+   
+ 
 -- | Evaluate interface constraints in module.
 evaluateConstraints
-  :: Module
+  :: Info
+  -> Module
   -> HM.HashMap Text Ref
-  -> Info
   -> Eval e (HM.HashMap Text Ref)
-evaluateConstraints Interface{} _ info =
+evaluateConstraints info Interface{} _ =
   evalError info $ "Unexpected: interface found while appending meta-constraints to module"
-evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMap info) _mInterfaces
+evaluateConstraints info Module{..} evalMap = foldMap (evaluateConstraint evalMap info) _mInterfaces
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
     evaluateConstraint hm i ifn = do
@@ -347,7 +326,8 @@ solveConstraint info refName iref ehm = do
              TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
               when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
               when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
-              when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
+              when (length args /= length args') $ evalError info $
+                "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
               forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
                 when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
                 when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
@@ -421,7 +401,7 @@ reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce TImplements {} = undefined -- TODO
+reduce t@TImplements {} = unsafeReduce t -- TODO should not be unsafely reduced
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
