@@ -322,10 +322,8 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
     evaluateConstraint hm i ifn = do
-      -- load the interface refmaps via refstore
       iRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
       case iRefs of
-        -- if nothing found, interface is not loaded, ergo not unfound
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
         Just iRefs' -> HM.foldrWithKey (solveConstraint i) (pure hm) iRefs'
@@ -343,18 +341,13 @@ solveConstraint info refName iref ehm = do
     Nothing -> pure hm
     Just mref ->
       case (iref, mref) of
-        -- only Direct if native
         (Ref t, Ref s) ->
           case (t, s) of
-            -- compare TDef only. This should never be comparing consts
-            -- since consts are stated in a module xor interface
             (TDef _n _mn dt (FunType args rty) _ _ _,
              TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
-              -- compare deftype, return type, and if args lists are matching size, compare for correctness
               when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
               when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
               when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
-              -- compare args by matching against name and type
               forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
                 when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
                 when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
