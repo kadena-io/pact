@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
-import           Control.Lens                (over)
+import           Control.Lens                (over, ifoldr)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
@@ -18,7 +18,6 @@ import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
-import Safe (atMay)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -190,14 +189,14 @@ evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
 evalCore (ListAt tyA i l) = do
   i' <- eval i
   l' <- withShow tyA $ evalL l
-  case unliteralS i' of
-    Nothing -> throwErrorNoLoc "Unable to determine list index statically"
-    Just i'' -> case atMay l' (fromInteger i'') of
-      -- TODO:
-      Nothing -> do
-        markFailure true
-        pure $ sansProv $ uninterpret "outOfBounds"
-      Just v -> pure v
+
+  markFailure $ i' .> fromIntegral (length l')
+
+  -- statically build a list of index comparisons
+  pure $ ifoldr
+    (\thisIx val rest -> ite (fromIntegral thisIx .== i') val rest)
+    (sansProv $ uninterpret "listOutOfBounds")
+    l'
 
 evalCore (Var vid name) = do
   mVal <- getVar vid

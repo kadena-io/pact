@@ -2513,6 +2513,13 @@ spec = describe "analyze" $ do
     --       |]
     -- expectPass code6 $ Valid Abort'
 
+    let code6' = [text|
+          (defun test:integer (ix:integer)
+            @model (property (= result ix))
+            (at ix [0 1 2]))
+          |]
+    expectVerified code6'
+
     let code7 = [text|
           (defun test:bool ()
             @model (property (= result true))
