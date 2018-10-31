@@ -1918,7 +1918,7 @@ verification of values.
 backend at time of writing (2018). The key-value structure allows using
 even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very
 straightforward, with simple primary key structure. Indexing is not
-supported or required.
+supported nor required.
 
 Pact Datatype Codec
 -------------------

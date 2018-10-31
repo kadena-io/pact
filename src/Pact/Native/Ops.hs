@@ -116,7 +116,7 @@ lnDef :: NativeDef
 lnDef = defRNative "ln" (unopd log) unopTy "Natural log of X. `(round (ln 60) 6)`"
 
 expDef :: NativeDef
-expDef = defRNative "exp" (unopd exp) unopTy "Exp of X `(round (exp 3) 6)`"
+expDef = defRNative "exp" (unopd exp) unopTy "Exp of X. `(round (exp 3) 6)`"
 
 absDef :: NativeDef
 absDef = defRNative "abs" abs' (unaryTy tTyDecimal tTyDecimal <> unaryTy tTyInteger tTyInteger)

@@ -1527,7 +1527,7 @@ _Transparency_: JSON is a human-readable format which allows visual verification
 
 _Portability_: JSON enjoys strong support in nearly every database backend at time of writing (2018). The key-value
 structure allows using even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very straightforward,
-with simple primary key structure. Indexing is not supported or required.
+with simple primary key structure. Indexing is not supported nor required.
 
 ## Pact Datatype Codec
 
