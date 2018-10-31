@@ -388,10 +388,11 @@ resolveRef nn@(Name _ _) = do
 
 
 unify :: Info -> HM.HashMap Text Ref -> Either Text Ref -> Eval e Ref
-unify _ _ (Right d) = pure d
-unify i m (Left f) = case HM.lookup f m of
-  Nothing -> evalError i $ "Ref lookup failed for " ++ show f
-  Just f' -> pure f'
+unify i m = either lookupRefName pure
+  where
+    lookupRefName rn = case HM.lookup rn m of
+      Nothing -> evalError i $ "Ref lookup failed for " ++ show rn
+      Just ref -> pure ref
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of

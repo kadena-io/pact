@@ -61,14 +61,14 @@ import           Prelude                   hiding (exp)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Info, mModel, mName, renderInfo,
+                                            Info, mModel, renderInfo,
                                             renderParsed, tMeta, _tDefName)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
+import           Pact.Types.Runtime        (Exp, ModuleData(..), ModuleName,
+                                            Ref (Ref), mdRefMap, mdModule,
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (Module(..), ModuleName, mModel)
+import           Pact.Types.Term           (Module(..))
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -525,8 +525,13 @@ data ModelDecl = ModelDecl
 
 -- Get the model defined in this module
 moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
-moduleModelDecl (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
-  = case model of
+moduleModelDecl ModuleData{..} =
+  case _mdModule of
+    Pact.Module{Pact._mMeta=Pact.Meta _ model}            -> parseModuleModelDecls model
+    Pact.Interface{Pact._interfaceMeta=Pact.Meta _ model} -> parseModuleModelDecls model
+  where
+    parseModuleModelDecls :: Maybe (Exp Info) -> Either ParseFailure ModelDecl
+    parseModuleModelDecls m = case m of
       Just model' -> do
         lst <- parseModelDecl model'
         let (propList, checkList) = partitionEithers lst

@@ -45,7 +45,7 @@ module Pact.Types.Term
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tInterfaceName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
