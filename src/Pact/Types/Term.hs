@@ -41,7 +41,8 @@ module Pact.Types.Term
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
-   tNativeDocs,tNativeFun,tNativeName,tObjectType,tObject,tSchemaName,
+   tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,
+   tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
@@ -269,6 +270,7 @@ data Term n =
     , _tNativeFun :: !NativeDFun
     , _tFunTypes :: FunTypes (Term n)
     , _tNativeDocs :: Text
+    , _tNativeTopLevelOnly :: Bool
     , _tInfo :: !Info
     } |
     TConst {
@@ -424,7 +426,7 @@ instance Monad Term where
     TModule m b i >>= f = TModule m (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
-    TNative n fn t d i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d i
+    TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
     TVar n i >>= f = (f n) { _tInfo = i }

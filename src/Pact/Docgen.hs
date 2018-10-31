@@ -75,27 +75,32 @@ renderTerm h TNative {..} = do
   case parseString nativeDocParser mempty (unpack _tNativeDocs) of
     Success (t,es) -> do
          hPutStrLn h t
-         if null es then noexs
-         else do
-           hPutStrLn h "```lisp"
-           forM_ es $ \e -> do
-             let (et,e') = case head e of
-                             '!' -> (ExecErr,drop 1 e)
-                             '$' -> (Lit,drop 1 e)
-                             _   -> (Exec,e)
-             case et of
-               Lit -> hPutStrLn h e'
-               _ -> do
-                 hPutStrLn h $ "pact> " ++ e'
-                 r <- evalRepl FailureTest e'
-                 case (r,et) of
-                   (Right r',_)       -> hPrint h r'
-                   (Left err,ExecErr) -> hPutStrLn h err
-                   (Left err,_)       -> throwM (userError err)
-           hPutStrLn h "```"
+         if null es then noexs else renderExamples h es
     _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
+  when _tNativeTopLevelOnly $ do
+    hPutStrLn h ""
+    hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""
 renderTerm _ _ = return ()
+
+renderExamples :: Handle -> [String] -> IO ()
+renderExamples h es = do
+  hPutStrLn h "```lisp"
+  forM_ es $ \e -> do
+    let (et,e') = case head e of
+                    '!' -> (ExecErr,drop 1 e)
+                    '$' -> (Lit,drop 1 e)
+                    _   -> (Exec,e)
+    case et of
+      Lit -> hPutStrLn h e'
+      _ -> do
+        hPutStrLn h $ "pact> " ++ e'
+        r <- evalRepl FailureTest e'
+        case (r,et) of
+          (Right r',_)       -> hPrint h r'
+          (Left err,ExecErr) -> hPutStrLn h err
+          (Left err,_)       -> throwM (userError err)
+  hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()
 renderProperties h = do
