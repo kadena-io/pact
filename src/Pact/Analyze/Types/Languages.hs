@@ -287,6 +287,7 @@ uniformlyShows' ty p t = case ty of
   SList SBool    -> showsPrec p t
   SList SKeySet  -> showsPrec p t
 
+
 -- TODO: generalize the uniformly family?
 
 instance

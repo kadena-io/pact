@@ -2520,19 +2520,13 @@ spec = describe "analyze" $ do
           |]
     expectVerified code7
 
-    let code8 = [text|
+    let code8 model = [text|
           (defun test:bool (a:integer b:integer c:integer)
-            @model (property (= result true))
+            @model $model
             (contains a [a b c]))
           |]
-    expectVerified code8
-
-    let code8 = [text|
-          (defun test:bool (a:integer b:integer c:integer)
-            @model (property (= result false))
-            (contains a [b c]))
-          |]
-    expectFalsified code8
+    expectVerified  $ code8 "(property (= result true))"
+    expectFalsified $ code8 "(property (= result false))"
 
     let code9 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
