@@ -57,16 +57,12 @@ fromJSON' = resultToEither . fromJSON
 lensyOptions :: Int -> Options
 lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
 
-#if !defined(ghcjs_HOST_OS)
 lensyToJSON
   :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
-#endif
 lensyToJSON n = genericToJSON (lensyOptions n)
 
-#if !defined(ghcjs_HOST_OS)
 lensyParseJSON
   :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
-#endif
 lensyParseJSON n = genericParseJSON (lensyOptions n)
 
 newtype Hash = Hash { unHash :: ByteString }

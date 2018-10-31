@@ -17,9 +17,10 @@ import qualified Data.Decimal                as Decimal
 import           Data.SBV                    (HasKind (kindOf),
                                               Kind (KUnbounded),
                                               SDivisible (..), SymWord (..),
-                                              oneIf, (.>=), (.^))
+                                              bnot, oneIf, (&&&), (.==), (.>),
+                                              (.^), (|||))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
-import           Data.SBV.Dynamic            (svPlus, svTimes, svUNeg, svAbs)
+import           Data.SBV.Dynamic            (svAbs, svPlus, svTimes, svUNeg)
 import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
                                               SBV (SBV), SVal (SVal),
                                               genMkSymVar, normCW)
@@ -38,28 +39,31 @@ import           Pact.Analyze.Types.UserShow
 newtype Decimal = Decimal { unDecimal :: Integer }
   deriving (Enum, Eq, Ord, Show)
 
+forceConcrete :: SymWord a => SBV a -> a
+forceConcrete sbva = case unliteral sbva of
+  Just result -> result
+  Nothing     -> error "this computation must be concrete"
+
+liftSBV :: (SymWord a, SymWord b) => (SBV a -> SBV b) -> a -> b
+liftSBV f = forceConcrete . f . literal
+
+liftSBV2 :: (SymWord a, SymWord b, SymWord c)
+  => (SBV a -> SBV b -> SBV c)
+  -> a -> b -> c
+liftSBV2 f a b = forceConcrete $ f (literal a) (literal b)
+
 instance Num Decimal where
-  negate (Decimal d)    = Decimal (negate d)
-  Decimal a + Decimal b = Decimal (a + b)
-  Decimal a - Decimal b = Decimal (a - b)
-  Decimal a * Decimal b = rShift255D (Decimal (a * b))
+  negate                = liftSBV negate
+  (+)                   = liftSBV2 (+)
+  (-)                   = liftSBV2 (-)
+  Decimal a * Decimal b = Decimal $ liftSBV banker'sMethod $ Decimal $ a * b
   fromInteger           = lShift255D . Decimal
-  abs                   = Decimal . abs . unDecimal
+  abs                   =              Decimal . abs    . unDecimal
   signum                = lShift255D . Decimal . signum . unDecimal
 
 instance Fractional Decimal where
-  a / Decimal b =
-    -- first make the numerator 10^255 times larger
-    let Decimal a'     = lShift255D a
-        -- now get the quotient and remainder
-        (divAb, modAb) = divMod a' b
-        -- if the remainder is more than half of the divisor, round up
-        adjustment     = if modAb * 2 >= b then 1 else 0
-    in Decimal $ divAb + adjustment
-
-  fromRational rat =
-    let (Decimal.Decimal places mantissa) = fromRational rat
-    in lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+  (/)          = liftSBV2 (/)
+  fromRational = forceConcrete . fromRational
 
 class SymbolicDecimal d where
   type IntegerOf d :: *
@@ -72,7 +76,7 @@ class SymbolicDecimal d where
 
 instance SymbolicDecimal Decimal where
   type IntegerOf Decimal = Integer
-  fromInteger'         = fromInteger
+  fromInteger'          = fromInteger
   lShiftD n (Decimal d) = Decimal (d * 10 ^ n)
   lShiftD' n            = lShiftD (fromIntegral n)
   rShiftD n (Decimal d) = Decimal (d `div` 10 ^ n)
@@ -85,7 +89,7 @@ instance {-# OVERLAPPING #-} Num (SBV Decimal) where
   negate (SBVI.SBV a)     = SBVI.SBV $ svUNeg a
   SBVI.SBV a + SBVI.SBV b = SBVI.SBV $ svPlus a b
   SBVI.SBV a - SBVI.SBV b = SBVI.SBV $ svPlus a $ svUNeg b
-  SBVI.SBV a * SBVI.SBV b = rShift255D $ SBVI.SBV $ svTimes a b
+  SBVI.SBV a * SBVI.SBV b = coerceSBV $ banker'sMethod $ SBVI.SBV $ svTimes a b
   fromInteger             = literal . fromInteger
   abs (SBVI.SBV a)        = SBVI.SBV $ svAbs a
   signum = lShift255D . coerceSBV . signum . coerceSBV @Decimal @Integer
@@ -93,13 +97,42 @@ instance {-# OVERLAPPING #-} Num (SBV Decimal) where
 -- Caution: see note [OverlappingInstances] *This instance must be selected for
 -- decimals*.
 instance {-# OVERLAPPING #-} Fractional (SBV Decimal) where
-  a / b =
-    let (divAb, modAb) = sDivMod
-          (coerceSBV @_ @Integer (lShift255D a))
-          (coerceSBV @_ @Integer b)
-        adjustment = oneIf $ coerceSBV modAb * 2 .>= coerceSBV @_ @Integer b
-    in coerceSBV $ divAb + adjustment
-  fromRational = literal . fromRational
+  -- Note that we need to round to the nearest decimal in the same way that the
+  -- banker's method rounds to the nearest int. Also note we need to make the
+  -- numerator larger by a factor of 10^255 to offset the larger denominator (1
+  -- * 10^255 represents 1.0).
+  a / b = coerceSBV @Integer @Decimal $ roundingDiv
+    (coerceSBV @_ @Integer (lShift255D a))
+    (coerceSBV @_ @Integer b)
+
+  fromRational rat = literal $
+    let (Decimal.Decimal places mantissa) = fromRational rat
+    in lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
+
+-- Convert from decimal to integer by the banker's method. This rounds to the
+-- nearest integer when the decimal happens to land exactly between two
+-- integers.
+banker'sMethod :: SBV Decimal -> SBV Integer
+banker'sMethod d
+  = roundingDiv (coerceSBV @Decimal @Integer d) (coerceSBV @Decimal @Integer 1)
+
+-- (Banker's method) rounding division for integers.
+roundingDiv :: SBV Integer -> SBV Integer -> SBV Integer
+roundingDiv num denom =
+  let -- @wholePart@ is always less than (or equal to) the answer, so we may
+      -- add a positive adjustment to it.
+      -- @fractionalPart@ is negative when the denominator is negative. So when
+      -- we use it we take the absolute value.
+      (wholePart, fractionalPart) = num `sDivMod` denom
+
+      exactlyBetweenNumbers = abs fractionalPart * 2 .== abs denom
+      roundsUp              = abs fractionalPart * 2 .>  abs denom
+      wholePartIsOdd        = bnot $ wholePart `sMod` 2 .== 0
+
+    -- We're working in the space of integers 10^255 times bigger than the
+    -- decimals they represent. Possibly add an adjustment to jump to the next
+    -- decimal, then convert to a decimal.
+  in wholePart + oneIf (roundsUp ||| exactlyBetweenNumbers &&& wholePartIsOdd)
 
 instance SymbolicDecimal (SBV Decimal) where
   type IntegerOf (SBV Decimal) = SBV Integer
@@ -118,6 +151,8 @@ decimalPrecision = 255
 lShift255D :: SymbolicDecimal d => d -> d
 lShift255D = lShiftD decimalPrecision
 
+-- Caution: This is only used for the floor operation. Do not use for dropping
+-- digits. The banker's method must be used instead.
 rShift255D :: SymbolicDecimal d => d -> d
 rShift255D = rShiftD decimalPrecision
 

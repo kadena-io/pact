@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE Rank2Types        #-}
-{-# LANGUAGE ViewPatterns      #-}
-{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 module AnalyzeSpec (spec) where
 
@@ -20,8 +20,8 @@ import           Data.Foldable                (find)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Maybe                   (fromJust, isJust, isNothing)
-import           Data.SBV                     (Boolean (bnot, true, (&&&), (==>)),
+import           Data.Maybe                   (fromJust, isJust)
+import           Data.SBV                     (Boolean (bnot, true, (&&&), (<=>), (==>)),
                                                isConcretely)
 import           Data.SBV.Internals           (SBV (SBV))
 import           Data.Text                    (Text)
@@ -41,7 +41,7 @@ import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
 
 import           Pact.Analyze.Check
-import           Pact.Analyze.Eval.Numerical  (banker'sMethod)
+import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
 import qualified Pact.Analyze.Model           as Model
 import           Pact.Analyze.Parse           (PreProp (..), TableEnv,
                                                expToProp, inferProp)
@@ -50,8 +50,8 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Util            (dummyInfo, (...))
 
 
-wrap :: Text -> Text
-wrap code =
+wrap :: Text -> Text -> Text
+wrap code model =
   [text|
     (env-keys ["admin"])
     (env-data { "keyset": { "keys": ["admin"], "pred": "=" } })
@@ -61,14 +61,16 @@ wrap code =
       @model
         [; (defproperty dec-conserves-mass (t:table c:column) (= (column-delta t c) 0.0))
          ; (defproperty int-conserves-mass (t:table c:column) (= (column-delta t c) 0))
-         (defproperty my-column-delta (d:integer) (= (column-delta 'accounts 'balance) d))
-         (defproperty conserves-balance (= (column-delta 'accounts 'balance) 0))
+         (defproperty my-column-delta (d:integer) (= (column-delta accounts 'balance) d))
+         (defproperty conserves-balance (= (column-delta accounts 'balance) 0))
          (defproperty conserves-balance2 (my-column-delta 0))
          ; this hash the same name as the column, but the column name takes
          ; precedence
          (defproperty balance (> 0 1))
          (defproperty bad-recursive-prop bad-recursive-prop)
-         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))]
+         (defproperty bad-recursive-prop2 (d:integer) (bad-recursive-prop2 d))
+         $model
+        ]
       (defschema account
         "Row type for accounts table."
          balance:integer
@@ -167,23 +169,29 @@ handlePositiveTestResult = \case
   Just tf -> HUnit.assertFailure =<< renderTestFailure tf
 
 expectVerified :: Text -> Spec
-expectVerified code = do
-  res <- runIO $ runVerification $ wrap code
+expectVerified = expectVerified' ""
+
+expectVerified' :: Text -> Text -> Spec
+expectVerified' model code = do
+  res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ handlePositiveTestResult res
 
 expectFalsified :: Text -> Spec
-expectFalsified code = do
-  res <- runIO $ runVerification $ wrap code
+expectFalsified = expectFalsified' ""
+
+expectFalsified' :: Text -> Text -> Spec
+expectFalsified' model code = do
+  res <- runIO $ runVerification $ wrap code model
   it "passes in-code checks" $ res `shouldSatisfy` isJust
 
 expectPass :: Text -> Check -> Spec
 expectPass code check = do
-  res <- runIO $ runCheck (wrap code) check
+  res <- runIO $ runCheck (wrap code "") check
   it (show check) $ handlePositiveTestResult res
 
 expectFail :: Text -> Check -> Spec
 expectFail code check = do
-  res <- runIO $ runCheck (wrap code) check
+  res <- runIO $ runCheck (wrap code "") check
   it (show check) $ res `shouldSatisfy` isJust
 
 intConserves :: TableName -> ColumnName -> Prop Bool
@@ -230,16 +238,124 @@ spec = describe "analyze" $ do
     let unlit = fromJust . unliteralS @Decimal
 
     it "can be one half" $ unlit (1 / 2) == 0.5
+
     it "handles the last decimal correctly" $
       unlit (1581138830084.1918464 / 1581138830084)
       ==
       1.000000000000121334316980759948431357013938975877803928214364623522650045615600621337146939720454311443026061056754776474139591383112306668111215913835129748371209820415844429729847990579481732664375546615468582277686924612859136684739968417878803629721864
 
+    let i256 :: Int
+        i256 = 256
+
+        i255 :: Int
+        i255 = 255
+
+    it "handles the last decimal digit correctly (positive, round up 1)" $
+      unlit (15 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round up 2)" $
+      unlit (17 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round up 3)" $
+      unlit ((-17) / (-(10 ^ i256)))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 1)" $
+      unlit (25 / (10 ^ i256))
+      ==
+      2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 2)" $
+      unlit (13 / (10 ^ i256))
+      ==
+      1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (positive, round down 3)" $
+      unlit ((-13) / (-(10 ^ i256)))
+      ==
+      1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 1)" $
+      unlit ((-15) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 2)" $
+      unlit ((-17) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round down 3)" $
+      unlit (17 / (-(10 ^ i256)))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 1)" $
+      unlit ((-25) / (10 ^ i256))
+      ==
+      -2 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 2)" $
+      unlit ((-13) / (10 ^ i256))
+      ==
+      -1 / 10 ^ i255
+
+    it "handles the last decimal digit correctly (negative, round up 3)" $
+      unlit (13 / (-(10 ^ i256)))
+      ==
+      -1 / 10 ^ i255
+
+    it "handles division by a negative number correctly" $
+      unlit (0 / (-1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000))
+      ==
+      0
+
+  describe "big multiplications" $ do
+    let unlit = fromJust . unliteralS @Decimal
+
+    let code =
+          [text|
+            (defun test:bool ()
+              (let ((x:decimal (*
+                  1.58113883008419202353012810347474735209747288392336210205455502815728238592
+                  1.5811388300841925223288550988445549742724468531346309495428665472399639648496680411494875076793255338200521528740886266294574044913261377201695510306266771994578476399139180068539229254218727314228818363809792
+                ))
+                    (y:decimal 2.500000000000008243836642384325766770967352358818865769190857605784112966024663251834475644384046904403556387019539234091871481832161009920035987673979588455403008477585022252399854826133637675727060845285897044645837341219331160090749369830048441622744791))
+                (enforce (= x y))))
+          |]
+    expectPass code $ Valid Success'
+
+    it "rounds up the last digit when appropriate" $
+        unlit (1581138830084.192052937980207914179905763920823196984267407804357031202155885633105058076747359551154153957331638299995511193600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+       * 1581138830084.192220194412674817793768840142081644758814711734437239116786835916965025889939456340088832614965073903903044055232345709136743725518878029119488000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)
+      ==
+
+      2500000000000007812618040.433562734137684699135011741551181715981891159652849247733486729055338549963875582523604695139936764674737736206382376787827325735603006181405156090936148131370459148823374617217523084670407741689762536216481173675491045653179580074788284514172469055900877
+
+    let code' =
+          [text|
+            (defun test:bool ()
+              (let ((x:decimal (*
+                  1581138830084.192052937980207914179905763920823196984267407804357031202155885633105058076747359551154153957331638299995511193600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+                  1581138830084.192220194412674817793768840142081644758814711734437239116786835916965025889939456340088832614965073903903044055232345709136743725518878029119488000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+                ))
+                    (y:decimal 2500000000000007812618040.433562734137684699135011741551181715981891159652849247733486729055338549963875582523604695139936764674737736206382376787827325735603006181405156090936148131370459148823374617217523084670407741689762536216481173675491045653179580074788284514172469055900877))
+                (enforce (= x y))))
+          |]
+    expectPass code' $ Valid Success'
+
   describe "banker's method" $ do
     let unlit = fromJust . unliteralS
 
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (1.5)) == 2
-    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethod (2.5)) == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS 1.5)    == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS 2.5)    == 2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS (-1.5)) == -2
+    it "rounds (_.5) to the nearest even" $ unlit (banker'sMethodS (-2.5)) == -2
 
   describe "result" $ do
     let code =
@@ -752,7 +868,7 @@ spec = describe "analyze" $ do
       expectPass code $ Valid $ PVar 1 "x" ==> Inj Success
       expectPass code $ Valid $ PNot (PVar 1 "x") ==> PNot (Inj Success)
 
-  describe "table-read.multiple-read" $
+  describe "table-read.multiple-read" $ do
     let code =
           [text|
             (defschema token-row
@@ -762,14 +878,20 @@ spec = describe "analyze" $ do
 
             (defun test:bool ()
               (insert tokens "stu" {"balance": 5, "name": "stu"})
-              (let ((stu-name    (at 'name (read tokens "stu")))
+              (let ((stu-name    (at 'name    (read tokens "stu")))
                     (stu-balance (at 'balance (read tokens "stu"))))
                 (enforce (= stu-name "stu") "name is stu")
                 (enforce (= stu-balance 5) "balance is 5")))
           |]
-    in expectPass code $ Valid $ Inj Success
+    expectPass code $ Valid $
+      PNot (PropSpecific (RowExists "tokens" "stu" Before))
+      <=> Success'
+    expectPass code $ Valid $
+      Success'
+      ==>
+      PropSpecific (RowExists "tokens" "stu" After)
 
-  describe "table-read.one-read" $
+  describe "table-read.one-read" $ do
     let code =
           [text|
             (defschema token-row
@@ -785,7 +907,13 @@ spec = describe "analyze" $ do
                 )
               )
           |]
-    in expectPass code $ Valid $ bnot Abort'
+    expectPass code $ Valid $
+       PNot (PropSpecific (RowExists "tokens" "stu" Before))
+       <=> bnot Abort'
+    expectPass code $ Valid $
+       Success'
+       ==>
+       PropSpecific (RowExists "tokens" "stu" After)
 
   describe "at.dynamic-key" $ do
     let code =
@@ -884,12 +1012,12 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (insert tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ Inj $ TableWrite "tokens"
+    expectPass code $ Valid $ Inj (TableWrite "tokens") <=> Success'
     expectPass code $ Valid $ bnot $ Inj $ TableWrite "other"
-    --
-    -- TODO: actually, this can fail when the key already exists! this is wrong:
-    --
-    expectPass code $ Valid (Inj Success)
+    expectPass code $ Valid $
+      Success' <=> PNot (Inj (RowExists "tokens" "stu" Before))
+    expectPass code $ Valid $
+      Success' ==> Inj (RowExists "tokens" "stu" After)
 
   describe "table-written.insert.partial" $ do
     let code =
@@ -911,7 +1039,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (update tokens "stu" {"balance": 5}))
           |]
-    expectPass code $ Valid $ Inj $ TableWrite "tokens"
+    expectPass code $ Valid $ Success' <=> Inj (TableWrite "tokens")
 
   describe "table-written.update.partial" $ do
     let code =
@@ -922,10 +1050,8 @@ spec = describe "analyze" $ do
             (defun test:string ()
               (update tokens "stu" {}))
           |]
-    --
-    -- TODO: actually, this can fail when the key does not yet exist! this is wrong:
-    --
-    expectPass code $ Valid (Inj Success)
+    expectPass code $ Valid $
+      Success' <=> PropSpecific (RowExists "tokens" "stu" Before)
 
   describe "table-written.write" $ do
     let code =
@@ -998,6 +1124,17 @@ spec = describe "analyze" $ do
     expectPass code $ Valid $
       Inj Success ==> intConserves "accounts" "balance"
 
+  describe "conserves-mass.integer.insert" $ do
+    let code =
+          [text|
+            (defun test:string ()
+              "create a new account with 0 balance"
+              (insert accounts "stu" { "balance": 0 }))
+          |]
+
+    expectPass code $ Valid $
+      Inj Success ==> intConserves "accounts" "balance"
+
   describe "conserves-mass.integer.without-uniqueness" $ do
     let code =
           [text|
@@ -1036,6 +1173,23 @@ spec = describe "analyze" $ do
 
     expectVerified code
     expectPass code $ Valid $ Inj Success ==> decConserves "accounts2" "balance"
+
+  describe "conserves-mass.decimal.insert" $ do
+    let code =
+          [text|
+            (defschema account2
+              @doc   "accounts schema"
+              @model (invariant (>= balance 0.0))
+              balance:decimal)
+            (deftable accounts2:{account2})
+
+            (defun test:string ()
+              "create a new account with 0 balance"
+              (insert accounts2 "stu" { "balance": 0.0 }))
+          |]
+
+    expectPass code $ Valid $
+      Inj Success ==> decConserves "accounts2" "balance"
 
   describe "conserves-mass.decimal.failing-invariant" $ do
     let code =
@@ -1104,7 +1258,7 @@ spec = describe "analyze" $ do
             (defun test:string ()
               @model
                 (properties [
-                  (not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))
+                  (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
                 ])
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
@@ -1149,7 +1303,8 @@ spec = describe "analyze" $ do
                 (enforce (= bal 10) "Read after write failed")))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) ==> Success'
 
   describe "with-read.nested" $ do
     let code =
@@ -1162,7 +1317,8 @@ spec = describe "analyze" $ do
                   (enforce (= bal 10) "Shadowing failed"))))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" (PVar 1 "acct") Before) <=> Success'
 
   describe "with-read.overlapping-names" $ do
     let code =
@@ -1180,7 +1336,8 @@ spec = describe "analyze" $ do
                   num)))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PNot (Inj (RowExists "owners" "bob" Before)) <=> Success'
 
   describe "bind.from-read" $ do
     let code =
@@ -1193,7 +1350,8 @@ spec = describe "analyze" $ do
                   bal)))
           |]
 
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      Inj (RowExists "accounts" "bob" Before) <=> Success'
 
   describe "bind.from-literal" $ do
     let code =
@@ -1458,7 +1616,8 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before) <=> Success'
 
   describe "schema-invariants.not-equals" $ do
     let code =
@@ -1475,7 +1634,10 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      <=>
+      Success'
 
   describe "schema-invariants.equals" $ do
     let code =
@@ -1492,7 +1654,10 @@ spec = describe "analyze" $ do
           |]
 
     expectVerified code
-    expectPass code $ Valid Success'
+    expectPass code $ Valid $
+      PropSpecific (RowExists "ints" "any index" Before)
+      <=>
+      Success'
 
   describe "format-time / parse-time" $ do
     let code =
@@ -1666,7 +1831,8 @@ spec = describe "analyze" $ do
           -> Either String (Prop a)
         textToProp' env1 env2 tableEnv ty t = case parseExprs' t of
           Right [exp'] ->
-            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty ty exp'
+            expToProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty ty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1684,7 +1850,8 @@ spec = describe "analyze" $ do
           -> Either String EProp
         inferProp' env1 env2 tableEnv t = case parseExprs' t of
           Right [exp'] ->
-            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty exp'
+            inferProp tableEnv (VarId (Map.size env1)) env1 env2 HM.empty
+              HM.empty exp'
           Left err -> Left err
           _        -> Left "Error: unexpected result from parseExprs"
 
@@ -1704,19 +1871,18 @@ spec = describe "analyze" $ do
         singletonTableEnv a b ty = TableMap $ Map.singleton a $
             ColumnMap $ Map.singleton b ty
 
-
     it "infers column-delta" $ do
       let tableEnv = singletonTableEnv "a" "b" (EType TInt)
-      textToPropTableEnv tableEnv TBool "(> (column-delta 'a 'b) 0)"
+      textToPropTableEnv tableEnv TBool "(> (column-delta a 'b) 0)"
         `shouldBe`
         Right (CoreProp $ IntegerComparison Gt (Inj (IntColumnDelta "a" "b")) 0)
 
       let tableEnv' = singletonTableEnv "a" "b" (EType TDecimal)
-      textToPropTableEnv tableEnv' TBool "(> (column-delta 'a 'b) 0.0)"
+      textToPropTableEnv tableEnv' TBool "(> (column-delta a 'b) 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
-      textToPropTableEnv tableEnv' TBool "(> (column-delta \"a\" \"b\") 0.0)"
+      textToPropTableEnv tableEnv' TBool "(> (column-delta a \"b\") 0.0)"
         `shouldBe`
         Right (CoreProp $ DecimalComparison Gt (Inj (DecColumnDelta "a" "b")) 0)
 
@@ -1779,7 +1945,7 @@ spec = describe "analyze" $ do
       textToPropTableEnv
         tableEnv
         TBool
-        "(not (exists (row:string) (= (cell-delta 'accounts 'balance row) 2)))"
+        "(not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))"
         `shouldBe`
         Right (PNot
           (Inj $ Exists (VarId 1) "row" (EType TStr)
@@ -1791,7 +1957,7 @@ spec = describe "analyze" $ do
       let env1 = Map.singleton "from" (VarId 1)
           env2 = Map.singleton (VarId 1) (EType TStr)
           tableEnv = singletonTableEnv "accounts" "ks" $ EType TKeySet
-      textToProp' env1 env2 tableEnv TBool "(row-enforced 'accounts 'ks from)"
+      textToProp' env1 env2 tableEnv TBool "(row-enforced accounts 'ks from)"
       `shouldBe`
       Right (Inj $ RowEnforced
         (TableNameLit "accounts")
@@ -1800,7 +1966,7 @@ spec = describe "analyze" $ do
 
     it "parses column properties" $
       let tableEnv = singletonTableEnv "accounts" "balance" $ EType TInt
-      in textToPropTableEnv tableEnv TBool "(= (column-delta 'accounts 'balance) 0)"
+      in textToPropTableEnv tableEnv TBool "(= (column-delta accounts 'balance) 0)"
            `shouldBe`
            Right (CoreProp $ IntegerComparison Eq (Inj $ IntColumnDelta "accounts" "balance") 0)
 
@@ -1837,17 +2003,25 @@ spec = describe "analyze" $ do
         `shouldBe`
         Right
           (ESimple TBool
-            (Inj $ Forall (VarId 1) "table" QTable
-              (PNot (Inj $ TableWrite "table"))))
+            $ Inj $ Forall (VarId 1) "table" QTable
+              $ PNot $ Inj $ TableWrite $
+                CoreProp $ Var (VarId 1) "table")
 
     it "parses quantified columns" $ do
-      pendingWith "separate parser for props"
-      inferProp'' "(forall (column:(column-of table)) (not (column-write table column)))"
+      pendingWith "parsing quantified table names"
+      inferProp'' [text|
+        (forall (table:table)
+          (forall (column:(column-of table))
+            (column-written table column)))
+        |]
         `shouldBe`
         Right
           (ESimple TBool
-            (Inj $ Forall (VarId 1) "column" (QColumnOf "table")
-              (PNot (Inj $ ColumnWrite "table" "column"))))
+            (Inj $ Forall (VarId 1) "table" QTable
+              (Inj $ Forall (VarId 2) "column" (QColumnOf "table")
+                (Inj (ColumnWritten
+                  (CoreProp (Var (VarId 1) "table"))
+                  (CoreProp (Var (VarId 2) "column")))))))
 
   describe "UserShow (PreProp)" $ do
     it "renders literals how you would expect" $ do
@@ -1915,8 +2089,17 @@ spec = describe "analyze" $ do
             (defun test1:integer ()
               @doc   "don't touch a column"
               @model (properties [
-                  (forall (column:(column-of simple-table)) (not (column-write column)))
-                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                  (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column)))
+
+                  (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column)))
                 ])
               1)
 
@@ -1924,8 +2107,17 @@ spec = describe "analyze" $ do
               @doc "write a column"
               @model
                 (properties [
-                  (exists (column:(column-of simple-table)) (column-write column))
-                  (forall (column:(column-of simple-table)) (not (column-read column)))
+                  (exists (column:(column-of simple-table))
+                    (column-written simple-table column))
+                  ; ^- equisatisfiable -v
+                  (not (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column))))
+
+                  (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column)))
                 ])
               (insert simple-table "joel" { 'balance : 5 }))
 
@@ -1933,19 +2125,23 @@ spec = describe "analyze" $ do
               @doc   "read a column"
               @model
                 (properties [
-                  (forall (column:(column-of simple-table)) (not (column-write column)))
-                  (exists (column:(column-of simple-table)) (column-read column))
+                  (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column)))
+                  ; ^- equisatisfiable -v
+                  (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column)))
+
+                  (exists (column:(column-of simple-table))
+                    (column-read simple-table column))
+                  ; ^- equisatisfiable -v
+                  (not (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column))))
                 ])
-              )
               (read simple-table "joel"))
 
           |]
 
-    -- TODO replace this check with expectVerified after 'pending' is removed
-    res <- runIO $ runVerification $ wrap code
-    it "passes in-code checks" $ do
-      pendingWith "separate parser for props"
-      res `shouldSatisfy` isNothing
+    expectVerified code
 
   describe "UserShow" $
     it "schema looks okay" $ do
@@ -2049,7 +2245,7 @@ spec = describe "analyze" $ do
 
         expectTrace :: Text -> Prop Bool -> [TraceEvent -> Bool] -> Spec
         expectTrace code prop tests = do
-          res <- runIO $ runCheck (wrap code) $ Valid prop
+          res <- runIO $ runCheck (wrap code "") $ Valid prop
           it "produces the correct trace" $
             case res of
               Just (TestCheckFailure (falsifyingModel -> Just model)) -> do
@@ -2074,8 +2270,9 @@ spec = describe "analyze" $ do
                   (update accounts to   { "balance": (+ to-bal amount) })))
             |]
 
-      expectTrace code (bnot Success')
-        [read, read, push, assert, assert, write, write, pop]
+      expectTrace code
+        (bnot Success')
+        [push, read, read, push, assert, assert, write, write, pop, pop]
 
     describe "doesn't include events excluded by a conditional" $ do
       let code =
@@ -2085,17 +2282,17 @@ spec = describe "analyze" $ do
                   (insert accounts "stu" {"balance": 5}) ; impossible
                   "didn't write"))
             |]
-      expectTrace code (PLit False) [{- else -} path]
+      expectTrace code (PLit False) [push, {- else -} path, pop]
 
     describe "doesn't include events after a failed enforce" $ do
       let code =
             [text|
               (defun test:integer ()
-                (insert accounts "test" {"balance": 5})
+                (write accounts "test" {"balance": 5})
                 (enforce false)
                 (at 'balance (read accounts "test")))
             |]
-      expectTrace code Success' [write, assert]
+      expectTrace code Success' [push, write, assert]
 
     describe "doesn't include cases after a successful enforce-one case" $ do
       let code =
@@ -2108,7 +2305,145 @@ spec = describe "analyze" $ do
                   ]))
             |]
       expectTrace code (bnot Success')
-        [assert, {- failure -} path, {- success -} path]
+        [push, assert, {- failure -} path, {- success -} path, pop]
 
     it "doesn't include events after the first failure in an enforce-one case" $
       pendingWith "use of resumptionPath"
+
+  describe "references to module constants" $ do
+    expectVerified [text|
+      (defconst FOO "FOO")
+
+      (defun test:string ()
+        @model (property (= result FOO))
+        FOO)
+      |]
+
+  describe "module-scoped properties verify" $ do
+    let okay = [text|
+          (defun okay:string (from:string to:string)
+            (enforce (!= from to) "sender and receive must not be the same")
+            (with-read accounts from { "balance" := from-bal }
+              (with-read accounts to { "balance" := to-bal }
+                (update accounts from { "balance": (- from-bal 1) })
+                (update accounts to   { "balance": (+ to-bal 1) }))))
+          |]
+        bad = [text|
+          (defun bad:string ()
+            (with-read accounts "joel" { "balance" := bal }
+              (update accounts "joel" { "balance": (+ bal 1000000000) })))
+          |]
+        conservesBalance = "(property conserves-balance)"
+
+    expectVerified'  conservesBalance okay
+    expectFalsified' conservesBalance bad
+    expectFalsified' conservesBalance $ T.unlines [ bad, okay ]
+    expectFalsified' conservesBalance $ T.unlines [ okay, bad ]
+
+    expectVerified' "(property conserves-balance {'except: [bad]})" $
+      T.unlines [ okay, bad ]
+    expectVerified' "(property conserves-balance {'only:   [good]})" $
+      T.unlines [ okay, bad ]
+
+    expectVerified'  "(property conserves-balance {'except: []})" okay
+    expectFalsified' "(property conserves-balance {'except: []})" bad
+
+    expectVerified'  "(property conserves-balance {'only:   []    })" bad
+    expectFalsified' "(property conserves-balance {'only:   [bad]})" bad
+
+  describe "read (property)" $ do
+    let code1 = [text|
+          (defun test:object{account} (acct:string)
+            @model (property (= result (read accounts acct 'before)))
+            (read accounts acct))
+          |]
+    expectVerified code1
+
+    -- reading from a different account
+    let code2 = [text|
+          (defun test:object{account} (acct:string)
+            @model (property (= result (read accounts acct 'before)))
+            (read accounts 'brian))
+          |]
+    expectFalsified code2
+
+    let code3 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (= 100
+                (at 'balance (read accounts acct 'after))))
+            (write accounts acct { 'balance: 100 }))
+          |]
+    expectVerified code3
+
+    -- writing to a different account
+    let code4 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (= 100
+                (at 'balance (read accounts acct 'after))))
+            (write accounts acct { 'balance: 0 }))
+          |]
+    expectFalsified code4
+
+    let code5 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
+            (with-read accounts acct { 'balance := bal }
+              (write accounts acct { 'balance: (+ 100 bal) })))
+          |]
+    expectVerified code5
+
+    -- writing to a different account
+    let code6 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
+            (with-read accounts acct { 'balance := bal }
+              (write accounts 'brian { 'balance: (+ 100 bal) })))
+          |]
+    expectFalsified code6
+
+    let code7 = [text|
+          (defun test:string (acct:string)
+            @model (property
+              (=
+                (+ (at 'balance (read accounts acct 'before)) 100)
+                   (at 'balance (read accounts acct 'after))))
+            (write accounts acct { 'balance: 0 })
+            (with-read accounts acct { 'balance := bal }
+              (enforce (> bal 0))
+              (write accounts acct { 'balance: 100 })))
+          |]
+    let acct           = PVar 1 "acct"
+        schema         = Schema $ Map.singleton "balance" $ EType TInt
+        readBalance ba = PAt schema "balance"
+          (PropSpecific $ PropRead ba schema "accounts" acct)
+          (EType TInt)
+        exists ba      = PropSpecific (RowExists "accounts" acct ba)
+
+    expectPass code7 $ Valid $
+      Success'
+      ==>
+      PAnd (exists Before) (exists After)
+
+    expectPass code7 $ Valid $
+      Success'
+      -- TODO: this arrow should point both ways
+      ==>
+      Inj (IntegerComparison Eq (readBalance After) 100)
+
+    -- this should hold in general (for any contract)
+    expectPass code7 $ Valid $ exists Before ==> exists After
+
+    -- TODO:
+    -- this could be generalized to a property that should hold in general
+    -- expectPass code7 $ Valid $
+    --   Abort'
+    --   ==>
+    --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))

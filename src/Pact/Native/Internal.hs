@@ -19,6 +19,7 @@ module Pact.Native.Internal
   ,parseMsgKey
   ,bindReduce
   ,defNative,defGasRNative,defRNative
+  ,setTopLevelOnly
   ,foldDefs
   ,funType,funType'
   ,getModule
@@ -82,9 +83,13 @@ bindReduce ps bd bi lkpFun = do
   call (StackFrame (pack $ "(bind: " ++ show (map (second abbrev) vs) ++ ")") bi Nothing) $!
     ((0,) <$> reduceBody bd'')
 
+setTopLevelOnly :: NativeDef -> NativeDef
+setTopLevelOnly = set (_2 . tNativeTopLevelOnly) True
+
 -- | Specify a 'NativeFun'
 defNative :: NativeDefName -> NativeFun e -> FunTypes (Term Name) -> Text -> NativeDef
-defNative n fun ftype docs = (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs def)
+defNative n fun ftype docs =
+  (n, TNative n (NativeDFun n (unsafeCoerce fun)) ftype docs False def)
 
 -- | Specify a 'GasRNativeFun'
 defGasRNative :: NativeDefName -> GasRNativeFun e -> FunTypes (Term Name) -> Text -> NativeDef

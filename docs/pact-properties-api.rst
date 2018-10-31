@@ -26,9 +26,9 @@ Numerical operators
 
    (+ x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Addition of integers and decimals.
@@ -44,9 +44,9 @@ Supported in either invariants or properties.
 
    (- x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Subtraction of integers and decimals.
@@ -62,9 +62,9 @@ Supported in either invariants or properties.
 
    (* x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Multiplication of integers and decimals.
@@ -80,9 +80,9 @@ Supported in either invariants or properties.
 
    (/ x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Division of integers and decimals.
@@ -98,9 +98,9 @@ Supported in either invariants or properties.
 
    (^ x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Exponentiation of integers and decimals.
@@ -116,9 +116,9 @@ log
 
    (log b x)
 
--  takes ``b`` of type *a*
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``b``: *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Logarithm of ``x`` base ``b``.
@@ -134,8 +134,8 @@ Supported in either invariants or properties.
 
    (- x)
 
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Negation of integers and decimals.
@@ -151,8 +151,8 @@ sqrt
 
    (sqrt x)
 
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Square root of integers and decimals.
@@ -168,8 +168,8 @@ ln
 
    (ln x)
 
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Logarithm of integers and decimals base e.
@@ -185,8 +185,8 @@ exp
 
    (exp x)
 
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Exponential of integers and decimals. e raised to the integer or decimal
@@ -203,8 +203,8 @@ abs
 
    (abs x)
 
--  takes ``x`` of type *a*
--  produces type *a*
+-  takes ``x``: *a*
+-  produces *a*
 -  where *a* is of type ``integer`` or ``decimal``
 
 Absolute value of integers and decimals.
@@ -220,16 +220,16 @@ round
 
    (round x)
 
--  takes ``x`` of type ``decimal``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  produces ``integer``
 
 .. code:: lisp
 
    (round x prec)
 
--  takes ``x`` of type ``decimal``
--  takes ``prec`` of type ``integer``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  takes ``prec``: ``integer``
+-  produces ``integer``
 
 Banker’s rounding value of decimal ``x`` as integer, or to ``prec``
 precision as decimal.
@@ -245,16 +245,16 @@ ceiling
 
    (ceiling x)
 
--  takes ``x`` of type ``decimal``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  produces ``integer``
 
 .. code:: lisp
 
    (ceiling x prec)
 
--  takes ``x`` of type ``decimal``
--  takes ``prec`` of type ``integer``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  takes ``prec``: ``integer``
+-  produces ``integer``
 
 Rounds the decimal ``x`` up to the next integer, or to ``prec``
 precision as decimal.
@@ -270,16 +270,16 @@ floor
 
    (floor x)
 
--  takes ``x`` of type ``decimal``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  produces ``integer``
 
 .. code:: lisp
 
    (floor x prec)
 
--  takes ``x`` of type ``decimal``
--  takes ``prec`` of type ``integer``
--  produces type ``integer``
+-  takes ``x``: ``decimal``
+-  takes ``prec``: ``integer``
+-  produces ``integer``
 
 Rounds the decimal ``x`` down to the previous integer, or to ``prec``
 precision as decimal.
@@ -295,9 +295,9 @@ mod
 
    (mod x y)
 
--  takes ``x`` of type ``integer``
--  takes ``y`` of type ``integer``
--  produces type ``integer``
+-  takes ``x``: ``integer``
+-  takes ``y``: ``integer``
+-  produces ``integer``
 
 Integer modulus
 
@@ -317,9 +317,9 @@ Logical operators
 
    (> x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer`` or ``decimal``
 
 True if ``x`` > ``y``
@@ -335,9 +335,9 @@ Supported in either invariants or properties.
 
    (< x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer`` or ``decimal``
 
 True if ``x`` < ``y``
@@ -353,9 +353,9 @@ Supported in either invariants or properties.
 
    (>= x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer`` or ``decimal``
 
 True if ``x`` >= ``y``
@@ -371,9 +371,9 @@ Supported in either invariants or properties.
 
    (<= x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer`` or ``decimal``
 
 True if ``x`` <= ``y``
@@ -389,9 +389,9 @@ Supported in either invariants or properties.
 
    (= x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer``, ``decimal``, ``string``, ``time``,
    ``bool``, ``object``, or ``keyset``
 
@@ -408,9 +408,9 @@ Supported in either invariants or properties.
 
    (!= x y)
 
--  takes ``x`` of type *a*
--  takes ``y`` of type *a*
--  produces type ``bool``
+-  takes ``x``: *a*
+-  takes ``y``: *a*
+-  produces ``bool``
 -  where *a* is of type ``integer``, ``decimal``, ``string``, ``time``,
    ``bool``, ``object``, or ``keyset``
 
@@ -427,9 +427,9 @@ and
 
    (and x y)
 
--  takes ``x`` of type ``bool``
--  takes ``y`` of type ``bool``
--  produces type ``bool``
+-  takes ``x``: ``bool``
+-  takes ``y``: ``bool``
+-  produces ``bool``
 
 Short-circuiting logical conjunction
 
@@ -444,9 +444,9 @@ or
 
    (or x y)
 
--  takes ``x`` of type ``bool``
--  takes ``y`` of type ``bool``
--  produces type ``bool``
+-  takes ``x``: ``bool``
+-  takes ``y``: ``bool``
+-  produces ``bool``
 
 Short-circuiting logical disjunction
 
@@ -461,8 +461,8 @@ not
 
    (not x)
 
--  takes ``x`` of type ``bool``
--  produces type ``bool``
+-  takes ``x``: ``bool``
+-  produces ``bool``
 
 Logical negation
 
@@ -477,9 +477,9 @@ when
 
    (when x y)
 
--  takes ``x`` of type ``bool``
--  takes ``y`` of type ``bool``
--  produces type ``bool``
+-  takes ``x``: ``bool``
+-  takes ``y``: ``bool``
+-  produces ``bool``
 
 Logical implication. Equivalent to ``(or (not x) y)``.
 
@@ -499,9 +499,9 @@ at
 
    (at k o)
 
--  takes ``k`` of type ``string``
--  takes ``o`` of type ``object``
--  produces type ``bool``
+-  takes ``k``: ``string``
+-  takes ``o``: ``object``
+-  produces ``bool``
 
 Object projection
 
@@ -516,9 +516,9 @@ Supported in either invariants or properties.
 
    (+ x y)
 
--  takes ``x`` of type ``object``
--  takes ``y`` of type ``object``
--  produces type ``object``
+-  takes ``x``: ``object``
+-  takes ``y``: ``object``
+-  produces ``object``
 
 Object merge
 
@@ -538,8 +538,8 @@ length
 
    (length s)
 
--  takes ``s`` of type ``string``
--  produces type ``integer``
+-  takes ``s``: ``string``
+-  produces ``integer``
 
 String length
 
@@ -554,9 +554,9 @@ Supported in either invariants or properties.
 
    (+ s t)
 
--  takes ``s`` of type ``string``
--  takes ``t`` of type ``string``
--  produces type ``string``
+-  takes ``s``: ``string``
+-  takes ``t``: ``string``
+-  produces ``string``
 
 String concatenation
 
@@ -576,9 +576,9 @@ add-time
 
    (add-time t s)
 
--  takes ``t`` of type ``time``
--  takes ``s`` of type *a*
--  produces type ``time``
+-  takes ``t``: ``time``
+-  takes ``s``: *a*
+-  produces ``time``
 -  where *a* is of type ``integer`` or ``decimal``
 
 Add seconds to a time
@@ -599,9 +599,9 @@ forall
 
    (forall (x:string) y)
 
--  binds ``x`` of type *a*
--  takes ``y`` of type *r*
--  produces type *r*
+-  binds ``x``: *a*
+-  takes ``y``: *r*
+-  produces *r*
 -  where *a* is *any type*
 -  where *r* is *any type*
 
@@ -618,9 +618,9 @@ exists
 
    (exists (x:string) y)
 
--  binds ``x`` of type *a*
--  takes ``y`` of type *r*
--  produces type *r*
+-  binds ``x``: *a*
+-  takes ``y``: *r*
+-  produces *r*
 -  where *a* is *any type*
 -  where *r* is *any type*
 
@@ -701,8 +701,8 @@ table-written
 
    (table-written t)
 
--  takes ``t`` of type *a*
--  produces type ``bool``
+-  takes ``t``: *a*
+-  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 
 Whether a table is written in the function under analysis
@@ -718,8 +718,8 @@ table-read
 
    (table-read t)
 
--  takes ``t`` of type *a*
--  produces type ``bool``
+-  takes ``t``: *a*
+-  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 
 Whether a table is read in the function under analysis
@@ -735,10 +735,10 @@ cell-delta
 
    (cell-delta t c r)
 
--  takes ``t`` of type *a*
--  takes ``c`` of type *b*
--  takes ``r`` of type ``string``
--  produces type *c*
+-  takes ``t``: *a*
+-  takes ``c``: *b*
+-  takes ``r``: ``string``
+-  produces *c*
 -  where *a* is of type ``table`` or ``string``
 -  where *b* is of type ``column`` or ``string``
 -  where *c* is of type ``integer`` or ``decimal``
@@ -756,15 +756,53 @@ column-delta
 
    (column-delta t c)
 
--  takes ``t`` of type *a*
--  takes ``c`` of type *b*
--  produces type *c*
+-  takes ``t``: *a*
+-  takes ``c``: *b*
+-  produces *c*
 -  where *a* is of type ``table`` or ``string``
 -  where *b* is of type ``column`` or ``string``
 -  where *c* is of type ``integer`` or ``decimal``
 
 The difference in a column’s total summed value before and after the
 transaction
+
+Supported in properties only.
+
+.. _FColumnWritten:
+
+column-written
+~~~~~~~~~~~~~~
+
+.. code:: lisp
+
+   (column-written t c)
+
+-  takes ``t``: *a*
+-  takes ``c``: *b*
+-  produces ``bool``
+-  where *a* is of type ``table`` or ``string``
+-  where *b* is of type ``column`` or ``string``
+
+Whether a column is written to in a transaction
+
+Supported in properties only.
+
+.. _FColumnRead:
+
+column-read
+~~~~~~~~~~~
+
+.. code:: lisp
+
+   (column-read t c)
+
+-  takes ``t``: *a*
+-  takes ``c``: *b*
+-  produces ``bool``
+-  where *a* is of type ``table`` or ``string``
+-  where *b* is of type ``column`` or ``string``
+
+Whether a column is read from in a transaction
 
 Supported in properties only.
 
@@ -777,9 +815,9 @@ row-read
 
    (row-read t r)
 
--  takes ``t`` of type *a*
--  takes ``r`` of type ``string``
--  produces type ``bool``
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 
 Whether a row is read in the function under analysis
@@ -795,9 +833,9 @@ row-written
 
    (row-written t r)
 
--  takes ``t`` of type *a*
--  takes ``r`` of type ``string``
--  produces type ``bool``
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 
 Whether a row is written in the function under analysis
@@ -813,9 +851,9 @@ row-read-count
 
    (row-read-count t r)
 
--  takes ``t`` of type *a*
--  takes ``r`` of type ``string``
--  produces type ``integer``
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  produces ``integer``
 -  where *a* is of type ``table`` or ``string``
 
 The number of times a row is read during a transaction
@@ -831,12 +869,50 @@ row-write-count
 
    (row-write-count t r)
 
--  takes ``t`` of type *a*
--  takes ``r`` of type ``string``
--  produces type ``integer``
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  produces ``integer``
 -  where *a* is of type ``table`` or ``string``
 
 The number of times a row is written during a transaction
+
+Supported in properties only.
+
+.. _FRowExists:
+
+row-exists
+~~~~~~~~~~
+
+.. code:: lisp
+
+   (row-exists t r time)
+
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  takes ``time``: one of {“before”, “after”}
+-  produces ``bool``
+-  where *a* is of type ``table`` or ``string``
+
+Whether a row exists before or after a transaction
+
+Supported in properties only.
+
+.. _FPropRead:
+
+read
+~~~~
+
+.. code:: lisp
+
+   (read t r)
+
+-  takes ``t``: *a*
+-  takes ``r``: ``string``
+-  takes ``time``: one of {“before”, “after”}
+-  produces ``object``
+-  where *a* is of type ``table`` or ``string``
+
+The value of a read before or after a transaction
 
 Supported in properties only.
 
@@ -854,8 +930,8 @@ authorized-by
 
    (authorized-by k)
 
--  takes ``k`` of type ``string``
--  produces type ``bool``
+-  takes ``k``: ``string``
+-  produces ``bool``
 
 Whether the named keyset is enforced by the function under analysis
 
@@ -870,10 +946,10 @@ row-enforced
 
    (row-enforced t c r)
 
--  takes ``t`` of type *a*
--  takes ``c`` of type *b*
--  takes ``r`` of type ``string``
--  produces type ``bool``
+-  takes ``t``: *a*
+-  takes ``c``: *b*
+-  takes ``r``: ``string``
+-  produces ``bool``
 -  where *a* is of type ``table`` or ``string``
 -  where *b* is of type ``column`` or ``string``
 

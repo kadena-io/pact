@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -34,7 +35,7 @@ import Data.Monoid
 import System.Directory
 import System.FilePath
 
-import Crypto.Random
+import "crypto-api" Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Pact.Repl

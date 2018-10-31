@@ -75,27 +75,32 @@ renderTerm h TNative {..} = do
   case parseString nativeDocParser mempty (unpack _tNativeDocs) of
     Success (t,es) -> do
          hPutStrLn h t
-         if null es then noexs
-         else do
-           hPutStrLn h "```lisp"
-           forM_ es $ \e -> do
-             let (et,e') = case head e of
-                             '!' -> (ExecErr,drop 1 e)
-                             '$' -> (Lit,drop 1 e)
-                             _   -> (Exec,e)
-             case et of
-               Lit -> hPutStrLn h e'
-               _ -> do
-                 hPutStrLn h $ "pact> " ++ e'
-                 r <- evalRepl FailureTest e'
-                 case (r,et) of
-                   (Right r',_)       -> hPrint h r'
-                   (Left err,ExecErr) -> hPutStrLn h err
-                   (Left err,_)       -> throwM (userError err)
-           hPutStrLn h "```"
+         if null es then noexs else renderExamples h es
     _ -> hPutStrLn h (unpack _tNativeDocs) >> noexs
+  when _tNativeTopLevelOnly $ do
+    hPutStrLn h ""
+    hPutStrLn h "Top level only: this function will fail if used in module code."
   hPutStrLn h ""
 renderTerm _ _ = return ()
+
+renderExamples :: Handle -> [String] -> IO ()
+renderExamples h es = do
+  hPutStrLn h "```lisp"
+  forM_ es $ \e -> do
+    let (et,e') = case head e of
+                    '!' -> (ExecErr,drop 1 e)
+                    '$' -> (Lit,drop 1 e)
+                    _   -> (Exec,e)
+    case et of
+      Lit -> hPutStrLn h e'
+      _ -> do
+        hPutStrLn h $ "pact> " ++ e'
+        r <- evalRepl FailureTest e'
+        case (r,et) of
+          (Right r',_)       -> hPrint h r'
+          (Left err,ExecErr) -> hPutStrLn h err
+          (Left err,_)       -> throwM (userError err)
+  hPutStrLn h "```"
 
 renderProperties :: Handle -> IO ()
 renderProperties h = do
@@ -129,12 +134,12 @@ renderProperties h = do
           Analyze.Fun mBindings argTys retTy -> do
             for_ mBindings $ \case
               Analyze.BindVar (Analyze.Var (unpack -> var)) (showType -> bTy) ->
-                hPutStrLn h $ "* binds `" <> var <> "` of type " <> bTy
+                hPutStrLn h $ "* binds `" <> var <> "`: " <> bTy
               Analyze.BindObject ->
                 hPutStrLn h "* destructures the provided object"
             for_ argTys $ \(Analyze.Var (unpack -> arg), showType -> aTy) ->
-              hPutStrLn h $ "* takes `" <> arg <> "` of type " <> aTy
-            hPutStrLn h $ "* produces type " <> showType retTy
+              hPutStrLn h $ "* takes `" <> arg <> "`: " <> aTy
+            hPutStrLn h $ "* produces " <> showType retTy
 
         ifor_ constraints $ \(Analyze.TypeVar (unpack -> tv)) constraint ->
           hPutStrLn h $ "* where _" <> tv <> "_ is "
@@ -164,6 +169,7 @@ renderProperties h = do
     showType :: Analyze.Type -> String
     showType (Analyze.TyCon ct) = showConTy ct
     showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
+    showType (Analyze.TyEnum vals) = "one of {" ++ intercalate ", " (fmap show vals) ++ "}"
 
 escapeText :: String -> String
 escapeText n

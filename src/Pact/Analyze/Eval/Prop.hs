@@ -1,18 +1,20 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import           Control.Lens               (at, view, (%=), (?~))
+import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
+                                             (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Map.Strict            as Map
 import           Data.Monoid                ((<>))
-import           Data.SBV                   (Boolean (bnot, true, (&&&), (|||)),
+import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)), SBV,
                                              SymWord (exists_, forall_),
                                              Symbolic)
@@ -88,18 +90,62 @@ getLitTableName CoreProp{} = throwErrorNoLoc "Core values can't be table names"
 
 getLitColName :: Prop ColumnName -> Query ColumnName
 getLitColName (PLit cn) = pure cn
-getLitColName _         = throwErrorNoLoc "TODO: column quantification"
+getLitColName (CoreProp (Var vid name)) = do
+  mCn <- view $ qeColumnScope . at vid
+  case mCn of
+    Nothing -> throwErrorNoLoc $ fromString $
+      "could not find column in scope: " <> T.unpack name
+    Just cn -> pure cn
+getLitColName (PropSpecific Result)
+  = throwErrorNoLoc "Function results can't be column names"
+getLitColName CoreProp{} = throwErrorNoLoc "Core values can't be column names"
 
 
 evalProp :: SymWord a => Prop a -> Query (S a)
 evalProp (CoreProp tm)    = evalCore tm
 evalProp (PropSpecific a) = evalPropSpecific a
 
+beforeAfterLens :: BeforeOrAfter -> Lens' BeforeAndAfter CellValues
+beforeAfterLens = \case
+  Before -> before
+  After  -> after
 
 evalPropO :: Prop Object -> Query Object
 evalPropO (CoreProp a)          = evalCoreO a
 evalPropO (PropSpecific Result) = expectObj =<< view qeAnalyzeResult
+evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
+  tn' <- getLitTableName tn
+  sRk <- evalProp pRk
 
+  -- TODO: there is a lot of duplication between this and the corresponding
+  -- term evaluation code. It would be nice to consolidate these.
+  aValFields <- iforM fields $ \fieldName fieldType -> do
+    let cn = ColumnName $ T.unpack fieldName
+
+    av <- case fieldType of
+      EType TInt     -> mkAVal <$> view
+        (qeAnalyzeState.intCell     (beforeAfterLens ba) tn' cn sRk false)
+      EType TBool    -> mkAVal <$> view
+        (qeAnalyzeState.boolCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType TStr     -> mkAVal <$> view
+        (qeAnalyzeState.stringCell  (beforeAfterLens ba) tn' cn sRk false)
+      EType TDecimal -> mkAVal <$> view
+        (qeAnalyzeState.decimalCell (beforeAfterLens ba) tn' cn sRk false)
+      EType TTime    -> mkAVal <$> view
+        (qeAnalyzeState.timeCell    (beforeAfterLens ba) tn' cn sRk false)
+      EType TKeySet  -> mkAVal <$> view
+        (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
+      EType TAny     -> pure OpaqueVal
+      --
+      -- TODO: if we add nested object support here, we need to install
+      --       the correct provenance into AVals all the way down into
+      --       sub-objects.
+      --
+      EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
+
+    pure (fieldType, av)
+
+  pure $ Object aValFields
 
 evalPropSpecific :: SymWord a => PropSpecific a -> Query (S a)
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
@@ -115,8 +161,12 @@ evalPropSpecific (Forall vid _name QTable prop) = do
   bools <- for (Map.keys tables) $ \tableName ->
     local (qeTableScope . at vid ?~ tableName) (evalProp prop)
   pure $ foldr (&&&) true bools
-evalPropSpecific (Forall _vid _name (QColumnOf _tab) _p) =
-  throwErrorNoLoc "TODO: column quantification"
+evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
+  columns <- view (analyzeEnv . aeColumnIds . ix tabName)
+  bools <- for (Map.keys columns) $ \colName ->
+    let colName' = ColumnName $ T.unpack colName
+    in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
+  pure $ foldr (&&&) true bools
 evalPropSpecific (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
   sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
   local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
@@ -126,9 +176,13 @@ evalPropSpecific (Exists vid _name QTable prop) = do
   TableMap tables <- view (analyzeEnv . invariants)
   bools <- for (Map.keys tables) $ \tableName ->
     local (qeTableScope . at vid ?~ tableName) (evalProp prop)
-  pure $ foldr (|||) true bools
-evalPropSpecific (Exists _vid _name (QColumnOf _tab) _p) =
-  throwErrorNoLoc "TODO: column quantification"
+  pure $ foldr (|||) false bools
+evalPropSpecific (Exists vid _name (QColumnOf tabName) prop) = do
+  columns <- view (analyzeEnv . aeColumnIds . ix tabName)
+  bools <- for (Map.keys columns) $ \colName ->
+    let colName' = ColumnName $ T.unpack colName
+    in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
+  pure $ foldr (|||) false bools
 
 -- DB properties
 evalPropSpecific (TableRead tn) = do
@@ -137,10 +191,14 @@ evalPropSpecific (TableRead tn) = do
 evalPropSpecific (TableWrite tn) = do
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.tableWritten tn'
-evalPropSpecific (ColumnWrite _ _)
-  = throwErrorNoLoc "column write analysis not yet implemented"
-evalPropSpecific (ColumnRead _ _)
-  = throwErrorNoLoc "column read analysis not yet implemented"
+evalPropSpecific (ColumnWritten tn cn) = do
+  tn' <- getLitTableName tn
+  cn' <- getLitColName cn
+  view $ qeAnalyzeState.columnWritten tn' cn'
+evalPropSpecific (ColumnRead tn cn) = do
+  tn' <- getLitTableName tn
+  cn' <- getLitColName cn
+  view $ qeAnalyzeState.columnRead tn' cn'
 --
 -- TODO: should we introduce and use CellWrite to subsume other cases?
 --
@@ -180,6 +238,13 @@ evalPropSpecific (RowWriteCount tn pRk) = do
   sRk <- evalProp pRk
   tn' <- getLitTableName tn
   view $ qeAnalyzeState.rowWriteCount tn' sRk
+evalPropSpecific (RowExists tn pRk beforeAfter) = do
+  sRk <- evalProp pRk
+  tn' <- getLitTableName tn
+  view $ qeAnalyzeState.
+    rowExists (case beforeAfter of {Before -> before; After -> after}) tn' sRk
+evalPropSpecific PropRead{}
+  = vacuousMatch "an object cannot be a symbolic value"
 
 -- Authorization
 evalPropSpecific (KsNameAuthorized ksn) = nameAuthorized $ literalS ksn

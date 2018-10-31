@@ -31,7 +31,8 @@ module Pact.Types.Exp
    _ELiteral,_EAtom,_EList,_ESeparator,
    ListDelimiter(..),listDelims,enlist,
    Separator(..),
-   pattern CommaExp
+   pattern CommaExp,
+   pattern ColonExp
    ) where
 
 
@@ -189,3 +190,6 @@ instance Show (Exp i) where
 
 pattern CommaExp :: Exp t
 pattern CommaExp <- ESeparator (SeparatorExp Comma _i)
+
+pattern ColonExp :: Exp t
+pattern ColonExp <- ESeparator (SeparatorExp Colon _i)

@@ -99,10 +99,14 @@ data Feature
   | FTableRead
   | FCellDelta
   | FColumnDelta
+  | FColumnWritten
+  | FColumnRead
   | FRowRead
   | FRowWritten
   | FRowReadCount
   | FRowWriteCount
+  | FRowExists
+  | FPropRead
   -- Authorization operators
   | FAuthorizedBy
   | FRowEnforced
@@ -177,6 +181,7 @@ newtype TypeVar
 data Type
   = TyCon ConcreteType
   | TyVar TypeVar
+  | TyEnum [Text]
   deriving (Eq, Ord, Show)
 
 data Bindings
@@ -846,6 +851,46 @@ doc FColumnDelta = Doc
         ]
         c
   ]
+doc FColumnWritten = Doc
+  "column-written"
+  CDatabase
+  PropOnly
+  "Whether a column is written to in a transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(column-written t c)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        ]
+        (TyCon bool)
+  ]
+doc FColumnRead = Doc
+  "column-read"
+  CDatabase
+  PropOnly
+  "Whether a column is read from in a transaction"
+  [ let a = TyVar $ TypeVar "a"
+        b = TyVar $ TypeVar "b"
+    in Usage
+      "(column-read t c)"
+      (Map.fromList
+        [ ("a", OneOf [tbl, str])
+        , ("b", OneOf [col, str])
+        ])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("c", b)
+        ]
+        (TyCon bool)
+  ]
 doc FRowRead = Doc
   "row-read"
   CDatabase
@@ -909,6 +954,40 @@ doc FRowWriteCount = Doc
         , ("r", TyCon str)
         ]
         (TyCon int)
+  ]
+doc FRowExists = Doc
+  "row-exists"
+  CDatabase
+  PropOnly
+  "Whether a row exists before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(row-exists t r time)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon bool)
+  ]
+doc FPropRead = Doc
+  "read"
+  CDatabase
+  PropOnly
+  "The value of a read before or after a transaction"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(read t r)"
+      (Map.fromList [("a", OneOf [tbl, str])])
+      $ Fun
+        Nothing
+        [ ("t", a)
+        , ("r", TyCon str)
+        , ("time", TyEnum ["before", "after"])
+        ]
+        (TyCon obj)
   ]
 
 -- Authorization features
@@ -1021,10 +1100,14 @@ PAT(STableWritten, FTableWritten)
 PAT(STableRead, FTableRead)
 PAT(SCellDelta, FCellDelta)
 PAT(SColumnDelta, FColumnDelta)
+PAT(SColumnWritten, FColumnWritten)
+PAT(SColumnRead, FColumnRead)
 PAT(SRowRead, FRowRead)
 PAT(SRowWritten, FRowWritten)
 PAT(SRowReadCount, FRowReadCount)
 PAT(SRowWriteCount, FRowWriteCount)
+PAT(SRowExists, FRowExists)
+PAT(SPropRead, FPropRead)
 PAT(SAuthorizedBy, FAuthorizedBy)
 PAT(SRowEnforced, FRowEnforced)
 

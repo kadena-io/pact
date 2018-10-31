@@ -668,6 +668,14 @@ instance UserShow (Type a) where
     TKeySet  -> "keyset"
     TAny     -> "*"
 
+columnMapToSchema :: ColumnMap EType -> Schema
+columnMapToSchema
+  = Schema
+  . Map.fromList
+  . fmap (\(ColumnName name, ety) -> (fromString name, ety))
+  . Map.toList
+  . _columnMap
+
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
   deriving (Show, Functor, Foldable, Traversable, Monoid)

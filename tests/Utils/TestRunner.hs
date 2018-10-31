@@ -1,3 +1,4 @@
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -25,7 +26,7 @@ import Pact.ApiReq
 import Pact.Types.API
 import Pact.Types.Command
 
-import Crypto.Random
+import "crypto-api" Crypto.Random
 import Crypto.Ed25519.Pure
 
 import Data.Aeson
@@ -33,6 +34,7 @@ import Test.Hspec
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as HM
 import qualified Control.Exception as Exception
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
 import Control.Lens
@@ -58,11 +60,11 @@ data ApiResultCheck = ApiResultCheck
   , _arcExpect :: Maybe Value
   } deriving (Show, Eq)
 
-runAll :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
-runAll cmds = Exception.bracket
+runAll :: Options -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+runAll opts cmds = Exception.bracket
               (startServer _testConfigFilePath)
                stopServer
-              (const (run cmds))
+              (const (run opts cmds))
 
 startServer :: FilePath -> IO (Async (), Async (), Async ())
 startServer configFile = do
@@ -70,7 +72,18 @@ startServer configFile = do
   asyncServer <- async runServer
   link2 asyncServer asyncCmd
   link2 asyncServer asyncHist
+  waitUntilStarted
   return (asyncServer, asyncCmd, asyncHist)
+
+waitUntilStarted :: IO ()
+waitUntilStarted = do
+  r <- get $ _serverPath ++ "poll"
+  let s = r ^. responseStatus . statusCode
+  if s == 200
+    then return ()
+    else do
+      threadDelay 500
+      waitUntilStarted
 
 stopServer :: (Async (), Async (), Async ()) -> IO ()
 stopServer (asyncServer, asyncCmd, asyncHist) = do
@@ -83,9 +96,9 @@ stopServer (asyncServer, asyncCmd, asyncHist) = do
                     "Thread " ++ show (asyncThreadId asy) ++ " could not be cancelled."
           _ -> return ()
 
-run :: [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
-run cmds = do
-  sendResp <- doSend $ SubmitBatch cmds
+run :: Options -> [Command T.Text] -> IO (HM.HashMap RequestKey ApiResult)
+run opts cmds = do
+  sendResp <- doSend opts $ SubmitBatch cmds
   case sendResp of
     ApiFailure err -> Exception.evaluate (error err)
     ApiSuccess RequestKeys{..} -> do
@@ -95,27 +108,27 @@ run cmds = do
         Just res -> return res
 
   where helper reqKeys = do
-          pollResp <- doPoll $ Poll reqKeys
+          pollResp <- doPoll opts $ Poll reqKeys
           case pollResp of
             ApiFailure err -> Exception.evaluate (error err)
             ApiSuccess (PollResponses apiResults) ->
               if null apiResults then helper reqKeys
               else return apiResults
 
-doSend :: (ToJSON req) => req -> IO (ApiResponse RequestKeys)
-doSend req = view responseBody <$> doSend' req
+doSend :: (ToJSON req) => Options -> req -> IO (ApiResponse RequestKeys)
+doSend opts req = view responseBody <$> doSend' opts req
 
-doSend' :: (ToJSON req) => req -> IO (Response (ApiResponse RequestKeys))
-doSend' req = do
-  sendResp <- post (_serverPath ++ "send") (toJSON req)
+doSend' :: (ToJSON req) => Options -> req -> IO (Response (ApiResponse RequestKeys))
+doSend' opts req = do
+  sendResp <- postWith opts (_serverPath ++ "send") (toJSON req)
   asJSON sendResp
 
-doPoll :: (ToJSON req) => req -> IO (ApiResponse PollResponses)
-doPoll req = view responseBody <$> doPoll' req
+doPoll :: (ToJSON req) => Options -> req -> IO (ApiResponse PollResponses)
+doPoll opts req = view responseBody <$> doPoll' opts req
 
-doPoll' :: (ToJSON req) => req -> IO (Response (ApiResponse PollResponses))
-doPoll' req = do
-  pollResp <- post (_serverPath ++ "poll") (toJSON req)
+doPoll' :: (ToJSON req) => Options -> req -> IO (Response (ApiResponse PollResponses))
+doPoll' opts req = do
+  pollResp <- postWith opts (_serverPath ++ "poll") (toJSON req)
   asJSON pollResp
 
 

@@ -25,7 +25,7 @@ import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
 import           Control.Monad.State.Strict (MonadState, StateT, modify',
-                                             runStateT)
+                                             runStateT, evalStateT)
 import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
@@ -40,6 +40,7 @@ import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
                                              Type (..))
 import qualified Pact.Types.Lang            as Pact
@@ -53,7 +54,6 @@ import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
-
 
 -- * Translation types
 
@@ -296,20 +296,20 @@ startNewSubpath = do
   pure p
 
 tagDbAccess
-  :: (Located (TagId, Schema) -> TraceEvent)
+  :: (Schema -> Located TagId -> TraceEvent)
   -> Node
   -> Schema
   -> TranslateM TagId
 tagDbAccess mkEvent node schema = do
   tid <- genTagId
-  emit $ mkEvent $ Located (nodeInfo node) (tid, schema)
+  emit $ mkEvent schema (Located (nodeInfo node) tid)
   pure tid
 
 tagRead :: Node -> Schema -> TranslateM TagId
 tagRead = tagDbAccess TraceRead
 
-tagWrite :: Node -> Schema -> TranslateM TagId
-tagWrite = tagDbAccess TraceWrite
+tagWrite :: WriteType -> Node -> Schema -> TranslateM TagId
+tagWrite = tagDbAccess . TraceWrite
 
 tagAssert :: Node -> TranslateM TagId
 tagAssert node = do
@@ -863,7 +863,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun node (toOp writeTypeP -> Just writeType) [ShortTableName tn, row, obj] -> do
     ESimple TStr row'   <- translateNode row
     EObject schema obj' <- translateNode obj
-    tid                 <- tagWrite node schema
+    tid                 <- tagWrite writeType node schema
     pure $ ESimple TStr $
       Write writeType tid (TableName (T.unpack tn)) schema row' obj'
 
@@ -977,11 +977,12 @@ mkExecutionGraph vertex0 rootPath st = ExecutionGraph
     (_tsPathEdges st)
 
 runTranslation
-  :: Info
+  :: Text
+  -> Info
   -> [Named Node]
   -> [AST Node]
   -> Except TranslateFailure ([Arg], ETerm, ExecutionGraph)
-runTranslation info pactArgs body = do
+runTranslation name info pactArgs body = do
     (args, translationVid) <- runArgsTranslation
     (tm, graph) <- runBodyTranslation args translationVid
     pure (args, tm, graph)
@@ -1001,7 +1002,34 @@ runTranslation info pactArgs body = do
           nextTagId  = succ $ _pathTag path0
           graph0     = pure vertex0
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
-          translation = translateBody body
-                     <* extendPath -- form final edge for any remaining events
+          translation = do
+            retTid    <- genTagId
+            bindingTs <- traverse translateBinding pactArgs
+            res <- withNewScope (FunctionScope name) bindingTs retTid $
+              translateBody body
+            _ <- extendPath -- form final edge for any remaining events
+            pure res
       in fmap (fmap $ mkExecutionGraph vertex0 path0) $ flip runStateT state0 $
            runReaderT (unTranslateM translation) (mkTranslateEnv info args)
+
+-- | Translate a node ignoring the execution graph. This is useful in cases
+-- where we don't show an execution trace. Those two places (currently) are:
+-- * Translating `defconst`s for use in properties. This is for use only in
+-- properties, as opposed to in execution.
+-- * Translating terms for property testing. Here we don't show a trace -- we
+-- just test that pact and analysis come to the same result.
+translateNodeNoGraph :: AST Node -> Except TranslateFailure ETerm
+translateNodeNoGraph node =
+  let vertex0    = 0
+      nextVertex = succ vertex0
+      path0      = Path 0
+      nextTagId  = succ $ _pathTag path0
+      graph0     = pure vertex0
+      translateState     = TranslateState nextTagId 0 graph0 vertex0 nextVertex
+        Map.empty mempty path0 Map.empty
+
+      translateEnv = TranslateEnv dummyInfo Map.empty mempty 0 (pure 0) (pure 0)
+
+  in (`evalStateT` translateState) $
+       (`runReaderT` translateEnv) $
+         unTranslateM $ translateNode node

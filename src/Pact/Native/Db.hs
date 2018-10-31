@@ -63,7 +63,7 @@ dbDefs =
       bindTy = TySchema TyBinding rt
       a = mkTyVar "a" []
   in ("Database",
-    [defRNative "create-table" createTable'
+    [setTopLevelOnly $ defRNative "create-table" createTable'
      (funType tTyString [("table",tableTy)])
      "Create table TABLE. `$(create-table accounts)`"
 
@@ -118,13 +118,13 @@ dbDefs =
       "Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects \
       \indexed by txid. \
       \`$(keylog 'accounts \"Alice\" 123485945)`"
-    ,defRNative "describe-table" descTable
+    ,setTopLevelOnly $ defRNative "describe-table" descTable
      (funType tTyValue [("table",tableTy)])
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
      \`$(describe-table accounts)`"
-    ,defRNative "describe-keyset" descKeySet
+    ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
      (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
-    ,defRNative "describe-module" descModule
+    ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
      \`$(describe-module 'my-module)`"

@@ -128,8 +128,9 @@ enforceOneDef =
     enforceOne i as = argsError' i as
 
 pactVersionDef :: NativeDef
-pactVersionDef =
-  defRNative "pact-version" (\_ _ -> return $ toTerm pactVersion) (funType tTyString [])
+pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
+  (\_ _ -> return $ toTerm pactVersion)
+  (funType tTyString [])
   "Obtain current pact build version. `(pact-version)`"
 
 
@@ -286,7 +287,8 @@ langDefs =
      \`(bind { \"a\": 1, \"b\": 2 } { \"a\" := a-value } a-value)`"
     ,defRNative "typeof" typeof'' (funType tTyString [("x",a)])
      "Returns type of X as string. `(typeof \"hello\")`"
-    ,defRNative "list-modules" listModules (funType (TyList tTyString) []) "List modules available for loading."
+    ,setTopLevelOnly $ defRNative "list-modules" listModules
+     (funType (TyList tTyString) []) "List modules available for loading."
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
      \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
@@ -297,7 +299,7 @@ langDefs =
 
     ,pactVersionDef
 
-    ,defRNative "enforce-pact-version" enforceVersion
+    ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
       funType tTyBool [("min-version",tTyString),("max-version",tTyString)])
     "Enforce runtime pact version as greater than or equal MIN-VERSION, and less than or equal MAX-VERSION. \

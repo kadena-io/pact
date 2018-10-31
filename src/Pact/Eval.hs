@@ -485,7 +485,15 @@ reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
   let fa = FunApp ai (asString _tNativeName) Nothing Defun _tFunTypes (Just _tNativeDocs)
-  in appCall fa ai as $ _nativeFun _tNativeFun fa as
+      -- toplevel: only empty callstack or non-module-having callstack allowed
+      enforceTopLevel = traverse_ $ \c ->
+        case preview (sfApp . _Just . _1 . faModule . _Just) c of
+          Nothing -> return ()
+          Just m -> evalError ai $ "Top-level call used in module " ++ show m ++
+            ": " ++ show _tNativeName
+  in do
+    when _tNativeTopLevelOnly $ use evalCallStack >>= enforceTopLevel
+    appCall fa ai as $ _nativeFun _tNativeFun fa as
 
 reduceDirect (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceDirect r _ ai = evalError ai $ "Unexpected non-native direct ref: " ++ show r

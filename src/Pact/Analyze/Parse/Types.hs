@@ -20,7 +20,7 @@ import           Prelude                    hiding (exp)
 
 import           Pact.Types.Lang            (AtomExp (..), Exp (..),
                                              ListDelimiter (..), ListExp (..),
-                                             Literal, LiteralExp (..),
+                                             Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (UserType)
@@ -44,8 +44,13 @@ data PreProp
   | PreAbort
   | PreSuccess
   | PreResult
-  | PreVar     VarId Text
-  | PropDefVar       Text
+
+  -- In conversion from @Exp@ to @PreProp@ we maintain a distinction between
+  -- bound and unbound variables. Bound (@PreVar@) variables are bound inside
+  -- quantifiers. Unbound (@PreGlobalVar@) variables either refer to a property
+  -- definition or a table.
+  | PreVar       VarId Text
+  | PreGlobalVar       Text
 
   -- quantifiers
   | PreForall VarId Text QType PreProp
@@ -55,22 +60,23 @@ data PreProp
   | PreApp Text [PreProp]
 
   | PreAt Text PreProp
+  | PrePropRead PreProp PreProp PreProp
   | PreLiteralObject (Map Text PreProp)
-  deriving Eq
+  deriving (Eq, Show)
 
 instance UserShow PreProp where
   userShowsPrec prec = \case
-    PreIntegerLit i -> tShow i
-    PreStringLit t  -> tShow t
-    PreDecimalLit d -> userShow d
-    PreTimeLit t    -> tShow (Pact.LTime (toPact timeIso t))
-    PreBoolLit b    -> tShow (Pact.LBool b)
+    PreIntegerLit i   -> tShow i
+    PreStringLit t    -> tShow t
+    PreDecimalLit d   -> userShow d
+    PreTimeLit t      -> tShow (Pact.LTime (toPact timeIso t))
+    PreBoolLit b      -> tShow (Pact.LBool b)
 
-    PreAbort        -> STransactionAborts
-    PreSuccess      -> STransactionSucceeds
-    PreResult       -> SFunctionResult
-    PreVar _id name -> name
-    PropDefVar name -> name
+    PreAbort          -> STransactionAborts
+    PreSuccess        -> STransactionSucceeds
+    PreResult         -> SFunctionResult
+    PreVar _id name   -> name
+    PreGlobalVar name -> name
 
     PreForall _vid name qty prop ->
       "(" <> SUniversalQuantification <> " (" <> name <> ":" <> userShow qty <>
@@ -82,6 +88,9 @@ instance UserShow PreProp where
       "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
       "(" <> SObjectProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+    PrePropRead tn rk ba ->
+      "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
+        userShow ba <> ")"
     PreLiteralObject obj ->
       userShowsPrec prec obj
 
@@ -104,16 +113,16 @@ textToQuantifier = \case
 type TableEnv = TableMap (ColumnMap EType)
 
 data PropCheckEnv = PropCheckEnv
-  { _varTys           :: Map VarId QType
-  , _tableEnv         :: TableEnv
-  , _quantifiedTables :: Set TableName
-  -- , _quantifiedColumns :: Set ColumnName
+  { _varTys            :: Map VarId QType
+  , _tableEnv          :: TableEnv
+  , _quantifiedTables  :: Set TableName
+  , _quantifiedColumns :: Set ColumnName
 
   -- User-defined properties
-  , _definedProps     :: HM.HashMap Text (DefinedProperty PreProp)
+  , _definedProps      :: HM.HashMap Text (DefinedProperty PreProp)
 
   -- Vars bound within a user-defined property
-  , _localVars        :: HM.HashMap Text EProp
+  , _localVars         :: HM.HashMap Text EProp
   }
 
 type ParseEnv = Map Text VarId
@@ -138,6 +147,9 @@ pattern EAtom' name <- EAtom (AtomExp name [] _i)
 
 pattern ELiteral' :: Literal -> Exp t
 pattern ELiteral' lit <- ELiteral (LiteralExp lit _i)
+
+pattern EStrLiteral' :: Text -> Exp t
+pattern EStrLiteral' lit <- ELiteral (LiteralExp (LString lit) _i)
 
 pattern Colon' :: Exp t
 pattern Colon' <- ESeparator (SeparatorExp Colon _i)
