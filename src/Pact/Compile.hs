@@ -60,6 +60,7 @@ import Pact.Types.Runtime (PactError)
 
 data CompileState = CompileState
   { _csFresh :: Int
+  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   , _csModule :: Maybe (ModuleName,Hash)
   }
 makeLenses ''CompileState
@@ -80,12 +81,13 @@ compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
-
+-- TODO: ModuleName should be renamed to something that reflects interface AND module
 currentModule :: Compile (ModuleName,Hash)
 currentModule = use (psUser . csModule) >>= \m -> case m of
   Just cm -> return cm
   Nothing -> context >>= tokenErr' "Must be declared within module"
 
+-- TODO: ModuleName should be renamed to something that reflects interface AND module
 currentModule' :: Compile ModuleName
 currentModule' = fst <$> currentModule
 
@@ -151,6 +153,7 @@ bindingForm = do
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
+-- TODO: ModuleName should be renamed to something that reflects interface AND module
 varAtom :: Compile (Term Name)
 varAtom = do
   AtomExp{..} <- atom
@@ -266,6 +269,7 @@ moduleForm = do
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
+      -- TODO: ModuleName should be renamed to something that reflects interface AND module
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
@@ -280,38 +284,22 @@ moduleForm = do
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
     TImplements{} -> return []
-    t -> syntaxError $ "Only defun, defpact, defconst, deftable, use, bless allowed in module: " ++ abbrev t
-  interfaces <- fmap concat $ forM bd $ \d -> case d of
-    TImplements{..} -> return [_tInterfaceName]
-    _ -> return []
+    t -> syntaxError $ "Invalid declaration in module scope: " ++ abbrev t
+  let interfaces = flip foldMap bd $ \d -> case d of
+        TImplements{..} -> [_tInterfaceName]
+        _ -> []
   return $ TModule
     (Module modName (KeySetName keyset) m code modHash blessed interfaces)
     (abstract (const Nothing) (TList bd TyAny bi)) i
 
--- | implements:
---
--- This is the parsing form associated with the "implements" keyword
--- 
 implements :: Compile (Term Name)
 implements = do
   modName <- currentModule'
+  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
   return $ TImplements ifName modName info
-
--- | interface:
---
--- This is the parsing form associated with the `interface` keyword.
--- The structure of an interface is as follows:
---
--- (interface foo
---   @doc "some documentation"
---   @model (property (do (some property)))
---
---   (defun <name>:<return ty> (a1:<ty1> ... aN:<tyN>) @doc "some doc")
---   (defconst <NAME>:<return ty> val)
---
--- The bodies of `defun` decls must be empty
+  
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
@@ -323,6 +311,7 @@ interface = do
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
+      -- TODO: ModuleName should be renamed to something that reflects interface AND module
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
@@ -332,15 +321,9 @@ interface = do
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
     
--- | interfaceForm:
---
--- This function parses the body forms declared in an interface
--- as either an empty function declaration (a function type signature
--- without body), or as a `defconst` (with value).
 interfaceForm :: Compile ([Term Name], Info)
 interfaceForm = (,) <$> some interfaceForms <*> contextInfo
   where
-    interfaceForms :: Compile (Term Name)
     interfaceForms = withList' Parens $ do 
       AtomExp{..} <- bareAtom
       case _atomAtom of
@@ -348,10 +331,6 @@ interfaceForm = (,) <$> some interfaceForms <*> contextInfo
         "defconst" -> commit >> defconst
         _ -> expected "empty form"
 
--- | emptyDef:
---
--- Same as `defun`, however, instead of parsing an abstract body,
--- we simply lift the defname and contextual information into a bare Scope.
 emptyDef :: Compile (Term Name)
 emptyDef = do
   modName <- currentModule'
@@ -415,6 +394,7 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
+  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
 hash' :: Compile Hash

@@ -254,7 +254,7 @@ instance Ord Name where
   QName {} `compare` Name {} = GT
   
 
-
+-- TODO: We need a better ADT for this.
 data Module
  = Module
  { _mName :: !ModuleName

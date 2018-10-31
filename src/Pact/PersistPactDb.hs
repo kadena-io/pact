@@ -113,8 +113,8 @@ pactdb :: PactDb (DbEnv p)
 pactdb = PactDb
   { _readRow = \d k e ->
        case d of
-           KeySets  -> readSysTable e (DataTable keysetsTable) (asString k)
-           Modules  -> readSysTable e (DataTable modulesTable) (asString k)
+           KeySets -> readSysTable e (DataTable keysetsTable) (asString k)
+           Modules -> readSysTable e (DataTable modulesTable) (asString k)
            (UserTables t) -> readUserTable e t k
 
  , _writeRow = \wt d k v e ->

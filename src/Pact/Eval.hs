@@ -310,20 +310,14 @@ loadModule i@Interface{..} body info gas0 = do
 
     
 
--- | Evaluate interface constraints in module 
---
--- For each implemented member, there may be overlapping meta
--- models between the module implementation and the interface
--- definition - therefore, in order not to step on the user's
--- implementation, we must concatenate meta constraints and
--- build the more detailed meta model of the member
+-- | Evaluate interface constraints in module.
 evaluateConstraints
   :: Module
   -> HM.HashMap Text Ref
   -> Info
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints Interface{} _ info =
-  evalError info $ "Impossible. interface found while appending meta-constraints to module"
+  evalError info $ "Unexpected: interface found while appending meta-constraints to module"
 evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMap info) _mInterfaces
   where
     evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
@@ -336,12 +330,7 @@ evaluateConstraints Module{..} evalMap info = foldMap (evaluateConstraint evalMa
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
         Just iRefs' -> HM.foldrWithKey (solveConstraint i) (pure hm) iRefs'
 
--- | Compare implemented member signatures and concatenate models
---
--- For each reference, we must check that it exists in the interface refmap,
--- and if it does, we must check that it is both a def, and that we update
--- any model information in the reference map with the concatenatation
--- of the module models, as well as the interface models.
+-- | Compare implemented member signatures with their definitions
 solveConstraint
   :: Info
   -> Text
@@ -433,16 +422,13 @@ reduce (TObject ps t i) =
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
-reduce TModule{..} =
-  case _tModuleDef of
-    Module{} -> evalError _tInfo "Module only allowed at top level"
-    Interface{} -> evalError _tInfo "Interface only allowed at top level"
+reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce t@TImplements {} = unsafeReduce t 
+reduce TImplements {} = undefined -- TODO
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -544,8 +530,6 @@ resolveFreeVars i b = traverse r b where
              Nothing -> evalError i $ "Cannot resolve " ++ show fv
              Just d -> return d
 
--- Install must handle interfaces
--- strip out everything except consts
 installModule :: ModuleData ->  Eval e ()
 installModule ModuleData{..} = do 
   (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap)
