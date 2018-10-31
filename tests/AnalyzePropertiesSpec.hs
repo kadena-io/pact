@@ -114,6 +114,6 @@ sequentialChecks :: IO Bool
 sequentialChecks = checkSequential $ Group "checks"
   [ ("prop_round_trip_type", prop_round_trip_type)
   , ("prop_round_trip_term", prop_round_trip_term)
-  , ("prop_evaluation",      withTests 1000 prop_evaluation)
+  , ("prop_evaluation",      prop_evaluation)
   , ("prop_evaluation_time", prop_evaluation_time)
   ]
