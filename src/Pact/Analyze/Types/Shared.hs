@@ -798,7 +798,6 @@ instance Mergeable a => Mergeable (TableMap a) where
 instance UserShow (Quantifiable q) where
   userShowPrec d = \case
     EType ty     -> userShowPrec d ty
-    -- EListType ty -> brackets $ userShowPrec 0 ty
     EObjectTy ty -> userShowPrec d ty
     QTable       -> "table"
     QColumnOf tn -> "(column-of " <> userShow tn <> ")"

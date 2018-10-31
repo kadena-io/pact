@@ -11,6 +11,7 @@
 
 module AnalyzeSpec (spec) where
 
+
 import           Control.Lens                 (at, findOf, ix, matching, (&),
                                                (.~), (^.), (^..), _Left)
 import           Control.Monad                (unless)
@@ -2463,51 +2464,80 @@ spec = describe "analyze" $ do
 -}
 
   describe "lists verify" $ do
-    let code' model = [text|
-          (defun test:[integer] ()
+    let code0 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
-            [1 2 3])
+            [a b c])
           |]
-    expectVerified  $ code' "(property (= result [1 2 3]))"
-    expectFalsified $ code' "(property (= result [1 2]))"
+    expectVerified  $ code0 "(property (= result [a b c]))"
+    expectFalsified $ code0 "(property (= result [a b]))"
 
-    let code' model = [text|
-          (defun test:[integer] ()
+    let code1 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
-            (drop 2 [1 2 3]))
+            (drop 2 [a b c]))
           |]
-    expectVerified  $ code' "(property (= result [3]))"
-    expectFalsified $ code' "(property (= result [2 3]))"
+    expectVerified  $ code1 "(property (= result [c]))"
+    expectFalsified $ code1 "(property (= result [b c]))"
 
-    let code' = [text|
-          (defun test:[integer] ()
+    let code2 = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
             (drop 4 [1 2 3]))
           |]
-    expectPass code' $ Valid Abort'
+    expectPass code2 $ Valid Abort'
 
-    let code' model = [text|
-          (defun test:[integer] ()
+    let code3 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
-            (take 2 [1 2 3]))
+            (take 2 [a b c]))
           |]
-    expectVerified  $ code' "(property (= result [1 2]))"
-    expectFalsified $ code' "(property (= result [2 3]))"
+    expectVerified  $ code3 "(property (= result [a b]))"
+    expectFalsified $ code3 "(property (= result [b c]))"
 
-    let code' = [text|
-          (defun test:[integer] ()
-            (take 4 [1 2 3]))
+    let code4 = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            (take 4 [a b c]))
           |]
-    expectPass code' $ Valid Abort'
+    expectPass code4 $ Valid Abort'
 
-    let code' model = [text|
-          (defun test:integer ()
+    -- let code5 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         @model (property (= result a))
+    --         (at 0 [a b c]))
+    --       |]
+    -- expectVerified code5
+
+    -- let code6 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         (at 2 [a b c]))
+    --       |]
+    -- expectPass code6 $ Valid Abort'
+
+    let code7 = [text|
+          (defun test:bool ()
+            @model (property (= result true))
+            (contains "foo" "foobar"))
+          |]
+    expectVerified code7
+
+    let code8 = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model (property (= result true))
+            (contains a [a b c]))
+          |]
+    expectVerified code8
+
+    let code8 = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model (property (= result false))
+            (contains a [b c]))
+          |]
+    expectFalsified code8
+
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
-            (at 0 [1 2 3]))
+            (+ [a b] [c]))
           |]
-    expectVerified  $ code' "(property (= result 1))"
-
-    let code' = [text|
-          (defun test:integer ()
-            (at 5 [1 2 3]))
-          |]
-    expectPass code' $ Valid Abort'
+    expectVerified  $ code9 "(property (= result [a b c]))"
+    expectFalsified $ code9 "(property (= result [a b]))"

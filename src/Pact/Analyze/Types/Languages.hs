@@ -188,9 +188,9 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
   ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
 
-  -- TODO: ListContains   :: forall t a. SimpleType a => t a -> t [a] -> Core t 'TyBool
   ObjContains    :: Schema -> Existential t -> Core t 'TyBool
   StringContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
+  ListContains   :: SingTy 'SimpleK a -> t a -> t ('TyList a) -> Core t 'TyBool
 
   ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjDrop :: Schema -> t 'TyStr -> t 'TyObject -> Core t 'TyObject
@@ -206,7 +206,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ListTake    :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
-  -- ListConcat  :: t [a] -> t [a] -> Core t [a]
+  ListConcat  :: SingTy 'SimpleK a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
 
   ObjectMerge :: t 'TyObject -> t 'TyObject -> Core t 'TyObject
 
@@ -294,9 +294,22 @@ instance
   ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
   ObjContains s1 e1           == ObjContains s2 e2           = s1 == s2 && e1 == e2
   StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
+  ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
+    Just Refl -> uniformlyEq ty1 b1 b2 && (case ty1 of
+      -- TODO
+      SInteger -> a1 == a2
+      SBool    -> a1 == a2
+      SStr     -> a1 == a2
+      STime    -> a1 == a2
+      SDecimal -> a1 == a2
+      SKeySet  -> a1 == a2
+      -- SAny     -> a1 == a2
+      )
+    Nothing   -> False
   ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
   ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
   ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
   LiteralObject m1            == LiteralObject m2            = m1 == m2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
@@ -388,6 +401,7 @@ instance
       . showString " "
       . showsPrec 11 a
       . showString " "
+      -- TODO
       . (case ty of
         SStr     -> showsPrec 11 b
         SInteger -> showsPrec 11 b
@@ -405,6 +419,13 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
+    ListContains a b c ->
+        showString "ListContains "
+      . showsPrec 11 a
+      . showString " "
+      . showString "REDACTED"
+      . showString " "
+      . showString "REDACTED"
     ListDrop ty i l ->
         showString "ObjDrop "
       . showsPrec 11 ty
@@ -432,6 +453,13 @@ instance
       . showsPrec 11 b
       . showString " "
       . showsPrec 11 c
+    ListConcat a b c ->
+        showString "ListConcat "
+      . showsPrec 11 a
+      . showString " "
+      . showString "REDACTED"
+      . showString " "
+      . showString "REDACTED"
     ObjectMerge a b ->
         showString "ObjectMerge "
       . showsPrec 11 a

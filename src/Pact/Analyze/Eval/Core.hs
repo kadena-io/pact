@@ -162,10 +162,18 @@ evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
--- evalCore (StringContains needle haystack) = do
---   needle'   <- eval needle
---   haystack' <- eval haystack
---   pure $ sansProv $ _sSbv needle' `SBVS.isInfixOf` _sSbv haystack'
+evalCore (StringContains needle haystack) = do
+  needle'   <- eval needle
+  haystack' <- eval haystack
+  pure $ sansProv $
+    _sSbv (coerceS @Str @String needle')
+    `SBVS.isInfixOf`
+    _sSbv (coerceS @Str @String haystack')
+evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
+  needle'   <- eval needle
+  haystack' <- evalL haystack
+  pure $ sansProv $
+    foldr (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
   SList tyA' -> case singEq tyA tyB of
     Nothing   -> error "TODO"
@@ -226,6 +234,7 @@ evalCoreL (ListTake _ty n list) = do
       let n''' = fromInteger n''
       markFailure $ literal $ n''' > length list'
       pure $ take n''' list'
+evalCoreL (ListConcat _ty p1 p2) = (++) <$> evalL p1 <*> evalL p2
 
 -- evalCoreL ListReverse{} = undefined
 -- evalCoreL ListSort{} = undefined

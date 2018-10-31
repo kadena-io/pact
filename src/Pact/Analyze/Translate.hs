@@ -11,6 +11,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Pact.Analyze.Translate where
 
@@ -845,14 +846,18 @@ translateNode astNode = withAstContext astNode $ case astNode of
           -- Feature 1: string concatenation
           (SStr, SStr)         -> pure $ ESimple SStr $ inject $ StrConcat a' b'
           -- Feature 2: arithmetic addition
-          (SInteger, SInteger)         -> pure $ ESimple SInteger $ inject $ IntArithOp Add a' b'
+          (SInteger, SInteger) -> pure $ ESimple SInteger $ inject $ IntArithOp Add a' b'
           (SDecimal, SDecimal) -> pure $ ESimple SDecimal $ inject $ DecArithOp Add a' b'
-          (SInteger, SDecimal)     -> pure $ ESimple SDecimal $ inject $ IntDecArithOp Add a' b'
-          (SDecimal, SInteger)     -> pure $ ESimple SDecimal $ inject $ DecIntArithOp Add a' b'
+          (SInteger, SDecimal) -> pure $ ESimple SDecimal $ inject $ IntDecArithOp Add a' b'
+          (SDecimal, SInteger) -> pure $ ESimple SDecimal $ inject $ DecIntArithOp Add a' b'
           _ -> throwError' $ MalformedArithOp fn args
       (EObject s1 o1, EObject s2 o2) ->
         -- Feature 3: object merge
         pure $ EObject (s1 <> s2) $ inject $ ObjectMerge o1 o2
+      (EList (SList tyA) a', EList (SList tyB) b') -> case singEq tyA tyB of
+        -- Feature 4: list concatenation
+        Just Refl -> pure $ EList (SList tyA) $ inject $ ListConcat tyA a' b'
+        Nothing   -> throwError' $ MalformedArithOp fn args
       (_, _) ->
         throwError' $ MalformedArithOp fn args
 
@@ -986,14 +991,19 @@ translateNode astNode = withAstContext astNode $ case astNode of
     pure $ EList listOfTy $ CoreTerm litList
 
   AST_Contains node val collection -> do
-    ty          <- translateType node
-    val'        <- translateNode val
-    collection' <- translateNode collection
-    case ty of
-      EObjectTy{} -> throwError' TODO
-      -- EType SStr -> case (val', collection') of
-      --   (ESimple SStr needle, ESimple SStr haystack)
-      --     -> pure $ ESimple SBool $ CoreTerm $ StringContains needle haystack
+    ty                      <- translateType node
+    ESimple needleTy needle <- translateNode val
+    collection'             <- translateNode collection
+    case collection' of
+      -- ESimple SStr needle -> case collection' of
+      ESimple SStr haystack -> case needleTy of
+        SStr -> pure $ ESimple SBool $ CoreTerm $ StringContains needle haystack
+        _    -> throwError' TODO
+      EObject _ _ -> throwError' TODO
+      EList (SList ty) haystack -> case singEq needleTy ty of
+        Just Refl
+          -> pure $ ESimple SBool $ CoreTerm $ ListContains ty needle haystack
+        Nothing -> throwError' TODO
 
   -- TODO: object drop
   AST_Drop _node num list -> do

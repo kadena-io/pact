@@ -349,7 +349,7 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       modelArgs' <- lift $ allocArgs args
       tags <- lift $ allocModelTags (Located funInfo tm) graph
-      r@(AnalysisResult _querySucceeds prop ksProvs)
+      AnalysisResult _querySucceeds prop ksProvs
         <- withExceptT analyzeToCheckFailure $
           runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
             funInfo

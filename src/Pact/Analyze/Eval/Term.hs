@@ -191,7 +191,7 @@ tagResult av = do
   case (av, tag) of
     (AList av', AList tag') ->
       for_ (zipWith (.==) av' tag') (addConstraint . traceTag "8" . sansProv)
-    (AList av', OpaqueVal) -> pure ()
+    (AList _, OpaqueVal) -> pure ()
     _ -> addConstraint $ traceTag "9" $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()
@@ -200,7 +200,7 @@ tagReturn tid av = do
   case mTag of
     Nothing    -> pure ()
     Just tagAv -> case (av, tagAv) of
-      (AList av', OpaqueVal) -> pure ()
+      (AList _, OpaqueVal) -> pure ()
       _ -> addConstraint $ traceTag "10" $ sansProv $ tagAv .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()

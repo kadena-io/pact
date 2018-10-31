@@ -48,7 +48,7 @@ allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType t@(SList _ty) -> pure OpaqueVal
+  EType SList{} -> pure OpaqueVal
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
@@ -188,7 +188,7 @@ saturateModel =
 
         go (EType (SList ty :: SingTy k t)) (AList avals) =
           fmap AList $ traverse (go (EType ty)) avals
-        go (EType (SList ty :: SingTy k t)) OpaqueVal = pure OpaqueVal
+        go (EType SList{}) OpaqueVal = pure OpaqueVal
 
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
