@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
-import           Control.Lens                (over, ifoldr)
+import           Control.Lens                (over, ifoldr, imap)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
@@ -218,6 +218,13 @@ evalCoreL (LiteralList _ty xs) = do
 evalCoreL (ListDrop _ty n list) = do
   n'    <- eval n
   list' <- evalL list
+
+  -- TODO: bad asymptotics
+  let list'' = imap (\i _ -> drop i list') list'
+
+--   pure $ ifoldr
+--     (\thisIx val rest -> ite
+
   case unliteralS n' of
     Nothing -> throwErrorNoLoc "Unable to determine statically the number of list elements to drop"
     Just n'' -> do

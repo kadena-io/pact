@@ -2518,7 +2518,10 @@ spec = describe "analyze" $ do
             @model (property (= result ix))
             (at ix [0 1 2]))
           |]
-    expectVerified code6'
+    -- expectVerified code6'
+    expectPass code6' $ Valid $ Success'
+      ==> (CoreProp $ IntegerComparison Eq (PVar 1 "ix") Result')
+    expectPass code6' $ Satisfiable Abort'
 
     let code7 = [text|
           (defun test:bool ()
