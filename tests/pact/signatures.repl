@@ -1,49 +1,104 @@
 (begin-tx)
 
-(interface foo-interface
-  @doc "do some crazy foo stuff"
-  @model (property (do (crazy stuff)))
-
-  (defun foo:bool (x:bool))
-  (defun bar:bool (x:decimal y:bool) @doc "i love bars")
-  (defun f:string () "docs work without the doc")
-
-  (defconst BAZ:bool true)
-  (defconst QUX "qux the casbah")
-
-  (defun g:bool () 
-    @model (property (do (stuff)))
-    @doc "is for great"
-    )
+; simple interfaces with only defun and defconst
+(interface sig-test1
+  ; simple defuns of varying parameter list sizes, 
+  ; typed and untyped
+  (defun test1-f1:bool ())
+  (defun test1-f2:string (x:bool))
+  (defun test1-f3:decimal (x:bool y:string z:decimal))
+  
+  ; simple defconsts
+  (defconst TEST1-C1 0)
+  (defconst TEST1-C2 "const 1")
+  (defconst TEST1-C3 2.0)
 )
 
-(interface bar
-  @doc "more crazy stuff"
-  @model (property (do (foobar)))
+; more complex interface with model properties 
+; and  docstrings at the module level
+(interface sig-test2
+  @doc "this is a docstring for sig-test2"
+  @model (property (do (something)))
 
-  (defun foobar:decimal (x:bool))
+  (defun test2-f1:decimal (x:bool))
+  (defun test2-f2:string ())
+  (defconst TEST2-C1 "test2-C1")
+  (defconst TEST2-C2 true)
+)
+
+; most complex interface with model properties
+; defined at module and function level, as well 
+; as docstrings in both positions, typed and untyped
+(interface sig-test3
+  @doc "this is a docstring for sig-test3"
+  @model (property (do (something)))
+
+  (defun test3-f1:bool (x:bool))
+  (defun test3-f2:bool (x:decimal y:bool) @doc "i love pact")
+  (defun test3-f3:string () "docs work without the doc")
+  (defun test3-f4:decimal () 
+    @model (property (do (subproperty))))
+
+  ; a full example of what a function may look like
+  (defun test3-f5:bool (x:bool y:bool)
+    @model (property (do (subproperty)))
+    @doc "example function docstring")
+
+  ; typed and inferred variants
+  (defconst TEST3-C1 true)
+  (defconst TEST3-C2 1)
+  (defconst TEST3-C3 "const the casbah")
 )
 
 (commit-tx)
 
-(define-keyset 'k (sig-keyset))
+(define-keyset 'test-keyset (sig-keyset))
 
-(module mod 'k
-  @doc   "this defines mod"
-  @model (property (do (crazy stuff)))
+(module mod 'test-keyset
 
-  (implements foo-interface)
+  @doc "my module documentation"
+  @model (property (do (mymodule prop)))
 
-  (defun foo:bool (x:bool) @doc "foo the town" true)
-  (defun bar:bool (x:decimal y:bool) @doc "i love bars" y)
-  (defun f:string () @doc "return" "f")
-  (defun g:bool () true)
+  ; implement arbitrarily many interfaces
+  (implements sig-test1)
+  (implements sig-test2)
+  (implements sig-test3)
 
-  (defun foobar ()
-    "docstrings work without @doc"
-    2)
+  (defun test1-f1:bool () 
+    true)
 
-  (defconst BAR 1 @doc "barring disbelief")
-  (defconst QUX "noqux the casbah")
+  (defun test1-f2:string (x:bool) 
+    @doc "implementation of test1-f2"
+    "forget about x")
+
+  (defun test1-f3:decimal (x: bool y: string z:decimal) 
+    z)
+
+  (defun test2-f1:decimal (x:bool) 
+    2.0)
+
+  (defun test2-f2:string ()
+    @doc "implementation of test2-f2"
+    "axiomatic string")
+
+  (defun test3-f1:bool (x:bool)
+    true)
+  (defun test3-f2:bool (x:decimal y:bool) 
+    @doc "i love pact"
+    y)
+
+  (defun test3-f3:string () 
+    "docs work without the doc"
+    "i love pact twice")
+  (defun test3-f4:decimal () 
+    @model (property (do (subproperty)))
+    2.0)
+
+  ; a full example of what a function may look like
+  ; using constants defined in interfaces
+  (defun test3-f5:bool (x: bool y: bool)
+    @model (property (do (subproperty)))
+    "example function docstring"
+    (and x y))
 
 )
