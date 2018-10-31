@@ -17,8 +17,11 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
+{-# LANGUAGE UndecidableInstances       #-}
+
 module Pact.Analyze.Types.Shared where
 
+import Data.Constraint.Extras
 import Data.Constraint (Dict(Dict))
 import           Control.Lens                 (At (at), Index, Iso, Iso',
                                                IxValue, Ixed (ix), Lens',
@@ -720,36 +723,17 @@ liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
 liftC Dict b = b
 
 withEq :: forall a b k. SingTy k a -> (Eq (Concrete a) => b) -> b
-withEq = liftC . singMkEq
+withEq = has @EqConcrete
 
-singMkEq :: SingTy k a -> Dict (Eq (Concrete a))
-singMkEq = \case
-  SInteger -> Dict
-  SBool    -> Dict
-  SStr     -> Dict
-  STime    -> Dict
-  SDecimal -> Dict
-  SKeySet  -> Dict
-  SAny     -> Dict
-  SList a  -> case singMkEq a of
-    Dict -> Dict
-  SObject  -> Dict
+class    Eq   (Concrete a) => EqConcrete a where
+instance Eq   (Concrete a) => EqConcrete a where
+class    Show (Concrete a) => ShowConcrete a where
+instance Show (Concrete a) => ShowConcrete a where
+class    UserShow (Concrete a) => UserShowConcrete a where
+instance UserShow (Concrete a) => UserShowConcrete a where
 
 withShow :: forall a b k. SingTy k a -> (Show (Concrete a) => b) -> b
-withShow = liftC . singMkShow -- has' @Eq @Concrete
-
-singMkShow :: SingTy k a -> Dict (Show (Concrete a))
-singMkShow = \case
-  SInteger -> Dict
-  SBool    -> Dict
-  SStr     -> Dict
-  STime    -> Dict
-  SDecimal -> Dict
-  SKeySet  -> Dict
-  SAny     -> Dict
-  SList a  -> case singMkShow a of
-    Dict -> Dict
-  SObject  -> Dict
+withShow = has @ShowConcrete
 
 withSMTValue
   :: forall a b.
@@ -767,20 +751,7 @@ singMkSMTValue = \case
   SAny     -> Dict
 
 withUserShow :: forall a b k. SingTy k a -> (UserShow (Concrete a) => b) -> b
-withUserShow = liftC . singMkUserShow
-
-singMkUserShow :: SingTy k a -> Dict (UserShow (Concrete a))
-singMkUserShow = \case
-  SInteger -> Dict
-  SBool    -> Dict
-  SStr     -> Dict
-  STime    -> Dict
-  SDecimal -> Dict
-  SKeySet  -> Dict
-  SAny     -> Dict
-  SList a  -> case singMkUserShow a of
-    Dict -> Dict
-  SObject  -> Dict
+withUserShow = has @UserShowConcrete
 
 withSymWord
   :: forall a b.
