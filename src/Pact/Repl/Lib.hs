@@ -30,15 +30,17 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
+import qualified Data.Text as Text
 import Data.Text.Encoding
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
+#if defined(ghcjs_HOST_OS)
+import qualified Pact.Analyze.Remote.Client as RemoteClient
+#else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
-import qualified Data.Text as Text
-import Pact.Analyze.Check
+import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 #endif
 import Pact.Typechecker
@@ -343,7 +345,6 @@ tc i as = case as of
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
-#if !defined(ghcjs_HOST_OS)
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -352,12 +353,17 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        modResult <- liftIO $ verifyModule modules md
-        setop $ TcErrors $ fmap Text.unpack $ renderVerifiedModule modResult
+#if defined(ghcjs_HOST_OS)
+        renderedLines <- liftIO $
+          RemoteClient.verifyModule modules md "localhost" 3000
+#else
+        modResult <- liftIO $ Check.verifyModule modules md
+        let renderedLines = Check.renderVerifiedModule modResult
+#endif
+        setop $ TcErrors $ Text.unpack <$> renderedLines
         return (tStr "")
 
   _ -> argsError i as
-#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def
