@@ -1193,7 +1193,7 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 ## REPL-only functions {#repl-lib}
 
-The following functions are loaded magically in the interactive REPL, or in script files with a `.repl` extension. They are not available for blockchain-based execution.
+The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
 
 
 ### begin-tx {#begin-tx}
@@ -1264,7 +1264,7 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 *gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Query gas state, or set it to GAS
+Query gas state, or set it to GAS.
 
 
 ### env-gaslimit {#env-gaslimit}
@@ -1272,7 +1272,7 @@ Query gas state, or set it to GAS
 *limit*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Set environment gas limit to LIMIT
+Set environment gas limit to LIMIT.
 
 
 ### env-gasprice {#env-gasprice}
@@ -1280,7 +1280,7 @@ Set environment gas limit to LIMIT
 *price*&nbsp;`decimal` *&rarr;*&nbsp;`string`
 
 
-Set environment gas price to PRICE
+Set environment gas price to PRICE.
 
 
 ### env-gasrate {#env-gasrate}
@@ -1288,7 +1288,7 @@ Set environment gas price to PRICE
 *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Update gas model to charge constant RATE
+Update gas model to charge constant RATE.
 
 
 ### env-hash {#env-hash}
@@ -1376,7 +1376,7 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 *file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. 
+Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. 
 ```lisp
 (load "accounts.repl")
 ```
@@ -1398,7 +1398,7 @@ Inspect state from previous pact execution. Returns object with fields 'yield': 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Print a string, mainly to format newlines correctly
+Print a string, to format newlines correctly.
 
 
 ### rollback-tx {#rollback-tx}
@@ -1417,7 +1417,7 @@ Rollback transaction.
  *&rarr;*&nbsp;`keyset`
 
 
-Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
+Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
 
 
 ### typecheck {#typecheck}

@@ -1322,9 +1322,9 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 REPL-only functions
 -------------------
 
-The following functions are loaded magically in the interactive REPL, or
-in script files with a ``.repl`` extension. They are not available for
-blockchain-based execution.
+The following functions are loaded automatically into the interactive
+REPL, or within script files with a ``.repl`` extension. They are not
+available for blockchain-based execution.
 
 begin-tx
 ~~~~~~~~
@@ -1397,28 +1397,28 @@ env-gas
 
 *gas* ``integer`` *→* ``string``
 
-Query gas state, or set it to GAS
+Query gas state, or set it to GAS.
 
 env-gaslimit
 ~~~~~~~~~~~~
 
 *limit* ``integer`` *→* ``string``
 
-Set environment gas limit to LIMIT
+Set environment gas limit to LIMIT.
 
 env-gasprice
 ~~~~~~~~~~~~
 
 *price* ``decimal`` *→* ``string``
 
-Set environment gas price to PRICE
+Set environment gas price to PRICE.
 
 env-gasrate
 ~~~~~~~~~~~
 
 *rate* ``integer`` *→* ``string``
 
-Update gas model to charge constant RATE
+Update gas model to charge constant RATE.
 
 env-hash
 ~~~~~~~~
@@ -1512,7 +1512,7 @@ load
 *file* ``string`` *reset* ``bool`` *→* ``string``
 
 Load and evaluate FILE, resetting repl state beforehand if optional
-NO-RESET is true.
+RESET is true.
 
 .. code:: lisp
 
@@ -1536,7 +1536,7 @@ print
 
 *value* ``<a>`` *→* ``string``
 
-Print a string, mainly to format newlines correctly
+Print a string, to format newlines correctly.
 
 rollback-tx
 ~~~~~~~~~~~
@@ -1554,8 +1554,8 @@ sig-keyset
 
 *→* ``keyset``
 
-Convenience to build a keyset from keys present in message signatures,
-using ‘keys-all’ as the predicate.
+Convenience function to build a keyset from keys present in message
+signatures, using ‘keys-all’ as the predicate.
 
 typecheck
 ~~~~~~~~~
