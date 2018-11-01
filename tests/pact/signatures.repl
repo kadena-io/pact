@@ -53,7 +53,7 @@
 (commit-tx)
 
 (define-keyset 'test-keyset (sig-keyset))
-(module mod 'test-keyset
+(module mod-test1 'test-keyset
 
   @doc "my module documentation"
   @model (property (do (mymodule prop)))

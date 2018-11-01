@@ -24,7 +24,7 @@
   
   (use test-module)
 
-  (defun test-1:object{test-module.account} (x:object{test-module.account}))
+  (defun test-1:object{account} (x:object{account}))
 )
 
 (commit-tx)

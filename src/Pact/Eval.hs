@@ -259,13 +259,12 @@ evaluateDefs info defs = do
   cs <- traverseGraph defs
   sortedDefs <- detectCycles cs
   unifiedDefs <- foldl dresolve (pure HM.empty) sortedDefs
-  traverse evalConstRef unifiedDefs
+  traverse (runPure . evalConsts) unifiedDefs
   where
     dresolve eds (d,dn,_) = do
       ds <- eds
       ud <- traverse (unify info ds) d
       return $ HM.insert dn (Ref ud) ds
-    evalConstRef = runPure . evalConsts
     detectCycles sccs = forM sccs $ \c ->
       case c of
         AcyclicSCC v -> return v
@@ -296,46 +295,46 @@ evaluateConstraints
   -> HM.HashMap Text Ref
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints info Interface{} _ =
-  evalError info $ "Unexpected: interface found while appending meta-constraints to module"
-evaluateConstraints info Module{..} evalMap = foldMap (evaluateConstraint evalMap info) _mInterfaces
+  evalError info $ "Unexpected: interface found in module position while solving constraints"
+evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
   where
-    evaluateConstraint :: HM.HashMap Text Ref -> Info -> ModuleName -> Eval e (HM.HashMap Text Ref)
-    evaluateConstraint hm i ifn = do
-      iRefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
-      case iRefs of
+    evaluateConstraint ifn = do
+      irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
+      case irefs of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just iRefs' -> HM.foldrWithKey (solveConstraint i) (pure hm) iRefs'
-
--- | Compare implemented member signatures with their definitions
+        Just irefs' -> HM.foldrWithKey (solveConstraint info) (pure evalMap) irefs'
+          
+-- | Compare implemented member signatures with their definitions.
+-- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
   :: Info
   -> Text
   -> Ref
   -> Eval e (HM.HashMap Text Ref)
   -> Eval e (HM.HashMap Text Ref)
-solveConstraint info refName iref ehm = do
+solveConstraint info refName (Direct t) _ =
+  evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
+solveConstraint info refName (Ref t) ehm = do
   hm <- ehm
   case HM.lookup refName hm of
     Nothing -> pure hm
-    Just mref ->
-      case (iref, mref) of
-        (Ref t, Ref s) ->
-          case (t, s) of
-            (TDef _n _mn dt (FunType args rty) _ _ _,
-             TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
-              when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
-              when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
-              when (length args /= length args') $ evalError info $
-                "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
-              forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
-                when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
-                when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
-                return ()
-              pure hm
-            _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
-        _ -> evalError info $ "mismatching implementation signatures: \n" ++ show iref ++ "\n" ++ show mref
-      
+    Just (Direct s) ->
+      evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
+    Just (Ref s) ->
+      case (t, s) of
+        (TDef _n _mn dt (FunType args rty) _ _ _,
+          TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
+          when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
+          when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
+          forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
+            when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
+            when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
+            return ()
+          pure hm
+        _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
+
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
   dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
