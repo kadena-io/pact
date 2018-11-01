@@ -375,4 +375,4 @@ enforceBlessedHashes i mn h = do
           | h `HS.member` _mBlessed -> return () -- hash is blessed
           | otherwise -> evalError' i $
             "Execution aborted, hash not blessed for module " ++ show mn ++ ": " ++ show h
-        _ -> evalError' i $ "Internal error: ???" ++ show mn ++ ": " ++ show h 
+        _ -> evalError' i $ "Internal error: expected module reference " ++ show mn

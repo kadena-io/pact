@@ -60,7 +60,6 @@ import Pact.Types.Runtime (PactError)
 
 data CompileState = CompileState
   { _csFresh :: Int
-  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   , _csModule :: Maybe (ModuleName,Hash)
   }
 makeLenses ''CompileState
@@ -81,13 +80,11 @@ compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
--- TODO: ModuleName should be renamed to something that reflects interface AND module
 currentModule :: Compile (ModuleName,Hash)
 currentModule = use (psUser . csModule) >>= \m -> case m of
   Just cm -> return cm
   Nothing -> context >>= tokenErr' "Must be declared within module"
 
--- TODO: ModuleName should be renamed to something that reflects interface AND module
 currentModule' :: Compile ModuleName
 currentModule' = fst <$> currentModule
 
@@ -153,7 +150,6 @@ bindingForm = do
   TBinding bindings <$> abstractBody (map fst bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
--- TODO: ModuleName should be renamed to something that reflects interface AND module
 varAtom :: Compile (Term Name)
 varAtom = do
   AtomExp{..} <- atom
@@ -269,7 +265,6 @@ moduleForm = do
   let code = case i of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      -- TODO: ModuleName should be renamed to something that reflects interface AND module
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
@@ -285,7 +280,7 @@ moduleForm = do
     TBless {..} -> return [_tBlessed]
     TImplements{} -> return []
     t -> syntaxError $ "Invalid declaration in module scope: " ++ abbrev t
-  let interfaces = flip foldMap bd $ \d -> case d of
+  let interfaces = bd >>= \d -> case d of
         TImplements{..} -> [_tInterfaceName]
         _ -> []
   return $ TModule
@@ -295,7 +290,6 @@ moduleForm = do
 implements :: Compile (Term Name)
 implements = do
   modName <- currentModule'
-  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
   return $ TImplements ifName modName info
@@ -311,7 +305,6 @@ interface = do
   let code = case info of
         Info Nothing -> "<code unavailable>"
         Info (Just (c,_)) -> c
-      -- TODO: ModuleName should be renamed to something that reflects interface AND module
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
@@ -329,7 +322,8 @@ interfaceForm = (,) <$> some interfaceForms <*> contextInfo
       case _atomAtom of
         "defun" -> commit >> emptyDef 
         "defconst" -> commit >> defconst
-        _ -> expected "empty form"
+        "use" -> commit >> useForm
+        t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
@@ -394,7 +388,6 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
-  -- TODO: ModuleName should be renamed to something that reflects interface AND module
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
 hash' :: Compile Hash

@@ -401,7 +401,7 @@ reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
-reduce t@TImplements {} = unsafeReduce t -- TODO should not be unsafely reduced
+reduce t@TImplements{} = evalError (_tInfo t) "Interface implementations only allowed at top level"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct

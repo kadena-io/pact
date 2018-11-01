@@ -215,6 +215,7 @@ newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
+-- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
 newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s

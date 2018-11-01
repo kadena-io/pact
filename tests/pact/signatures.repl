@@ -53,7 +53,6 @@
 (commit-tx)
 
 (define-keyset 'test-keyset (sig-keyset))
-
 (module mod 'test-keyset
 
   @doc "my module documentation"
@@ -63,6 +62,7 @@
   (implements sig-test1)
   (implements sig-test2)
   (implements sig-test3)
+
 
   (defun test1-f1:bool () 
     true)

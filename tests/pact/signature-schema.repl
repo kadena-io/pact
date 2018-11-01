@@ -1,0 +1,48 @@
+;; Define a module schema, and use in an abstract interface
+(begin-tx)
+
+(define-keyset 'test-keyset (sig-keyset))
+
+(module test-module 'test-keyset
+  @doc "schema test module"
+
+  (defschema account 
+    @doc "dummy account schema"
+    @model (invariant (>= balance 0.0))
+    balance:decimal
+    amount:decimal
+    ccy:string
+    auth:string
+    )
+)
+
+(commit-tx)
+(begin-tx)
+
+(interface test-sig
+  @doc "test that schemas can be used as type signatures in interfaces"
+  
+  (use test-module)
+
+  (defun test-1:object{test-module.account} (x:object{test-module.account}))
+)
+
+(commit-tx)
+
+(define-keyset 'impl-keyset (sig-keyset))
+
+(module test-impl 'impl-keyset
+  @doc "test if implementing test-sig resolves schema type"
+
+  (use test-module)
+  (implements "test-sig")
+  
+  (deftable accounts:{accounts}
+    "test reference")
+
+  (defun test-1:object{test-module.account} (x:object{test-module.account})
+    x)
+)
+  
+  
+    
