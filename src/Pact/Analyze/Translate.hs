@@ -774,6 +774,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
           (_, _) -> case singEq ta tb of
             Just Refl -> throwError' $ MalformedComparison fn args
             _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
+      (EList ta a', EList tb b') -> case singEq ta tb of
+        Just Refl -> do
+          op' <- maybe (throwError' $ MalformedComparison fn args) pure $
+            toOp eqNeqP fn
+          pure $ ESimple SBool $ inject $
+            ListEqNeq op' (EList ta a') (EList tb b')
+        _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
       (EObject _ a', EObject _ b') -> do
         op' <- maybe (throwError' $ MalformedComparison fn args) pure $
           toOp eqNeqP fn

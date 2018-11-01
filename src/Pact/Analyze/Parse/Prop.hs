@@ -394,10 +394,6 @@ inferPreProp preProp = case preProp of
           SKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple SBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-          -- TList ty -> case toOp eqNeqP op' of
-          --   Just eqNeq
-          --     -> pure $ ESimple SBool $ CoreProp $ ListEqNeq eqNeq (ESimple aTy aProp) (ESimple aTy bProp)
-          --   Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
       (EList aTy aProp, EList bTy bProp) -> case toOp eqNeqP op' of
         Just eqNeq -> case singEq aTy bTy of
           Just Refl -> pure $ ESimple SBool $ CoreProp $
@@ -537,6 +533,9 @@ checkPreProp ty preProp
     eprop <- inferPreProp preProp
     case eprop of
       ESimple ty' prop -> case singEq ty ty' of
+        Just Refl -> pure prop
+        Nothing   -> typeError preProp ty ty'
+      EList ty' prop -> case singEq ty ty' of
         Just Refl -> pure prop
         Nothing   -> typeError preProp ty ty'
       EObject ty' _prop -> typeError preProp ty ty'

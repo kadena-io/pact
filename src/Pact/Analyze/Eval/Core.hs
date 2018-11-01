@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
-import           Control.Lens                (over, ifoldr, imap)
+import           Control.Lens                (over, ifoldr)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
@@ -18,6 +18,7 @@ import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
+import qualified Data.List as List
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -190,7 +191,8 @@ evalCore (ListAt tyA i l) = do
   i' <- eval i
   l' <- withShow tyA $ evalL l
 
-  markFailure $ i' .> fromIntegral (length l')
+  -- valid range [0..length l - 1]
+  markFailure $ i' .< 0 ||| i' .>= fromIntegral (length l')
 
   -- statically build a list of index comparisons
   pure $ ifoldr
@@ -219,27 +221,24 @@ evalCoreL (ListDrop _ty n list) = do
   n'    <- eval n
   list' <- evalL list
 
-  -- TODO: bad asymptotics
-  let list'' = imap (\i _ -> drop i list') list'
+  -- statically build a list of index comparisons
+  pure $ ifoldr
+    (\thisIx val rest -> ite (fromIntegral thisIx .== n') val rest)
+    -- we return [] for *any* wrong index, including negative numbers
+    []
+    (List.tails list')
 
---   pure $ ifoldr
---     (\thisIx val rest -> ite
-
-  case unliteralS n' of
-    Nothing -> throwErrorNoLoc "Unable to determine statically the number of list elements to drop"
-    Just n'' -> do
-      let n''' = fromInteger n''
-      markFailure $ literal $ n''' > length list'
-      pure $ drop n''' list'
 evalCoreL (ListTake _ty n list) = do
   n'    <- eval n
   list' <- evalL list
-  case unliteralS n' of
-    Nothing -> throwErrorNoLoc "Unable to determine statically the number of list elements to drop"
-    Just n'' -> do
-      let n''' = fromInteger n''
-      markFailure $ literal $ n''' > length list'
-      pure $ take n''' list'
+
+  -- statically build a list of index comparisons
+  pure $ ifoldr
+    (\thisIx val rest -> ite (fromIntegral thisIx .== n') val rest)
+    -- we return [] for *any* wrong index, including negative numbers
+    []
+    (List.inits list')
+
 evalCoreL (ListConcat _ty p1 p2) = (++) <$> evalL p1 <*> evalL p2
 
 -- evalCoreL ListReverse{} = undefined
