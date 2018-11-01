@@ -19,8 +19,7 @@ import           Pact.Analyze.Util          (dummyInfo)
 import           Pact.Eval                  (liftTerm)
 import           Pact.Native                (enforceDef, enforceOneDef,
                                              formatDef, hashDef, ifDef,
-                                             lengthDef, pactVersionDef,
-                                             readDecimalDef)
+                                             lengthDef, readDecimalDef)
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
@@ -127,7 +126,6 @@ toPactTm = \case
   -- ESimple TBool (KsAuthorized x)
   -- ESimple TBool (NameAuthorized x)
 
-  ESimple TStr PactVersion -> mkApp pactVersionDef []
   ESimple TStr (Format template vals)
     -> mkApp' formatDef (ESimple TStr template) vals
   ESimple TStr (FormatTime x y)

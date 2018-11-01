@@ -324,8 +324,7 @@ genTermSpecific size@(BoundedString _len) = scale 2 $ Gen.choice
   --      tagId <- genTagId
   --      Write writeType tagId table schema
   -- Write
-  [ pure $ ESimple TStr PactVersion
-  , do
+  [ do
        let genFormattableTerm = Gen.choice
              [ genTerm intSize
              , do

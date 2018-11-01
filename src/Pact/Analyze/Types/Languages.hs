@@ -528,8 +528,6 @@ data Term ret where
   Read            ::              TagId -> TableName -> Schema -> Term String ->                Term Object
   Write           :: WriteType -> TagId -> TableName -> Schema -> Term String -> Term Object -> Term String
 
-  PactVersion     :: Term String
-
   Format          :: Term String         -> [ETerm]     -> Term String
   FormatTime      :: Term String         -> Term Time   -> Term String
   ParseTime       :: Maybe (Term String) -> Term String -> Term Time
@@ -563,7 +561,6 @@ instance UserShow a => UserShow (Term a) where
 
     Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
     Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
-    PactVersion          -> parenList ["pact-version"]
     Format x y           -> parenList ["format", userShow x, userShowList y]
     FormatTime x y       -> parenList ["format", userShow x, userShow y]
     ParseTime Nothing y  -> parenList ["parse-time", userShow y]

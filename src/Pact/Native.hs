@@ -23,7 +23,6 @@ module Pact.Native
     ,lengthDef
     ,enforceDef
     ,enforceOneDef
-    ,pactVersionDef
     ,formatDef
     ,hashDef
     ,ifDef
@@ -128,12 +127,6 @@ enforceOneDef =
           Nothing -> failTx (_faInfo i) (unpack msg')
           Just b -> return b
     enforceOne i as = argsError' i as
-
-pactVersionDef :: NativeDef
-pactVersionDef = setTopLevelOnly $ defRNative "pact-version"
-  (\_ _ -> return $ toTerm pactVersion)
-  (funType tTyString [])
-  "Obtain current pact build version. `(pact-version)`"
 
 
 formatDef :: NativeDef
@@ -298,7 +291,10 @@ langDefs =
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
      "Special form binds to a yielded object value from the prior step execution in a pact."
 
-    ,pactVersionDef
+    ,setTopLevelOnly $ defRNative "pact-version"
+     (\_ _ -> return $ toTerm pactVersion)
+     (funType tTyString [])
+     "Obtain current pact build version. `(pact-version)`"
 
     ,setTopLevelOnly $ defRNative "enforce-pact-version" enforceVersion
      (funType tTyBool [("min-version",tTyString)] <>
@@ -609,13 +605,13 @@ strToInt i as =
     go base' txt =
       if T.all isHexDigit txt
       then
-        if T.length txt <= 128 
+        if T.length txt <= 128
         then case baseStrToInt base' txt of
           Left _ -> argsError i as
           Right n -> return (toTerm n)
         else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
       else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
-      
+
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
 txHash i as = argsError i as
@@ -626,7 +622,7 @@ txHash i as = argsError i as
 -- e.g.
 --   -- hexadecimal to decimal
 --   baseStrToInt 10 "abcdef123456" = 188900967593046
--- 
+--
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
   if base <= 1 || base > 16
@@ -637,5 +633,5 @@ baseStrToInt base t =
     else Right $ T.foldl' go 0 t
   where
     go :: Integer -> Char -> Integer
-    go acc w = base * acc + (fromIntegral . digitToInt $ w) 
+    go acc w = base * acc + (fromIntegral . digitToInt $ w)
 {-# INLINE baseStrToInt #-}

@@ -45,7 +45,6 @@ import qualified Pact.Types.Hash             as Pact
 import qualified Pact.Types.Persistence      as Pact
 import           Pact.Types.Runtime          (tShow)
 import qualified Pact.Types.Runtime          as Pact
-import           Pact.Types.Version          (pactVersion)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
@@ -477,8 +476,6 @@ evalTerm = \case
     authorized <- nameAuthorized ksn
     tagAuth tid ks authorized
     pure authorized
-
-  PactVersion -> pure $ literalS $ T.unpack pactVersion
 
   Format formatStr args -> do
     formatStr' <- eval formatStr

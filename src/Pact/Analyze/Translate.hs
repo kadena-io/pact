@@ -884,8 +884,6 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
-  AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
-
   AST_WithRead node table key bindings schemaNode body -> do
     schema            <- translateSchema schemaNode
     ESimple TStr key' <- translateNode key
