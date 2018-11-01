@@ -16,6 +16,8 @@ in
             pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
             haskeline = guardGhcjs super.haskeline;
 
+            ghcjs-dom = self.callHackage "ghcjs-dom" "0.9.2.0" {};
+
             # Needed to get around a requirement on `hspec-discover`.
             megaparsec = pkgs.haskell.lib.dontCheck super.megaparsec;
 
@@ -64,7 +66,7 @@ in
     };
     shells = {
       ghc = ["pact"];
-      # ghcjs = ["pact"];
+      ghcjs = ["pact"];
     };
 
   })

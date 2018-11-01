@@ -19,7 +19,8 @@ cabal-version:       >=1.22
 
 library
 
-  exposed-modules:     Pact.Compile
+  exposed-modules:     Pact.Analyze.Remote.Types
+                     , Pact.Compile
                      , Pact.Eval
                      , Pact.Gas
                      , Pact.Native
@@ -54,6 +55,12 @@ library
                      , Crypto.Hash.Blake2Native
                      , Pact.Types.Typecheck
                      , Pact.Typechecker
+
+  if impl(ghcjs)
+    exposed-modules:
+      JavaScript.Web.XMLHttpRequest
+      Pact.Analyze.Remote.Client
+
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
@@ -88,6 +95,7 @@ library
       Pact.Analyze.Types.Shared
       Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
+      Pact.Analyze.Remote.Server
       Pact.ApiReq
       Pact.Bench
       Pact.Docgen
@@ -151,6 +159,11 @@ library
                      , vector >= 0.11.0.0 && < 0.13
                      , vector-space >= 0.10.4 && < 0.14
                      , mmorph >= 1.1 && < 1.2
+
+  if impl(ghcjs)
+    build-depends:
+      ghcjs-base,
+      ghcjs-prim
 
   if !impl(ghcjs)
     build-depends:
@@ -237,9 +250,11 @@ test-suite hspec
       , crypto-api
       , http-client
       , wreq
+      , snap-server
   other-modules:
                 Blake2Spec
                 KeysetSpec
+                RemoteVerifySpec
                 TypesSpec
                 HashSpec
   if !impl(ghcjs)
