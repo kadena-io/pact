@@ -385,7 +385,7 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value after change of base of a string of length <= 128 chars consisting of base-2 through base-16 (hexadecimal) characters. Only bases 2 through 16 are supported. 
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. 
 ```lisp
 pact> (str-to-int 16 "123456")
 1193046
