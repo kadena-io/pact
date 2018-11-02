@@ -24,6 +24,7 @@ import qualified Data.Set as S
 import Control.Lens (view)
 
 import Data.Aeson as A
+import Data.Maybe (fromMaybe)
 
 import Pact.Types.Command
 import Pact.Types.RPC
@@ -38,13 +39,16 @@ initPactService :: CommandConfig -> Loggers -> IO (CommandExecInterface (PactRPC
 initPactService CommandConfig {..} loggers = do
   let logger = newLogger loggers "PactService"
       klog s = logLog logger "INIT" s
+      gasLimit = fromMaybe 0 _ccGasLimit
+      gasRate = fromMaybe 0 _ccGasRate
+      gasEnv = (GasEnv (fromIntegral gasLimit) 0.0 (constGasModel (fromIntegral gasRate)))
       mkCEI p@PactDbEnv {..} = do
         cmdVar <- newMVar (CommandState initRefStore M.empty)
         klog "Creating Pact Schema"
         initSchema p
         return CommandExecInterface
-          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar eMode cmd (verifyCommand cmd)
-          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar }
+          { _ceiApplyCmd = \eMode cmd -> applyCmd logger _ccEntity p cmdVar gasEnv eMode cmd (verifyCommand cmd)
+          , _ceiApplyPPCmd = applyCmd logger _ccEntity p cmdVar gasEnv }
   case _ccSqlite of
     Nothing -> do
       klog "Initializing pure pact"
@@ -54,11 +58,11 @@ initPactService CommandConfig {..} loggers = do
       mkSQLiteEnv logger True sqlc loggers >>= mkCEI
 
 
-applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> ExecutionMode -> Command a ->
+applyCmd :: Logger -> Maybe EntityName -> PactDbEnv p -> MVar CommandState -> GasEnv -> ExecutionMode -> Command a ->
             ProcessedCommand (PactRPC ParsedCode) -> IO CommandResult
-applyCmd _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
-applyCmd logger conf dbv cv exMode _ (ProcSucc cmd) = do
-  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger) $ runPayload cmd
+applyCmd _ _ _ _ _ ex cmd (ProcFail s) = return $ jsonResult ex (cmdToRequestKey cmd) s
+applyCmd logger conf dbv cv gasEnv exMode _ (ProcSucc cmd) = do
+  r <- tryAny $ runCommand (CommandEnv conf exMode dbv cv logger gasEnv) $ runPayload cmd
   case r of
     Right cr -> do
       logLog logger "DEBUG" $ "success for requestKey: " ++ show (cmdToRequestKey cmd)
@@ -97,8 +101,7 @@ applyExec rk (ExecMsg parsedCode edata) Command{..} = do
   (CommandState refStore pacts) <- liftIO $ readMVar _ceState
   let sigs = userSigsToPactKeySet _cmdSigs
       evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
-                (MsgData sigs edata Nothing _cmdHash) refStore
-                freeGasEnv
+                (MsgData sigs edata Nothing _cmdHash) refStore _ceGasEnv
   pr <- liftIO $ evalExec evalEnv parsedCode
   newCmdPact <- join <$> mapM (handlePactExec (erInput pr)) (erExec pr)
   let newPacts = case newCmdPact of
@@ -142,7 +145,7 @@ applyContinuation rk msg@ContMsg{..} Command{..} = do
               pactStep = Just $ PactStep _cmStep _cmRollback (PactId $ pack $ show _cmTxId) _cpYield
               evalEnv = setupEvalEnv _ceDbEnv _ceEntity _ceMode
                         (MsgData sigs _cmData pactStep _cmdHash) _csRefStore
-                        freeGasEnv
+                        _ceGasEnv
           res <- tryAny (liftIO  $ evalContinuation evalEnv _cpContinuation)
 
           -- Update pacts state
