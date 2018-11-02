@@ -24,9 +24,10 @@
 
 (module test-impl 'test-keyset
   @doc "test if implementing test-sig resolves schema type"
-
-  (use test-module)
   
+  (use test-module)
+  (implements test-sig)
+
   (deftable accounts:{account}
     "test reference")
 

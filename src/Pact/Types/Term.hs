@@ -283,6 +283,7 @@ instance ToJSON Module where
     [ "name" .= _mName
     , "keyset" .= _mKeySet
     , "meta" .= _mMeta
+    , "code" .= _mCode
     , "hash" .= _mHash
     , "blessed" .= _mBlessed
     , "interfaces" .= _mInterfaces
