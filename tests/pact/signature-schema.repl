@@ -1,8 +1,6 @@
 ;; Define a module schema, and use in an abstract interface
 (begin-tx)
-
 (define-keyset 'test-keyset (sig-keyset))
-
 (module test-module 'test-keyset
   @doc "schema test module"
 
@@ -15,34 +13,24 @@
     auth:string
     )
 )
-
 (commit-tx)
 (begin-tx)
-
-(interface test-sig
-  @doc "test that schemas can be used as type signatures in interfaces"
-  
+(interface test-sig  
   (use test-module)
 
   (defun test-1:object{account} (x:object{account}))
 )
-
 (commit-tx)
 
-(define-keyset 'impl-keyset (sig-keyset))
-
-(module test-impl 'impl-keyset
+(module test-impl 'test-keyset
   @doc "test if implementing test-sig resolves schema type"
 
   (use test-module)
-  (implements "test-sig")
   
-  (deftable accounts:{accounts}
+  (deftable accounts:{account}
     "test reference")
 
-  (defun test-1:object{test-module.account} (x:object{test-module.account})
+  (defun test-1:object{account} (x:object{account})
     x)
 )
-  
-  
     

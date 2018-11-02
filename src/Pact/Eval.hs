@@ -173,7 +173,6 @@ eval (TModule m@Interface{..} bod i) =
     return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
 eval t = enscope t >>= reduce
 
-
 evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
 evalUse mn h i = do
   mm <- preview $ eeRefStore . rsModules . ix mn
@@ -195,14 +194,6 @@ evalUse mn h i = do
       installModule md
 
 -- | Make table of module definitions for storage in namespace/RefStore.
---
--- Definitions are transformed such that all free variables are resolved either to
--- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
--- resolve to a definition in the module ('Left String'). A graph is formed from
--- all 'Left String' entries and enforced as acyclic, proving the definitions
--- to be non-recursive. The graph is walked to unify the Either to
--- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
--- the table itself: the topological sort of the graph ensures the reference will be there.
 loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
 loadModule m@Module{..} bod1 mi g0 = do
   (g1,modDefs1) <-
@@ -226,8 +217,8 @@ loadModule m@Module{..} bod1 mi g0 = do
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   evaluatedDefs <- evaluateDefs mi modDefs1
-  solvedDefs <- evaluateConstraints mi m evaluatedDefs
-  let md = ModuleData m solvedDefs
+  evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m evaluatedDefs
   installModule md 
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -254,46 +245,44 @@ loadModule i@Interface{..} body info gas0 = do
   (evalRefs . rsNewModules) %= HM.insert _interfaceName md
   return (gas1, idefs)
 
+-- | Definitions are transformed such that all free variables are resolved either to
+-- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
+-- resolve to a definition in the module ('Left String'). A graph is formed from
+-- all 'Left String' entries and enforced as acyclic, proving the definitions
+-- to be non-recursive. The graph is walked to unify the Either to
+-- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
+-- the table itself: the topological sort of the graph ensures the reference will be there.
 evaluateDefs :: Info -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
 evaluateDefs info defs = do
   cs <- traverseGraph defs
-  sortedDefs <- detectCycles cs
-  unifiedDefs <- foldl dresolve (pure HM.empty) sortedDefs
-  traverse (runPure . evalConsts) unifiedDefs
-  where
-    dresolve eds (d,dn,_) = do
-      ds <- eds
-      ud <- traverse (unify info ds) d
-      return $ HM.insert dn (Ref ud) ds
-    detectCycles sccs = forM sccs $ \c ->
+  sortedDefs <- forM cs $ \c ->
       case c of
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
           "Recursion detected: " ++ show vs
+  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds 
+      unifiedDefs = foldl dresolve HM.empty sortedDefs
+  traverse (runPure . evalConsts) unifiedDefs
 
 traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
-traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) resolveTerm
-  where
-    resolveTerm (dn,d) = do
-      d' <- forM d resolveTermRef
-      return (d', dn, mapMaybe(either Just (const Nothing)) $ toList d')
-    resolveTermRef (f :: Name) = do
-      dm <- resolveRef f
-      case (dm, f) of
-        (Just t, _) -> return (Right t)
-        (Nothing, Name fn _) ->
-          case HM.lookup fn defs of
-            Just _ -> return (Left fn)
-            Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
-        (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
-   
- 
+traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
+  d' <- forM d $ \(f :: Name) -> do
+    dm <- resolveRef f
+    case (dm, f) of
+      (Just t, _) -> return (Right t)
+      (Nothing, Name fn _) ->
+        case HM.lookup fn defs of
+          Just _ -> return (Left fn)
+          Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
+      (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
+  return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+     
 -- | Evaluate interface constraints in module.
 evaluateConstraints
   :: Info
   -> Module
   -> HM.HashMap Text Ref
-  -> Eval e (HM.HashMap Text Ref)
+  -> Eval e ()
 evaluateConstraints info Interface{} _ =
   evalError info $ "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
@@ -303,22 +292,22 @@ evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInter
       case irefs of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just irefs' -> HM.foldrWithKey (solveConstraint info) (pure evalMap) irefs'
+        Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
           
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
   :: Info
+  -> HM.HashMap Text Ref
   -> Text
   -> Ref
-  -> Eval e (HM.HashMap Text Ref)
-  -> Eval e (HM.HashMap Text Ref)
-solveConstraint info refName (Direct t) _ =
+  -> Eval e ()
+  -> Eval e ()
+solveConstraint info _ refName (Direct t) _ =
   evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
-solveConstraint info refName (Ref t) ehm = do
-  hm <- ehm
-  case HM.lookup refName hm of
-    Nothing -> pure hm
+solveConstraint info em refName (Ref t) _ =
+  case HM.lookup refName em of
+    Nothing -> pure ()
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
@@ -332,7 +321,6 @@ solveConstraint info refName (Ref t) ehm = do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
             return ()
-          pure hm
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -347,13 +335,11 @@ resolveRef nn@(Name _ _) = do
     d@Just {} -> return d
     Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
 
-
-unify :: Info -> HM.HashMap Text Ref -> Either Text Ref -> Eval e Ref
-unify i m = either lookupRefName pure
-  where
-    lookupRefName rn = case HM.lookup rn m of
-      Nothing -> evalError i $ "Ref lookup failed for " ++ show rn
-      Just ref -> pure ref
+-- | This should be impure. See 'evaluateDefs'. Refs are
+-- expected to exist, and if they don't, it is a serious bug
+unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
+unify _ (Right r) = r
+unify m (Left t) = m HM.! t 
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
@@ -504,7 +490,7 @@ resolveFreeVars i b = traverse r b where
 
 installModule :: ModuleData ->  Eval e ()
 installModule ModuleData{..} = do 
-  (evalRefs . rsLoaded) %= HM.union (HM.foldlWithKey' (\m k v -> HM.insert (k `Name` def) v m) HM.empty _mdRefMap)
+  (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
   let n = case _mdModule of
         Module{..} -> _mName
         Interface{..} -> _interfaceName
