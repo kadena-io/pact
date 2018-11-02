@@ -13,7 +13,7 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, bAll, true, false, literal, uninterpret)
+                                              SymWord, ite, bAll, true, false, uninterpret)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -217,27 +217,35 @@ evalCoreL
 evalCoreL (LiteralList _ty xs) = do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv <$> vals
-evalCoreL (ListDrop _ty n list) = do
+evalCoreL (ListDrop ty n list) = do
   n'    <- eval n
   list' <- evalL list
 
+  let list'' = ite (n' .>= 0) (List.tails list') (List.inits list')
+      n''    = ite (n' .>= 0) n' (fromIntegral (length list') + n')
+
   -- statically build a list of index comparisons
   pure $ ifoldr
-    (\thisIx val rest -> ite (fromIntegral thisIx .== n') val rest)
-    -- we return [] for *any* wrong index, including negative numbers
+    (\thisIx val rest -> ite (fromIntegral thisIx .== n'') val rest)
+    -- we return [] for any index which is too large
     []
-    (List.tails list')
+    list''
 
 evalCoreL (ListTake _ty n list) = do
   n'    <- eval n
   list' <- evalL list
 
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  let list'' = ite (n' .>= 0) (List.inits list') (List.tails list')
+      n''    = ite (n' .>= 0) n' (fromIntegral (length list') + n')
+
   -- statically build a list of index comparisons
   pure $ ifoldr
-    (\thisIx val rest -> ite (fromIntegral thisIx .== n') val rest)
-    -- we return [] for *any* wrong index, including negative numbers
+    (\thisIx val rest -> ite (fromIntegral thisIx .== n'') val rest)
+    -- we return [] for any index which is too large
     []
-    (List.inits list')
+    list''
 
 evalCoreL (ListConcat _ty p1 p2) = (++) <$> evalL p1 <*> evalL p2
 

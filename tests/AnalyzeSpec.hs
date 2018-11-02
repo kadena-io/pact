@@ -2463,7 +2463,7 @@ spec = describe "analyze" $ do
     --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
 -}
 
-  describe "lists verify" $ do
+  describe "list literals" $ do
     let code0 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
@@ -2472,6 +2472,7 @@ spec = describe "analyze" $ do
     expectVerified  $ code0 "(property (= result [a b c]))"
     expectFalsified $ code0 "(property (= result [a b]))"
 
+  describe "list drop" $ do
     let code1 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
@@ -2479,6 +2480,14 @@ spec = describe "analyze" $ do
           |]
     expectVerified  $ code1 "(property (= result [c]))"
     expectFalsified $ code1 "(property (= result [b c]))"
+
+    let code1' model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model $model
+            (drop -1 [a b c]))
+          |]
+    expectVerified  $ code1' "(property (= result [a b]))"
+    expectFalsified $ code1' "(property (= result [a]))"
 
             -- TODO
             -- @model (property (= result []))
@@ -2491,6 +2500,7 @@ spec = describe "analyze" $ do
     --       |]
     -- expectVerified code2
 
+  describe "list take" $ do
     let code3 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
@@ -2498,6 +2508,14 @@ spec = describe "analyze" $ do
           |]
     expectVerified  $ code3 "(property (= result [a b]))"
     expectFalsified $ code3 "(property (= result [b c]))"
+
+    let code3' model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model $model
+            (take -2 [a b c]))
+          |]
+    expectVerified  $ code3' "(property (= result [b c]))"
+    expectFalsified $ code3' "(property (= result [a b]))"
 
             -- TODO
             -- @model (property (= result []))
@@ -2510,6 +2528,7 @@ spec = describe "analyze" $ do
     --       |]
     -- expectVerified code4
 
+  describe "list at" $ do
     -- let code5 = [text|
     --       (defun test:integer (a:integer b:integer c:integer)
     --         @model (property (= result a))
@@ -2531,6 +2550,7 @@ spec = describe "analyze" $ do
     expectVerified code6'
     expectPass code6' $ Satisfiable Abort'
 
+  describe "string contains" $ do
     let code7 = [text|
           (defun test:bool ()
             @model (property (= result true))
@@ -2538,6 +2558,7 @@ spec = describe "analyze" $ do
           |]
     expectVerified code7
 
+  describe "list contains" $ do
     let code8 model = [text|
           (defun test:bool (a:integer b:integer c:integer)
             @model $model
@@ -2546,6 +2567,7 @@ spec = describe "analyze" $ do
     expectVerified  $ code8 "(property (= result true))"
     expectFalsified $ code8 "(property (= result false))"
 
+  describe "list concat" $ do
     let code9 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
