@@ -110,6 +110,13 @@ term =
   <|> listLiteral
   <|> objectLiteral
 
+-- | User-available atoms (excluding reserved words).
+userAtom :: Compile (AtomExp Info)
+userAtom = do
+  a@AtomExp{..} <- bareAtom
+  when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
+  pure a
+
 specialForm :: Compile (Term Name)
 specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "use" -> commit >> useForm
@@ -155,7 +162,9 @@ varAtom = do
   when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
   n <- case _atomQualifiers of
     [] -> return $ Name _atomAtom _atomInfo
-    [q] -> return $ QName (ModuleName q) _atomAtom _atomInfo
+    [q] -> do
+      when (q `elem` reserved) $ unexpected' "reserved word"
+      return $ QName (ModuleName q) _atomAtom _atomInfo
     _ -> expected "single qualifier"
   commit
   return $ TVar n _atomInfo
@@ -187,7 +196,7 @@ literal = lit >>= \LiteralExp{..} ->
 deftable :: Compile (Term Name)
 deftable = do
   (mn,mh) <- currentModule
-  AtomExp{..} <- bareAtom
+  AtomExp{..} <- userAtom
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
@@ -225,7 +234,7 @@ meta = atPairs <|> try docStr <|> return def
 defschema :: Compile (Term Name)
 defschema = do
   modName <- currentModule'
-  tn <- _atomAtom <$> bareAtom
+  tn <- _atomAtom <$> userAtom
   m <- meta
   fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
@@ -255,7 +264,7 @@ defpact = do
 
 moduleForm :: Compile (Term Name)
 moduleForm = do
-  modName' <- _atomAtom <$> bareAtom
+  modName' <- _atomAtom <$> userAtom
   keyset <- str
   m <- meta
   use (psUser . csModule) >>= \cm -> case cm of
@@ -333,7 +342,7 @@ letsForm = do
 
 useForm :: Compile (Term Name)
 useForm = do
-  modName <- (_atomAtom <$> bareAtom) <|> str <|> expected "bare atom, string, symbol"
+  modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
   TUse (ModuleName modName) <$> optional hash' <*> contextInfo
 
 hash' :: Compile Hash
@@ -342,7 +351,7 @@ hash' = str >>= \s -> case fromText' s of
   Left e -> syntaxError $ "bad hash: " ++ e
 
 typedAtom :: Compile (AtomExp Info,Type (Term Name))
-typedAtom = (,) <$> bareAtom <*> (typed <|> freshTyVar)
+typedAtom = (,) <$> userAtom <*> (typed <|> freshTyVar)
 
 arg :: Compile (Arg (Term Name))
 arg = typedAtom >>= \(AtomExp{..},ty) ->
@@ -381,7 +390,7 @@ parseSchemaType tyRep sty = symbol tyRep >>
 
 parseUserSchemaType :: Compile (Type (Term Name))
 parseUserSchemaType = withList Braces $ \ListExp{..} -> do
-  AtomExp{..} <- bareAtom
+  AtomExp{..} <- userAtom
   return $ TyUser (return $ Name _atomAtom _listInfo)
 
 bodyForm :: Compile (Term Name)
