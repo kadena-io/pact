@@ -34,11 +34,13 @@ import Control.Lens hiding (parts,Fold,contains)
 import Control.Monad
 import Control.Monad.Reader (asks)
 import Control.Monad.Catch
+
+import Data.Char (isHexDigit, digitToInt)
 import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import Prelude
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T
+import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, foldl', append)
 import Safe
 import Control.Arrow hiding (app)
 import Data.Foldable
@@ -164,7 +166,6 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
   "Compute BLAKE2b 512-bit hash of VALUE. Strings are converted directly while other values are \
   \converted using their JSON representation. `(hash \"hello\")` `(hash { 'foo: 1 })`"
   where
-
     hash' :: RNativeFun e
     hash' i as = case as of
       [TLitString s] -> go $ encodeUtf8 s
@@ -321,8 +322,12 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
+     ,defRNative "str-to-int" strToInt
+     (funType tTyInteger [("str-val", tTyString)] <>
+      funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
+     "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
+     \chars in length and BASE must be between 2 and 16. `(str-to-int 16 \"123456\")` `(str-to-int \"abcdef123456\")`"
     ,hashDef
-
     ])
     where b = mkTyVar "b" []
           c = mkTyVar "c" []
@@ -594,6 +599,43 @@ identity :: RNativeFun e
 identity _ [a'] = return a'
 identity i as = argsError i as
 
+strToInt :: RNativeFun e
+strToInt i as =
+  case as of
+    [TLitString s] -> go 10 s
+    [TLitInteger base, TLitString s] -> go base s
+    _ -> argsError i as
+  where
+    go base' txt =
+      if T.all isHexDigit txt
+      then
+        if T.length txt <= 128 
+        then case baseStrToInt base' txt of
+          Left _ -> argsError i as
+          Right n -> return (toTerm n)
+        else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
+      else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
+      
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
 txHash i as = argsError i as
+
+-- | Change of base for Text-based representations of integrals. Only bases
+-- 2 through 16 are supported, for non-empty text of length <= 128
+--
+-- e.g.
+--   -- hexadecimal to decimal
+--   baseStrToInt 10 "abcdef123456" = 188900967593046
+-- 
+baseStrToInt :: Integer -> Text -> Either Text Integer
+baseStrToInt base t =
+  if base <= 1 || base > 16
+  then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
+  else
+    if T.null t
+    then Left $ "baseStringToInt - empty text: " `T.append` asString t
+    else Right $ T.foldl' go 0 t
+  where
+    go :: Integer -> Char -> Integer
+    go acc w = base * acc + (fromIntegral . digitToInt $ w) 
+{-# INLINE baseStrToInt #-}

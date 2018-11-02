@@ -378,6 +378,22 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 ```
 
 
+### str-to-int {#str-to-int}
+
+*str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+*base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
+
+
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. 
+```lisp
+pact> (str-to-int 16 "123456")
+1193046
+pact> (str-to-int "abcdef123456")
+1123455123456
+```
+
+
 ### take {#take}
 
 *count*&nbsp;`integer` *list*&nbsp;`<a[[<l>],string]>` *&rarr;*&nbsp;`<a[[<l>],string]>`

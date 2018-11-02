@@ -92,7 +92,6 @@ matrix:
 
   # OSX Build El Cap
   - env: BUILD=stack ARGS=""
-    compiler: ": #stack default osx default (el cap)"
     os: osx
     addons:
       artifacts:
@@ -101,7 +100,6 @@ matrix:
 
   # Linux build
   - env: BUILD=stack ARGS=""
-    compiler: ": #stack default linux"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:

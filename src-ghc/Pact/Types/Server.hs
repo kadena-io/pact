@@ -23,10 +23,10 @@
 --
 module Pact.Types.Server
   ( userSigToPactPubKey, userSigsToPactKeySet
-  , CommandConfig(..), ccSqlite, ccEntity
+  , CommandConfig(..), ccSqlite, ccEntity, ccGasLimit, ccGasRate
   , CommandPact(..), cpTxId, cpContinuation, cpStepCount, cpStep, cpYield
   , CommandState(..), csRefStore, csPacts
-  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger
+  , CommandEnv(..), ceEntity, ceMode, ceDbEnv, ceState, ceLogger, ceGasEnv
   , CommandM, runCommand, throwCmdEx
   , History(..)
   , ExistenceResult(..)
@@ -75,6 +75,8 @@ userSigsToPactKeySet = S.fromList . fmap userSigToPactPubKey
 data CommandConfig = CommandConfig {
       _ccSqlite :: Maybe SQLiteConfig
     , _ccEntity :: Maybe EntityName
+    , _ccGasLimit :: Maybe Int
+    , _ccGasRate :: Maybe Int
     }
 $(makeLenses ''CommandConfig)
 
@@ -100,6 +102,7 @@ data CommandEnv p = CommandEnv {
     , _ceDbEnv :: PactDbEnv p
     , _ceState :: MVar CommandState
     , _ceLogger :: Logger
+    , _ceGasEnv :: GasEnv
     }
 $(makeLenses ''CommandEnv)
 
