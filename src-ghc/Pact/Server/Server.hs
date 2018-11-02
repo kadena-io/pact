@@ -50,7 +50,9 @@ data Config = Config {
   _logDir :: FilePath,
   _pragmas :: [Pragma],
   _verbose :: Bool,
-  _entity :: Maybe EntityName
+  _entity :: Maybe EntityName,
+  _gasLimit :: Maybe Int,
+  _gasRate :: Maybe Int
   } deriving (Eq,Show,Generic)
 instance ToJSON Config where toJSON = lensyToJSON 1
 instance FromJSON Config where parseJSON = lensyParseJSON 1
@@ -64,6 +66,8 @@ usage =
   \logDir     - Directory for HTTP logs \n\
   \pragmas    - SQLite pragmas to use with persistence DBs \n\
   \entity     - Entity name for simulating privacy, defaults to \"entity\" \n\
+  \gasLimit   - Gas limit for each transaction, defaults to 0 \n\
+  \gasRate    - Gas price per action, defaults to 0 \n\
   \\n"
 
 serve :: FilePath -> IO ()
@@ -86,6 +90,8 @@ setupServer configFile = do
   let cmdConfig = CommandConfig
           (fmap (\pd -> SQLiteConfig (pd ++ "/pact.sqlite") _pragmas) _persistDir)
           _entity
+          _gasLimit
+          _gasRate
   let histConf = initHistoryEnv histC inC _persistDir debugFn replayFromDisk'
   asyncCmd <- async (startCmdThread cmdConfig inC histC replayFromDisk' debugFn)
   asyncHist <- async (runHistoryService histConf Nothing)
