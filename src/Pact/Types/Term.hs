@@ -91,7 +91,7 @@ import Pact.Types.Exp
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
-  , _mModel :: !(Maybe (Exp Info))  -- ^ model
+  , _mModel :: ![Exp Info]   -- ^ model
   } deriving (Eq, Show, Generic)
 instance ToJSON Meta where
   toJSON Meta {..} = object
@@ -226,7 +226,7 @@ instance ToJSON Module where
 -- address _mMeta not having a FromJSON, for now harmless
 instance FromJSON Module where
   parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing Nothing) {- o .:? "meta" -} <*>
+    o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing []) {- o .:? "meta" -} <*>
     o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
 
 data ConstVal n =
