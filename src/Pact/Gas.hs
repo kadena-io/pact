@@ -8,7 +8,7 @@ import Data.Text
 import Pact.Types.Runtime
 import Control.Lens
 import Control.Arrow
-import Data.Monoid ()
+import Data.Monoid ((<>))
 import Data.Word
 
 -- | Compute gas for some application or evaluation.

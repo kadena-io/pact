@@ -11,7 +11,8 @@ import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
                                        prism)
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
-import           Data.Semigroup       ((<>))
+import           Data.Monoid          (Monoid(..))
+import           Data.Semigroup       (Semigroup(..))
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 
@@ -76,6 +77,7 @@ instance Semigroup (SnocList a) where
 
 instance Monoid (SnocList a) where
   mempty = SnocList []
+  mappend = (<>)
 
 pattern ConsList :: [a] -> SnocList a
 pattern ConsList xs <- SnocList (reverse -> xs)

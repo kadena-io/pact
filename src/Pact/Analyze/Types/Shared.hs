@@ -30,6 +30,7 @@ import           Data.Function                (on)
 import           Data.List                    (sortBy)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
+import           Data.Monoid                  (Monoid(..))
 import           Data.SBV                     (Boolean (bnot, false, true, (&&&), (|||)),
                                                EqSymbolic, HasKind, Int64,
                                                Kind (KString, KUnbounded),
@@ -45,7 +46,7 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
-import           Data.Semigroup               ((<>))
+import           Data.Semigroup               (Semigroup(..))
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)

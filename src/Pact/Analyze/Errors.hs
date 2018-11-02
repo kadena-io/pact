@@ -3,7 +3,7 @@
 module Pact.Analyze.Errors where
 
 import qualified Data.SBV.Internals     as SBVI
-import           Data.Semigroup         ()
+import           Data.Semigroup         ((<>))
 import           Data.String            (IsString (fromString))
 import           Data.Text              (Text)
 import qualified Data.Text              as T

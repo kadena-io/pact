@@ -14,7 +14,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Control.Monad
 import Data.Foldable
 import qualified Data.Text as T
-import Data.Monoid ()
+import Data.Monoid ((<>))
 
 spec :: Spec
 spec = do

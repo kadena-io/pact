@@ -39,7 +39,7 @@ import Data.Typeable
 import Data.Aeson hiding ((.=))
 import GHC.Generics
 
-import Data.Monoid ()
+import Data.Monoid ((<>))
 import qualified Data.Map.Strict as M
 import Data.Maybe
 
