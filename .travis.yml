@@ -99,7 +99,7 @@ matrix:
           - .stack-work/dist/x86_64-osx/Cabal-2.2.0.1/build/pact/pact
 
   # Linux build
-  - env: BUILD=stack ARGS=""
+  - env: BUILD=stack ARGS="-j1"
     addons:
       apt: {packages: [libgmp-dev]}
       artifacts:
