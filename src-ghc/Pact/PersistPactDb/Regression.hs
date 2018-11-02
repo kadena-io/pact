@@ -56,6 +56,7 @@ runRegression p = do
        object [("hash" .= String "bf5fda6cead20c9349f8a7f0052ec6039bf8b38c4507db2142cbc5f2a01169941e3f0d7c7aaa3c97d53c36e63502f47d3b8c3948cce15a919055e5550f86c3ba")
               ,("blessed" .= ([]::[Text]))
               ,("keyset" .= String "mod-admin-keyset")
+              ,("interfaces" .= ([]::[Text]))
               ,("name" .= String "mod1")
               ,("code" .= String "code")
               ,("meta" .= object [("model" .= Null)
