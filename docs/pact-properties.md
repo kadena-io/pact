@@ -1,6 +1,6 @@
 ![](img/kadena-logo-210px.png)
 
-The Pact property checking system
+The Pact Property Checking System
 ===
 
 ## What is it?
@@ -24,7 +24,7 @@ property _statically_, before any code is deployed to the blockchain.
 Compared with conventional unit testing, wherein the behavior of a program is
 validated for a single combination of inputs and the author hopes this case
 generalizes to all inputs, the Pact property checking system _automatically_
-checks the code under test against all possible inputs, and therefore all
+checks the code against all possible inputs, and therefore all
 possible execution paths.
 
 Pact does this by allowing authors to specify _schema invariants_ about columns
@@ -48,9 +48,9 @@ sophisticated properties about their smart contracts over time.
 
 Here's an example of Pact's properties in action -- we declare a property
 alongside the docstring of the function to which it corresponds. Note that the
-function farms out its implementation of keyset enforcement to another
-function, `enforce-admin`, and we don't have to be concerned about how that
-happens to be implemented. Our property states that if the transaction
+function delegates its implementation of keyset enforcement to another
+function, `enforce-admin`, and we don't need to be concerned about its
+internal details. Our property states that if the transaction
 submitted to the blockchain runs successfully, it must be the case that the
 transaction has the proper signatures to satisfy the keyset named `admins`:
 
