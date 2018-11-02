@@ -35,12 +35,13 @@ import           Pact.Analyze.Remote.Types (Request(..), Response(..),
 import           Pact.Repl                 (initReplState, evalRepl')
 import           Pact.Repl.Types           (LibState, ReplMode(StringEval),
                                             ReplState, rEnv)
-import           Pact.Types.Exp            (ModuleName(..), Name(..))
 import           Pact.Types.Info           (Code(_unCode))
 import           Pact.Types.Runtime        (Domain(KeySets), Method,
                                             ModuleData, PactDb(_readRow),
                                             eePactDb, eeRefStore, rsModules)
-import           Pact.Types.Term           (Module(_mName, _mCode), KeySet(..))
+import           Pact.Types.Term           (Module(_mName, _mCode),
+                                            ModuleName(..), Name(..),
+                                            KeySet(..))
 
 -- | Convenience function for launching a verification server.
 runServer :: Snap.Config Snap a -> IO ()

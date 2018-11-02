@@ -7,8 +7,7 @@ import           Control.Lens       (makeLenses)
 import qualified Data.Aeson         as A
 import           Data.Text          (Text)
 
-import           Pact.Types.Exp     (ModuleName)
-import           Pact.Types.Term    (Module)
+import           Pact.Types.Term    (Module, ModuleName)
 
 data Request
   = Request [Module] ModuleName -- ^ verify one of the modules, by name

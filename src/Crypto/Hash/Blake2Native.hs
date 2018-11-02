@@ -19,7 +19,6 @@ import Data.Vector as V (Vector,(//),(!),fromList,(++))
 import Control.Lens ((&),(<&>))
 import Prelude as P hiding (last)
 
-
 type V = Vector
 
 -- | state context
