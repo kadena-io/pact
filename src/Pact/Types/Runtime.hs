@@ -5,7 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
-
 -- |
 -- Module      :  Pact.Types.Runtime
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -21,14 +20,14 @@ module Pact.Types.Runtime
    evalError,evalError',failTx,argsError,argsError',throwDbError,throwEither,throwErr,
    PactId(..),
    PactStep(..),psStep,psRollback,psPactId,psResume,
-   ModuleData,
+   ModuleData(..), mdModule, mdRefMap,
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
    Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
-   RefState(..),rsLoaded,rsLoadedModules,rsNew,
+   RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
    EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
    Eval(..),runEval,runEval',
    call,method,
@@ -40,7 +39,7 @@ module Pact.Types.Runtime
    module Pact.Types.Gas
    ) where
 
-
+import Control.Applicative (liftA2)
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
@@ -110,9 +109,9 @@ instance AsString KeyPredBuiltins where
   asString KeysAll = "keys-all"
   asString KeysAny = "keys-any"
   asString Keys2 = "keys-2"
+  
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
-
 
 
 newtype PactId = PactId Text
@@ -128,16 +127,20 @@ data PactStep = PactStep {
 } deriving (Eq,Show)
 makeLenses ''PactStep
 
-type ModuleData = (Module,HM.HashMap Text Ref)
+-- | Module ref store 
+data ModuleData = ModuleData
+  { _mdModule :: Module
+  , _mdRefMap :: HM.HashMap Text Ref
+  } deriving (Eq, Show)
+makeLenses ''ModuleData
 
--- | Storage for loaded modules and natives.
+-- | Storage for loaded modules, interfaces, and natives.
 data RefStore = RefStore {
       _rsNatives :: HM.HashMap Name Ref
     , _rsModules :: HM.HashMap ModuleName ModuleData
-    } deriving (Eq,Show)
+    } deriving (Eq, Show)
 makeLenses ''RefStore
 instance Default RefStore where def = RefStore HM.empty HM.empty
-
 
 newtype EntityName = EntityName Text
   deriving (IsString,AsString,Eq,Ord,Hashable,Serialize,NFData,ToJSON,FromJSON,Default)
@@ -208,17 +211,16 @@ data RefState = RefState {
       -- | Modules that were loaded.
     , _rsLoadedModules :: HM.HashMap ModuleName Module
       -- | Modules that were compiled and loaded in this tx.
-    , _rsNew :: [(ModuleName,ModuleData)]
-    }
-                deriving (Eq,Show)
+    , _rsNewModules :: HM.HashMap ModuleName ModuleData
+    } deriving (Eq,Show)
 makeLenses ''RefState
-instance Default RefState where def = RefState HM.empty HM.empty def
+instance Default RefState where def = RefState HM.empty HM.empty HM.empty 
 
--- | Update for newly-loaded modules.
-updateRefStore :: RefState -> RefStore -> RefStore
+-- | Update for newly-loaded modules and interfaces.
+updateRefStore :: RefState -> RefStore -> RefStore 
 updateRefStore RefState {..}
-  | null _rsNew = id
-  | otherwise = over rsModules $ HM.union $ HM.fromList _rsNew
+  | HM.null _rsNewModules = id
+  | otherwise = over rsModules (HM.union _rsNewModules)
 
 -- | Interpreter mutable state.
 data EvalState = EvalState {
@@ -240,6 +242,10 @@ newtype Eval e a =
     deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
 
+instance Monoid a => Monoid (Eval e a) where
+  mempty = pure mempty
+  mappend = liftA2 mappend
+  
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.
 runEval :: EvalState -> EvalEnv e -> Eval e a -> IO (a,EvalState)
@@ -368,8 +374,11 @@ argsError' i as = throwArgsError i (map (toTerm.pack.abbrev) as) "Invalid argume
 --
 
 newtype EnvNoDb e = EnvNoDb (EvalEnv e)
+
 instance PureNoDb (EnvNoDb e)
+
 newtype EnvSysRead e = EnvSysRead (EvalEnv e)
+
 instance PureSysRead (EnvSysRead e)
 instance PureNoDb (EnvSysRead e)
 

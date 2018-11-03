@@ -241,8 +241,8 @@ doTx i t n = do
   pureEval i (e >> return (tStr "")) >>= \r -> forM r $ \_ -> do
     case t of
       Commit -> do
-        newmods <- use (rEvalState.evalRefs.rsNew)
-        rEnv.eeRefStore.rsModules %= HM.union (HM.fromList newmods)
+        newmods <- use (rEvalState . evalRefs . rsNewModules)
+        rEnv . eeRefStore . rsModules %= HM.union newmods
       _ -> return ()
     rEvalState .= def
     useReplLib

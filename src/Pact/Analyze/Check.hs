@@ -6,7 +6,7 @@
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
-
+{-# LANGUAGE RecordWildCards       #-}
 module Pact.Analyze.Check
   ( verifyModule
   , verifyCheck
@@ -61,13 +61,14 @@ import           Prelude                   hiding (exp)
 import           Pact.Analyze.Parse        hiding (tableEnv)
 import           Pact.Typechecker          (typecheckTopLevel)
 import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Info, mModel, mName, renderInfo,
+                                            Info, mModel, renderInfo,
                                             renderParsed, tMeta, _tDefName)
-import           Pact.Types.Runtime        (Exp, ModuleData, ModuleName,
-                                            Ref (Ref),
+import           Pact.Types.Runtime        (Exp, ModuleData(..), ModuleName,
+                                            Ref (Ref), mdRefMap, mdModule,
                                             Term (TConst, TDef, TSchema, TTable),
                                             asString, getInfo, tShow)
 import qualified Pact.Types.Runtime        as Pact
+import           Pact.Types.Term           (Module(..))
 import           Pact.Types.Typecheck      (AST,
                                             Fun (FDefun, _fArgs, _fBody, _fInfo),
                                             Named, Node, TcId (_tiInfo),
@@ -390,15 +391,16 @@ moduleTables
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
   -> ExceptT ParseFailure IO [Table]
-moduleTables modules (_mod, modRefs) = do
+moduleTables modules ModuleData{..} = do
   -- All tables defined in this module, and imported by it. We're going to look
   -- through these for their schemas, which we'll look through for invariants.
-  let tables = flip mapMaybe (modules ^@.. traversed . _2 . itraversed) $ \case
+  let tables = flip mapMaybe (modules ^@.. traversed . mdRefMap . itraversed) $ \case
         (name, Ref (table@TTable {})) -> Just (name, table)
         _                             -> Nothing
 
   -- TODO: need mapMaybe for HashMap
-  let schemas = HM.fromList $ flip mapMaybe (HM.toList modRefs) $ \case
+  -- Note(emily): i can handle this in the current PR - lets discuss.
+  let schemas = HM.fromList $ flip mapMaybe (HM.toList _mdRefMap) $ \case
         (name, Ref (schema@TSchema {})) -> Just (name, schema)
         _                               -> Nothing
 
@@ -409,7 +411,7 @@ moduleTables modules (_mod, modRefs) = do
     let TC.Schema{_utName,_utFields} = schema
         schemaName = asString _utName
 
-    invariants <- case schemas ^? ix schemaName.tMeta.mModel._Just of
+    invariants <- case schemas ^? ix schemaName . tMeta . mModel . _Just of
       -- no model = no invariants
       Nothing    -> pure []
       Just model -> liftEither $ case expToMapping ["invariant", "invariants"] model of
@@ -422,6 +424,7 @@ moduleTables modules (_mod, modRefs) = do
             flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
     pure $ Table tabName schema invariants
+
 
 data PropertyScope
   = Everywhere
@@ -509,10 +512,11 @@ parseModelDecl exp = Left (exp, "expected set of defproperty")
 
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
-moduleTypecheckableRefs (_mod, modRefs) = flip HM.filter modRefs $ \case
+moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
   Ref TDef{}   -> True
   Ref TConst{} -> True
   _            -> False
+
 
 data ModelDecl = ModelDecl
   { _moduleDefProperties :: !(HM.HashMap Text (DefinedProperty (Exp Info)))
@@ -521,8 +525,13 @@ data ModelDecl = ModelDecl
 
 -- Get the model defined in this module
 moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
-moduleModelDecl (Pact.Module{Pact._mMeta=Pact.Meta _ model}, _modRefs)
-  = case model of
+moduleModelDecl ModuleData{..} =
+  case _mdModule of
+    Pact.Module{Pact._mMeta=Pact.Meta _ model}            -> parseModuleModelDecls model
+    Pact.Interface{Pact._interfaceMeta=Pact.Meta _ model} -> parseModuleModelDecls model
+  where
+    parseModuleModelDecls :: Maybe (Exp Info) -> Either ParseFailure ModelDecl
+    parseModuleModelDecls m = case m of
       Just model' -> do
         lst <- parseModelDecl model'
         let (propList, checkList) = partitionEithers lst
@@ -768,13 +777,18 @@ verifyCheck
   -> ExceptT VerificationFailure IO CheckResult
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
-      moduleName = moduleData ^. _1.mName
+      module'    = moduleData ^. mdModule
+      moduleName = nameOf module' 
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
-      moduleFun (_mod, modRefs) name = name `HM.lookup` modRefs
+      moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
 
   tables <- withExceptT ModuleParseFailure $ moduleTables modules moduleData
   case moduleFun moduleData funName of
     Just funRef -> ExceptT $
       Right . head <$> verifyFunctionProps tables funRef funName [Located info check]
     Nothing -> pure $ Left $ CheckFailure info $ NotAFunction funName
+  where
+    nameOf m = case m of
+      Interface{..} -> _interfaceName
+      Module{..}    -> _mName

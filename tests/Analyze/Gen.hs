@@ -31,9 +31,9 @@ import           Pact.Analyze.Types         hiding (Object, Term)
 import qualified Pact.Analyze.Types         as Analyze
 import           Pact.Analyze.Util          (dummyInfo)
 
-import           Pact.Types.Exp             (Name (Name))
 import           Pact.Types.Persistence     (WriteType)
 import qualified Pact.Types.Term            as Pact
+import           Pact.Types.Term            (Name(Name))
 
 import           Analyze.TimeGen
 

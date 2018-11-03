@@ -782,6 +782,7 @@ toAST TStep {..} = do
   ex <- toAST _tStepExec
   assocAST si ex
   Step sn ent ex <$> traverse toAST _tStepRollback
+toAST TImplements{..} = die _tInfo "Implements not supported"
 
 trackPrim :: Info -> PrimType -> PrimValue -> TC (AST Node)
 trackPrim inf pty v = do
@@ -939,9 +940,9 @@ typecheckTopLevel (Direct d) = die (_tInfo d) $ "Unexpected direct ref: " ++ abb
 
 -- | Typecheck all productions in a module.
 typecheckModule :: Bool -> ModuleData -> IO ([TopLevel Node],[Failure])
-typecheckModule dbg (Module {..},refs) = do
-  debug' dbg $ "Typechecking module " ++ show _mName
+typecheckModule dbg ModuleData{..} = do
+  debug' dbg $ "Typechecking module " ++ show (_mName _mdModule)
   let tc ((tls,fails),sup) r = do
         (tl,TcState {..}) <- runTC sup dbg (typecheckTopLevel r)
         return ((tl:tls,fails ++ toList _tcFailures),succ _tcSupply)
-  fst <$> foldM tc (([],[]),0) (HM.elems refs)
+  fst <$> foldM tc (([],[]),0) (HM.elems _mdRefMap)

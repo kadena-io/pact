@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-
+{-# LANGUAGE RecordWildCards #-}
 -- |
 -- Module      :  Pact.Native.Internal
 -- Copyright   :  (C) 2016 Stuart Popejoy
@@ -120,7 +120,7 @@ getModule i n = do
     Nothing -> do
       rm <- HM.lookup n <$> view (eeRefStore.rsModules)
       case rm of
-        Just (m,_) -> return m
+        Just ModuleData{..} -> return _mdModule
         Nothing -> evalError i $ "Unable to resolve module " ++ show n
 
 tTyInteger :: Type n; tTyInteger = TyPrim TyInteger

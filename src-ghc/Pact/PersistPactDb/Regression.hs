@@ -45,7 +45,7 @@ runRegression p = do
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  let mod' = Module "mod1" "mod-admin-keyset" (Meta Nothing Nothing) "code" (H.hash "code") mempty
+  let mod' = Module "mod1" "mod-admin-keyset" (Meta Nothing Nothing) "code" (H.hash "code") mempty mempty
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
   assertEquals' "result of commit 3"
@@ -56,6 +56,7 @@ runRegression p = do
        object [("hash" .= String "bf5fda6cead20c9349f8a7f0052ec6039bf8b38c4507db2142cbc5f2a01169941e3f0d7c7aaa3c97d53c36e63502f47d3b8c3948cce15a919055e5550f86c3ba")
               ,("blessed" .= ([]::[Text]))
               ,("keyset" .= String "mod-admin-keyset")
+              ,("interfaces" .= ([]::[Text]))
               ,("name" .= String "mod1")
               ,("code" .= String "code")
               ,("meta" .= object [("model" .= Null)
