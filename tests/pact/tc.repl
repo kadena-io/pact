@@ -118,6 +118,9 @@
   (defun tc-obj-eq (a:object{account})
     (= a a))
 
+  ;;not tc per se but runtime type enforce error
+  (defun rtc-empty-string-list:[string] (input:[string]) input)
+
 )
 
 (create-table persons)
@@ -138,3 +141,5 @@
 (expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
 
 (typecheck 'tctest)
+
+(rtc-empty-string-list [])
