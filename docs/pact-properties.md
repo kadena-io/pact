@@ -171,7 +171,7 @@ properties at once:
 ### Transaction abort and success
 
 By default, every property is predicated on the successful completion of the
-transaction which would contain an invocation of the function under test. This
+transaction which would contain an invocation of the function being tested. This
 means that properties like the following:
 
 ```lisp
@@ -296,7 +296,7 @@ For an example using this property, see "A simple balance transfer example"
 below.
 
 It turns out that `conserves-mass` is actually just a trivial application of
-another property called `column-delta`, which returns an numeric value of the
+another property called `column-delta`, which returns a numeric value of the
 sum of all changes to the column during the transaction. So
 `(conserves-mass 'accounts 'balance)` is actually just the same as:
 
@@ -326,8 +326,8 @@ change. So here `1` means an increase of `1` to the column's total sum.
 In examples like `(row-enforced 'accounts 'ks key)` or
 `(row-written 'accounts key)` above, we've so far only referred to function
 arguments by the use of the variable named `key`. But what if we wanted to
-talk about all possible rows that will be written, if function doesn't simply
-update a single row keyed by an input to the function?
+talk about all possible rows that will be written, if a function doesn't simply
+update a single row?
 
 In such a situation we could use universal quantification to talk about _any_
 such row:
