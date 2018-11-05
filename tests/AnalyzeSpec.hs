@@ -2573,5 +2573,5 @@ spec = describe "analyze" $ do
             @model $model
             (+ [a b] [c]))
           |]
-    expectVerified  $ code9 "(property (= result [a b c]))"
+    expectVerified  $ code9 "(property (= result [a b]))"
     expectFalsified $ code9 "(property (= result [a b]))"

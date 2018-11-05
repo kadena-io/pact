@@ -48,7 +48,7 @@ allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType SList{} -> pure OpaqueVal
+  EType SList{} -> error "alloc list" -- pure OpaqueVal
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
