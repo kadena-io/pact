@@ -132,9 +132,7 @@ replDefs = ("Repl",
        "Set environment gas price to PRICE"
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        "Update gas model to charge constant RATE"
-#if !defined(ghcjs_HOST_OS)
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
-#endif
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
