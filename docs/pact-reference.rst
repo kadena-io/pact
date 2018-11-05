@@ -838,7 +838,7 @@ Call with references instead of ``use``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When calling module functions in transactions, use `reference
-syntax <#reference>`__ instead of importing the module with
+syntax <#references>`__ instead of importing the module with
 `use <#use>`__. When defining modules that reference other module
 functions, ``use`` is fine, as those references will be inlined at
 module definition time.

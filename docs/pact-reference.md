@@ -675,7 +675,7 @@ Some tips for fast execution are:
 Design transactions so they can be executed with a single function call.
 
 #### Call with references instead of `use` {#usereferences}
-When calling module functions in transactions, use [reference syntax](#reference) instead of importing
+When calling module functions in transactions, use [reference syntax](#references) instead of importing
 the module with [use](#use). When defining modules that reference other module functions, `use` is
 fine, as those references will be inlined at module definition time.
 
