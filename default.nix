@@ -29,7 +29,7 @@ in
             # test suite for this is failing on ghcjs:
             hw-hspec-hedgehog = pkgs.haskell.lib.dontCheck super.hw-hspec-hedgehog;
 
-            algebraic-graphs = guardGhcjs super.algebraic-graphs;
+            algebraic-graphs = pkgs.haskell.lib.dontCheck super.algebraic-graphs;
 
             ghcjs-dom = self.callHackage "ghcjs-dom" "0.9.2.0" {};
 
