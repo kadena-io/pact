@@ -28,10 +28,13 @@ To start writing
 smart contracts, the best way to go is to use the [Atom editor](https://atom.io) and install
 `language-pact` using the [package manager](http://flight-manual.atom.io/using-atom/sections/atom-packages/).
 
-Installing Pact with homebrew (OSX only)
+Installing Pact with Homebrew (OSX only)
 ---
+You'll then need to install the Pact interpreter/REPL. On Mac, the easiest way to install `pact` is with Homebrew.
 
-You'll then need to install the Pact interpreter/REPL. On Mac, the easiest way is with [homebrew](https://brew.sh/).
+Make sure that Homebrew has been installed in your machine. Instructions for how to install it can be found [here](https://brew.sh/).
+
+Once Homebrew is installed, run the following command to install `pact`:
 
 ```
 brew install kadena-io/pact/pact
@@ -39,12 +42,13 @@ brew install kadena-io/pact/pact
 
 Installing Pact with Binary Distributions
 ---
+Pact can also be installed by following the instructions below:
+- Install z3
+- Download the [prebuild binaries](http://kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
+- Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
+- Put the binary somewhere in your PATH.
 
-[Prebuilt binaries](http://kadena.io/pact/downloads.html) are
-available, or see [building](#Building) below.
-
-Once you have downloaded the binary, put it somewhere in your PATH.
-
+For installing `pact` on Linux distros in the Arch family, refer to this [package](https://aur.archlinux.org/packages/pact/).
 
 Verifying Install
 ---
