@@ -322,11 +322,11 @@ implements = do
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
   return $ TImplements ifName modName info
-  
+
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
-  m <- meta
+  m <- metaWithModel
   use (psUser . csModule) >>= \ci -> case ci of
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
@@ -342,14 +342,14 @@ interface = do
   return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
-    
+
 interfaceForm :: Compile ([Term Name], Info)
 interfaceForm = (,) <$> some interfaceForms <*> contextInfo
   where
-    interfaceForms = withList' Parens $ do 
+    interfaceForms = withList' Parens $ do
       AtomExp{..} <- bareAtom
       case _atomAtom of
-        "defun" -> commit >> emptyDef 
+        "defun" -> commit >> emptyDef
         "defconst" -> commit >> defconst
         "use" -> commit >> useForm
         t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
@@ -359,13 +359,13 @@ emptyDef = do
   modName <- currentModule'
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- meta
+  m <- metaWithModel
   info <- contextInfo
   return $
     TDef defName modName Defun
     (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
-  
-  
+
+
 step :: Compile (Term Name)
 step = do
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>

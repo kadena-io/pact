@@ -519,16 +519,15 @@ data ModelDecl = ModelDecl
 
 -- Get the model defined in this module
 moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
-moduleModelDecl ModuleData{..} = do 
-
-  let model = case _mdModule of
-      Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
-      Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
-      
+moduleModelDecl ModuleData{..} = do
   lst <- parseModuleModelDecl model
   let (propList, checkList) = partitionEithers lst
   pure $ ModelDecl (HM.fromList propList) checkList
-  
+  where
+    model = case _mdModule of
+      Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
+      Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
+
 
 moduleFunChecks
   :: [Table]
@@ -748,7 +747,7 @@ verifyCheck
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
       module'    = moduleData ^. mdModule
-      moduleName = nameOf module' 
+      moduleName = nameOf module'
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap
