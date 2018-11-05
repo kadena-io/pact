@@ -36,11 +36,12 @@ import Pact.Repl.Types
 interactiveRepl :: IO (Either () (Term Name))
 interactiveRepl = generalRepl Interactive
 
+-- Note(emily): revisit whether we want all _module_ names, or all interface names as well.
 completeFn :: (MonadIO m, MonadState ReplState m) => CompletionFunc m
 completeFn = completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') ("\"\'" ++ filenameWordBreakChars) $ \str -> do
     modules <- use (rEnv . eeRefStore . rsModules)
-    let namesInModules = toListOf (traverse . _2 . to HM.keys . each) modules
+    let namesInModules = toListOf (traverse . mdRefMap . to HM.keys . each) modules
         allNames = concat
           [ namesInModules
           , nameOfModule <$> HM.keys modules

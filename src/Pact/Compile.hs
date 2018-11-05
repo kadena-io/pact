@@ -72,14 +72,13 @@ initParseState e = ParseState e $ CompileState 0 Nothing
 
 reserved :: [Text]
 reserved =
-  T.words "use module defun defpact step step-with-rollback true false let let* defconst"
+  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface implements"
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
 compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
 
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
-
 
 currentModule :: Compile (ModuleName,Hash)
 currentModule = use (psUser . csModule) >>= \m -> case m of
@@ -131,6 +130,8 @@ specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
     "defun" -> commit >> defun
     "defpact" -> commit >> defpact
     "module" -> commit >> moduleForm
+    "interface" -> commit >> interface
+    "implements" -> commit >> implements
     _ -> expected "special form"
 
 
@@ -268,7 +269,6 @@ defun = do
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
-
 defpact :: Compile (Term Name)
 defpact = do
   modName <- currentModule'
@@ -288,7 +288,7 @@ moduleForm = do
   keyset <- str
   m <- metaWithModel
   use (psUser . csModule) >>= \cm -> case cm of
-    Just {} -> syntaxError "Invalid nested module"
+    Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
   i <- contextInfo
   let code = case i of
@@ -307,11 +307,65 @@ moduleForm = do
     TTable {} -> return []
     TUse {} -> return []
     TBless {..} -> return [_tBlessed]
-    _ -> syntaxError "Only defun, defpact, defconst, deftable, use, bless allowed in module"
+    TImplements{} -> return []
+    t -> syntaxError $ "Invalid declaration in module scope: " ++ abbrev t
+  let interfaces = bd >>= \d -> case d of
+        TImplements{..} -> [_tInterfaceName]
+        _ -> []
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash blessed)
+    (Module modName (KeySetName keyset) m code modHash blessed interfaces)
     (abstract (const Nothing) (TList bd TyAny bi)) i
 
+implements :: Compile (Term Name)
+implements = do
+  modName <- currentModule'
+  ifName <- (ModuleName . _atomAtom) <$> bareAtom
+  info <- contextInfo
+  return $ TImplements ifName modName info
+  
+interface :: Compile (Term Name)
+interface = do
+  iname' <- _atomAtom <$> bareAtom
+  m <- meta
+  use (psUser . csModule) >>= \ci -> case ci of
+    Just {} -> syntaxError "invalid nested interface or module"
+    Nothing -> return ()
+  info <- contextInfo
+  let code = case info of
+        Info Nothing -> "<code unavailable>"
+        Info (Just (c,_)) -> c
+      iname = ModuleName iname'
+      ihash = hash $ encodeUtf8 (_unCode code)
+  (psUser . csModule) .= Just (iname, ihash)
+  (defs, defInfo) <- interfaceForm
+  eof
+  return $ TModule
+    (Interface iname code m)
+    (abstract (const Nothing) (TList defs TyAny defInfo)) info
+    
+interfaceForm :: Compile ([Term Name], Info)
+interfaceForm = (,) <$> some interfaceForms <*> contextInfo
+  where
+    interfaceForms = withList' Parens $ do 
+      AtomExp{..} <- bareAtom
+      case _atomAtom of
+        "defun" -> commit >> emptyDef 
+        "defconst" -> commit >> defconst
+        "use" -> commit >> useForm
+        t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
+
+emptyDef :: Compile (Term Name)
+emptyDef = do
+  modName <- currentModule'
+  (defName, returnTy) <- first _atomAtom <$> typedAtom
+  args <- withList' Parens $ many arg
+  m <- meta
+  info <- contextInfo
+  return $
+    TDef defName modName Defun
+    (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
+  
+  
 step :: Compile (Term Name)
 step = do
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>
@@ -420,9 +474,6 @@ bodyForm = do
 
 bodyForm' :: Compile ([Term Name],Info)
 bodyForm' = (,) <$> some term <*> contextInfo
-
-
-
 
 _compileAccounts :: IO (Either PactError [Term Name])
 _compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile id

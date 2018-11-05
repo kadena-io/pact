@@ -141,62 +141,73 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
   evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
-
-
-eval (TModule m bod i) = topLevelCall i "module" (GModule m) $ \g0 -> do
-  -- enforce old module keysets
-  oldM <- readRow i Modules (_mName m)
-  case oldM of
-    Nothing -> return ()
-    Just om -> enforceKeySetName i (_mKeySet om)
-  -- enforce new module keyset
-  enforceKeySetName i (_mKeySet m)
-  -- build/install module from defs
-  (g,_defs) <- loadModule m bod i g0
-  writeRow i Write Modules (_mName m) m
-  return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
-
+eval (TModule m@Module{..} bod i) = 
+  topLevelCall i "module" (GModule m) $ \g0 -> do
+    -- enforce old module keysets
+    oldM <- readRow i Modules _mName
+    case oldM of
+      Nothing -> return ()
+      Just om ->
+        case om of
+          Module{..} -> enforceKeySetName i _mKeySet
+          Interface{..} -> evalError i $
+            "Name overlap: module " ++ show _mName ++ " overlaps with interface  " ++ show _interfaceName
+    -- enforce new module keyset
+    enforceKeySetName i _mKeySet
+    -- build/install module from defs
+    (g,_defs) <- loadModule m bod i g0
+    writeRow i Write Modules _mName m
+    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)  
+eval (TModule m@Interface{..} bod i) =
+  topLevelCall i "interface" (GInterface m) $ \gas -> do
+    oldI <- readRow i Modules _interfaceName
+    case oldI of
+      Nothing -> return ()
+      Just oi ->
+        case oi of
+          Module{..} -> evalError i $
+            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName 
+          Interface{..} -> return ()
+    (g, _) <- loadModule m bod i gas
+    writeRow i Write Modules _interfaceName m
+    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
 eval t = enscope t >>= reduce
-
 
 evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
 evalUse mn h i = do
-  mm <- HM.lookup mn <$> view (eeRefStore.rsModules)
+  mm <- preview $ eeRefStore . rsModules . ix mn
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
-    Just m@(Module{..},_) -> do
-      case h of
-        Nothing -> return ()
-        Just mh | mh == _mHash -> return ()
-                | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
+    Just md -> do
+      case view mdModule md of
+        Module{..} -> 
+          case h of
+            Nothing -> return ()
+            Just mh | mh == _mHash -> return ()
+                    | otherwise -> evalError i $ "Module " ++ show mn ++ " does not match specified hash: " ++
                                show mh ++ ", " ++ show _mHash
-      installModule m
+        Interface{..} ->
+          case h of
+            Nothing -> return ()
+            Just _ -> evalError i $ "Interfaces should not have associated hashes: " ++ show _interfaceName
 
+      installModule md
 
 -- | Make table of module definitions for storage in namespace/RefStore.
---
--- Definitions are transformed such that all free variables are resolved either to
--- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
--- resolve to a definition in the module ('Left String'). A graph is formed from
--- all 'Left String' entries and enforced as acyclic, proving the definitions
--- to be non-recursive. The graph is walked to unify the Either to
--- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
--- the table itself: the topological sort of the graph ensures the reference will be there.
-loadModule :: Module -> Scope n Term Name -> Info -> Gas ->
-              Eval e (Gas,HM.HashMap Text (Term Name))
-loadModule m bod1 mi g0 = do
+loadModule :: Module -> Scope n Term Name -> Info -> Gas -> Eval e (Gas,HM.HashMap Text (Term Name))
+loadModule m@Module{..} bod1 mi g0 = do
   (g1,modDefs1) <-
     case instantiate' bod1 of
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
               dnm <- case t of
                 TDef {..} -> return $ Just _tDefName
-                TNative {..} -> return $ Just $ asString _tNativeName
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
                 TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
                 TBless {..} -> return Nothing
+                TImplements {..} -> return $ Just (asString _tInterfaceName)
                 _ -> evalError (_tInfo t) "Invalid module member"
               case dnm of
                 Nothing -> return (g, rs)
@@ -205,52 +216,130 @@ loadModule m bod1 mi g0 = do
                   return (g + g',(dn,t):rs)
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
-  cs :: [SCC (Term (Either Text Ref), Text, [Text])] <-
-    fmap stronglyConnCompR $ forM (HM.toList modDefs1) $ \(dn,d) ->
-      do
-        d' <- forM d $ \(f :: Name) -> do
-                dm <- resolveRef f
-                case (dm,f) of
-                  (Just t,_) -> return (Right t)
-                  (Nothing,Name fn _) ->
-                      case HM.lookup fn modDefs1 of
-                        Just _ -> return (Left fn)
-                        Nothing -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-                  (Nothing,_) -> evalError (_nInfo f) ("Cannot resolve \"" ++ show f ++ "\"")
-        return (d',dn,mapMaybe (either Just (const Nothing)) $ toList d')
-  sorted <- forM cs $ \c -> case c of
-              AcyclicSCC v -> return v
-              CyclicSCC vs ->
-                evalError (if null vs then mi else _tInfo $ view _1 $ head vs) $ "Recursion detected: " ++ show vs
-  let defs :: HM.HashMap Text Ref
-      defs = foldl dresolve HM.empty sorted
-      -- insert a fresh Ref into the map, fmapping the Either to a Ref via 'unify'
-      dresolve ds (d,dn,_) = HM.insert dn (Ref (fmap (unify ds) d)) ds
-      evalConstRef r@Ref {} = runPure $ evalConsts r
-      evalConstRef r@Direct {} = runPure $ evalConsts r
-  evaluatedDefs <- traverse evalConstRef defs
-  installModule (m,evaluatedDefs)
-  (evalRefs.rsNew) %= ((_mName m,(m,evaluatedDefs)):)
-  return (g1,modDefs1)
+  evaluatedDefs <- evaluateDefs mi modDefs1
+  evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m evaluatedDefs
+  installModule md 
+  (evalRefs . rsNewModules) %= HM.insert _mName md
+  return (g1, modDefs1)
+loadModule i@Interface{..} body info gas0 = do
+  (gas1,idefs) <- case instantiate' body of
+    (TList bd _ _bi) -> do
+      let doDef (g,rs) t = do
+            dnm <- case t of
+              TDef {..} -> return $ Just _tDefName
+              TConst {..} -> return $ Just $ _aName _tConstArg
+              TSchema {..} -> return $ Just $ asString _tSchemaName
+              TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+              _ -> evalError (_tInfo t) "Invalid interface member"
+            case dnm of
+              Nothing -> return (g, rs)
+              Just dn -> do
+                g' <- computeGas (Left (_tInfo t,dn)) (GModuleMember i)
+                return (g + g',(dn,t):rs)
+      second HM.fromList <$> foldM doDef (gas0,[]) bd
+    t -> evalError (_tInfo t) "Malformed interface"
+  evaluatedDefs <- evaluateDefs info idefs
+  let md = ModuleData i evaluatedDefs
+  installModule md
+  (evalRefs . rsNewModules) %= HM.insert _interfaceName md
+  return (gas1, idefs)
 
+-- | Definitions are transformed such that all free variables are resolved either to
+-- an existing ref in the refstore/namespace ('Right Ref'), or a symbol that must
+-- resolve to a definition in the module ('Left String'). A graph is formed from
+-- all 'Left String' entries and enforced as acyclic, proving the definitions
+-- to be non-recursive. The graph is walked to unify the Either to
+-- the 'Ref's it already found or a fresh 'Ref' that will have already been added to
+-- the table itself: the topological sort of the graph ensures the reference will be there.
+evaluateDefs :: Info -> HM.HashMap Text (Term Name) -> Eval e (HM.HashMap Text Ref)
+evaluateDefs info defs = do
+  cs <- traverseGraph defs
+  sortedDefs <- forM cs $ \c ->
+      case c of
+        AcyclicSCC v -> return v
+        CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
+          "Recursion detected: " ++ show vs
+  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds 
+      unifiedDefs = foldl dresolve HM.empty sortedDefs
+  traverse (runPure . evalConsts) unifiedDefs
 
+traverseGraph :: HM.HashMap Text (Term Name) -> Eval e [SCC (Term (Either Text Ref), Text, [Text])]
+traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) -> do
+  d' <- forM d $ \(f :: Name) -> do
+    dm <- resolveRef f
+    case (dm, f) of
+      (Just t, _) -> return (Right t)
+      (Nothing, Name fn _) ->
+        case HM.lookup fn defs of
+          Just _ -> return (Left fn)
+          Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
+      (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
+  return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
+     
+-- | Evaluate interface constraints in module.
+evaluateConstraints
+  :: Info
+  -> Module
+  -> HM.HashMap Text Ref
+  -> Eval e ()
+evaluateConstraints info Interface{} _ =
+  evalError info $ "Unexpected: interface found in module position while solving constraints"
+evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
+  where
+    evaluateConstraint ifn = do
+      irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
+      case irefs of
+        Nothing -> evalError info $
+          "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
+        Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
+          
+-- | Compare implemented member signatures with their definitions.
+-- At this stage, we have not merged consts, so we still check for overlap
+solveConstraint
+  :: Info
+  -> HM.HashMap Text Ref
+  -> Text
+  -> Ref
+  -> Eval e ()
+  -> Eval e ()
+solveConstraint info _ refName (Direct t) _ =
+  evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
+solveConstraint info em refName (Ref t) _ =
+  case HM.lookup refName em of
+    Nothing -> pure ()
+    Just (Direct s) ->
+      evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
+    Just (Ref s) ->
+      case (t, s) of
+        (TDef _n _mn dt (FunType args rty) _ _ _,
+          TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
+          when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
+          when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
+          when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
+          forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
+            when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
+            when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
+            return ()
+        _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
-  dsm <- asks $ firstOf $ eeRefStore.rsModules.ix q._2.ix n
+  dsm <- preview $ eeRefStore . rsModules . ix q . mdRefMap . ix n
   case dsm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs.rsLoaded.ix qn) <$> get
+    Nothing -> preview (evalRefs . rsLoaded . ix qn) <$> get
 resolveRef nn@(Name _ _) = do
-  nm <- asks $ firstOf $ eeRefStore.rsNatives.ix nn
+  nm <- preview $ eeRefStore . rsNatives . ix nn
   case nm of
     d@Just {} -> return d
-    Nothing -> firstOf (evalRefs.rsLoaded.ix nn) <$> get
+    Nothing -> preview (evalRefs . rsLoaded . ix nn) <$> get
 
-
+-- | This should be impure. See 'evaluateDefs'. Refs are
+-- expected to exist, and if they don't, it is a serious bug
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
-unify _ (Right d) = d
-unify m (Left f) = m HM.! f
+unify _ (Right r) = r
+unify m (Left t) = m HM.! t 
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
@@ -291,12 +380,13 @@ reduce (TObject ps t i) =
 reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
-reduce t@TModule {} = evalError (_tInfo t) "Module only allowed at top level"
+reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce t@TImplements{} = evalError (_tInfo t) "Interface implementations only allowed at top level"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -399,10 +489,13 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 installModule :: ModuleData ->  Eval e ()
-installModule (m,defs) = do
-  (evalRefs.rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ defs)
-  (evalRefs.rsLoadedModules) %= HM.insert (_mName m) m
-
+installModule ModuleData{..} = do 
+  (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
+  let n = case _mdModule of
+        Module{..} -> _mName
+        Interface{..} -> _interfaceName
+  (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
+  
 msg :: Text -> Term n
 msg = toTerm
 

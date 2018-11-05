@@ -35,15 +35,17 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,
+   interfaceCode, interfaceMeta, interfaceName,
+   ModuleName(..),
+   Name(..),
    ConstVal(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
-   tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,
-   tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
+   tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tInterfaceName,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -75,6 +77,8 @@ import Data.Hashable
 import Data.Foldable
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
+import qualified Data.Attoparsec.Text as AP
+import Text.Trifecta (try,ident,TokenParsing,(<?>))
 import Data.Monoid
 import Control.DeepSeq
 import Data.Maybe
@@ -83,6 +87,8 @@ import qualified Data.HashMap.Strict as HM
 import Data.Int (Int64)
 import Data.Serialize (Serialize)
 
+
+import Pact.Types.Parser
 import Pact.Types.Util
 import Pact.Types.Info
 import Pact.Types.Type
@@ -150,6 +156,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     }
+            
 
 instance Show FunApp where
   show FunApp {..} =
@@ -208,26 +215,94 @@ newtype TableName = TableName Text
     deriving (Eq,Ord,IsString,ToTerm,AsString,Hashable)
 instance Show TableName where show (TableName s) = show s
 
-data Module = Module {
-    _mName :: !ModuleName
-  , _mKeySet :: !KeySetName
-  , _mMeta :: !Meta
-  , _mCode :: !Code
-  , _mHash :: !Hash
-  , _mBlessed :: !(HS.HashSet Hash)
-  } deriving (Eq)
+-- TODO: We need a more expressive ADT that can handle modules _and_ interfaces
+newtype ModuleName = ModuleName Text
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
+instance Show ModuleName where show (ModuleName s) = show s
+
+-- | A named reference from source.
+data Name =
+    QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
+    Name { _nName :: Text, _nInfo :: Info }
+         deriving (Generic)
+instance Show Name where
+    show (QName q n _) = asString' q ++ "." ++ unpack n
+    show (Name n _) = unpack n
+instance ToJSON Name where toJSON = toJSON . show
+instance FromJSON Name where
+  parseJSON = withText "Name" $ \t -> case AP.parseOnly (parseName def) t of
+    Left s -> fail s
+    Right n -> return n
+
+parseName :: (TokenParsing m, Monad m) => Info -> m Name
+parseName i = do
+  a <- ident style
+  try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
+    return (Name a i)
+
+
+instance Hashable Name where
+  hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
+  hashWithSalt s (QName q n _) = s `hashWithSalt` (1::Int) `hashWithSalt` q `hashWithSalt` n
+instance Eq Name where
+  (QName a b _) == (QName c d _) = (a,b) == (c,d)
+  (Name a _) == (Name b _) = a == b
+  _ == _ = False
+instance Ord Name where
+  (QName a b _) `compare` (QName c d _) = (a,b) `compare` (c,d)
+  (Name a _) `compare` (Name b _) = a `compare` b
+  Name {} `compare` QName {} = LT
+  QName {} `compare` Name {} = GT
+  
+
+-- TODO: We need a more expressive, safer ADT for this.
+data Module
+ = Module
+ { _mName :: !ModuleName
+ , _mKeySet :: !KeySetName
+ , _mMeta :: !Meta
+ , _mCode :: !Code
+ , _mHash :: !Hash
+ , _mBlessed :: !(HS.HashSet Hash)
+ , _mInterfaces :: [ModuleName]
+ }
+ | Interface
+ { _interfaceName :: !ModuleName
+ , _interfaceCode :: !Code
+ , _interfaceMeta :: !Meta
+ } deriving Eq
+
 instance Show Module where
-  show Module {..} =
-    "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+  show m = case m of
+    Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
+    Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
+
+                     
 instance ToJSON Module where
-  toJSON Module {..} = object
-    ["name" .= _mName, "keyset" .= _mKeySet, "code" .= _mCode, "hash" .= _mHash, "blessed" .= toList _mBlessed, "meta" .= _mMeta ]
--- | TODO when we figure out how/if we're storing modules in the database we can
--- address _mMeta not having a FromJSON, for now harmless
+  toJSON Module{..} = object
+    [ "name" .= _mName
+    , "keyset" .= _mKeySet
+    , "meta" .= _mMeta
+    , "code" .= _mCode
+    , "hash" .= _mHash
+    , "blessed" .= _mBlessed
+    , "interfaces" .= _mInterfaces
+    ]
+  toJSON Interface{..} = object
+    [ "name" .= _interfaceName
+    , "code" .= _interfaceCode
+    , "meta" .= _interfaceMeta
+    ]
+
 instance FromJSON Module where
-  parseJSON = withObject "Module" $ \o -> Module <$>
-    o .: "name" <*> o .: "keyset" <*> pure (Meta Nothing []) {- o .:? "meta" -} <*>
-    o .: "code" <*> o .: "hash" <*> (HS.fromList <$> o .: "blessed")
+  parseJSON = withObject "Module" $ \o -> Module
+    <$> o .: "name"
+    <*> o .: "keyset"
+    <*> pure (Meta Nothing []) {- o .:? "meta" -}
+    <*> o .: "code"
+    <*> o .: "hash"
+    <*> (HS.fromList <$> o .: "blessed")
+    <*> o .: "interfaces"
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -341,6 +416,11 @@ data Term n =
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
     , _tInfo :: !Info
+    } |
+    TImplements {
+      _tInterfaceName :: !ModuleName
+    , _tModuleName :: !ModuleName
+    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
 
@@ -373,6 +453,8 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ " " ++ show _tMeta ++ ")"
+    show TImplements{..} =
+      "(TImplements " ++ show _tInterfaceName ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -414,6 +496,7 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
+  liftEq _ (TImplements ifs mn i) (TImplements ifs' mn' i') = ifs == ifs' && mn == mn' && i == i'
   liftEq _ _ _ = False
 
 
@@ -440,6 +523,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
+    TImplements ifs mn i >>= _ = TImplements ifs mn i 
 
 
 instance FromJSON (Term n) where
@@ -509,6 +593,7 @@ typeof t = case t of
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
+      TImplements{} -> Left "implements"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -549,7 +634,10 @@ termEq _ _ = False
 
 
 abbrev :: Show t => Term t -> String
-abbrev (TModule m _ _) = "<module " ++ asString' (_mName m) ++ ">"
+abbrev (TModule m _ _) =
+  case m of
+    Module{..} -> "<module " ++ asString' _mName ++ ">"
+    Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
 abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
@@ -566,7 +654,7 @@ abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-
+abbrev TImplements{..} = "<implements " ++ show _tInterfaceName ++ ">"
 
 
 
