@@ -9,7 +9,6 @@ module Pact.PersistPactDb.Regression
 import Control.Concurrent.MVar
 import Control.Exception
 import qualified Data.Map.Strict as M
-import qualified Data.Vector as V
 
 import Pact.PersistPactDb
 import Pact.Persist
@@ -59,7 +58,7 @@ runRegression p = do
               ,("keyset" .= String "mod-admin-keyset")
               ,("name" .= String "mod1")
               ,("code" .= String "code")
-              ,("meta" .= object [("model" .= Array (V.fromList []))
+              ,("meta" .= object [("model" .= ([] :: [Text]))
                                  ,("docs" .= Null)])]
      ,TxLog "USER_user1" "key1" $
        object [("gah" .= object [("_P_decm" .= Number 1.23454345e8)
