@@ -347,9 +347,9 @@ read-msg
 *key* ``string`` *→* ``<a>``
 
 Read KEY from top level of message data body, or data body itself if not
-provided. Coerces value to pact type: String -> string, Number ->
-integer, Boolean -> bool, List -> value, Object -> value. NB value types
-are not introspectable in pact.
+provided. Coerces value to their corresponding pact type: String ->
+string, Number -> integer, Boolean -> bool, List -> list, Object ->
+object.
 
 .. code:: lisp
 
