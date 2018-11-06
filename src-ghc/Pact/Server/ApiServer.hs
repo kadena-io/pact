@@ -43,7 +43,6 @@ import qualified Data.HashMap.Strict as HM
 import Snap.Util.CORS
 import Snap.Core
 import Snap.Http.Server as Snap
-import Snap.Util.FileServe
 
 import Pact.Types.Command
 import Pact.Types.API
@@ -65,14 +64,7 @@ runApiServer histChan inbChan logFn port logDir = do
   let conf' = ApiEnv logFn histChan inbChan
   httpServe (serverConf port logDir) $
     applyCORS defaultOptions $ methods [GET, POST] $
-    route [("api/v1", runReaderT api conf')
-          ,("/", noCacheStatic)]
-
-noCacheStatic :: Snap ()
-noCacheStatic = do
-  modifyResponse $ setHeader "Cache-Control" "no-cache, no-store, must-revalidate"
-  modifyResponse $ setHeader "Expires" "0"
-  serveDirectory "."
+    route [("api/v1", runReaderT api conf')]
 
 api :: Api ()
 api = route [
