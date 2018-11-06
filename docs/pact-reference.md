@@ -738,7 +738,7 @@ arguments in order to serially execute the function.
 
 ```lisp
 (map (+ 2) [1 2 3])
-(fold (+) "" ["Concatenate" " " "me"]
+(fold (+) "" ["Concatenate" " " "me"])
 ```
 
 Pact also has [compose](#compose), which allows "chaining" applications in a functional style.

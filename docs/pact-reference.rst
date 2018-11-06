@@ -939,7 +939,7 @@ execute the function.
 .. code:: lisp
 
    (map (+ 2) [1 2 3])
-   (fold (+) "" ["Concatenate" " " "me"]
+   (fold (+) "" ["Concatenate" " " "me"])
 
 Pact also has `compose <#compose>`__, which allows “chaining”
 applications in a functional style.
