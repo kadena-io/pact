@@ -141,7 +141,7 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
   evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
-eval (TModule m@Module{..} bod i) = 
+eval (TModule m@Module{..} bod i) =
   topLevelCall i "module" (GModule m) $ \g0 -> do
     -- enforce old module keysets
     oldM <- readRow i Modules _mName
@@ -157,7 +157,7 @@ eval (TModule m@Module{..} bod i) =
     -- build/install module from defs
     (g,_defs) <- loadModule m bod i g0
     writeRow i Write Modules _mName m
-    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)  
+    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)
 eval (TModule m@Interface{..} bod i) =
   topLevelCall i "interface" (GInterface m) $ \gas -> do
     oldI <- readRow i Modules _interfaceName
@@ -166,11 +166,11 @@ eval (TModule m@Interface{..} bod i) =
       Just oi ->
         case oi of
           Module{..} -> evalError i $
-            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName 
+            "Name overlap: interface " ++ show _interfaceName ++ " overlaps with module " ++ show _mName
           Interface{..} -> return ()
     (g, _) <- loadModule m bod i gas
     writeRow i Write Modules _interfaceName m
-    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)  
+    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)
 eval t = enscope t >>= reduce
 
 evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
@@ -180,7 +180,7 @@ evalUse mn h i = do
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
     Just md -> do
       case view mdModule md of
-        Module{..} -> 
+        Module{..} ->
           case h of
             Nothing -> return ()
             Just mh | mh == _mHash -> return ()
@@ -219,7 +219,7 @@ loadModule m@Module{..} bod1 mi g0 = do
   evaluatedDefs <- evaluateDefs mi modDefs1
   evaluateConstraints mi m evaluatedDefs
   let md = ModuleData m evaluatedDefs
-  installModule md 
+  installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
 loadModule i@Interface{..} body info gas0 = do
@@ -260,7 +260,7 @@ evaluateDefs info defs = do
         AcyclicSCC v -> return v
         CyclicSCC vs -> evalError (if null vs then info else _tInfo $ view _1 $ head vs) $
           "Recursion detected: " ++ show vs
-  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds 
+  let dresolve ds (d,dn,_) = HM.insert dn (Ref $ unify ds <$> d) ds
       unifiedDefs = foldl dresolve HM.empty sortedDefs
   traverse (runPure . evalConsts) unifiedDefs
 
@@ -276,7 +276,7 @@ traverseGraph defs = fmap stronglyConnCompR $ forM (HM.toList defs) $ \(dn,d) ->
           Nothing -> evalError (_nInfo f) $ "Cannot resolve \"" ++ show f ++ "\""
       (Nothing, _) -> evalError (_nInfo f) $ "cannot resolve \"" ++ show f ++ "\""
   return (d', dn, mapMaybe (either Just (const Nothing)) $ toList d')
-     
+
 -- | Evaluate interface constraints in module.
 evaluateConstraints
   :: Info
@@ -293,7 +293,7 @@ evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInter
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
         Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
-          
+
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
@@ -321,7 +321,7 @@ solveConstraint info em refName (Ref t) _ =
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
             return ()
-        _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t 
+        _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
 resolveRef qn@(QName q n _) = do
@@ -339,7 +339,7 @@ resolveRef nn@(Name _ _) = do
 -- expected to exist, and if they don't, it is a serious bug
 unify :: HM.HashMap Text Ref -> Either Text Ref -> Ref
 unify _ (Right r) = r
-unify m (Left t) = m HM.! t 
+unify m (Left t) = m HM.! t
 
 evalConsts :: PureNoDb e => Ref -> Eval e Ref
 evalConsts (Ref r) = case r of
@@ -489,13 +489,13 @@ resolveFreeVars i b = traverse r b where
              Just d -> return d
 
 installModule :: ModuleData ->  Eval e ()
-installModule ModuleData{..} = do 
+installModule ModuleData{..} = do
   (evalRefs . rsLoaded) %= HM.union (HM.fromList . map (first (`Name` def)) . HM.toList $ _mdRefMap)
   let n = case _mdModule of
         Module{..} -> _mName
         Interface{..} -> _interfaceName
   (evalRefs . rsLoadedModules) %= HM.insert n _mdModule
-  
+
 msg :: Text -> Term n
 msg = toTerm
 
@@ -505,13 +505,13 @@ enscope t = instantiate' <$> (resolveFreeVars (_tInfo t) . abstract (const Nothi
 instantiate' :: Scope n Term a -> Term a
 instantiate' = instantiate1 (toTerm ("No bindings" :: Text))
 
--- | Runtime input typecheck -- let bindings and defuns.
--- Output checking -- defconsts, function return values -- left to static TC.
--- Native funs TC via pattern-matching etc.
+-- | Runtime input typecheck, enforced on let bindings, consts, user defun app args.
+-- Output checking -- app return values -- left to static TC.
+-- Native funs not checked here, as they use pattern-matching etc.
 typecheck :: [(Arg (Term Name),Term Name)] -> Eval e ()
 typecheck ps = void $ foldM tvarCheck M.empty ps where
   tvarCheck m (Arg {..},t) = do
-    r <- check1 _aInfo _aType t
+    r <- typecheckTerm _aInfo _aType t
     case r of
       Nothing -> return m
       Just (v,ty) -> case M.lookup v m of
@@ -521,30 +521,51 @@ typecheck ps = void $ foldM tvarCheck M.empty ps where
                         evalError (_tInfo t) $ "Type error: values for variable " ++ show _aType ++
                         " do not match: " ++ show (prevTy,ty)
 
-check1 :: forall e . Info -> Type (Term Name) -> Term Name -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-check1 i spec t = do
+-- | 'typecheckTerm i spec t' checks a Term 't' against a specified type 'spec'.
+-- Returns `Nothing` on successful check against concrete/untyped,
+-- or `Just` a pair for successful check against a type variable, where
+-- the pair is the type variable itself and the term type.
+typecheckTerm :: forall e . Info -> Type (Term Name) -> Term Name
+       -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
+typecheckTerm i spec t = do
+
   ty <- case typeof t of
     Left s -> evalError i $ "Invalid type in value location: " ++ unpack s
     Right r -> return r
+
   let
+
     tcFail :: Show a => a -> Eval e b
-    tcFail found = evalError i $ "Type error: expected " ++ show spec ++ ", found " ++ show found
+    tcFail found = evalError i $
+      "Type error: expected " ++ show spec ++ ", found " ++ show found
+
     tcOK = return Nothing
-    paramCheck :: Eq t => Type t -> Type t -> (Type t -> Eval e (Type (Term Name))) ->
-                  Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
-    paramCheck TyAny _ _ = tcOK
-    paramCheck TyVar {} _ _ = tcOK
-    paramCheck pspec pty check | pspec == pty = tcOK -- dupe check as below, for totality
-                               | not (isUnconstrainedTy pty) = tcFail ty -- unequal constrained fails
-                               | otherwise = do
-                                   checked <- check pspec
-                                   if checked == spec then tcOK else tcFail checked
-    checkList [] lty = return lty
+
+    -- | check container parameterized type.
+    -- 'paramCheck pspec pty check' check specified param ty 'pspec' with
+    -- value param ty 'pty'. If not trivially equal, use 'check'
+    -- to determine actual container value type, and compare for equality
+    -- with specified.
+    paramCheck :: Type (Term Name)
+               -> Type (Term Name)
+               -> (Type (Term Name) -> Eval e (Type (Term Name)))
+               -> Eval e (Maybe (TypeVar (Term Name),Type (Term Name)))
+    paramCheck TyAny _ _ = tcOK -- no spec
+    paramCheck pspec pty check
+      | pspec == pty = tcOK -- equality OK
+      | otherwise = do
+          -- run check function to get actual content type
+          checked <- check pspec
+          -- final check expects full match with toplevel 'spec'
+          if checked == spec then tcOK else tcFail checked
+
+    -- | infer list value type
     checkList es lty = return $ TyList $
                     case nub (map typeof es) of
-                      [] -> lty
-                      [Right a] -> a
-                      _ -> TyAny
+                      [Right a] -> a -- uniform value type: return it
+                      [] -> lty -- empty: return specified
+                      _ -> TyAny -- otherwise untyped
+
   case (spec,ty,t) of
     (_,_,_) | spec == ty -> tcOK -- identical types always OK
     (TyAny,_,_) -> tcOK -- var args are untyped
@@ -552,11 +573,16 @@ check1 i spec t = do
       if spec `canUnifyWith` ty
       then return $ Just (_tyVar,ty) -- collect found types under vars
       else tcFail ty -- constraint failed
-    (TyList lspec,TyList lty,TList {..}) -> paramCheck lspec lty (checkList _tList)
-    (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) -> paramCheck ospec oty (checkUserType True i _tObject)
+    -- check list
+    (TyList lspec,TyList lty,TList {..}) ->
+      paramCheck lspec lty (checkList _tList)
+    -- check object
+    (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) ->
+      paramCheck ospec oty (checkUserType True i _tObject)
     _ -> tcFail ty
 
-
+-- | check object args. Used in 'typecheckTerm' above and also in DB writes.
+-- Total flag allows for partial row types if False.
 checkUserType :: Bool -> Info  -> [(Term Name,Term Name)] -> Type (Term Name) -> Eval e (Type (Term Name))
 checkUserType total i ps (TyUser tu@TSchema {..}) = do
   let uty = M.fromList . map (_aName &&& id) $ _tFields
@@ -567,7 +593,8 @@ checkUserType total i ps (TyUser tu@TSchema {..}) = do
     t -> evalError i $ "Invalid object, non-String key found: " ++ show t
   when total $ do
     let missing = M.difference uty (M.fromList (map (first _aName) aps))
-    unless (M.null missing) $ evalError i $ "Missing fields for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show (M.elems missing)
+    unless (M.null missing) $ evalError i $
+      "Missing fields for {" ++ unpack (asString _tSchemaName) ++ "}: " ++ show (M.elems missing)
   typecheck aps
   return $ TySchema TyObject (TyUser tu)
 checkUserType _ i _ t = evalError i $ "Invalid reference in user type: " ++ show t
