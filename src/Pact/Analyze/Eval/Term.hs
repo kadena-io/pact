@@ -251,7 +251,7 @@ evalTermO :: Term Object -> Analyze Object
 evalTermO = \case
   CoreTerm a -> evalCoreO a
 
-  Read tid tn (Schema fields) rowKey -> do
+  Read Nothing tid tn (Schema fields) rowKey -> do
     sRk <- symRowKey <$> evalTerm rowKey
     tableRead tn .= true
     rowReadCount tn sRk += 1

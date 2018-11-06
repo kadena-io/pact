@@ -895,12 +895,13 @@ translateNode astNode = withAstContext astNode $ case astNode of
       translateObjBinding bindings schema body readT
 
   AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
-    schema <- translateSchema schemaNode
+    schema            <- translateSchema schemaNode
+    EObject _ defobj  <- translateNode defaultNode
     ESimple TStr key' <- translateNode key
     tid <- tagRead node schema
-    let readT = EObject schema $ Read default' tid (TableName (T.unpack table)) schema key'
+    let readT = EObject schema $ Read (Just defobj) tid (TableName (T.unpack table)) schema key'
     withNodeContext node $
-      translateObjBinding bindings schema body
+      translateObjBinding bindings schema body readT
 
   AST_Bind node objectA bindings schemaNode body -> do
     schema  <- translateSchema schemaNode

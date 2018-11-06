@@ -144,13 +144,13 @@ pattern AST_WithRead node table key bindings schema body <-
       [ShortTableName table, key]
 
 pattern AST_WithDefaultRead
-  :: Node
-  -> Text
-  -> AST Node
-  -> [(Named Node, AST Node)]
-  -> Node
-  -> AST Node
-  -> [AST Node]
+  :: Node                     -- ^ node
+  -> Text                     -- ^ table name
+  -> AST Node                 -- ^ key
+  -> [(Named Node, AST Node)] -- ^ table bindings
+  -> Node                     -- ^ schema node
+  -> AST Node                 -- ^ default node
+  -> [AST Node]               -- ^ body
   -> AST Node
 pattern AST_WithDefaultRead node table key bindings schema default' body <-
   App node (NativeFuncSpecial "with-default-read" (AST_BindSchema _ bindings schema body))
