@@ -48,7 +48,7 @@ Pact can also be installed by following the instructions below:
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
 
-For installing `pact` on Linux distros in the Arch family, refer to this [package](https://aur.archlinux.org/packages/pact/).
+For installing `pact` on Linux distributions in the Arch family, refer to [this package on the AUR](https://aur.archlinux.org/packages/pact/).
 
 Verifying Install
 ---
