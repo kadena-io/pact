@@ -890,9 +890,17 @@ translateNode astNode = withAstContext astNode $ case astNode of
     schema            <- translateSchema schemaNode
     ESimple TStr key' <- translateNode key
     tid               <- tagRead node schema
-    let readT = EObject schema $ Read tid (TableName (T.unpack table)) schema key'
+    let readT = EObject schema $ Read Nothing tid (TableName (T.unpack table)) schema key'
     withNodeContext node $
       translateObjBinding bindings schema body readT
+
+  AST_WithDefaultRead node table key bindings schemaNode defaultNode body -> do
+    schema <- translateSchema schemaNode
+    ESimple TStr key' <- translateNode key
+    tid <- tagRead node schema
+    let readT = EObject schema $ Read default' tid (TableName (T.unpack table)) schema key'
+    withNodeContext node $
+      translateObjBinding bindings schema body
 
   AST_Bind node objectA bindings schemaNode body -> do
     schema  <- translateSchema schemaNode
@@ -918,7 +926,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
     ESimple TStr key' <- translateNode key
     schema <- translateSchema node
     tid <- tagRead node schema
-    pure $ EObject schema $ Read tid (TableName (T.unpack table)) schema key'
+    pure $ EObject schema $ Read Nothing tid (TableName (T.unpack table)) schema key'
 
   -- Note: this won't match if the columns are not a list literal
   AST_ReadCols node table key columns -> do
@@ -932,7 +940,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
     tid <- tagRead node schema
     pure $ EObject schema $
-      Read tid (TableName (T.unpack table)) schema key'
+      Read Nothing tid (TableName (T.unpack table)) schema key'
 
   AST_At node colName obj -> do
     EObject schema obj'   <- translateNode obj

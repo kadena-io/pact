@@ -107,8 +107,9 @@ pattern Inj a <- (project -> Just a) where
 --
 -- These are the expressions shared by all three languages ('Prop',
 -- 'Invariant', and 'Term'). Another way of thinking about this type is the
--- pure subset of any of then languages. This happens to coincide with all of
--- the invariant language, but properties and terms have more constructions.
+-- pure subset common to any of those languages. This happens to coincide
+-- with all of the invariant language, but properties and terms have more
+-- constructions.
 --
 -- This consists of:
 --
@@ -525,8 +526,8 @@ data Term ret where
   NameAuthorized  :: TagId -> Term String -> Term Bool
 
   -- Table access
-  Read            ::              TagId -> TableName -> Schema -> Term String ->                Term Object
-  Write           :: WriteType -> TagId -> TableName -> Schema -> Term String -> Term Object -> Term String
+  Read            :: Maybe (Term Object) -> TagId -> TableName -> Schema -> Term String ->                Term Object
+  Write           :: WriteType           -> TagId -> TableName -> Schema -> Term String -> Term Object -> Term String
 
   PactVersion     :: Term String
 
@@ -561,7 +562,7 @@ instance UserShow a => UserShow (Term a) where
     NameAuthorized _ _
       -> error "NameAuthorized should only appear inside of an Enforce"
 
-    Read _ tab _ x       -> parenList ["read", userShow tab, userShow x]
+    Read d _ tab _ x     -> parenList ["read", userShow d, userShow tab, userShow x]
     Write _ _ tab _ x y  -> parenList ["read", userShow tab, userShow x, userShow y]
     PactVersion          -> parenList ["pact-version"]
     Format x y           -> parenList ["format", userShow x, userShowList y]
