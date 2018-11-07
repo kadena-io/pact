@@ -408,7 +408,7 @@ instance Monoid Object where
   mempty = Object Map.empty
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  Object m1 `mappend` Object m2 = Object $ m1 <> m2
+  mappend = (<>)
 
 objFields :: Lens' Object (Map Text TVal)
 objFields = lens getter setter
@@ -424,7 +424,7 @@ instance Monoid Schema where
   mempty = Schema Map.empty
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
+  mappend = (<>)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where

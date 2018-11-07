@@ -145,7 +145,6 @@ instance Semigroup Constraints where
 
 instance Monoid Constraints where
   mempty = Constraints (pure ())
-  mappend (Constraints act1) (Constraints act2) = Constraints $ act1 *> act2
 
 data SymbolicCells
   = SymbolicCells
