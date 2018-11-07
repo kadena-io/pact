@@ -50,7 +50,7 @@ pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 *value*&nbsp;`<a>` *ignore1*&nbsp;`<b>` *ignore2*&nbsp;`<c>` *ignore3*&nbsp;`<d>` *&rarr;*&nbsp;`<a>`
 
 
-Ignore (lazily) arguments IGNORE* and return VALUE. 
+Lazily ignore arguments IGNORE* and return VALUE. 
 ```lisp
 pact> (filter (constantly true) [1 2 3])
 [1 2 3]
@@ -100,7 +100,7 @@ pact> (drop ['name] { 'name: "Vlad", 'active: false})
 *test*&nbsp;`bool` *msg*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Fail transaction with MSG if pure function TEST fails, or returns true. 
+Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0: Chaos reigns
@@ -140,7 +140,7 @@ Top level only: this function will fail if used in module code.
 *app*&nbsp;`(x:<a> -> bool)` *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Filter LIST by applying APP to each element to get a boolean determining inclusion.
+Filter LIST by applying APP to each element. For each true result, the original value is kept.
 ```lisp
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ["dog" "has" "fleas"]
@@ -202,7 +202,7 @@ pact> (map (identity) [1 2 3])
 *cond*&nbsp;`bool` *then*&nbsp;`<a>` *else*&nbsp;`<a>` *&rarr;*&nbsp;`<a>`
 
 
-Test COND, if true evaluate THEN, otherwise evaluate ELSE. 
+Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE. 
 ```lisp
 pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 "Sanity prevails"
@@ -264,7 +264,7 @@ pact> (make-list 5 true)
 *app*&nbsp;`(x:<b> -> <a>)` *list*&nbsp;`[<b>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Apply elements in LIST as last arg to APP, returning list of results. 
+Apply APP to each element in LIST, returning a new list of results. 
 ```lisp
 pact> (map (+ 1) [1 2 3])
 [2 3 4]
@@ -323,7 +323,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, List -> value, Object -> value. NB value types are not introspectable in pact. 
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. 
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -352,10 +352,10 @@ Special form binds to a yielded object value from the prior step execution in a 
 
 ### reverse {#reverse}
 
-*l*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
+*list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Reverse a list. 
+Reverse LIST. 
 ```lisp
 pact> (reverse [1 2 3])
 [3 2 1]
@@ -369,7 +369,7 @@ pact> (reverse [1 2 3])
 *fields*&nbsp;`[string]` *values*&nbsp;`[object:<{o}>]` *&rarr;*&nbsp;`[object:<{o}>]`
 
 
-Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. 
+Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. 
 ```lisp
 pact> (sort [3 1 2])
 [1 2 3]
@@ -453,7 +453,7 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 *OBJECT*&nbsp;`object:<{y}>` *&rarr;*&nbsp;`object:<{y}>`
 
 
-Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. 
+Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. 
 ```lisp
 (yield { "amount": 100.0 })
 ```
@@ -478,7 +478,7 @@ Top level only: this function will fail if used in module code.
 *keyset*&nbsp;`string` *&rarr;*&nbsp;`value`
 
 
-Get metadata for KEYSET
+Get metadata for KEYSET.
 
 Top level only: this function will fail if used in module code.
 
@@ -516,7 +516,7 @@ Top level only: this function will fail if used in module code.
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
 ```lisp
-(insert 'accounts { "balance": 0.0, "note": "Created account." })
+(insert accounts { "balance": 0.0, "note": "Created account." })
 ```
 
 
@@ -527,7 +527,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data already exis
 
 Return updates to TABLE for a KEY in transactions at or after TXID, in a list of objects indexed by txid. 
 ```lisp
-(keylog 'accounts "Alice" 123485945)
+(keylog accounts "Alice" 123485945)
 ```
 
 
@@ -538,7 +538,7 @@ Return updates to TABLE for a KEY in transactions at or after TXID, in a list of
 
 Return all keys in TABLE. 
 ```lisp
-(keys 'accounts)
+(keys accounts)
 ```
 
 
@@ -549,9 +549,9 @@ Return all keys in TABLE.
 *table*&nbsp;`table:<{row}>` *key*&nbsp;`string` *columns*&nbsp;`[string]` *&rarr;*&nbsp;`object:<{row}>`
 
 
-Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. 
+Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. 
 ```lisp
-(read 'accounts id ['balance 'ccy])
+(read accounts id ['balance 'ccy])
 ```
 
 
@@ -587,7 +587,7 @@ Return all txid values greater than or equal to TXID in TABLE.
 
 Return all updates to TABLE performed in transaction TXID. 
 ```lisp
-(txlog 'accounts 123485945)
+(txlog accounts 123485945)
 ```
 
 
@@ -598,7 +598,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
 ```lisp
-(update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+(update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 
 
@@ -609,7 +609,7 @@ Write entry in TABLE for KEY of OBJECT column data, failing if data does not exi
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements. If row not found, read columns from DEFAULTS, an object with matching key names. 
 ```lisp
-(with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+(with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
    (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -621,7 +621,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 Special form to read row from TABLE for KEY and bind columns per BINDINGS over subsequent body statements.
 ```lisp
-(with-read 'accounts id { "balance":= bal, "ccy":= ccy }
+(with-read accounts id { "balance":= bal, "ccy":= ccy }
    (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -633,7 +633,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 Write entry in TABLE for KEY of OBJECT column data.
 ```lisp
-(write 'accounts { "balance": 100.0 })
+(write accounts { "balance": 100.0 })
 ```
 
 ## Time {#Time}
@@ -683,7 +683,7 @@ pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 *format*&nbsp;`string` *time*&nbsp;`time` *&rarr;*&nbsp;`string`
 
 
-Format TIME using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+Format TIME using FORMAT. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
 ```lisp
 pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
 "2016-07-22"
@@ -723,7 +723,7 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 *format*&nbsp;`string` *utcval*&nbsp;`string` *&rarr;*&nbsp;`time`
 
 
-Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](#time-formats) for supported formats.
+Construct time from UTCVAL using FORMAT. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
 ```lisp
 pact> (parse-time "%F" "2016-09-12")
 "2016-09-12T00:00:00Z"
@@ -982,7 +982,7 @@ pact> (ceiling 100.15234 2)
 *x*&nbsp;`<a[integer,decimal]>` *&rarr;*&nbsp;`<a[integer,decimal]>`
 
 
-Exp of X 
+Exp of X. 
 ```lisp
 pact> (round (exp 3) 6)
 20.085537
@@ -1193,7 +1193,7 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 ## REPL-only functions {#repl-lib}
 
-The following functions are loaded magically in the interactive REPL, or in script files with a `.repl` extension. They are not available for blockchain-based execution.
+The following functions are loaded automatically into the interactive REPL, or within script files with a `.repl` extension. They are not available for blockchain-based execution.
 
 
 ### begin-tx {#begin-tx}
@@ -1264,7 +1264,7 @@ Set environment confidential ENTITY id, or unset with no argument. Clears any pr
 *gas*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Query gas state, or set it to GAS
+Query gas state, or set it to GAS.
 
 
 ### env-gaslimit {#env-gaslimit}
@@ -1272,7 +1272,7 @@ Query gas state, or set it to GAS
 *limit*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Set environment gas limit to LIMIT
+Set environment gas limit to LIMIT.
 
 
 ### env-gasprice {#env-gasprice}
@@ -1280,7 +1280,7 @@ Set environment gas limit to LIMIT
 *price*&nbsp;`decimal` *&rarr;*&nbsp;`string`
 
 
-Set environment gas price to PRICE
+Set environment gas price to PRICE.
 
 
 ### env-gasrate {#env-gasrate}
@@ -1288,7 +1288,7 @@ Set environment gas price to PRICE
 *rate*&nbsp;`integer` *&rarr;*&nbsp;`string`
 
 
-Update gas model to charge constant RATE
+Update gas model to charge constant RATE.
 
 
 ### env-hash {#env-hash}
@@ -1376,7 +1376,7 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 *file*&nbsp;`string` *reset*&nbsp;`bool` *&rarr;*&nbsp;`string`
 
 
-Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. 
+Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. 
 ```lisp
 (load "accounts.repl")
 ```
@@ -1398,7 +1398,7 @@ Inspect state from previous pact execution. Returns object with fields 'yield': 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Print a string, mainly to format newlines correctly
+Output VALUE to terminal as unquoted, unescaped text.
 
 
 ### rollback-tx {#rollback-tx}
@@ -1417,7 +1417,7 @@ Rollback transaction.
  *&rarr;*&nbsp;`keyset`
 
 
-Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
+Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate.
 
 
 ### typecheck {#typecheck}

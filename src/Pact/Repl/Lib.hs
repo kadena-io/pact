@@ -84,7 +84,7 @@ replDefs = ("Repl",
      [
       defZRNative "load" load (funType tTyString [("file",tTyString)] <>
                               funType tTyString [("file",tTyString),("reset",tTyBool)]) $
-      "Load and evaluate FILE, resetting repl state beforehand if optional NO-RESET is true. " <>
+      "Load and evaluate FILE, resetting repl state beforehand if optional RESET is true. " <>
       "`$(load \"accounts.repl\")`"
      ,defZRNative "env-keys" setsigs (funType tTyString [("keys",TyList tTyString)])
       "Set transaction signature KEYS. `(env-keys [\"my-key\" \"admin-key\"])`"
@@ -123,13 +123,13 @@ replDefs = ("Repl",
                                  funType tTyString [("module",tTyString),("debug",tTyBool)])
        "Typecheck MODULE, optionally enabling DEBUG output."
      ,defZRNative "env-gaslimit" setGasLimit (funType tTyString [("limit",tTyInteger)])
-       "Set environment gas limit to LIMIT"
+       "Set environment gas limit to LIMIT."
      ,defZRNative "env-gas" envGas (funType tTyInteger [] <> funType tTyString [("gas",tTyInteger)])
-       "Query gas state, or set it to GAS"
+       "Query gas state, or set it to GAS."
      ,defZRNative "env-gasprice" setGasPrice (funType tTyString [("price",tTyDecimal)])
-       "Set environment gas price to PRICE"
+       "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
-       "Update gas model to charge constant RATE"
+       "Update gas model to charge constant RATE."
 #if !defined(ghcjs_HOST_OS)
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
 #endif
@@ -139,9 +139,9 @@ replDefs = ("Repl",
       "This is only needed for tests, as Pact values are automatically represented as JSON in API output. " <>
       "`(json [{ \"name\": \"joe\", \"age\": 10 } {\"name\": \"mary\", \"age\": 25 }])`"
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
-     "Convenience to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
+     "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defZRNative "print" print' (funType tTyString [("value",a)])
-     "Print a string, mainly to format newlines correctly"
+     "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ])

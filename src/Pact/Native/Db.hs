@@ -84,7 +84,7 @@ dbDefs =
     ,defGasRNative "read" read'
      (funType rowTy [("table",tableTy),("key",tTyString)] <>
       funType rowTy [("table",tableTy),("key",tTyString),("columns",TyList tTyString)])
-     "Read row from TABLE for KEY returning database record object, or just COLUMNS if specified. \
+     "Read row from TABLE for KEY, returning database record object, or just COLUMNS if specified. \
      \`$(read accounts id ['balance 'ccy])`"
 
     ,defNative (specialForm Select) select
@@ -123,7 +123,7 @@ dbDefs =
      "Get metadata for TABLE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
      \`$(describe-table accounts)`"
     ,setTopLevelOnly $ defRNative "describe-keyset" descKeySet
-     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET"
+     (funType tTyValue [("keyset",tTyString)]) "Get metadata for KEYSET."
     ,setTopLevelOnly $ defRNative "describe-module" descModule
      (funType tTyValue [("module",tTyString)])
      "Get metadata for MODULE. Returns an object with 'name', 'hash', 'blessed', 'code', and 'keyset' fields. \
@@ -151,7 +151,7 @@ descModule i [TLitString t] = do
   case _mdModule <$> mods of
     Just m ->
       case m of
-        Module{..} -> 
+        Module{..} ->
           return $ TObject
             [ (tStr "name"      , tStr $ asString _mName)
             , (tStr "hash"      , tStr $ asString _mHash)
@@ -366,7 +366,7 @@ enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
 enforceBlessedHashes i mn h = do
   mmRs <- fmap _mdModule . HM.lookup mn <$> view (eeRefStore . rsModules)
   mm <- maybe (HM.lookup mn <$> use (evalRefs.rsLoadedModules)) (return.Just) mmRs
-  case mm of 
+  case mm of
     Nothing -> evalError' i $ "Internal error: Module " ++ show mn ++ " not found, could not enforce hashes"
     Just m ->
       case m of

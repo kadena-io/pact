@@ -9,7 +9,7 @@ blockchain <http://kadena.io>`__. For more background, please see the
 `white paper <http://kadena.io/docs/Kadena-PactWhitepaper.pdf>`__ or the
 `pact home page <http://kadena.io/#pactModal>`__.
 
-Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
+Copyright (c) 2016 - 2018, Stuart Popejoy. All Rights Reserved.
 
 Rest API
 ========
@@ -114,8 +114,8 @@ sent to http://localhost:8080/api/v1/send, if running on
 /send
 ~~~~~
 
-Asynchronous submit of one or more *public* (unencrypted) commands to
-the blockchain. See `cmd field format <#cmd-field-and-payloads>`__
+Asynchronous submission of one or more *public* (unencrypted) commands
+to the blockchain. See `cmd field format <#cmd-field-and-payloads>`__
 regarding the stringified JSON data.
 
 Request JSON:
@@ -155,9 +155,9 @@ Response JSON:
 /private
 ~~~~~~~~
 
-Asynchronous submit of one or more *private* commands to the blockchain,
-using supplied address info to securely encrypt for only sending and
-receiving entities to read. See `cmd field
+Asynchronous submission of one or more *private* commands to the
+blockchain, using supplied address info to securely encrypt, in order
+only to send and receive entities for reading. See `cmd field
 format <#cmd-field-and-payloads>`__ regarding the stringified JSON data.
 
 Request JSON:
@@ -633,16 +633,16 @@ With the `typecheck <#typecheck>`__ repl command, the Pact interpreter
 will analyze a module and attempt to infer types on every variable,
 function application or const definition. Using this in project repl
 scripts is helpful to aid the developer in adding “just enough types” to
-make the typecheck succeed. Fully successful typecheck is usually a
-matter of providing schemas for all tables, and argument types for
-ancillary functions that call ambiguous or overloaded native functions.
+make the typecheck succeed. Successful typechecking is usually a matter
+of providing schemas for all tables, and argument types for ancillary
+functions that call ambiguous or overloaded native functions.
 
 Formal Verification
 ~~~~~~~~~~~~~~~~~~~
 
-Pact’s typechecker is designed to output a fully typechecked, inlined
-AST for use generating formal proofs in SMT-LIB2. If the typecheck does
-not fully succeed, the module is not considered “provable”.
+Pact’s typechecker is designed to output a fully typechecked and inlined
+AST for generating formal proofs in the SMT-LIB2 language. If the
+typecheck does not succeed, the module is not considered “provable”.
 
 We see, then, that Pact code can move its way up a “safety” gradient,
 starting with no types, then with “enough” types, and lastly, with
@@ -688,7 +688,7 @@ Keyset Predicates
 ~~~~~~~~~~~~~~~~~
 
 A keyset predicate references a function by its (optionally qualified)
-name which will compare the public keys in the keyset to the key or keys
+name, and will compare the public keys in the keyset to the key or keys
 used to sign the blockchain message. The function accepts two arguments,
 “count” and “matched”, where “count” is the number of keys in the keyset
 and “matched” is how many keys on the message signature matched a keyset
@@ -696,14 +696,14 @@ key.
 
 Support for multiple signatures is the responsibility of the blockchain
 layer, and is a powerful feature for Bitcoin-style “multisig” contracts
-(ie requiring at least two signatures to release funds).
+(i.e. requiring at least two signatures to release funds).
 
 Pact comes with built-in keyset predicates: `keys-all <#keys-all>`__,
 `keys-any <#keys-any>`__, `keys-2 <#keys-2>`__. Module authors are free
 to define additional predicates.
 
-If a keyset predicate is not specified, it is defaulted to
-`keys-all <#keys-all>`__.
+If a keyset predicate is not specified, `keys-all <#keys-all>`__ is used
+by default.
 
 .. _keyrotation:
 
@@ -722,10 +722,11 @@ Module Table Guards
 When `creating <#create-table>`__ a table, a module name must also be
 specified. By this mechanism, tables are “guarded” or “encapsulated” by
 the module, such that direct access to the table via `data-access
-functions <#Database>`__ is authorized by the module’s admin keyset.
-However, *within module functions*, table access is unconstrained. This
-gives contract authors great flexibility in designing data access, and
-is intended to enshrine the module as the main “user” data access API.
+functions <#Database>`__ is authorized only by the module’s admin
+keyset. However, *within module functions*, table access is
+unconstrained. This gives contract authors great flexibility in
+designing data access, and is intended to enshrine the module as the
+main “user” data access API.
 
 .. _rowlevelkeysets:
 
@@ -800,9 +801,7 @@ Data Types
 
 Pact code can be explicitly typed, and is always strongly-typed under
 the hood as the native functions perform strict type checking as
-indicated in their documented type signatures. language, but does use
-fixed type representations “under the hood” and does no coercion of
-types, so is strongly-typed nonetheless.
+indicated in their documented type signatures.
 
 Pact’s supported types are:
 
@@ -839,7 +838,7 @@ Call with references instead of ``use``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When calling module functions in transactions, use `reference
-syntax <#reference>`__ instead of importing the module with
+syntax <#references>`__ instead of importing the module with
 `use <#use>`__. When defining modules that reference other module
 functions, ``use`` is fine, as those references will be inlined at
 module definition time.
@@ -940,7 +939,7 @@ execute the function.
 .. code:: lisp
 
    (map (+ 2) [1 2 3])
-   (fold (+) ["Concatenate" " " "me"]
+   (fold (+) "" ["Concatenate" " " "me"])
 
 Pact also has `compose <#compose>`__, which allows “chaining”
 applications in a functional style.
@@ -973,8 +972,8 @@ Message Data
 
 Pact expects code to arrive in a message with a JSON payload and
 signatures. Message data is read using `read-msg <#read-msg>`__ and
-related functions, while signatures are not directly readable or
-writable – they are evaluated as part of `keyset
+related functions. While signatures are not directly readable or
+writable, they are evaluated as part of `keyset
 predicate <#keysetpredicates>`__ enforcement.
 
 .. _json:
@@ -1111,8 +1110,8 @@ Yield and Resume
 ~~~~~~~~~~~~~~~~
 
 A step can yield values to the following step using `yield <#yield>`__
-and `resume <#resume>`__. In public, this is an unforgeable value as it
-is maintained within the blockchain pact scope. In private this is
+and `resume <#resume>`__. In public, this is an unforgeable value, as it
+is maintained within the blockchain pact scope. In private, this is
 simply a value sent with a RESUME message from the executed entity.
 
 Pact execution scope and ``pact-id``
@@ -1122,7 +1121,7 @@ Every time a pact is initiated, it is given a unique ID which is
 retrievable using the `pact-id <#pact-id>`__ function, which will return
 the ID of the currently executing pact, or fail if not running within a
 pact scope. This mechanism can thus be used to guard access to
-resources, analogous to the use of keysets and signatures. The classic
+resources, analogous to the use of keysets and signatures. One typical
 use of this is to create escrow accounts that can only be used within
 the context of a given pact, eliminating the need for a trusted third
 party for many use-cases.
@@ -1169,16 +1168,16 @@ module version.
 Inlined Dependencies: “No Leftpad”
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pact inlines all user-code references when a module is loaded, meaning
-that upstream definitions are injected into downstream code. At this
-point, upstream definitions are permanent: the only way to upgrade
-dependencies is to re-load the module code.
+When a module is loaded, all references to foreign modules are resolved,
+and their code is directly inlined. At this point, upstream definitions
+are permanent: the only way to upgrade dependencies is to reload the
+original module.
 
-This permanence is great for downstream/client code: the upstream
-provider cannot change what code gets executed in your module, once
-loaded. It creates a big problem for upstream/provider code, as
-providers cannot upgrade the downstream code to address an exploit, or
-to introduce new features.
+This permanence is great for user code: once a module is loaded, an
+upstream provider cannot change what code is executed within. However,
+this creates a big problem for upstream developers, as they cannot
+upgrade the downstream code themselves in order to address an exploit,
+or to introduce new features.
 
 Blessing hashes
 ~~~~~~~~~~~~~~~
@@ -1250,8 +1249,8 @@ Symbols are string literals representing some unique item in the
 runtime, like a function or a table name. Their representation
 internally is simply a string literal so their usage is idiomatic.
 
-Symbols are created with a preceding tick, thus they do no support
-whitespace or multiline.
+Symbols are created with a preceding tick, thus they do not support
+whitespace nor multiline syntax.
 
 ::
 
@@ -1261,25 +1260,26 @@ whitespace or multiline.
 Integers
 ~~~~~~~~
 
-Integer literals are unbounded positive naturals. For negative numbers
-use the unary `- <#->`__ function.
+Integer literals are unbounded, and can be positive or negative.
 
 ::
 
    pact> 12345
    12345
+   pact> -922337203685477580712387461234
+   -922337203685477580712387461234
 
 Decimals
 ~~~~~~~~
 
-Decimal literals are positive decimals to exact expressed precision.
+Decimal literals have potentially unlimited precision.
 
 ::
 
    pact> 100.25
    100.25
-   pact> 356452.23451872
-   356452.23451872
+   pact> -356452.234518728287461023856582382983746
+   -356452.234518728287461023856582382983746
 
 Booleans
 ~~~~~~~~
@@ -1405,7 +1405,7 @@ Consts
 Special forms
 -------------
 
-Docs and metadata
+Docs and Metadata
 ~~~~~~~~~~~~~~~~~
 
 Many special forms like `defun <#defun>`__ accept optional documentation
@@ -1413,26 +1413,27 @@ strings, in the following form:
 
 .. code:: lisp
 
-   (defun foo (bar)
-     "Do the thing with BAR"
-     ...)
+   (defun average (a b)
+     "take the average of a and b"
+     (/ (+ a b) 2))
 
-However, in this position an optional *metadata section* can specify
-docs and metadata, where metadata can be tagged with any key desired.
-The following code provides a docstring of “does the thing with BAR” and
-specifies metadata of type ``property`` and ``example``:
+Alternately, users can specify metadata using a special ``@``-prefix
+syntax. Supported metadata fields are ``@doc`` to provide a
+documentation string, and ``@model`` that can be used by Pact tooling to
+verify the correctness of the implementation:
 
 .. code:: lisp
 
-   (defun foo (bar)
-     ("does the thing with BAR"
-       (property [(when something abort)])
-       (example (foo "my house")))
-     ...)
+   (defun average (a b)
+     @doc   "take the average of a and b"
+     @model (property (= (+ a b) (* 2 result)))
+     (/ (+ a b) 2))
 
-Thus, the metadata form is DOC PAIR*, where a PAIR is (ATOM EXPR). The
-Pact language lexer/compiler ignores all EXPR forms, to be
-lexed/compiled at some later stage by whatever tool recognizes ATOM.
+Indeed, a bare docstring like ``"foo"`` is actually just a short form
+for ``@doc "foo"``.
+
+Specific information on *Properties* can be found in `The Pact Property
+Checking System <pact-properties.html>`__.
 
 bless
 ~~~~~
@@ -1468,7 +1469,8 @@ DOC-OR-META. Arguments are in scope for BODY, one or more expressions.
 
    (defun add3 (a b c) (+ a (+ b c)))
 
-   (defun scale3 (a b c s) "multiply sum of A B C times s"
+   (defun scale3 (a b c s)
+     "multiply sum of A B C times s"
      (* s (add3 a b c)))
 
 defconst
@@ -1494,12 +1496,12 @@ defpact
 
    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
-Define NAME as a *pact*, a multistep computation intended for private
-transactions. Identical to `defun <#defun>`__ except body must be
-comprised of `steps <#step>`__ to be executed in strict sequential
-order. Steps must uniformly be “public” (no entity indicator) or
-“private” (with entity indicator). With private steps, failures result
-in a reverse-sequence “rollback cascade”.
+Define NAME as a *pact*, a computation comprised of multiple steps that
+occur in distinct transactions. Identical to `defun <#defun>`__ except
+body must be comprised of `steps <#step>`__ to be executed in strict
+sequential order. Steps must uniformly be “public” (no entity indicator)
+or “private” (with entity indicator). With private steps, failures
+result in a reverse-sequence “rollback cascade”.
 
 .. code:: lisp
 
@@ -1565,10 +1567,10 @@ let\*
 
 ::
 
-   (let\* (BINDPAIR [BINDPAIR [...]]) BODY)
+   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables can
-reference previously declared BINDPAIRS in the same let. ``let\*`` is
+reference previously declared BINDPAIRS in the same let. ``let*`` is
 expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
 ``let`` is preferred where possible.
 
@@ -1587,12 +1589,11 @@ step
    (step EXPR)
    (step ENTITY EXPR)
 
-Define a step within a `defpact <#defpact>`__ such that any prior steps
+Define a step within a `defpact <#defpact>`__, such that any prior steps
 will be executed in prior transactions, and later steps in later
-transactions. With ENTITY, indicates that this step is intended for
-confidential transactions such that only ENTITY will execute the step,
-while other participants will “skip” the step. in order of execution
-specified in containing `defpact <#defpact>`__.
+transactions. Including an ENTITY argument indicates that this step is
+intended for confidential transactions. Therefore, only the ENTITY would
+execute the step, and other participants would “skip” it.
 
 step-with-rollback
 ~~~~~~~~~~~~~~~~~~
@@ -1618,11 +1619,11 @@ use
    (use MODULE)
    (use MODULE HASH)
 
-Import an existing MODULE into namespace. Can only be issued at
+Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
-symbol or bare atom. With HASH, validate that module hash matches HASH,
-failing if not. Use `describe-module <#describe-module>`__ to query for
-the hash of a loaded module on the chain.
+symbol or bare atom. With HASH, validate that the imported module’s hash
+matches HASH, failing if not. Use `describe-module <#describe-module>`__
+to query for the hash of a loaded module on the chain.
 
 .. code:: lisp
 
@@ -1684,8 +1685,8 @@ S-expressions
 ~~~~~~~~~~~~~
 
 S-expressions are formed with parentheses, with the first atom
-determining if the expression is a `special form <#special>`__ or a
-function application, in which case the first atom must refer to a
+determining if the expression is a `special form <#special-forms>`__ or
+a function application, in which case the first atom must refer to a
 definition.
 
 .. _partialapplication:
@@ -1702,8 +1703,8 @@ runtime error.
 References
 ~~~~~~~~~~
 
-References are two atoms joined by a dot ``.`` to directly resolve to
-module definitions.
+References are multiple atoms joined by a dot ``.`` that directly
+resolve to definitions found in other modules.
 
 ::
 
@@ -1719,9 +1720,9 @@ module definitions.
    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
    SRC to DEST\")"
 
-References are preferred to ``use`` for transactions, as references
-resolve faster. However in module definition, ``use`` is preferred for
-legibility.
+References are preferred over ``use`` for transactions, as references
+resolve faster. However, when defining a module, ``use`` is preferred
+for legibility.
 
 Time formats
 ============
@@ -1848,11 +1849,12 @@ Default format and JSON serialization
 -------------------------------------
 
 The default format is a UTC ISO8601 date+time format:
-“%Y-%m-%dT%H:%M:%SZ”, as accepted by the `time <#time>`__ function.
-While the time object internally supports up to microsecond resolution,
-values returned from the Pact interpreter as JSON will be serialized
-with the default format. When higher resolution is desired, explicitly
-format times with ``%v`` and related.
+“%Y-%m-%dT%H:%M:%SZ”, as accepted by the
+`time <pact-functions.html#id4>`__ function. While the time object
+internally supports up to microsecond resolution, values returned from
+the Pact interpreter as JSON will be serialized with the default format.
+When higher resolution is desired, explicitly format times with ``%v``
+and related codes.
 
 Examples
 --------
@@ -1878,7 +1880,7 @@ YYYY-MM-DD hh:mm:ss.000000
 
 ::
 
-   > (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+   pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
    "2016-07-23 13:30:45.001002"
 
 Database Serialization Format
@@ -1915,7 +1917,7 @@ verification of values.
 backend at time of writing (2018). The key-value structure allows using
 even non-RDBMS backends like RocksDB etc, and also keeps SQL DDL very
 straightforward, with simple primary key structure. Indexing is not
-supported or required.
+supported nor required.
 
 Pact Datatype Codec
 -------------------
@@ -1982,7 +1984,7 @@ and a day-local microsecond value.
 .. code:: javascript
 
    { "_P_timed": 234 /* "modified julian day value */
-     "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
    }
 
 Suggestions for converting MJDs can be found
@@ -2036,7 +2038,7 @@ User Transaction Table
 
 The transaction table logs all updates to the table.
 
--  **Naming**: ``TX_[module]_[table]**``
+-  **Naming**: ``TX_[module]_[table]``
 -  **Key Format**: Keys are integers, using backend-specific BIGINT
    values, reflecting the transaction ID being recorded.
 -  **Value format**: JSON array of updates in a particular transaction.

@@ -55,7 +55,7 @@ renderFunctions h = do
     renderSection ns
   hPutStrLn h "## REPL-only functions {#repl-lib}"
   hPutStrLn h ""
-  hPutStrLn h "The following functions are loaded magically in the interactive REPL, or in script files \
+  hPutStrLn h "The following functions are loaded automatically into the interactive REPL, or within script files \
                \with a `.repl` extension. They are not available for blockchain-based execution."
   hPutStrLn h ""
   renderSection (snd replDefs)

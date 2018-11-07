@@ -61,7 +61,7 @@ constantly
 *value* ``<a>`` *ignore1* ``<b>`` *ignore2* ``<c>`` *ignore3* ``<d>``
 *→* ``<a>``
 
-Ignore (lazily) arguments IGNORE\* and return VALUE.
+Lazily ignore arguments IGNORE\* and return VALUE.
 
 .. code:: lisp
 
@@ -113,7 +113,8 @@ enforce
 
 *test* ``bool`` *msg* ``string`` *→* ``bool``
 
-Fail transaction with MSG if pure function TEST fails, or returns true.
+Fail transaction with MSG if pure expression TEST is false. Otherwise,
+returns true.
 
 .. code:: lisp
 
@@ -150,13 +151,15 @@ from the left, such that ‘2’, ‘2.2’, and ‘2.2.3’ would all allow
    pact> (enforce-pact-version "2.3")
    true
 
+Top level only: this function will fail if used in module code.
+
 filter
 ~~~~~~
 
 *app* ``(x:<a> -> bool)`` *list* ``[<a>]`` *→* ``[<a>]``
 
-Filter LIST by applying APP to each element to get a boolean determining
-inclusion.
+Filter LIST by applying APP to each element. For each true result, the
+original value is kept.
 
 .. code:: lisp
 
@@ -221,7 +224,7 @@ if
 
 *cond* ``bool`` *then* ``<a>`` *else* ``<a>`` *→* ``<a>``
 
-Test COND, if true evaluate THEN, otherwise evaluate ELSE.
+Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE.
 
 .. code:: lisp
 
@@ -264,6 +267,8 @@ list-modules
 
 List modules available for loading.
 
+Top level only: this function will fail if used in module code.
+
 make-list
 ~~~~~~~~~
 
@@ -281,7 +286,7 @@ map
 
 *app* ``(x:<b> -> <a>)`` *list* ``[<b>]`` *→* ``[<a>]``
 
-Apply elements in LIST as last arg to APP, returning list of results.
+Apply APP to each element in LIST, returning a new list of results.
 
 .. code:: lisp
 
@@ -306,6 +311,8 @@ Obtain current pact build version.
 
    pact> (pact-version)
    "2.5.0"
+
+Top level only: this function will fail if used in module code.
 
 read-decimal
 ~~~~~~~~~~~~
@@ -340,9 +347,9 @@ read-msg
 *key* ``string`` *→* ``<a>``
 
 Read KEY from top level of message data body, or data body itself if not
-provided. Coerces value to pact type: String -> string, Number ->
-integer, Boolean -> bool, List -> value, Object -> value. NB value types
-are not introspectable in pact.
+provided. Coerces value to their corresponding pact type: String ->
+string, Number -> integer, Boolean -> bool, List -> list, Object ->
+object. However, top-level values are provided as a ‘value’ JSON type.
 
 .. code:: lisp
 
@@ -372,9 +379,9 @@ execution in a pact.
 reverse
 ~~~~~~~
 
-*l* ``[<a>]`` *→* ``[<a>]``
+*list* ``[<a>]`` *→* ``[<a>]``
 
-Reverse a list.
+Reverse LIST.
 
 .. code:: lisp
 
@@ -388,7 +395,7 @@ sort
 
 *fields* ``[string]`` *values* ``[object:<{o}>]`` *→* ``[object:<{o}>]``
 
-Sort monotyped list of primitive VALUES, or objects using supplied
+Sort a homogeneous list of primitive VALUES, or objects using supplied
 FIELDS list.
 
 .. code:: lisp
@@ -397,6 +404,24 @@ FIELDS list.
    [1 2 3]
    pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
    [{"name": "Val", "age": 25} {"name": "Lin", "age": 30}]
+
+str-to-int
+~~~~~~~~~~
+
+*str-val* ``string`` *→* ``integer``
+
+*base* ``integer`` *str-val* ``string`` *→* ``integer``
+
+Compute the integer value of STR-VAL in base 10, or in BASE if
+specified. STR-VAL must be <= 128 chars in length and BASE must be
+between 2 and 16.
+
+.. code:: lisp
+
+   pact> (str-to-int 16 "123456")
+   1193046
+   pact> (str-to-int "abcdef123456")
+   1123455123456
 
 take
 ~~~~
@@ -461,9 +486,8 @@ yield
 *OBJECT* ``object:<{y}>`` *→* ``object:<{y}>``
 
 Yield OBJECT for use with ‘resume’ in following pact step. The object is
-similar to database row objects, in that only the top level can be
-binded to in ‘resume’; nested objects are converted to opaque JSON
-values.
+similar to database row objects, in that only the top level can be bound
+to in ‘resume’; nested objects are converted to opaque JSON values.
 
 .. code:: lisp
 
@@ -485,12 +509,16 @@ Create table TABLE.
 
    (create-table accounts)
 
+Top level only: this function will fail if used in module code.
+
 describe-keyset
 ~~~~~~~~~~~~~~~
 
 *keyset* ``string`` *→* ``value``
 
-Get metadata for KEYSET
+Get metadata for KEYSET.
+
+Top level only: this function will fail if used in module code.
 
 describe-module
 ~~~~~~~~~~~~~~~
@@ -504,6 +532,8 @@ Get metadata for MODULE. Returns an object with ‘name’, ‘hash’,
 
    (describe-module 'my-module)
 
+Top level only: this function will fail if used in module code.
+
 describe-table
 ~~~~~~~~~~~~~~
 
@@ -516,6 +546,8 @@ Get metadata for TABLE. Returns an object with ‘name’, ‘hash’,
 
    (describe-table accounts)
 
+Top level only: this function will fail if used in module code.
+
 insert
 ~~~~~~
 
@@ -527,7 +559,7 @@ already exists for KEY.
 
 .. code:: lisp
 
-   (insert 'accounts { "balance": 0.0, "note": "Created account." })
+   (insert accounts { "balance": 0.0, "note": "Created account." })
 
 keylog
 ~~~~~~
@@ -540,7 +572,7 @@ list of objects indexed by txid.
 
 .. code:: lisp
 
-   (keylog 'accounts "Alice" 123485945)
+   (keylog accounts "Alice" 123485945)
 
 keys
 ~~~~
@@ -551,7 +583,7 @@ Return all keys in TABLE.
 
 .. code:: lisp
 
-   (keys 'accounts)
+   (keys accounts)
 
 read
 ~~~~
@@ -561,12 +593,12 @@ read
 *table* ``table:<{row}>`` *key* ``string`` *columns* ``[string]``
 *→* ``object:<{row}>``
 
-Read row from TABLE for KEY returning database record object, or just
+Read row from TABLE for KEY, returning database record object, or just
 COLUMNS if specified.
 
 .. code:: lisp
 
-   (read 'accounts id ['balance 'ccy])
+   (read accounts id ['balance 'ccy])
 
 select
 ~~~~~~
@@ -605,7 +637,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 .. code:: lisp
 
-   (txlog 'accounts 123485945)
+   (txlog accounts 123485945)
 
 update
 ~~~~~~
@@ -618,7 +650,7 @@ not exist for KEY.
 
 .. code:: lisp
 
-   (update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+   (update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
 
 with-default-read
 ~~~~~~~~~~~~~~~~~
@@ -632,7 +664,7 @@ from DEFAULTS, an object with matching key names.
 
 .. code:: lisp
 
-   (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+   (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
       (format "Balance for {} is {} {}" [id bal ccy]))
 
 with-read
@@ -646,7 +678,7 @@ BINDINGS over subsequent body statements.
 
 .. code:: lisp
 
-   (with-read 'accounts id { "balance":= bal, "ccy":= ccy }
+   (with-read accounts id { "balance":= bal, "ccy":= ccy }
       (format "Balance for {} is {} {}" [id bal ccy]))
 
 write
@@ -659,7 +691,7 @@ Write entry in TABLE for KEY of OBJECT column data.
 
 .. code:: lisp
 
-   (write 'accounts { "balance": 100.0 })
+   (write accounts { "balance": 100.0 })
 
 .. _Time:
 
@@ -711,8 +743,8 @@ format-time
 
 *format* ``string`` *time* ``time`` *→* ``string``
 
-Format TIME using FORMAT. See `“Time Formats” docs <#time-formats>`__
-for supported formats.
+Format TIME using FORMAT. See `“Time Formats”
+docs <pact-reference.html#time-formats>`__ for supported formats.
 
 .. code:: lisp
 
@@ -753,7 +785,7 @@ parse-time
 *format* ``string`` *utcval* ``string`` *→* ``time``
 
 Construct time from UTCVAL using FORMAT. See `“Time Formats”
-docs <#time-formats>`__ for supported formats.
+docs <pact-reference.html#time-formats>`__ for supported formats.
 
 .. code:: lisp
 
@@ -1061,7 +1093,7 @@ exp
 
 *x* ``<a[integer,decimal]>`` *→* ``<a[integer,decimal]>``
 
-Exp of X
+Exp of X.
 
 .. code:: lisp
 
@@ -1221,6 +1253,8 @@ will be enforced before updating to new value.
 
    (define-keyset 'admin-keyset (read-keyset "keyset"))
 
+Top level only: this function will fail if used in module code.
+
 enforce-keyset
 ~~~~~~~~~~~~~~
 
@@ -1288,9 +1322,9 @@ PREDFUN }). PREDFUN should resolve to a keys predicate.
 REPL-only functions
 -------------------
 
-The following functions are loaded magically in the interactive REPL, or
-in script files with a ``.repl`` extension. They are not available for
-blockchain-based execution.
+The following functions are loaded automatically into the interactive
+REPL, or within script files with a ``.repl`` extension. They are not
+available for blockchain-based execution.
 
 begin-tx
 ~~~~~~~~
@@ -1363,28 +1397,28 @@ env-gas
 
 *gas* ``integer`` *→* ``string``
 
-Query gas state, or set it to GAS
+Query gas state, or set it to GAS.
 
 env-gaslimit
 ~~~~~~~~~~~~
 
 *limit* ``integer`` *→* ``string``
 
-Set environment gas limit to LIMIT
+Set environment gas limit to LIMIT.
 
 env-gasprice
 ~~~~~~~~~~~~
 
 *price* ``decimal`` *→* ``string``
 
-Set environment gas price to PRICE
+Set environment gas price to PRICE.
 
 env-gasrate
 ~~~~~~~~~~~
 
 *rate* ``integer`` *→* ``string``
 
-Update gas model to charge constant RATE
+Update gas model to charge constant RATE.
 
 env-hash
 ~~~~~~~~
@@ -1478,7 +1512,7 @@ load
 *file* ``string`` *reset* ``bool`` *→* ``string``
 
 Load and evaluate FILE, resetting repl state beforehand if optional
-NO-RESET is true.
+RESET is true.
 
 .. code:: lisp
 
@@ -1502,7 +1536,7 @@ print
 
 *value* ``<a>`` *→* ``string``
 
-Print a string, mainly to format newlines correctly
+Output VALUE to terminal as unquoted, unescaped text.
 
 rollback-tx
 ~~~~~~~~~~~
@@ -1520,8 +1554,8 @@ sig-keyset
 
 *→* ``keyset``
 
-Convenience to build a keyset from keys present in message signatures,
-using ‘keys-all’ as the predicate.
+Convenience function to build a keyset from keys present in message
+signatures, using ‘keys-all’ as the predicate.
 
 typecheck
 ~~~~~~~~~

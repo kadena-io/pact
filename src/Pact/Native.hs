@@ -92,7 +92,7 @@ listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
   (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-  "Fail transaction with MSG if pure function TEST fails, or returns true. \
+  "Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. \
   \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
   where
 
@@ -175,7 +175,7 @@ hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
 
 ifDef :: NativeDef
 ifDef = defNative "if" if' (funType a [("cond",tTyBool),("then",a),("else",a)])
-  "Test COND, if true evaluate THEN, otherwise evaluate ELSE. \
+  "Test COND. If true, evaluate THEN. Otherwise, evaluate ELSE. \
   \`(if (= (+ 2 2) 4) \"Sanity prevails\" \"Chaos reigns\")`"
   where
 
@@ -206,7 +206,7 @@ langDefs =
      ifDef
     ,defNative "map" map'
      (funType (TyList a) [("app",lam b a),("list",TyList b)])
-     "Apply elements in LIST as last arg to APP, returning list of results. \
+     "Apply APP to each element in LIST, returning a new list of results. \
      \`(map (+ 1) [1 2 3])`"
 
     ,defNative "fold" fold'
@@ -221,18 +221,18 @@ langDefs =
     ,defRNative "make-list" makeList (funType (TyList a) [("length",tTyInteger),("value",a)])
      "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
 
-    ,defRNative "reverse" reverse' (funType (TyList a) [("l",TyList a)])
-     "Reverse a list. `(reverse [1 2 3])`"
+    ,defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
+     "Reverse LIST. `(reverse [1 2 3])`"
 
     ,defNative "filter" filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
-     "Filter LIST by applying APP to each element to get a boolean determining inclusion.\
+     "Filter LIST by applying APP to each element. For each true result, the original value is kept.\
      \`(filter (compose (length) (< 2)) [\"my\" \"dog\" \"has\" \"fleas\"])`"
 
     ,defRNative "sort" sort'
      (funType (TyList a) [("values",TyList a)] <>
       funType (TyList (tTyObject (mkSchemaVar "o"))) [("fields",TyList tTyString),("values",TyList (tTyObject (mkSchemaVar "o")))])
-     "Sort monotyped list of primitive VALUES, or objects using supplied FIELDS list. \
+     "Sort a homogeneous list of primitive VALUES, or objects using supplied FIELDS list. \
      \`(sort [3 1 2])` `(sort ['age] [{'name: \"Lin\",'age: 30} {'name: \"Val\",'age: 25}])`"
 
     ,defNative (specialForm Where) where'
@@ -275,8 +275,8 @@ langDefs =
      "Parse KEY string or number value from top level of message data body as integer. `$(read-integer \"age\")`"
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      "Read KEY from top level of message data body, or data body itself if not provided. \
-     \Coerces value to pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> value, Object -> value. NB value types are not introspectable in pact. \
+     \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
+     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defRNative "tx-hash" txHash (funType tTyString [])
@@ -292,7 +292,7 @@ langDefs =
      (funType (TyList tTyString) []) "List modules available for loading."
     ,defRNative "yield" yield (funType yieldv [("OBJECT",yieldv)])
      "Yield OBJECT for use with 'resume' in following pact step. The object is similar to database row objects, in that \
-     \only the top level can be binded to in 'resume'; nested objects are converted to opaque JSON values. \
+     \only the top level can be bound to in 'resume'; nested objects are converted to opaque JSON values. \
      \`$(yield { \"amount\": 100.0 })`"
     ,defNative "resume" resume
      (funType a [("binding",TySchema TyBinding (mkSchemaVar "y")),("body",TyAny)])
@@ -318,7 +318,7 @@ langDefs =
      (funType a [("value",a),("ignore1",b)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c)] <>
       funType a [("value",a),("ignore1",b),("ignore2",c),("ignore3",d)])
-     "Ignore (lazily) arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
+     "Lazily ignore arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
@@ -609,13 +609,13 @@ strToInt i as =
     go base' txt =
       if T.all isHexDigit txt
       then
-        if T.length txt <= 128 
+        if T.length txt <= 128
         then case baseStrToInt base' txt of
           Left _ -> argsError i as
           Right n -> return (toTerm n)
         else evalError' i $ "Invalid input: unsupported string length: " ++ (unpack txt)
       else evalError' i $ "Invalid input: supplied string is not hex: " ++ (unpack txt)
-      
+
 txHash :: RNativeFun e
 txHash _ [] = (tStr . asString) <$> view eeHash
 txHash i as = argsError i as
@@ -626,7 +626,7 @@ txHash i as = argsError i as
 -- e.g.
 --   -- hexadecimal to decimal
 --   baseStrToInt 10 "abcdef123456" = 188900967593046
--- 
+--
 baseStrToInt :: Integer -> Text -> Either Text Integer
 baseStrToInt base t =
   if base <= 1 || base > 16
@@ -637,5 +637,5 @@ baseStrToInt base t =
     else Right $ T.foldl' go 0 t
   where
     go :: Integer -> Char -> Integer
-    go acc w = base * acc + (fromIntegral . digitToInt $ w) 
+    go acc w = base * acc + (fromIntegral . digitToInt $ w)
 {-# INLINE baseStrToInt #-}
