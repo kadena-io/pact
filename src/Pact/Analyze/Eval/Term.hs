@@ -27,7 +27,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite, (.<))
+                                              false, ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
@@ -83,9 +83,7 @@ evalTermLogicalOp NotOp [a] = bnot <$> eval a
 evalTermLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 addConstraint :: S Bool -> Analyze ()
-addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
-  where
-    c = Constraints $ constrain $ _sSbv s
+addConstraint b = modify' $ latticeState.lasConstraints %~ (&&& b)
 
 instance (Mergeable a) => Mergeable (Analyze a) where
   symbolicMerge force test left right = Analyze $ RWST $ \r s ->
