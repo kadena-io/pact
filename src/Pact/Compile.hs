@@ -105,7 +105,7 @@ term =
   literal
   <|> varAtom
   <|> withList' Parens
-    (specialForm <|> app)
+    ((specialForm <|> app) <* eof)
   <|> listLiteral
   <|> objectLiteral
 
@@ -278,7 +278,6 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
   (bd,bi) <- bodyForm'
-  eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
     TDef {} -> return []
     TNative {} -> return []
@@ -302,7 +301,7 @@ implements = do
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
   return $ TImplements ifName modName info
-  
+
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
@@ -318,18 +317,17 @@ interface = do
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
   (defs, defInfo) <- interfaceForm
-  eof
   return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
-    
+
 interfaceForm :: Compile ([Term Name], Info)
 interfaceForm = (,) <$> some interfaceForms <*> contextInfo
   where
-    interfaceForms = withList' Parens $ do 
+    interfaceForms = withList' Parens $ do
       AtomExp{..} <- bareAtom
       case _atomAtom of
-        "defun" -> commit >> emptyDef 
+        "defun" -> commit >> emptyDef
         "defconst" -> commit >> defconst
         "use" -> commit >> useForm
         t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
@@ -344,8 +342,8 @@ emptyDef = do
   return $
     TDef defName modName Defun
     (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
-  
-  
+
+
 step :: Compile (Term Name)
 step = do
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>
