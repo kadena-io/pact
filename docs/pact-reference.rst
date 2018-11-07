@@ -1417,10 +1417,10 @@ strings, in the following form:
      "take the average of a and b"
      (/ (+ a b) 2))
 
-However, in this position, extra metadata fields can also be specified.
-One such metadata field is ``@model``, which represents a *property*
-that can be used by Pact tooling to verify the correctness of the
-implementation:
+Alternately, users can specify metadata using a special ``@``-prefix
+syntax. Supported metadata fields are ``@doc`` to provide a
+documentation string, and ``@model`` that can be used by Pact tooling to
+verify the correctness of the implementation:
 
 .. code:: lisp
 
@@ -1430,8 +1430,7 @@ implementation:
      (/ (+ a b) 2))
 
 Indeed, a bare docstring like ``"foo"`` is actually just a short form
-for ``@doc "foo"``. More metadata types are expected to be added in
-future.
+for ``@doc "foo"``.
 
 Specific information on *Properties* can be found in `The Pact Property
 Checking System <pact-properties.html>`__.

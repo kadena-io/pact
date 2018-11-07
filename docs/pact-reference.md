@@ -1115,9 +1115,9 @@ in the following form:
   (/ (+ a b) 2))
 ```
 
-However, in this position, extra metadata fields can also be specified.
-One such metadata field is `@model`, which represents a *property* that can
-be used by Pact tooling to verify the correctness of the implementation:
+Alternately, users can specify metadata using a special `@`-prefix syntax.
+Supported metadata fields are `@doc` to provide a documentation string, and `@model`
+that can be used by Pact tooling to verify the correctness of the implementation:
 
 ```lisp
 (defun average (a b)
@@ -1127,7 +1127,6 @@ be used by Pact tooling to verify the correctness of the implementation:
 ```
 
 Indeed, a bare docstring like `"foo"` is actually just a short form for `@doc "foo"`.
-More metadata types are expected to be added in future.
 
 Specific information on *Properties* can be found in [The Pact Property Checking System](pact-properties.html).
 
