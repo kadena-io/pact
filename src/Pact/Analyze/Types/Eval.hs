@@ -63,10 +63,12 @@ instance Wrapped SymbolicSuccess where
 
 class ( MonadError AnalyzeFailure m
       , S :<: TermOf m
-      , Mergeable (m (S Bool)) -- TODO: We only need Mergeable for Bool at the
-      )                        -- moment, but really this should probably be
-                               -- done for all Mergeable values, perhaps via
-                               -- QuantifiedConstraints, once we're on 8.6
+      -- TODO: We only need Mergeable for Bool and Integer at the moment, but
+      -- really this should probably be done for all Mergeable values, perhaps
+      -- via QuantifiedConstraints, once we're on 8.6:
+      , Mergeable (m (S Bool))
+      , Mergeable (m (S Integer))
+      )
       => Analyzer m
   where
     type TermOf m   :: * -> *

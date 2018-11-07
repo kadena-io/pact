@@ -28,6 +28,7 @@ module Pact.Native
     ,hashDef
     ,ifDef
     ,readDecimalDef
+    ,baseStrToInt
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)

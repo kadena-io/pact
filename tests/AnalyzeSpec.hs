@@ -16,7 +16,7 @@ import           Control.Monad                (unless)
 import           Control.Monad.Except         (runExceptT)
 import           Control.Monad.State.Strict   (runStateT)
 import           Data.Either                  (isLeft, isRight)
-import           Data.Foldable                (find)
+import           Data.Foldable                (find, for_)
 import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
@@ -39,6 +39,7 @@ import           Pact.Repl                    (evalRepl', initReplState)
 import           Pact.Repl.Types              (ReplMode (StringEval), rEnv)
 import           Pact.Types.Runtime           (Exp, Info, ModuleData,
                                                eeRefStore, rsModules)
+import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Check
 import           Pact.Analyze.Eval.Numerical  (banker'sMethodS)
@@ -1464,6 +1465,79 @@ spec = describe "analyze" $ do
               ))
           |]
     in expectPass code $ Valid $ bnot Abort'
+
+  describe "str-to-int" $ do
+    describe "without specified base" $ do
+      describe "concrete string" $ do
+        describe "valid inputs" $
+          let code =
+                [text|
+                  (defun test:bool ()
+                    (enforce (= (str-to-int "5") 5) "")
+                    (enforce (= (str-to-int "11111111111111111111111") 11111111111111111111111) "")
+                    )
+                |]
+          in expectPass code $ Valid Success'
+
+        describe "invalid inputs" $ do
+          for_ ["", "-123", "abc", "123a", "a123", T.replicate 129 "1"] $ \str ->
+            expectFail [text|(defun test:integer () (str-to-int "$str"))|] $
+              Valid Success'
+
+      describe "symbolic string" $ do
+        let code =
+              [text|
+                (defun test:integer (s:string)
+                  (str-to-int s))
+              |]
+
+        expectPass code $ Valid $ Success' ==> CoreProp
+          (IntegerComparison Gte (Result' :: Prop Integer) 0)
+
+        expectPass code $ Valid $
+          Success' &&& CoreProp (StringComparison Eq (PVar 1 "s") "123") ==>
+            (CoreProp $ IntegerComparison Eq (Result' :: Prop Integer) 123)
+
+    describe "with specified base" $ do
+      describe "concrete string and base" $ do
+        describe "valid inputs" $
+          let code =
+                [text|
+                  (defun test:bool ()
+                    (enforce (= (str-to-int 10 "5") 5) "")
+                    (enforce (= (str-to-int 8 "10") 8) "")
+                    )
+                |]
+          in expectPass code $ Valid Success'
+
+        describe "invalid inputs" $ do
+          --
+          -- TODO: uncomment case once the concrete impl is fixed:
+          --
+          for_ [(0, "23"), (6, ""){- , (6, "77") -}] $ \(base, str) ->
+            let baseText = tShow (base :: Int)
+            in expectFail [text|(defun test:integer () (str-to-int $baseText "$str"))|] $
+                 Valid Success'
+
+      describe "symbolic string and concrete base" $ do
+        describe "only base 10 is supported" $ do
+          expectPass [text| (defun test:integer (s:string) (str-to-int 10 s)) |] $
+            Satisfiable Success'
+          expectFail [text| (defun test:integer (s:string) (str-to-int 8 s)) |] $
+            Satisfiable Success'
+
+      describe "concrete string and symbolic base" $ do
+        expectVerified
+          [text|
+            (defun test:integer (base:integer)
+              @model [(property (when (= result 8) (= base 8)))]
+              (str-to-int base "10"))
+          |]
+
+      describe "symbolic string and symbolic base" $ do
+        describe "unsupported" $ do
+          expectFail [text| (defun test:integer (b:integer s:string) (str-to-int b s)) |] $
+            Satisfiable Success'
 
   describe "big round" $
     let code =

@@ -85,6 +85,7 @@ data Feature
   -- String operators
   | FStringLength
   | FStringConcatenation
+  | FStringToInteger
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
@@ -681,6 +682,29 @@ doc FStringConcatenation = Doc
         ]
         (TyCon str)
   ]
+doc FStringToInteger = Doc
+  "str-to-int"
+  CString
+  InvAndProp
+  "String to integer conversion"
+  [ Usage
+      "(str-to-int s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        ]
+        (TyCon int)
+  , Usage
+      "(str-to-int b s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("b", TyCon int)
+        , ("s", TyCon str)
+        ]
+        (TyCon int)
+  ]
 
 -- Temporal features
 
@@ -1090,6 +1114,7 @@ PAT(SObjectProjection, FObjectProjection)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)
+PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
