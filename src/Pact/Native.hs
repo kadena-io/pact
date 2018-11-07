@@ -92,7 +92,7 @@ listA = mkTyVar "a" [TyList (mkTyVar "l" []),TyPrim TyString,TySchema TyObject (
 enforceDef :: NativeDef
 enforceDef = defNative "enforce" enforce
   (funType tTyBool [("test",tTyBool),("msg",tTyString)])
-  "Fail transaction with MSG if value TEST is false. Otherwise, returns true. \
+  "Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. \
   \`!(enforce (!= (+ 2 2) 4) \"Chaos reigns\")`"
   where
 
@@ -222,7 +222,7 @@ langDefs =
      "Create list by repeating VALUE LENGTH times. `(make-list 5 true)`"
 
     ,defRNative "reverse" reverse' (funType (TyList a) [("list",TyList a)])
-     "Reverse a list. `(reverse [1 2 3])`"
+     "Reverse LIST. `(reverse [1 2 3])`"
 
     ,defNative "filter" filter'
      (funType (TyList a) [("app",lam a tTyBool),("list",TyList a)])
@@ -276,7 +276,7 @@ langDefs =
     ,defRNative "read-msg" readMsg (funType a [] <> funType a [("key",tTyString)])
      "Read KEY from top level of message data body, or data body itself if not provided. \
      \Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, \
-     \List -> list, Object -> object. \
+     \List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. \
      \`$(defun exec ()\n   (transfer (read-msg \"from\") (read-msg \"to\") (read-decimal \"amount\")))`"
 
     ,defRNative "tx-hash" txHash (funType tTyString [])

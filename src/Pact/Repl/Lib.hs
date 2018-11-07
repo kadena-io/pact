@@ -141,7 +141,7 @@ replDefs = ("Repl",
      ,defZRNative "sig-keyset" sigKeyset (funType tTyKeySet [])
      "Convenience function to build a keyset from keys present in message signatures, using 'keys-all' as the predicate."
      ,defZRNative "print" print' (funType tTyString [("value",a)])
-     "Print a string, to format newlines correctly."
+     "Output VALUE to terminal as unquoted, unescaped text."
      ,defZRNative "env-hash" envHash (funType tTyString [("hash",tTyString)])
      "Set current transaction hash. HASH must be a valid BLAKE2b 512-bit hash. `(env-hash (hash \"hello\"))`"
      ])

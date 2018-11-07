@@ -972,7 +972,7 @@ Strings also support multiline by putting a backslash before and after whitespac
 Symbols are string literals representing some unique item in the runtime, like a function or a table name.
 Their representation internally is simply a string literal so their usage is idiomatic.
 
-Symbols are created with a preceding tick, thus they do not support whitespaces or multilines.
+Symbols are created with a preceding tick, thus they do not support whitespace nor multiline syntax.
 
 ```
 pact> 'a-symbol
@@ -1184,7 +1184,9 @@ Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon module lo
 (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 ```
 
-Define NAME as a _pact_, a multistep transaction computation.
+
+Define NAME as a _pact_, a computation comprised of multiple steps that occur
+in distinct transactions.
 Identical to [defun](#defun) except body must be comprised of [steps](#step) to be
 executed in strict sequential order. Steps must uniformly be "public" (no entity indicator)
 or "private" (with entity indicator). With private steps, failures result in a reverse-sequence
@@ -1292,7 +1294,7 @@ ROLLBACK-EXPR functions as a "cancel function" to be explicitly executed by a pa
 ```
 
 Import an existing MODULE into a namespace. Can only be issued at the top-level, or within a module
-declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that the remote module's
+declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that the imported module's
 hash matches HASH, failing if not. Use [describe-module](#describe-module) to query for the
 hash of a loaded module on the chain.
 
@@ -1355,7 +1357,7 @@ runtime error.
 
 ### References {#references}
 
-References are two atoms joined by a dot `.` that directly resolve to definitions found
+References are multiple atoms joined by a dot `.` that directly resolve to definitions found
 in other modules.
 
 ```

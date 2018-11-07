@@ -1250,7 +1250,7 @@ runtime, like a function or a table name. Their representation
 internally is simply a string literal so their usage is idiomatic.
 
 Symbols are created with a preceding tick, thus they do not support
-whitespaces or multilines.
+whitespace nor multiline syntax.
 
 ::
 
@@ -1497,12 +1497,12 @@ defpact
 
    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
-Define NAME as a *pact*, a multistep transaction computation. Identical
-to `defun <#defun>`__ except body must be comprised of `steps <#step>`__
-to be executed in strict sequential order. Steps must uniformly be
-“public” (no entity indicator) or “private” (with entity indicator).
-With private steps, failures result in a reverse-sequence “rollback
-cascade”.
+Define NAME as a *pact*, a computation comprised of multiple steps that
+occur in distinct transactions. Identical to `defun <#defun>`__ except
+body must be comprised of `steps <#step>`__ to be executed in strict
+sequential order. Steps must uniformly be “public” (no entity indicator)
+or “private” (with entity indicator). With private steps, failures
+result in a reverse-sequence “rollback cascade”.
 
 .. code:: lisp
 
@@ -1622,7 +1622,7 @@ use
 
 Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
-symbol or bare atom. With HASH, validate that the remote module’s hash
+symbol or bare atom. With HASH, validate that the imported module’s hash
 matches HASH, failing if not. Use `describe-module <#describe-module>`__
 to query for the hash of a loaded module on the chain.
 
@@ -1704,8 +1704,8 @@ runtime error.
 References
 ~~~~~~~~~~
 
-References are two atoms joined by a dot ``.`` that directly resolve to
-definitions found in other modules.
+References are multiple atoms joined by a dot ``.`` that directly
+resolve to definitions found in other modules.
 
 ::
 

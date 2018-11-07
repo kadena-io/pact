@@ -113,8 +113,8 @@ enforce
 
 *test* ``bool`` *msg* ``string`` *→* ``bool``
 
-Fail transaction with MSG if value TEST is false. Otherwise, returns
-true.
+Fail transaction with MSG if pure expression TEST is false. Otherwise,
+returns true.
 
 .. code:: lisp
 
@@ -349,7 +349,7 @@ read-msg
 Read KEY from top level of message data body, or data body itself if not
 provided. Coerces value to their corresponding pact type: String ->
 string, Number -> integer, Boolean -> bool, List -> list, Object ->
-object.
+object. However, top-level values are provided as a ‘value’ JSON type.
 
 .. code:: lisp
 
@@ -381,7 +381,7 @@ reverse
 
 *list* ``[<a>]`` *→* ``[<a>]``
 
-Reverse a list.
+Reverse LIST.
 
 .. code:: lisp
 
@@ -1536,7 +1536,7 @@ print
 
 *value* ``<a>`` *→* ``string``
 
-Print a string, to format newlines correctly.
+Output VALUE to terminal as unquoted, unescaped text.
 
 rollback-tx
 ~~~~~~~~~~~

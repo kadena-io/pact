@@ -100,7 +100,7 @@ pact> (drop ['name] { 'name: "Vlad", 'active: false})
 *test*&nbsp;`bool` *msg*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Fail transaction with MSG if value TEST is false. Otherwise, returns true. 
+Fail transaction with MSG if pure expression TEST is false. Otherwise, returns true. 
 ```lisp
 pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0: Chaos reigns
@@ -323,7 +323,7 @@ Parse KEY string or number value from top level of message data body as integer.
 *key*&nbsp;`string` *&rarr;*&nbsp;`<a>`
 
 
-Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. 
+Read KEY from top level of message data body, or data body itself if not provided. Coerces value to their corresponding pact type: String -> string, Number -> integer, Boolean -> bool, List -> list, Object -> object. However, top-level values are provided as a 'value' JSON type. 
 ```lisp
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
@@ -355,7 +355,7 @@ Special form binds to a yielded object value from the prior step execution in a 
 *list*&nbsp;`[<a>]` *&rarr;*&nbsp;`[<a>]`
 
 
-Reverse a list. 
+Reverse LIST. 
 ```lisp
 pact> (reverse [1 2 3])
 [3 2 1]
@@ -1398,7 +1398,7 @@ Inspect state from previous pact execution. Returns object with fields 'yield': 
 *value*&nbsp;`<a>` *&rarr;*&nbsp;`string`
 
 
-Print a string, to format newlines correctly.
+Output VALUE to terminal as unquoted, unescaped text.
 
 
 ### rollback-tx {#rollback-tx}
