@@ -1630,7 +1630,7 @@ The data table supports CRUD-style access to the current table state.
 
 The transaction table logs all updates to the table.
 
-- **Naming**: `TX_[module]_[table]**`
+- **Naming**: `TX_[module]_[table]`
 - **Key Format**: Keys are integers, using backend-specific BIGINT values, reflecting the transaction ID being recorded.
 - **Value format**: JSON array of updates in a particular transaction.
 
