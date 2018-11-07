@@ -1,327 +1,32 @@
-- [Rest API](#sec-1)
-  - [`cmd` フィールドとペイロード](#sec-1-1)
-    - [`exec` ペイロード](#sec-1-1-1)
-    - [`cont` ペイロード](#sec-1-1-2)
-  - [エンドポイント](#sec-1-2)
-    - [/send](#sec-1-2-1)
-    - [/private](#sec-1-2-2)
-    - [/poll](#sec-1-2-3)
-    - [/listen](#sec-1-2-4)
-    - [/local](#sec-1-2-5)
-  - [API リクエスト フォーマッター](#sec-1-3)
-    - [リクエストのYAML ファイル形式](#sec-1-3-1)
-- [概念の説明](#sec-2)
-  - [実行モード](#sec-2-1)
-    - [コントラクト定義](#sec-2-1-1)
-    - [トランザクション実行](#sec-2-1-2)
-    - [クエリおよびローカル実行](#sec-2-1-3)
-  - [データベース操作](#sec-2-2)
-    - [アトミックな実行](#sec-2-2-1)
-    - [キー/行モデル](#sec-2-2-2)
-    - [クエリとパフォーマンス](#sec-2-2-3)
-    - [Null 値なし](#sec-2-2-4)
-    - [バージョン管理された履歴](#sec-2-2-5)
-    - [バックエンド](#sec-2-2-6)
-  - [型とスキーマ](#sec-2-3)
-    - [実行時の型の施行](#sec-2-3-1)
-    - [モジュール内の型推論](#sec-2-3-2)
-    - [形式検証](#sec-2-3-3)
-  - [キーセットと認証](#sec-2-4)
-    - [キーセット定義](#sec-2-4-1)
-    - [キーセット述語](#sec-2-4-2)
-    - [キーの循環](#sec-2-4-3)
-    - [モジュールのテーブル・ガード](#sec-2-4-4)
-    - [行ごとのキーセット](#sec-2-4-5)
-  - [計算モデル](#sec-2-5)
-    - [チューリング不完全](#sec-2-5-1)
-    - [変数への単一割り当て](#sec-2-5-2)
-    - [データ型](#sec-2-5-3)
-    - [パフォーマンス](#sec-2-5-4)
-    - [制御フロー](#sec-2-5-5)
-    - [関数型言語の概念](#sec-2-5-6)
-    - [副作用のない実行](#sec-2-5-7)
-    - [LISP](#sec-2-5-8)
-    - [メッセージ データ](#sec-2-5-9)
-  - [機密保持](#sec-2-6)
-    - [エンティティ](#sec-2-6-1)
-    - [互いに素なデータベース](#sec-2-6-2)
-    - [機密保持のための pacts](#sec-2-6-3)
-  - ["Pacts" による非同期トランザクションの自動化](#sec-2-7)
-    - [パブリック pacts](#sec-2-7-1)
-    - [プライベート pacts](#sec-2-7-2)
-    - [失敗、ロールバック、キャンセル](#sec-2-7-3)
-    - [イールドと再開](#sec-2-7-4)
-    - [Pact 実行スコープと `pact-id`](#sec-2-7-5)
-    - [pacts のテスト](#sec-2-7-6)
-  - [モジュールの依存管理](#sec-2-8)
-    - [モジュール ハッシュ](#sec-2-8-1)
-    - [`use` を使用したモジュール バージョンの固定](#sec-2-8-2)
-    - [インライン化された依存のモジュール](#sec-2-8-3)
-    - [ハッシュの「ブレス」](#sec-2-8-4)
-    - ["v2" モジュールによる段階的アップグレード](#sec-2-8-5)
-- [シンタックス](#sec-3)
-  - [リテラル](#sec-3-1)
-    - [文字列](#sec-3-1-1)
-    - [シンボル](#sec-3-1-2)
-    - [整数](#sec-3-1-3)
-    - [小数](#sec-3-1-4)
-    - [ブール](#sec-3-1-5)
-    - [リスト](#sec-3-1-6)
-    - [オブジェクト](#sec-3-1-7)
-    - [バインディング](#sec-3-1-8)
-  - [型の指定](#sec-3-2)
-    - [型リテラル](#sec-3-2-1)
-    - [スキーマ型リテラル](#sec-3-2-2)
-    - [型指定の対象](#sec-3-2-3)
-  - [特殊形式](#sec-3-3)
-    - [ドキュメントとメタデータ](#sec-3-3-1)
-    - [bless](#sec-3-3-2)
-    - [defun](#sec-3-3-3)
-    - [defconst](#sec-3-3-4)
-    - [defpact](#sec-3-3-5)
-    - [defschema](#sec-3-3-6)
-    - [deftable](#sec-3-3-7)
-    - [let](#sec-3-3-8)
-    - [let\*](#sec-3-3-9)
-    - [step](#sec-3-3-10)
-    - [step-with-rollback](#sec-3-3-11)
-    - [use](#sec-3-3-12)
-    - [module](#sec-3-3-13)
-  - [式](#sec-3-4)
-    - [アトム](#sec-3-4-1)
-    - [S 式](#sec-3-4-2)
-    - [参照](#sec-3-4-3)
-- [時間形式](#sec-4)
-  - [デフォルト形式と JSON のシリアル化](#sec-4-1)
-  - [例](#sec-4-2)
-    - [ISO8601](#sec-4-2-1)
-    - [RFC822](#sec-4-2-2)
-    - [YYYY-MM-DD hh:mm:ss.000000](#sec-4-2-3)
-- [データベースのシリアル化形式](#sec-5)
-  - [試行的なベータ版の機能に関する重要な警告](#sec-5-1)
-  - [JSON 値によるキー値の形式](#sec-5-2)
-  - [Pact データ型のコーデック](#sec-5-3)
-    - [整数](#sec-5-3-1)
-    - [小数](#sec-5-3-2)
-    - [ブール](#sec-5-3-3)
-    - [文字列](#sec-5-3-4)
-    - [時刻](#sec-5-3-5)
-    - [JSON 値/blob](#sec-5-3-6)
-    - [キーセット](#sec-5-3-7)
-  - [モジュール (ユーザー) テーブル](#sec-5-4)
-    - [列名](#sec-5-4-1)
-    - [ユーザー データ テーブル](#sec-5-4-2)
-    - [ユーザー トランザクション テーブル](#sec-5-4-3)
-- [組み込み関数](#sec-6)
-  - [一般的な関数](#sec-6-1)
-    - [at](#sec-6-1-1)
-    - [bind](#sec-6-1-2)
-    - [compose](#sec-6-1-3)
-    - [constantly](#sec-6-1-4)
-    - [contains](#sec-6-1-5)
-    - [drop](#sec-6-1-6)
-    - [enforce](#sec-6-1-7)
-    - [enforce-one](#sec-6-1-8)
-    - [enforce-pact-version](#sec-6-1-9)
-    - [filter](#sec-6-1-10)
-    - [fold](#sec-6-1-11)
-    - [format](#sec-6-1-12)
-    - [hash](#sec-6-1-13)
-    - [identity](#sec-6-1-14)
-    - [if](#sec-6-1-15)
-    - [length](#sec-6-1-16)
-    - [list](#sec-6-1-17)
-    - [list-modules](#sec-6-1-18)
-    - [make-list](#sec-6-1-19)
-    - [map](#sec-6-1-20)
-    - [pact-id](#sec-6-1-21)
-    - [pact-version](#sec-6-1-22)
-    - [read-decimal](#sec-6-1-23)
-    - [read-integer](#sec-6-1-24)
-    - [read-msg](#sec-6-1-25)
-    - [remove](#sec-6-1-26)
-    - [resume](#sec-6-1-27)
-    - [reverse](#sec-6-1-28)
-    - [sort](#sec-6-1-29)
-    - [take](#sec-6-1-30)
-    - [tx-hash](#sec-6-1-31)
-    - [typeof](#sec-6-1-32)
-    - [where](#sec-6-1-33)
-    - [yield](#sec-6-1-34)
-  - [データベース](#sec-6-2)
-    - [create-table](#sec-6-2-1)
-    - [describe-keyset](#sec-6-2-2)
-    - [describe-module](#sec-6-2-3)
-    - [describe-table](#sec-6-2-4)
-    - [insert](#sec-6-2-5)
-    - [keylog](#sec-6-2-6)
-    - [keys](#sec-6-2-7)
-    - [read](#sec-6-2-8)
-    - [select](#sec-6-2-9)
-    - [txids](#sec-6-2-10)
-    - [txlog](#sec-6-2-11)
-    - [update](#sec-6-2-12)
-    - [with-default-read](#sec-6-2-13)
-    - [with-read](#sec-6-2-14)
-    - [write](#sec-6-2-15)
-  - [時刻](#sec-6-3)
-    - [add-time](#sec-6-3-1)
-    - [days](#sec-6-3-2)
-    - [diff-time](#sec-6-3-3)
-    - [format-time](#sec-6-3-4)
-    - [hours](#sec-6-3-5)
-    - [minutes](#sec-6-3-6)
-    - [parse-time](#sec-6-3-7)
-    - [time](#sec-6-3-8)
-  - [演算子](#sec-6-4)
-    - [!=](#sec-6-4-1)
-    - [\*](#sec-6-4-2)
-    - [+](#sec-6-4-3)
-    - [-](#sec-6-4-4)
-    - [/](#sec-6-4-5)
-    - [<](#sec-6-4-6)
-    - [<=](#sec-6-4-7)
-    - [=](#sec-6-4-8)
-    - [>](#sec-6-4-9)
-    - [>=](#sec-6-4-10)
-    - [^](#sec-6-4-11)
-    - [abs](#sec-6-4-12)
-    - [and](#sec-6-4-13)
-    - [and?](#sec-6-4-14)
-    - [ceiling](#sec-6-4-15)
-    - [exp](#sec-6-4-16)
-    - [floor](#sec-6-4-17)
-    - [ln](#sec-6-4-18)
-    - [log](#sec-6-4-19)
-    - [mod](#sec-6-4-20)
-    - [not](#sec-6-4-21)
-    - [not?](#sec-6-4-22)
-    - [or](#sec-6-4-23)
-    - [or?](#sec-6-4-24)
-    - [round](#sec-6-4-25)
-    - [sqrt](#sec-6-4-26)
-  - [キーセット](#sec-6-5)
-    - [define-keyset](#sec-6-5-1)
-    - [enforce-keyset](#sec-6-5-2)
-    - [keys-2](#sec-6-5-3)
-    - [keys-all](#sec-6-5-4)
-    - [keys-any](#sec-6-5-5)
-    - [read-keyset](#sec-6-5-6)
-  - [REPL 専用の関数](#sec-6-6)
-    - [begin-tx](#sec-6-6-1)
-    - [bench](#sec-6-6-2)
-    - [commit-tx](#sec-6-6-3)
-    - [env-data](#sec-6-6-4)
-    - [env-entity](#sec-6-6-5)
-    - [env-gas](#sec-6-6-6)
-    - [env-gaslimit](#sec-6-6-7)
-    - [env-gasprice](#sec-6-6-8)
-    - [env-gasrate](#sec-6-6-9)
-    - [env-hash](#sec-6-6-10)
-    - [env-keys](#sec-6-6-11)
-    - [env-step](#sec-6-6-12)
-    - [expect](#sec-6-6-13)
-    - [expect-failure](#sec-6-6-14)
-    - [json](#sec-6-6-15)
-    - [load](#sec-6-6-16)
-    - [pact-state](#sec-6-6-17)
-    - [print](#sec-6-6-18)
-    - [rollback-tx](#sec-6-6-19)
-    - [sig-keyset](#sec-6-6-20)
-    - [typecheck](#sec-6-6-21)
-    - [verify](#sec-6-6-22)
-- [Pact のプロパティ チェック システム](#sec-7)
-  - [概要](#sec-7-1)
-  - [プロパティおよびスキーマの不変条件の記述](#sec-7-2)
-  - [プロパティ チェッカーのしくみ](#sec-7-3)
-  - [プロパティ チェッカーの使用方法](#sec-7-4)
-  - [プロパティの表現](#sec-7-5)
-    - [引数、戻り値、標準の演算子、比較演算子](#sec-7-5-1)
-    - [ブール演算子](#sec-7-5-2)
-    - [トランザクションの中止と成功](#sec-7-5-3)
-    - [プロパティ API の詳細](#sec-7-5-4)
-  - [スキーマの不変条件の表現](#sec-7-6)
-    - [キーセットの認証](#sec-7-6-1)
-    - [データベース アクセス](#sec-7-6-2)
-    - [質量保存の法則と列の差分](#sec-7-6-3)
-    - [全称限定子と存在限定子](#sec-7-6-4)
-    - [プロパティの定義と再使用](#sec-7-6-5)
-  - [単純な残高の移動の例](#sec-7-7)
-- [プロパティと不変条件の関数](#sec-8)
-  - [数値演算子](#sec-8-1)
-    - [+](#sec-8-1-1)
-    - [-](#sec-8-1-2)
-    - [\*](#sec-8-1-3)
-    - [/](#sec-8-1-4)
-    - [^](#sec-8-1-5)
-    - [log](#sec-8-1-6)
-    - [-](#sec-8-1-7)
-    - [sqrt](#sec-8-1-8)
-    - [ln](#sec-8-1-9)
-    - [exp](#sec-8-1-10)
-    - [abs](#sec-8-1-11)
-    - [round](#sec-8-1-12)
-    - [ceiling](#sec-8-1-13)
-    - [floor](#sec-8-1-14)
-    - [mod](#sec-8-1-15)
-  - [論理演算子](#sec-8-2)
-    - [>](#sec-8-2-1)
-    - [<](#sec-8-2-2)
-    - [>=](#sec-8-2-3)
-    - [<=](#sec-8-2-4)
-    - [=](#sec-8-2-5)
-    - [!=](#sec-8-2-6)
-    - [and](#sec-8-2-7)
-    - [or](#sec-8-2-8)
-    - [not](#sec-8-2-9)
-    - [when](#sec-8-2-10)
-  - [オブジェクト演算子](#sec-8-3)
-    - [at](#sec-8-3-1)
-    - [+](#sec-8-3-2)
-  - [文字列演算子](#sec-8-4)
-    - [length](#sec-8-4-1)
-    - [+](#sec-8-4-2)
-  - [時間演算子](#sec-8-5)
-    - [add-time](#sec-8-5-1)
-  - [定量演算子](#sec-8-6)
-    - [forall](#sec-8-6-1)
-    - [exists](#sec-8-6-2)
-  - [トランザクション演算子](#sec-8-7)
-    - [abort](#sec-8-7-1)
-    - [success](#sec-8-7-2)
-    - [result](#sec-8-7-3)
-  - [データベース演算子](#sec-8-8)
-    - [table-written](#sec-8-8-1)
-    - [table-read](#sec-8-8-2)
-    - [cell-delta](#sec-8-8-3)
-    - [column-delta](#sec-8-8-4)
-    - [column-written](#sec-8-8-5)
-    - [column-read](#sec-8-8-6)
-    - [row-read](#sec-8-8-7)
-    - [row-written](#sec-8-8-8)
-    - [row-read-count](#sec-8-8-9)
-    - [row-write-count](#sec-8-8-10)
-  - [許可演算子](#sec-8-9)
-    - [authorized-by](#sec-8-9-1)
-    - [row-enforced](#sec-8-9-2)
+![](img/kadena-logo-210px.png)
 
-本書は、[高性能なブロックチェーン](http://kadena.io/)上で正しいトランザクション実行を実現するために設計された Pact スマートコントラクト言語の参考資料です。詳細な背景情報については、[ホワイトペーパー](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)または [pact のホーム ページ](http://kadena.io/pact)を参照してください。
+# Pact スマート コントラクト言語リファレンス
+
+本書は、[高性能なブロックチェーン](http://kadena.io/)上で正しいトランザクション実行を実現するために設計された Pact スマートコントラクト言語の参考資料です。
+詳細な背景情報については、[ホワイトペーパー](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)または [pact のホーム ページ](http://kadena.io/pact)を参照してください。
 
 Copyright (c) 2016 - 2018, Stuart Popejoy. All Rights Reserved.
 
 # Rest API<a id="sec-1"></a>
 
-Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バックエンドが組み込まれています。このため、 `pact` ツールだけで、ブロックチェーンアプリケーションのプロトタイプを作成できます。
+Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バックエンドが組み込まれています。
+このため、 `pact` ツールだけで、ブロックチェーンアプリケーションのプロトタイプを作成できます。
 
-サーバーを起動するには、適切な構成を使用して `pact -s config.yaml` を発行します。 `pact-lang-api` JS ライブラリは、Web 開発用の [npm 経由で提供されています](https://www.npmjs.com/package/pact-lang-api)。
+サーバーを起動するには、適切な構成を使用して `pact -s config.yaml` を発行します。
+`pact-lang-api` JS ライブラリは、Web 開発用の [npm 経由で提供されています](https://www.npmjs.com/package/pact-lang-api)。
 
 ## `cmd` フィールドとペイロード<a id="sec-1-1"></a>
 
-ブロックチェーンに送信されたペイロードは、受信されたコマンドが正しいことを確認するために、 ハッシュされる必要があります。 これはまた、必要なプライベートキーによって署名される値でも あります。トランザクションの JSON を、ハッシュを構成している値とバイト単位で一致させるには、 JSON をペイロード内に文字列として "エンコード" (つまり、["文字列化"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)) する必要があります。 `cmd` フィールドは、 `exec` ペイロードと `cont` ペイロードの 2 種類のペイロードをサポートしています。
+ブロックチェーンに送信されたペイロードは、受信されたコマンドが正しいことを確認するために、 ハッシュされる必要があります。
+これはまた、必要なプライベートキーによって署名される値でも あります。
+トランザクションの JSON を、ハッシュを構成している値とバイト単位で一致させるには、 JSON をペイロード内に文字列として "エンコード" (つまり、["文字列化"](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)) する必要があります。
+`cmd` フィールドは、 `exec` ペイロードと `cont` ペイロードの 2 種類のペイロードをサポートしています。
 
 ### `exec` ペイロード<a id="sec-1-1-1"></a>
 
-`exec` ペイロードには、実行可能コードとデータが、エンコードされた文字列として保持されます。[send](https://pact-language.readthedocs.io/en/latest/pact-reference.html#send)、[private](https://pact-language.readthedocs.io/en/latest/pact-reference.html#private)、 および [local](https://pact-language.readthedocs.io/en/latest/pact-reference.html#local) の各エンドポイントは、 `cmd` フィールドでこのペイロード型をサポートします。エンコードされる JSON の形式は次のとおりです。
+`exec` ペイロードには、実行可能コードとデータが、エンコードされた文字列として保持されます。
+[send](https://pact-language.readthedocs.io/en/latest/pact-reference.html#send)、[private](https://pact-language.readthedocs.io/en/latest/pact-reference.html#private)、 および [local](https://pact-language.readthedocs.io/en/latest/pact-reference.html#local) の各エンドポイントは、 `cmd` フィールドでこのペイロード型をサポートします。
+エンコードされる JSON の形式は次のとおりです。
 
 ```js
 {
@@ -335,18 +40,23 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バック
 }
 ```
 
-メッセージをアセンブルするときには、この JSON が "文字列化" され、 `cmd` フィールドに指定されている必要があります。[pact ツールでリクエストフォーマッター](https://pact-language.readthedocs.io/en/latest/pact-reference.html#api-request-formatter)の出力を確認すると、 `cmd` フィールドは、指定されたコードとともに、エンコードされ、エスケープされた JSON の文字列であることがわかります。
+メッセージをアセンブルするときには、この JSON が "文字列化" され、 `cmd` フィールドに指定されている必要があります。
+[pact ツールでリクエストフォーマッター](https://pact-language.readthedocs.io/en/latest/pact-reference.html#api-request-formatter)の出力を確認すると、 `cmd` フィールドは、指定されたコードとともに、エンコードされ、エスケープされた JSON の文字列であることがわかります。
 
 ### `cont` ペイロード<a id="sec-1-1-2"></a>
 
-`cont` ペイロードを使用すると、[pact](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pacts) を継続またはロール バックすることができます。このペイロードには、関係する pact の ID、pact をロールバックするのか継続するのかの指定、ステップ番号、必要なステップデータの各フィールドを要します。 これらのペイロードフィールドには、以下の特別な制約があります。
+`cont` ペイロードを使用すると、[pact](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pacts) を継続またはロール バックすることができます。
+このペイロードには、関係する pact の ID、pact をロールバックするのか継続するのかの指定、ステップ番号、必要なステップデータの各フィールドを要します。
+これらのペイロードフィールドには、以下の特別な制約があります。
 
 -   pact ID は、pact をインスタンス化したトランザクションの ID と同じです。
 -   1 つのトランザクションでインスタンス化できるのは、1 つの pact のみです。
 -   pact をロールバックする場合、ステップ番号は直前に実行されたステップの番号を指定します。
 -   pact を継続する場合、ステップ番号には直前に実行されたステップに 1 を加えた数値を指定します。
 
-`exec` ペイロード フィールドと同様、 `cont` ペイロード フィールドも文字列としてエンコードする必要があります。[send](https://pact-language.readthedocs.io/en/latest/pact-reference.html#send) エンドポイントは、 `cmd` フィールドでこのペイロード型をサポートします。 エンコードされる JSON の形式は次のとおりです。
+`exec` ペイロード フィールドと同様、 `cont` ペイロード フィールドも文字列としてエンコードする必要があります。
+[send](https://pact-language.readthedocs.io/en/latest/pact-reference.html#send) エンドポイントは、 `cmd` フィールドでこのペイロード型をサポートします。
+エンコードされる JSON の形式は次のとおりです。
 
 ```js
 {
@@ -364,11 +74,13 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バック
 
 ## エンドポイント<a id="sec-1-2"></a>
 
-すべてのエンドポイントは、 `api/v1` から運用されます。したがって `localhost:8080` で実行されている場合、send 呼び出しは [http://localhost:8080/api/v1/send](http://localhost:8080/api/v1/send) に送信します。
+すべてのエンドポイントは、 `api/v1` から運用されます。
+したがって `localhost:8080` で実行されている場合、send 呼び出しは [http://localhost:8080/api/v1/send](http://localhost:8080/api/v1/send) に送信します。
 
 ### /send<a id="sec-1-2-1"></a>
 
-1 つ以上の "public" (暗号化されていない) コマンドをブロックチェーンに非同期送信します。文字列化された JSON データについては、 [cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads) を参照してください。
+1 つ以上の "public" (暗号化されていない) コマンドをブロックチェーンに非同期送信します。
+文字列化された JSON データについては、 [cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads) を参照してください。
 
 リクエスト JSON:
 
@@ -406,7 +118,8 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バック
 
 ### /private<a id="sec-1-2-2"></a>
 
-指定されたアドレス情報を使用して、1 つ以上の "private" コマンドをブロックチェーンに非同期送信することで、送受信するエンティティのみが読み取られるようにセキュアに暗号化します。 文字列化された JSON データについては、[cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads)を参照してください。
+指定されたアドレス情報を使用して、1 つ以上の "private" コマンドをブロックチェーンに非同期送信することで、送受信するエンティティのみが読み取られるようにセキュアに暗号化します。
+文字列化された JSON データについては、[cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads)を参照してください。
 
 リクエスト JSON:
 
@@ -501,7 +214,10 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バック
 
 ### /local<a id="sec-1-2-5"></a>
 
-トランザクション以外の実行コマンドを送信するブロッキングおよび同期呼び出しです。 ブロックチェーン環境では、これはノードローカルの "ダーティリード" です。データベースへの書き込みや変更は、ロールバックされます。文字列化された JSON データについては、[cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads)を参照してください。
+トランザクション以外の実行コマンドを送信するブロッキングおよび同期呼び出しです。
+ブロックチェーン環境では、これはノードローカルの "ダーティリード" です。
+データベースへの書き込みや変更は、ロールバックされます。
+文字列化された JSON データについては、[cmd フィールド形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cmd-field-and-payloads)を参照してください。
 
 リクエスト JSON:
 
@@ -533,7 +249,9 @@ Pact のバージョン 2.1.0 以降には HTTP サーバーと SQLite バック
 
 ## API リクエスト フォーマッター<a id="sec-1-3"></a>
 
-Pact 2.2.3 では、 `pact` ツールで `-a` オプションを使用できるようになりました。これにより、リクエストを記述した YAML ファイルを使用して API リクエスト JSON をフォーマットできます。出力は Postman などの POST ツールで使用でき、 `curl` にパイプすることも可能です。
+Pact 2.2.3 では、 `pact` ツールで `-a` オプションを使用できるようになりました。
+これにより、リクエストを記述した YAML ファイルを使用して API リクエスト JSON をフォーマットできます。
+出力は Postman などの POST ツールで使用でき、 `curl` にパイプすることも可能です。
 
 例えば、以下の内容を持つ "apireq.yaml" という yaml ファイルがあるとします。
 
@@ -563,7 +281,9 @@ $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
 
 ### リクエストのYAML ファイル形式<a id="sec-1-3-1"></a>
 
-リクエスト yaml ファイルには、2 つの形式があります。"実行" リクエスト yaml ファイルは、[exec](https://pact-language.readthedocs.io/en/latest/pact-reference.html#exec-payload) ペイロードを記述します。これに対し、"継続"リクエスト yaml ファイルは、[cont](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cont-payload) ペイロードを記述します。
+リクエスト yaml ファイルには、2 つの形式があります。
+"実行" リクエスト yaml ファイルは、[exec](https://pact-language.readthedocs.io/en/latest/pact-reference.html#exec-payload) ペイロードを記述します。
+これに対し、"継続"リクエスト yaml ファイルは、[cont](https://pact-language.readthedocs.io/en/latest/pact-reference.html#cont-payload) ペイロードを記述します。
 
 実行リクエスト yaml では次のキーを指定できます。
 
@@ -603,7 +323,8 @@ to: プライベートメッセージ用のエンティティ名
 
 ## 実行モード<a id="sec-2-1"></a>
 
-Pact言語 は、独自の "実行モード" で使用して、ブロックチェーン上での高速リニア実行の パフォーマンス要件に対応するように設計されています。これらの実行モードは次のとおりです。
+Pact言語 は、独自の "実行モード" で使用して、ブロックチェーン上での高速リニア実行の パフォーマンス要件に対応するように設計されています。
+これらの実行モードは次のとおりです。
 
 1.  コントラクト定義
 2.  トランザクション実行
@@ -611,17 +332,21 @@ Pact言語 は、独自の "実行モード" で使用して、ブロックチ�
 
 ### コントラクト定義<a id="sec-2-1-1"></a>
 
-このモードでは、コードがブロックチェーンに送信されて、コード (モジュール)、テーブル (データ)、キーセット (認証) から構成されるスマートコントラクトを確立します。これには、例えばデータを初期化するための (データベースを変更する) トランザクションコードも含まれます。
+このモードでは、コードがブロックチェーンに送信されて、コード (モジュール)、テーブル (データ)、キーセット (認証) から構成されるスマートコントラクトを確立します。
+これには、例えばデータを初期化するための (データベースを変更する) トランザクションコードも含まれます。
 
-特定のスマートコントラクトでは、これらはすべて単一のメッセージとしてブロックチェーンに送信されます。 したがって、エラーが生じた場合、スマートコントラクト全体がまとめてロールバックされます。
+特定のスマートコントラクトでは、これらはすべて単一のメッセージとしてブロックチェーンに送信されます。
+したがって、エラーが生じた場合、スマートコントラクト全体がまとめてロールバックされます。
 
 1.  キーセット定義
 
-    [キーセット](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysets)は、モジュールとテーブルの管理者認証方式の指定に使用されるため、 通常はファイルの一番最初に定義されます。定義によってランタイム環境にキーセットが作成され、 グローバル キーセット データベースにそれらの定義が格納されます。
+    [キーセット](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysets)は、モジュールとテーブルの管理者認証方式の指定に使用されるため、 通常はファイルの一番最初に定義されます。
+定義によってランタイム環境にキーセットが作成され、 グローバル キーセット データベースにそれらの定義が格納されます。
 
 2.  モジュールの宣言
 
-    [モジュール](https://pact-language.readthedocs.io/en/latest/pact-reference.html#module)には、スマート コントラクトの API とデータの定義が含まれます。これには以下のもので構成されています。
+    [モジュール](https://pact-language.readthedocs.io/en/latest/pact-reference.html#module)には、スマート コントラクトの API とデータの定義が含まれます。
+これには以下のもので構成されています。
 
     -   [関数](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defun)
     -   [スキーマ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defschema)定義
@@ -629,51 +354,77 @@ Pact言語 は、独自の "実行モード" で使用して、ブロックチ�
     -   [pact](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defpact) の特殊関数
     -   [const](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defconst) 値
 
-    モジュールが宣言されると、他のモジュールからのネイティブ関数や定義への参照がすべて解決されます。 解決が失敗すると、結果としてトランザクションがロールバックします。
+    モジュールが宣言されると、他のモジュールからのネイティブ関数や定義への参照がすべて解決されます。
+ 解決が失敗すると、結果としてトランザクションがロールバックします。
 
-    モジュールは、管理キーセットによって制御して再定義できます。モジュールのバージョン管理は、 モジュール名にバージョン番号を含める方法以外サポートされていません ("accounts-v1" など)。もっとも、"モジュール ハッシュ" が、コードの安全性を確保するための強力な機能を備えています。モジュールを [use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) によってインポートするときには、モジュール ハッシュを指定して、コードを特定のリリースに関連付けることができます。
+    モジュールは、管理キーセットによって制御して再定義できます。
+モジュールのバージョン管理は、 モジュール名にバージョン番号を含める方法以外サポートされていません ("accounts-v1" など)。
+もっとも、"モジュール ハッシュ" が、コードの安全性を確保するための強力な機能を備えています。
+モジュールを [use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) によってインポートするときには、モジュール ハッシュを指定して、コードを特定のリリースに関連付けることができます。
 
-    Pact 2.2 以降では、モジュール宣言内で `use` ステートメントを発行できます。 この機能をモジュール ハッシュと組み合わせると、依存モジュールが後からチェーン上で 変更された場合に、更新されたモジュールコードがインポートに失敗することで高水準の保証が実現します。 またロードされたモジュールのハッシュに変更内容が伝達されるため、更新が行われても、 ダウンストリームのモジュールが誤って変更されることはありません。
+    Pact 2.2 以降では、モジュール宣言内で `use` ステートメントを発行できます。
+ この機能をモジュール ハッシュと組み合わせると、依存モジュールが後からチェーン上で 変更された場合に、更新されたモジュールコードがインポートに失敗することで高水準の保証が実現します。
+ またロードされたモジュールのハッシュに変更内容が伝達されるため、更新が行われても、 ダウンストリームのモジュールが誤って変更されることはありません。
 
     モジュール名は、グローバルに一意である必要があります。
 
 3.  テーブルの作成
 
-    テーブルは、モジュールと同時に[作成](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table)されます。テーブルはモジュール内で "定義" されますが、モジュールの作成後に "作成" されるため、テーブルを必ずしも再作成しなくても、後からモジュールを再定義できます。
+    テーブルは、モジュールと同時に[作成](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table)されます。
+テーブルはモジュール内で "定義" されますが、モジュールの作成後に "作成" されるため、テーブルを必ずしも再作成しなくても、後からモジュールを再定義できます。
 
-    モジュールのテーブルに対する関係は重要です。これについては、「[テーブルのガード](https://pact-language.readthedocs.io/en/latest/pact-reference.html#module-table-guards)」で説明します。
+    モジュールのテーブルに対する関係は重要です。
+これについては、「[テーブルのガード](https://pact-language.readthedocs.io/en/latest/pact-reference.html#module-table-guards)」で説明します。
 
-    作成できるテーブルの数に制限はありません。テーブル名は、モジュール名を使用して名前空間化されます。
+    作成できるテーブルの数に制限はありません。
+テーブル名は、モジュール名を使用して名前空間化されます。
 
     テーブルは[スキーマ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defschema)によって型指定できます。
 
 ### トランザクション実行<a id="sec-2-1-2"></a>
 
-"トランザクション" とは、支払、販売、複雑な契約のワークフロー ステップなど、ブロックチェーン上で行われるビジネス イベントを指します。一般にトランザクションは、モジュール関数への 1 回の呼び出しです。ただし、実行するステートメントの数に制限はありません。実際、"トランザクション" と "スマート コントラクトの定義" の違いは、単に実行されるコードの "種類" の問題に過ぎず、コードの評価における実際的な違いはありません。
+"トランザクション" とは、支払、販売、複雑な契約のワークフロー ステップなど、ブロックチェーン上で行われるビジネス イベントを指します。
+一般にトランザクションは、モジュール関数への 1 回の呼び出しです。
+ただし、実行するステートメントの数に制限はありません。
+実際、"トランザクション" と "スマート コントラクトの定義" の違いは、単に実行されるコードの "種類" の問題に過ぎず、コードの評価における実際的な違いはありません。
 
 ### クエリおよびローカル実行<a id="sec-2-1-3"></a>
 
-データのクエリは、通常はビジネス イベントではなく、しかもパフォーマンスに影響を与えるデータ ペイロードが含まれることがあります。そのためクエリは、メッセージの受信側ノード上で "ローカル実行" として処理されます。履歴クエリでは、"トランザクション ID" が参照点として使用されるため、あらゆる競合状態が回避され、非同期でクエリを実行できます。
+データのクエリは、通常はビジネス イベントではなく、しかもパフォーマンスに影響を与えるデータ ペイロードが含まれることがあります。
+そのためクエリは、メッセージの受信側ノード上で "ローカル実行" として処理されます。
+履歴クエリでは、"トランザクション ID" が参照点として使用されるため、あらゆる競合状態が回避され、非同期でクエリを実行できます。
 
-トランザクション実行とローカル実行の違いは、異なる API エンドポイントをターゲットとすることで実現されます。pact コードは、トランザクション実行とローカル実行を区別できません。
+トランザクション実行とローカル実行の違いは、異なる API エンドポイントをターゲットとすることで実現されます。
+pact コードは、トランザクション実行とローカル実行を区別できません。
 
 ## データベース操作<a id="sec-2-2"></a>
 
-Pact 言語は、ブロックチェーンの実行に特有な必須条件をそなえたデータベースのようなものだとも言えます。 Pact 言語は、さまざまなバックエンドに適応して実行できます。
+Pact 言語は、ブロックチェーンの実行に特有な必須条件をそなえたデータベースのようなものだとも言えます。
+ Pact 言語は、さまざまなバックエンドに適応して実行できます。
 
 ### アトミックな実行<a id="sec-2-2-1"></a>
 
-ブロックチェーン内に送信され、Pact によって実行されるメッセージは常に "アトミック"です。トランザクションはその全体が成功するか、全体が失敗するかのいずれかです。これはデータベース用語で言うところの "トランザクション" と同じです。ロールバック処理は、[マルチステップのトランザクション](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pacts)を除いて、明示的なサポートはありません。
+ブロックチェーン内に送信され、Pact によって実行されるメッセージは常に "アトミック"です。
+トランザクションはその全体が成功するか、全体が失敗するかのいずれかです。
+これはデータベース用語で言うところの "トランザクション" と同じです。
+ロールバック処理は、[マルチステップのトランザクション](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pacts)を除いて、明示的なサポートはありません。
 
 ### キー/行モデル<a id="sec-2-2-2"></a>
 
-ブロックチェーンの実行では、OLTP (オンライン トランザクション処理) データベースのワークロードと同様、非正規化データを単一のテーブルに書き込みます。Pact のデータアクセス API には、これを反映した "キー/行モデル" が搭載されています。このモデルでは、1 つのキーによって、1 つの列にアクセスします。
+ブロックチェーンの実行では、OLTP (オンライン トランザクション処理) データベースのワークロードと同様、非正規化データを単一のテーブルに書き込みます。
+Pact のデータアクセス API には、これを反映した "キー/行モデル" が搭載されています。
+このモデルでは、1 つのキーによって、1 つの列にアクセスします。
 
-そのため、Pact 言語ではテーブルの ”結合” (join) はサポートされていません。テーブルの結合を行う場合は、 Pact データベースからエクスポートしたデータを使った OLAP (オンライン分析処理) データベースでの分析が適しています。しかし、Pact がリレーショナルな手法でトランザクションを "記録" できないわけではありません。例えば Customer テーブルのキーが Sales テーブルで使用されている場合に、Customer テーブルのコードによって Customer レコードを検索して Sales テーブルに書き込むことができます。
+そのため、Pact 言語ではテーブルの ”結合” (join) はサポートされていません。
+テーブルの結合を行う場合は、 Pact データベースからエクスポートしたデータを使った OLAP (オンライン分析処理) データベースでの分析が適しています。
+しかし、Pact がリレーショナルな手法でトランザクションを "記録" できないわけではありません。
+例えば Customer テーブルのキーが Sales テーブルで使用されている場合に、Customer テーブルのコードによって Customer レコードを検索して Sales テーブルに書き込むことができます。
 
 ### クエリとパフォーマンス<a id="sec-2-2-3"></a>
 
-Pact 2.3 以降の Pact には、テーブルから複数の行を選択する強力なクエリの仕組みが搭載されています。 これは一見 SQL に似ていますが、[select](https://pact-language.readthedocs.io/en/latest/pact-reference.html#select) 演算と [where](https://pact-language.readthedocs.io/en/latest/pact-reference.html#where) 演算によってテーブルへの "ストリーミング インターフェイス" が提供されます。そこではユーザーがフィルター関数を指定した後、[sort](https://pact-language.readthedocs.io/en/latest/pact-reference.html#sort) やその他の関数を使用して行セットをリスト データ構造として操作します。
+Pact 2.3 以降の Pact には、テーブルから複数の行を選択する強力なクエリの仕組みが搭載されています。
+ これは一見 SQL に似ていますが、[select](https://pact-language.readthedocs.io/en/latest/pact-reference.html#select) 演算と [where](https://pact-language.readthedocs.io/en/latest/pact-reference.html#where) 演算によってテーブルへの "ストリーミング インターフェイス" が提供されます。
+そこではユーザーがフィルター関数を指定した後、[sort](https://pact-language.readthedocs.io/en/latest/pact-reference.html#sort) やその他の関数を使用して行セットをリスト データ構造として操作します。
 
 ```lisp
 ;; 給料が 90000 以上の開発者を選び、年齢によって並び替えます
@@ -691,41 +442,58 @@ Pact 2.3 以降の Pact には、テーブルから複数の行を選択する�
           employees)))
 ```
 
-トランザクション環境において、Pact のデータベース操作は、1 行単位の読み書きに最適化されています。つまり、上の例のクエリの計算速度やコストを予想できなくなることがあります。しかし、[ローカル](https://pact-language.readthedocs.io/en/latest/pact-reference.html#local)実行機能を使用すれば、Pact がストリーミング結果に対してユーザーのフィルター関数を利用できるため、優れたパフォーマンスが発揮されます。
+トランザクション環境において、Pact のデータベース操作は、1 行単位の読み書きに最適化されています。
+つまり、上の例のクエリの計算速度やコストを予想できなくなることがあります。
+しかし、[ローカル](https://pact-language.readthedocs.io/en/latest/pact-reference.html#local)実行機能を使用すれば、Pact がストリーミング結果に対してユーザーのフィルター関数を利用できるため、優れたパフォーマンスが発揮されます。
 
 したがって、ローカルの非トランザクション操作によって選択操作を行い、トランザクション環境では大きなテーブルで選択を使用しないようにすることがベスト プラクティスとなります。
 
 ### Null 値なし<a id="sec-2-2-4"></a>
 
-Pact言語のデータベース機能には、NULL 値の概念がありません。列の値が 1 つでも見つからない場合は、データベース結果に対する計算の主要な関数である [with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read) がエラーを出します。トランザクションの作成者は、トランザクションのあらゆる読み取りに対して値が存在するように注意する必要があります。これは "全体性" を確保し、null 値に関わる不必要で危険な制御フローを回避するための安全機能です。
+Pact言語のデータベース機能には、NULL 値の概念がありません。
+列の値が 1 つでも見つからない場合は、データベース結果に対する計算の主要な関数である [with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read) がエラーを出します。
+トランザクションの作成者は、トランザクションのあらゆる読み取りに対して値が存在するように注意する必要があります。
+これは "全体性" を確保し、null 値に関わる不必要で危険な制御フローを回避するための安全機能です。
 
 ### バージョン管理された履歴<a id="sec-2-2-5"></a>
 
-さらにこのキー/行モデルでは、列の値が変更されるたび、その変更がトランザクション ID によってバージョン管理されます。例えば、"name"、"age"、"role" という 3 列構成のテーブルがあるとして、第一トランザクションでは "name" を、第二トランザクションでは "age" と "role" を更新したとします。履歴データを取得すると、第一トランザクションでは "name" に対する変更のみが、第二トランザクションでは "age" と "role" への変更のみが返されます。
+さらにこのキー/行モデルでは、列の値が変更されるたび、その変更がトランザクション ID によってバージョン管理されます。
+例えば、"name"、"age"、"role" という 3 列構成のテーブルがあるとして、第一トランザクションでは "name" を、第二トランザクションでは "age" と "role" を更新したとします。
+履歴データを取得すると、第一トランザクションでは "name" に対する変更のみが、第二トランザクションでは "age" と "role" への変更のみが返されます。
 
 ### バックエンド<a id="sec-2-2-6"></a>
 
-Pact では、ブロックチェーン内のスマートコントラクト レイヤーで、同一の正確な実行が保証されます。そのため、バッキング ストアは、異なるコンセンサス ノード上で同一である必要がありません。Pact を実装すると、ダウンストリーム・システムにデータを容易に一括レプリケーションできるため、産業用 RDBMS の統合が可能になり、ブロックチェーンに基づいたシステムへの大規模な移行が促進されます。
+Pact では、ブロックチェーン内のスマートコントラクト レイヤーで、同一の正確な実行が保証されます。
+そのため、バッキング ストアは、異なるコンセンサス ノード上で同一である必要がありません。
+Pact を実装すると、ダウンストリーム・システムにデータを容易に一括レプリケーションできるため、産業用 RDBMS の統合が可能になり、ブロックチェーンに基づいたシステムへの大規模な移行が促進されます。
 
 ## 型とスキーマ<a id="sec-2-3"></a>
 
-Pact 2.0 以降では、随意ではありますが、明示的な型指定ができます。 型なしの Pact 1.0 コードは以前と同様に機能します。型なしのコード作成は、手早くプロトタイプを作成したい場合に便利です。
+Pact 2.0 以降では、随意ではありますが、明示的な型指定ができます。
+ 型なしの Pact 1.0 コードは以前と同様に機能します。型なしのコード作成は、手早くプロトタイプを作成したい場合に便利です。
 
-スキーマは、型指定の一番の動機となります。スキーマは、型指定できる列のリストを使用して[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defschema)されます (型は必須ではありません)。次にテーブルが、特定のスキーマを使用して[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#deftable)されます (これもオプションです)。
+スキーマは、型指定の一番の動機となります。
+スキーマは、型指定できる列のリストを使用して[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defschema)されます (型は必須ではありません)。
+次にテーブルが、特定のスキーマを使用して[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#deftable)されます (これもオプションです)。
 
 スキーマは、オブジェクト型についても使用でき、また指定できます。
 
 ### 実行時の型の施行<a id="sec-2-3-1"></a>
 
-コードで宣言されたすべての型は、ランタイムで施行されます。テーブル スキーマの場合は、テーブルへのすべての書き込みが、スキーマに対して型チェックされます。そうでない場合は、型指定が検出されると、式の評価時にランタイムがその型を施行します。
+コードで宣言されたすべての型は、ランタイムで施行されます。
+テーブル スキーマの場合は、テーブルへのすべての書き込みが、スキーマに対して型チェックされます。
+そうでない場合は、型指定が検出されると、式の評価時にランタイムがその型を施行します。
 
 ### モジュール内の型推論<a id="sec-2-3-2"></a>
 
-[typecheck](https://pact-language.readthedocs.io/en/latest/pact-reference.html) という repl コマンド を使用すると、Pact インタープリターによってモジュールが分析され、すべての変数、関数適用、定数定義に対して型推論が試されます。プロジェクトの repl スクリプトでこれを使用すると、開発者が型チェックに成功するための ”必要最小限の型指定” を追加する作業が軽減されます。型チェックに問題なく成功するには、通常、 すべてのテーブルに対してスキーマが指定され、曖昧なまたは多重定義されたネイティブ関数を呼び出す補助関数で引数の型が指定されている必要があります。
+[typecheck](https://pact-language.readthedocs.io/en/latest/pact-reference.html) という repl コマンド を使用すると、Pact インタープリターによってモジュールが分析され、すべての変数、関数適用、定数定義に対して型推論が試されます。
+プロジェクトの repl スクリプトでこれを使用すると、開発者が型チェックに成功するための ”必要最小限の型指定” を追加する作業が軽減されます。
+型チェックに問題なく成功するには、通常、 すべてのテーブルに対してスキーマが指定され、曖昧なまたは多重定義されたネイティブ関数を呼び出す補助関数で引数の型が指定されている必要があります。
 
 ### 形式検証<a id="sec-2-3-3"></a>
 
-SMT-LIB2 言語の証明を自動的に作り出すため、Pact は完全に型チェックされインラインもされた AST を出力します。型チェックが成功しない場合、モジュールを証明できなくなります。
+SMT-LIB2 言語の証明を自動的に作り出すため、Pact は完全に型チェックされインラインもされた AST を出力します。
+型チェックが成功しない場合、モジュールを証明できなくなります。
 
 このように、Pact コードは、型無しから、"十分な" 型指定、さらには形式検証に至るまで、段階的に "安全性" を高めることができます。
 
@@ -737,7 +505,8 @@ Pact では、Bitcoin スクリプトと同様、パブリックキー認証が�
 
 ### キーセット定義<a id="sec-2-4-1"></a>
 
-キーセットは、メッセージのペイロードから定義を[読み取る](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-keyset)ことによって[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#define-keyset)されます。キーセットは、パブリックキーと "キーセット述語" のリストから構成されます。
+キーセットは、メッセージのペイロードから定義を[読み取る](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-keyset)ことによって[定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#define-keyset)されます。
+キーセットは、パブリックキーと "キーセット述語" のリストから構成されます。
 
 有効なキーセット JSON の作成例を以下に示します。
 
@@ -759,25 +528,36 @@ Pact では、Bitcoin スクリプトと同様、パブリックキー認証が�
 
 ### キーセット述語<a id="sec-2-4-2"></a>
 
-キーセット述語はある特定の関数を参照します。選ばれた関数は、キーセット内のパブリックキーと、ブロックチェーン メッセージの署名に使用されたキーを比較します。これが一致しない場合は、トランザクションが進みません。この関数では、"count" と "matched" の 2 つの引数を指定できます。"count" はキーセット内のキーの数、"matched" はメッセージの署名に使用されているキーのうち、キーセットのキーと一致するキーの数です。
+キーセット述語はある特定の関数を参照します。
+選ばれた関数は、キーセット内のパブリックキーと、ブロックチェーン メッセージの署名に使用されたキーを比較します。
+これが一致しない場合は、トランザクションが進みません。
+この関数では、"count" と "matched" の 2 つの引数を指定できます。
+"count" はキーセット内のキーの数、"matched" はメッセージの署名に使用されているキーのうち、キーセットのキーと一致するキーの数です。
 
 複数署名のサポートは、ブロックチェーン レイヤーの責任であり、Bitcoin 型の "マルチシグ" コントラクト (決済には少なくとも 2 つの署名が必要) が持つ強力な機能です。
 
-Pact には、[keys-all](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-all)、[keys-any](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-any)、[keys-2](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-2) のキーセット述語が組み込まれています。 モジュールの作成者は、追加の述語を自由に定義できます。
+Pact には、[keys-all](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-all)、[keys-any](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-any)、[keys-2](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-2) のキーセット述語が組み込まれています。
+ モジュールの作成者は、追加の述語を自由に定義できます。
 
 キーセット述語が指定されていない場合、デフォルトで [keys-all](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-all) が使用されます。
 
 ### キーの循環<a id="sec-2-4-3"></a>
 
-キーセットは循環させることができます。ただし、現在のキーセット定義とキーセット述語に対して認証されたメッセージよってのみ可能です。認証が完了した後は、キーセットを簡単に[再定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#define-keyset)できます。
+キーセットは循環させることができます。
+ただし、現在のキーセット定義とキーセット述語に対して認証されたメッセージよってのみ可能です。
+認証が完了した後は、キーセットを簡単に[再定義](https://pact-language.readthedocs.io/en/latest/pact-reference.html#define-keyset)できます。
 
 ### モジュールのテーブル・ガード<a id="sec-2-4-4"></a>
 
-テーブルを[作成](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table)するときには、モジュール名を併せて指定する必要があります。この仕組みにより、[データアクセス関数](https://pact-language.readthedocs.io/en/latest/pact-reference.html#Database)を介したテーブルへの直接アクセスが、モジュールの管理キーセットによって認証されることで、テーブルがモジュールによって ”保護”されます。ただし、モジュール関数内では、テーブル アクセスは制約されません。これにより、コントラクト作成者はきわめて柔軟にデータ アクセスを設計できるため、モジュールを主な "ユーザー" データ アクセス API として位置付けることができます。
+テーブルを[作成](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table)するときには、モジュール名を併せて指定する必要があります。
+この仕組みにより、[データアクセス関数](https://pact-language.readthedocs.io/en/latest/pact-reference.html#Database)を介したテーブルへの直接アクセスが、モジュールの管理キーセットによって認証されることで、テーブルがモジュールによって ”保護”されます。
+ただし、モジュール関数内では、テーブル アクセスは制約されません。
+これにより、コントラクト作成者はきわめて柔軟にデータ アクセスを設計できるため、モジュールを主な "ユーザー" データ アクセス API として位置付けることができます。
 
 ### 行ごとのキーセット<a id="sec-2-4-5"></a>
 
-キーセットは列の値として行に格納して、行全体を認証できます。以下のコードでは、これを実現する方法を示します。
+キーセットは列の値として行に格納して、行全体を認証できます。
+以下のコードでは、これを実現する方法を示します。
 
 ```lisp
 (defun create-account (id)
@@ -789,7 +569,8 @@ Pact には、[keys-all](https://pact-language.readthedocs.io/en/latest/pact-ref
     (format "Your balance is {}" [bal])))
 ```
 
-この例では、 `create-account` が [read-keyset](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-keyset) を使用してメッセージのペイロードからキーセット定義を読み取り、テーブルに "keyset" として格納します。 `read-balance` は、最初に [enforce-keyset](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce-keyset) でキーセットを適用することで、持ち主のキーセットに対し、残高の読み取りのみを許可します。
+この例では、 `create-account` が [read-keyset](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-keyset) を使用してメッセージのペイロードからキーセット定義を読み取り、テーブルに "keyset" として格納します。
+ `read-balance` は、最初に [enforce-keyset](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce-keyset) でキーセットを適用することで、持ち主のキーセットに対し、残高の読み取りのみを許可します。
 
 ## 計算モデル<a id="sec-2-5"></a>
 
@@ -797,21 +578,29 @@ Pact には、[keys-all](https://pact-language.readthedocs.io/en/latest/pact-ref
 
 ### チューリング不完全<a id="sec-2-5-1"></a>
 
-Pact はチューリング不完全です。つまり、再帰機能がなく (再帰は実行前に検出されればエラーとなります)、無限にループすることもできません。 Pact は、[map](https://pact-language.readthedocs.io/en/latest/pact-reference.html#map)、[fold](https://pact-language.readthedocs.io/en/latest/pact-reference.html#fold)、および [filter](https://pact-language.readthedocs.io/en/latest/pact-reference.html#filter) を介してリスト構造上での演算をサポートしますが、 無限のリストを定義できないため、これらには必然的に限界があります。
+Pact はチューリング不完全です。
+つまり、再帰機能がなく (再帰は実行前に検出されればエラーとなります)、無限にループすることもできません。
+ Pact は、[map](https://pact-language.readthedocs.io/en/latest/pact-reference.html#map)、[fold](https://pact-language.readthedocs.io/en/latest/pact-reference.html#fold)、および [filter](https://pact-language.readthedocs.io/en/latest/pact-reference.html#filter) を介してリスト構造上での演算をサポートしますが、 無限のリストを定義できないため、これらには必然的に限界があります。
 
-Pact モジュールは、チューリング不完全であるため、すべての参照が事前にロードされて解決されます。つまり、ルックアップ テーブルで関数を読み取るのではなく、関数のコードそのものがコールサイトに直接挿入されます。これはチューリング不完全な言語のパフォーマンス上の利点の一例です。
+Pact モジュールは、チューリング不完全であるため、すべての参照が事前にロードされて解決されます。
+つまり、ルックアップ テーブルで関数を読み取るのではなく、関数のコードそのものがコールサイトに直接挿入されます。
+これはチューリング不完全な言語のパフォーマンス上の利点の一例です。
 
 ### 変数への単一割り当て<a id="sec-2-5-2"></a>
 
-Pact では、[let expressions](https://pact-language.readthedocs.io/en/latest/pact-reference.html#let) と [bindings](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bindings) で変数を宣言できます。変数は不変です。再割り当てやインプレースでの変更はできません。
+Pact では、[let expressions](https://pact-language.readthedocs.io/en/latest/pact-reference.html#let) と [bindings](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bindings) で変数を宣言できます。
+変数は不変です。
+再割り当てやインプレースでの変更はできません。
 
-一般に、変数宣言は [with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read) 関数で行われ、変数が名前によって列の値に割り当てられます。 [bind](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bind) 関数はこれと同じ機能をオブジェクトに対して提供します。
+一般に、変数宣言は [with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read) 関数で行われ、変数が名前によって列の値に割り当てられます。
+ [bind](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bind) 関数はこれと同じ機能をオブジェクトに対して提供します。
 
 モジュールグローバルな定数値は、[defconst](https://pact-language.readthedocs.io/en/latest/pact-reference.html) で宣言できます。
 
 ### データ型<a id="sec-2-5-3"></a>
 
-Pact コードに型を付けるのはユーザーの自由です。型の指定がなくても型チェックは行われるので、指定すればする程コードの安全性が高まります。
+Pact コードに型を付けるのはユーザーの自由です。
+型の指定がなくても型チェックは行われるので、指定すればする程コードの安全性が高まります。
 
 Pact 言語は次の型をサポートしています。
 
@@ -829,7 +618,8 @@ Pact 言語は次の型をサポートしています。
 
 ### パフォーマンス<a id="sec-2-5-4"></a>
 
-Pact 言語は、ブロックチェーンでのビジネス イベントの記録を迅速化するためにクエリとモジュール定義にペナルティを課して、[トランザクション実行](https://pact-language.readthedocs.io/en/latest/pact-reference.html#transaction-execution)のパフォーマンスを最優先するように設計されています。以下に、高速で実行するためのヒントを示します。
+Pact 言語は、ブロックチェーンでのビジネス イベントの記録を迅速化するためにクエリとモジュール定義にペナルティを課して、[トランザクション実行](https://pact-language.readthedocs.io/en/latest/pact-reference.html#transaction-execution)のパフォーマンスを最優先するように設計されています。
+以下に、高速で実行するためのヒントを示します。
 
 1.  単一関数のトランザクション
 
@@ -837,7 +627,8 @@ Pact 言語は、ブロックチェーンでのビジネス イベントの記�
 
 2.  `use` ではなく参照を使用した呼び出し
 
-    トランザクションでモジュール関数を呼び出すときは、[use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) でモジュールをインポートするのではなく、[参照構文](https://pact-language.readthedocs.io/en/latest/pact-reference.html#references)を使用しましょう。 他のモジュール関数を参照するモジュールを定義する場合は、 モジュール定義時にそれらの参照がインライン化されるため、 `use` を使用しても問題ありません。
+    トランザクションでモジュール関数を呼び出すときは、[use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) でモジュールをインポートするのではなく、[参照構文](https://pact-language.readthedocs.io/en/latest/pact-reference.html#references)を使用しましょう。
+ 他のモジュール関数を参照するモジュールを定義する場合は、 モジュール定義時にそれらの参照がインライン化されるため、 `use` を使用しても問題ありません。
 
 3.  ハードコードされた引数とメッセージ値
 
@@ -863,7 +654,10 @@ Pact 言語は、ブロックチェーンでのビジネス イベントの記�
 
 4.  必要に応じた型指定
 
-    テーブルスキーマによって、Pact はほとんどのユース ケースで厳密に型指定されますが、データベースを使用しない関数でも型指定が必要になることがあります。この場合、REPLの [typecheck](https://pact-language.readthedocs.io/en/latest/typecheck) 関数を使用して、必要な型を追加してください。ランタイムの型施行のコストはわずかです。また型シグネチャが多すぎるとコードが読みにくくなる可能性がありますが、もっとも、型は API の文書化に便利な場合があるため、最後は個別の判断となります。
+    テーブルスキーマによって、Pact はほとんどのユース ケースで厳密に型指定されますが、データベースを使用しない関数でも型指定が必要になることがあります。
+この場合、REPLの [typecheck](https://pact-language.readthedocs.io/en/latest/typecheck) 関数を使用して、必要な型を追加してください。
+ランタイムの型施行のコストはわずかです。
+また型シグネチャが多すぎるとコードが読みにくくなる可能性がありますが、もっとも、型は API の文書化に便利な場合があるため、最後は個別の判断となります。
 
 ### 制御フロー<a id="sec-2-5-5"></a>
 
@@ -871,25 +665,33 @@ Pact は [if](https://pact-language.readthedocs.io/en/latest/pact-reference.html
 
 1.  "If" に要注意
 
-    可能な限り、if を避けてください。分岐が多いほど、コードの理解が困難になり、バグが生じやすくなります。ベスト プラクティスとして、フロントエンドに "処理の内容" を表すコードを指定し、スマート コントラクトには "達成しようとするトランザクションを検証" するコードを配置してください。
+    可能な限り、if を避けてください。
+分岐が多いほど、コードの理解が困難になり、バグが生じやすくなります。
+ベスト プラクティスとして、フロントエンドに "処理の内容" を表すコードを指定し、スマート コントラクトには "達成しようとするトランザクションを検証" するコードを配置してください。
 
     Pact の元の設計では、if (およびループ) がすべて排除されていましたが、このバージョンではユーザーが十分に考慮して機能を使用できるように追加されました。
 
 2.  enforce の使用
 
-    "If" はビジネス ロジックの不変条件を施行する目的では絶対に使用せず、その場合は代わりに [enforce](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce) を使用してください。これによってトランザクションが失敗します。
+    "If" はビジネス ロジックの不変条件を施行する目的では絶対に使用せず、その場合は代わりに [enforce](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce) を使用してください。
+これによってトランザクションが失敗します。
 
-    実際、Pact で許容される "非ローカル終了" は失敗のみです。Pact では "全域性" が重視されるためです。
+    実際、Pact で許容される "非ローカル終了" は失敗のみです。
+Pact では "全域性" が重視されるためです。
 
-    Pact 2.3 で追加された [enforce-one](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce-one) を使用すると、"式が 1 つでも合格すれば、すべての式が合格となる" という基準に従って施行リストをテストできます。これは、Pact における "例外処理" の唯一の例です。施行が失敗した場合は単純に次のテストが実行され、成功した場合は短絡評価が行われます。
+    Pact 2.3 で追加された [enforce-one](https://pact-language.readthedocs.io/en/latest/pact-reference.html#enforce-one) を使用すると、"式が 1 つでも合格すれば、すべての式が合格となる" という基準に従って施行リストをテストできます。
+これは、Pact における "例外処理" の唯一の例です。
+施行が失敗した場合は単純に次のテストが実行され、成功した場合は短絡評価が行われます。
 
 3.  組み込みのキーセットの使用
 
-    組み込みのキーセット関数である [keys-all](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-all)、[keys-any](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-any)、[keys-2](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-2) は、インタープリターにハードコードされており、素早く実行できます。カスタムのキーセットはランタイムの解決が必要であり、処理に時間がかかります。
+    組み込みのキーセット関数である [keys-all](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-all)、[keys-any](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-any)、[keys-2](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keys-2) は、インタープリターにハードコードされており、素早く実行できます。
+カスタムのキーセットはランタイムの解決が必要であり、処理に時間がかかります。
 
 ### 関数型言語の概念<a id="sec-2-5-6"></a>
 
-Pact には、関数型プログラミングで最もよく使われる [map](https://pact-language.readthedocs.io/en/latest/pact-reference.html#map)、[fold](https://pact-language.readthedocs.io/en/latest/pact-reference.html#fold)、および [filter](https://pact-language.readthedocs.io/en/latest/pact-reference.html#filter) が搭載されています。これらはすべて、[部分適用](https://pact-language.readthedocs.io/en/latest/pact-reference.html#partial-application)が使用され、リスト項目が引数の末尾に追加されて、関数が順次実行されます。
+Pact には、関数型プログラミングで最もよく使われる [map](https://pact-language.readthedocs.io/en/latest/pact-reference.html#map)、[fold](https://pact-language.readthedocs.io/en/latest/pact-reference.html#fold)、および [filter](https://pact-language.readthedocs.io/en/latest/pact-reference.html#filter) が搭載されています。
+これらはすべて、[部分適用](https://pact-language.readthedocs.io/en/latest/pact-reference.html#partial-application)が使用され、リスト項目が引数の末尾に追加されて、関数が順次実行されます。
 
 ```lisp
 (map (+ 2) [1 2 3])
@@ -901,15 +703,20 @@ Pact にはまた [compose](https://pact-language.readthedocs.io/en/latest/pact-
 
 ### 副作用のない実行<a id="sec-2-5-7"></a>
 
-特定の場合に限り、Pact コードの実行に副作用がまったくないと保証できます。これは、単純にデータベース状態のアクセスや変更が発生しないことを意味します。 現在、 `enforce` 、 `enforce-one` 、およびキーセット述語の評価は、すべて副作用なしの環境で実行されます。 [defconst](https://pact-language.readthedocs.io/en/latest/pact-reference.html) メモ化もそうです。
+特定の場合に限り、Pact コードの実行に副作用がまったくないと保証できます。
+これは、単純にデータベース状態のアクセスや変更が発生しないことを意味します。
+ 現在、 `enforce` 、 `enforce-one` 、およびキーセット述語の評価は、すべて副作用なしの環境で実行されます。
+ [defconst](https://pact-language.readthedocs.io/en/latest/pact-reference.html) メモ化もそうです。
 
 ### LISP<a id="sec-2-5-8"></a>
 
-Pact ではコードがそのランタイム表現を直接反映し、コントラクト作成者がプログラム実行に専念できるように LISP 構文が使用されています。Pact コードは、コードを直接検証できるように、人間が判読可能な形式で台帳上に格納されますが、LISP 型の [S 式構文](https://pact-language.readthedocs.io/en/latest/pact-reference.html#sexp)を使用することで、このコードを高速に実行できます。
+Pact ではコードがそのランタイム表現を直接反映し、コントラクト作成者がプログラム実行に専念できるように LISP 構文が使用されています。
+Pact コードは、コードを直接検証できるように、人間が判読可能な形式で台帳上に格納されますが、LISP 型の [S 式構文](https://pact-language.readthedocs.io/en/latest/pact-reference.html#sexp)を使用することで、このコードを高速に実行できます。
 
 ### メッセージ データ<a id="sec-2-5-9"></a>
 
-Pact は、JSON ペイロードと署名が付いたメッセージの形式でコードを受け取ります。メッセージ データは [read-msg](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-msg) と関連の関数を使用して読み取られますが、署名は直接読み書きできず、[キーセット](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysetpredicates)[述語](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysetpredicates)の施行の一部として評価されます。
+Pact は、JSON ペイロードと署名が付いたメッセージの形式でコードを受け取ります。
+メッセージ データは [read-msg](https://pact-language.readthedocs.io/en/latest/pact-reference.html#read-msg) と関連の関数を使用して読み取られますが、署名は直接読み書きできず、[キーセット](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysetpredicates)[述語](https://pact-language.readthedocs.io/en/latest/pact-reference.html#keysetpredicates)の施行の一部として評価されます。
 
 1.  JSON のサポート
 
@@ -928,61 +735,93 @@ Pact は、JSON ペイロードと署名が付いたメッセージの形式で�
 
 ## 機密保持<a id="sec-2-6"></a>
 
-Pact は、参加者の一部のみがメッセージを表示できる "機密保持" 環境での使用を想定して設計されています。これは、スマート コントラクト実行に大きな影響があります。
+Pact は、参加者の一部のみがメッセージを表示できる "機密保持" 環境での使用を想定して設計されています。
+これは、スマート コントラクト実行に大きな影響があります。
 
 ### エンティティ<a id="sec-2-6-1"></a>
 
-"エンティティ" とは、機密メッセージを表示できるまたは表示できないビジネス参加者です。エンティティは会社、会社内のグループ、または個人のいずれかです。
+"エンティティ" とは、機密メッセージを表示できるまたは表示できないビジネス参加者です。
+エンティティは会社、会社内のグループ、または個人のいずれかです。
 
 ### 互いに素なデータベース<a id="sec-2-6-2"></a>
 
-Pact スマート コントラクトは、ブロックチェーンによって編成されたメッセージを処理して、トランザクション実行の結果をデータベースに記録します。 機密保持環境では、異なるエンティティは異なるトランザクションを実行します。このため、データベースが「互いに素」となります。
+Pact スマート コントラクトは、ブロックチェーンによって編成されたメッセージを処理して、トランザクション実行の結果をデータベースに記録します。
+ 機密保持環境では、異なるエンティティは異なるトランザクションを実行します。
+このため、データベースが「互いに素」となります。
 
 このことは、Pact の実行には影響がありませんが、データベースのデータが "両面トランザクション" を行えなくなるため、互いに素になった複数のデータセットに対して単一トランザクションを行う新しい概念が必要になります。
 
 ### 機密保持のための pacts<a id="sec-2-6-3"></a>
 
-Pact の重要な機密保持機能は、素である複数のトランザクションを調整し、ターゲットのエンティティによる実行の順番を調整する機能です。 これについては、次のセクションで説明します。
+Pact の重要な機密保持機能は、素である複数のトランザクションを調整し、ターゲットのエンティティによる実行の順番を調整する機能です。
+ これについては、次のセクションで説明します。
 
 ## "Pacts" による非同期トランザクションの自動化<a id="sec-2-7"></a>
 
-プログラミング言語名の Pact とは名前が似ていますが、“pacts” は別のものです。本来は「約束」や「契約」のような意味で、ここでは多段階の順次トランザクションを [pact](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defpact) と呼ばれる単一のコードとして定義したものです。複数段階のインタラクションを 1 つの pact として定義することにより、トランザクションの参加者は、合意された一連の操作を実行し、特定の複数段階のインタラクションが存続する間のみ、データ リソースの作成と管理に使用できる、特別な "実行スコープ" を提供します。
+プログラミング言語名の Pact とは名前が似ていますが、“pacts” は別のものです。
+本来は「約束」や「契約」のような意味で、ここでは多段階の順次トランザクションを [pact](https://pact-language.readthedocs.io/en/latest/pact-reference.html#defpact) と呼ばれる単一のコードとして定義したものです。
+複数段階のインタラクションを 1 つの pact として定義することにより、トランザクションの参加者は、合意された一連の操作を実行し、特定の複数段階のインタラクションが存続する間のみ、データ リソースの作成と管理に使用できる、特別な "実行スコープ" を提供します。
 
-pacts は、"コルーチン" の一種、つまり、複数の終了ポイントと再エントリ ポイントを持つ関数です。Pacts は、[ステップ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step)から成り、特定のブロックチェーン トランザクションでは単一のステップのみが実行されます。ステップは、厳格な順番に従ってのみ実行されます。
+pacts は、"コルーチン" の一種、つまり、複数の終了ポイントと再エントリ ポイントを持つ関数です。
+Pacts は、[ステップ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step)から成り、特定のブロックチェーン トランザクションでは単一のステップのみが実行されます。
+ステップは、厳格な順番に従ってのみ実行されます。
 
-1 つの pact は、関数の定義と同様、引数を宣言して定義されます。ただし、引数の値は最初のステップの実行時にのみ評価され、その後、 それらの値は変更されることなく後続のステップでも使用できます。新しい値を後続のステップと共有するには、ステップで [yield](https://pact-language.readthedocs.io/en/latest/pact-reference.html#yield) を使用して値を引き渡します。後続のステップは、 [resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) を使用してこの値を拾うことができます。
+1 つの pact は、関数の定義と同様、引数を宣言して定義されます。
+ただし、引数の値は最初のステップの実行時にのみ評価され、その後、 それらの値は変更されることなく後続のステップでも使用できます。
+新しい値を後続のステップと共有するには、ステップで [yield](https://pact-language.readthedocs.io/en/latest/pact-reference.html#yield) を使用して値を引き渡します。
+後続のステップは、 [resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) を使用してこの値を拾うことができます。
 
-pacts は、プライベートとパブリックの2つのコンテキストのいずれかで実行するように設計されています。プライベート pact では、そのステップを実行する単一のエンティティが各ステップの指定によって特定されているのに対し、パブリック ステップではエンティティの指定がありません。 pacts は、パブリックまたはプライベートのいずれかでのみ実行できます。エンティティの指定があるステップとないステップが混在していると、ロード時にエラーが発生します。
+pacts は、プライベートとパブリックの2つのコンテキストのいずれかで実行するように設計されています。
+プライベート pact では、そのステップを実行する単一のエンティティが各ステップの指定によって特定されているのに対し、パブリック ステップではエンティティの指定がありません。
+ pacts は、パブリックまたはプライベートのいずれかでのみ実行できます。
+エンティティの指定があるステップとないステップが混在していると、ロード時にエラーが発生します。
 
 ### パブリック pacts<a id="sec-2-7-1"></a>
 
-パブリック pacts は、厳格な順番でのみ実行できるステップで構成されています。 どのユーザーがステップを実行できるかの施行は、ステップ式のコード内で行われます。 すべてのステップは、トランザクションの参加者が、ブロックチェーンに CONTINUATION コマンドを送信してマニュアルで開始されます。
+パブリック pacts は、厳格な順番でのみ実行できるステップで構成されています。
+ どのユーザーがステップを実行できるかの施行は、ステップ式のコード内で行われます。
+ すべてのステップは、トランザクションの参加者が、ブロックチェーンに CONTINUATION コマンドを送信してマニュアルで開始されます。
 
 ### プライベート pacts<a id="sec-2-7-2"></a>
 
-プライベート pacts も順次実行されるステップで構成されますが、各ステップは "entity" 引数で選択されたエンティティ ノードでのみ実行でき、他のエンティティ ノードはステップを無視 します。プライべート pacts は、初期ステップが送信された後、ブロックチェーン プラットフォームによって自動的に続行されます。実行エンティティのノードは、自動的に CONTINUATION コマンドを送信して次のステップを促します。
+プライベート pacts も順次実行されるステップで構成されますが、各ステップは "entity" 引数で選択されたエンティティ ノードでのみ実行でき、他のエンティティ ノードはステップを無視 します。
+プライべート pacts は、初期ステップが送信された後、ブロックチェーン プラットフォームによって自動的に続行されます。
+実行エンティティのノードは、自動的に CONTINUATION コマンドを送信して次のステップを促します。
 
 ### 失敗、ロールバック、キャンセル<a id="sec-2-7-3"></a>
 
 失敗処理は、パブリック pacts とプライベート pacts で大きく異なります。
 
-パブリック pacts では、このステップで pact を 中止 できるかを示すロールバック式が指定されます。中止できる場合、参加者は次のステップが実行される前に CANCEL メッセージを送信してキャンセルを実行できます。pact の最後のステップが実行された後は、pact が終了し、ロール バックすることはできません。パブリック ステップでの失敗は、pact 以外のトランザクションでの失敗と同様、すべての変更がロール バックされます。したがって pacts は意図的にしか中止できないため、必要になりうるすべての中止選択を前もって用意しましょう。
+パブリック pacts では、このステップで pact を 中止 できるかを示すロールバック式が指定されます。
+中止できる場合、参加者は次のステップが実行される前に CANCEL メッセージを送信してキャンセルを実行できます。
+pact の最後のステップが実行された後は、pact が終了し、ロール バックすることはできません。
+パブリック ステップでの失敗は、pact 以外のトランザクションでの失敗と同様、すべての変更がロール バックされます。
+したがって pacts は意図的にしか中止できないため、必要になりうるすべての中止選択を前もって用意しましょう。
 
-プライベート pact では、ステップの順次実行が、ブロックチェーン プラットフォーム自体によって自動に行われます。失敗が発生すると ROLLBACK メッセージが実行エンティティ ノードから送信されます。これにより、前のステップで指定されたロールバック式が発動され、そのステップのエンティティによって実行されます。この失敗は次に、新しい ROLLBACK トランザクションとして前のステップに戻り、最初のステップがロール バックを終えたときに完了します。
+プライベート pact では、ステップの順次実行が、ブロックチェーン プラットフォーム自体によって自動に行われます。
+失敗が発生すると ROLLBACK メッセージが実行エンティティ ノードから送信されます。
+これにより、前のステップで指定されたロールバック式が発動され、そのステップのエンティティによって実行されます。
+この失敗は次に、新しい ROLLBACK トランザクションとして前のステップに戻り、最初のステップがロール バックを終えたときに完了します。
 
 ### イールドと再開<a id="sec-2-7-4"></a>
 
-ステップは、[yield](https://pact-language.readthedocs.io/en/latest/pact-reference.html#yield) と [resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) によって、次のステップに値を渡すことができます。パブリックの場合、この値はブロックチェーンの pact 範囲内で維持されるため改ざんできません。プライベートの場合、これは単に、実行されたエンティティから RESUME メッセージと共に送信される値です。
+ステップは、[yield](https://pact-language.readthedocs.io/en/latest/pact-reference.html#yield) と [resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) によって、次のステップに値を渡すことができます。
+パブリックの場合、この値はブロックチェーンの pact 範囲内で維持されるため改ざんできません。
+プライベートの場合、これは単に、実行されたエンティティから RESUME メッセージと共に送信される値です。
 
 ### Pact 実行スコープと `pact-id`<a id="sec-2-7-5"></a>
 
-pact は開始されるたびに、特有の ID が付けられます。[pact-id](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pact-id) 関数は現在実行されている pact の ID を譲るか、pact 範囲内で実行されていない場合は失敗します。したがって、キーセットと署名を使用するのと同じように、この仕組みを使用してリソースのアクセスを保護することができます。使い方の例としては、特定の pact のコンテキスト内でのみ使用できるエスクロー (第三者預託) アカウントを作成すれば、第三者を置く必要が多くの場合なくなります。
+pact は開始されるたびに、特有の ID が付けられます。
+[pact-id](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pact-id) 関数は現在実行されている pact の ID を譲るか、pact 範囲内で実行されていない場合は失敗します。
+したがって、キーセットと署名を使用するのと同じように、この仕組みを使用してリソースのアクセスを保護することができます。
+使い方の例としては、特定の pact のコンテキスト内でのみ使用できるエスクロー (第三者預託) アカウントを作成すれば、第三者を置く必要が多くの場合なくなります。
 
 ### pacts のテスト<a id="sec-2-7-6"></a>
 
 pacts をテストするには、repl 関数 [env-entity](https://pact-language.readthedocs.io/en/latest/pact-reference.html)、[env-step](https://pact-language.readthedocs.io/en/latest/pact-reference.html)、[pact-state](https://pact-language.readthedocs.io/en/latest/pact-reference.html#pact-state) を使用して pactの仮実行を行います。
 
-また pact サーバー API で pact 実行をシミュレートすることもできます。これには、[継続リクエスト](https://pact-language.readthedocs.io/en/latest/pact-reference.html#request-yaml) yaml ファイルを `cont` ペイロード付きの API リクエストにフォーマットします。
+また pact サーバー API で pact 実行をシミュレートすることもできます。
+これには、[継続リクエスト](https://pact-language.readthedocs.io/en/latest/pact-reference.html#request-yaml) yaml ファイルを `cont` ペイロード付きの API リクエストにフォーマットします。
 
 ## モジュールの依存管理<a id="sec-2-8"></a>
 
@@ -990,7 +829,9 @@ Pact は、モジュールと他の Pact モジュールとの依存関係を管
 
 ### モジュール ハッシュ<a id="sec-2-8-1"></a>
 
-ロードされた pact モジュールは、モジュールのソース コード内容に基づいて計算されたハッシュに関連付けられます。このモジュール ハッシュは、モジュールのバージョンを一意に識別します。モジュール ハッシュは、[describe-module](https://pact-language.readthedocs.io/en/latest/pact-reference.html#describe-module) を使用して次のように確認できます。
+ロードされた pact モジュールは、モジュールのソース コード内容に基づいて計算されたハッシュに関連付けられます。
+このモジュール ハッシュは、モジュールのバージョンを一意に識別します。
+モジュール ハッシュは、[describe-module](https://pact-language.readthedocs.io/en/latest/pact-reference.html#describe-module) を使用して次のように確認できます。
 
 ```
 pact> (at "hash" (describe-module 'accounts))
@@ -999,17 +840,27 @@ pact> (at "hash" (describe-module 'accounts))
 
 ### `use` を使用したモジュール バージョンの固定<a id="sec-2-8-2"></a>
 
-[use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) という関数を使用すると、モジュール ハッシュを指定して、依存関係のバージョンを固定できます。モジュール宣言内で使用すると、依存関係ハッシュ値がモジュールのハッシュに導入されます。これにより、"依存関係のみ" のアップグレードで、アップグレードをモジュール バージョンにプッシュできます。
+[use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) という関数を使用すると、モジュール ハッシュを指定して、依存関係のバージョンを固定できます。
+モジュール宣言内で使用すると、依存関係ハッシュ値がモジュールのハッシュに導入されます。
+これにより、"依存関係のみ" のアップグレードで、アップグレードをモジュール バージョンにプッシュできます。
 
 ### インライン化された依存のモジュール<a id="sec-2-8-3"></a>
 
-Pact では、モジュールがロードされると、すべてのユーザーコード参照がインライン化されます。 つまり、アップストリームのコードがダウンストリームのモジュールに直接挿入されます。 ここでインラインされた他所のコードは、もう変えられません。モジュール コードを再ロードしない限り、依存のモジュールをアップグレードすることはできません。
+Pact では、モジュールがロードされると、すべてのユーザーコード参照がインライン化されます。
+ つまり、アップストリームのコードがダウンストリームのモジュールに直接挿入されます。
+ ここでインラインされた他所のコードは、もう変えられません。
+モジュール コードを再ロードしない限り、依存のモジュールをアップグレードすることはできません。
 
-これはユーザーにとっても安心な仕様だと言えます。自らのモジュールがロードされれば、 アップストリームからの干渉はありません。しかしこれは、そのアップストリームの開発者にとって大問題でもあります。 バッグを解決したいときや新しい機能を導入したい場合は、コードの古いバージョンが 既にユーザーモジュールにインラインされたため、変更を加えられなくなります。この問題の解決は次の部分で説明されます。
+これはユーザーにとっても安心な仕様だと言えます。
+自らのモジュールがロードされれば、 アップストリームからの干渉はありません。
+しかしこれは、そのアップストリームの開発者にとって大問題でもあります。
+ バッグを解決したいときや新しい機能を導入したい場合は、コードの古いバージョンが 既にユーザーモジュールにインラインされたため、変更を加えられなくなります。この問題の解決は次の部分で説明されます。
 
 ### ハッシュの「ブレス」<a id="sec-2-8-4"></a>
 
-上で説明した問題のバランスを取る方法があります。Pact では、アップストリームのモジュールがそれに依存を持つダウンストリームのコードを無効にすることができます。アップストリームの開発者が [bless](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bless) （ブレス）という特殊形式をモジュールに入れれば、特定の古いバージョンにのみテーブルへのアクセスが許可されます。
+上で説明した問題のバランスを取る方法があります。
+Pact では、アップストリームのモジュールがそれに依存を持つダウンストリームのコードを無効にすることができます。
+アップストリームの開発者が [bless](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bless) （ブレス）という特殊形式をモジュールに入れれば、特定の古いバージョンにのみテーブルへのアクセスが許可されます。
 
 ```lisp
 (module provider 'keyset
@@ -1019,11 +870,18 @@ Pact では、モジュールがロードされると、すべてのユーザー
 )
 ```
 
-これを “provider” というモジュールの最新の形とし、指定されたハッシュは “provider” の古いバージョンに一致します。このハッシュ以外のバージョンがデータベースを更新しようとする際、失敗します。 幸い、副作用（データベースの更新など）のないコードは、ブレスはどうであれ、無効になることは決してありません。 これはアップストリームからの妨害を防止します。
+これを “provider” というモジュールの最新の形とし、指定されたハッシュは “provider” の古いバージョンに一致します。
+このハッシュ以外のバージョンがデータベースを更新しようとする際、失敗します。
+ 幸い、副作用（データベースの更新など）のないコードは、ブレスはどうであれ、無効になることは決してありません。
+ これはアップストリームからの妨害を防止します。
 
 ### "v2" モジュールによる段階的アップグレード<a id="sec-2-8-5"></a>
 
-アップストリームの開発者は、ブレスの仕組みを使用して、重要なアップグレードを段階的に実施できます。 これには、アップグレード前のモジュールの名前を新しいバージョンの名前に変更し、古いモジュールを、最新バージョン (およびそれ以前の適切なバージョン) のみをブレスする新しい “空の” モジュールに置き換えます。 新しいユーザーは "v1" コードのインポートに失敗し、新しいバージョンを使用する必要がありますが、 既存のユーザーは、期限まで古いバージョンを引き続き使用できます。 期限とは、モジュールの開発者がすべてのブレスを削除していいと判断する期間のことです。そして、"空の" モジュールは、ユーザーデータを新しいモジュールに移行するための移行機能も提供できます。
+アップストリームの開発者は、ブレスの仕組みを使用して、重要なアップグレードを段階的に実施できます。
+ これには、アップグレード前のモジュールの名前を新しいバージョンの名前に変更し、古いモジュールを、最新バージョン (およびそれ以前の適切なバージョン) のみをブレスする新しい “空の” モジュールに置き換えます。
+ 新しいユーザーは "v1" コードのインポートに失敗し、新しいバージョンを使用する必要がありますが、 既存のユーザーは、期限まで古いバージョンを引き続き使用できます。
+ 期限とは、モジュールの開発者がすべてのブレスを削除していいと判断する期間のことです。
+そして、"空の" モジュールは、ユーザーデータを新しいモジュールに移行するための移行機能も提供できます。
 
 # シンタックス<a id="sec-3"></a>
 
@@ -1049,7 +907,8 @@ pact> "a string"
 
 ### シンボル<a id="sec-3-1-2"></a>
 
-シンボルとは、関数やテーブル名など、ランタイム内の一意の項目を表す文字列リテラルです。シンボル表現は内部的には単なる文字列リテラルであり、慣用に従って使用できます。
+シンボルとは、関数やテーブル名など、ランタイム内の一意の項目を表す文字列リテラルです。
+シンボル表現は内部的には単なる文字列リテラルであり、慣用に従って使用できます。
 
 シンボルは、引用符を前に付けて作成するため、空白や複数行の記述はサポートされていません。
 
@@ -1093,7 +952,9 @@ false
 
 ### リスト<a id="sec-3-1-6"></a>
 
-リストリテラルは、角かっこを使って作成します。必要に応じて、カンマで区切ることができます。均一なリテラル リストは、解析時に型が与えられます。
+リストリテラルは、角かっこを使って作成します。
+必要に応じて、カンマで区切ることができます。
+均一なリテラル リストは、解析時に型が与えられます。
 
 ```
 pact> [1 2 3]
@@ -1111,7 +972,8 @@ pact> (typeof [1 2 true])
 
 ### オブジェクト<a id="sec-3-1-7"></a>
 
-オブジェクトは Python や Javascript でも見るディクショナリであり、中かっこの中に、キーと値のペアをコロン (:) で区切って指定します。アプリケーションによっては (例えばデータベースの更新など)、キーを文字列にする必要があります。
+オブジェクトは Python や Javascript でも見るディクショナリであり、中かっこの中に、キーと値のペアをコロン (:) で区切って指定します。
+アプリケーションによっては (例えばデータベースの更新など)、キーを文字列にする必要があります。
 
 ```
 pact> { "foo": (+ 1 2), "bar": "baz" }
@@ -1120,7 +982,8 @@ pact> { "foo": (+ 1 2), "bar": "baz" }
 
 ### バインディング<a id="sec-3-1-8"></a>
 
-バインディングは、オブジェクトと同様に中かっこで作成され、 `:=` 演算子を使用してデータベースの結果を変数にバインドします。これらは、[with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read)、[with-default-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-default-read)、[bind](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bind)、[resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) で使用して、行内の名前付き列、またはオブジェクトの値に変数を割り当てます。
+バインディングは、オブジェクトと同様に中かっこで作成され、 `:=` 演算子を使用してデータベースの結果を変数にバインドします。
+これらは、[with-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-read)、[with-default-read](https://pact-language.readthedocs.io/en/latest/pact-reference.html#with-default-read)、[bind](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bind)、[resume](https://pact-language.readthedocs.io/en/latest/pact-reference.html#resume) で使用して、行内の名前付き列、またはオブジェクトの値に変数を割り当てます。
 
 ```lisp
 (defun check-balance (id)
@@ -1196,7 +1059,8 @@ object:{person}
   (/ (+ a b) 2))
 ```
 
-ただしここでは、ドキュメント文字列以外のメタデータも指定できます。”@model” を加えれば、コードの正確性を自動的に確認してくれる `property` を定義できます。
+ただしここでは、ドキュメント文字列以外のメタデータも指定できます。
+”@model” を加えれば、コードの正確性を自動的に確認してくれる `property` を定義できます。
 
 ```lisp
 (defun average (a b)
@@ -1205,7 +1069,8 @@ object:{person}
   (/ (+ a b) 2))
 ```
 
-やはり、 `foo` も `@doc foo` の略した形です。 将来的には、使用できるメタデータの種類が追加される予定です。
+やはり、 `foo` も `@doc foo` の略した形です。
+ 将来的には、使用できるメタデータの種類が追加される予定です。
 
 Properties の詳細は[こちら](https://pact-language.readthedocs.io/en/latest/pact-properties.html)へ。
 
@@ -1215,7 +1080,8 @@ Properties の詳細は[こちら](https://pact-language.readthedocs.io/en/lates
 (bless HASH)
 ```
 
-モジュール宣言内で、HASH によってそのモジュールの前のバージョンを ”ブレス” し、データベースのアクセス許可を設定します。この仕組みについては、「[モジュールの依存管理](https://pact-language.readthedocs.io/en/latest/pact-reference.html#dependency-management)」を参照してください。
+モジュール宣言内で、HASH によってそのモジュールの前のバージョンを ”ブレス” し、データベースのアクセス許可を設定します。
+この仕組みについては、「[モジュールの依存管理](https://pact-language.readthedocs.io/en/latest/pact-reference.html#dependency-management)」を参照してください。
 
 ```lisp
 (module provider 'keyset
@@ -1231,7 +1097,8 @@ Properties の詳細は[こちら](https://pact-language.readthedocs.io/en/lates
 (defun NAME ARGLIST [DOC-OR-META] BODY...)
 ```
 
-NAME を関数として定義し、ARGLIST を引数として指定し、オプションで DOC-OR-META を指定します。引数は、1 つ以上の式である BODY のスコープで使えます。
+NAME を関数として定義し、ARGLIST を引数として指定し、オプションで DOC-OR-META を指定します。
+引数は、1 つ以上の式である BODY のスコープで使えます。
 
 ```lisp
 (defun add3 (a b c) (+ a (+ b c)))
@@ -1247,7 +1114,8 @@ NAME を関数として定義し、ARGLIST を引数として指定し、オプ�
 (defconst NAME VALUE [DOC-OR-META])
 ```
 
-NAME を VALUE として定義し、オプションで DOC-OR-META を指定します。値はモジュールのロード時に評価され記録されます。
+NAME を VALUE として定義し、オプションで DOC-OR-META を指定します。
+値はモジュールのロード時に評価され記録されます。
 
 ```lisp
 (defconst COLOR_RED="#FF0000" "Red in hex")
@@ -1263,7 +1131,10 @@ NAME を VALUE として定義し、オプションで DOC-OR-META を指定し�
 (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 ```
 
-NAME を、"pact"、つまり複数ステップ計算として定義します。[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) とほぼ同じですが、厳格な順序で実行される[ステップ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step)で本体を構成する必要があります。ステップは、"パブリック" (エンティティ指定なし)、または "プライベート" (エンティティ指定あり) のいずれかで統一する必要があります。プライベート ステップで失敗が生じた場合、逆の順序で "ロールバック カスケード" が発生します。
+NAME を、"pact"、つまり複数ステップ計算として定義します。
+[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) とほぼ同じですが、厳格な順序で実行される[ステップ](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step)で本体を構成する必要があります。
+ステップは、"パブリック" (エンティティ指定なし)、または "プライベート" (エンティティ指定あり) のいずれかで統一する必要があります。
+プライベート ステップで失敗が生じた場合、逆の順序で "ロールバック カスケード" が発生します。
 
 ```lisp
 (defpact payment (payer payer-entity payee payee-entity amount)
@@ -1280,7 +1151,8 @@ NAME を、"pact"、つまり複数ステップ計算として定義します。
 (defschema NAME [DOC-OR-META] FIELDS...)
 ```
 
-NAME を、FIELDS のリストを指定する "スキーマ" として定義します。各フィールドは、 `FIELDNAME[:FIELDTYPE]` の形式です。
+NAME を、FIELDS のリストを指定する "スキーマ" として定義します。
+各フィールドは、 `FIELDNAME[:FIELDTYPE]` の形式です。
 
 ```lisp
 (defschema accounts
@@ -1297,7 +1169,8 @@ NAME を、FIELDS のリストを指定する "スキーマ" として定義し�
 (deftable NAME[:SCHEMA] [DOC-OR-META])
 ```
 
-NAME を、データベース関数で使用される "テーブル" として定義します。テーブルは、[create-table](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table) で作成する必要があることに注意してください。
+NAME を、データベース関数で使用される "テーブル" として定義します。
+テーブルは、[create-table](https://pact-language.readthedocs.io/en/latest/pact-reference.html#create-table) で作成する必要があることに注意してください。
 
 ### let<a id="sec-3-3-8"></a>
 
@@ -1305,7 +1178,9 @@ NAME を、データベース関数で使用される "テーブル" として�
 (let (BINDPAIR [BINDPAIR [...]]) BODY)
 ```
 
-BINDPAIR 内の変数を BODY のスコープ内にバインドします。BINDPAIR 内の変数は、同じ `let` バインディング内の以前に宣言された変数を参照することはできません。その場合は、[let\*](https://pact-language.readthedocs.io/en/latest/pact-reference.html#letstar) を使用してください。
+BINDPAIR 内の変数を BODY のスコープ内にバインドします。
+BINDPAIR 内の変数は、同じ `let` バインディング内の以前に宣言された変数を参照することはできません。
+その場合は、[let\*](https://pact-language.readthedocs.io/en/latest/pact-reference.html#letstar) を使用してください。
 
 ```lisp
 (let ((x 2)
@@ -1320,7 +1195,10 @@ BINDPAIR 内の変数を BODY のスコープ内にバインドします。BINDP
 (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 ```
 
-BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は、同じ `let` で以前に宣言された BINDPAIRS を参照できます。 `let*` は、コンパイル時に、各 BINDPAIR のネストされた `let` 呼び出しに拡張されます。そのため、可能な限り、let の使用が推奨されます。
+BINDPAIR 内の変数を BODY の範囲内にバインドします。
+変数は、同じ `let` で以前に宣言された BINDPAIRS を参照できます。
+ `let*` は、コンパイル時に、各 BINDPAIR のネストされた `let` 呼び出しに拡張されます。
+そのため、可能な限り、let の使用が推奨されます。
 
 ```lisp
 (let* ((x 2)
@@ -1336,7 +1214,8 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は�
 (step ENTITY EXPR)
 ```
 
-[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 内のステップは、前のステップが前のトランザクションで実行され、後のステップが後のトランザクションで実行されるように定義します。ENTITY を指定すると、このステップはプライベートトランザクションとなり、ENTITY のみがこのステップを実行して、他の参加者はこのステップを無視します。
+[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 内のステップは、前のステップが前のトランザクションで実行され、後のステップが後のトランザクションで実行されるように定義します。
+ENTITY を指定すると、このステップはプライベートトランザクションとなり、ENTITY のみがこのステップを実行して、他の参加者はこのステップを無視します。
 
 ### step-with-rollback<a id="sec-3-3-11"></a>
 
@@ -1345,7 +1224,10 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は�
 (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 ```
 
-[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 内でステップを定義します。[step](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step) に似ていますが、ROLLBACK-EXPR を指定する点が異なります。ENTITY を指定すると、ROLLBACK-EXPR は後続のステップが失敗した場合のみ、失敗したステップから最初のステップまで逆方向に実行される "ロールバック カスケード" の一部として実行されます。ENTITY を指定しない場合、ROLLBACK-EXPR 関数は、参加者が意図的に実行する "キャンセル関数" として機能します。
+[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 内でステップを定義します。
+[step](https://pact-language.readthedocs.io/en/latest/pact-reference.html#step) に似ていますが、ROLLBACK-EXPR を指定する点が異なります。
+ENTITY を指定すると、ROLLBACK-EXPR は後続のステップが失敗した場合のみ、失敗したステップから最初のステップまで逆方向に実行される "ロールバック カスケード" の一部として実行されます。
+ENTITY を指定しない場合、ROLLBACK-EXPR 関数は、参加者が意図的に実行する "キャンセル関数" として機能します。
 
 ### use<a id="sec-3-3-12"></a>
 
@@ -1354,7 +1236,11 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は�
 (use MODULE HASH)
 ```
 
-既存の MODULE を名前空間にインポートします。コードファイルの一番上、またはモジュール宣言内でのみ使えます。MODULE は、文字列、シンボル、アトムのいずれかです。 HASH を指定すると、モジュール ハッシュが HASH と一致しているかどうかが検証され、そうでない場合は失敗します。ブロックチェーン上にロードされたモジュールのハッシュを照会するには、[describe-module](https://pact-language.readthedocs.io/en/latest/pact-reference.html#describe-module) を使用します。
+既存の MODULE を名前空間にインポートします。
+コードファイルの一番上、またはモジュール宣言内でのみ使えます。
+MODULE は、文字列、シンボル、アトムのいずれかです。
+ HASH を指定すると、モジュール ハッシュが HASH と一致しているかどうかが検証され、そうでない場合は失敗します。
+ブロックチェーン上にロードされたモジュールのハッシュを照会するには、[describe-module](https://pact-language.readthedocs.io/en/latest/pact-reference.html#describe-module) を使用します。
 
 ```lisp
 (use accounts)
@@ -1368,7 +1254,9 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は�
 (module NAME KEYSET [DOC-OR-META] DEFS...)
 ```
 
-キーセット KEYSET によってガードされたモジュール NAME を定義してブロックチェーンにインストールします。オプションで DOC-OR-META を指定できます。DEFS には、[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 式または [defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 式のみを指定できます。
+キーセット KEYSET によってガードされたモジュール NAME を定義してブロックチェーンにインストールします。
+オプションで DOC-OR-META を指定できます。
+DEFS には、[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 式または [defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 式のみを指定できます。
 
 ```lisp
 (module accounts 'accounts-admin
@@ -1394,15 +1282,20 @@ BINDPAIR 内の変数を BODY の範囲内にバインドします。変数は�
 
 ### アトム<a id="sec-3-4-1"></a>
 
-アトムは先頭に文字または許可されたシンボルを使用し、文字、数字および許可されたシンボルで構成される非予約語です。許可されたシンボルは、%#+-\\\_&$@<>=?\*!|/ です。アトムは、[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 形式、[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 形式、[binding](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bindings) 形式によってバインドされる変数、 または [use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) によって名前空間にインポートされたシンボルに解決する必要があります。
+アトムは先頭に文字または許可されたシンボルを使用し、文字、数字および許可されたシンボルで構成される非予約語です。
+許可されたシンボルは、%#+-\\\_&$@<>=?\*!|/ です。
+アトムは、[defun](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 形式、[defpact](https://pact-language.readthedocs.io/en/latest/pact-reference.html) 形式、[binding](https://pact-language.readthedocs.io/en/latest/pact-reference.html#bindings) 形式によってバインドされる変数、 または [use](https://pact-language.readthedocs.io/en/latest/pact-reference.html#use) によって名前空間にインポートされたシンボルに解決する必要があります。
 
 ### S 式<a id="sec-3-4-2"></a>
 
-S 式はかっこで囲って作成されます。最初のアトムは、式が[特殊形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#special)か関数適用かを示します。関数適用の場合、最初のアトムは定義を参照する必要があります。
+S 式はかっこで囲って作成されます。
+最初のアトムは、式が[特殊形式](https://pact-language.readthedocs.io/en/latest/pact-reference.html#special)か関数適用かを示します。
+関数適用の場合、最初のアトムは定義を参照する必要があります。
 
 1.  部分適用
 
-    適用する引数が必要な数よりも少なくても、コンテキストによってはその関数の有効な/部分適用/となります。ただし、これがサポートされるのは Pact の[関数型関数](https://pact-language.readthedocs.io/en/latest/pact-reference.html#functional-concepts)のみであり、それ以外は、ランタイム エラーとなります。
+    適用する引数が必要な数よりも少なくても、コンテキストによってはその関数の有効な/部分適用/となります。
+ただし、これがサポートされるのは Pact の[関数型関数](https://pact-language.readthedocs.io/en/latest/pact-reference.html#functional-concepts)のみであり、それ以外は、ランタイム エラーとなります。
 
 ### 参照<a id="sec-3-4-3"></a>
 
@@ -1425,11 +1318,13 @@ pact> transfer
 from SRC to DEST\")"
 ```
 
-参照は `use` よりも高速に解決できるため、トランザクションでは参照の方が適切です。 しかし、モジュール定義では、 `use` の方が読みやすくなります。
+参照は `use` よりも高速に解決できるため、トランザクションでは参照の方が適切です。
+ しかし、モジュール定義では、 `use` の方が読みやすくなります。
 
 # 時間形式<a id="sec-4"></a>
 
-Pact は、Haskell の [thyme ライブラリ](http://hackage.haskell.org/package/thyme) を利用して、時間値の計算を高速に処理します。 以下に示すように、[parse-time](https://pact-language.readthedocs.io/en/latest/pact-reference.html#parse-time) 関数と [format-time](https://pact-language.readthedocs.io/en/latest/pact-reference.html#format-time) 関数では、GNU strftime から派生した形式コードを指定し、一部の拡張機能を利用できます。
+Pact は、Haskell の [thyme ライブラリ](http://hackage.haskell.org/package/thyme) を利用して、時間値の計算を高速に処理します。
+ 以下に示すように、[parse-time](https://pact-language.readthedocs.io/en/latest/pact-reference.html#parse-time) 関数と [format-time](https://pact-language.readthedocs.io/en/latest/pact-reference.html#format-time) 関数では、GNU strftime から派生した形式コードを指定し、一部の拡張機能を利用できます。
 
 %% - リテラル "%"
 
@@ -1519,7 +1414,9 @@ Pact は、Haskell の [thyme ライブラリ](http://hackage.haskell.org/packag
 
 ## デフォルト形式と JSON のシリアル化<a id="sec-4-1"></a>
 
-デフォルト形式は、UTC ISO8601 の日付 + 時刻形式、“%Y-%m-%dT%H:%M:%SZ” であり、この形式で [time](https://pact-language.readthedocs.io/en/latest/pact-functions.html#id4) 関数に入力できます。time オブジェクトは、内部的にはマイクロ秒までの解像度をサポートしますが、Pact インタープリターから JSON として返される値は、デフォルト形式でシリアル化されます。より高い解像度が必要な場合は、 `%v` とその関連項目を使用して、明示的に時間形式を設定してください。
+デフォルト形式は、UTC ISO8601 の日付 + 時刻形式、“%Y-%m-%dT%H:%M:%SZ” であり、この形式で [time](https://pact-language.readthedocs.io/en/latest/pact-functions.html#id4) 関数に入力できます。
+time オブジェクトは、内部的にはマイクロ秒までの解像度をサポートしますが、Pact インタープリターから JSON として返される値は、デフォルト形式でシリアル化されます。
+より高い解像度が必要な場合は、 `%v` とその関連項目を使用して、明示的に時間形式を設定してください。
 
 ## 例<a id="sec-4-2"></a>
 
@@ -1548,19 +1445,25 @@ pact> (format-time "%Y-%m-/%d/ %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45
 
 ## 試行的なベータ版の機能に関する重要な警告<a id="sec-5-1"></a>
 
-このセクションでは、Pact 2.4.\* 以降のバージョンに搭載されているデータベース シリアル化形式について記載されています。しかし、この形式はまだベータ版です。これは、当社がこのデータを直接エクスポートする具体的な RDBMS バックエンドと展開について取り組みを開始してからまだ日が浅いためです。
+このセクションでは、Pact 2.4.\* 以降のバージョンに搭載されているデータベース シリアル化形式について記載されています。
+しかし、この形式はまだベータ版です。
+これは、当社がこのデータを直接エクスポートする具体的な RDBMS バックエンドと展開について取り組みを開始してからまだ日が浅いためです。
 
-したがって、当社はこれらの形式について後方互換性を保証せず、将来のバージョンにおいて改良された形式に移行する権利を留保します。Pact では API の安定性については、お客様にとっての互換性とパフォーマンスが最優先事項ですが、バックエンドのエクスポートはまだ試行的な機能です。
+したがって、当社はこれらの形式について後方互換性を保証せず、将来のバージョンにおいて改良された形式に移行する権利を留保します。
+Pact では API の安定性については、お客様にとっての互換性とパフォーマンスが最優先事項ですが、バックエンドのエクスポートはまだ試行的な機能です。
 
 将来的にはこれらの形式について安定性が確保できると考えており、そのときには後方互換性が保証されます。
 
 ## JSON 値によるキー値の形式<a id="sec-5-2"></a>
 
-Pact はすべての値を 2 列、2 値の構造でデータベースに格納し、すべての値は JSON で表現されます。このアプローチは、JSONの汎用性に重点を置いて選択されたものです。
+Pact はすべての値を 2 列、2 値の構造でデータベースに格納し、すべての値は JSON で表現されます。
+このアプローチは、JSONの汎用性に重点を置いて選択されたものです。
 
 透過性: JSON は、人間が判別可能な形式であり、値を目視で確認できます。
 
-移植性: 本書執筆の時点 (2018 年) で、JSON はほぼすべてのデータベース バックエンドにサポートされています。キー/値構造により、RDBMS 以外の RocksDB などのバックエンドも使用でき、また SQL DDL を単純な主要キー構造で容易に使用できます。インデックス処理はサポートされておらず、不要です。
+移植性: 本書執筆の時点 (2018 年) で、JSON はほぼすべてのデータベース バックエンドにサポートされています。
+キー/値構造により、RDBMS 以外の RocksDB などのバックエンドも使用でき、また SQL DDL を単純な主要キー構造で容易に使用できます。
+インデックス処理はサポートされておらず、不要です。
 
 ## Pact データ型のコーデック<a id="sec-5-3"></a>
 
@@ -1570,7 +1473,9 @@ Pact はすべての値を 2 列、2 値の構造でデータベースに格納�
 
 大きな整数を除き、値は直接 JSON の数値にエンコードされます。
 
-JSON/Javascript で、何をもって "大きな整数" とするかは議論があります。当社では `[-2^53 .. 2^53]` という範囲を使用しています (詳細については、[こちら](http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html)を参照してください)。大きな整数については、文字化された整数値を使用して、JSON シングルトン オブジェクトがエンコードされます。
+JSON/Javascript で、何をもって "大きな整数" とするかは議論があります。
+当社では `[-2^53 .. 2^53]` という範囲を使用しています (詳細については、[こちら](http://blog.vjeux.com/2010/javascript/javascript-max_int-number-limits.html)を参照してください)。
+大きな整数については、文字化された整数値を使用して、JSON シングルトン オブジェクトがエンコードされます。
 
 ```js
 /* small integers are just a number */
@@ -1591,7 +1496,8 @@ JSON/Javascript で、何をもって "大きな整数" とするかは議論が
 }
 ```
 
-仮数の値は、上記の整数形式を使用します。小数に関する資料に記載されているとおり、値は次のように計算できます。
+仮数の値は、上記の整数形式を使用します。
+小数に関する資料に記載されているとおり、値は次のように計算できます。
 
 ```
 MANTISSA / (10 ^ PLACES)
@@ -1681,7 +1587,8 @@ JSON の行の値には、ユーザー データ テーブルと同じエンコ�
 
 *idx* `string` *object* `object:<{o}>` *→* `<a>`
 
-リストの場合 IDX に一致する添字の値を譲ります。オブジェクトの場合 IDX に一致するキーの関連された値を譲ります。
+リストの場合 IDX に一致する添字の値を譲ります。
+オブジェクトの場合 IDX に一致するキーの関連された値を譲ります。
 
 ```
 pact> (at 1 [1 2 3])
@@ -1695,7 +1602,8 @@ pact> (at "bar" { "foo": 1, "bar": 2 })
 
 *src* `object:<{row}>` *binding* `binding:<{row}>` *→* `<a>`
 
-SRC を評価し、BINDING 内でキーの指定によって値を抽出してある名前に”バインド”します。バインドされた名前は後続の式で使えます。
+SRC を評価し、BINDING 内でキーの指定によって値を抽出してある名前に”バインド”します。
+バインドされた名前は後続の式で使えます。
 
 ```
 pact> (bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
@@ -1755,7 +1663,8 @@ true
 
 *keys* `[string]` *object* `object:<{o}>` *→* `object:<{o}>`
 
-COUNT の数の値を LIST (または文字列) から除くか、KEYS にキーがあるエントリを OBJECT から除きます。COUNT が負の数の場合は、後ろから除きます。
+COUNT の数の値を LIST (または文字列) から除くか、KEYS にキーがあるエントリを OBJECT から除きます。
+COUNT が負の数の場合は、後ろから除きます。
 
 ```
 pact> (drop 2 "vwxyz")
@@ -1783,7 +1692,8 @@ pact> (enforce (!= (+ 2 2) 4) "Chaos reigns")
 
 *msg* `string` *tests* `[bool]` *→* `bool`
 
-TESTS を順番に実行します (副作用なしのコンテキストで、かつキーセットを施行)。すべてのテストが失敗した場合、トランザクションが失敗します。最初の成功時に短絡評価されます。
+TESTS を順番に実行します (副作用なしのコンテキストで、かつキーセットを施行)。
+すべてのテストが失敗した場合、トランザクションが失敗します。最初の成功時に短絡評価されます。
 
 ```
 pact> (enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
@@ -1796,7 +1706,9 @@ true
 
 *min-version* `string` *max-version* `string` *→* `bool`
 
-MIN-VERSION 以上、または MAX-VERSION 以下のランタイム pact バージョンを施行します。バージョンの値は、左側の数値が一致していれば一致しているものと判断されます。つまり、"2.2.3" が "2"、"2.2"、"2.2.3" のいずれかとして見なされます。
+MIN-VERSION 以上、または MAX-VERSION 以下のランタイム pact バージョンを施行します。
+バージョンの値は、左側の数値が一致していれば一致しているものと判断されます。
+つまり、"2.2.3" が "2"、"2.2"、"2.2.3" のいずれかとして見なされます。
 
 ```
 pact> (enforce-pact-version "2.3")
@@ -1807,7 +1719,8 @@ true
 
 *app* `(x:<a> -> bool)` *list* `[<a>]` *→* `[<a>]`
 
-すべての要素に APP を適用して LIST をフィルタリングします。APPの結果が True の場合に元の値が残されます。
+すべての要素に APP を適用して LIST をフィルタリングします。
+APPの結果が True の場合に元の値が残されます。
 
 ```
 pact> (filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
@@ -1840,7 +1753,8 @@ pact> (format "My {} has {}" ["dog" "fleas"])
 
 *value* `<a>` *→* `string`
 
-VALUE の BLAKE 2b 512 ビット ハッシュを計算します。文字列は直接変換され、その他の値は JSON 表現を使用して変換されます。
+VALUE の BLAKE 2b 512 ビット ハッシュを計算します。
+文字列は直接変換され、その他の値は JSON 表現を使用して変換されます。
 
 ```
 pact> (hash "hello")
@@ -1876,7 +1790,8 @@ pact> (if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 
 *x* `<a[[<l>],string,object:<{o}>]>` *→* `integer`
 
-X の長さを計算します。X にはリスト、文字列、オブジェクトのいずれかを指定できます。
+X の長さを計算します。
+X にはリスト、文字列、オブジェクトのいずれかを指定できます。
 
 ```
 pact> (length [1 2 3])
@@ -1893,7 +1808,9 @@ pact> (length { "a": 1, "b": 2 })
 
 *elems* `*` *→* `list`
 
-ELEMS からリストを作成します。Pact 2.1.1 以降では非推奨です。代わりにリテラル リストがサポートされています。
+ELEMS からリストを作成します。
+Pact 2.1.1 以降では非推奨です。
+代わりにリテラル リストがサポートされています。
 
 ```
 pact> (list 1 2 3)
@@ -1972,7 +1889,8 @@ pact> (pact-version)
 
 *key* `string` *→* `<a>`
 
-メッセージ データからの KEY、または KEY が指定されていない場合はデータ本体自体を読み取ります。値は、String -> string、Number -> integer、Boolean -> bool、List -> list、Object -> object の規則に従って pact 型に強制します。
+メッセージ データからの KEY、または KEY が指定されていない場合はデータ本体自体を読み取ります。
+値は、String -> string、Number -> integer、Boolean -> bool、List -> list、Object -> object の規則に従って pact 型に強制します。
 
 ```lisp
 (defun exec ()
@@ -2013,7 +1931,8 @@ pact> (reverse [1 2 3])
 
 *fields* `[string]` *values* `[object:<{o}>]` *→* `[object:<{o}>]`
 
-プリミティブ VALUES の単一型リストを並べ替えます。オブジェクトの場合 FIELDS リストを使用して並べ替えます。
+プリミティブ VALUES の単一型リストを並べ替えます。
+オブジェクトの場合 FIELDS リストを使用して並べ替えます。
 
 ```
 pact> (sort [3 1 2])
@@ -2029,7 +1948,8 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 
 *keys* `[string]` *object* `object:<{o}>` *→* `object:<{o}>`
 
-COUNT の数の値を LIST (または文字列) から取得するか、KEYS にキーがあるエントリを OBJECT から取得します。COUNT が負の数の場合は、最後から取得します。
+COUNT の数の値を LIST (または文字列) から取得するか、KEYS にキーがあるエントリを OBJECT から取得します。
+COUNT が負の数の場合は、最後から取得します。
 
 ```
 pact> (take 2 "abcd")
@@ -2079,7 +1999,9 @@ pact> (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age:
 
 *OBJECT* `object:<{y}>` *→* `object:<{y}>`
 
-OBJECT をイールドします。イールドされたオブジェクトは、次の pact ステップで "resume" を使って使用できます。オブジェクトはデータベースの行オブジェクトと同様、最上位レベルのみが "resume" でバインドでき、ネストされたオブジェクトは通常の JSON 値に変換されます。
+OBJECT をイールドします。
+イールドされたオブジェクトは、次の pact ステップで "resume" を使って使用できます。
+オブジェクトはデータベースの行オブジェクトと同様、最上位レベルのみが "resume" でバインドでき、ネストされたオブジェクトは通常の JSON 値に変換されます。
 
 ```lisp
 (yield { "amount": 100.0 })
@@ -2107,7 +2029,8 @@ KEYSET のメタデータを取得します。
 
 *module* `string` *→* `value`
 
-MODULE のメタデータを取得します。"name"、"hash"、"blessed"、"code"、"keyset" のフィールドを持つオブジェクトを返します。
+MODULE のメタデータを取得します。
+"name"、"hash"、"blessed"、"code"、"keyset" のフィールドを持つオブジェクトを返します。
 
 ```lisp
 (describe-module 'my-module)
@@ -2117,7 +2040,8 @@ MODULE のメタデータを取得します。"name"、"hash"、"blessed"、"cod
 
 *table* `table:<{row}>` *→* `value`
 
-TABLE のメタデータを取得します。"name"、"hash"、"blessed"、"code"、"keyset" のフィールドを持つオブジェクトを返します。
+TABLE のメタデータを取得します。
+"name"、"hash"、"blessed"、"code"、"keyset" のフィールドを持つオブジェクトを返します。
 
 ```lisp
 (describe-table accounts)
@@ -2127,7 +2051,8 @@ TABLE のメタデータを取得します。"name"、"hash"、"blessed"、"code
 
 *table* `table:<{row}>` *key* `string` *object* `object:<{row}>` *→* `string`
 
-TABLE の KEY に OBJECT 列データのエントリを書き込みます。KEY に既にデータが存在する場合は失敗します。
+TABLE の KEY に OBJECT 列データのエントリを書き込みます。
+KEY に既にデータが存在する場合は失敗します。
 
 ```lisp
 (insert 'accounts { "balance": 0.0, "note": "Created account."})
@@ -2137,7 +2062,8 @@ TABLE の KEY に OBJECT 列データのエントリを書き込みます。KEY 
 
 *table* `table:<{row}>` *key* `string` *txid* `integer` *→* `[object]`
 
-TXID 以降のトランザクションで TABLE の KEY に対して行われた更新を返します。結果はオブジェクトのリストで、それぞれのキーが各トランザクションの ID です。
+TXID 以降のトランザクションで TABLE の KEY に対して行われた更新を返します。
+結果はオブジェクトのリストで、それぞれのキーが各トランザクションの ID です。
 
 ```lisp
 (keylog 'accounts "Alice" 123485945)
@@ -2203,7 +2129,8 @@ TABLE の TXID 以上のすべての txid 値を返します。
 
 *table* `table:<{row}>` *key* `string` *object* `object:<{row}>` *→* `string`
 
-TABLE の KEY に OBJECT 列データを書き込みます。 KEY にデータが存在しない場合は失敗します。
+TABLE の KEY に OBJECT 列データを書き込みます。
+ KEY にデータが存在しない場合は失敗します。
 
 ```lisp
 (update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
@@ -2213,7 +2140,8 @@ TABLE の KEY に OBJECT 列データを書き込みます。 KEY にデータ�
 
 *table* `table:<{row}>` *key* `string` *defaults* `object:<{row}>` *bindings* `binding:<{row}>` *→* `<a>`
 
-TABLE から KEY の行を読み取り、列を BINDING によって後続の本体ステートメントにバインドする特殊形式です。行が見つからない場合、DEFAULTS (一致するキー名を持つオブジェクト) から列を読み取ります。
+TABLE から KEY の行を読み取り、列を BINDING によって後続の本体ステートメントにバインドする特殊形式です。
+行が見つからない場合、DEFAULTS (一致するキー名を持つオブジェクト) から列を読み取ります。
 
 ```lisp
 (with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
@@ -2249,7 +2177,8 @@ TABLE の KEY に OBJECT 列データを書き込みます。
 
 *time* `time` *seconds* `integer` *→* `time`
 
-SECONDS を TIME に追加します。SECONDS は整数または小数です。
+SECONDS を TIME に追加します。
+SECONDS は整数または小数です。
 
 ```
 pact> (add-time (time "2016-07-22T12:00:00Z") 15)
@@ -2284,7 +2213,8 @@ pact> (diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 
 *format* `string` *time* `time` *→* `string`
 
-FORMAT を使用して TIME の形式を設定します。[サポートされている形式については、「時間形式」の文書を](https://pact-language.readthedocs.io/en/latest/pact-functions.html#time-formats)参照してください。
+FORMAT を使用して TIME の形式を設定します。
+[サポートされている形式については、「時間形式」の文書を](https://pact-language.readthedocs.io/en/latest/pact-functions.html#time-formats)参照してください。
 
 ```
 pact> (format-time "%F" (time "2016-07-22T12:00:00Z"))
@@ -2321,7 +2251,8 @@ pact> (add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 
 *format* `string` *utcval* `string` *→* `time`
 
-FORMAT を使用して UTCVAL から時刻を作成します。[サポートされている形式については、「時間形式」の文書を](https://pact-language.readthedocs.io/en/latest/pact-functions.html#time-formats)参照してください。
+FORMAT を使用して UTCVAL から時刻を作成します。
+[サポートされている形式については、「時間形式」の文書を](https://pact-language.readthedocs.io/en/latest/pact-functions.html#time-formats)参照してください。
 
 ```
 pact> (parse-time "%F" "2016-09-12")
@@ -2717,7 +2648,8 @@ pact> (sqrt 25)
 
 *name* `string` *keyset* `string` *→* `string`
 
-KEYSET を使用して NAME というキーセットを定義します。キーセット NAME が既に存在する場合、新しい値に更新する前にキーセットが施行されます。
+KEYSET を使用して NAME というキーセットを定義します。
+キーセット NAME が既に存在する場合、新しい値に更新する前にキーセットが施行されます。
 
 ```lisp
 (define-keyset 'admin-keyset (read-keyset "keyset"))
@@ -2727,7 +2659,8 @@ KEYSET を使用して NAME というキーセットを定義します。キー�
 
 *keyset-or-name* `<k[string,keyset]>` *→* `bool`
 
-BODY の実行前に、メッセージ キーに対して KEYSET-OR-NAME を施行する特殊形式です。KEYSET-OR-NAME はキーセット名のシンボル、またはキーセット オブジェクトのいずれかです。
+BODY の実行前に、メッセージ キーに対して KEYSET-OR-NAME を施行する特殊形式です。
+KEYSET-OR-NAME はキーセット名のシンボル、またはキーセット オブジェクトのいずれかです。
 
 ```lisp
 (with-keyset 'admin-keyset ...)
@@ -2772,7 +2705,8 @@ true
 
 *key* `string` *→* keyset
 
-メッセージ データから KEY をキーセットとして読み取ります `({ “keys”: KEYLIST, “pred”: PREDFUN })` 。 PREDFUN は、キー述語でなければなりません。
+メッセージ データから KEY をキーセットとして読み取ります `({ “keys”: KEYLIST, “pred”: PREDFUN })` 。
+ PREDFUN は、キー述語でなければなりません。
 
 ```lisp
 (read-keyset "admin-keyset")
@@ -2780,7 +2714,8 @@ true
 
 ## REPL 専用の関数<a id="sec-6-6"></a>
 
-以下の関数は、インタラクティブな REPL、または .repl 拡張子を持つスクリプト ファイルに自動的にロードされます。これらは、ブロックチェーンベースの実行では利用できません。
+以下の関数は、インタラクティブな REPL、または .repl 拡張子を持つスクリプト ファイルに自動的にロードされます。
+これらは、ブロックチェーンベースの実行では利用できません。
 
 ### begin-tx<a id="sec-6-6-1"></a>
 
@@ -2788,7 +2723,8 @@ true
 
 *name* `string` *→* `string`
 
-トランザクションを開始します。オプションで NAME を指定できます。
+トランザクションを開始します。
+オプションで NAME を指定できます。
 
 ```lisp
 (begin-tx "load module")
@@ -2831,7 +2767,8 @@ pact> (env-data { "keyset": { "keys": ["my-key" "admin-key"], "pred": "keys-any"
 
 *entity* `string` *→* `string`
 
-REPL 内で機密 ENTITY ID を設定するか、引数を指定せずに設定を解除します。以前の pact 実行状態はすべて排除されます。
+REPL 内で機密 ENTITY ID を設定するか、引数を指定せずに設定を解除します。
+以前の pact 実行状態はすべて排除されます。
 
 ```lisp
 (env-entity "my-org")
@@ -2869,7 +2806,8 @@ REPL 内で機密 ENTITY ID を設定するか、引数を指定せずに設定�
 
 *hash* `string` *→* `string`
 
-現在のトランザクション ハッシュを設定します。HASH には、有効な BLAKE2b 512 ビット ハッシュを指定する必要があります。
+現在のトランザクション ハッシュを設定します。
+HASH には、有効な BLAKE2b 512 ビット ハッシュを指定する必要があります。
 
 ```
 pact> (env-hash (hash "hello"))
@@ -2897,7 +2835,12 @@ pact> (env-keys ["my-key" "admin-key"])
 
 *step-idx* `integer` *rollback* `bool` *resume* `object:<{y}>` *→* `string`
 
-pact ステップ状態を設定します。引数を指定しない場合は、ステップの設定が解除されます。STEP-IDX には、実行するステップ インデックスを設定します。ROLLBACK では、ロールバック式が存在する場合に、それを実行するかどうかを指定します。RESUME では、"resume" によって読み取る値を設定します。以前の pact 実行状態はすべて排除されます。
+pact ステップ状態を設定します。
+引数を指定しない場合は、ステップの設定が解除されます。
+STEP-IDX には、実行するステップ インデックスを設定します。
+ROLLBACK では、ロールバック式が存在する場合に、それを実行するかどうかを指定します。
+RESUME では、"resume" によって読み取る値を設定します。
+以前の pact 実行状態はすべて排除されます。
 
 ```
 (env-step 1)
@@ -2931,7 +2874,8 @@ pact> (expect-failure "Enforce fails on false" (enforce false "Expected error"))
 
 *exp* `<a>` *→* `value`
 
-pact 式 EXP を JSON 値としてエンコードします。Pact 値は、API 出力で自動的に JSON で表されるため、これはテストの目的でのみ必要です。
+pact 式 EXP を JSON 値としてエンコードします。
+Pact 値は、API 出力で自動的に JSON で表されるため、これはテストの目的でのみ必要です。
 
 ```
 pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
@@ -2944,7 +2888,8 @@ pact> (json [{ "name": "joe", "age": 10 } {"name": "mary", "age": 25 }])
 
 *file* `string` *reset* `bool` *→* `string`
 
-FILE をロードして評価します。オプションの RESET が true の場合は、repl 状態があらかじめリセットされます。
+FILE をロードして評価します。
+オプションの RESET が true の場合は、repl 状態があらかじめリセットされます。
 
 ```lisp
 (load "accounts.repl")
@@ -2954,7 +2899,8 @@ FILE をロードして評価します。オプションの RESET が true の�
 
 *→* `object`
 
-以前の pact 実行がもたらした状態を確認します。返されるオブジェクトには、"yield" (結果をイールドするか、結果が存在しない場合は "false")、"step" (実行されたステップ)、"executed" (エンティティが一致しないためにステップがスキップされたかどうか) の各フィールドが含まれます。
+以前の pact 実行がもたらした状態を確認します。
+返されるオブジェクトには、"yield" (結果をイールドするか、結果が存在しない場合は "false")、"step" (実行されたステップ)、"executed" (エンティティが一致しないためにステップがスキップされたかどうか) の各フィールドが含まれます。
 
 ```lisp
 (pact-state)
@@ -2988,7 +2934,8 @@ FILE をロードして評価します。オプションの RESET が true の�
 
 *module* `string` *debug* `bool` *→* `string`
 
-MODULE の型チェックを行います。オプションで DEBUG 出力を有効にすることができます。
+MODULE の型チェックを行います。
+オプションで DEBUG 出力を有効にすることができます。
 
 ### verify<a id="sec-6-6-22"></a>
 
@@ -3002,21 +2949,31 @@ MODULE の形式検証を行います。
 
 Pact には、スマート コントラクトの作成者が Pact プログラムのプロパティ (指定) を表現し、自動的にチェックできる機能が搭載されています。
 
-この Pact プロパティ チェック システムは、現在のスマート コントラクトのプログラミングの世界に存在する混乱と不確実性に対する当社の対応策として装備されたものです。人間がスマート コントラクトを作成する以上、ミスはつきものです。またスマート コントラクトを侵害しようとするあらゆる攻撃の手口を想定することは困難です。そこで当社は、形式検証の履歴が全くなくとも、コードが攻撃に対する防御力を備えていることを証明できる機能を用意しました。
+この Pact プロパティ チェック システムは、現在のスマート コントラクトのプログラミングの世界に存在する混乱と不確実性に対する当社の対応策として装備されたものです。
+人間がスマート コントラクトを作成する以上、ミスはつきものです。
+またスマート コントラクトを侵害しようとするあらゆる攻撃の手口を想定することは困難です。
+そこで当社は、形式検証の履歴が全くなくとも、コードが攻撃に対する防御力を備えていることを証明できる機能を用意しました。
 
 例えば、任意の複雑な Pact プログラムにおいて、コントラクトの “管理者” にのみデータベースの編集権限を付与し、他者にはデータベースの読み取りのみを許可する場合には、コードをブロックチェーンに展開する前に、コードのプロパティを "静的に" 証明できます。
 
-従来の単体テストでは、プログラムの動作は具体的な入力についてしか検証されず、作成者はそのケースがあらゆる入力に一般化できることを祈るしかありません。しかし Pact プロパティ チェック システムでは、可能な全ての入力に対してコードが自動的にチェックされます。
+従来の単体テストでは、プログラムの動作は具体的な入力についてしか検証されず、作成者はそのケースがあらゆる入力に一般化できることを祈るしかありません。
+しかし Pact プロパティ チェック システムでは、可能な全ての入力に対してコードが自動的にチェックされます。
 
 Pact でこれを実現するための機能として、作成者はデータベース テーブルの列に関する "スキーマの不変条件" を指定でき、また関数の引数と戻り値、キーセットの施行、データベース アクセス、および `enforce` の使用について、関数に関するプロパティを宣言して証明できます。
 
-Pact のプロパティは "契約" の概念に対応 (注: "スマート コントラクト" とは異なる概念です) します。Pact の不変条件は、形式検証の世界の詳細型（refinement types）への第一歩となります。
+Pact のプロパティは "契約" の概念に対応 (注: "スマート コントラクト" とは異なる概念です) します。
+Pact の不変条件は、形式検証の世界の詳細型（refinement types）への第一歩となります。
 
-この初期リリースでは、Pact 言語がまだ 100% サポートされておらず、プロパティ チェッカーの実装自体がまだ形式検証されていません。しかしこれはまだ第一歩に過ぎません。当社は引き続きあらゆる Pact プログラムのサポートを可能な限り拡張し、最終的には、精度が証明されたプロパティ チェッカーを提供するとともに、今後、作成者がスマート コントラクトに関するさらに高度なプロパティを表現できるように取り組みを続けていきます。
+この初期リリースでは、Pact 言語がまだ 100% サポートされておらず、プロパティ チェッカーの実装自体がまだ形式検証されていません。
+しかしこれはまだ第一歩に過ぎません。
+当社は引き続きあらゆる Pact プログラムのサポートを可能な限り拡張し、最終的には、精度が証明されたプロパティ チェッカーを提供するとともに、今後、作成者がスマート コントラクトに関するさらに高度なプロパティを表現できるように取り組みを続けていきます。
 
 ## プロパティおよびスキーマの不変条件の記述<a id="sec-7-2"></a>
 
-以下に、Pact の実際のプロパティの例を示します。プロパティと共に、それに対応する関数の説明を付記しました。 関数は、キーセット施行の実装を `enforce-admin` という別の関数に委託するため、ユーザーはその実装について考える必要がありません。 このプロパティでは、ブロックチェーンに送信されたトランザクションが正常に実行されたとしたら、 `admins` というキーセットに対応する正しい署名がトランザクションに正しく施されたことになります。
+以下に、Pact の実際のプロパティの例を示します。
+プロパティと共に、それに対応する関数の説明を付記しました。
+ 関数は、キーセット施行の実装を `enforce-admin` という別の関数に委託するため、ユーザーはその実装について考える必要がありません。
+ このプロパティでは、ブロックチェーンに送信されたトランザクションが正常に実行されたとしたら、 `admins` というキーセットに対応する正しい署名がトランザクションに正しく施されたことになります。
 
 ```lisp
 (defun read-account (id)
@@ -3033,7 +2990,8 @@ Pact のプロパティは "契約" の概念に対応 (注: "スマート コ�
 (properties [p1 p2 p3 ...])
 ```
 
-次に、スキーマの不変条件の例を見てみましょう。次のスキーマを持つテーブルでプロパティ チェッカーが成功した場合、どのコードが実行されても、トークン残高が 0 より大きいという不変条件が常に維持されることになります。
+次に、スキーマの不変条件の例を見てみましょう。
+次のスキーマを持つテーブルでプロパティ チェッカーが成功した場合、どのコードが実行されても、トークン残高が 0 より大きいという不変条件が常に維持されることになります。
 
 ```lisp
 (defschema tokens
@@ -3046,13 +3004,18 @@ Pact のプロパティは "契約" の概念に対応 (注: "スマート コ�
 
 ## プロパティ チェッカーのしくみ<a id="sec-7-3"></a>
 
-Pact のプロパティ チェッカーは、STM (Satisfiability Modulo Theories) ソルバーで、言語のセマンティクスを実現することによって機能します。 これには、プログラムの数式を作成し、その数式の妥当性をテストする必要があります。 SMT ソルバーは、Pact コードに関して提起された命題について、それを偽ることができる変数と値の組み合わせが存在しないことを証明できます。 Pact は現在、Microsoft の [Z3 theorem prover](https://github.com/Z3Prover/z3/wiki) をプロパティ チェック システムの基盤として使用しています。
+Pact のプロパティ チェッカーは、STM (Satisfiability Modulo Theories) ソルバーで、言語のセマンティクスを実現することによって機能します。
+ これには、プログラムの数式を作成し、その数式の妥当性をテストする必要があります。
+ SMT ソルバーは、Pact コードに関して提起された命題について、それを偽ることができる変数と値の組み合わせが存在しないことを証明できます。
+ Pact は現在、Microsoft の [Z3 theorem prover](https://github.com/Z3Prover/z3/wiki) をプロパティ チェック システムの基盤として使用しています。
 
 このような数式は、Pact モジュールの関数、それらの関数について提供されているプロパティ、モジュールのスキーマで宣言されている不変条件を組み合わせて作成されます。
 
-Pact モジュール内の関数定義については、別の関数への後続の呼び出しがインライン化されています。プロパティをテストするには、その前にこのインライン化されたコードが型チェックに合格する必要があります。
+Pact モジュール内の関数定義については、別の関数への後続の呼び出しがインライン化されています。
+プロパティをテストするには、その前にこのインライン化されたコードが型チェックに合格する必要があります。
 
-スキーマの不変条件について、プロパティ チェッカーは帰納的なアプローチを取っています。 つまり、スキーマの不変条件が、現在のデータベースのデータについて "有効" であると仮定し、 データベースが変更されても、モジュール内のすべての関数でそれらの不変条件が維持されるかどうかを確認します。
+スキーマの不変条件について、プロパティ チェッカーは帰納的なアプローチを取っています。
+ つまり、スキーマの不変条件が、現在のデータベースのデータについて "有効" であると仮定し、 データベースが変更されても、モジュール内のすべての関数でそれらの不変条件が維持されるかどうかを確認します。
 
 ## プロパティ チェッカーの使用方法<a id="sec-7-4"></a>
 
@@ -3068,7 +3031,8 @@ Pact モジュール内の関数定義については、別の関数への後続
 
 ### 引数、戻り値、標準の演算子、比較演算子<a id="sec-7-5-1"></a>
 
-プロパティでは、関数の引数を名前によって直接参照できます。また戻り値は、 `result` という名前で参照できます。
+プロパティでは、関数の引数を名前によって直接参照できます。
+また戻り値は、 `result` という名前で参照できます。
 
 ```lisp
 (defun negate:integer (x:integer)
@@ -3094,7 +3058,9 @@ Pact モジュール内の関数定義については、別の関数への後続
 
 ### ブール演算子<a id="sec-7-5-2"></a>
 
-Pact のプロパティ チェック言語は、標準のブール演算子である `and` 、 `or` 、 `not` に加え、 `when` の形式での論理包含をサポートします。ここで、 `(when x y)` は、 `(or (not x) y)` と同値です。以下では、3 つのプロパティが同時に定義されています。
+Pact のプロパティ チェック言語は、標準のブール演算子である `and` 、 `or` 、 `not` に加え、 `when` の形式での論理包含をサポートします。
+ここで、 `(when x y)` は、 `(or (not x) y)` と同値です。
+以下では、3 つのプロパティが同時に定義されています。
 
 ```lisp
 (defun negate:integer (x:integer)
@@ -3111,7 +3077,8 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 
 ### トランザクションの中止と成功<a id="sec-7-5-3"></a>
 
-デフォルトで、すべてのプロパティはテスト対象の関数の呼び出しを含めたトランザクションの成功を前提としています。例えば、以下のプロパティを考えてみましょう。
+デフォルトで、すべてのプロパティはテスト対象の関数の呼び出しを含めたトランザクションの成功を前提としています。
+例えば、以下のプロパティを考えてみましょう。
 
 ```lisp
 (defun ensured-positive (val:integer)
@@ -3124,7 +3091,8 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 
 このプロパティは、 `enforce` を使用することで成功します。
 
-ブロックチェーンの実行時に、 `enforce` 呼び出しが失敗すると、それに含まれているトランザクションが中止します。 `properties` は、トランザクションが成功することのみを前提としているため、それぞれの `enforce` 呼び出しが正常終了するための必要条件が成立していると想定されます。
+ブロックチェーンの実行時に、 `enforce` 呼び出しが失敗すると、それに含まれているトランザクションが中止します。
+ `properties` は、トランザクションが成功することのみを前提としているため、それぞれの `enforce` 呼び出しが正常終了するための必要条件が成立していると想定されます。
 
 ### プロパティ API の詳細<a id="sec-7-5-4"></a>
 
@@ -3132,11 +3100,14 @@ Pact のプロパティ チェック言語は、標準のブール演算子で�
 
 ## スキーマの不変条件の表現<a id="sec-7-6"></a>
 
-スキーマの不変条件は、プロパティ定義で利用できる機能のうち、より限定的なサブセットによって記述されます。これらは具体的には、認証、データベース アクセス、トランザクションの成功と失敗、関数の引数と戻り値に関係しない機能です。不変条件の定義で利用可能なすべての機能の詳細については、API ドキュメントの「[Property and Invariant Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html)」を参照してください。
+スキーマの不変条件は、プロパティ定義で利用できる機能のうち、より限定的なサブセットによって記述されます。
+これらは具体的には、認証、データベース アクセス、トランザクションの成功と失敗、関数の引数と戻り値に関係しない機能です。
+不変条件の定義で利用可能なすべての機能の詳細については、API ドキュメントの「[Property and Invariant Functions](http://pact-language.readthedocs.io/en/latest/pact-properties-api.html)」を参照してください。
 
 ### キーセットの認証<a id="sec-7-6-1"></a>
 
-Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参照するか、値として渡すことができます。プロパティ チェック システムは、両方の方法によるキーセットの使用をサポートしています。
+Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参照するか、値として渡すことができます。
+プロパティ チェック システムは、両方の方法によるキーセットの使用をサポートしています。
 
 名前付きキーセットでは、すべての可能なコード パスがそのキーセットを施行する場合のみ、プロパティ `authorized-by` が成立します。
 
@@ -3154,7 +3125,8 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
       (incorrect-action action))))
 ```
 
-行レベルのキーセット施行の一般的なパターンとして、テーブルの行ごとにユーザーが割り当てられ、 各ユーザーの行にキーセットが格納されて、行の変更時に認証されることがあります。 このようなパターンが正しく実装されているかどうかは、 `row-enforced` プロパティを使用して確認できます。
+行レベルのキーセット施行の一般的なパターンとして、テーブルの行ごとにユーザーが割り当てられ、 各ユーザーの行にキーセットが格納されて、行の変更時に認証されることがあります。
+ このようなパターンが正しく実装されているかどうかは、 `row-enforced` プロパティを使用して確認できます。
 
 以下のプロパティが合格するには、コードが `accounts` テーブルの ks 列に格納されている、変数 `name` によってキーが設定された行のキーセットを抽出し、 `enforce-keyset` を使用して施行する必要があります。
 
@@ -3177,7 +3149,10 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 
 ### 質量保存の法則と列の差分<a id="sec-7-6-3"></a>
 
-状況によっては、トランザクションの前後で、列の値の合計が同じであることが望ましい場合があります。 言い換えれば、トランザクションの最後に、列に対するすべての更新額を合計すると差し引きゼロになる状況です。 このパターンを把握するために、 `conserves-mass` プロパティが用意されています。 このプロパティでは、テーブル名と列名を指定できます。
+状況によっては、トランザクションの前後で、列の値の合計が同じであることが望ましい場合があります。
+ 言い換えれば、トランザクションの最後に、列に対するすべての更新額を合計すると差し引きゼロになる状況です。
+ このパターンを把握するために、 `conserves-mass` プロパティが用意されています。
+ このプロパティでは、テーブル名と列名を指定できます。
 
 ```lisp
 (conserves-mass 'accounts 'balance)
@@ -3185,7 +3160,9 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 
 このプロパティの使用例については、以下の「単純な残高の移動の例」を参照してください。
 
-`conserves-mass` は実際には、 `column-delta` という別のプロパティの平凡な適用方法です。このプロパティは、トランザクションで列に対して行われたすべての変更の合計値を返します。したがって `(conserves-mass 'accounts 'balance)` は実際には、以下と同じです。
+`conserves-mass` は実際には、 `column-delta` という別のプロパティの平凡な適用方法です。
+このプロパティは、トランザクションで列に対して行われたすべての変更の合計値を返します。
+したがって `(conserves-mass 'accounts 'balance)` は実際には、以下と同じです。
 
 ```lisp
 (= 0 (column-delta 'accounts 'balance))
@@ -3203,13 +3180,16 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 (= 1 (column-delta 'accounts 'balance))
 ```
 
-`column-delta` は、トランザクションの前後 (`after - before`) の列の増加についてのみ定義されています。変化の絶対量ではありません。したがって、ここで 1 という値は、列の合計値が 1 だけ増加したことを示します。
+`column-delta` は、トランザクションの前後 (`after - before`) の列の増加についてのみ定義されています。
+変化の絶対量ではありません。したがって、ここで 1 という値は、列の合計値が 1 だけ増加したことを示します。
 
 ### 全称限定子と存在限定子<a id="sec-7-6-4"></a>
 
-ここまでの説明では、上記の `(row-enforced 'accounts 'ks key)` や `(row-written 'accounts key)` などの例で、 `key` という変数によって関数の引数のみを参照してきました。 しかし書き込みが可能なすべての行を扱う場合や、関数が複数の行を更新する場合はどうすればよいでしょうか。
+ここまでの説明では、上記の `(row-enforced 'accounts 'ks key)` や `(row-written 'accounts key)` などの例で、 `key` という変数によって関数の引数のみを参照してきました。
+ しかし書き込みが可能なすべての行を扱う場合や、関数が複数の行を更新する場合はどうすればよいでしょうか。
 
-そのような場合、全称限定子を使用して、条件を満たす "すべての" 行を扱うことができます。以下に例を示します。
+そのような場合、全称限定子を使用して、条件を満たす "すべての" 行を扱うことができます。
+以下に例を示します。
 
 ```lisp
 (properties
@@ -3273,7 +3253,8 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 (deftable accounts:{account})
 ```
 
-以下は、2 つの口座間で残高を移動するコードで、一見正しいようですがいくつかバグがあります。 別のプロパティを使用し、テーブルに不変条件に追加してこれらのバグを解消していきます。
+以下は、2 つの口座間で残高を移動するコードで、一見正しいようですがいくつかバグがあります。
+ 別のプロパティを使用し、テーブルに不変条件に追加してこれらのバグを解消していきます。
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -3299,7 +3280,9 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
   ks:keyset)
 ```
 
-次に、 `verify` を使用してこのモジュールのすべてのプロパティをチェックすると、 `amount` で -1 を渡すことにより、(残高が 0 の場合に) 正の残高という不変条件に違反できることがプロパティ チェッカーによって指摘されます。つまり、このコードでは、"送信者" が負の金額を移転すれば、他のユーザーの金銭を盗むことができます。そこで `(> amount 0)` を施行して、もう一度チェックしてみましょう。
+次に、 `verify` を使用してこのモジュールのすべてのプロパティをチェックすると、 `amount` で -1 を渡すことにより、(残高が 0 の場合に) 正の残高という不変条件に違反できることがプロパティ チェッカーによって指摘されます。
+つまり、このコードでは、"送信者" が負の金額を移転すれば、他のユーザーの金銭を盗むことができます。
+そこで `(> amount 0)` を施行して、もう一度チェックしてみましょう。
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -3315,7 +3298,8 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
       (update accounts to { "balance": (+ to-bal amount) }))))
 ```
 
-この時点でプロパティ チェッカーによって、このコードの妥当性が検証されます。ここで別のプロパティ `(conserves-mass 'accounts 'balance)` を使用して、この関数が金銭を生み出したり、消してしまったりできないことを確認しましょう。
+この時点でプロパティ チェッカーによって、このコードの妥当性が検証されます。
+ここで別のプロパティ `(conserves-mass 'accounts 'balance)` を使用して、この関数が金銭を生み出したり、消してしまったりできないことを確認しましょう。
 
 ```lisp
 (defun transfer (from:string to:string amount:integer)
@@ -3333,9 +3317,11 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
       (update accounts to { "balance": (+ to-bal amount) }))))
 ```
 
-ここで `verify` を実行すると、プロパティ チェッカーが再度バグを発見し、 `from` と `to` を同じ口座に設定すると、プロパティの偽装が可能であることがわかります。 これが本当であれば、このコードは何もないところから金銭を作り出すことになります。
+ここで `verify` を実行すると、プロパティ チェッカーが再度バグを発見し、 `from` と `to` を同じ口座に設定すると、プロパティの偽装が可能であることがわかります。
+ これが本当であれば、このコードは何もないところから金銭を作り出すことになります。
 
-この仕組みを解明するため、次の 2 つの `update` 呼び出しを検討してみましょう。これらの呼び出しでは、 `from` と `to` に同じ値が設定されるとともに、 `from-bal` と `to-bal` がいわゆる `previous-balance` に設定されています。
+この仕組みを解明するため、次の 2 つの `update` 呼び出しを検討してみましょう。
+これらの呼び出しでは、 `from` と `to` に同じ値が設定されるとともに、 `from-bal` と `to-bal` がいわゆる `previous-balance` に設定されています。
 
 ```lisp
 (update accounts "alice" { "balance": (- previous-balance amount) })
@@ -3343,7 +3329,8 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 (update accounts "alice" { "balance": (+ previous-balance amount) })
 ```
 
-このシナリオでは、2 番目の `update` 呼び出しが `(+ previous-balance amount)` によって最初の呼び出しを完全に上書きすることがわかります。Alice はまさに `amount` の金額のトークンを無料で手に入れるのです。
+このシナリオでは、2 番目の `update` 呼び出しが `(+ previous-balance amount)` によって最初の呼び出しを完全に上書きすることがわかります。
+Alice はまさに `amount` の金額のトークンを無料で手に入れるのです。
 
 そこで、もう 1 つ `enforce` を `((!= from to)` を指定して) 追加し、この予期しない動作を防止します。
 
@@ -3372,7 +3359,10 @@ Pact では、キーは定義済みの名前 (`define-keyset` で定義) で参�
 
 # プロパティと不変条件の関数<a id="sec-8"></a>
 
-以下は、Pact の実行可能コードに限らず、プロパティや不変条件で使用できる関数です。 これらの関数がすべて、プロパティで使用できますが、不変条件で使用できるのは一部です。 通常、不変条件はデータの形状を記述することができ、プロパティはそれに加えて関数の入力と出力、 データベース操作を記述することができます。各関数について、それがプロパティ専用か、 プロパティと不変条件の両方で使用可能かを明記します。
+以下は、Pact の実行可能コードに限らず、プロパティや不変条件で使用できる関数です。
+ これらの関数がすべて、プロパティで使用できますが、不変条件で使用できるのは一部です。
+ 通常、不変条件はデータの形状を記述することができ、プロパティはそれに加えて関数の入力と出力、 データベース操作を記述することができます。
+各関数について、それがプロパティ専用か、 プロパティと不変条件の両方で使用可能かを明記します。
 
 ## 数値演算子<a id="sec-8-1"></a>
 
@@ -3880,7 +3870,9 @@ abort
 
 -   bool 型
 
-トランザクションが中止されるかどうかです。この関数は、トランザクションの成功を想定しない命題を表現する場合のみ有用です。 `property` によって定義される命題は、黙示的にトランザクションの成功を想定します。 当社では、今後この機能を使用する新しいモードを追加する予定です。この機能が必要な場合は当社までお知らせください。
+トランザクションが中止されるかどうかです。この関数は、トランザクションの成功を想定しない命題を表現する場合のみ有用です。 `property` によって定義される命題は、黙示的にトランザクションの成功を想定します。
+ 当社では、今後この機能を使用する新しいモードを追加する予定です。
+この機能が必要な場合は当社までお知らせください。
 
 プロパティのみでサポートされています。
 
@@ -3892,7 +3884,11 @@ success
 
 -   bool 型
 
-トランザクションが成功するかどうかです。この関数は、トランザクションの成功を想定しない命題を表現する場合のみ有用です。 `property` によって定義される命題は、黙示的にトランザクションの成功を想定します。 当社では、今後この機能を使用する新しいモードを追加する予定です。この機能が必要な場合は当社までお知らせください。
+トランザクションが成功するかどうかです。
+この関数は、トランザクションの成功を想定しない命題を表現する場合のみ有用です。
+ `property` によって定義される命題は、黙示的にトランザクションの成功を想定します。
+ 当社では、今後この機能を使用する新しいモードを追加する予定です。
+この機能が必要な場合は当社までお知らせください。
 
 プロパティのみでサポートされています。
 
