@@ -11,18 +11,16 @@ import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT(..))
-import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
-                                             EqSymbolic ((.==)), SBV,
-                                             Mergeable(symbolicMerge),
-                                             SymWord (exists_, forall_),
-                                             Symbolic)
+                                             EqSymbolic ((.==)),
+                                             Mergeable(symbolicMerge), SymWord)
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 
+import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, forAll, exists)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Orphans       ()
@@ -37,13 +35,13 @@ import           Pact.Analyze.Util
 --
 newtype Query a
   = Query
-    { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic)) a }
+    { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Alloc)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
-            MonadError AnalyzeFailure, MonadState SymbolicSuccess)
+            MonadError AnalyzeFailure, MonadState SymbolicSuccess, MonadAlloc)
 
 instance (Mergeable a) => Mergeable (Query a) where
-  -- We merge the result and state, performing any 'Symbolic' actions that
-  -- occur in-order.
+  -- We merge the result and state, performing any 'Alloc' actions that occur
+  -- in-order.
   symbolicMerge force test left right = Query $ StateT $ \s0 -> do
     (resL, sL) <- runStateT (queryAction left) s0
     (resR, sR) <- runStateT (queryAction right) s0
@@ -60,9 +58,6 @@ instance Analyzer Query where
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
   markFailure b = id %= (&&& SymbolicSuccess (bnot b))
-
-liftSymbolic :: Symbolic a -> Query a
-liftSymbolic = Query . lift . lift . lift
 
 aval
   :: Analyzer m
@@ -161,8 +156,8 @@ evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
 evalPropSpecific (Forall vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (forall_ :: Symbolic (SBV ty))
-  local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
+  var <- forAll :: Query (S ty)
+  local (scope.at vid ?~ mkAVal var) $ evalProp p
 evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 evalPropSpecific (Forall vid _name QTable prop) = do
@@ -177,8 +172,8 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
     in local (qeColumnScope . at vid ?~ colName') (evalProp prop)
   pure $ foldr (&&&) true bools
 evalPropSpecific (Exists vid _name (EType (_ :: Types.Type ty)) p) = do
-  sbv <- liftSymbolic (exists_ :: Symbolic (SBV ty))
-  local (scope.at vid ?~ mkAVal' sbv) $ evalProp p
+  var <- exists :: Query (S ty)
+  local (scope.at vid ?~ mkAVal var) $ evalProp p
 evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =
   throwErrorNoLoc "objects can't currently be quantified in properties (issue 139)"
 evalPropSpecific (Exists vid _name QTable prop) = do

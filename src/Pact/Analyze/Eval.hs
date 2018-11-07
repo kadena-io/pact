@@ -33,6 +33,7 @@ import           Data.String                 (fromString)
 
 import           Pact.Types.Lang             (Info)
 
+import           Pact.Analyze.Alloc          (runAlloc)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
@@ -110,7 +111,7 @@ runAnalysis' query tables args tm tags info = do
       ksProvs = state1 ^. globalState.gasKsProvenances
 
   (results, querySucceeds)
-    <- runReaderT (runStateT (queryAction query) true) qEnv
+    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) true) qEnv
   pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis
