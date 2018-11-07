@@ -201,7 +201,7 @@ deftable = do
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
-  m <- metaNoModel
+  m <- meta ModelNotAllowed
   TTable (TableName _atomAtom) mn mh
     (fromMaybe TyAny ty) m <$> contextInfo
 
@@ -215,28 +215,15 @@ defconst = do
   a <- arg
   v <- term
 
-  m <- metaNoModel
+  m <- meta ModelNotAllowed
   TConst a modName (CVRaw v) m <$> contextInfo
 
-metaNoModel :: Compile Meta
-metaNoModel = atPairs <|> try docStr <|> return def
-  where
-    docStr = Meta <$> (Just <$> str) <*> pure []
-    docPair = symbol "@doc" >> str
-    modelPair = do
-      symbol "@model"
-      (ListExp exps _ _i, _) <- list' Brackets
-      pure exps
-    atPairs = do
-      doc <- optional (try docPair)
-      model <- optional (try modelPair)
-      case (doc, model) of
-        (Nothing, Nothing) -> expected "@doc declaration"
-        (_      , Just _ ) -> syntaxError "@model not allowed in this declaration"
-        (_      , Nothing) -> return (Meta doc [])
+data ModelAllowed
+  = ModelAllowed
+  | ModelNotAllowed
 
-metaWithModel :: Compile Meta
-metaWithModel = atPairs <|> try docStr <|> return def
+meta :: ModelAllowed -> Compile Meta
+meta modelAllowed = atPairs <|> try docStr <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure []
     docPair = symbol "@doc" >> str
@@ -247,16 +234,17 @@ metaWithModel = atPairs <|> try docStr <|> return def
     atPairs = do
       doc <- optional (try docPair)
       model <- optional (try modelPair)
-      case (doc, model) of
-        (Nothing, Nothing    ) -> expected "@doc or @model declarations"
-        (_      , Just model') -> return (Meta doc model')
-        (_      , Nothing    ) -> return (Meta doc [])
+      case (doc, model, modelAllowed) of
+        (Nothing, Nothing    , _              ) -> expected "@doc or @model declarations"
+        (_      , Just model', ModelAllowed   ) -> return (Meta doc model')
+        (_      , Just _     , ModelNotAllowed) -> syntaxError "@model not allowed in this declaration"
+        (_      , Nothing    , _              ) -> return (Meta doc [])
 
 defschema :: Compile (Term Name)
 defschema = do
   modName <- currentModule'
   tn <- _atomAtom <$> userAtom
-  m <- metaWithModel
+  m <- meta ModelAllowed
   fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
@@ -265,7 +253,7 @@ defun = do
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- metaWithModel
+  m <- meta ModelAllowed
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
@@ -274,7 +262,7 @@ defpact = do
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- metaWithModel
+  m <- meta ModelAllowed
   (body,bi) <- bodyForm'
   forM_ body $ \t -> case t of
     TStep {} -> return ()
@@ -286,7 +274,7 @@ moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
   keyset <- str
-  m <- metaWithModel
+  m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
