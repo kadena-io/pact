@@ -322,15 +322,25 @@ execScript' m fp = do
   runStateT (useReplLib >> loadFile fp) s
 
 
+-- | install repl lib functions into monad state
 useReplLib :: Repl ()
 useReplLib = id %= setReplLib
 
+-- | mutate repl state to install lib functions
 setReplLib :: ReplState -> ReplState
-setReplLib = rEvalState.evalRefs.rsLoaded %~ HM.union (moduleToMap replDefs)
+setReplLib = over (rEvalState.evalRefs.rsLoaded) $ HM.union (moduleToMap replDefs)
 
+-- | mutate repl state to remove lib functions
+unsetReplLib :: ReplState -> ReplState
+unsetReplLib = over (rEvalState.evalRefs.rsLoaded) (`HM.difference` (moduleToMap replDefs))
 
+-- | evaluate string in repl monad
+evalPact :: String -> Repl (Either String (Term Name))
+evalPact cmd = parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
+
+-- | evaluate string in repl monad, loading lib functions first.
 evalRepl' :: String -> Repl (Either String (Term Name))
-evalRepl' cmd = useReplLib >> parsedCompileEval cmd (TF.parseString exprsOnly mempty cmd)
+evalRepl' cmd = useReplLib >> evalPact cmd
 
 evalRepl :: ReplMode -> String -> IO (Either String (Term Name))
 evalRepl m cmd = initReplState m >>= evalStateT (evalRepl' cmd)
