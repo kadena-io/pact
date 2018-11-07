@@ -14,16 +14,13 @@ import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               (&), (+=), (.=), (.~), (<&>),
                                               (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Monad               (void, when)
-import           Control.Monad.Except        (Except, ExceptT (ExceptT),
-                                              MonadError (throwError),
-                                              runExcept)
+import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
-import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
@@ -91,7 +88,7 @@ addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
     c = Constraints $ constrain $ _sSbv s
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
+  symbolicMerge force test left right = Analyze $ RWST $ \r s ->
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -99,7 +96,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runExcept . runRWST (runAnalyze act) r
+    let run act = runRWST (runAnalyze act) r
     in do
       (lRes, AnalyzeState lls lgs, ()) <- run left s
       (rRes, AnalyzeState rls rgs, ()) <- run right $ s & globalState .~ lgs
