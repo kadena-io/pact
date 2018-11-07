@@ -8,7 +8,7 @@ correct, transactional execution on a [high-performance blockchain](http://kaden
 background, please see the [white paper](http://kadena.io/docs/Kadena-PactWhitepaper.pdf)
 or the [pact home page](http://kadena.io/#pactModal).
 
-Copyright (c) 2016/2017, Stuart Popejoy. All Rights Reserved.
+Copyright (c) 2016 - 2018, Stuart Popejoy. All Rights Reserved.
 
 
 Rest API
