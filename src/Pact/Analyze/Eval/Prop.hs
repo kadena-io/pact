@@ -55,7 +55,6 @@ instance Analyzer Query where
   type TermOf Query = Prop
   eval           = evalProp
   evalO          = evalPropO
-  evalLogicalOp  = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err

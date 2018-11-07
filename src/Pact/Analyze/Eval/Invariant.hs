@@ -37,7 +37,6 @@ instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
   eval  (CoreInvariant tm)   = evalCore tm
   evalO (CoreInvariant tm)   = evalCoreO tm
-  evalLogicalOp              = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view location
     throwError $ AnalyzeFailure info err

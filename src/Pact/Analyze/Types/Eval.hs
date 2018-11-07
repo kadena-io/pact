@@ -61,20 +61,20 @@ instance Wrapped SymbolicSuccess where
   type Unwrapped SymbolicSuccess = SBV Bool
   _Wrapped' = iso successBool SymbolicSuccess
 
-class (MonadError AnalyzeFailure m, S :<: TermOf m) => Analyzer m where
-  type TermOf m   :: * -> *
-  eval            :: (Show a, SymWord a) => TermOf m a -> m (S a)
-  evalO           :: TermOf m Object -> m Object
-  throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
-  getVar          :: VarId -> m (Maybe AVal)
-  markFailure     :: SBV Bool -> m ()
-
-  -- unfortunately, because `Query` and `InvariantCheck` include `Symbolic` in
-  -- their monad stack, they can't use `ite`, which we need to use to implement
-  -- short-circuiting ops correctly for (effectful) terms. Though, luckily the
-  -- invariant and prop languages are pure, so we're fine to implement them in
-  -- terms of `|||` / `&&&`.
-  evalLogicalOp   :: LogicalOp -> [TermOf m Bool] -> m (S Bool)
+class ( MonadError AnalyzeFailure m
+      , S :<: TermOf m
+      , Mergeable (m (S Bool)) -- TODO: We only need Mergeable for Bool at the
+      )                        -- moment, but really this should probably be
+                               -- done for all Mergeable values, perhaps via
+                               -- QuantifiedConstraints, once we're on 8.6
+      => Analyzer m
+  where
+    type TermOf m   :: * -> *
+    eval            :: (Show a, SymWord a) => TermOf m a -> m (S a)
+    evalO           :: TermOf m Object -> m Object
+    throwErrorNoLoc :: AnalyzeFailureNoLoc -> m a
+    getVar          :: VarId -> m (Maybe AVal)
+    markFailure     :: SBV Bool -> m ()
 
 data AnalyzeEnv
   = AnalyzeEnv

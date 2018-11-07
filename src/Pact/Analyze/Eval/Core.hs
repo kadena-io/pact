@@ -8,7 +8,7 @@ module Pact.Analyze.Eval.Core where
 import           Control.Lens                (over)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
+import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
                                               SymWord, ite)
@@ -86,19 +86,6 @@ evalComparisonOp op xT yT = do
     Eq  -> x .== y
     Neq -> x ./= y
 
-evalLogicalOp'
-  :: (Analyzer m, Boolean (S a), Show a, SymWord a)
-  => LogicalOp
-  -> [TermOf m a]
-  -> m (S a)
-evalLogicalOp' op terms = do
-  symBools <- traverse eval terms
-  case (op, symBools) of
-    (AndOp, [a, b]) -> pure $ a &&& b
-    (OrOp,  [a, b]) -> pure $ a ||| b
-    (NotOp, [a])    -> pure $ bnot a
-    _               -> throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
-
 evalEqNeq
   :: (Analyzer m, SymWord a, Show a)
   => EqNeq
@@ -124,6 +111,20 @@ evalObjectEqNeq op xT yT = do
   pure $ sansProv $ case op of
     Eq'  -> x .== y
     Neq' -> x ./= y
+
+evalLogicalOp
+  :: Analyzer m
+  => LogicalOp
+  -> [TermOf m Bool]
+  -> m (S Bool)
+evalLogicalOp AndOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (eval b) (pure false)
+evalLogicalOp OrOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (pure true) (eval b)
+evalLogicalOp NotOp [a] = bnot <$> eval a
+evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 evalCore
   :: (Analyzer m, SymWord a)
