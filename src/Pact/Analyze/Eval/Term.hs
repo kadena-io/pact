@@ -62,25 +62,11 @@ instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
   evalO            = evalTermO
-  evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
   markFailure b = succeeds %= (&&& sansProv (bnot b))
-
-evalTermLogicalOp
-  :: LogicalOp
-  -> [Term Bool]
-  -> Analyze (S Bool)
-evalTermLogicalOp AndOp [a, b] = do
-  a' <- eval a
-  ite (_sSbv a') (eval b) (pure false)
-evalTermLogicalOp OrOp [a, b] = do
-  a' <- eval a
-  ite (_sSbv a') (pure true) (eval b)
-evalTermLogicalOp NotOp [a] = bnot <$> eval a
-evalTermLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
 
 addConstraint :: S Bool -> Analyze ()
 addConstraint b = modify' $ latticeState.lasConstraints %~ (&&& b)
