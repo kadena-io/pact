@@ -1585,7 +1585,7 @@ Times are stored in a JSON object capturing a Modified Julian Day value and a da
 
 ```javascript
 { "_P_timed": 234 /* "modified julian day value */
-  "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+, "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
 }
 ```
 

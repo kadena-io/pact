@@ -1985,7 +1985,7 @@ and a day-local microsecond value.
 .. code:: javascript
 
    { "_P_timed": 234 /* "modified julian day value */
-     "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
    }
 
 Suggestions for converting MJDs can be found
