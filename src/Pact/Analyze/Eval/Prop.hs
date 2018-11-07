@@ -13,7 +13,6 @@ import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Map.Strict            as Map
-import           Data.Monoid                ((<>))
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)), SBV,
                                              SymWord (exists_, forall_),

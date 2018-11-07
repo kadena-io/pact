@@ -21,7 +21,6 @@ import Control.Arrow
 import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Data.List
-import Data.Monoid()
 import Data.Yaml as Y
 #endif
 import qualified Data.Text as T

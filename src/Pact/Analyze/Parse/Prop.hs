@@ -44,7 +44,6 @@ import qualified Data.HashMap.Strict          as HM
 import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
 import           Data.Maybe                   (isJust)
-import           Data.Semigroup               ((<>))
 import qualified Data.Set                     as Set
 import           Data.String                  (fromString)
 import           Data.Text                    (Text)

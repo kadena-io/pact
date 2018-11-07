@@ -11,7 +11,6 @@ import           Control.Lens         (Iso, Snoc (_Snoc), iso, makeLenses,
                                        prism)
 import qualified Data.Default         as Default
 import qualified Data.Foldable        as Foldable
-import           Data.Semigroup       ((<>))
 import           Pact.Types.Lang      (Info (_iInfo), Parsed)
 import           Pact.Types.Typecheck (AST (_aNode), Node (_aId), _tiInfo)
 

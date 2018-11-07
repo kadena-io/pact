@@ -45,7 +45,6 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
-import           Data.Semigroup               ((<>))
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)

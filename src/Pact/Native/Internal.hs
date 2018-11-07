@@ -41,7 +41,6 @@ import Control.Arrow
 import qualified Data.Aeson.Lens as A
 import Bound
 import qualified Data.HashMap.Strict as HM
-import Data.Semigroup ((<>))
 
 import Pact.Types.Runtime
 import Pact.Types.Native

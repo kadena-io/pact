@@ -79,8 +79,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import Text.PrettyPrint.ANSI.Leijen hiding ((<>),(<$>))
 import qualified Data.Attoparsec.Text as AP
 import Text.Trifecta (try,ident,TokenParsing,(<?>))
-import Data.Monoid ()
-import Data.Semigroup ((<>))
 import Control.DeepSeq
 import Data.Maybe
 import qualified Data.HashSet as HS

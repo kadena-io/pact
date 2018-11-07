@@ -32,7 +32,6 @@ import Data.Aeson (toJSON)
 import Pact.Eval
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Semigroup ((<>))
 
 import Pact.Types.Runtime
 import Pact.Native.Internal
