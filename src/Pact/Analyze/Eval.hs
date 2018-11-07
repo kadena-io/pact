@@ -28,6 +28,7 @@ import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.Map.Strict             (Map)
 import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic,
                                               true)
+import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
 import           Pact.Types.Lang             (Info)
@@ -100,7 +101,7 @@ runAnalysis' query tables args tm tags info = do
   (funResult, state1, ()) <- hoist generalize $
     runRWST (runAnalyze act) aEnv state0
 
-  lift $ runConstraints $ state1 ^. globalState.gasConstraints
+  lift $ SBV.constrain $ _sSbv $ state1 ^. latticeState.lasConstraints
 
   let cv0     = state0 ^. latticeState . lasExtra
       cv1     = state1 ^. latticeState . lasExtra

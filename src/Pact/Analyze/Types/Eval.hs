@@ -27,8 +27,7 @@ import           Data.Maybe                   (mapMaybe)
 import           Data.SBV                     (Boolean (bnot, true, (&&&)),
                                                HasKind, Mergeable, SBV, SBool,
                                                SymArray (readArray, writeArray),
-                                               SymWord, Symbolic, false,
-                                               uninterpret)
+                                               SymWord, false, uninterpret)
 import qualified Data.SBV.Internals           as SBVI
 import           Data.Text                    (Text)
 import qualified Data.Text                    as T
@@ -133,18 +132,6 @@ data QueryEnv
     , _qeColumnScope   :: Map VarId ColumnName
     }
 
-newtype Constraints
-  = Constraints { runConstraints :: Symbolic () }
-
-instance Show Constraints where
-  show _ = "<symbolic>"
-
-instance Semigroup Constraints where
-  (Constraints act1) <> (Constraints act2) = Constraints $ act1 *> act2
-
-instance Monoid Constraints where
-  mempty = Constraints (pure ())
-
 data SymbolicCells
   = SymbolicCells
     { _scIntValues     :: ColumnMap (SFunArray RowKey Integer)
@@ -198,6 +185,7 @@ data LatticeAnalyzeState a
     -- has been overwritten and *then* enforced, that does not constitute valid
     -- enforcement of the keyset.
     , _lasCellsWritten        :: TableMap (ColumnMap (SFunArray RowKey Bool))
+    , _lasConstraints         :: S Bool
     , _lasExtra               :: a
     }
   deriving (Generic, Show)
@@ -207,8 +195,7 @@ deriving instance Mergeable a => Mergeable (LatticeAnalyzeState a)
 -- Checking state that is transferred through every computation, in-order.
 data GlobalAnalyzeState
   = GlobalAnalyzeState
-    { _gasConstraints   :: Constraints          -- we log these a la writer
-    , _gasKsProvenances :: Map TagId Provenance -- added as we accum ks info
+    { _gasKsProvenances :: Map TagId Provenance -- added as we accum ks info
     }
   deriving (Show)
 
@@ -276,14 +263,14 @@ mkInitialAnalyzeState tables = AnalyzeState
         , _lasRowsWritten         = mkPerTableSFunArray 0
         , _lasCellsEnforced       = cellsEnforced
         , _lasCellsWritten        = cellsWritten
+        , _lasConstraints         = true
         , _lasExtra               = CellValues
           { _cvTableCells          = mkSymbolicCells tables
           , _cvRowExists           = mkRowExists
           }
         }
     , _globalState = GlobalAnalyzeState
-        { _gasConstraints   = mempty
-        , _gasKsProvenances = mempty
+        { _gasKsProvenances = mempty
         }
     }
 
