@@ -10,11 +10,12 @@ import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
                                              (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Control.Monad.State.Strict (MonadState, StateT)
+import           Control.Monad.State.Strict (MonadState, StateT(..))
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)), SBV,
+                                             Mergeable(symbolicMerge),
                                              SymWord (exists_, forall_),
                                              Symbolic)
 import qualified Data.SBV.Internals         as SBVI
@@ -39,6 +40,16 @@ newtype Query a
     { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
             MonadError AnalyzeFailure, MonadState SymbolicSuccess)
+
+instance (Mergeable a) => Mergeable (Query a) where
+  -- We merge the result and state, performing any 'Symbolic' actions that
+  -- occur in-order.
+  symbolicMerge force test left right = Query $ StateT $ \s0 -> do
+    (resL, sL) <- runStateT (queryAction left) s0
+    (resR, sR) <- runStateT (queryAction right) s0
+    pure ( symbolicMerge force test resL resR
+         , symbolicMerge force test sL   sR
+         )
 
 instance Analyzer Query where
   type TermOf Query = Prop
