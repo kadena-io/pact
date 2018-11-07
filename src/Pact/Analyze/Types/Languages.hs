@@ -45,6 +45,8 @@ module Pact.Analyze.Types.Languages
   , pattern POr
   , pattern PStrConcat
   , pattern PStrLength
+  , pattern PStrToInt
+  , pattern PStrToIntBase
   , pattern PVar
   ) where
 
@@ -131,12 +133,16 @@ data Core t a where
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t String -> t String -> Core t String
+  StrConcat    :: t String  -> t String  -> Core t String
   -- | The length of a 'String' expression
-  StrLength :: t String                     -> Core t Integer
+  StrLength    :: t String  ->              Core t Integer
+  -- | Conversion of a base-10 string to an integer
+  StrToInt     :: t String  ->              Core t Integer
+  -- | Conversion of a base-1-16 string to an integer
+  StrToIntBase :: t Integer -> t String  -> Core t Integer
 
   -- numeric ops
-  Numerical :: Numerical t a -> Core t a
+  Numerical    :: Numerical t a -> Core t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
@@ -195,6 +201,8 @@ instance
     Sym s                    -> tShow s
     StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
+    StrToInt s               -> parenList ["str-to-int", userShow s]
+    StrToIntBase b s         -> parenList ["str-to-int", userShow b, userShow s]
     Numerical tm             -> userShowsPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
@@ -432,6 +440,12 @@ pattern PLogical op args = CoreProp (Logical op args)
 
 pattern PStrLength :: Prop String -> Prop Integer
 pattern PStrLength str = CoreProp (StrLength str)
+
+pattern PStrToInt :: Prop String -> Prop Integer
+pattern PStrToInt str = CoreProp (StrToInt str)
+
+pattern PStrToIntBase :: Prop Integer -> Prop String -> Prop Integer
+pattern PStrToIntBase base str = CoreProp (StrToIntBase base str)
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = CoreProp (Logical AndOp [a, b])

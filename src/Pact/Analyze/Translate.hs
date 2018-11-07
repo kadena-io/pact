@@ -883,6 +883,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
+  AST_NFun _node "str-to-int" [s] -> do
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToInt s'
+
+  AST_NFun _node "str-to-int" [b, s] -> do
+    ESimple TInt b' <- translateNode b
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToIntBase b' s'
+
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
