@@ -235,7 +235,8 @@ meta modelAllowed = atPairs <|> try docStr <|> return def
       doc <- optional (try docPair)
       model <- optional (try modelPair)
       case (doc, model, modelAllowed) of
-        (Nothing, Nothing    , _              ) -> expected "@doc or @model declarations"
+        (Nothing, Nothing    , ModelAllowed   ) -> expected "@doc or @model declarations"
+        (Nothing, Nothing    , ModelNotAllowed) -> expected "@doc declaration"
         (_      , Just model', ModelAllowed   ) -> return (Meta doc model')
         (_      , Just _     , ModelNotAllowed) -> syntaxError "@model not allowed in this declaration"
         (_      , Nothing    , _              ) -> return (Meta doc [])
