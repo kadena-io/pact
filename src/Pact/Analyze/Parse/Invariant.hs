@@ -8,7 +8,6 @@ import           Control.Applicative      ((<|>))
 import           Control.Lens             ((^.))
 import           Control.Monad.Reader     (ask)
 import           Data.Foldable            (asum, find)
-import           Data.Semigroup           ((<>))
 import qualified Data.Text                as T
 import           Prelude                  hiding (exp)
 

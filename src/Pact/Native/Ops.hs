@@ -27,7 +27,6 @@ module Pact.Native.Ops
 import Data.Decimal
 import Data.Default
 import qualified Data.Map.Strict as M
-import Data.Semigroup
 
 import Pact.Native.Internal
 import Pact.Types.Runtime

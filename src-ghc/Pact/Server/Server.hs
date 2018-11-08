@@ -29,7 +29,6 @@ import qualified Data.ByteString.Char8 as B8
 
 import qualified Data.HashMap.Strict as HashMap
 
-import Data.Monoid
 import Data.Word (Word16)
 import GHC.Generics
 import System.Log.FastLogger

@@ -13,7 +13,6 @@ import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
-import           Data.Monoid                ((<>))
 import           Data.SBV                   (SBV, SymWord)
 import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI

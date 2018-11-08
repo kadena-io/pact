@@ -12,7 +12,6 @@ import           Control.Monad.Reader       (ReaderT)
 import           Control.Monad.State.Strict (StateT)
 import qualified Data.HashMap.Strict        as HM
 import           Data.Map                   (Map)
-import           Data.Semigroup             ((<>))
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T

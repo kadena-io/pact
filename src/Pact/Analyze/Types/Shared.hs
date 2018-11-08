@@ -45,7 +45,6 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
-import           Data.Semigroup               ((<>))
 import qualified Data.Set                     as Set
 import           Data.String                  (IsString (..))
 import           Data.Text                    (Text)
@@ -399,7 +398,7 @@ type TVal = (EType, AVal)
 
 newtype Object
   = Object (Map Text TVal)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Semigroup)
 
 instance UserShow Object where
   userShowsPrec d (Object m) = userShowsPrec d (fmap snd m)
@@ -408,7 +407,7 @@ instance Monoid Object where
   mempty = Object Map.empty
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  Object m1 `mappend` Object m2 = Object $ m1 <> m2
+  mappend = (<>)
 
 objFields :: Lens' Object (Map Text TVal)
 objFields = lens getter setter
@@ -418,13 +417,13 @@ objFields = lens getter setter
 
 newtype Schema
   = Schema (Map Text EType)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Semigroup)
 
 instance Monoid Schema where
   mempty = Schema Map.empty
 
   -- NOTE: left-biased semantics of schemas for Pact's "object merging":
-  Schema m1 `mappend` Schema m2 = Schema $ m1 <> m2
+  mappend = (<>)
 
 -- Note: this doesn't exactly match the pact syntax
 instance UserShow Schema where
@@ -678,7 +677,7 @@ columnMapToSchema
 
 newtype ColumnMap a
   = ColumnMap { _columnMap :: Map ColumnName a }
-  deriving (Show, Functor, Foldable, Traversable, Monoid)
+  deriving (Show, Functor, Foldable, Traversable, Semigroup, Monoid)
 
 instance Mergeable a => Mergeable (ColumnMap a) where
   symbolicMerge force test (ColumnMap left) (ColumnMap right) = ColumnMap $

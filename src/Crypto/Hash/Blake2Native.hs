@@ -18,7 +18,6 @@ import Data.ByteString as B (ByteString,index,unpack,pack,length,take,splitAt,nu
 import Data.Vector as V (Vector,(//),(!),fromList,(++))
 import Control.Lens ((&),(<&>))
 import Prelude as P hiding (last)
-import Data.Monoid
 
 
 type V = Vector

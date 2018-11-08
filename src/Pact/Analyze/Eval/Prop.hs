@@ -13,7 +13,6 @@ import           Control.Monad.Reader       (MonadReader (local), ReaderT)
 import           Control.Monad.State.Strict (MonadState, StateT)
 import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Map.Strict            as Map
-import           Data.Monoid                ((<>))
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)), SBV,
                                              SymWord (exists_, forall_),
@@ -147,7 +146,7 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
 
   pure $ Object aValFields
 
-evalPropSpecific :: SymWord a => PropSpecific a -> Query (S a)
+evalPropSpecific :: PropSpecific a -> Query (S a)
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds
 evalPropSpecific Abort   = bnot <$> evalPropSpecific Success
 evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult

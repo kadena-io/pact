@@ -49,7 +49,6 @@ import Data.Aeson hiding (Object)
 import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import Data.Monoid
 
 import Pact.Types.Lang
 import Pact.Types.Native

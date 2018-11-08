@@ -26,7 +26,6 @@ import           Data.Foldable               (foldl', foldlM)
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
-import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,

@@ -21,7 +21,6 @@ import Control.Arrow
 import Data.Maybe
 #if !defined(ghcjs_HOST_OS)
 import Data.List
-import Data.Monoid
 import Data.Yaml as Y
 #endif
 import qualified Data.Text as T
@@ -128,7 +127,7 @@ _test = do
                "  include: [INFO] \n" <>
                "ExcludeINFO:      \n" <>
                "  exclude: [INFO]"
-      rules = either error id $ Y.decodeEither config
+      rules = either (error . Y.prettyPrintParseException) id $ Y.decodeEither' config
       loggers = initLoggers putStrLn doLog rules
   forM_ (sort $ HM.keys (logRules rules)) $ \ln -> runLogIO (newLogger loggers ln) _stuff
   runLogIO (newLogger loggers "Unconfigured") _stuff

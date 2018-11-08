@@ -46,7 +46,6 @@ import qualified Data.List                 as List
 import           Data.Map.Strict           (Map)
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (mapMaybe)
-import           Data.Monoid               ((<>))
 import           Data.SBV                  (Symbolic)
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Control          as SBV

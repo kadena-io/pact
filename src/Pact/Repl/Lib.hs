@@ -21,7 +21,7 @@ module Pact.Repl.Lib where
 
 import Control.Arrow ((&&&))
 import Data.Default
-import Data.Semigroup
+import Data.Semigroup (Endo(..))
 import qualified Data.HashMap.Strict as HM
 import Control.Monad.Reader
 import Control.Monad.Catch

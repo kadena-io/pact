@@ -58,7 +58,6 @@ import Control.Lens hiding (prism)
 import Data.Default
 import Data.Text (Text,pack,unpack)
 import qualified Data.Text as T
-import Data.Semigroup ((<>))
 import qualified Data.Set as S
 
 import Pact.Types.Exp

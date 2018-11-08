@@ -31,7 +31,6 @@ import Text.Trifecta as TF hiding (err)
 import System.IO
 import System.Exit hiding (die)
 import qualified Options.Applicative as O
-import Data.Monoid
 import System.Directory
 import System.FilePath
 

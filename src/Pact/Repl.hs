@@ -41,7 +41,7 @@ import GHC.Word (Word8)
 import System.IO
 import Text.Trifecta.Delta
 import Control.Concurrent
-import Data.Monoid
+import Data.Monoid (appEndo)
 import System.FilePath
 
 import Pact.Compile

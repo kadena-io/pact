@@ -24,7 +24,6 @@ import           Control.Monad.Reader         (MonadReader)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import           Data.Maybe                   (mapMaybe)
-import           Data.Monoid                  ((<>))
 import           Data.SBV                     (Boolean (bnot, true, (&&&)),
                                                HasKind, Mergeable, SBV, SBool,
                                                SymArray (readArray, writeArray),
@@ -140,9 +139,11 @@ newtype Constraints
 instance Show Constraints where
   show _ = "<symbolic>"
 
+instance Semigroup Constraints where
+  (Constraints act1) <> (Constraints act2) = Constraints $ act1 *> act2
+
 instance Monoid Constraints where
   mempty = Constraints (pure ())
-  mappend (Constraints act1) (Constraints act2) = Constraints $ act1 *> act2
 
 data SymbolicCells
   = SymbolicCells

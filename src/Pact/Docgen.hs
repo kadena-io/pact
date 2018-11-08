@@ -25,7 +25,6 @@ import           Control.Monad.Catch
 import           Data.Foldable        (for_)
 import           Data.Function
 import           Data.List
-import           Data.Monoid
 import           Data.Text            (replace)
 import qualified Data.Text            as T
 import           System.IO

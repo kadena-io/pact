@@ -15,7 +15,6 @@ import Control.Arrow
 import Control.Monad
 import Data.Aeson
 import qualified Data.Map.Strict as M
-import Data.Monoid
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.String

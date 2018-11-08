@@ -12,7 +12,6 @@ import qualified Algebra.Graph             as Alga
 import           Control.Lens              (makeLenses, makePrisms)
 import           Data.Map.Strict           (Map)
 import           Data.SBV                  (SBV)
-import           Data.Semigroup            (Semigroup ((<>)))
 import           Data.Text                 (Text)
 import           GHC.Natural               (Natural)
 import           Prelude                   hiding (Float)

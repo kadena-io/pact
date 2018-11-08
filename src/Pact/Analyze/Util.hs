@@ -70,9 +70,11 @@ newtype SnocList a
   = SnocList { _reversed :: [a] }
   deriving (Eq, Ord, Show)
 
+instance Semigroup (SnocList a) where
+  SnocList xs <> SnocList ys = SnocList $ ys ++ xs
+
 instance Monoid (SnocList a) where
   mempty = SnocList []
-  SnocList xs `mappend` SnocList ys = SnocList $ ys ++ xs
 
 pattern ConsList :: [a] -> SnocList a
 pattern ConsList xs <- SnocList (reverse -> xs)

@@ -12,7 +12,6 @@ import           Control.Lens       (Traversal', at, to, (^.), (^?), _2, _Just)
 import           Data.Bool          (bool)
 import           Data.Map.Strict    (Map)
 import qualified Data.Map.Strict    as Map
-import           Data.Monoid        ((<>))
 import           Data.SBV           (SBV)
 import qualified Data.SBV           as SBV
 import           Data.Set           (Set)
