@@ -140,7 +140,7 @@ runCompile act cs a =
         (Label s:_) -> doErr def (toList s)
         er -> doErr def (show er)
       Label ne -> doErr def (toList ne)
-      Tokens (x :| _) -> doErr (getInfo x) $ showExpect expect
+      Tokens (x :| _) -> doErr (getInfo x) $ "expected " <> showExpect expect
     (Left e) -> doErr def (show e)
     where doErr i s = Left $ PactError SyntaxError i def (pack s)
           showExpect e = case labelText $ S.toList e of
@@ -148,7 +148,7 @@ runCompile act cs a =
             ss -> intercalate "," ss
           labelText [] = []
           labelText (Label s:r) = toList s:labelText r
-          labelText (EndOfInput:r) = "End of input":labelText r
+          labelText (EndOfInput:r) = "end of expression or input":labelText r
           labelText (_:r) = labelText r
 
 

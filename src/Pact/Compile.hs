@@ -105,7 +105,7 @@ term =
   literal
   <|> varAtom
   <|> withList' Parens
-    (specialForm <|> app)
+    ((specialForm <|> app) <* eof)
   <|> listLiteral
   <|> objectLiteral
 
@@ -287,7 +287,6 @@ moduleForm = do
       modHash = hash $ encodeUtf8 $ _unCode code
   (psUser . csModule) .= Just (modName,modHash)
   (bd,bi) <- bodyForm'
-  eof
   blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
     TDef {} -> return []
     TNative {} -> return []
@@ -327,7 +326,6 @@ interface = do
       ihash = hash $ encodeUtf8 (_unCode code)
   (psUser . csModule) .= Just (iname, ihash)
   (defs, defInfo) <- interfaceForm
-  eof
   return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
