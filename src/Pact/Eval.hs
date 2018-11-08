@@ -217,8 +217,8 @@ loadModule m@Module{..} bod1 mi g0 = do
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   evaluatedDefs <- evaluateDefs mi modDefs1
-  evaluateConstraints mi m evaluatedDefs
-  let md = ModuleData m evaluatedDefs
+  solvedDefs <- evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -282,7 +282,7 @@ evaluateConstraints
   :: Info
   -> Module
   -> HM.HashMap Text Ref
-  -> Eval e ()
+  -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints info Interface{} _ =
   evalError info $ "Unexpected: interface found in module position while solving constraints"
 evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
@@ -292,35 +292,36 @@ evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInter
       case irefs of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
+        Just irefs' -> HM.foldrWithKey (solveConstraint info) (pure evalMap) irefs'
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
   :: Info
-  -> HM.HashMap Text Ref
   -> Text
   -> Ref
-  -> Eval e ()
-  -> Eval e ()
-solveConstraint info _ refName (Direct t) _ =
+  -> Eval e (HM.HashMap Text Ref)
+  -> Eval e (HM.HashMap Text Ref)
+solveConstraint info refName (Direct t) _ =
   evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
-solveConstraint info em refName (Ref t) _ =
+solveConstraint info refName (Ref t) evalMap = do
+  em <- evalMap
   case HM.lookup refName em of
-    Nothing -> pure ()
+    Nothing -> evalMap
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
       case (t, s) of
-        (TDef _n _mn dt (FunType args rty) _ _ _,
-          TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
+        (TDef _n _mn dt (FunType args rty) _ m _,
+          TDef _n' _mn' dt' (FunType args' rty') b m' i) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
-            return ()
+            pure ()
+          pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
