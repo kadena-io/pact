@@ -4,8 +4,8 @@
   @doc "Test to make sure interface global models and function \
       \ models are concatenated properly in implementing modules"
   @model
-    [ (defproperty negb_involution (= (not (not (f1 x)))))
-      (defproperty negb_inversion (= (f2 false) true))
+    [ (defproperty negb_involution (= (not (not true)) true))
+      (defproperty negb_inversion (= false (not true)))
       (defproperty integer_id (= (f3 x)))
     ]
 
@@ -25,6 +25,9 @@
   (implements test1)
 
   (defun f1:bool (x:bool)
+    @model
+    [ (property negb_inversion)
+      (property negb_involution) ]
     x)
 
   (defun f2:bool (y:bool)
