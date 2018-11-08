@@ -1,0 +1,39 @@
+(begin-tx)
+
+(interface test1
+  @doc "Test to make sure interface global models and function \
+      \ models are concatenated properly in implementing modules"
+  @model
+    [ (defproperty negb_involution (= (not (not (f1 x)))))
+      (defproperty negb_inversion (= (f2 false) true))
+      (defproperty integer_id (= (f3 x)))
+    ]
+
+
+  (defun f1:bool (x:bool))
+  (defun f2:bool (y:bool))
+  (defun f3:integer (x:integer))
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-keyset 'test-keyset (sig-keyset))
+(module mod-test 'test-keyset
+  @doc "Module implementing test1"
+
+  (implements test1)
+
+  (defun f1:bool (x:bool)
+    x)
+
+  (defun f2:bool (y:bool)
+    (not y))
+
+  (defun f3:integer (x:integer)
+    x)
+)
+
+(commit-tx)
+
+(verify 'mod-test)
