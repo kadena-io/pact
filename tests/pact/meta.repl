@@ -17,7 +17,7 @@
   (defconst BAZ 2 "docstrings work without @doc")
 
   (defschema schema
-    @doc "a schema" @model (property stuff))
+    @doc "a schema" @model [(property stuff)])
 
   (defschema schema2
     "a schema")
