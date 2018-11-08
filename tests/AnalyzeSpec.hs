@@ -848,6 +848,16 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid $ bnot Success'
 
+  describe "enforce-one.10" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one "" [true])
+              (enforce-one "" [false]))
+          |]
+
+    expectPass code $ Valid Success'
+
   describe "logical short-circuiting" $ do
     describe "and" $ do
       let code =
