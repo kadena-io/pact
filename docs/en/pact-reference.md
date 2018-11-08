@@ -362,7 +362,7 @@ as a unit.
 
 #### Keyset definition {#keysetdefinition}
 
-[Keysets](#keysets) are customarily defined first, as they are used to specify
+[Keysets](#confidential-keysets) are customarily defined first, as they are used to specify
 admin authorization schemes for modules and tables. Definition creates the keysets
 in the runtime environment and stores their definition in the global keyset database.
 
@@ -540,7 +540,7 @@ then with "enough" types, and lastly, with formal proofs.
 Note that as of Pact 2.0 the formal verification function is still under development.
 
 
-Keysets and Authorization {#keysets}
+Keysets and Authorization {#confidential-keysets}
 ---
 
 Pact is inspired by Bitcoin scripts to incorporate public-key authorization directly into smart
@@ -656,7 +656,7 @@ Pact's supported types are:
 - [Integers](#integers)
 - [Decimals](#decimals)
 - [Booleans](#booleans)
-- [Key sets](#keysets)
+- [Key sets](#confidential-keysets)
 - [Lists](#lists)
 - [Objects](#objects)
 - [Function](#defun) and [pact](#defpact) definitions

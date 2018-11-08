@@ -407,10 +407,10 @@ contract as a unit.
 Keyset definition
 ^^^^^^^^^^^^^^^^^
 
-`Keysets <#keysets>`__ are customarily defined first, as they are used
-to specify admin authorization schemes for modules and tables.
-Definition creates the keysets in the runtime environment and stores
-their definition in the global keyset database.
+`Keysets <#confidential-keysets>`__ are customarily defined first, as
+they are used to specify admin authorization schemes for modules and
+tables. Definition creates the keysets in the runtime environment and
+stores their definition in the global keyset database.
 
 .. _moduledeclaration:
 
@@ -651,7 +651,7 @@ formal proofs.
 Note that as of Pact 2.0 the formal verification function is still under
 development.
 
-.. _keysets:
+.. _confidential-keysets:
 
 Keysets and Authorization
 -------------------------
@@ -809,7 +809,7 @@ Pact’s supported types are:
 -  `Integers <#integers>`__
 -  `Decimals <#decimals>`__
 -  `Booleans <#booleans>`__
--  `Key sets <#keysets>`__
+-  `Key sets <#confidential-keysets>`__
 -  `Lists <#lists>`__
 -  `Objects <#objects>`__
 -  `Function <#defun>`__ and `pact <#defpact>`__ definitions
