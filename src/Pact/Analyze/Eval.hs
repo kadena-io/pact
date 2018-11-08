@@ -87,20 +87,26 @@ runAnalysis'
   -> [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables args tm tags info = do
-  let act    = evalETerm tm >>= \res -> tagResult res >> pure res
-      state0 = mkInitialAnalyzeState tables
-
+runAnalysis' query tables args tm rootPath tags info = do
   aEnv <- case mkAnalyzeEnv tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
 
+  let state0 = mkInitialAnalyzeState tables
+
+      analysis = do
+        tagSubpathStart rootPath true
+        res <- evalETerm tm
+        tagResult res
+        pure res
+
   (funResult, state1, ()) <- hoist generalize $
-    runRWST (runAnalyze act) aEnv state0
+    runRWST (runAnalyze analysis) aEnv state0
 
   lift $ SBV.constrain $ _sSbv $ state1 ^. latticeState.lasConstraints
 
@@ -119,19 +125,21 @@ runPropertyAnalysis
   -> [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables args tm tags info =
+runPropertyAnalysis check tables args tm rootPath tags info =
   runIdentity <$>
-    runAnalysis' (Identity <$> analyzeCheck check) tables args tm tags info
+    runAnalysis' (Identity <$> analyzeCheck check) tables args tm rootPath tags info
 
 runInvariantAnalysis
   :: [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables args tm tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm tags info
+runInvariantAnalysis tables args tm rootPath tags info =
+  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm rootPath tags info
