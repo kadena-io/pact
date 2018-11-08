@@ -98,10 +98,19 @@ data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
   , _mModel :: ![Exp Info]   -- ^ model
   } deriving (Eq, Show, Generic)
+
 instance ToJSON Meta where
   toJSON Meta {..} = object
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
+
 instance Default Meta where def = Meta def def
+
+instance Semigroup Meta where
+  (Meta d m) <> (Meta d' m') = Meta (d <> d') (m <> m')
+
+instance Monoid Meta where
+  mempty = Meta Nothing []
+  mappend = (<>)
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 
@@ -155,7 +164,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     }
-            
+
 
 instance Show FunApp where
   show FunApp {..} =
@@ -254,7 +263,7 @@ instance Ord Name where
   (Name a _) `compare` (Name b _) = a `compare` b
   Name {} `compare` QName {} = LT
   QName {} `compare` Name {} = GT
-  
+
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -278,7 +287,7 @@ instance Show Module where
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
-                     
+
 instance ToJSON Module where
   toJSON Module{..} = object
     [ "name" .= _mName
@@ -524,7 +533,7 @@ instance Monad Term where
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
-    TImplements ifs mn i >>= _ = TImplements ifs mn i 
+    TImplements ifs mn i >>= _ = TImplements ifs mn i
 
 
 instance FromJSON (Term n) where
