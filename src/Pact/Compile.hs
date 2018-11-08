@@ -201,8 +201,7 @@ deftable = do
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
-  m <- meta
-  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on tables"
+  m <- meta ModelNotAllowed
   TTable (TableName _atomAtom) mn mh
     (fromMaybe TyAny ty) m <$> contextInfo
 
@@ -215,28 +214,38 @@ defconst = do
   modName <- currentModule'
   a <- arg
   v <- term
-  m <- meta
-  when (isJust (m ^. mModel)) $ syntaxError "@model not permitted on defconst"
+
+  m <- meta ModelNotAllowed
   TConst a modName (CVRaw v) m <$> contextInfo
 
-meta :: Compile Meta
-meta = atPairs <|> try docStr <|> return def
+data ModelAllowed
+  = ModelAllowed
+  | ModelNotAllowed
+
+meta :: ModelAllowed -> Compile Meta
+meta modelAllowed = atPairs <|> try docStr <|> return def
   where
-    docStr = Meta <$> (Just <$> str) <*> pure Nothing
+    docStr = Meta <$> (Just <$> str) <*> pure []
     docPair = symbol "@doc" >> str
-    modelPair = symbol "@model" >> anyExp
+    modelPair = do
+      symbol "@model"
+      (ListExp exps _ _i, _) <- list' Brackets
+      pure exps
     atPairs = do
       doc <- optional (try docPair)
       model <- optional (try modelPair)
-      case (doc,model) of
-        (Nothing,Nothing) -> expected "@doc or @model declarations"
-        _ -> return $ Meta doc model
+      case (doc, model, modelAllowed) of
+        (Nothing, Nothing    , ModelAllowed   ) -> expected "@doc or @model declarations"
+        (Nothing, Nothing    , ModelNotAllowed) -> expected "@doc declaration"
+        (_      , Just model', ModelAllowed   ) -> return (Meta doc model')
+        (_      , Just _     , ModelNotAllowed) -> syntaxError "@model not allowed in this declaration"
+        (_      , Nothing    , _              ) -> return (Meta doc [])
 
 defschema :: Compile (Term Name)
 defschema = do
   modName <- currentModule'
   tn <- _atomAtom <$> userAtom
-  m <- meta
+  m <- meta ModelAllowed
   fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
@@ -245,7 +254,7 @@ defun = do
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- meta
+  m <- meta ModelAllowed
   TDef defname modName Defun (FunType args returnTy)
     <$> abstractBody args <*> pure m <*> contextInfo
 
@@ -254,7 +263,7 @@ defpact = do
   modName <- currentModule'
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- meta
+  m <- meta ModelAllowed
   (body,bi) <- bodyForm'
   forM_ body $ \t -> case t of
     TStep {} -> return ()
@@ -266,7 +275,7 @@ moduleForm :: Compile (Term Name)
 moduleForm = do
   modName' <- _atomAtom <$> userAtom
   keyset <- str
-  m <- meta
+  m <- meta ModelAllowed
   use (psUser . csModule) >>= \cm -> case cm of
     Just {} -> syntaxError "Invalid nested module or interface"
     Nothing -> return ()
@@ -302,11 +311,11 @@ implements = do
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
   info <- contextInfo
   return $ TImplements ifName modName info
-  
+
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
-  m <- meta
+  m <- metaWithModel
   use (psUser . csModule) >>= \ci -> case ci of
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
@@ -322,14 +331,14 @@ interface = do
   return $ TModule
     (Interface iname code m)
     (abstract (const Nothing) (TList defs TyAny defInfo)) info
-    
+
 interfaceForm :: Compile ([Term Name], Info)
 interfaceForm = (,) <$> some interfaceForms <*> contextInfo
   where
-    interfaceForms = withList' Parens $ do 
+    interfaceForms = withList' Parens $ do
       AtomExp{..} <- bareAtom
       case _atomAtom of
-        "defun" -> commit >> emptyDef 
+        "defun" -> commit >> emptyDef
         "defconst" -> commit >> defconst
         "use" -> commit >> useForm
         t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
@@ -339,13 +348,13 @@ emptyDef = do
   modName <- currentModule'
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- meta
+  m <- metaWithModel
   info <- contextInfo
   return $
     TDef defName modName Defun
     (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
-  
-  
+
+
 step :: Compile (Term Name)
 step = do
   cont <- try (TStep <$> (Just <$> term) <*> term) <|>

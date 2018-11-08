@@ -233,7 +233,7 @@ toAnalyze ty tm = do
         (Pact.Arg "tm" ty dummyInfo)
         "module"
         (Pact.CVRaw tm)
-        (Meta Nothing Nothing)
+        (Meta Nothing [])
         dummyInfo
       ref = Pact.Ref cnst
   maybeConst <- lift $ Pact.runTC 0 False $ typecheckTopLevel ref

@@ -36,7 +36,7 @@
 
   (defschema account
     @doc   "Row type for accounts table."
-    @model (invariant (>= balance 0.0))
+    @model [(invariant (>= balance 0.0))]
     balance:decimal
     amount:decimal
     ccy:string

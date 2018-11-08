@@ -2,7 +2,7 @@
 
 (module mod 'k
   @doc   "this defines mod"
-  @model (property (do (crazy stuff)))
+  @model [(property (do (crazy stuff)))]
 
   (defun foo ()
     @doc "foo the town"

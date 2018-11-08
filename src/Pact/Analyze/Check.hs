@@ -30,7 +30,7 @@ import           Control.Exception         as E
 import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
                                             traversed, view, (%~), (&), (<&>),
                                             (?~), (^.), (^?), (^@..), _1, _2,
-                                            _Just, _Left)
+                                            _Left)
 import           Control.Monad             (void, (<=<))
 
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
@@ -411,17 +411,13 @@ moduleTables modules ModuleData{..} = do
     let TC.Schema{_utName,_utFields} = schema
         schemaName = asString _utName
 
-    invariants <- case schemas ^? ix schemaName . tMeta . mModel . _Just of
+    invariants <- case schemas ^? ix schemaName.tMeta.mModel of
       -- no model = no invariants
-      Nothing    -> pure []
-      Just model -> liftEither $ case expToMapping ["invariant", "invariants"] model of
-        Nothing -> throwError (model, "expected \"invariant\" or \"invariants\"")
-        Just model' -> do
-          let expInvariants = model' ^? ix "invariants"
-              expInvariant  = model' ^? ix "invariant"
-          exps <- collectExps "invariants" expInvariants expInvariant
-          runExpParserOver exps $
-            flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
+      Nothing -> pure []
+      Just model -> liftEither $ do
+        exps <- collectExps "invariant" model
+        runExpParserOver exps $
+          flip runReaderT (varIdArgs _utFields) . expToInvariant TBool
 
     pure $ Table tabName schema invariants
 
@@ -470,19 +466,19 @@ normalizeListLit lits = case lits of
 -- * '(defproperty foo (> 1 0))'
 -- * '(defproperty foo (a:integer b:integer) (> a b))'
 -- * '(property foo)'
-parseModelDecl
-  :: Exp Info
+parseModuleModelDecl
+  :: [Exp Info]
   -> Either ParseFailure [Either (Text, DefinedProperty (Exp Info)) ModuleProperty]
-parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
+parseModuleModelDecl exps = traverse parseDecl exps where
 
-  parseDefprops' exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
+  parseDecl exp@(ParenList (EAtom' "defproperty" : rest)) = case rest of
     [ EAtom' propname, ParenList args, body ] -> do
       args' <- parseBindings (curry Right) args & _Left %~ (exp,)
       pure $ Left (propname, DefinedProperty args' body)
     [ EAtom' propname,              body ] ->
       pure $ Left (propname, DefinedProperty [] body)
     _ -> Left (exp, "Invalid property definition")
-  parseDefprops' exp = do
+  parseDecl exp = do
     (body, propScope) <- parsePropertyExp exp
     pure $ Right $ ModuleProperty body propScope
 
@@ -508,8 +504,6 @@ parseModelDecl (SquareList exps) = traverse parseDefprops' exps where
       _ -> Left (exp, "malformed property definition")
     _ -> Left (exp, "expected a set of property / defproperty")
 
-parseModelDecl exp = Left (exp, "expected set of defproperty")
-
 -- Get the set (HashMap) of refs to functions in this module.
 moduleTypecheckableRefs :: ModuleData -> HM.HashMap Text Ref
 moduleTypecheckableRefs ModuleData{..} = flip HM.filter _mdRefMap $ \case
@@ -525,18 +519,15 @@ data ModelDecl = ModelDecl
 
 -- Get the model defined in this module
 moduleModelDecl :: ModuleData -> Either ParseFailure ModelDecl
-moduleModelDecl ModuleData{..} =
-  case _mdModule of
-    Pact.Module{Pact._mMeta=Pact.Meta _ model}            -> parseModuleModelDecls model
-    Pact.Interface{Pact._interfaceMeta=Pact.Meta _ model} -> parseModuleModelDecls model
+moduleModelDecl ModuleData{..} = do
+  lst <- parseModuleModelDecl model
+  let (propList, checkList) = partitionEithers lst
+  pure $ ModelDecl (HM.fromList propList) checkList
   where
-    parseModuleModelDecls :: Maybe (Exp Info) -> Either ParseFailure ModelDecl
-    parseModuleModelDecls m = case m of
-      Just model' -> do
-        lst <- parseModelDecl model'
-        let (propList, checkList) = partitionEithers lst
-        pure $ ModelDecl (HM.fromList propList) checkList
-      Nothing     -> Right $ ModelDecl HM.empty []
+    model = case _mdModule of
+      Pact.Module{Pact._mMeta=Pact.Meta _ m}            -> m
+      Pact.Interface{Pact._interfaceMeta=Pact.Meta _ m} -> m
+
 
 moduleFunChecks
   :: [Table]
@@ -597,45 +588,23 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
 
-    checks <- withExcept ModuleParseFailure $ liftEither $ do
-      exps <- case defn ^? tMeta . mModel . _Just of
-        Just model -> case expToMapping ["property", "properties"] model of
-          Nothing -> throwError (model, "expected \"property\" or \"properties\"")
-          Just model' ->
-            let expProperties = model' ^? ix "properties"
-                expProperty   = model' ^? ix "property"
-            in collectExps "properties" expProperties expProperty
-        Nothing -> pure []
-      let funName = _tDefName defn
-          applicableModuleChecks = map _moduleProperty $
-            filter (applicableCheck funName) modCheckExps
-      runExpParserOver (applicableModuleChecks <> exps) $
-        expToCheck tableEnv vidStart nameVids vidTys consts propDefs
+    checks <- case defn ^? tMeta . mModel of
+      Nothing -> pure []
+      Just model -> withExcept ModuleParseFailure $ liftEither $ do
+        exps <- collectExps "property" model
+        let funName = _tDefName defn
+            applicableModuleChecks = map _moduleProperty $
+              filter (applicableCheck funName) modCheckExps
+        runExpParserOver (applicableModuleChecks <> exps) $
+          expToCheck tableEnv vidStart nameVids vidTys consts propDefs
 
     pure (ref, Right checks)
 
--- | Given an exp like '(k v)', and a set (list) of allowed keys, convert it to
--- a singleton map
-expToMapping :: [Text] -> Exp Info -> Maybe (Map Text (Exp Info))
-expToMapping allowed = \case
-  ParenList [EAtom' k, v]
-    | k `elem` allowed -> Just $ Map.singleton k v
-  _                    -> Nothing
-
--- | For both properties and invariants you're allowed to use either the
--- singular ("property") or plural ("properties") name. This helper just
--- collects the properties / invariants in a list.
-collectExps
-  :: String
-  -> Maybe (Exp Info)
-  -> Maybe (Exp Info)
-  -> Either ParseFailure [Exp Info]
-collectExps name multiExp singularExp = case multiExp of
-  Just (SquareList exps') -> Right exps'
-  Just exp -> Left (exp, name ++ " must be a list")
-  Nothing -> case singularExp of
-    Just exp -> Right [exp]
-    Nothing  -> Right []
+-- | Remove the "invariant" or "property" application from every exp
+collectExps :: Text -> [Exp Info] -> Either ParseFailure [Exp Info]
+collectExps name multiExp = for multiExp $ \case
+  ParenList [EAtom' name', v] | name' == name -> Right v
+  exp -> Left (exp, "expected an application of " ++ T.unpack name)
 
 -- | This runs a parser over a collection of 'Exp's, collecting the failures
 -- or successes.
@@ -778,7 +747,7 @@ verifyCheck
 verifyCheck moduleData funName check = do
   let info       = dummyInfo
       module'    = moduleData ^. mdModule
-      moduleName = nameOf module' 
+      moduleName = nameOf module'
       modules    = HM.fromList [(moduleName, moduleData)]
       moduleFun :: ModuleData -> Text -> Maybe Ref
       moduleFun ModuleData{..} name = name `HM.lookup` _mdRefMap

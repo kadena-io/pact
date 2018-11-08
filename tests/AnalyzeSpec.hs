@@ -580,7 +580,7 @@ spec = describe "analyze" $ do
             (defun test:integer (acct:string)
               @doc   "test"
               @model
-                (property (forall (row:string) (row-enforced "tokens" "ks" row)))
+                [(property (forall (row:string) (row-enforced "tokens" "ks" row)))]
               (with-read tokens acct { "ks" := ks, "balance" := bal }
                 (enforce-keyset ks)
                 bal))
@@ -720,7 +720,7 @@ spec = describe "analyze" $ do
               s)
 
             (defun test:string ()
-              @model (properties [ (my-column-delta 1) ])
+              @model [(property (my-column-delta 1))]
               (id
                 (write accounts "bob"
                   {"balance": (+ 1 (at 'balance (read accounts "bob")))})
@@ -958,7 +958,7 @@ spec = describe "analyze" $ do
           [text|
             (defun test:bool (a:object{account})
               @doc ""
-              @model (property (and result (= a a)))
+              @model [(property (and result (= a a)))]
               (= a a))
           |]
 
@@ -983,7 +983,7 @@ spec = describe "analyze" $ do
 
             (defun test:object{person} ()
               @doc   ""
-              @model (property (= {"name": "brian", "age": 100} result))
+              @model [(property (= {"name": "brian", "age": 100} result))]
 
               ; merge is left-biased
               (+ {"age": 100} {"age": 1, "name": "brian"}))
@@ -1157,7 +1157,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema account2
               @doc   "accounts schema"
-              @model (invariant (>= balance 0.0))
+              @model [(invariant (>= balance 0.0))]
               balance:decimal)
             (deftable accounts2:{account2})
 
@@ -1179,7 +1179,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema account2
               @doc   "accounts schema"
-              @model (invariant (>= balance 0.0))
+              @model [(invariant (>= balance 0.0))]
               balance:decimal)
             (deftable accounts2:{account2})
 
@@ -1196,7 +1196,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema account
               @doc   "accounts schema"
-              @model (invariant (>= balance 0.0))
+              @model [(invariant (>= balance 0.0))]
               balance:decimal)
             (deftable accounts:{account})
 
@@ -1257,9 +1257,10 @@ spec = describe "analyze" $ do
           [text|
             (defun test:string ()
               @model
-                (properties [
-                  (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
-                ])
+                [ (property
+                    (not (exists (row:string) (= (cell-delta accounts 'balance row) 2)))
+                  )
+                ]
               (with-read accounts "bob" { "balance" := old-bob }
                 (update accounts "bob" { "balance": (+ old-bob 2) })
 
@@ -1601,9 +1602,9 @@ spec = describe "analyze" $ do
             (defschema ints-row
               @doc "doc"
               @model
-                (invariants
-                  [(> pos 0)
-                   (< neg 0)])
+                [ (invariant (> pos 0))
+                  (invariant (< neg 0))
+                ]
               pos:integer
               neg:integer)
             (deftable ints:{ints-row} "Table of positive and negative integers")
@@ -1624,7 +1625,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               @doc   "doc"
-              @model (invariant (!= nonzero 0))
+              @model [(invariant (!= nonzero 0))]
               nonzero:integer)
             (deftable ints:{ints-row})
 
@@ -1644,7 +1645,7 @@ spec = describe "analyze" $ do
           [text|
             (defschema ints-row
               @doc   "doc"
-              @model (invariant (= zero 0))
+              @model [(invariant (= zero 0))]
               zero:integer)
             (deftable ints:{ints-row})
 
@@ -1738,11 +1739,10 @@ spec = describe "analyze" $ do
             (defschema central-bank-schema
               @doc   "central bank"
               @model
-                (invariants
-                  [(= 1000000 (+ reserve circulation))
-                   (>= reserve 0)
-                   (>= circulation 0)
-                  ])
+                [ (invariant (= 1000000 (+ reserve circulation)))
+                  (invariant (>= reserve 0))
+                  (invariant (>= circulation 0))
+                ]
               reserve:integer
               circulation:integer)
             (deftable central-bank-table:{central-bank-schema})
@@ -2053,27 +2053,27 @@ spec = describe "analyze" $ do
             (defun test1:integer ()
               @doc   "don't touch a table"
               @model
-                (properties [
-                  (forall (table:table) (not (table-written table)))
-                  (forall (table:table) (not (table-read table)))
-                ])
+                [ (property (forall (table:table) (not (table-written table))))
+                  (property (forall (table:table) (not (table-read table))))
+                ]
               1)
 
             (defun test2:string ()
               @doc "write a table"
               @model
-                (properties [
-                  (exists (table:table) (table-written table))
-                  (forall (table:table) (not (table-read table)))
-                ])
+                [
+                  (property (exists (table:table) (table-written table)))
+                  (property (forall (table:table) (not (table-read table))))
+                ]
               (insert simple-table "joel" { 'balance : 5 }))
 
             (defun test3:object{simple-schema} ()
               @doc   "read a table"
-              @model (properties [
-                  (forall (table:table) (not (table-written table)))
-                  (exists (table:table) (table-read table))
-                ])
+              @model
+                [
+                  (property (forall (table:table) (not (table-written table))))
+                  (property (exists (table:table) (table-read table)))
+                ]
               (read simple-table "joel"))
 
           |]
@@ -2088,55 +2088,56 @@ spec = describe "analyze" $ do
 
             (defun test1:integer ()
               @doc   "don't touch a column"
-              @model (properties [
-                  (forall (column:(column-of simple-table))
-                    (not (column-written simple-table column)))
+              @model
+                [
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column))))
                   ; ^- equisatisfiable -v
-                  (not (exists (column:(column-of simple-table))
-                    (column-written simple-table column)))
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column))))
 
-                  (forall (column:(column-of simple-table))
-                    (not (column-read simple-table column)))
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column))))
                   ; ^- equisatisfiable -v
-                  (not (exists (column:(column-of simple-table))
-                    (column-read simple-table column)))
-                ])
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column))))
+                ]
               1)
 
             (defun test2:string ()
               @doc "write a column"
               @model
-                (properties [
-                  (exists (column:(column-of simple-table))
-                    (column-written simple-table column))
+                [
+                  (property (exists (column:(column-of simple-table))
+                    (column-written simple-table column)))
                   ; ^- equisatisfiable -v
-                  (not (forall (column:(column-of simple-table))
-                    (not (column-written simple-table column))))
+                  (property (not (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column)))))
 
-                  (forall (column:(column-of simple-table))
-                    (not (column-read simple-table column)))
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column))))
                   ; ^- equisatisfiable -v
-                  (not (exists (column:(column-of simple-table))
-                    (column-read simple-table column)))
-                ])
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-read simple-table column))))
+                ]
               (insert simple-table "joel" { 'balance : 5 }))
 
             (defun test3:object{simple-schema} ()
               @doc   "read a column"
               @model
-                (properties [
-                  (forall (column:(column-of simple-table))
-                    (not (column-written simple-table column)))
+                [
+                  (property (forall (column:(column-of simple-table))
+                    (not (column-written simple-table column))))
                   ; ^- equisatisfiable -v
-                  (not (exists (column:(column-of simple-table))
-                    (column-written simple-table column)))
+                  (property (not (exists (column:(column-of simple-table))
+                    (column-written simple-table column))))
 
-                  (exists (column:(column-of simple-table))
-                    (column-read simple-table column))
+                  (property (exists (column:(column-of simple-table))
+                    (column-read simple-table column)))
                   ; ^- equisatisfiable -v
-                  (not (forall (column:(column-of simple-table))
-                    (not (column-read simple-table column))))
-                ])
+                  (property (not (forall (column:(column-of simple-table))
+                    (not (column-read simple-table column)))))
+                ]
               (read simple-table "joel"))
 
           |]
@@ -2154,12 +2155,12 @@ spec = describe "analyze" $ do
           (defschema user
             @doc "user info"
             @model
-              (invariants
-                [(>= (length first) 2)
-                 (>= (length last) 2)
-                 (=  (length ssn) 9)
-                 (>= balance 0)
-                ])
+              [
+                (invariant (>= (length first) 2))
+                (invariant (>= (length last) 2))
+                (invariant (=  (length ssn) 9))
+                (invariant (>= balance 0))
+              ]
             first:string
             last:string
             ssn:string
@@ -2169,12 +2170,11 @@ spec = describe "analyze" $ do
           (defun test:object{user} (first:string last:string ssn:string balance:integer)
             @doc "make a user"
             @model
-              (properties
-                [ (= (at 'first result) first)
-                  (= (at 'last result) last)
-                  (= (at 'ssn result) ssn)
-                  (= (at 'balance result) balance)
-                ])
+              [ (property (= (at 'first result) first))
+                (property (= (at 'last result) last))
+                (property (= (at 'ssn result) ssn))
+                (property (= (at 'balance result) balance))
+              ]
              { 'first:first, 'last:last, 'ssn:ssn, 'balance:balance })
           |]
 
@@ -2183,11 +2183,11 @@ spec = describe "analyze" $ do
   describe "user-defined properties verify" $ do
     let code = [text|
           (defun test:string (from:string to:string)
-            @model (properties
-              [ (my-column-delta 0)
-                conserves-balance
-                conserves-balance2
-              ])
+            @model
+              [ (property (my-column-delta 0))
+                (property conserves-balance)
+                (property conserves-balance2)
+              ]
             (enforce (!= from to) "sender and receive must not be the same")
             (with-read accounts from { "balance" := from-bal }
               (with-read accounts to { "balance" := to-bal }
@@ -2205,23 +2205,23 @@ spec = describe "analyze" $ do
                 ; (update accounts from { "balance": (- from-bal 1) })
                 (update accounts to   { "balance": (+ to-bal 1) }))))
           |]
-    expectFalsified $ code' "(property conserves-balance)"
-    expectFalsified $ code' "(property conserves-balance2)"
-    expectFalsified $ code' "(property (my-column-delta 0))"
-    expectVerified  $ code' "(property (my-column-delta 1))"
+    expectFalsified $ code' "[(property conserves-balance)]"
+    expectFalsified $ code' "[(property conserves-balance2)]"
+    expectFalsified $ code' "[(property (my-column-delta 0))]"
+    expectVerified  $ code' "[(property (my-column-delta 1))]"
 
   -- user-defined properties can't be recursive
   describe "user-defined properties can't be recursive" $ do
     let code = [text|
           (defun test:string (from:string to:string)
-            @model (property bad-recursive-prop)
+            @model [(property bad-recursive-prop)]
             "foo")
           |]
     expectFalsified code
 
     let code' = [text|
           (defun test:string (from:string to:string)
-            @model (property (bad-recursive-prop2 0))
+            @model [(property (bad-recursive-prop2 0))]
             "foo")
           |]
     expectFalsified code'
@@ -2315,7 +2315,7 @@ spec = describe "analyze" $ do
       (defconst FOO "FOO")
 
       (defun test:string ()
-        @model (property (= result FOO))
+        @model [(property (= result FOO))]
         FOO)
       |]
 
@@ -2354,7 +2354,7 @@ spec = describe "analyze" $ do
   describe "read (property)" $ do
     let code1 = [text|
           (defun test:object{account} (acct:string)
-            @model (property (= result (read accounts acct 'before)))
+            @model [(property (= result (read accounts acct 'before)))]
             (read accounts acct))
           |]
     expectVerified code1
@@ -2362,16 +2362,18 @@ spec = describe "analyze" $ do
     -- reading from a different account
     let code2 = [text|
           (defun test:object{account} (acct:string)
-            @model (property (= result (read accounts acct 'before)))
+            @model [(property (= result (read accounts acct 'before)))]
             (read accounts 'brian))
           |]
     expectFalsified code2
 
     let code3 = [text|
           (defun test:string (acct:string)
-            @model (property
-              (= 100
-                (at 'balance (read accounts acct 'after))))
+            @model
+              [ (property
+                  (= 100
+                    (at 'balance (read accounts acct 'after))))
+              ]
             (write accounts acct { 'balance: 100 }))
           |]
     expectVerified code3
@@ -2379,19 +2381,23 @@ spec = describe "analyze" $ do
     -- writing to a different account
     let code4 = [text|
           (defun test:string (acct:string)
-            @model (property
-              (= 100
-                (at 'balance (read accounts acct 'after))))
+            @model
+              [ (property
+                  (= 100
+                    (at 'balance (read accounts acct 'after))))
+              ]
             (write accounts acct { 'balance: 0 }))
           |]
     expectFalsified code4
 
     let code5 = [text|
           (defun test:string (acct:string)
-            @model (property
-              (=
-                (+ (at 'balance (read accounts acct 'before)) 100)
-                   (at 'balance (read accounts acct 'after))))
+            @model
+              [ (property
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
+              ]
             (with-read accounts acct { 'balance := bal }
               (write accounts acct { 'balance: (+ 100 bal) })))
           |]
@@ -2400,10 +2406,12 @@ spec = describe "analyze" $ do
     -- writing to a different account
     let code6 = [text|
           (defun test:string (acct:string)
-            @model (property
-              (=
-                (+ (at 'balance (read accounts acct 'before)) 100)
-                   (at 'balance (read accounts acct 'after))))
+            @model
+              [ (property
+                  (=
+                    (+ (at 'balance (read accounts acct 'before)) 100)
+                       (at 'balance (read accounts acct 'after))))
+              ]
             (with-read accounts acct { 'balance := bal }
               (write accounts 'brian { 'balance: (+ 100 bal) })))
           |]
@@ -2411,10 +2419,12 @@ spec = describe "analyze" $ do
 
     let code7 = [text|
           (defun test:string (acct:string)
-            @model (property
-              (=
-                (+ (at 'balance (read accounts acct 'before)) 100)
-                   (at 'balance (read accounts acct 'after))))
+            @model
+              [ (property
+                (=
+                  (+ (at 'balance (read accounts acct 'before)) 100)
+                     (at 'balance (read accounts acct 'after))))
+              ]
             (write accounts acct { 'balance: 0 })
             (with-read accounts acct { 'balance := bal }
               (enforce (> bal 0))
