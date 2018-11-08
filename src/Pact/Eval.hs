@@ -282,19 +282,21 @@ evaluateConstraints
   :: Info
   -> Module
   -> HM.HashMap Text Ref
-  -> Eval e (HM.HashMap Text Ref)
+  -> Eval e (Module, HM.HashMap Text Ref)
 evaluateConstraints info Interface{} _ =
   evalError info $ "Unexpected: interface found in module position while solving constraints"
-evaluateConstraints info Module{..} evalMap =
+evaluateConstraints info m evalMap =
   -- we would like the lazy semantics of foldr to shortcircuit the solver
-  foldr evaluateConstraint (pure evalMap) _mInterfaces
+  foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
   where
     evaluateConstraint ifn em = do
-      irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
-      case irefs of
+      (Module n ks m c h b ifs, refMap) <- em
+      refData <- preview $ eeRefStore . rsModules . ix ifn
+      case refData of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just irefs' -> HM.foldrWithKey (solveConstraint info) em irefs'
+        Just (ModuleData Interface{..} irefs) ->
+          (Module n ks (m <> _interfaceMeta) c h b ifs,) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
