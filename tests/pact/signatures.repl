@@ -41,7 +41,7 @@
 
   ; a full example of what a function may look like
   (defun test3-f5:bool (x:bool y:bool)
-    @model [(property (do (subproperty)))]
+    @model [(property (do (subproperty1)))]
     @doc "example function docstring")
 
   ; typed and inferred variants
@@ -96,8 +96,10 @@
 
   ; a full example of what a function may look like
   ; using constants defined in interfaces
+  ; Note: interface subproperty1 and module subproperty2 are
+  ; both verified for this function
   (defun test3-f5:bool (x: bool y: bool)
-    @model [(property (do (subproperty)))]
+    @model [(property (do (subproperty2)))]
     "example function docstring"
     (and x y))
 

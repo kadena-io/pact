@@ -285,14 +285,16 @@ evaluateConstraints
   -> Eval e (HM.HashMap Text Ref)
 evaluateConstraints info Interface{} _ =
   evalError info $ "Unexpected: interface found in module position while solving constraints"
-evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
+evaluateConstraints info Module{..} evalMap =
+  -- we would like the lazy semantics of foldr to shortcircuit the solver
+  foldr evaluateConstraint (pure evalMap) _mInterfaces
   where
-    evaluateConstraint ifn = do
+    evaluateConstraint ifn em = do
       irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
       case irefs of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just irefs' -> HM.foldrWithKey (solveConstraint info) (pure evalMap) irefs'
+        Just irefs' -> HM.foldrWithKey (solveConstraint info) em irefs'
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
@@ -321,6 +323,8 @@ solveConstraint info refName (Ref t) evalMap = do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
             pure ()
+
+          -- the model concatenation step: we must reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
