@@ -6,7 +6,7 @@
   @model
     [ (defproperty negb_involution (= (not (not true)) true))
       (defproperty negb_inversion (= false (not true)))
-      (defproperty integer_id (= (f3 x) x))
+      (defproperty integer_id (= x x))
     ]
 
 
@@ -31,9 +31,13 @@
     x)
 
   (defun f2:bool (y:bool)
+    @model
+    [ (property negb_inversion)
+      (property negb_involution) ]
     (not y))
 
   (defun f3:integer (x:integer)
+    @model [ (property integer_id) ]
     x)
 )
 
