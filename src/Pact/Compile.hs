@@ -314,7 +314,7 @@ implements = do
 interface :: Compile (Term Name)
 interface = do
   iname' <- _atomAtom <$> bareAtom
-  m <- metaWithModel
+  m <- meta ModelAllowed
   use (psUser . csModule) >>= \ci -> case ci of
     Just {} -> syntaxError "invalid nested interface or module"
     Nothing -> return ()
@@ -346,7 +346,7 @@ emptyDef = do
   modName <- currentModule'
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
-  m <- metaWithModel
+  m <- meta ModelAllowed
   info <- contextInfo
   return $
     TDef defName modName Defun
