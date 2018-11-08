@@ -326,7 +326,8 @@ langDefs =
      (funType tTyInteger [("str-val", tTyString)] <>
       funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
      "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
-     \chars in length and BASE must be between 2 and 16. `(str-to-int 16 \"123456\")` `(str-to-int \"abcdef123456\")`"
+     \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
+     \the base. `(str-to-int 16 \"abcdef123456\")` `(str-to-int \"123456\")`"
     ,hashDef
     ])
     where b = mkTyVar "b" []
