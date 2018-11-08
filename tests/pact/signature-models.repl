@@ -6,7 +6,7 @@
   @model
     [ (defproperty negb_involution (= (not (not true)) true))
       (defproperty negb_inversion (= false (not true)))
-      (defproperty integer_id (= (f3 x)))
+      (defproperty integer_id (= (f3 x) x))
     ]
 
 
