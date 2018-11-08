@@ -217,8 +217,8 @@ loadModule m@Module{..} bod1 mi g0 = do
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
   evaluatedDefs <- evaluateDefs mi modDefs1
-  solvedDefs <- evaluateConstraints mi m evaluatedDefs
-  let md = ModuleData m solvedDefs
+  (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m' solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -290,13 +290,14 @@ evaluateConstraints info m evalMap =
   foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
   where
     evaluateConstraint ifn em = do
-      (Module n ks m c h b ifs, refMap) <- em
+      (Module n ks meta c h b ifs, refMap) <- em
       refData <- preview $ eeRefStore . rsModules . ix ifn
       case refData of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
         Just (ModuleData Interface{..} irefs) ->
-          (Module n ks (m <> _interfaceMeta) c h b ifs,) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+          (Module n ks (meta <> _interfaceMeta) c h b ifs,) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+        Just _ -> evalError info $ "Unexpected: interface found in module position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
