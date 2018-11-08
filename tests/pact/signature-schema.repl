@@ -6,7 +6,7 @@
 
   (defschema account 
     @doc "dummy account schema"
-    @model (invariant (>= balance 0.0))
+    @model [(invariant (>= balance 0.0))]
     balance:decimal
     amount:decimal
     ccy:string
