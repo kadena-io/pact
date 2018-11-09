@@ -295,8 +295,10 @@ evaluateConstraints info m evalMap =
       case refData of
         Nothing -> evalError info $
           "Interface implemented in module, but not defined: " ++ asString' ifn
-        Just (ModuleData Interface{..} irefs) ->
-          (over mMeta (<> _interfaceMeta) m',) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+        Just (ModuleData Interface{..} irefs) -> do
+          em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+          let um = over mMeta (<> _interfaceMeta) m'
+          pure (um, em')
         Just _ -> evalError info $ "Unexpected: interface found in module position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
