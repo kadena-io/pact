@@ -326,7 +326,6 @@ solveConstraint info refName (Ref t) evalMap = do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
             pure ()
-
           -- the model concatenation step: we must reinsert the ref back into the map with new models
           pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
