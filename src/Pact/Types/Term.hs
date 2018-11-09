@@ -526,6 +526,7 @@ instance Monad Term where
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
     TImplements ifs mn i >>= _ = TImplements ifs mn i
 
+
 instance FromJSON (Term n) where
     parseJSON (Number n) = return $ TLiteral (LInteger (round n)) def
     parseJSON (Bool b) = return $ toTerm b

@@ -290,13 +290,13 @@ evaluateConstraints info m evalMap =
   foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
   where
     evaluateConstraint ifn em = do
-      (Module n ks meta c h b ifs, refMap) <- em
+      (m',refMap) <- em
       refData <- preview $ eeRefStore . rsModules . ix ifn
       case refData of
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
+          "Interface implemented in module, but not defined: " ++ asString' ifn
         Just (ModuleData Interface{..} irefs) ->
-          (Module n ks (meta <> _interfaceMeta) c h b ifs,) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+          (over mMeta (<> _interfaceMeta) m',) <$> HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
         Just _ -> evalError info $ "Unexpected: interface found in module position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
