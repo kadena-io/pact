@@ -23,6 +23,6 @@ cd ..
 cd jp/
 rm -rf _build
 
-pandoc -s -t rst pact-jp.md -o pact-jp.rst
-perl -p0777i -e 's/^(\+|\-)\n~/\\\1\n~~/gm' pact-jp.rst
+pandoc -s -t rst pact-reference.md -o pact-reference.rst
+perl -p0777i -e 's/^(\+|\-)\n~/\\\1\n~~/gm' pact-reference.rst
 sphinx-build -b html -d _build/doctrees . _build/html

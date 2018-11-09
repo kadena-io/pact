@@ -11,4 +11,4 @@ Contents:
 .. toctree::
    :maxdepth: 3
 
-   pact-jp
+   pact-reference
