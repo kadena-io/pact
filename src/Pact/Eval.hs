@@ -299,7 +299,7 @@ evaluateConstraints info m evalMap =
           em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
           let um = over mMeta (<> _interfaceMeta) m'
           pure (um, em')
-        Just _ -> evalError info $ "Unexpected: interface found in module position while solving constraints"
+        Just _ -> evalError info $ "Unexpected: module found in interface position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
