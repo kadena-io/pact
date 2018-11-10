@@ -394,7 +394,7 @@ Module names must be globally unique.
 
 #### Table Creation {#tablecreation}
 
-Tables are [created](#create-table) at the same time as modules. While tables are *defined* in
+Tables are [created](pact-functions.html#create-table) at the same time as modules. While tables are *defined* in
 modules, they are *created* "after" modules, so that the module may be redefined later without
 having to necessarily re-create the table.
 
@@ -450,9 +450,9 @@ to the Sales table.
 ### Queries and Performance {#queryperformance}
 
 As of Pact 2.3, Pact offers a powerful query mechanism for selecting multiple rows from a table.
-While visually similar to SQL, the [select](#select) and [where](#where) operations offer a
+While visually similar to SQL, the [select](pact-functions.html#select) and [where](pact-functions.html#where) operations offer a
 _streaming interface_ to a table, where the user provides filter functions, and then operates
-on the rowset as a list data structure using [sort](#sort) and other functions.
+on the rowset as a list data structure using [sort](pact-functions.html#sort) and other functions.
 
 ```lisp
 
@@ -483,7 +483,7 @@ and avoid using select on large tables in the transactional setting.
 ### No Nulls {#nonulls}
 
 Pact has no concept of a NULL value in its database metaphor. The main function for computing
-on database results, [with-read](#with-read), will error if any column value is not found.
+on database results, [with-read](pact-functions.html#with-read), will error if any column value is not found.
 Authors must ensure that values are present for any transactional read. This is a safety feature
 to ensure *totality* and avoid needless, unsafe control-flow surrounding null values.
 
@@ -521,7 +521,7 @@ encountered, the runtime enforces the type when the expression is evaluated.
 
 ### Static Type Inference on Modules
 
-With the [typecheck](#typecheck) repl command, the Pact interpreter will analyze a module
+With the [typecheck](pact-functions.html#typecheck) repl command, the Pact interpreter will analyze a module
 and attempt to infer types on every variable, function application or const definition.
 Using this in project repl scripts is helpful to aid the developer in adding "just enough types"
 to make the typecheck succeed. Successful typechecking is usually a matter of providing
@@ -548,7 +548,7 @@ contract execution and administration.
 
 ### Keyset definition
 
-Keysets are [defined](#define-keyset) by [reading](#read-keyset) definitions from the message
+Keysets are [defined](pact-functions.html#define-keyset) by [reading](pact-functions.html#read-keyset) definitions from the message
 payload. Keysets consist of a list of public keys and a *keyset predicate*.
 
 Examples of valid keyset JSON productions:
@@ -581,10 +581,10 @@ keys on the message signature matched a keyset key.
 Support for multiple signatures is the responsibility of the blockchain layer, and is a powerful
 feature for Bitcoin-style "multisig" contracts (i.e. requiring at least two signatures to release funds).
 
-Pact comes with built-in keyset predicates: [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2).
+Pact comes with built-in keyset predicates: [keys-all](pact-functions.html#keys-all), [keys-any](pact-functions.html#keys-any), [keys-2](pact-functions.html#keys-2).
 Module authors are free to define additional predicates.
 
-If a keyset predicate is not specified, [keys-all](#keys-all) is used by default.
+If a keyset predicate is not specified, [keys-all](pact-functions.html#keys-all) is used by default.
 
 ### Key rotation {#keyrotation}
 
@@ -593,9 +593,9 @@ and predicate. Once authorized, the keyset can be easily [redefined](#define-key
 
 ### Module Table Guards {#tableguards}
 
-When [creating](#create-table) a table, a module name must also be specified. By this mechanism,
+When [creating](pact-functions.html#create-table) a table, a module name must also be specified. By this mechanism,
 tables are "guarded" or "encapsulated" by the module, such that direct access to the table
-via [data-access functions](#Database) is authorized only by the module's admin keyset. However,
+via [data-access functions](pact-functions.html#database) is authorized only by the module's admin keyset. However,
 *within module functions*, table access is unconstrained. This gives contract authors great
 flexibility in designing data access, and is intended to enshrine the module as the main
 "user" data access API.
@@ -615,9 +615,9 @@ The following code indicates how this might be achieved:
     (format "Your balance is {}" [bal])))
 ```
 
-In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](#read-keyset)
+In the example, `create-account` reads a keyset definition from the message payload using [read-keyset](pact-functions.html#read-keyset)
 to store as "keyset" in the table. `read-balance` only allows that owner's keyset to read the balance,
-by first enforcing the keyset using [enforce-keyset](#enforce-keyset).
+by first enforcing the keyset using [enforce-keyset](pact-functions.html#enforce-keyset).
 
 Computational Model {#computation}
 ---
@@ -627,7 +627,7 @@ Here we cover various aspects of Pact's approach to computation.
 ### Turing-Incomplete {#turingincomplete}
 Pact is turing-incomplete, in that there is no recursion (recursion is detected before execution
 and results in an error) and no ability to loop indefinitely. Pact does support operation on
-list structures via [map](#map), [fold](#fold) and [filter](#filter), but since there is no ability
+list structures via [map](pact-functions.html#map), [fold](pact-functions.html#fold) and [filter](pact-functions.html#filter), but since there is no ability
 to define infinite lists, these are necessarily bounded.
 
 Turing-incompleteness allows Pact module loading to resolve all references in advance, meaning that
@@ -640,8 +640,8 @@ Pact allows variable declarations in [let expressions](#let) and [bindings](#bin
 immutable: they cannot be re-assigned, or modified in-place.
 
 A common variable declaration
-occurs in the [with-read](#with-read) function, assigning variables to column values by name. The
-[bind](#bind) function offers this same functionality for objects.
+occurs in the [with-read](pact-functions.html#with-read) function, assigning variables to column values by name. The
+[bind](pact-functions.html#bind) function offers this same functionality for objects.
 
 Module-global constant values can be declared with [defconst](#defconst).
 
@@ -703,7 +703,7 @@ the necessary types. There is a small cost for type enforcement at runtime, and 
 signatures can harm readability. However types can help document an API, so this is a judgement call.
 
 ### Control Flow {#controlflow}
-Pact supports conditionals via [if](#if), bounded looping, and of course function application.
+Pact supports conditionals via [if](pact-functions.html#if), bounded looping, and of course function application.
 
 #### "If" considered harmful {#evilif}
 Consider avoiding `if` wherever possible: every branch makes code harder to understand and more
@@ -714,25 +714,25 @@ Pact's original design left out `if` altogether (and looping), but it was decide
 be able to judiciously use these features as necessary.
 
 #### Use enforce {#use-the-enforce-luke}
-"If" should never be used to enforce business logic invariants: instead, [enforce](#enforce) is
+"If" should never be used to enforce business logic invariants: instead, [enforce](pact-functions.html#enforce) is
 the right choice, which will fail the transaction.
 
 Indeed, failure is the only *non-local exit* allowed by Pact. This reflects Pact's emphasis on
 *totality*.
 
-Note that [enforce-one](#enforce-one) (added in Pact 2.3) allows for testing a list of enforcements such that
+Note that [enforce-one](pact-functions.html#enforce-one) (added in Pact 2.3) allows for testing a list of enforcements such that
 if any pass, the whole expression passes. This is the sole example in Pact of "exception catching"
 in that a failed enforcement simply results in the next test being executed, short-circuiting
 on success.
 
 #### Use built-in keysets
-The built-in keyset functions [keys-all](#keys-all), [keys-any](#keys-any), [keys-2](#keys-2)
+The built-in keyset functions [keys-all](pact-functions.html#keys-all), [keys-any](pact-functions.html#keys-any), [keys-2](pact-functions.html#keys-2)
 are hardcoded in the interpreter to execute quickly. Custom keysets require runtime resolution
 which is slower.
 
 ### Functional Concepts {#fp}
 
-Pact includes the functional-programming "greatest hits": [map](#map), [fold](#fold) and [filter](#filter).
+Pact includes the functional-programming "greatest hits": [map](pact-functions.html#map), [fold](pact-functions.html#fold) and [filter](pact-functions.html#filter).
 These all employ [partial application](#partial-application), where the list item is appended onto the application
 arguments in order to serially execute the function.
 
@@ -741,7 +741,7 @@ arguments in order to serially execute the function.
 (fold (+) "" ["Concatenate" " " "me"])
 ```
 
-Pact also has [compose](#compose), which allows "chaining" applications in a functional style.
+Pact also has [compose](pact-functions.html#compose), which allows "chaining" applications in a functional style.
 
 ### Pure execution {#pure}
 In certain contexts Pact can guarantee that computation is "pure", which simply means
@@ -761,7 +761,7 @@ code to execute quickly.
 ### Message Data {#messagedata}
 
 Pact expects code to arrive in a message with a JSON payload and signatures. Message data
-is read using [read-msg](#read-msg) and related functions. While signatures are not directly
+is read using [read-msg](pact-functions.html#read-msg) and related functions. While signatures are not directly
 readable or writable, they are evaluated as part of [keyset predicate](#keysetpredicates)
 enforcement.
 
@@ -770,7 +770,7 @@ enforcement.
 Values returned from Pact transactions are expected to be directly represented as JSON
 values.
 
-When reading values from a message via [read-msg](#read-msg), Pact coerces JSON types
+When reading values from a message via [read-msg](pact-functions.html#read-msg), Pact coerces JSON types
 as follows:
 
 - String -> String
@@ -780,7 +780,7 @@ as follows:
 - Array -> List
 - Null -> JSON Value
 
-Decimal values are represented as Strings and read using [read-decimal](#read-decimal).
+Decimal values are represented as Strings and read using [read-decimal](pact-functions.html#read-decimal).
 
 
 Confidentiality {#confidentiality}
@@ -824,8 +824,8 @@ Steps can only be executed in strict sequential order.
 A pact is defined with arguments, similarly to function definition. However, arguments values are only
 evaluated in the execution of the initial step, after which those values are available unchanged to subsequent steps.
 To share new values
-with subsequent steps, a step can [yield](#yield) values which the subsequent step can recover using
-the special [resume](#resume) binding form.
+with subsequent steps, a step can [yield](pact-functions.html#yield) values which the subsequent step can recover using
+the special [resume](pact-functions.html#resume) binding form.
 
 Pacts are designed to run in one of two different contexts, private and public. A private pact is
 indicated by each step identifying a single entity to execute the step, while public steps do
@@ -860,13 +860,13 @@ previous step as a new ROLLBACK transaction, completing when the first step is r
 
 ### Yield and Resume
 
-A step can yield values to the following step using [yield](#yield) and [resume](#resume). In public,
+A step can yield values to the following step using [yield](pact-functions.html#yield) and [resume](pact-functions.html#resume). In public,
 this is an unforgeable value, as it is maintained within the blockchain pact scope. In private, this is
 simply a value sent with a RESUME message from the executed entity.
 
 ### Pact execution scope and `pact-id`
 
-Every time a pact is initiated, it is given a unique ID which is retrievable using the [pact-id](#pact-id)
+Every time a pact is initiated, it is given a unique ID which is retrievable using the [pact-id](pact-functions.html#pact-id)
 function, which will return the ID of the currently executing pact, or fail if not running within a pact
 scope. This mechanism can thus be used to guard access to resources, analogous to the use of keysets and
 signatures. One typical use of this is to create escrow accounts that can only be used within the context
@@ -875,8 +875,8 @@ of a given pact, eliminating the need for a trusted third party for many use-cas
 ### Testing pacts
 
 Pacts
-can be tested in repl scripts using the [env-entity](#env-entity), [env-step](#env-step)
-and [pact-state](#pact-state) repl functions to simulate pact executions.
+can be tested in repl scripts using the [env-entity](pact-functions.html#env-entity), [env-step](pact-functions.html#env-step)
+and [pact-state](pact-functions.html#pact-state) repl functions to simulate pact executions.
 
 It is also possible to simulate pact execution in the pact server API by formatting [continuation Request](#request-yaml)
 yaml files into API requests with a `cont` payload.
@@ -888,7 +888,7 @@ Pact supports a number of features to manage a module's dependencies on other Pa
 ### Module Hashes
 Once loaded, a Pact module is associated with a hash computed from the module's source code text.
 This module hash uniquely identifies the version of the module.
-Module hashes can be examined with [describe-module](#describe-module):
+Module hashes can be examined with [describe-module](pact-functions.html#describe-module):
 
 ```
 pact> (at "hash" (describe-module 'accounts))
@@ -1039,8 +1039,8 @@ pact> { "foo": (+ 1 2), "bar": "baz" }
 ### Bindings {#bindings}
 Bindings are dictionary-like forms, also created with curly braces, to bind
 database results to variables using the `:=` operator.
-They are used in [with-read](#with-read), [with-default-read](#with-default-read),
-[bind](#bind) and [resume](#resume) to assign variables to named columns in a row, or values in an object.
+They are used in [with-read](pact-functions.html#with-read), [with-default-read](pact-functions.html#with-default-read),
+[bind](pact-functions.html#bind) and [resume](pact-functions.html#resume) to assign variables to named columns in a row, or values in an object.
 
 ```lisp
 (defun check-balance (id)
@@ -1226,7 +1226,7 @@ is in the form `FIELDNAME[:FIELDTYPE]`.
 ```
 
 Define NAME as a _table_, used in database functions. Note the
-table must still be created with [create-table](#create-table).
+table must still be created with [create-table](pact-functions.html#create-table).
 
 ### let {#let}
 
@@ -1294,7 +1294,7 @@ ROLLBACK-EXPR functions as a "cancel function" to be explicitly executed by a pa
 
 Import an existing MODULE into a namespace. Can only be issued at the top-level, or within a module
 declaration. MODULE can be a string, symbol or bare atom. With HASH, validate that the imported module's
-hash matches HASH, failing if not. Use [describe-module](#describe-module) to query for the
+hash matches HASH, failing if not. Use [describe-module](pact-functions.html#describe-module) to query for the
 hash of a loaded module on the chain.
 
 ```lisp
@@ -1380,7 +1380,7 @@ Time formats
 ===
 
 Pact leverages the Haskell [thyme library](http://hackage.haskell.org/package/thyme) for fast
-computation of time values. The [parse-time](#parse-time) and [format-time](#format-time)
+computation of time values. The [parse-time](pact-functions.html#parse-time) and [format-time](pact-functions.html#format-time)
 functions accept format codes that derive from GNU `strftime` with some extensions, as follows:
 
 `%%` - literal `"%"`
