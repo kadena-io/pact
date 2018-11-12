@@ -43,7 +43,7 @@ brew install kadena-io/pact/pact
 Installing Pact with Binary Distributions
 ---
 Pact can also be installed by following the instructions below:
-- Install z3
+- Install [z3](https://github.com/Z3Prover/z3/wiki)
 - Download the [prebuilt binaries](http://kadena.io/pact/downloads.html) for your distribution. Or see [Building](#Building) for instructions on how to build Pact from the source code.
 - Once you've downloaded the binary, make sure that it is marked as executable by running `chmod +x <executable-file>`.
 - Put the binary somewhere in your PATH.
