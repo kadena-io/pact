@@ -1,3 +1,7 @@
+2.5.1
+---
+* Fix keyset enforce of old keyset
+
 2.5.0
 ---
 * Pluggable gas model with simple fixed-rate implementation
