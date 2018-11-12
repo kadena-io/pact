@@ -91,6 +91,7 @@ data Feature
   -- Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
+  | FColumnOf
   -- Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
@@ -190,16 +191,17 @@ data Bindings
   | BindObject
   deriving (Eq, Ord, Show)
 
-int, dec, str, time, bool, obj, ks, tbl, col :: ConcreteType
-int  = "integer"
-dec  = "decimal"
-str  = "string"
-time = "time"
-bool = "bool"
-obj  = "object"
-ks   = "keyset"
-tbl  = "table"
-col  = "column"
+int, dec, str, time, bool, obj, ks, tbl, col, type' :: ConcreteType
+int   = "integer"
+dec   = "decimal"
+str   = "string"
+time  = "time"
+bool  = "bool"
+obj   = "object"
+ks    = "keyset"
+tbl   = "table"
+col   = "column"
+type' = "type"
 
 doc :: Feature -> Doc
 
@@ -764,6 +766,21 @@ doc FExistentialQuantification = Doc
         r
   ]
 
+doc FColumnOf = Doc
+  "column-of"
+  CQuantification
+  PropOnly
+  "The *type* of `column`s for a given `table`. Commonly used in conjunction with quantification; e.g.: `(exists (col:(column-of accounts)) (column-written accounts col))`."
+  [ Usage
+      "(column-of t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("t", TyCon tbl)
+        ]
+        (TyCon type')
+  ]
+
 -- Transactional features
 
 doc FTransactionAborts = Doc
@@ -1118,6 +1135,7 @@ PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
+PAT(SColumnOf, FColumnOf)
 PAT(STransactionAborts, FTransactionAborts)
 PAT(STransactionSucceeds, FTransactionSucceeds)
 PAT(SFunctionResult, FFunctionResult)
