@@ -29,6 +29,7 @@ import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
 import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
+import qualified Data.SBV.List as SBVL
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Traversable     (for)
@@ -66,7 +67,9 @@ allocForETerm
       (\_ -> mkAVal . sansProv <$>
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
-    pure (EType (SList ty), AList cells')
+    let aval :: AVal
+        aval = undefined -- mkAVal $ SBVL.implode $ SBVI.SBV . (\(AVal _ sval) -> sval) <$> cells'
+    pure (EType (SList ty), aval)
 -- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
 
@@ -186,8 +189,11 @@ saturateModel =
           (\Refl -> error "TODO")
           (\Refl -> error "TODO")
 
-        go (EType (SList ty :: SingTy k t)) (AList avals) =
-          fmap AList $ traverse (go (EType ty)) avals
+        go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
+          withSymWord ty $ withSymWord ty $
+            _ <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
+          -- mkAVal' . SBV.literal
+          --   <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go (EType SList{}) OpaqueVal = pure OpaqueVal
 
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj

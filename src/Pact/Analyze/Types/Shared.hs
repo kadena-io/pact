@@ -498,7 +498,6 @@ varIdArgs args =
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
-  | AList [AVal]
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)
@@ -506,7 +505,6 @@ data AVal
 instance UserShow AVal where
   userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
-    AList avals -> userShow avals
     AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 
@@ -554,9 +552,6 @@ mkAVal (S mProv (SBVI.SBV sval)) = AVal mProv sval
 
 mkAVal' :: SBV a -> AVal
 mkAVal' (SBVI.SBV sval) = AVal Nothing sval
-
-mkAList :: [S a] -> AVal
-mkAList = AList . fmap mkAVal
 
 coerceS :: forall a b. Coercible a b => S a -> S b
 coerceS (S mProv a) = S mProv $ coerceSBV a

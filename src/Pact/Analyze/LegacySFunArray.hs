@@ -16,12 +16,23 @@ import           Data.SBV               hiding (SFunArray)
 import           Data.SBV.Internals     (registerKind, SymArray(..))
 -- import Data.SBV.Core.Data
 
--- | Declare a new functional symbolic array. Note that a read from an uninitialized cell will result in an error.
-declNewSFunArray :: forall a b. (HasKind a, HasKind b) => Maybe String -> Symbolic (SFunArray a b)
-declNewSFunArray mbNm = do st <- ask
-                           liftIO $ mapM_ (registerKind st) [kindOf (undefined :: a), kindOf (undefined :: b)]
-                           return $ SFunArray $ error . msg mbNm
-  where msg Nothing   i = "Reading from an uninitialized array entry, index: " ++ show i
+-- | Declare a new functional symbolic array. Note that a read from an
+-- uninitialized cell will result in an error.
+declNewSFunArray
+  :: forall a b.
+     (HasKind a, HasKind b)
+  => Maybe String
+  -> Maybe (SBV b)
+  -> Symbolic (SFunArray a b)
+declNewSFunArray mbNm mDef = do
+  st <- ask
+  liftIO $ mapM_ (registerKind st) [kindOf (undefined :: a), kindOf (undefined :: b)]
+  return $ SFunArray handleNotFound
+  where handleNotFound = case mDef of
+          Nothing  -> error . msg mbNm
+          Just def -> const def
+
+        msg Nothing   i = "Reading from an uninitialized array entry, index: " ++ show i
         msg (Just nm) i = "Array " ++ show nm ++ ": Reading from an uninitialized array entry, index: " ++ show i
 
 newtype SFunArray a b = SFunArray (SBV a -> SBV b)

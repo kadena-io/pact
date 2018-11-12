@@ -53,7 +53,6 @@ showTVal (ety, av) = case av of
         showSbv (SBVI.SBV sval :: SBV (Concrete t)))
       (\Refl -> error "TODO")
       (\Refl -> error "TODO")
-  AList avals -> "[ " <> T.intercalate ", " (userShow <$> avals) <> " ]"
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

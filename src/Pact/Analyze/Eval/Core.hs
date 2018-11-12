@@ -7,18 +7,20 @@
 {-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
-import           Control.Lens                (over, ifoldr)
+import           Control.Lens                (over, (^?!), ix)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, bAll, true, false, uninterpret)
+                                              SymWord, ite, true, false, uninterpret, SBV)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
-import qualified Data.List as List
+import qualified Data.SBV.List as SBVL
+import Data.SBV.List.Bounded (bfoldr, band, bzipWith)
+import Data.Traversable (for)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -170,34 +172,39 @@ evalCore (StringContains needle haystack) = do
     `SBVS.isInfixOf`
     _sSbv (coerceS @Str @String haystack')
 evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
-  needle'   <- eval needle
-  haystack' <- evalL haystack
+  S _ needle'   <- eval needle
+  S _ haystack' <- evalL haystack
+  -- bfoldr :: (SymWord a, SymWord b) => Int -> (SBV a -> SBV b -> SBV b) -> SBV b -> SList a -> SBV b
   pure $ sansProv $
-    foldr (\cell rest -> cell .== needle' ||| rest) false haystack'
+    bfoldr 10 (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
   SList tyA' -> case singEq tyA tyB of
     Nothing   -> error "TODO"
     Just Refl -> withEq tyA' $ withSymWord tyA' $ withShow tyA' $ do
-      a' <- evalL a
-      b' <- evalL b
-      pure $ case pair a' b' of
-        Nothing -> case op of
-          Eq'  -> false
-          Neq' -> true
-        Just pairs -> sansProv $ flip bAll pairs $ uncurry $ case op of
-          Eq'  -> (.==)
-          Neq' -> (./=)
+      S _ a' <- evalL a
+      S _ b' <- evalL b
+
+      let wrongLength = case op of
+            Eq'  -> false
+            Neq' -> true
+          zipF = case op of
+            Eq'  -> (.==)
+            Neq' -> (./=)
+
+      pure $ ite (SBVL.length a' .== SBVL.length b')
+        (sansProv $ band 10 $ bzipWith 10 zipF a' b')
+        wrongLength
 evalCore (ListAt tyA i l) = do
-  i' <- eval i
-  l' <- withShow tyA $ evalL l
+  S _ i' <- eval i
+  S _ l' <- withShow tyA $ evalL l
 
   -- valid range [0..length l - 1]
-  markFailure $ i' .< 0 ||| i' .>= fromIntegral (length l')
+  markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
 
   -- statically build a list of index comparisons
-  pure $ ifoldr
+  pure $ sansProv $ ibfoldr 10
     (\thisIx val rest -> ite (fromIntegral thisIx .== i') val rest)
-    (sansProv $ uninterpret "listOutOfBounds")
+    (uninterpret "listOutOfBounds")
     l'
 
 evalCore (Var vid name) = do
@@ -206,49 +213,46 @@ evalCore (Var vid name) = do
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
-    -- Just (AList lst)       ->
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
+
+ibfoldr
+  :: (SymWord a, SymWord b)
+  => Int -> (Int -> SBV a -> SBV b -> SBV b) -> SBV b -> SBV [a] -> SBV b
+ibfoldr = undefined
 
 evalCoreL
   :: ( Analyzer m
      , a' ~ Concrete a
      , SymWord a', Show a')
-  => Core (TermOf m) ('TyList a) -> m ([S a'])
+  => Core (TermOf m) ('TyList a) -> m (S [a'])
 evalCoreL (LiteralList _ty xs) = do
   vals <- traverse (fmap _sSbv . eval) xs
-  pure $ sansProv <$> vals
+  pure $ sansProv $ SBVL.implode vals
 evalCoreL (ListDrop _ty n list) = do
-  n'    <- eval n
-  list' <- evalL list
-
-  let list'' = ite (n' .>= 0) (List.tails list') (List.inits list')
-      n''    = ite (n' .>= 0) n' (fromIntegral (length list') + n')
-
-  -- statically build a list of index comparisons
-  pure $ ifoldr
-    (\thisIx val rest -> ite (fromIntegral thisIx .== n'') val rest)
-    -- we return [] for any index which is too large
-    []
-    list''
-
-evalCoreL (ListTake _ty n list) = do
-  n'    <- eval n
-  list' <- evalL list
+  S _ n'    <- eval n
+  S _ list' <- evalL list
 
   -- if the index is positive, count from the start of the list, otherwise
   -- count from the end.
-  let list'' = ite (n' .>= 0) (List.inits list') (List.tails list')
-      n''    = ite (n' .>= 0) n' (fromIntegral (length list') + n')
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.drop n' list')
+    (SBVL.take (SBVL.length list' + n') list')
 
-  -- statically build a list of index comparisons
-  pure $ ifoldr
-    (\thisIx val rest -> ite (fromIntegral thisIx .== n'') val rest)
-    -- we return [] for any index which is too large
-    []
-    list''
+evalCoreL (ListTake _ty n list) = do
+  S _ n'    <- eval n
+  S _ list' <- evalL list
 
-evalCoreL (ListConcat _ty p1 p2) = (++) <$> evalL p1 <*> evalL p2
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.take n' list')
+    (SBVL.drop (SBVL.length list' + n') list')
+
+evalCoreL (ListConcat _ty p1 p2) = do
+  S _ p1' <- evalL p1
+  S _ p2' <- evalL p2
+  pure $ sansProv $ SBVL.concat p1' p2'
 
 -- evalCoreL ListReverse{} = undefined
 -- evalCoreL ListSort{} = undefined
@@ -283,8 +287,6 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
-
-        -- Just (fieldType, AList avals) ->
 
         Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
           ObjFieldOfWrongType fieldName fieldType
@@ -347,6 +349,20 @@ evalCoreO (Var vid name) = do
 evalCoreO (Lit obj)     = pure obj
 evalCoreO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
 evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
+evalCoreO (ListAt _ _ _) = error "TODO"
+evalCoreO (ObjDrop (Schema schemaFields) keys obj) = do
+  keys' <- evalL keys
+  case unliteralS keys' of
+    Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
+    Just literalKeys -> do
+      fields <- for literalKeys $ \(Str key) -> do
+        let retType = schemaFields ^?! ix (T.pack key)
+        -- val <- withSymWord singTy $
+        --   evalObjAt schema (Lit' (Str key)) obj retType
+        let val = undefined
+        pure (T.pack key, (retType, mkAVal val))
+      pure $ Object $ Map.fromList fields
+evalCoreO (ObjTake _ _ _) = error "TODO"
 
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
@@ -356,7 +372,7 @@ evalExistential = \case
     pure (EType ty, mkAVal prop')
   EList (SList ty) prop -> withShow ty $ withSymWord ty $ do
     vals  <- evalL prop
-    pure (EType ty, mkAList vals)
+    pure (EType ty, mkAVal vals)
   EObject ty prop -> do
     prop' <- evalO prop
     pure (EObjectTy ty, AnObj prop')

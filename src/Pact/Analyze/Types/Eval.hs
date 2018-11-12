@@ -67,7 +67,7 @@ class (MonadError AnalyzeFailure m , S :*<: TermOf m) => Analyzer m where
   eval          :: (a' ~ Concrete a, Show a', SymWord a')
                 => TermOf m a           -> m (S a')
   evalL         :: (a' ~ Concrete a, Show a', SymWord a')
-                => TermOf m ('TyList a) -> m [S a']
+                => TermOf m ('TyList a) -> m (S [a'])
   evalO         :: TermOf m 'TyObject   -> m Object
 
 

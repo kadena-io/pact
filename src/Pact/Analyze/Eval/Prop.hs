@@ -75,13 +75,11 @@ aval elimVal elimList elimObj = \case
 expectVal :: Analyzer m => AVal -> m (S a)
 expectVal = aval
   (pure ... mkS)
-  (throwErrorNoLoc . AValUnexpectedlyList)
   (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: Analyzer m => AVal -> m Object
 expectObj = aval
   ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
-  (throwErrorNoLoc . AValUnexpectedlyList)
   pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal

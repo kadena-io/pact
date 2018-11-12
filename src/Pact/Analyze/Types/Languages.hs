@@ -175,7 +175,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- | A 'ComparisonOp' expression over two 'Time' expressions
   TimeComparison    :: ComparisonOp -> t 'TyTime    -> t 'TyTime    -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'String' expressions
-  StringComparison  :: ComparisonOp -> t 'TyStr  -> t 'TyStr  -> Core t 'TyBool
+  StringComparison  :: ComparisonOp -> t 'TyStr     -> t 'TyStr     -> Core t 'TyBool
   -- | A 'ComparisonOp' expression over two 'Bool' expressions
   --
   -- note: this is more broad than the set ({=, !=}) of comparisons pact
@@ -198,7 +198,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ListSort    :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
 
   ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
-  ObjDrop :: Schema -> t 'TyStr -> t 'TyObject -> Core t 'TyObject
+  ObjDrop :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
   -- ListFilter ::
   -- ListFold ::
