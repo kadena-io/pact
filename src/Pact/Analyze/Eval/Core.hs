@@ -186,23 +186,13 @@ evalStrToIntBase bT sT = do
     -- Symbolic base and concrete string: pre-compute all 17 possible outcomes
     (Nothing, Just conStr) ->
       let conText = T.pack conStr
-      in iteS (sansProv $ b .== 1) (precompute 1 conText) $
-           iteS (sansProv $ b .== 2) (precompute 2 conText) $
-           iteS (sansProv $ b .== 3) (precompute 3 conText) $
-           iteS (sansProv $ b .== 4) (precompute 4 conText) $
-           iteS (sansProv $ b .== 5) (precompute 5 conText) $
-           iteS (sansProv $ b .== 6) (precompute 6 conText) $
-           iteS (sansProv $ b .== 7) (precompute 7 conText) $
-           iteS (sansProv $ b .== 8) (precompute 8 conText) $
-           iteS (sansProv $ b .== 9) (precompute 9 conText) $
-           iteS (sansProv $ b .== 10) (precompute 10 conText) $
-           iteS (sansProv $ b .== 11) (precompute 11 conText) $
-           iteS (sansProv $ b .== 12) (precompute 12 conText) $
-           iteS (sansProv $ b .== 13) (precompute 13 conText) $
-           iteS (sansProv $ b .== 14) (precompute 14 conText) $
-           iteS (sansProv $ b .== 15) (precompute 15 conText) $
-           iteS (sansProv $ b .== 16) (precompute 16 conText) $
+      in foldr
+           (\conBase rest ->
+             iteS (sansProv $ b .== literalS conBase)
+               (precompute conBase conText)
+               rest)
            symbolicFailure
+           [2..16]
 
     -- Concrete base and symbolic string: only support base 10
     (Just conBase, Nothing)

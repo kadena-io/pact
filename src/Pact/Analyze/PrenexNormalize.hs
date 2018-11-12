@@ -77,9 +77,9 @@ floatIntegerQuantifiers p = case p of
   CoreProp (StrLength s)
     -> PStrLength <$> float s
   CoreProp (StrToInt s)
-    -> PStrToInt <$> float s
+    -> CoreProp . StrToInt <$> float s
   CoreProp (StrToIntBase b s)
-    -> PStrToIntBase <$> float b <*> float s
+    -> CoreProp ... StrToIntBase <$> float b <*> float s
 
   CoreProp (Numerical (IntArithOp op a b))
     -> PNumerical ... IntArithOp      op <$> float a <*> float b
