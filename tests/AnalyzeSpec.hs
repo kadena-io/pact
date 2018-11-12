@@ -1521,10 +1521,7 @@ spec = describe "analyze" $ do
           in expectPass code $ Valid Success'
 
         describe "invalid inputs" $ do
-          --
-          -- TODO: uncomment case once the concrete impl is fixed:
-          --
-          for_ [(0, "23"), (6, ""){- , (6, "77") -}] $ \(base, str) ->
+          for_ [(0, "23"), (6, ""), (6, "77")] $ \(base, str) ->
             let baseText = tShow (base :: Int)
             in expectFail [text|(defun test:integer () (str-to-int $baseText "$str"))|] $
                  Valid Success'

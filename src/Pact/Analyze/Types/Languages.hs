@@ -45,8 +45,6 @@ module Pact.Analyze.Types.Languages
   , pattern POr
   , pattern PStrConcat
   , pattern PStrLength
-  , pattern PStrToInt
-  , pattern PStrToIntBase
   , pattern PVar
   ) where
 
@@ -440,12 +438,6 @@ pattern PLogical op args = CoreProp (Logical op args)
 
 pattern PStrLength :: Prop String -> Prop Integer
 pattern PStrLength str = CoreProp (StrLength str)
-
-pattern PStrToInt :: Prop String -> Prop Integer
-pattern PStrToInt str = CoreProp (StrToInt str)
-
-pattern PStrToIntBase :: Prop Integer -> Prop String -> Prop Integer
-pattern PStrToIntBase base str = CoreProp (StrToIntBase base str)
 
 pattern PAnd :: Prop Bool -> Prop Bool -> Prop Bool
 pattern PAnd a b = CoreProp (Logical AndOp [a, b])
