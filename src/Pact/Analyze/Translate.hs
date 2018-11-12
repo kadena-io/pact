@@ -117,6 +117,8 @@ describeTranslateFailureNoLoc = \case
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
+  BadList -> "TODO"
+  TODO -> "TODO"
 
 data TranslateEnv
   = TranslateEnv
@@ -493,6 +495,7 @@ translateBody = \case
     pure $ case asts' of
       ESimple ty astsT -> ESimple ty $ Sequence ast' astsT
       EObject ty astsO -> EObject ty $ Sequence ast' astsO
+      EList   ty astsL -> EList   ty $ Sequence ast' astsL
 
 translateLet :: ScopeType -> [(Named Node, AST Node)] -> [AST Node] -> TranslateM ETerm
 translateLet scopeTy (unzip -> (bindingAs, rhsAs)) body = do
@@ -979,6 +982,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EList (SList listOfTy) list -> do
         ESimple SInteger index' <- translateNode index
         pure $ ESimple listOfTy $ CoreTerm $ ListAt listOfTy index' list
+      _ -> throwError' TODO
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -997,8 +1001,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       <- maybe (throwError' BadList) pure $ mkLiteralList elems'
     pure $ EList listOfTy $ CoreTerm litList
 
-  AST_Contains node val collection -> do
-    ty                      <- translateType node
+  AST_Contains _node val collection -> do
     ESimple needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
@@ -1006,6 +1009,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       ESimple SStr haystack -> case needleTy of
         SStr -> pure $ ESimple SBool $ CoreTerm $ StringContains needle haystack
         _    -> throwError' TODO
+      ESimple _ _ -> throwError' TODO
       EObject _ _ -> throwError' TODO
       EList (SList ty) haystack -> case singEq needleTy ty of
         Just Refl
@@ -1014,35 +1018,22 @@ translateNode astNode = withAstContext astNode $ case astNode of
 
   -- TODO: object drop
   AST_Drop _node num list -> do
-    EList ty' list'       <- translateNode list
+    EList ty'@(SList elemTy) list'       <- translateNode list
     ESimple SInteger num' <- translateNode num
-    case ty' of
-      SList sty -> pure $ EList ty' $ CoreTerm $ ListDrop sty num' list'
-      _         -> throwError' TODO
+    pure $ EList ty' $ CoreTerm $ ListDrop elemTy num' list'
 
   AST_Reverse _node list -> do
-    ESimple ty' list' <- translateNode list
-    case ty' of
-      -- SList{} -> pure $ ESimple ty' $ CoreTerm $ ListReverse list'
-      _       -> throwError' TODO
+    EList ty'@(SList elemTy) list' <- translateNode list
+    pure $ EList ty' $ CoreTerm $ ListReverse elemTy list'
 
-  AST_Sort node list               -> do
-    -- TODO: do we need to translate the node ty? look at Take
-    ty                <- translateType node
-    ESimple ty' list' <- translateNode list
-
-    case ty of
-      EObjectTy{} -> throwError' TODO
-      EType ty''@SList{} -> case singEq ty' ty'' of
-        Nothing   -> throwError' TODO
-        -- Just Refl -> pure $ ESimple ty' $ CoreTerm $ ListSort list'
+  AST_Sort _node list -> do
+    EList ty'@(SList elemTy) list' <- translateNode list
+    pure $ EList ty' $ CoreTerm $ ListSort elemTy list'
 
   AST_Take _node num list -> do
-    EList ty' list'       <- translateNode list
-    ESimple SInteger num' <- translateNode num
-    case ty' of
-      SList sty -> pure $ EList ty' $ CoreTerm $ ListTake sty num' list'
-      _         -> throwError' TODO
+    EList ty'@(SList elemTy) list' <- translateNode list
+    ESimple SInteger num'          <- translateNode num
+    pure $ EList ty' $ CoreTerm $ ListTake elemTy num' list'
 
   AST_Step                -> throwError' $ NoPacts astNode
   AST_NFun _ "pact-id" [] -> throwError' $ NoPacts astNode

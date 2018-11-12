@@ -30,7 +30,34 @@ import           Pact.Analyze.Util
   CoreProp Var{}      -> ([], p);                                     \
   CoreProp Lit{}      -> ([], p);                                     \
   CoreProp Sym{}      -> ([], p);                                     \
+  CoreProp (ListAt ty a b) -> CoreProp <$> \
+    (ListAt ty <$> float a <*> float b) ; \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
+
+instance Float ('TyList 'TyObject) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyKeySet) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyAny) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyInteger) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyDecimal) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyTime) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyStr) where
+  float = error "TODO"
+
+instance Float ('TyList 'TyBool) where
+  float = error "TODO"
+
 
 instance Float 'TyInteger where
   float = floatIntegerQuantifiers
@@ -53,6 +80,10 @@ instance Float 'TyObject where
     CoreProp Numerical{}     -> vacuousMatch "numerical can't be Object"
     CoreProp LiteralObject{} -> ([], p)
     CoreProp ObjectMerge{}   -> ([], p)
+    CoreProp (ObjDrop schema keys obj) -> CoreProp <$>
+      (ObjDrop schema <$> float keys <*> float obj)
+    CoreProp (ObjTake schema keys obj) -> CoreProp <$>
+      (ObjTake schema <$> float keys <*> float obj)
     PropSpecific (PropRead ba schema tn pRk)
       -> PropSpecific . PropRead ba schema tn <$> float pRk
 
@@ -157,7 +188,7 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq   op (EList tyA a) (EList tyB b)) ->
+  CoreProp (ListEqNeq op (EList tyA a) (EList tyB b)) ->
     let -- HACK!
         qa = []
         qb = []
@@ -166,6 +197,15 @@ floatBoolQuantifiers p = case p of
     -- let (qa, a') = float a
     --     (qb, b') = float b
     in (qa ++ qb, CoreProp (ListEqNeq op (EList tyA a') (EList tyB b')))
+  CoreProp (ListEqNeq _ _ _)
+    -> error ("ill-formed list (in)-equality: " ++ show p)
+  CoreProp (ObjContains schema (EObject ty obj)) -> CoreProp <$>
+    (ObjContains schema . EObject ty <$> float obj)
+  CoreProp (ObjContains _ _) -> error ("ill-formed contains: " ++ show p)
+  CoreProp (StringContains needle haystack) -> CoreProp <$>
+    (StringContains <$> float needle <*> float haystack)
+  -- CoreProp (ListContains ty needle haystack) -> CoreProp <$>
+  --   (ListContains ty <$> float needle <*> float haystack)
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b

@@ -51,6 +51,7 @@ classTitle CQuantification = "Quantification"
 classTitle CTransactional = "Transactional"
 classTitle CDatabase = "Database"
 classTitle CAuthorization = "Authorization"
+classTitle CList = "List"
 
 data Feature
   -- Numerical operators

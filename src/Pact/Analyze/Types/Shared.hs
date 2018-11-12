@@ -126,6 +126,7 @@ transformExistential
 transformExistential f term = case term of
   ESimple ty  term' -> ESimple ty  (f term')
   EObject sch term' -> EObject sch (f term')
+  EList   ty  term' -> EList   ty  (f term')
 
 mapExistential :: (forall a. tm a -> tm a) -> Existential tm -> Existential tm
 mapExistential = transformExistential
@@ -505,6 +506,7 @@ data AVal
 instance UserShow AVal where
   userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
+    AList avals -> userShow avals
     AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 

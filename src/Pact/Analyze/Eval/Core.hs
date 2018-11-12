@@ -206,6 +206,7 @@ evalCore (Var vid name) = do
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
+    -- Just (AList lst)       ->
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
 
@@ -217,7 +218,7 @@ evalCoreL
 evalCoreL (LiteralList _ty xs) = do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv <$> vals
-evalCoreL (ListDrop ty n list) = do
+evalCoreL (ListDrop _ty n list) = do
   n'    <- eval n
   list' <- evalL list
 
@@ -282,6 +283,8 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+
+        -- Just (fieldType, AList avals) ->
 
         Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
           ObjFieldOfWrongType fieldName fieldType

@@ -97,8 +97,9 @@ instance Show (Existential tm) where {                                         \
     EObject ty obj -> showString "EObject " . showsPrec 11 ty . showString " " \
       . showsPrec 11 obj; };                                                   \
 instance UserShow (Existential tm) where                                       \
-  userShowPrec d e = case e of                                                \
-    ESimple ty a  -> withUserShow ty (userShowPrec d a);                      \
+  userShowPrec d e = case e of                                                 \
+    ESimple ty a  -> withUserShow ty (userShowPrec d a);                       \
+    EList ty lst  -> withUserShow ty (userShowPrec d lst);                     \
     EObject _ty a -> userShowPrec d a;
 
 -- | Subtyping relation from "Data types a la carte".
@@ -183,6 +184,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
   ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
+  -- TODO: switch to singleton representation
   ListEqNeq   :: EqNeq -> Existential t -> Existential t -> Core t 'TyBool
 
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
@@ -192,6 +194,9 @@ data Core (t :: Ty -> *) (a :: Ty) where
   StringContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
   ListContains   :: SingTy 'SimpleK a -> t a -> t ('TyList a) -> Core t 'TyBool
 
+  ListReverse :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
+  ListSort    :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
+
   ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjDrop :: Schema -> t 'TyStr -> t 'TyObject -> Core t 'TyObject
 
@@ -200,8 +205,6 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- ListMap ::
   -- MkList ?
   -- MakeList :: t a -> t 'TyInteger -> Core t [a]
-  -- LiTyStringeverse :: t [a] -> Core t [a]
-  -- ListSort    :: t [a] -> Core t [a]
 
   ListTake    :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
@@ -212,6 +215,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
 
+  -- TODO: is this necessary? Just use Lit?
   LiteralList :: SingTy 'ListK ('TyList a) -> [t a] -> Core t ('TyList a)
 
   -- ListInfo :: SingTy 'ListK ('TyList a) -> ListInfo t ('TyList a) -> Core t ('TyList a)
@@ -229,12 +233,14 @@ class
   , c (tm 'TyBool)
   , c (tm 'TyKeySet)
   , c (tm 'TyObject)
+  , c (tm 'TyAny)
   , c (tm ('TyList 'TyStr))
   , c (tm ('TyList 'TyInteger))
   , c (tm ('TyList 'TyTime))
   , c (tm ('TyList 'TyDecimal))
   , c (tm ('TyList 'TyBool))
   , c (tm ('TyList 'TyKeySet))
+  , c (tm ('TyList 'TyAny))
   ) => OfPactTypes c tm where
 instance OfPactTypes Eq Prop      where
 instance OfPactTypes Eq Invariant where
@@ -253,6 +259,7 @@ uniformlyEq ty t1 t2 = case ty of
   SDecimal -> t1 == t2
   SBool    -> t1 == t2
   SKeySet  -> t1 == t2
+  SAny     -> t1 == t2
 
 uniformlyEq'
   :: OfPactTypes Eq tm
@@ -264,6 +271,7 @@ uniformlyEq' ty t1 t2 = case ty of
   SList SDecimal -> t1 == t2
   SList SBool    -> t1 == t2
   SList SKeySet  -> t1 == t2
+  SList SAny     -> t1 == t2
 
 uniformlyShows
   :: OfPactTypes Show tm
@@ -275,6 +283,7 @@ uniformlyShows ty p t = case ty of
   SDecimal -> showsPrec p t
   SBool    -> showsPrec p t
   SKeySet  -> showsPrec p t
+  SAny     -> showsPrec p t
 
 uniformlyShows'
   :: OfPactTypes Show tm
@@ -286,6 +295,7 @@ uniformlyShows' ty p t = case ty of
   SList SDecimal -> showsPrec p t
   SList SBool    -> showsPrec p t
   SList SKeySet  -> showsPrec p t
+  SList SAny     -> showsPrec p t
 
 
 -- TODO: generalize the uniformly family?
@@ -325,7 +335,7 @@ instance
       STime    -> a1 == a2
       SDecimal -> a1 == a2
       SKeySet  -> a1 == a2
-      -- SAny     -> a1 == a2
+      SAny     -> a1 == a2
       )
     Nothing   -> False
   ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
@@ -336,6 +346,7 @@ instance
   LiteralObject m1            == LiteralObject m2            = m1 == m2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
   Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
+  _                           == _                           = False
 
 instance
   ( Show (Concrete a)
@@ -445,9 +456,20 @@ instance
         STime    -> showsPrec 11 a
         SDecimal -> showsPrec 11 a
         SBool    -> showsPrec 11 a
-        SKeySet  -> showsPrec 11 a)
+        SKeySet  -> showsPrec 11 a
+        SAny     -> showsPrec 11 a)
       . showString " "
       . uniformlyShows ty 11 b
+    ListReverse ty a ->
+        showString "ListReverse "
+      . showsPrec 11 ty
+      . showString " "
+      . uniformlyShows ty 11 a
+    ListSort ty a ->
+        showString "ListSort "
+      . showsPrec 11 ty
+      . showString " "
+      . uniformlyShows ty 11 a
     ListDrop ty i l ->
         showString "ObjDrop "
       . showsPrec 11 ty
@@ -462,6 +484,13 @@ instance
       . showsPrec 11 b
       . showString " "
       . showsPrec 11 c
+    ListTake ty a b ->
+        showString "ListTake "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . uniformlyShows ty 11 b
     ObjTake a b c ->
         showString "ObjTake "
       . showsPrec 11 a
@@ -507,6 +536,7 @@ instance
   , UserShow (tm 'TyBool)
   , UserShow (tm 'TyKeySet)
   , UserShow (tm 'TyObject)
+  , UserShow (tm ('TyList 'TyStr))
   , UserShow (Existential tm)
   ) => UserShow (Core tm a) where
   userShowPrec d = \case
@@ -526,10 +556,28 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
+    ListEqNeq   op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
-    -- ListAt k obj             -> parenList [userShow k, userShow obj]
+    ListAt{} -> "TODO"
+    -- ListAt ty k lst          -> withUserShow (SList ty) $ parenList [userShow k, userShow lst]
+    ObjContains _schema v    -> parenList ["contains", userShow v]
+    StringContains needle haystack -> parenList ["contains", userShow needle, userShow haystack]
+    ListContains{} -> "TODO"
+    -- ListContains ty needle haystack -> parenList ["contains", userShow needle, userShow haystack]
+    ListReverse{}       -> "TODO"
+    -- ListReverse ty lst       -> parenList ["reverse", userShow lst]
+    ListSort{}       -> "TODO"
+    -- ListSort ty lst       -> parenList ["reverse", userShow lst]
+    ListDrop{} -> "TODO"
+    -- ListDrop ty n lst        -> parenList ["drop", userShow n, userShow lst]
+    ObjDrop _schema k obj    -> parenList ["drop", userShow k, userShow obj]
+    ListTake{} -> "TODO"
+    -- ListTake ty n lst        -> parenList ["take", userShow n, userShow lst]
+    ObjTake _schema k obj    -> parenList ["take", userShow k, userShow obj]
+    ListConcat{} -> "TODO"
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
+    LiteralList{} -> "TODO"
 
 
 data BeforeOrAfter = Before | After
@@ -719,7 +767,8 @@ mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
 mkLiteralList [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
 mkLiteralList xs@(ESimple ty0 _ : _) = foldr
   (\case
-    EObject{} -> \_ -> Nothing
+    EObject{}    -> \_ -> Nothing
+    EList{}      -> \_ -> Nothing
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
@@ -729,6 +778,7 @@ mkLiteralList xs@(ESimple ty0 _ : _) = foldr
       _ -> error "impossible")
   (Just (EList (SList ty0) (LiteralList (SList ty0) [])))
   xs
+mkLiteralList _ = Nothing
 
 pattern Lit' :: forall tm ty. Core tm :<: tm => Concrete ty -> tm ty
 pattern Lit' a <- (project @(Core tm) @tm -> Just (Lit a)) where
@@ -961,3 +1011,5 @@ valueToProp = \case
   EObject{} -> Left "can't (yet) convert objects to props"
   ESimple ty (CoreTerm (Lit l)) -> Right $ ESimple ty (CoreProp (Lit l))
   ESimple _ _ -> Left "can only convert (simple) values terms to props"
+  EList ty (CoreTerm (Lit l)) -> Right $ EList ty (CoreProp (Lit l))
+  EList _ _ -> Left "can only convert (simple) values terms to props"

@@ -152,7 +152,7 @@ instance ArgDict (SingTy k) where
     SList SAny     -> Dict
     SObject        -> Dict
 
-  argDict' :: ConstraintsFor' (SingTy k) c g => (SingTy k) a -> Dict (c (g a))
+  -- argDict' :: ConstraintsFor' (SingTy k) c g => (SingTy k) a -> Dict (c (g a))
   argDict' = \case
     SInteger       -> Dict
     SBool          -> Dict
