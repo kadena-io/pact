@@ -8,10 +8,9 @@ documentation website. Pact's current Read the Docs website can be found [here](
 1. Setup
 2. File Layout
 3. Documentation Workflow
-4. Native Function Documentation
-5. Localization
+4. Localization
 
-### Setup
+## Setup
 
 To generate Pact's documentation, first download the following packages using your favorite package manager:
 
@@ -32,7 +31,7 @@ $ brew install pandoc
 
 More Read the Docs setup instructions can be found [here](http://docs.readthedocs.io/en/latest/getting_started.html).
 
-### File Layout
+## File Layout
 
 Pact documentation is available in a number of languages. The English versions
 are considered the "originals", with all others as translations. Each language's
@@ -46,7 +45,7 @@ This process is detailed in the next section.
 English has a number of `.md` files, some hand-written and some auto-generated.
 Translations have only one `.md` file each, titled `pact-reference.md`.
 
-### Documentation Workflow
+## Documentation Workflow
 
 Make sure to download the packages specified in the *Setup* section.
 
@@ -78,19 +77,19 @@ and rerun `./build.sh`.
 
 Once finished, commit the `.md` files that changed *and* their corresponding `.rst` files.
 
-### Localization
+## Localization
 
 As mentiond in *File Layout*, Pact documentation has several translations.
 Unlike the English, no content is auto-generated from Haskell files.
 Instead, updates to the English must be manually ported to each translation.
 
-#### Editing an existing Translation
+### Editing an existing Translation
 
 If you notice something to improve, edit the single `pact-reference.md` file corresponding
 to your language. Then, generate the `.rst` version as described in **Documentation Workflow**,
 and submit your changes.
 
-#### Adding a new Translation
+### Adding a new Translation
 
 Thank you! Your effort will help many developers around the world.
 
