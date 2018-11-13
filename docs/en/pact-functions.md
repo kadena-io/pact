@@ -287,7 +287,7 @@ Return ID if called during current pact execution, failing if not.
 Obtain current pact build version. 
 ```lisp
 pact> (pact-version)
-"2.5.0"
+"2.6.0"
 ```
 
 Top level only: this function will fail if used in module code.
@@ -385,12 +385,12 @@ pact> (sort ['age] [{'name: "Lin",'age: 30} {'name: "Val",'age: 25}])
 *base*&nbsp;`integer` *str-val*&nbsp;`string` *&rarr;*&nbsp;`integer`
 
 
-Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. 
+Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for the base. 
 ```lisp
-pact> (str-to-int 16 "123456")
-1193046
-pact> (str-to-int "abcdef123456")
-1123455123456
+pact> (str-to-int 16 "abcdef123456")
+188900967593046
+pact> (str-to-int "123456")
+123456
 ```
 
 
