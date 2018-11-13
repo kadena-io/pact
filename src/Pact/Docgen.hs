@@ -39,8 +39,8 @@ import           Pact.Types.Lang
 
 main :: IO ()
 main = do
-  withFile "docs/pact-functions.md"      WriteMode renderFunctions
-  withFile "docs/pact-properties-api.md" WriteMode renderProperties
+  withFile "docs/en/pact-functions.md"      WriteMode renderFunctions
+  withFile "docs/en/pact-properties-api.md" WriteMode renderProperties
 
 data ExampleType = Exec | ExecErr | Lit
 
