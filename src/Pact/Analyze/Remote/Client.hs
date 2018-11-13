@@ -19,9 +19,8 @@ import qualified Data.Text.Lazy.Encoding       as LTE
 import qualified JavaScript.Web.XMLHttpRequest as XHR
 
 import qualified Pact.Analyze.Remote.Types as Remote
-import           Pact.Types.Exp            (ModuleName)
-import           Pact.Types.Runtime        (ModuleData)
-import           Pact.Types.Term           (Module(_mName))
+import           Pact.Types.Runtime        (ModuleData(..))
+import           Pact.Types.Term           (Module(_mName), ModuleName)
 import           Pact.Types.Util           (tShow)
 
 verifyModule
@@ -32,7 +31,7 @@ verifyModule
   -> IO [Text]
 verifyModule namedMods mod' host port = do
   let requestURI = "http://" ++ host ++ ":" ++ show port ++ "/verify"
-      body       = Remote.Request (Foldable.toList $ fmap fst namedMods) (_mName $ fst mod')
+      body       = Remote.Request (Foldable.toList $ fmap _mdModule namedMods) (_mName $ _mdModule mod')
       jsonBody   = JS.lazyTextToJSString $ LTE.decodeUtf8 $ A.encode body
   eResponse <- liftIO (C.try $ post requestURI jsonBody :: IO (Either XHR.XHRError (XHR.Response Text)))
   return $ case eResponse of
