@@ -153,8 +153,8 @@ tagSubpathStart p active = do
 
 tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
 tagFork pathL pathR reachable lPasses = do
-    tagSubpathStart pathL $ reachable &&& lPasses
-    tagSubpathStart pathR $ reachable &&& bnot lPasses
+  tagSubpathStart pathL $ reachable &&& lPasses
+  tagSubpathStart pathR $ reachable &&& bnot lPasses
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do

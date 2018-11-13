@@ -166,8 +166,8 @@ data TranslateState
       --
       -- 'TraceSubpathStart's are emitted once for each path: at the start of
       -- an execution trace, and at the beginning of either side of a
-      -- conditional.  After a conditional, we resume the path from before the
-      -- conditional.  Either side of a conditional will contain a minimum of
+      -- conditional. After a conditional, we resume the path from before the
+      -- conditional. Either side of a conditional will contain a minimum of
       -- two edges: splitting away from the other branch, and then rejoining
       -- back to the other branch at the join point. The following program:
       --
@@ -672,13 +672,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     let n = length casesA -- invariant: n > 0
         genPath = Path <$> genTagId
     preEnforcePath <- use tsCurrentPath
-    pathPairs <- (++)
-        -- For the first n-1 cases, we generate a failure, then success, tag,
-        -- for each possibility after the case runs.
-        <$> replicateM (pred n) ((,) <$> genPath <*> genPath)
-        -- For the last case, we generate a single tag for both, to result in a
-        -- fully-connected graph:
-        <*> replicateM 1        (genPath <&> \p -> (p, p))
+    -- Generate failure and success paths for each case. We generate and tag
+    -- the final failure path, but don't include it in the graph.
+    pathPairs <- replicateM n ((,) <$> genPath <*> genPath)
 
     let (failurePaths, successPaths) = unzip pathPairs
         -- we don't start a new path for the first case -- we *always* run it:
