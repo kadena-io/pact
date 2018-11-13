@@ -9,7 +9,6 @@ import Control.Exception (finally)
 import Control.Lens
 import Control.Monad.State.Strict
 import Data.Aeson
-import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import qualified Data.Text as T
 import Snap.Http.Server.Config
@@ -40,7 +39,7 @@ loadCode code = do
     Left err -> Left $ ReplError err
     Right _t -> Right replState
 
-stateModuleData :: ModuleName -> ReplState -> Maybe (Module, HM.HashMap Text Ref)
+stateModuleData :: ModuleName -> ReplState -> Maybe ModuleData
 stateModuleData nm replState = replState ^. rEnv . eeRefStore . rsModules . at nm
 
 serve :: Int -> IO ThreadId
@@ -83,7 +82,7 @@ testSingleModule = do
     stateModuleData "mod1" replState0 `shouldSatisfy` isJust
 
   Right replState0 <- pure eReplState0
-  Just (mod1, _refs) <- pure $ stateModuleData "mod1" replState0
+  Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
 
   resp <- runIO $ serveAndRequest 3000 $ Remote.Request [mod1] "mod1"
 
@@ -120,8 +119,8 @@ testUnsortedModules = do
     stateModuleData "mod2" replState0 `shouldSatisfy` isJust
 
   Right replState0 <- pure eReplState0
-  Just (mod1, _refs) <- pure $ stateModuleData "mod1" replState0
-  Just (mod2, _refs) <- pure $ stateModuleData "mod2" replState0
+  Just (ModuleData mod1 _refs) <- pure $ stateModuleData "mod1" replState0
+  Just (ModuleData mod2 _refs) <- pure $ stateModuleData "mod2" replState0
 
   resp <- runIO $ serveAndRequest 3001 $ Remote.Request [mod2, mod1] "mod2"
 
