@@ -858,6 +858,18 @@ spec = describe "analyze" $ do
 
     expectPass code $ Valid Success'
 
+  describe "enforce-one.single-case-regression" $ do
+    let code =
+          [text|
+            (defun test:bool ()
+              (enforce-one "regression" [true]))
+          |]
+    expectPass code $ Satisfiable true
+    expectFail code $ Satisfiable Abort'
+    expectFail code $ Valid Abort'
+    expectPass code $ Satisfiable Success'
+    expectPass code $ Valid Success'
+
   describe "logical short-circuiting" $ do
     describe "and" $ do
       let code =
