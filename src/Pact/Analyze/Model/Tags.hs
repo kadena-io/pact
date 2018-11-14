@@ -49,7 +49,8 @@ allocAVal :: HasCallStack => EType -> Symbolic AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
-  EType SList{} -> error "alloc list" -- pure OpaqueVal
+  EType (SList ty :: SingTy k ty) -> mkAVal . sansProv <$>
+    (withSymWord ty alloc :: Symbolic (SBV [Concrete ty]))
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
@@ -68,7 +69,7 @@ allocForETerm
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
     let aval :: AVal
-        aval = undefined -- mkAVal $ SBVL.implode $ SBVI.SBV . (\(AVal _ sval) -> sval) <$> cells'
+        aval = AList $ fmap (\(AVal _ sval) -> sval) cells'
     pure (EType (SList ty), aval)
 -- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
@@ -190,8 +191,9 @@ saturateModel =
           (\Refl -> error "TODO")
 
         go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
-          withSymWord ty $ withSymWord ty $
-            _ <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
+          withSMTValue ty $ withSymWord ty $ withSymWord ty $
+            AList . fmap ((\(SBVI.SBV sval) -> sval) . SBV.literal)
+              <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
           -- mkAVal' . SBV.literal
           --   <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go (EType SList{}) OpaqueVal = pure OpaqueVal

@@ -498,6 +498,7 @@ varIdArgs args =
 -- | Untyped symbolic value.
 data AVal
   = AVal (Maybe Provenance) SBVI.SVal
+  | AList [SBVI.SVal]
   | AnObj Object
   | OpaqueVal
   deriving (Eq, Show)

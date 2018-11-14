@@ -17,5 +17,5 @@ extra-deps:
     commit: cc88bab1fd3f62dc4d9f9ad81a231877a639c812
   - git: https://github.com/kadena-io/thyme.git
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
-  - sbv-7.12
   - constraints-extras-0.2.0.0
+  - ../../LeventErkok/sbv

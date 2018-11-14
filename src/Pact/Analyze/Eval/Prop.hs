@@ -24,6 +24,7 @@ import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import qualified Data.SBV.List              as SBVL
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
@@ -62,7 +63,7 @@ liftSymbolic = Query . lift . lift . lift
 aval
   :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
-  -> ([AVal] -> m a)
+  -> ([SBVI.SVal] -> m a)
   -> (Object -> m a)
   -> AVal
   -> m a
@@ -75,20 +76,22 @@ aval elimVal elimList elimObj = \case
 expectVal :: Analyzer m => AVal -> m (S a)
 expectVal = aval
   (pure ... mkS)
+  (error "TODO")
   (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: Analyzer m => AVal -> m Object
 expectObj = aval
   ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
+  (error "TODO")
   pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
-expectList :: Analyzer m => AVal -> m [S a]
+expectList :: Analyzer m => AVal -> m [SBV a]
 expectList = aval
   ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
-  (traverse expectVal)
+  (pure . fmap SBVI.SBV)
   (throwErrorNoLoc . AValUnexpectedlyObj)
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
@@ -168,9 +171,12 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
 
 evalPropL
   :: (a' ~ Concrete a, SymWord a', Show a')
-  => Prop ('TyList a) -> Query [S a']
+  => Prop ('TyList a) -> Query (S [a'])
 evalPropL (CoreProp tm) = evalCoreL tm
-evalPropL (PropSpecific Result) = expectList =<< view qeAnalyzeResult
+evalPropL (PropSpecific Result) = do
+  result <- view qeAnalyzeResult
+  lst <- expectList result
+  pure $ sansProv $ SBVL.implode lst
 
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds

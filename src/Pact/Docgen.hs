@@ -169,6 +169,7 @@ renderProperties h = do
     showType (Analyze.TyCon ct) = showConTy ct
     showType (Analyze.TyVar (Analyze.TypeVar (unpack -> tv))) = "_" ++ tv ++ "_"
     showType (Analyze.TyEnum vals) = "one of {" ++ intercalate ", " (fmap show vals) ++ "}"
+    showType (Analyze.TyList' ty) = "[" ++ showType ty ++ "]"
 
 escapeText :: String -> String
 escapeText n

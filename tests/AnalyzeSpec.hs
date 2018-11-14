@@ -2469,8 +2469,8 @@ spec = describe "analyze" $ do
             @model $model
             [a b c])
           |]
-    expectVerified  $ code0 "(property (= result [a b c]))"
-    expectFalsified $ code0 "(property (= result [a b]))"
+    expectVerified  $ code0 "[(property (= result [a b c]))]"
+    expectFalsified $ code0 "[(property (= result [a b]))]"
 
   describe "list drop" $ do
     let code1 model = [text|
@@ -2478,16 +2478,16 @@ spec = describe "analyze" $ do
             @model $model
             (drop 2 [a b c]))
           |]
-    expectVerified  $ code1 "(property (= result [c]))"
-    expectFalsified $ code1 "(property (= result [b c]))"
+    expectVerified  $ code1 "[(property (= result [c]))]"
+    expectFalsified $ code1 "[(property (= result [b c]))]"
 
     let code1' model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
             (drop -1 [a b c]))
           |]
-    expectVerified  $ code1' "(property (= result [a b]))"
-    expectFalsified $ code1' "(property (= result [a]))"
+    expectVerified  $ code1' "[(property (= result [a b]))]"
+    expectFalsified $ code1' "[(property (= result [a]))]"
 
             -- TODO
             -- @model (property (= result []))
@@ -2506,16 +2506,16 @@ spec = describe "analyze" $ do
             @model $model
             (take 2 [a b c]))
           |]
-    expectVerified  $ code3 "(property (= result [a b]))"
-    expectFalsified $ code3 "(property (= result [b c]))"
+    expectVerified  $ code3 "[(property (= result [a b]))]"
+    expectFalsified $ code3 "[(property (= result [b c]))]"
 
     let code3' model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
             @model $model
             (take -2 [a b c]))
           |]
-    expectVerified  $ code3' "(property (= result [b c]))"
-    expectFalsified $ code3' "(property (= result [a b]))"
+    expectVerified  $ code3' "[(property (= result [b c]))]"
+    expectFalsified $ code3' "[(property (= result [a b]))]"
 
             -- TODO
             -- @model (property (= result []))
@@ -2523,15 +2523,15 @@ spec = describe "analyze" $ do
             -- @model (property (= (length result) 0))
     -- let code4 = [text|
     --       (defun test:bool (a:integer b:integer c:integer)
-    --         @model (property (= result true))
+    --         @model [(property (= result true))]
     --         (= [] (take 4 [a b c])))
     --       |]
     -- expectVerified code4
 
-  describe "list at" $ do
+  -- describe "list at" $ do
     -- let code5 = [text|
     --       (defun test:integer (a:integer b:integer c:integer)
-    --         @model (property (= result a))
+    --         @model [(property (= result a))]
     --         (at 0 [a b c]))
     --       |]
     -- expectVerified code5
@@ -2542,18 +2542,18 @@ spec = describe "analyze" $ do
     --       |]
     -- expectPass code6 $ Valid Abort'
 
-    let code6' = [text|
-          (defun test:integer (ix:integer)
-            @model (property (= result ix))
-            (at ix [0 1 2]))
-          |]
-    expectVerified code6'
-    expectPass code6' $ Satisfiable Abort'
+--     let code6' = [text|
+--           (defun test:integer (ix:integer)
+--             @model [(property (= result ix))]
+--             (at ix [0 1 2]))
+--           |]
+--     expectVerified code6'
+--     expectPass code6' $ Satisfiable Abort'
 
   describe "string contains" $ do
     let code7 = [text|
           (defun test:bool ()
-            @model (property (= result true))
+            @model [(property (= result true))]
             (contains "foo" "foobar"))
           |]
     expectVerified code7
@@ -2564,8 +2564,8 @@ spec = describe "analyze" $ do
             @model $model
             (contains a [a b c]))
           |]
-    expectVerified  $ code8 "(property (= result true))"
-    expectFalsified $ code8 "(property (= result false))"
+    expectVerified  $ code8 "[(property (= result true))]"
+    expectFalsified $ code8 "[(property (= result false))]"
 
   describe "list concat" $ do
     let code9 model = [text|
@@ -2573,5 +2573,5 @@ spec = describe "analyze" $ do
             @model $model
             (+ [a b] [c]))
           |]
-    expectVerified  $ code9 "(property (= result [a b]))"
-    expectFalsified $ code9 "(property (= result [a b]))"
+    expectVerified  $ code9 "[(property (= result [a b]))]"
+    expectFalsified $ code9 "[(property (= result [a b]))]"

@@ -35,6 +35,7 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               SymArray (readArray), SymWord,
                                               constrain, false, ite, (.<))
 import qualified Data.SBV.String             as SBV
+import qualified Data.SBV.Internals          as SBVI
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -188,9 +189,10 @@ tagResult av = do
   tid <- view $ aeModelTags.mtResult._1
   tagReturn tid av
   tag <- view $ aeModelTags.mtResult._2.located._2
+  let eq a b = SBVI.SBV @() a .== SBVI.SBV @() b
   case (av, tag) of
     (AList av', AList tag') ->
-      for_ (zipWith (.==) av' tag') (addConstraint . traceTag "8" . sansProv)
+      for_ (zipWith eq av' tag') (addConstraint . traceTag "8" . sansProv)
     (AList _, OpaqueVal) -> pure ()
     _ -> addConstraint $ traceTag "9" $ sansProv $ tag .== av
 
@@ -340,7 +342,7 @@ validateWrite writeType sch@(Schema sm) obj@(Object om) = do
 
 evalTermL
   :: (a' ~ Concrete a, SymWord a', Show a')
-  => Term ('TyList a) -> Analyze [S a']
+  => Term ('TyList a) -> Analyze (S [a'])
 evalTermL (CoreTerm tm) = evalCoreL tm
 
 evalTerm :: (a' ~ Concrete a, Show a', SymWord a') => Term a -> Analyze (S a')

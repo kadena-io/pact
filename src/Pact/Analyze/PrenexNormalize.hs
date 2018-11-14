@@ -206,6 +206,7 @@ floatBoolQuantifiers p = case p of
     (StringContains <$> float needle <*> float haystack)
   -- CoreProp (ListContains ty needle haystack) -> CoreProp <$>
   --   (ListContains ty <$> float needle <*> float haystack)
+  CoreProp ListContains{} -> error "TODO"
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b
