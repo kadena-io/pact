@@ -1428,8 +1428,8 @@ spec = describe "analyze" $ do
                 (defun test:bool (x:integer)
                   (let ((x (let ((y 2)) y))
                         (y (let ((x 3)) x)))
-                   (let ((z (let ((w 1)) (+ (+ x y) w))))
-                     (enforce (= 6 z) "2 + 3 + 1 != 6"))))
+                    (let ((z (let ((w 1)) (+ (+ x y) w))))
+                      (enforce (= 6 z) "2 + 3 + 1 != 6"))))
               |]
         in expectPass code $ Valid $ bnot Abort'
 

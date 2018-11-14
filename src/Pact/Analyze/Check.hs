@@ -290,7 +290,7 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
       modelArgs' <- lift $ runAlloc $ allocArgs args
-      tags <- lift $ runAlloc $ allocModelTags (Located funInfo tm) graph
+      tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
       let rootPath = _egRootPath graph
       resultsTable <- withExceptT analyzeToCheckFailure $
         runInvariantAnalysis tables (analysisArgs modelArgs') tm rootPath tags
@@ -348,7 +348,7 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
           runTranslation funName funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
         modelArgs' <- lift $ runAlloc $ allocArgs args
-        tags <- lift $ runAlloc $ allocModelTags (Located funInfo tm) graph
+        tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
         let rootPath = _egRootPath graph
         AnalysisResult _querySucceeds prop ksProvs
           <- withExceptT analyzeToCheckFailure $

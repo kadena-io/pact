@@ -997,6 +997,11 @@ runTranslation name info pactArgs body = do
       (runReaderT (traverse translateArg pactArgs) info)
       (VarId 1)
 
+    argToBinding :: Arg -> Located Binding
+    argToBinding (Arg unmunged vid node ety) =
+      Located (node ^. aId . Pact.tiInfo) $
+        Binding vid unmunged (node ^. aId.tiName.to Munged) ety
+
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
@@ -1008,7 +1013,9 @@ runTranslation name info pactArgs body = do
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
           translation = do
             retTid    <- genTagId
-            bindingTs <- traverse translateBinding pactArgs
+            -- For our toplevel 'FunctionScope', we reuse variables we've
+            -- already generated during argument translation:
+            let bindingTs = fmap argToBinding args
             res <- withNewScope (FunctionScope name) bindingTs retTid $
               translateBody body
             _ <- extendPath -- form final edge for any remaining events
