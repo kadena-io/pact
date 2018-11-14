@@ -18,7 +18,8 @@ module Pact.Analyze.Model.Tags
   ) where
 
 import           Control.Lens         (Traversal', toListOf, traverseOf,
-                                       traversed, (<&>), (?~), (^.), _1, _2, _3)
+                                       traversed, (<&>), (?~), (^.), _1, _2,
+                                       _3)
 import           Control.Monad        ((>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -60,8 +61,12 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
-allocModelTags :: Located ETerm -> ExecutionGraph -> Alloc (ModelTags 'Symbolic)
-allocModelTags locatedTm graph = ModelTags
+allocModelTags
+  :: Map VarId (Located (Unmunged, TVal))
+  -> Located ETerm
+  -> ExecutionGraph
+  -> Alloc (ModelTags 'Symbolic)
+allocModelTags argsMap locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
@@ -77,11 +82,18 @@ allocModelTags locatedTm graph = ModelTags
     events :: [TraceEvent]
     events = toListOf (egEdgeEvents.traverse.traverse) graph
 
+    -- We only allocate variables here for non-arguments; that is, variables
+    -- which are intermediate bindings. Arguments have already been allocated
+    -- at this point (by 'allocArgs', with 'FromInput' provenance attached),
+    -- and we just reuse those allocations as we come across them in
+    -- 'TracePushScope' events.
     allocVars :: Alloc (Map VarId (Located (Unmunged, TVal)))
     allocVars = fmap Map.fromList $
       for (toListOf (traverse._TracePushScope._3.traverse) events) $
         \(Located info (Binding vid nm _ ety)) ->
-          allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
+          case Map.lookup vid argsMap of
+            Nothing -> allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
+            Just arg -> pure (vid, arg)
 
     allocAccesses
       :: Traversal' TraceEvent (Schema, Located TagId)
@@ -96,13 +108,14 @@ allocModelTags locatedTm graph = ModelTags
     allocReads :: Alloc (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
 
-    traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
-    traceWriteT f event = case event of
-      TraceWrite _writeType schema tagid -> const event <$> f (schema, tagid)
-      _                                  -> pure event
-
     allocWrites :: Alloc (Map TagId (Located Access))
     allocWrites = allocAccesses traceWriteT
+
+      where
+        traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
+        traceWriteT f event = case event of
+          TraceWrite _writeType schema tid -> const event <$> f (schema, tid)
+          _                                -> pure event
 
     allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
