@@ -20,6 +20,7 @@ cache:
   - $HOME/.ghc
   - $HOME/.cabal
   - $HOME/.stack
+  timeout: 900
 
 # The different configurations we want to test. We have BUILD=cabal which uses
 # cabal-install, and BUILD=stack which uses Stack. More documentation on each
