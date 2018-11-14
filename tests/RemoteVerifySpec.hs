@@ -71,7 +71,7 @@ testSingleModule = do
       (module mod1 'ks
         (defun f:integer ()
           @doc   "always returns 1"
-          @model (property (= result 1))
+          @model [(property (= result 1))]
           1))
 
       (commit-tx)
@@ -100,7 +100,7 @@ testUnsortedModules = do
       (module mod1 'ks
         (defun f:integer ()
           @doc   "always returns 1"
-          @model (property (= result 1))
+          @model [(property (= result 1))]
           1))
       (commit-tx)
       (begin-tx)
@@ -109,7 +109,7 @@ testUnsortedModules = do
         (use mod1)
         (defun g:integer ()
           @doc   "always returns 2"
-          @model (property (= result 2))
+          @model [(property (= result 2))]
           2))
       (commit-tx)
     |]
