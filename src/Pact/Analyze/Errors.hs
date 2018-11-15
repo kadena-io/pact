@@ -38,8 +38,8 @@ describeAnalyzeFailureNoLoc :: AnalyzeFailureNoLoc -> Text
 describeAnalyzeFailureNoLoc = \case
     -- these are internal errors. not quite as much care is taken on the messaging
     AtHasNoRelevantFields etype schema -> "When analyzing an `at` access, we expected to return a " <> tShow etype <> " but there were no fields of that type in the object with schema " <> tShow schema
-    AValUnexpectedlySVal sval -> "in analyzeTermO, unexpectedly found AVal: " <> tShow sval
-    AValUnexpectedlyObj obj -> "in analyzeTerm, unexpectedly found AnObj: " <> tShow obj
+    AValUnexpectedlySVal sval -> "in evalProp, unexpectedly found AVal: " <> tShow sval
+    AValUnexpectedlyObj obj -> "in evalProp, unexpectedly found AnObj: " <> tShow obj
     KeyNotPresent key obj -> "key " <> key <> " unexpectedly not found in object " <> tShow obj
     MalformedLogicalOpExec op count -> "malformed logical op " <> tShow op <> " with " <> tShow count <> " args"
     ObjFieldOfWrongType fName fType -> "object field " <> fName <> " of type " <> tShow fType <> " unexpectedly either an object or a ground type when we expected the other"

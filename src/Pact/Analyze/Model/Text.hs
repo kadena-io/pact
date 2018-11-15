@@ -12,7 +12,7 @@ module Pact.Analyze.Model.Text
   ) where
 
 import Data.Type.Equality ((:~:)(Refl))
-import           Control.Lens               (Lens', at, ifoldr, view, (^.))
+import           Control.Lens               (Lens', at, ifoldr, view, (^.), (<&>))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
 import           Data.Map.Strict            (Map)
 import qualified Data.Map.Strict            as Map
@@ -53,6 +53,16 @@ showTVal (ety, av) = case av of
         showSbv (SBVI.SBV sval :: SBV (Concrete t)))
       (\Refl -> error "TODO")
       (\Refl -> error "TODO")
+  AList svals -> case ety of
+    EObjectTy _           -> error "showModel: impossible object type for AVal"
+    EType (ty :: SingTy k t) -> singCase ty
+      (\Refl -> withUserShow ty $ withSymWord ty $
+        let svals' = svals <&> \sval ->
+              showSbv (SBVI.SBV sval :: SBV (Concrete t))
+        in "[ " <> T.intercalate ", " svals' <> " ]")
+      (\Refl -> error "TODO")
+      (\Refl -> error "TODO")
+
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

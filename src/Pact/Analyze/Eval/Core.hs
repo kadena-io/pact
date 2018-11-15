@@ -174,9 +174,8 @@ evalCore (StringContains needle haystack) = do
 evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
   S _ needle'   <- eval needle
   S _ haystack' <- evalL haystack
-  -- bfoldr :: (SymWord a, SymWord b) => Int -> (SBV a -> SBV b -> SBV b) -> SBV b -> SList a -> SBV b
   pure $ sansProv $
-    bfoldr 10 (\cell rest -> cell .== needle' ||| rest) false haystack'
+    bfoldr 4 (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
   SList tyA' -> case singEq tyA tyB of
     Nothing   -> error "TODO"
@@ -212,14 +211,15 @@ evalCore (Var vid name) = do
   case mVal of
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
+    Just (AList _svals)    -> error "TODO"
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
 
 ibfoldr
-  :: (SymWord a, SymWord b)
-  => Int -> (Int -> SBV a -> SBV b -> SBV b) -> SBV b -> SBV [a] -> SBV b
-ibfoldr = undefined
+  -- :: (SymWord a, SymWord b)
+  :: Int -> (Int -> SBV a -> SBV b -> SBV b) -> SBV b -> SBV [a] -> SBV b
+ibfoldr = error "TODO"
 
 evalCoreL
   :: ( Analyzer m
@@ -254,12 +254,14 @@ evalCoreL (ListConcat _ty p1 p2) = do
   S _ p2' <- evalL p2
   pure $ sansProv $ SBVL.concat p1' p2'
 
--- evalCoreL ListReverse{} = undefined
--- evalCoreL ListSort{} = undefined
--- evalCoreL (ListTake n list) = do
---   n'    <- eval n
---   list' <- eval list
---   pure $ sansProv $ _sSbv n' `SBVL.take` _sSbv list'
+evalCoreL Lit{} = error "TODO"
+evalCoreL Sym{} = error "TODO"
+evalCoreL Var{} = error "TODO"
+evalCoreL Numerical{} = error "TODO"
+evalCoreL ListReverse{} = error "TODO"
+evalCoreL ListSort{} = error "TODO"
+evalCoreL ObjAt{} = error "TODO"
+evalCoreL ListAt{} = error "TODO"
 
 evalObjAt
   :: (Analyzer m, SymWord a)
@@ -287,6 +289,8 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
         Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
 
         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
+
+        Just (_, AList _) -> error "TODO"
 
         Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
           ObjFieldOfWrongType fieldName fieldType
@@ -323,6 +327,7 @@ evalObjAtO colNameT objT = do
           Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
           Just (fieldType, AVal _ _) -> throwErrorNoLoc $
             ObjFieldOfWrongType fieldName fieldType
+          Just (_, AList _) -> error "TODO"
           Just (_fieldType, AnObj subObj) -> pure subObj
           Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
 
@@ -341,6 +346,7 @@ evalCoreO (Var vid name) = do
   case mVal of
     Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
+    Just AList{} -> error "TODO"
     Just (AnObj obj)   -> pure obj
     Just OpaqueVal     -> throwErrorNoLoc OpaqueValEncountered
 
@@ -350,7 +356,7 @@ evalCoreO (Lit obj)     = pure obj
 evalCoreO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
 evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 evalCoreO (ListAt _ _ _) = error "TODO"
-evalCoreO (ObjDrop (Schema schemaFields) keys obj) = do
+evalCoreO (ObjDrop (Schema schemaFields) keys _obj) = do
   keys' <- evalL keys
   case unliteralS keys' of
     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"

@@ -317,6 +317,7 @@ inferPreProp preProp = case preProp of
       ESimple ty _ -> throwErrorIn preProp $
         "expected object (with key " <> tShow objIx <> ") but found type " <>
         userShow ty
+      EList{} -> error "TODO"
       EObject objSchema@(Schema tyMap) objProp -> case tyMap ^? ix objIx of
         Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
         Just ety@(EType ty) -> singCase ty

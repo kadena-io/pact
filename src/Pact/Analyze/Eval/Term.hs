@@ -77,8 +77,11 @@ instance Analyzer Analyze where
   getVar vid = view (scope . at vid)
   markFailure b = succeeds %= (&&& sansProv (bnot b))
 
-traceTag :: Show a => String -> a -> a
-traceTag msg a = a -- trace (msg ++ ": " ++ show a) a
+traceTag :: String -> a -> a
+traceTag _msg a = a
+
+-- traceTag :: Show a => String -> a -> a
+-- traceTag msg a = trace (msg ++ ": " ++ show a) a
 
 evalTermLogicalOp
   :: LogicalOp
@@ -287,6 +290,8 @@ evalTermO = \case
         EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
         EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
         EType SAny     -> pure OpaqueVal
+        EType SList{} -> error "TODO"
+        EType SObject -> error "TODO"
         --
         -- TODO: if we add nested object support here, we need to install
         --       the correct provenance into AVals all the way down into
@@ -344,6 +349,9 @@ evalTermL
   :: (a' ~ Concrete a, SymWord a', Show a')
   => Term ('TyList a) -> Analyze (S [a'])
 evalTermL (CoreTerm tm) = evalCoreL tm
+evalTermL IfThenElse{} = error "TODO"
+evalTermL Let{} = error "TODO"
+evalTermL Sequence{} = error "TODO"
 
 evalTerm :: (a' ~ Concrete a, Show a', SymWord a') => Term a -> Analyze (S a')
 evalTerm = \case
@@ -452,6 +460,8 @@ evalTerm = \case
             EType SStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
             EType SKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
             EType SAny     -> void $ throwErrorNoLoc OpaqueValEncountered
+            EType SList{} -> error "TODO"
+            EType SObject -> error "TODO"
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
           pure aval'
@@ -459,6 +469,7 @@ evalTerm = \case
             -- TODO: handle EObjectTy here
 
         -- TODO(joel): I'm not sure this is the right error to throw
+        AList{} -> error "TODO"
         AnObj obj' -> throwErrorNoLoc $ AValUnexpectedlyObj obj'
         OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
@@ -559,6 +570,7 @@ evalTerm = \case
       ESimple SDecimal _ -> throwErrorNoLoc "We can't yet analyze calls to `hash` on decimals"
 
       ESimple _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash` on non-{string,integer,bool}"
+      EList{}            -> throwErrorNoLoc "We can't yet analyze calls to `hash on lists"
       EObject _ _        -> throwErrorNoLoc "We can't yet analyze calls to `hash on objects"
 
   n -> throwErrorNoLoc $ UnhandledTerm $ tShow n

@@ -506,6 +506,7 @@ data AVal
 instance UserShow AVal where
   userShowPrec _ = \case
     AVal _ sVal -> tShow sVal
+    AList sVals -> userShow (tShow <$> sVals)
     AnObj obj   -> userShow obj
     OpaqueVal   -> "[opaque]"
 

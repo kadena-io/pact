@@ -29,7 +29,6 @@ import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
 import           Data.SBV             (SBV, SymWord, Symbolic)
 import qualified Data.SBV             as SBV
-import qualified Data.SBV.List as SBVL
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Traversable     (for)
@@ -50,7 +49,7 @@ allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
 
   EType (SList ty :: SingTy k ty) -> mkAVal . sansProv <$>
-    (withSymWord ty alloc :: Symbolic (SBV [Concrete ty]))
+    (withSymWord ty alloc :: Symbolic (SBV [Concrete (ListElem ty)]))
   EType (ty :: SingTy k ty) -> singCase ty
     (\Refl -> mkAVal . sansProv <$>
       (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
@@ -69,7 +68,9 @@ allocForETerm
         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
       cells
     let aval :: AVal
-        aval = AList $ fmap (\(AVal _ sval) -> sval) cells'
+        aval = AList $ cells' <&> \case
+          AVal _ sval -> sval
+          _ -> error "TODO"
     pure (EType (SList ty), aval)
 -- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
@@ -190,10 +191,11 @@ saturateModel =
           (\Refl -> error "TODO")
           (\Refl -> error "TODO")
 
-        go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
-          withSMTValue ty $ withSymWord ty $ withSymWord ty $
-            AList . fmap ((\(SBVI.SBV sval) -> sval) . SBV.literal)
-              <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
+--         go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
+--           withSMTValue ty $ withSymWord ty $ withSymWord ty $
+--             AList . fmap ((\(SBVI.SBV sval') -> sval') . SBV.literal)
+--               <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
+
           -- mkAVal' . SBV.literal
           --   <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go (EType SList{}) OpaqueVal = pure OpaqueVal

@@ -34,6 +34,7 @@ import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
+import Debug.Trace
 
 --
 -- TODO: rename this. @Query@ is already taken by sbv.
@@ -158,6 +159,8 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
       EType SKeySet  -> mkAVal <$> view
         (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
       EType SAny     -> pure OpaqueVal
+      EType SList{} -> error "TODO"
+      EType SObject -> error "TODO"
       --
       -- TODO: if we add nested object support here, we need to install
       --       the correct provenance into AVals all the way down into
@@ -175,6 +178,7 @@ evalPropL
 evalPropL (CoreProp tm) = evalCoreL tm
 evalPropL (PropSpecific Result) = do
   result <- view qeAnalyzeResult
+  traceM $ "expecting a list: " ++ show result
   lst <- expectList result
   pure $ sansProv $ SBVL.implode lst
 
