@@ -7,6 +7,7 @@
 module Pact.Analyze.Remote.Server
   ( runServer
   , v1App
+  , verify
   ) where
 
 import           Control.Lens               ((^.), (.~), (&))
