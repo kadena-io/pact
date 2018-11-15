@@ -13,13 +13,13 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, true, false, uninterpret, SBV)
+                                              SymWord, ite, true, false, uninterpret)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import Data.Type.Equality
 import qualified Data.SBV.List as SBVL
-import Data.SBV.List.Bounded (bfoldr, band, bzipWith)
+import Data.SBV.List.Bounded (bfoldr, ibfoldr, band, bzipWith)
 import Data.Traversable (for)
 
 import           Pact.Analyze.Errors
@@ -28,6 +28,9 @@ import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
+
+listBound :: Int
+listBound = 10
 
 -- Note [Time Representation]
 --
@@ -175,7 +178,7 @@ evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
   S _ needle'   <- eval needle
   S _ haystack' <- evalL haystack
   pure $ sansProv $
-    bfoldr 4 (\cell rest -> cell .== needle' ||| rest) false haystack'
+    bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
   SList tyA' -> case singEq tyA tyB of
     Nothing   -> error "TODO"
@@ -191,7 +194,7 @@ evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
             Neq' -> (./=)
 
       pure $ ite (SBVL.length a' .== SBVL.length b')
-        (sansProv $ band 10 $ bzipWith 10 zipF a' b')
+        (sansProv $ band listBound $ bzipWith listBound zipF a' b')
         wrongLength
 evalCore (ListAt tyA i l) = do
   S _ i' <- eval i
@@ -201,7 +204,7 @@ evalCore (ListAt tyA i l) = do
   markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
 
   -- statically build a list of index comparisons
-  pure $ sansProv $ ibfoldr 10
+  pure $ sansProv $ ibfoldr listBound
     (\thisIx val rest -> ite (fromIntegral thisIx .== i') val rest)
     (uninterpret "listOutOfBounds")
     l'
@@ -214,11 +217,6 @@ evalCore (Var vid name) = do
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
-
-ibfoldr
-  -- :: (SymWord a, SymWord b)
-  :: Int -> (Int -> SBV a -> SBV b -> SBV b) -> SBV b -> SBV [a] -> SBV b
-ibfoldr = error "TODO"
 
 evalCoreL
   :: ( Analyzer m

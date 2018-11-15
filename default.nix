@@ -40,8 +40,8 @@ in
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";
-              rev = "0b6b2d6e4618935a3081e2acc2a9909d90fd01b1";
-              sha256 = "012j7ckng600rv7j8p3maqnnjfqjrm1x53v6gsi0whwhch20xlkv";
+              rev = "351cd68990b8e9e1e0e0b7b6ae22751f1b543c3e";
+              sha256 = "19rc7zfsmj9mbq1fm64h49d3mxw6jh31n3c3076mw8i83s7hbhg0";
             }) {});
 
             # Our own custom fork

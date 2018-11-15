@@ -2493,12 +2493,12 @@ spec = describe "analyze" $ do
             -- @model (property (= result []))
             -- TODO
             -- @model (property (= (length result) 0))
-    -- let code2 = [text|
-    --       (defun test:bool (a:integer b:integer c:integer)
-    --         @model (property (= result true))
-    --         (= [] (drop 4 [1 2 3])))
-    --       |]
-    -- expectVerified code2
+    let code2 = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model [(property (= result true))]
+            (= [] (drop 4 [1 2 3])))
+          |]
+    expectVerified code2
 
   describe "list take" $ do
     let code3 model = [text|
@@ -2521,34 +2521,34 @@ spec = describe "analyze" $ do
             -- -- @model (property (= result []))
             -- -- TODO
             -- -- @model (property (= (length result) 0))
-    -- let code4 = [text|
-          -- (defun test:bool (a:integer b:integer c:integer)
-            -- @model [(property (= result true))]
-            -- (= [] (take 4 [a b c])))
-          -- |]
-    -- expectVerified code4
+    let code4 = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model [(property (= result true))]
+            (= [] (take 4 [a b c])))
+          |]
+    expectVerified code4
 
---   describe "list at" $ do
---     let code5 = [text|
---           (defun test:integer (a:integer b:integer c:integer)
---             @model [(property (= result a))]
---             (at 0 [a b c]))
---           |]
---     expectVerified code5
+  describe "list at" $ do
+    let code5 = [text|
+          (defun test:integer (a:integer b:integer c:integer)
+            @model [(property (= result a))]
+            (at 0 [a b c]))
+          |]
+    expectVerified code5
 
---     let code6 = [text|
---           (defun test:integer (a:integer b:integer c:integer)
---             (at 2 [a b c]))
---           |]
---     expectPass code6 $ Valid Abort'
+    let code6 = [text|
+          (defun test:integer (a:integer b:integer c:integer)
+            (at 2 [a b c]))
+          |]
+    expectPass code6 $ Valid Abort'
 
---     let code6' = [text|
---           (defun test:integer (ix:integer)
---             @model [(property (= result ix))]
---             (at ix [0 1 2]))
---           |]
---     expectVerified code6'
---     expectPass code6' $ Satisfiable Abort'
+    let code6' = [text|
+          (defun test:integer (ix:integer)
+            @model [(property (= result ix))]
+            (at ix [0 1 2]))
+          |]
+    expectVerified code6'
+    expectPass code6' $ Satisfiable Abort'
 
   describe "string contains" $ do
     let code7 = [text|
@@ -2558,20 +2558,19 @@ spec = describe "analyze" $ do
           |]
     expectVerified code7
 
---   describe "list contains" $ do
---     let code8 model = [text|
---           (defun test:bool (a:integer b:integer c:integer)
---             @model $model
---             (contains a [a b c]))
---           |]
---     expectVerified  $ code8 "[(property (= result true))]"
---     expectFalsified $ code8 "[(property (= result false))]"
+  describe "list contains" $ do
+    let code8 model = [text|
+          (defun test:bool (a:integer b:integer c:integer)
+            @model $model
+            (contains a [a b c]))
+          |]
+    expectVerified  $ code8 "[(property (= result true))]"
+    expectFalsified $ code8 "[(property (= result false))]"
 
-  -- describe "list concat" $ do
-    -- let code9 model = [text|
-    --       (defun test:[integer] (a:integer b:integer c:integer)
-    --         @model $model
-    --         (+ [a b] [c]))
-    --       |]
-    -- -- expectVerified  $ code9 "[(property (= result [a b]))]"
-    -- expectFalsified $ code9 "[(property (= result [a b]))]"
+  describe "list concat" $ do
+    let code9 model = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model $model
+            (+ [a b] [c]))
+          |]
+    expectFalsified $ code9 "[(property (= result [a b]))]"
