@@ -4,9 +4,19 @@ let rp = builtins.fetchTarball {
   url = "https://github.com/reflex-frp/reflex-platform/archive/${rpRef}.tar.gz";
   sha256 = rpSha;
 };
+overlay = self: super: {
+  z3 = super.z3.overrideAttrs (drv: {
+    src = self.fetchFromGitHub {
+      owner = "Z3Prover";
+      repo = "z3";
+      rev = "727929c9af003d71eab1f0d90cc8e01761943491";
+      sha256 = "02p8rhflimc852ysgf7nmaypz6ga3w4iss3z8d3qrby5a2d464p9";
+    };
+  });
+};
 
 in
-  (import rp {}).project ({ pkgs, ... }: {
+  (import rp { nixpkgsOverlays = [ overlay ]; }).project ({ pkgs, ... }: {
     name = "pact";
     overrides = self: super:
       let guardGhcjs = p: if self.ghc.isGhcjs or false then null else p;
@@ -28,10 +38,10 @@ in
 
             # sbv >= 7.9
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
-              owner = "LeventErkok";
+              owner = "joelburget";
               repo = "sbv";
-              rev = "3dc60340634c82f39f6c5dca2b3859d10925cfdf";
-              sha256 = "18xcxg1h19zx6gdzk3dfs87447k3xjqn40raghjz53bg5k8cdc31";
+              rev = "280206808e981b62ea8f223cb40f7a20c9952617";
+              sha256 = "178iaz2rvhzsgswmb6b16zva7zanq2czin93girh7l70f2587rdh";
             }) {});
 
             # Our own custom fork
