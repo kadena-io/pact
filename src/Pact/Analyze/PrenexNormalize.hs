@@ -188,7 +188,7 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq op (EList tyA a) (EList tyB b)) ->
+  CoreProp (ListEqNeq ty op (EList tyA a) (EList tyB b)) ->
     let -- HACK!
         qa = []
         qb = []
@@ -196,8 +196,8 @@ floatBoolQuantifiers p = case p of
         b' = b
     -- let (qa, a') = float a
     --     (qb, b') = float b
-    in (qa ++ qb, CoreProp (ListEqNeq op (EList tyA a') (EList tyB b')))
-  CoreProp (ListEqNeq _ _ _)
+    in (qa ++ qb, CoreProp (ListEqNeq ty op (EList tyA a') (EList tyB b')))
+  CoreProp (ListEqNeq _ _ _ _)
     -> error ("ill-formed list (in)-equality: " ++ show p)
   CoreProp (ObjContains schema (EObject ty obj)) -> CoreProp <$>
     (ObjContains schema . EObject ty <$> float obj)

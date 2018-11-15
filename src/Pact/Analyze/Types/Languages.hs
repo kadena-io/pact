@@ -184,8 +184,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
   ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
-  -- TODO: switch to singleton representation
-  ListEqNeq   :: EqNeq -> Existential t -> Existential t -> Core t 'TyBool
+  ListEqNeq   :: SingTy 'SimpleK a  -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
 
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
   ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
@@ -321,7 +320,7 @@ instance
   BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
   KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
   ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
-  ListEqNeq op1 a1 b1         == ListEqNeq op2 a2 b2         = op1 == op2 && a1 == a2 && b1 == b2
+  ListEqNeq ty1 op1 a1 b1     == ListEqNeq _ty2 op2 a2 b2    = op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
   ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
   ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
   ObjContains s1 e1           == ObjContains s2 e2           = s1 == s2 && e1 == e2
@@ -411,13 +410,15 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    ListEqNeq op a b ->
+    ListEqNeq ty op a b ->
         showString "ListEqNeq "
+      . showsPrec 11 ty
+      . showString " "
       . showsPrec 11 op
       . showString " "
-      . showsPrec 11 a
+      . uniformlyShows ty 11 a
       . showString " "
-      . showsPrec 11 b
+      . uniformlyShows ty 11 b
 
     ObjAt s a b t ->
         showString "ListAt "
@@ -556,7 +557,7 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ListEqNeq   op x y       -> parenList [userShow op, userShow x, userShow y]
+    ListEqNeq   ty op x y    -> "TODO" -- parenList [userShow op, userShow x, userShow y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
     ListAt{} -> "TODO"
     -- ListAt ty k lst          -> withUserShow (SList ty) $ parenList [userShow k, userShow lst]

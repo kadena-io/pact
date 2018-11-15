@@ -398,8 +398,17 @@ inferPreProp preProp = case preProp of
       (EList aTy aProp, EList bTy bProp) -> case toOp eqNeqP op' of
         Just eqNeq -> case singEq aTy bTy of
           Just Refl -> pure $ ESimple SBool $ CoreProp $
-            ListEqNeq eqNeq (EList aTy aProp) (EList aTy bProp)
-          Nothing -> typeError preProp aTy bTy
+            ListEqNeq aTy eqNeq aProp bProp
+          Nothing -> case (aProp, bProp) of
+            (CoreProp (LiteralList _ []), _) -> pure $ ESimple SBool $ CoreProp $
+              ListEqNeq bTy eqNeq
+                (CoreProp (LiteralList bTy []))
+                bProp
+            (_, CoreProp (LiteralList _ [])) -> pure $ ESimple SBool $ CoreProp $
+              ListEqNeq aTy eqNeq
+                aProp
+                (CoreProp undefined)
+            _ -> typeError preProp aTy bTy
         Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
       (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
         Just eqNeq -> pure $ ESimple SBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
