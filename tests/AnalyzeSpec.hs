@@ -2461,6 +2461,7 @@ spec = describe "analyze" $ do
     --   Abort'
     --   ==>
     --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
+    -}
 
   describe "list literals" $ do
     let code0 model = [text|
@@ -2498,7 +2499,6 @@ spec = describe "analyze" $ do
     --         (= [] (drop 4 [1 2 3])))
     --       |]
     -- expectVerified code2
-    -}
 
   describe "list take" $ do
     let code3 model = [text|
@@ -2517,16 +2517,16 @@ spec = describe "analyze" $ do
     expectVerified  $ code3' "[(property (= result [b c]))]"
     expectFalsified $ code3' "[(property (= result [a b]))]"
 
-            -- TODO
-            -- @model (property (= result []))
-            -- TODO
-            -- @model (property (= (length result) 0))
-    let code4 = [text|
-          (defun test:bool (a:integer b:integer c:integer)
-            @model [(property (= result true))]
-            (= [] (take 4 [a b c])))
-          |]
-    expectVerified code4
+            -- -- TODO
+            -- -- @model (property (= result []))
+            -- -- TODO
+            -- -- @model (property (= (length result) 0))
+    -- let code4 = [text|
+          -- (defun test:bool (a:integer b:integer c:integer)
+            -- @model [(property (= result true))]
+            -- (= [] (take 4 [a b c])))
+          -- |]
+    -- expectVerified code4
 
 --   describe "list at" $ do
 --     let code5 = [text|

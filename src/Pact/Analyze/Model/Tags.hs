@@ -60,18 +60,18 @@ allocTVal :: HasCallStack => EType -> Symbolic TVal
 allocTVal ety = (ety,) <$> allocAVal ety
 
 allocForETerm :: HasCallStack => ETerm -> Symbolic TVal
-allocForETerm
-  (EList (SList ty :: SingTy 'ListK ty)
-  (CoreTerm (LiteralList _ cells))) = do
-    cells' <- traverse
-      (\_ -> mkAVal . sansProv <$>
-        (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
-      cells
-    let aval :: AVal
-        aval = AList $ cells' <&> \case
-          AVal _ sval -> sval
-          _ -> error "TODO"
-    pure (EType (SList ty), aval)
+-- allocForETerm
+--   (EList (SList ty :: SingTy 'ListK ty)
+--   (CoreTerm (LiteralList _ cells))) = do
+--     cells' <- traverse
+--       (\_ -> mkAVal . sansProv <$>
+--         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
+--       cells
+--     let aval :: AVal
+--         aval = AList $ cells' <&> \case
+--           AVal _ sval -> sval
+--           _ -> error "TODO"
+--     pure (EType (SList ty), aval)
 -- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
 

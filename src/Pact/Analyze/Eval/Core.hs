@@ -211,7 +211,6 @@ evalCore (Var vid name) = do
   case mVal of
     Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AList _svals)    -> error "TODO"
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCore x = error $ "no case for: " ++ show x
@@ -290,8 +289,6 @@ evalObjAt schema@(Schema schemaFields) colNameT objT retType = do
 
         Just (_fieldType, AVal mProv sval) -> pure $ mkS mProv sval
 
-        Just (_, AList _) -> error "TODO"
-
         Just (fieldType, AnObj _subObj) -> throwErrorNoLoc $
           ObjFieldOfWrongType fieldName fieldType
 
@@ -327,7 +324,6 @@ evalObjAtO colNameT objT = do
           Nothing -> throwErrorNoLoc $ KeyNotPresent fieldName obj
           Just (fieldType, AVal _ _) -> throwErrorNoLoc $
             ObjFieldOfWrongType fieldName fieldType
-          Just (_, AList _) -> error "TODO"
           Just (_fieldType, AnObj subObj) -> pure subObj
           Just (_fieldType, OpaqueVal) -> throwErrorNoLoc OpaqueValEncountered
 
@@ -346,7 +342,6 @@ evalCoreO (Var vid name) = do
   case mVal of
     Nothing            -> throwErrorNoLoc $ VarNotInScope name vid
     Just (AVal _ val') -> throwErrorNoLoc $ AValUnexpectedlySVal val'
-    Just AList{} -> error "TODO"
     Just (AnObj obj)   -> pure obj
     Just OpaqueVal     -> throwErrorNoLoc OpaqueValEncountered
 

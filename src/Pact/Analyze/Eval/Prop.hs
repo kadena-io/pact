@@ -24,7 +24,6 @@ import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
-import qualified Data.SBV.List              as SBVL
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
@@ -34,7 +33,6 @@ import qualified Pact.Analyze.Types         as Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
-import Debug.Trace
 
 --
 -- TODO: rename this. @Query@ is already taken by sbv.
@@ -64,39 +62,31 @@ liftSymbolic = Query . lift . lift . lift
 aval
   :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
-  -> ([SBVI.SVal] -> m a)
   -> (Object -> m a)
   -> AVal
   -> m a
-aval elimVal elimList elimObj = \case
+aval elimVal elimObj = \case
   AVal mProv sval -> elimVal mProv sval
-  AList lst       -> elimList lst
   AnObj obj       -> elimObj obj
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
 expectVal :: Analyzer m => AVal -> m (S a)
 expectVal = aval
   (pure ... mkS)
-  (error "TODO")
   (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: Analyzer m => AVal -> m Object
 expectObj = aval
   ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
-  (error "TODO")
   pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
 
-expectList :: Analyzer m => AVal -> m [SBV a]
+expectList :: Analyzer m => AVal -> m (SBV [a])
 expectList = aval
-  ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
-  (pure . fmap SBVI.SBV)
+  (\_prov sval -> pure (SBVI.SBV sval))
   (throwErrorNoLoc . AValUnexpectedlyObj)
-  where
-    getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
-    getSVal = flip const
 
 getLitTableName :: Prop TyTableName -> Query TableName
 getLitTableName (StrLit tn) = pure $ TableName tn
@@ -178,9 +168,7 @@ evalPropL
 evalPropL (CoreProp tm) = evalCoreL tm
 evalPropL (PropSpecific Result) = do
   result <- view qeAnalyzeResult
-  traceM $ "expecting a list: " ++ show result
-  lst <- expectList result
-  pure $ sansProv $ SBVL.implode lst
+  sansProv <$> expectList result
 
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds

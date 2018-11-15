@@ -25,7 +25,7 @@ import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
-import           Data.Foldable               (foldl', foldlM, for_)
+import           Data.Foldable               (foldl', foldlM)
 import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
@@ -35,7 +35,6 @@ import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||))
                                               SymArray (readArray), SymWord,
                                               constrain, false, ite, (.<))
 import qualified Data.SBV.String             as SBV
-import qualified Data.SBV.Internals          as SBVI
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
 import qualified Data.Text                   as T
@@ -192,21 +191,14 @@ tagResult av = do
   tid <- view $ aeModelTags.mtResult._1
   tagReturn tid av
   tag <- view $ aeModelTags.mtResult._2.located._2
-  let eq a b = SBVI.SBV @() a .== SBVI.SBV @() b
-  case (av, tag) of
-    (AList av', AList tag') ->
-      for_ (zipWith eq av' tag') (addConstraint . traceTag "8" . sansProv)
-    (AList _, OpaqueVal) -> pure ()
-    _ -> addConstraint $ traceTag "9" $ sansProv $ tag .== av
+  addConstraint $ sansProv $ tag .== av
 
 tagReturn :: TagId -> AVal -> Analyze ()
 tagReturn tid av = do
   mTag <- preview $ aeModelTags.mtReturns.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> case (av, tagAv) of
-      (AList _, OpaqueVal) -> pure ()
-      _ -> addConstraint $ traceTag "10" $ sansProv $ tagAv .== av
+    Just tagAv -> addConstraint $ traceTag "10" $ sansProv $ tagAv .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
@@ -468,8 +460,6 @@ evalTerm = \case
 
             -- TODO: handle EObjectTy here
 
-        -- TODO(joel): I'm not sure this is the right error to throw
-        AList{} -> error "TODO"
         AnObj obj' -> throwErrorNoLoc $ AValUnexpectedlyObj obj'
         OpaqueVal  -> throwErrorNoLoc OpaqueValEncountered
 
