@@ -39,11 +39,7 @@ import Criterion.Types
 import qualified Data.Map as M
 import qualified Data.Text as Text
 import Pact.Analyze.Check
-#if MIN_VERSION_statistics(0,14,0)
 import Statistics.Types (Estimate(..))
-#else
-import Statistics.Resampling.Bootstrap
-#endif
 #endif
 import Pact.Typechecker
 import Pact.Types.Typecheck
