@@ -51,7 +51,9 @@ showTVal (ety, av) = case av of
     EType (ty :: SingTy k t) -> singCase ty
       (\Refl -> withUserShow ty $ withSymWord ty $
         showSbv (SBVI.SBV sval :: SBV (Concrete t)))
-      (\Refl -> error "TODO")
+      (\Refl -> case ty of
+        SList ty' -> withUserShow ty' $ withSymWord ty' $
+          showSbv (SBVI.SBV sval :: SBV (Concrete t)))
       (\Refl -> error "TODO")
 
 showObject :: Object -> Text

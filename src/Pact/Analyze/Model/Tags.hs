@@ -188,7 +188,11 @@ saturateModel =
           (\Refl -> withSymWord ty $ withSMTValue ty $
             mkAVal' . SBV.literal
               <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
-          (\Refl -> error "TODO")
+          (\Refl -> case ty of
+            SList ty' -> withSymWord ty' $ withSMTValue ty' $
+              mkAVal' . SBV.literal
+                <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
+
           (\Refl -> error "TODO")
 
 --         go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
