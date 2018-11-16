@@ -76,7 +76,7 @@ runPipedRepl' p s@ReplState{..} h =
     evalStateT (useReplLib >> pipeLoop p h Nothing) s
 
 initReplState :: MonadIO m => ReplMode -> m ReplState
-initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def def)
+initReplState m = liftIO initPureEvalEnv >>= \e -> return (ReplState e def m def def def)
 
 initPureEvalEnv :: IO (EvalEnv LibState)
 initPureEvalEnv = do
@@ -156,7 +156,7 @@ compileEval src exp = handleCompile src exp $ \e -> pureEval (_tInfo e) (eval e)
 
 pureEval :: Info -> Eval LibState (Term Name) -> Repl (Either String (Term Name))
 pureEval ei e = do
-  (ReplState evalE evalS _ _ _) <- get
+  (ReplState evalE evalS _ _ _ _) <- get
   er <- try (liftIO $ runEval' evalS evalE e)
   let (r,es) = case er of
                  Left (SomeException ex) -> (Left (PactError EvalError def def (pack $ show ex)),evalS)
@@ -187,10 +187,10 @@ pureEval ei e = do
               mapM_ (\c -> outStrLn HErr $ " at " ++ show c) cs
             return (Left serr)
 
-doOut :: Show t => Info -> ReplMode -> t -> Repl ()
+doOut :: Info -> ReplMode -> Term Name -> Repl ()
 doOut ei mode a = case mode of
   Interactive -> plainOut
-  StringEval -> plainOut
+  StringEval -> rTermOut %= (a:)
   StdinPipe -> plainOut
   Script True _ -> lineOut
   _ -> return ()
