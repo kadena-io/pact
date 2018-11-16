@@ -19,4 +19,4 @@ extra-deps:
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   - constraints-extras-0.2.0.0
   - git: https://github.com/joelburget/sbv.git
-    commit: 280206808e981b62ea8f223cb40f7a20c9952617
+    commit: 351cd68990b8e9e1e0e0b7b6ae22751f1b543c3e
