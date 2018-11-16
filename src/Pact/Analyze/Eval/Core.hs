@@ -250,7 +250,7 @@ evalCoreL (ListConcat _ty p1 p2) = do
   pure $ sansProv $ SBVL.concat p1' p2'
 
 evalCoreL Lit{} = error "TODO"
-evalCoreL Sym{} = error "TODO"
+evalCoreL (Sym s) = pure s
 evalCoreL (Var vid name) = do
   mVal <- getVar vid
   case mVal of
@@ -258,11 +258,12 @@ evalCoreL (Var vid name) = do
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
-evalCoreL Numerical{} = error "TODO"
+evalCoreL Numerical{} = vacuousMatch "an object cannot be a numerical value"
 evalCoreL ListReverse{} = error "TODO"
 evalCoreL ListSort{} = error "TODO"
-evalCoreL ObjAt{} = error "TODO"
-evalCoreL ListAt{} = error "TODO"
+evalCoreL (ObjAt schema colNameT objT retType)
+  = evalObjAt schema colNameT objT retType
+evalCoreL ListAt{} = throwErrorNoLoc "nested list are not allowed"
 
 evalObjAt
   :: (Analyzer m, SymWord a)
