@@ -44,7 +44,20 @@ instance Float ('TyList 'TyAny) where
   float = error "TODO"
 
 instance Float ('TyList 'TyInteger) where
-  float = error "TODO"
+  float p = case p of
+    PropSpecific Result -> ([], p)
+    CoreProp Lit{} -> ([], p)
+    CoreProp Sym{} -> ([], p)
+    CoreProp Var{} -> ([], p)
+    CoreProp ListDrop{} -> error "TODO"
+    CoreProp Numerical{} -> vacuousMatch "numerical can't be a list"
+    CoreProp ObjAt{} -> error "TODO"
+    CoreProp ListAt{} -> error "TODO"
+    CoreProp ListReverse{} -> error "TODO"
+    CoreProp ListSort{} -> error "TODO"
+    CoreProp ListTake{} -> error "TODO"
+    CoreProp ListConcat{} -> error "TODO"
+    CoreProp LiteralList{} -> error "TODO"
 
 instance Float ('TyList 'TyDecimal) where
   float = error "TODO"
@@ -102,11 +115,26 @@ flipQuantifier = \case
   Forall' uid name ty -> Exists' uid name ty
   Exists' uid name ty -> Forall' uid name ty
 
+-- TODO: use has
+floatList
+  :: SingTy 'SimpleK a
+  -> Prop ('TyList a)
+  -> ([Quantifier], Prop ('TyList a))
+floatList = \case
+  SInteger -> float
+  SBool    -> float
+  SStr     -> float
+  STime    -> float
+  SDecimal -> float
+  SKeySet  -> float
+  SAny     -> float
+
 floatIntegerQuantifiers :: Prop 'TyInteger -> ([Quantifier], Prop 'TyInteger)
 floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
   CoreProp (StrLength pStr) -> PStrLength <$> float pStr
+  CoreProp (ListLength ty pLst) -> CoreProp . ListLength ty <$> floatList ty pLst
 
   CoreProp (Numerical (IntArithOp op a b))
     -> PNumerical ... IntArithOp      op <$> float a <*> float b
@@ -188,7 +216,7 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq ty op (EList tyA a) (EList tyB b)) ->
+  CoreProp (ListEqNeq ty op a b) ->
     let -- HACK!
         qa = []
         qb = []
@@ -196,9 +224,7 @@ floatBoolQuantifiers p = case p of
         b' = b
     -- let (qa, a') = float a
     --     (qb, b') = float b
-    in (qa ++ qb, CoreProp (ListEqNeq ty op (EList tyA a') (EList tyB b')))
-  CoreProp (ListEqNeq _ _ _ _)
-    -> error ("ill-formed list (in)-equality: " ++ show p)
+    in (qa ++ qb, CoreProp (ListEqNeq ty op a' b'))
   CoreProp (ObjContains schema (EObject ty obj)) -> CoreProp <$>
     (ObjContains schema . EObject ty <$> float obj)
   CoreProp (ObjContains _ _) -> error ("ill-formed contains: " ++ show p)

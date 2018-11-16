@@ -17,7 +17,6 @@ import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
-import Data.Type.Equality
 import qualified Data.SBV.List as SBVL
 import Data.SBV.List.Bounded (bfoldr, ibfoldr, band, bzipWith)
 import Data.Traversable (for)
@@ -179,23 +178,20 @@ evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
   S _ haystack' <- evalL haystack
   pure $ sansProv $
     bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
-evalCore (ListEqNeq op (EList tyA a) (EList tyB b)) = case tyA of
-  SList tyA' -> case singEq tyA tyB of
-    Nothing   -> error "TODO"
-    Just Refl -> withEq tyA' $ withSymWord tyA' $ withShow tyA' $ do
-      S _ a' <- evalL a
-      S _ b' <- evalL b
+evalCore (ListEqNeq ty op a b) = withEq ty $ withSymWord ty $ withShow ty $ do
+  S _ a' <- evalL a
+  S _ b' <- evalL b
 
-      let wrongLength = case op of
-            Eq'  -> false
-            Neq' -> true
-          zipF = case op of
-            Eq'  -> (.==)
-            Neq' -> (./=)
+  let wrongLength = case op of
+        Eq'  -> false
+        Neq' -> true
+      zipF = case op of
+        Eq'  -> (.==)
+        Neq' -> (./=)
 
-      pure $ ite (SBVL.length a' .== SBVL.length b')
-        (sansProv $ band listBound $ bzipWith listBound zipF a' b')
-        wrongLength
+  pure $ ite (SBVL.length a' .== SBVL.length b')
+    (sansProv $ band listBound $ bzipWith listBound zipF a' b')
+    wrongLength
 evalCore (ListAt tyA i l) = do
   S _ i' <- eval i
   S _ l' <- withShow tyA $ evalL l
@@ -208,6 +204,9 @@ evalCore (ListAt tyA i l) = do
     (\thisIx val rest -> ite (fromIntegral thisIx .== i') val rest)
     (uninterpret "listOutOfBounds")
     l'
+evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
+  S prov l' <- withShow ty $ evalL l
+  pure $ S prov $ SBVL.length l'
 
 evalCore (Var vid name) = do
   mVal <- getVar vid

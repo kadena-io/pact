@@ -85,6 +85,7 @@ data Feature
   | FProjection
   | FObjectMerge
   -- List operators
+  | FListLength
   | FContains
   | FDrop
   | FReverse
@@ -671,6 +672,22 @@ doc FObjectMerge = Doc
 
 -- List features
 
+doc FListLength = Doc
+  "length"
+  CList
+  InvAndProp -- TODO: double-check that this is true
+  "List length"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(length s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyList' a)
+        ]
+        (TyCon int)
+  ]
+
 doc FContains = Doc
   "contains"
   CList
@@ -772,6 +789,7 @@ doc FStringLength = Doc
         ]
         (TyCon int)
   ]
+
 doc FStringConcatenation = Doc
   "+"
   CString
@@ -1193,6 +1211,7 @@ PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SLogicalImplication, FLogicalImplication)
 PAT(SProjection, FProjection)
+PAT(SListLength, FListLength)
 PAT(SContains, FContains)
 PAT(SDrop, FDrop)
 PAT(SReverse, FReverse)

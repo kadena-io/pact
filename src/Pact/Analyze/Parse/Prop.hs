@@ -33,6 +33,7 @@ module Pact.Analyze.Parse.Prop
 -- bidirectional style, so the application is inferred while each argument is
 -- checked.
 
+
 import           Control.Applicative
 import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
                                                (?~), (^?), toListOf)
@@ -352,8 +353,14 @@ inferPreProp preProp = case preProp of
   -- applications:
   --
   -- Function types are inferred; arguments are checked.
-  PreApp s [str] | s == SStringLength ->
-    ESimple SInteger . PStrLength <$> checkPreProp SStr str
+  PreApp s [arg] | s == SStringLength -> do
+    arg' <- inferPreProp arg
+    case arg' of
+      ESimple SStr str
+        -> pure $ ESimple SInteger $ CoreProp $ StrLength str
+      EList (SList ty) lst
+        -> pure $ ESimple SInteger $ CoreProp $ ListLength ty lst
+      _ -> throwErrorIn preProp "expected string or list argument to length"
 
   PreApp s [a, b] | s == SModulus -> do
     it <- PNumerical ... ModOp <$> checkPreProp SInteger a <*> checkPreProp SInteger b
@@ -395,24 +402,31 @@ inferPreProp preProp = case preProp of
           SKeySet  -> case toOp eqNeqP op' of
             Just eqNeq -> pure $ ESimple SBool $ PKeySetEqNeq eqNeq aProp bProp
             Nothing    -> throwErrorIn preProp $ eqNeqMsg "keysets"
-      (EList aTy aProp, EList bTy bProp) -> case toOp eqNeqP op' of
-        Just eqNeq -> case singEq aTy bTy of
+
+      -- cast ([] :: [*]) to any other list type
+      (EList (SList SAny) (CoreProp (LiteralList _ [])), EList (SList ty) prop)
+        | Just eqNeq <- toOp eqNeqP op'
+        -> pure $ ESimple SBool $ CoreProp $
+          ListEqNeq ty eqNeq (CoreProp (LiteralList (SList ty) [])) prop
+
+      (EList (SList ty) prop, EList (SList SAny) (CoreProp (LiteralList _ [])))
+        | Just eqNeq <- toOp eqNeqP op'
+        -> pure $ ESimple SBool $ CoreProp $
+          ListEqNeq ty eqNeq (CoreProp (LiteralList (SList ty) [])) prop
+
+      (EList (SList aTy) aProp, EList (SList bTy) bProp)
+        | Just eqNeq <- toOp eqNeqP op' -> case singEq aTy bTy of
           Just Refl -> pure $ ESimple SBool $ CoreProp $
             ListEqNeq aTy eqNeq aProp bProp
-          Nothing -> case (aProp, bProp) of
-            (CoreProp (LiteralList _ []), _) -> pure $ ESimple SBool $ CoreProp $
-              ListEqNeq bTy eqNeq
-                (CoreProp (LiteralList bTy []))
-                bProp
-            (_, CoreProp (LiteralList _ [])) -> pure $ ESimple SBool $ CoreProp $
-              ListEqNeq aTy eqNeq
-                aProp
-                (CoreProp undefined)
-            _ -> typeError preProp aTy bTy
-        Nothing    -> throwErrorIn preProp $ eqNeqMsg "lists"
+          Nothing -> typeError preProp aTy bTy
+
+      (EList (SList _) _, EList (SList _) _)
+        | Nothing <- toOp eqNeqP op' -> throwErrorIn preProp $ eqNeqMsg "lists"
+
       (EObject _ aProp, EObject _ bProp) -> case toOp eqNeqP op' of
         Just eqNeq -> pure $ ESimple SBool $ CoreProp $ ObjectEqNeq eqNeq aProp bProp
         Nothing    -> throwErrorIn preProp $ eqNeqMsg "objects"
+
       (_, _) -> throwErrorIn preProp $
         "can't compare primitive types with objects (found " <>
         userShow (existentialType a') <> " and " <>

@@ -124,6 +124,12 @@
   ;;not tc per se but runtime type enforce error
   (defun rtc-empty-string-list:[string] (input:[string]) input)
 
+(defun take-integer:bool (a:integer b:integer c:integer)
+  (= [] (take 2 [a b c])))
+
+(defun at-integer:integer (a:integer b:integer c:integer)
+  (at 0 [a b c]))
+
 )
 
 (create-table persons)

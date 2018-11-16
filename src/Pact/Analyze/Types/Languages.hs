@@ -193,6 +193,8 @@ data Core (t :: Ty -> *) (a :: Ty) where
   StringContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
   ListContains   :: SingTy 'SimpleK a -> t a -> t ('TyList a) -> Core t 'TyBool
 
+  ListLength  :: SingTy 'SimpleK a -> t ('TyList a) -> Core t 'TyInteger
+
   ListReverse :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
   ListSort    :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
 
@@ -320,7 +322,9 @@ instance
   BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
   KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
   ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
-  ListEqNeq ty1 op1 a1 b1     == ListEqNeq _ty2 op2 a2 b2    = op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
+  ListEqNeq ty1 op1 a1 b1     == ListEqNeq ty2 op2 a2 b2     = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
   ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
   ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
   ObjContains s1 e1           == ObjContains s2 e2           = s1 == s2 && e1 == e2
@@ -337,6 +341,9 @@ instance
       SAny     -> a1 == a2
       )
     Nothing   -> False
+  ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
+    Nothing   -> False
+    Just Refl -> uniformlyEq ty1 a1 a2
   ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
   ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
@@ -461,6 +468,11 @@ instance
         SAny     -> showsPrec 11 a)
       . showString " "
       . uniformlyShows ty 11 b
+    ListLength ty a ->
+        showString "ListLength "
+      . showsPrec 11 ty
+      . showString " "
+      . uniformlyShows ty 11 a
     ListReverse ty a ->
         showString "ListReverse "
       . showsPrec 11 ty
@@ -557,7 +569,7 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ListEqNeq   ty op x y    -> "TODO" -- parenList [userShow op, userShow x, userShow y]
+    ListEqNeq{} -> "TODO" -- parenList [userShow op, userShow x, userShow y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
     ListAt{} -> "TODO"
     -- ListAt ty k lst          -> withUserShow (SList ty) $ parenList [userShow k, userShow lst]
@@ -565,6 +577,8 @@ instance
     StringContains needle haystack -> parenList ["contains", userShow needle, userShow haystack]
     ListContains{} -> "TODO"
     -- ListContains ty needle haystack -> parenList ["contains", userShow needle, userShow haystack]
+    ListLength{} -> "TODO"
+    -- ListLength ty x          -> parenList ["list-length"]
     ListReverse{}       -> "TODO"
     -- ListReverse ty lst       -> parenList ["reverse", userShow lst]
     ListSort{}       -> "TODO"

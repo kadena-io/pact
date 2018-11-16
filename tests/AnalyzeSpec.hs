@@ -217,7 +217,6 @@ pattern Result' = PropSpecific Result
 
 spec :: Spec
 spec = describe "analyze" $ do
-  {-
   describe "decimal arithmetic" $ do
     let unlit :: S Decimal -> Decimal
         unlit = fromJust . unliteralS
@@ -2461,7 +2460,6 @@ spec = describe "analyze" $ do
     --   Abort'
     --   ==>
     --   Inj (IntegerComparison Eq (readBalance Before) (readBalance After))
-    -}
 
   describe "list literals" $ do
     let code0 model = [text|
@@ -2489,14 +2487,12 @@ spec = describe "analyze" $ do
     expectVerified  $ code1' "[(property (= result [a b]))]"
     expectFalsified $ code1' "[(property (= result [a]))]"
 
-            -- TODO
-            -- @model (property (= result []))
-            -- TODO
-            -- @model (property (= (length result) 0))
     let code2 = [text|
-          (defun test:bool (a:integer b:integer c:integer)
-            @model [(property (= result true))]
-            (= [] (drop 4 [1 2 3])))
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model [(property (= result []))
+                    (property (= (length result) 0))
+                   ]
+            (drop 4 [a b c]))
           |]
     expectVerified code2
 
@@ -2517,30 +2513,36 @@ spec = describe "analyze" $ do
     expectVerified  $ code3' "[(property (= result [b c]))]"
     expectFalsified $ code3' "[(property (= result [a b]))]"
 
-            -- -- TODO
-            -- -- @model (property (= result []))
-            -- -- TODO
-            -- -- @model (property (= (length result) 0))
     let code4 = [text|
-          (defun test:bool (a:integer b:integer c:integer)
-            @model [(property (= result true))]
-            (= [] (take 4 [a b c])))
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model [(property (= result [a b c]))
+                    (property (= (length result) 3))
+                   ]
+            (take 4 [a b c]))
           |]
     expectVerified code4
 
-  describe "list at" $ do
     let code5 = [text|
-          (defun test:integer (a:integer b:integer c:integer)
-            @model [(property (= result a))]
-            (at 0 [a b c]))
+          (defun test:bool (a:integer b:integer c:integer)
+            @model [(property (= result true))]
+            (= [] (take 0 [a b c])))
           |]
     expectVerified code5
 
-    let code6 = [text|
-          (defun test:integer (a:integer b:integer c:integer)
-            (at 2 [a b c]))
-          |]
-    expectPass code6 $ Valid Abort'
+  describe "list at" $ do
+    -- next two tests disabled pending https://github.com/kadena-io/pact/issues/312
+    -- let code5 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         @model [(property (= result a))]
+    --         (at 0 [a b c]))
+    --       |]
+    -- expectVerified code5
+
+    -- let code6 = [text|
+    --       (defun test:integer (a:integer b:integer c:integer)
+    --         (at 2 [a b c]))
+    --       |]
+    -- expectPass code6 $ Valid Abort'
 
     let code6' = [text|
           (defun test:integer (ix:integer)

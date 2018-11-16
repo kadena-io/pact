@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE MultiWayIf                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -43,7 +45,7 @@ import           System.Locale              (defaultTimeLocale)
 
 import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
-                                             Type (..))
+                                             Type (TyUser, TySchema, TyPrim, TyVar, TyFun))
 import qualified Pact.Types.Lang            as Pact
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
@@ -585,6 +587,9 @@ translateObjBinding pairs schema bodyA rhsT = do
       withNodeVars nodeVars $
         translateBody bodyA
 
+pattern EmptyList :: SingTy 'SimpleK a -> Term ('TyList a)
+pattern EmptyList ty = CoreTerm (LiteralList (SList ty) [])
+
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of
   AST_Let bindings body ->
@@ -777,12 +782,22 @@ translateNode astNode = withAstContext astNode $ case astNode of
           (_, _) -> case singEq ta tb of
             Just Refl -> throwError' $ MalformedComparison fn args
             _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
-      (EList ta a', EList tb b') -> case singEq ta tb of
+
+      (EList (SList SAny) (EmptyList SAny), EList (SList ty) lst) -> do
+        op' <- maybe (throwError' $ MalformedComparison fn args) pure $
+          toOp eqNeqP fn
+        pure $ ESimple SBool $ CoreTerm $ ListEqNeq ty op' (EmptyList ty) lst
+
+      (EList (SList ty) lst, EList (SList SAny) (EmptyList SAny)) -> do
+        op' <- maybe (throwError' $ MalformedComparison fn args) pure $
+          toOp eqNeqP fn
+        pure $ ESimple SBool $ CoreTerm $ ListEqNeq ty op' lst (EmptyList ty)
+
+      (EList (SList ta) a', EList (SList tb) b') -> case singEq ta tb of
         Just Refl -> do
           op' <- maybe (throwError' $ MalformedComparison fn args) pure $
             toOp eqNeqP fn
-          pure $ ESimple SBool $ inject $
-            ListEqNeq op' (EList ta a') (EList tb b')
+          pure $ ESimple SBool $ inject $ ListEqNeq ta op' a' b'
         _         -> throwError' $ TypeMismatch (EType ta) (EType tb)
       (EObject _ a', EObject _ b') -> do
         op' <- maybe (throwError' $ MalformedComparison fn args) pure $
