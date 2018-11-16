@@ -58,9 +58,22 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Runtime (PactError)
 
+
+data ModuleState = ModuleState
+  { _msName :: ModuleName
+  , _msHash :: Hash
+  , _msBlessed :: [Hash]
+  , _msImplements :: [ModuleName]
+  , _msImports :: [Use]
+  }
+makeLenses ''ModuleState
+
+initModuleState :: ModuleName -> Hash -> ModuleState
+initModuleState n h = ModuleState n h def def def
+
 data CompileState = CompileState
   { _csFresh :: Int
-  , _csModule :: Maybe (ModuleName,Hash)
+  , _csModule :: Maybe ModuleState
   }
 makeLenses ''CompileState
 
@@ -126,13 +139,28 @@ compile mi e = let ei = mi <$> e in runCompile topLevel (initParseState ei) ei
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
-currentModule :: Compile (ModuleName,Hash)
-currentModule = use (psUser . csModule) >>= \m -> case m of
-  Just cm -> return cm
+moduleState :: Compile ModuleState
+moduleState = use (psUser . csModule) >>= \m -> case m of
+  Just m' -> return m'
   Nothing -> context >>= tokenErr' "Must be declared within module"
 
-currentModule' :: Compile ModuleName
-currentModule' = fst <$> currentModule
+overModuleState :: Lens' ModuleState a -> (a -> a) -> Compile ()
+overModuleState l f = do
+  m <- moduleState
+  psUser . csModule .= Just (over l f m)
+
+withModuleState :: ModuleState -> Compile a -> Compile (a,ModuleState)
+withModuleState ms0 act = do
+  psUser . csModule .= Just ms0
+  a <- act
+  ms1 <- state $ \s -> (view (psUser . csModule) s,set (psUser .csModule) Nothing s)
+  case ms1 of
+    Nothing -> syntaxError "Invalid internal state, module data not found"
+    Just ms -> return (a,ms)
+
+
+currentModuleName :: Compile ModuleName
+currentModuleName = _msName <$> moduleState
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -146,14 +174,14 @@ cToTV n | n < 26 = fromString [toC n]
   where toC i = toEnum (fromEnum 'a' + i)
 
 
-sexp :: (Compile (Term Name)) -> Compile (Term Name)
+sexp :: (Compile a) -> Compile a
 sexp body = withList' Parens (body <* eof)
 
 specialFormOrApp :: (Reserved -> Compile (Compile (Term Name))) -> Compile (Term Name)
 specialFormOrApp forms = sexp (sf <|> app) where
   sf = reservedAtom >>= forms >>= \a -> commit >> a
 
-specialForm :: (Reserved -> Compile (Compile (Term Name))) -> Compile (Term Name)
+specialForm :: (Reserved -> Compile (Compile a)) -> Compile a
 specialForm forms = sexp $ reservedAtom >>= forms >>= \a -> commit >> a
 
 
@@ -175,17 +203,18 @@ valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
     RLetStar -> return letsForm
     _ -> expected "value level form (let, let*)"
 
-moduleLevel :: Compile (Term Name)
+moduleLevel :: Compile [Term Name]
 moduleLevel = specialForm $ \r -> case r of
-    RUse -> return useForm
-    RDefconst -> return defconst
-    RBless -> return bless
-    RDeftable -> return deftable
-    RDefschema -> return defschema
-    RDefun -> return defun
-    RDefpact -> return defpact
-    RImplements -> return implements
+    RUse -> returnl useForm
+    RDefconst -> returnl defconst
+    RBless -> return (bless >> return [])
+    RDeftable -> returnl deftable
+    RDefschema -> returnl defschema
+    RDefun -> returnl defun
+    RDefpact -> returnl defpact
+    RImplements -> return (implements >> return [])
     _ -> expected "module level form (use, def..., special form)"
+    where returnl a = return (pure <$> a)
 
 
 literals :: Compile (Term Name)
@@ -265,22 +294,25 @@ literal = lit >>= \LiteralExp{..} ->
 
 deftable :: Compile (Term Name)
 deftable = do
-  (mn,mh) <- currentModule
+  ModuleState{..} <- moduleState
   AtomExp{..} <- userAtom
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
   m <- meta ModelNotAllowed
-  TTable (TableName _atomAtom) mn mh
+  TTable (TableName _atomAtom) _msName _msHash
     (fromMaybe TyAny ty) m <$> contextInfo
 
 
-bless :: Compile (Term Name)
-bless = TBless <$> hash' <*> contextInfo
+bless :: Compile ()
+bless = do
+  h <- hash'
+  overModuleState msBlessed (h:)
+
 
 defconst :: Compile (Term Name)
 defconst = do
-  modName <- currentModule'
+  modName <- currentModuleName
   a <- arg
   v <- valueLevel
 
@@ -317,7 +349,7 @@ meta modelAllowed = atPairs <|> try docStr <|> return def
 
 defschema :: Compile (Term Name)
 defschema = do
-  modName <- currentModule'
+  modName <- currentModuleName
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
@@ -325,7 +357,7 @@ defschema = do
 
 defun :: Compile (Term Name)
 defun = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
@@ -334,7 +366,7 @@ defun = do
 
 defpact :: Compile (Term Name)
 defpact = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
@@ -359,31 +391,16 @@ moduleForm = do
         Info (Just (c,_)) -> c
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
-  (psUser . csModule) .= Just (modName,modHash)
-  (bd,bi) <- bodyForm' moduleLevel
-  blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
-    TDef {} -> return []
-    TNative {} -> return []
-    TConst {} -> return []
-    TSchema {} -> return []
-    TTable {} -> return []
-    TUse {} -> return []
-    TBless {..} -> return [_tBlessed]
-    TImplements{} -> return []
-    t -> syntaxError $ "Invalid declaration in module scope: " ++ abbrev t
-  let interfaces = bd >>= \d -> case d of
-        TImplements{..} -> [_tInterfaceName]
-        _ -> []
+  ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash blessed interfaces)
-    (abstract (const Nothing) (TList bd TyAny bi)) i
+    (Module modName (KeySetName keyset) m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
+    (abstract (const Nothing) (TList (concat bd) TyAny bi)) i
 
-implements :: Compile (Term Name)
+implements :: Compile ()
 implements = do
-  modName <- currentModule'
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
-  info <- contextInfo
-  return $ TImplements ifName modName info
+  overModuleState msImplements (ifName:)
+
 
 interface :: Compile (Term Name)
 interface = do
@@ -398,19 +415,19 @@ interface = do
         Info (Just (c,_)) -> c
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
-  (psUser . csModule) .= Just (iname, ihash)
-  bd <- bodyForm $ specialForm $ \r -> case r of
-        RDefun -> return emptyDef
-        RDefconst -> return defconst
-        RUse -> return useForm
-        t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
+  (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
+            bodyForm $ specialForm $ \r -> case r of
+              RDefun -> return emptyDef
+              RDefconst -> return defconst
+              RUse -> return useForm
+              t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
-    (Interface iname code m)
+    (Interface iname code m _msImports)
     (abstract (const Nothing) bd) info
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
@@ -472,7 +489,12 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
-  TUse (ModuleName modName) <$> optional hash' <*> contextInfo
+  i <- contextInfo
+  u <- Use (ModuleName modName) <$> optional hash' <*> pure i
+  -- this is the one place module may not be present, use traversal
+  psUser . csModule . _Just . msImports %= (u:)
+  return $ TUse u i
+
 
 hash' :: Compile Hash
 hash' = str >>= \s -> case fromText' s of
@@ -527,7 +549,7 @@ bodyForm term = do
   (bs,i) <- bodyForm' term
   return $ TList bs TyAny i
 
-bodyForm' :: Compile (Term Name) -> Compile ([Term Name],Info)
+bodyForm' :: Compile a -> Compile ([a],Info)
 bodyForm' term = (,) <$> some term <*> contextInfo
 
 _compileAccounts :: IO (Either PactError [Term Name])
@@ -545,7 +567,7 @@ _compile sfun (TF.Success (a,s)) = return $ forM a $ \e ->
 
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
-_compileStrInModule = _compileStr' (set (psUser . csModule) (Just ("mymodule",hash mempty)))
+_compileStrInModule = _compileStr' (set (psUser . csModule) (Just (initModuleState "mymodule" (hash mempty))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' id
@@ -584,3 +606,6 @@ _atto fp = do
 
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
+
+_unusedLenses :: Compile ()
+_unusedLenses = void $ return (set msName,set msHash)
