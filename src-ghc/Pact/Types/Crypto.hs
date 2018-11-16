@@ -29,6 +29,7 @@ import Control.DeepSeq
 
 import Crypto.Ed25519.Pure ( PublicKey, PrivateKey, Signature(..), importPublic, importPrivate, exportPublic, exportPrivate)
 import qualified Crypto.Ed25519.Pure as Ed25519
+import Crypto.Hash (SHA3_256(..), Blake2b_512(..), HashAlgorithm)
 
 import Data.Aeson as A
 import Data.Aeson.Types (toJSONKeyText)
@@ -44,6 +45,10 @@ import Prelude
 
 import Pact.Types.Util
 import Pact.Types.Hash
+
+--data Signature PPKScheme = 
+class PactCrypto b where
+  getHashAlgo :: (HashAlgorithm a) => b -> a
 
 deriving instance Eq Signature
 deriving instance Ord Signature
@@ -62,19 +67,27 @@ instance ParseText Signature where
 exportSignature :: Signature -> ByteString
 exportSignature (Sig s) = s
 
-data PPKScheme = ED25519
+data PPKScheme = ED25519 | ETH | BTC
   deriving (Show, Eq, Ord, Generic)
 
 instance NFData PPKScheme
 -- default instance with only one value is empty array!!
-instance ToJSON PPKScheme where toJSON ED25519 = "ED25519"
+instance ToJSON PPKScheme where
+  toJSON ED25519 = "ED25519"
+  toJSON ETH = "ETH"
+  toJSON BTC = "BTC"
 instance FromJSON PPKScheme where
   parseJSON = withText "PPKScheme" $ \s -> case s of
     "ED25519" -> return ED25519
+    "ETH" -> return ETH
+    "BTC" -> return BTC
     _ -> fail $ "Unsupported PPKScheme: " ++ show s
   {-# INLINE parseJSON #-}
 instance Serialize PPKScheme
-
+{--instance PactCrypto PPKScheme where
+  getHashAlgo ED25519 = Blake2b_512
+  getHashAlgo ETH = SHA3_256
+  getHashAlgo BTC = SHA3_256--}
 
 valid :: Hash -> PublicKey -> Signature -> Bool
 valid (Hash h) = Ed25519.valid h

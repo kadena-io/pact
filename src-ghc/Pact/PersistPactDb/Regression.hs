@@ -18,6 +18,7 @@ import Data.Hashable
 import Pact.Types.Logger
 import qualified Pact.Types.Hash as H
 import Data.Default (def)
+import qualified Crypto.Hash as Crypto
 
 
 runRegression :: DbEnv p -> IO (MVar (DbEnv p))
@@ -41,7 +42,7 @@ runRegression p = do
   let ks = KeySet [PublicKey "skdjhfskj"] (Name "predfun" def)
   _writeRow pactdb Write KeySets "ks1" ks v
   assertEquals' "keyset write" (Just ks) $ _readRow pactdb KeySets "ks1" v
-  let mod' = Module "mod1" "mod-admin-keyset" (Meta Nothing Nothing) "code" (H.hash "code") mempty
+  let mod' = Module "mod1" "mod-admin-keyset" (Meta Nothing Nothing) "code" (H.hash Crypto.Blake2b_512 "code") mempty
   _writeRow pactdb Write Modules "mod1" mod' v
   assertEquals' "module write" (Just mod') $ _readRow pactdb Modules "mod1" v
   assertEquals' "hash of commit 3" (-8810669039792530227) (hashWithSalt 1 <$> commit v)

@@ -54,7 +54,7 @@ import Data.String
 import Data.Text hiding (filter, all)
 import Data.Hashable (Hashable)
 import qualified Data.Set as S
-
+import qualified Crypto.Hash as Crypto
 
 import GHC.Generics
 import Prelude
@@ -93,10 +93,24 @@ mkCommand creds addy nonce a = mkCommand' creds $ BSL.toStrict $ A.encode (Paylo
 mkCommand' :: [(PPKScheme, PrivateKey, Base.PublicKey)] -> ByteString -> Command ByteString
 mkCommand' creds env = Command env (sig <$> creds) hsh
   where
-    hsh = hash env
+    hsh = case first creds of
+            ED25519 -> hash env
+            ETH -> newEthHashFunction
+            BTC -> btcHashFunction
+    hsh = hash (getHashAlgo (first creds)) env
     sig (scheme, sk, pk) = UserSig scheme (toB16Text $ exportPublic pk) (toB16Text $ exportSignature $ sign hsh sk pk)
 
+genericHash = 
+    case first creds of
+            ED25519 -> hash env
+            ETH -> newEthHashFunction
+            BTC -> btcHashFunction
 
+getHashAlgo :: exists a. (Crypto.HashAlgorithm a) => PPKScheme -> a
+getHashAlgo scheme = case scheme of
+  ED25519 -> Crypto.Blake2b_512
+  ETH -> Crypto.SHA3_256
+  BTC -> Crypto.SHA3_256
 
 verifyCommand :: Command ByteString -> ProcessedCommand (PactRPC ParsedCode)
 verifyCommand orig@Command{..} = case (ppcmdPayload', ppcmdHash', mSigIssue) of

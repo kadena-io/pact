@@ -44,6 +44,9 @@ hexBS16ToBS = fst . B16.decode
 hexBStoEthAddress :: ByteString -> ByteString
 hexBStoEthAddress = BS.drop 12 . keccak256Hash . hexBS16ToBS
 
+signSHA3_256 :: PrivateKey -> ByteString -> IO Signature
+signSHA3_256 priv = sign priv SHA3_256
+
 -- TODO
 -- Generates an ECDSA nonce (`k`) deterministically according to RFC 6979.
 -- https://tools.ietf.org/html/rfc6979#section-3.2
@@ -78,9 +81,8 @@ _testKeccak bs = toB16Text $ hexBStoEthAddress bs
 _test :: ByteString
 _test =  hexBS16ToBS "0bed7abd61247635c1973eb38474a2516ed1d884"
 
-_testSign :: PrivateKey -> Maybe Signature
-_testSign priv = signSHA3_256' 5 priv msg
-  where msg = "hello"
+_testSignWith :: PrivateKey -> Maybe Signature
+_testSignWith priv = signSHA3_256' 5 priv "hello"
 
 _testVerify :: PublicKey -> Maybe Signature -> Bool
 _testVerify _ Nothing = False

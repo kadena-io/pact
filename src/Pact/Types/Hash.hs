@@ -30,12 +30,22 @@ import Pact.Types.Util
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
 
-hash :: ByteString -> Hash
-hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_512
+hash :: (Crypto.HashAlgorithm a) => a -> ByteString -> Hash
+hash algo = Hash . ByteArray.convert . Crypto.hashWith algo
 {-# INLINE hash #-}
 
-#else
+verifyHash :: (Crypto.HashAlgorithm a) => a -> Hash -> ByteString -> Either String Hash
+verifyHash algo h b = if hash algo b == h
+  then Right h
+  else Left $ "Hash Mismatch, received " ++ show h ++ " but our hashing resulted in " ++ show (hash algo b)
+{-# INLINE verifyHash #-}
 
+
+initialHash :: (Crypto.HashAlgorithm a) => a -> Hash
+initialHash algo = hash algo mempty
+
+#else
+-- TODO add support for ETH/BTC hashing algorithm
 import Crypto.Hash.Blake2Native
 
 hash :: ByteString -> Hash
@@ -43,18 +53,17 @@ hash bs = case blake2b hashLengthAsBS mempty bs of
   Left _ -> error "hashing failed"
   Right h -> Hash h
 
-#endif
-
-
 verifyHash :: Hash -> ByteString -> Either String Hash
 verifyHash h b = if hash b == h
   then Right h
   else Left $ "Hash Mismatch, received " ++ show h ++ " but our hashing resulted in " ++ show (hash b)
 {-# INLINE verifyHash #-}
 
-
 initialHash :: Hash
 initialHash = hash mempty
+
+#endif
+
 
 -- | Reads 'Hash' as a non-negative 'Integral' number using the base
 -- specified by the first argument, and character representation
