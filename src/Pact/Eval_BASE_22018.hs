@@ -139,8 +139,8 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
-  evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
+eval (TUse mn h i) = topLevelCall i "use" (GUse mn h) $ \g ->
+  evalUse mn h i >> return (g,tStr $ pack $ "Using " ++ show mn)
 eval (TModule m@Module{..} bod i) =
   topLevelCall i "module" (GModule m) $ \g0 -> do
     -- enforce old module keysets
@@ -170,11 +170,11 @@ eval (TModule m@Interface{..} bod i) =
           Interface{..} -> return ()
     (g, _) <- loadModule m bod i gas
     writeRow i Write Modules _interfaceName m
-    return (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)
+    return $ (g, msg $ pack $ "Loaded interface " ++ show _interfaceName)
 eval t = enscope t >>= reduce
 
-evalUse :: Use -> Eval e ()
-evalUse (Use mn h i) = do
+evalUse :: ModuleName -> Maybe Hash -> Info -> Eval e ()
+evalUse mn h i = do
   mm <- preview $ eeRefStore . rsModules . ix mn
   case mm of
     Nothing -> evalError i $ "Module " ++ show mn ++ " not found"
@@ -205,7 +205,9 @@ loadModule m@Module{..} bod1 mi g0 = do
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
-                TUse (Use {..}) _ -> return Nothing
+                TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
+                TBless {..} -> return Nothing
+                TImplements {..} -> return $ Just (asString _tInterfaceName)
                 _ -> evalError (_tInfo t) "Invalid module member"
               case dnm of
                 Nothing -> return (g, rs)
@@ -214,10 +216,9 @@ loadModule m@Module{..} bod1 mi g0 = do
                   return (g + g',(dn,t):rs)
         second HM.fromList <$> foldM doDef (g0,[]) bd
       t -> evalError (_tInfo t) "Malformed module"
-  mapM_ evalUse _mImports
   evaluatedDefs <- evaluateDefs mi modDefs1
-  (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
-  let md = ModuleData m' solvedDefs
+  evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m evaluatedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -229,7 +230,7 @@ loadModule i@Interface{..} body info gas0 = do
               TDef {..} -> return $ Just _tDefName
               TConst {..} -> return $ Just $ _aName _tConstArg
               TSchema {..} -> return $ Just $ asString _tSchemaName
-              TUse (Use {..}) _ -> return Nothing
+              TUse {..} -> evalUse _tModuleName _tModuleHash _tInfo >> return Nothing
               _ -> evalError (_tInfo t) "Invalid interface member"
             case dnm of
               Nothing -> return (g, rs)
@@ -238,7 +239,6 @@ loadModule i@Interface{..} body info gas0 = do
                 return (g + g',(dn,t):rs)
       second HM.fromList <$> foldM doDef (gas0,[]) bd
     t -> evalError (_tInfo t) "Malformed interface"
-  mapM_ evalUse _interfaceImports
   evaluatedDefs <- evaluateDefs info idefs
   let md = ModuleData i evaluatedDefs
   installModule md
@@ -282,53 +282,45 @@ evaluateConstraints
   :: Info
   -> Module
   -> HM.HashMap Text Ref
-  -> Eval e (Module, HM.HashMap Text Ref)
+  -> Eval e ()
 evaluateConstraints info Interface{} _ =
-  evalError info "Unexpected: interface found in module position while solving constraints"
-evaluateConstraints info m evalMap =
-  -- we would like the lazy semantics of foldr to shortcircuit the solver
-  foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
+  evalError info $ "Unexpected: interface found in module position while solving constraints"
+evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
   where
-    evaluateConstraint ifn em = do
-      (m',refMap) <- em
-      refData <- preview $ eeRefStore . rsModules . ix ifn
-      case refData of
+    evaluateConstraint ifn = do
+      irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
+      case irefs of
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: " ++ asString' ifn
-        Just (ModuleData Interface{..} irefs) -> do
-          em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
-          let um = over mMeta (<> _interfaceMeta) m'
-          pure (um, em')
-        Just _ -> evalError info $ "Unexpected: module found in interface position while solving constraints"
+          "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
+        Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
   :: Info
+  -> HM.HashMap Text Ref
   -> Text
   -> Ref
-  -> Eval e (HM.HashMap Text Ref)
-  -> Eval e (HM.HashMap Text Ref)
-solveConstraint info refName (Direct t) _ =
+  -> Eval e ()
+  -> Eval e ()
+solveConstraint info _ refName (Direct t) _ =
   evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
-solveConstraint info refName (Ref t) evalMap = do
-  em <- evalMap
+solveConstraint info em refName (Ref t) _ =
   case HM.lookup refName em of
-    Nothing -> evalMap
+    Nothing -> pure ()
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
       case (t, s) of
-        (TDef _n _mn dt (FunType args rty) _ m _,
-          TDef _n' _mn' dt' (FunType args' rty') b m' i) -> do
+        (TDef _n _mn dt (FunType args rty) _ _ _,
+          TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
-          -- the model concatenation step: we must reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
+            return ()
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -390,9 +382,11 @@ reduce (TBinding ps bod c i) = case c of
   BindSchema _ -> evalError i "Unexpected schema binding"
 reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed at top level"
 reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
+reduce t@TBless {} = evalError (_tInfo t) "Bless only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
+reduce t@TImplements{} = evalError (_tInfo t) "Interface implementations only allowed at top level"
 
 mkDirect :: Term Name -> Term Ref
 mkDirect = (`TVar` def) . Direct
@@ -515,7 +509,7 @@ instantiate' = instantiate1 (toTerm ("No bindings" :: Text))
 -- Output checking -- app return values -- left to static TC.
 -- Native funs not checked here, as they use pattern-matching etc.
 typecheck :: [(Arg (Term Name),Term Name)] -> Eval e ()
-typecheck ps = foldM_ tvarCheck M.empty ps where
+typecheck ps = void $ foldM tvarCheck M.empty ps where
   tvarCheck m (Arg {..},t) = do
     r <- typecheckTerm _aInfo _aType t
     case r of
