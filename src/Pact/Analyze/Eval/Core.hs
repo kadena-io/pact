@@ -18,7 +18,7 @@ import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified Data.SBV.List as SBVL
-import Data.SBV.List.Bounded (bfoldr, band, bzipWith)
+import Data.SBV.List.Bounded (bfoldr, band, bzipWith, breverse, bsort)
 import Data.Traversable (for)
 
 import           Pact.Analyze.Errors
@@ -235,8 +235,12 @@ evalCore (ListConcat ty p1 p2) = withShow ty $ withSymWord ty $ do
   S _ p1' <- eval p1
   S _ p2' <- eval p2
   pure $ sansProv $ SBVL.concat p1' p2'
-evalCore ListReverse{} = error "TODO"
-evalCore ListSort{} = error "TODO"
+evalCore (ListReverse ty l) = withShow ty $ withSymWord ty $ do
+  S prov l' <- eval l
+  pure $ S prov $ breverse listBound l'
+evalCore (ListSort ty l) = withShow ty $ withSymWord ty $ do
+  S prov l' <- eval l
+  pure $ S prov $ bsort listBound l'
 
 evalCore (Var vid name) = do
   mVal <- getVar vid
