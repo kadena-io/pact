@@ -16,6 +16,22 @@ import           Pact.Analyze.Errors
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 
+-- When doing binary arithmetic involving:
+-- * decimal x decimal
+-- * integer x decimal
+-- * decimal x integer
+--
+-- We widen / downcast the integer to be a decimal. This just requires shifting
+-- the number left 255 decimal digits in the case of an integer.
+class DecimalRepresentable a where
+  widenToDecimal :: S a -> S Decimal
+
+instance DecimalRepresentable Integer where
+  widenToDecimal = lShift255D . coerceS
+
+instance DecimalRepresentable Decimal where
+  widenToDecimal = id
+
 -- This module handles evaluation of unary and binary integers and decimals.
 -- Two tricky details to watch out for:
 --
@@ -161,19 +177,3 @@ evalRoundingLikeOp2 op xT precisionT = do
 -- Round a real exactly between two integers (_.5) to the nearest even
 banker'sMethodS :: S Decimal -> S Integer
 banker'sMethodS (S prov x) = S prov $ banker'sMethod x
-
--- When doing binary arithmetic involving:
--- * decimal x decimal
--- * integer x decimal
--- * decimal x integer
---
--- We widen / downcast the integer to be a decimal. This just requires shifting
--- the number left 255 decimal digits in the case of an integer.
-class DecimalRepresentable a where
-  widenToDecimal :: S a -> S Decimal
-
-instance DecimalRepresentable Integer where
-  widenToDecimal = lShift255D . coerceS
-
-instance DecimalRepresentable Decimal where
-  widenToDecimal = id

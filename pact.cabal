@@ -1,6 +1,6 @@
 
 name:                pact
-version:             2.5.0
+version:             2.6.0
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -57,6 +57,7 @@ library
   if !impl(ghcjs)
     hs-source-dirs: src-ghc
     exposed-modules:
+      Pact.Analyze.Alloc
       Pact.Analyze.Eval
       Pact.Analyze.Eval.Invariant
       Pact.Analyze.Eval.Numerical
@@ -201,8 +202,12 @@ executable bench
   default-language:    Haskell2010
 
 test-suite hspec
-  type:             exitcode-stdio-1.0
-  main-is:          hspec.hs
+  if !impl(ghcjs)
+    main-is:          hspec.hs
+    type:             exitcode-stdio-1.0
+  else
+    main-is:          hspec-ghcjs.hs
+    type:             exitcode-stdio-1.0
   hs-source-dirs:   tests
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -O2 -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
@@ -231,6 +236,10 @@ test-suite hspec
               , hedgehog == 0.6.*
               , hw-hspec-hedgehog == 0.1.*
               , intervals
+  other-modules:
+                Blake2Spec
+                KeysetSpec
+                TypesSpec
   if !impl(ghcjs)
     build-depends:
         neat-interpolation
@@ -240,11 +249,6 @@ test-suite hspec
       , crypto-api
       , http-client
       , wreq
-  other-modules:
-                Blake2Spec
-                KeysetSpec
-                TypesSpec
-  if !impl(ghcjs)
     other-modules:
         DocgenSpec
       , PactTestsSpec

@@ -166,8 +166,8 @@ data TranslateState
       --
       -- 'TraceSubpathStart's are emitted once for each path: at the start of
       -- an execution trace, and at the beginning of either side of a
-      -- conditional.  After a conditional, we resume the path from before the
-      -- conditional.  Either side of a conditional will contain a minimum of
+      -- conditional. After a conditional, we resume the path from before the
+      -- conditional. Either side of a conditional will contain a minimum of
       -- two edges: splitting away from the other branch, and then rejoining
       -- back to the other branch at the join point. The following program:
       --
@@ -672,13 +672,9 @@ translateNode astNode = withAstContext astNode $ case astNode of
     let n = length casesA -- invariant: n > 0
         genPath = Path <$> genTagId
     preEnforcePath <- use tsCurrentPath
-    pathPairs <- (++)
-        -- For the first n-1 cases, we generate a failure, then success, tag,
-        -- for each possibility after the case runs.
-        <$> replicateM (pred n) ((,) <$> genPath <*> genPath)
-        -- For the last case, we generate a single tag for both, to result in a
-        -- fully-connected graph:
-        <*> replicateM 1        (genPath <&> \p -> (p, p))
+    -- Generate failure and success paths for each case. We generate and tag
+    -- the final failure path, but don't include it in the graph.
+    pathPairs <- replicateM n ((,) <$> genPath <*> genPath)
 
     let (failurePaths, successPaths) = unzip pathPairs
         -- we don't start a new path for the first case -- we *always* run it:
@@ -883,6 +879,15 @@ translateNode astNode = withAstContext astNode $ case astNode of
       Just Refl -> pure $ ESimple ta $ IfThenElse cond' (truePath, a) (falsePath, b)
       _         -> throwError' (BranchesDifferentTypes (EType ta) (EType tb))
 
+  AST_NFun _node "str-to-int" [s] -> do
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToInt s'
+
+  AST_NFun _node "str-to-int" [b, s] -> do
+    ESimple TInt b' <- translateNode b
+    ESimple TStr s' <- translateNode s
+    pure $ ESimple TInt $ CoreTerm $ StrToIntBase b' s'
+
   AST_NFun _node "pact-version" [] -> pure $ ESimple TStr PactVersion
 
   AST_WithRead node table key bindings schemaNode body -> do
@@ -992,6 +997,11 @@ runTranslation name info pactArgs body = do
       (runReaderT (traverse translateArg pactArgs) info)
       (VarId 1)
 
+    argToBinding :: Arg -> Located Binding
+    argToBinding (Arg unmunged vid node ety) =
+      Located (node ^. aId . Pact.tiInfo) $
+        Binding vid unmunged (node ^. aId.tiName.to Munged) ety
+
     runBodyTranslation
       :: [Arg] -> VarId -> Except TranslateFailure (ETerm, ExecutionGraph)
     runBodyTranslation args nextVarId =
@@ -1003,7 +1013,9 @@ runTranslation name info pactArgs body = do
           state0     = TranslateState nextTagId nextVarId graph0 vertex0 nextVertex Map.empty mempty path0 Map.empty
           translation = do
             retTid    <- genTagId
-            bindingTs <- traverse translateBinding pactArgs
+            -- For our toplevel 'FunctionScope', we reuse variables we've
+            -- already generated during argument translation:
+            let bindingTs = fmap argToBinding args
             res <- withNewScope (FunctionScope name) bindingTs retTid $
               translateBody body
             _ <- extendPath -- form final edge for any remaining events

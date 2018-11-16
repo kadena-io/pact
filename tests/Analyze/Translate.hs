@@ -20,7 +20,7 @@ import           Pact.Eval                  (liftTerm)
 import           Pact.Native                (enforceDef, enforceOneDef,
                                              formatDef, hashDef, ifDef,
                                              lengthDef, pactVersionDef,
-                                             readDecimalDef)
+                                             readDecimalDef, strToIntDef)
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
@@ -72,6 +72,12 @@ toPactTm = \case
 
   ESimple TStr (Inj (StrConcat x y)) ->
     mkApp addDef [ESimple TStr x, ESimple TStr y]
+
+  ESimple TInt (Inj (StrToInt s)) ->
+    mkApp strToIntDef [ESimple TStr s]
+
+  ESimple TInt (Inj (StrToIntBase b s)) ->
+    mkApp strToIntDef [ESimple TInt b, ESimple TStr s]
 
   ESimple TBool (Inj (IntegerComparison op x y)) ->
     mkApp (comparisonOpToDef op) [ESimple TInt x, ESimple TInt y]

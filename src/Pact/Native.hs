@@ -25,9 +25,11 @@ module Pact.Native
     ,enforceOneDef
     ,pactVersionDef
     ,formatDef
+    ,strToIntDef
     ,hashDef
     ,ifDef
     ,readDecimalDef
+    ,baseStrToInt
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
@@ -40,7 +42,7 @@ import Data.Default
 import qualified Data.Attoparsec.Text as AP
 import Prelude
 import qualified Data.HashMap.Strict as M
-import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, foldl', append)
+import qualified Data.Text as T (isInfixOf, length, all, splitOn, null, append, unpack, singleton)
 import Safe
 import Control.Arrow hiding (app)
 import Data.Foldable
@@ -160,6 +162,14 @@ formatDef =
                   (head parts)
                   (zip es (tail parts))
     format i as = argsError i as
+
+strToIntDef :: NativeDef
+strToIntDef = defRNative "str-to-int" strToInt
+  (funType tTyInteger [("str-val", tTyString)] <>
+   funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
+  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
+  \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
+  \the base. `(str-to-int 16 \"abcdef123456\")` `(str-to-int \"123456\")`"
 
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
@@ -322,11 +332,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-     ,defRNative "str-to-int" strToInt
-     (funType tTyInteger [("str-val", tTyString)] <>
-      funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
-     "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
-     \chars in length and BASE must be between 2 and 16. `(str-to-int 16 \"123456\")` `(str-to-int \"abcdef123456\")`"
+    ,strToIntDef
     ,hashDef
     ])
     where b = mkTyVar "b" []
@@ -633,9 +639,14 @@ baseStrToInt base t =
   then Left $ "baseStrToInt - unsupported base: " `T.append` asString base
   else
     if T.null t
-    then Left $ "baseStringToInt - empty text: " `T.append` asString t
-    else Right $ T.foldl' go 0 t
+    then Left $ "baseStrToInt - empty text: " `T.append` asString t
+    else foldM go 0 $ T.unpack t
   where
-    go :: Integer -> Char -> Integer
-    go acc w = base * acc + (fromIntegral . digitToInt $ w)
+    go :: Integer -> Char -> Either Text Integer
+    go acc c =
+      let val = fromIntegral . digitToInt $ c
+      in if val < base
+         then pure $ base * acc + val
+         else Left $ "baseStrToInt - character '" <> T.singleton c <>
+                "' is out of range for base " <> tShow base <> ": " <> t
 {-# INLINE baseStrToInt #-}

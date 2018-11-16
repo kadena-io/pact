@@ -32,7 +32,6 @@ import           Control.Lens              (at, ifoldrM, ifor, itraversed, ix,
                                             (?~), (^.), (^?), (^@..), _1, _2,
                                             _Left)
 import           Control.Monad             (void, (<=<))
-
 import           Control.Monad.Except      (Except, ExceptT (ExceptT),
                                             MonadError, catchError, runExceptT,
                                             throwError, withExcept, withExceptT)
@@ -57,31 +56,30 @@ import qualified Data.Text                 as T
 import           Data.Traversable          (for)
 import           Prelude                   hiding (exp)
 
-import           Pact.Analyze.Parse        hiding (tableEnv)
-import           Pact.Typechecker          (typecheckTopLevel)
-import           Pact.Types.Lang           (pattern ColonExp, pattern CommaExp,
-                                            Info, mModel, renderInfo,
-                                            renderParsed, tMeta, _tDefName)
-import           Pact.Types.Runtime        (Exp, ModuleData(..), ModuleName,
-                                            Ref (Ref), mdRefMap, mdModule,
-                                            Term (TConst, TDef, TSchema, TTable),
-                                            asString, getInfo, tShow)
-import qualified Pact.Types.Runtime        as Pact
-import           Pact.Types.Term           (Module(..))
-import           Pact.Types.Typecheck      (AST,
-                                            Fun (FDefun, _fArgs, _fBody, _fInfo),
-                                            Named, Node, TcId (_tiInfo),
-                                            TopLevel (TopConst, TopFun, TopTable),
-                                            UserType (_utFields, _utName),
-                                            runTC, tcFailures)
-import qualified Pact.Types.Typecheck      as TC
+import           Pact.Typechecker     (typecheckTopLevel)
+import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
+                                       Info, mModel, renderInfo, renderParsed,
+                                       tMeta, _tDefName)
+import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
+                                       Ref (Ref), mdRefMap, mdModule,
+                                       Term (TConst, TDef, TSchema, TTable),
+                                       asString, getInfo, tShow)
+import qualified Pact.Types.Runtime   as Pact
+import           Pact.Types.Term      (Module(..))
+import           Pact.Types.Typecheck (AST,
+                                       Fun (FDefun, _fArgs, _fBody, _fInfo),
+                                       Named, Node, TcId (_tiInfo),
+                                       TopLevel (TopConst, TopFun, TopTable),
+                                       UserType (_utFields, _utName), runTC,
+                                       tcFailures)
+import qualified Pact.Types.Typecheck as TC
 
+import           Pact.Analyze.Alloc     (runAlloc)
 import           Pact.Analyze.Errors
-import           Pact.Analyze.Eval         hiding (invariants)
-import           Pact.Analyze.Model        (allocArgs, allocModelTags,
-                                            saturateModel, showModel)
-import           Pact.Analyze.Parse        (expToCheck, expToInvariant,
-                                            parseBindings)
+import           Pact.Analyze.Eval      hiding (invariants)
+import           Pact.Analyze.Model     (allocArgs, allocModelTags,
+                                         saturateModel, showModel)
+import           Pact.Analyze.Parse     hiding (tableEnv)
 import           Pact.Analyze.Translate
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -291,10 +289,12 @@ verifyFunctionInvariants' funName funInfo tables pactArgs body = runExceptT $ do
       withExcept translateToCheckFailure $ runTranslation funName funInfo pactArgs body
 
     ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-      modelArgs' <- lift $ allocArgs args
-      tags <- lift $ allocModelTags (Located funInfo tm) graph
+      modelArgs' <- lift $ runAlloc $ allocArgs args
+      tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+      let rootPath = _egRootPath graph
       resultsTable <- withExceptT analyzeToCheckFailure $
-        runInvariantAnalysis tables (analysisArgs modelArgs') tm tags funInfo
+        runInvariantAnalysis tables (analysisArgs modelArgs') tm rootPath tags
+          funInfo
 
       -- Iterate through each invariant in a single query so we can reuse our
       -- assertion stack.
@@ -347,12 +347,13 @@ verifyFunctionProperty funName funInfo tables pactArgs body (Located propInfo ch
         withExcept translateToCheckFailure $
           runTranslation funName funInfo pactArgs body
       ExceptT $ catchingExceptions $ runSymbolic $ runExceptT $ do
-        modelArgs' <- lift $ allocArgs args
-        tags <- lift $ allocModelTags (Located funInfo tm) graph
+        modelArgs' <- lift $ runAlloc $ allocArgs args
+        tags <- lift $ runAlloc $ allocModelTags modelArgs' (Located funInfo tm) graph
+        let rootPath = _egRootPath graph
         AnalysisResult _querySucceeds prop ksProvs
           <- withExceptT analyzeToCheckFailure $
-            runPropertyAnalysis check tables (analysisArgs modelArgs') tm tags
-              funInfo
+            runPropertyAnalysis check tables (analysisArgs modelArgs') tm
+              rootPath tags funInfo
 
         -- TODO: bring back the query success check when we've resolved the SBV
         -- query / quantified variables issue:

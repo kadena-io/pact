@@ -447,6 +447,27 @@ String concatenation
 
 Supported in either invariants or properties.
 
+### str-to-int {#FStringToInteger}
+
+```lisp
+(str-to-int s)
+```
+
+* takes `s`: `string`
+* produces `integer`
+
+```lisp
+(str-to-int b s)
+```
+
+* takes `b`: `integer`
+* takes `s`: `string`
+* produces `integer`
+
+String to integer conversion
+
+Supported in either invariants or properties.
+
 ## Temporal operators {#Temporal}
 
 ### add-time {#FTemporalAddition}
@@ -495,6 +516,19 @@ Supported in properties only.
 * where _r_ is _any type_
 
 Bind an existentially-quantified variable
+
+Supported in properties only.
+
+### column-of {#FColumnOf}
+
+```lisp
+(column-of t)
+```
+
+* takes `t`: `table`
+* produces `type`
+
+The *type* of `column`s for a given `table`. Commonly used in conjunction with quantification; e.g.: `(exists (col:(column-of accounts)) (column-written accounts col))`.
 
 Supported in properties only.
 
