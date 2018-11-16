@@ -282,8 +282,8 @@ evalTermO = \case
         EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
         EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
         EType SAny     -> pure OpaqueVal
-        EType SList{} -> error "TODO"
-        EType SObject -> error "TODO"
+        EType SList{}  -> error "TODO"
+        EType SObject  -> error "TODO"
         --
         -- TODO: if we add nested object support here, we need to install
         --       the correct provenance into AVals all the way down into
