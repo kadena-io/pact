@@ -172,7 +172,7 @@ pattern AST_ReadCols node tn key columns
   <- App node (NativeFunc "read") [ShortTableName tn, key, List _ columns]
 
 pattern AST_At :: a -> AST a -> AST a -> AST a
-pattern AST_At node colName obj <- App node (NativeFunc SProjection) [colName, obj]
+pattern AST_At node colName obj <- App node (NativeFunc SObjectProjection) [colName, obj]
 
 pattern AST_Contains :: a -> AST a -> AST a -> AST a
 pattern AST_Contains node val collection <- App node (NativeFunc SContains) [val, collection]

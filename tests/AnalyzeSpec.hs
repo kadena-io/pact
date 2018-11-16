@@ -2552,6 +2552,13 @@ spec = describe "analyze" $ do
     expectVerified code6'
     expectPass code6' $ Satisfiable Abort'
 
+    let code6'' = [text|
+          (defun test:integer (list:[integer])
+            @model [(property (= result (at 2 list)))]
+            (at 2 list))
+          |]
+    expectVerified code6''
+
   describe "string contains" $ do
     let code7 = [text|
           (defun test:bool ()

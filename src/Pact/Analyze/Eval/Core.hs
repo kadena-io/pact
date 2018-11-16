@@ -251,7 +251,13 @@ evalCoreL (ListConcat _ty p1 p2) = do
 
 evalCoreL Lit{} = error "TODO"
 evalCoreL Sym{} = error "TODO"
-evalCoreL Var{} = error "TODO"
+evalCoreL (Var vid name) = do
+  mVal <- getVar vid
+  case mVal of
+    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
+    Just (AVal mProv sval) -> pure $ mkS mProv sval
+    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
+    Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
 evalCoreL Numerical{} = error "TODO"
 evalCoreL ListReverse{} = error "TODO"
 evalCoreL ListSort{} = error "TODO"

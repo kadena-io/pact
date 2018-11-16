@@ -59,7 +59,7 @@ data PreProp
   -- applications
   | PreApp Text [PreProp]
 
-  | PreAt Text PreProp
+  | PreAt PreProp PreProp
   | PrePropRead PreProp PreProp PreProp
   | PreLiteralObject (Map Text PreProp)
   deriving (Eq, Show)
@@ -89,7 +89,8 @@ instance UserShow PreProp where
     PreApp name applicands ->
       "(" <> name <> " " <> T.unwords (map userShow applicands) <> ")"
     PreAt objIx obj ->
-      "(" <> SProjection <> " '" <> objIx <> " " <> userShow obj <> ")"
+      "(" <> SObjectProjection <> " " <> userShow objIx <> " " <>
+        userShow obj <> ")"
     PrePropRead tn rk ba ->
       "(" <> SPropRead <> " '" <> userShow tn <> " " <> userShow rk <> " " <>
         userShow ba <> ")"

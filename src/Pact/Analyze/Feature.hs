@@ -82,9 +82,10 @@ data Feature
   | FLogicalNegation
   | FLogicalImplication
   -- Object operators
-  | FProjection
+  | FObjectProjection
   | FObjectMerge
   -- List operators
+  | FListProjection
   | FListLength
   | FContains
   | FDrop
@@ -629,12 +630,13 @@ doc FLogicalImplication = Doc
 
 -- Object features
 
-doc FProjection = Doc
+doc FObjectProjection = Doc
   "at"
-  (error "TODO")
+  CObject
   InvAndProp
   "projection"
-  [ Usage
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
       "(at k o)"
       Map.empty
       $ Fun
@@ -642,7 +644,7 @@ doc FProjection = Doc
         [ ("k", TyCon str)
         , ("o", TyCon obj)
         ]
-        (TyCon bool)
+        a
   , Usage
       "(at i l)"
       Map.empty
@@ -671,6 +673,32 @@ doc FObjectMerge = Doc
   ]
 
 -- List features
+
+doc FListProjection = Doc
+  "at"
+  CList
+  InvAndProp
+  "projection"
+  [ let a = TyVar $ TypeVar "a"
+    in Usage
+      "(at k l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        , ("l", TyList' a)
+        ]
+        a
+  , Usage
+      "(at i l)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("i", TyCon int)
+        , ("o", TyCon list)
+        ]
+        (TyCon bool)
+  ]
 
 doc FListLength = Doc
   "length"
@@ -1210,7 +1238,7 @@ PAT(SLogicalConjunction, FLogicalConjunction)
 PAT(SLogicalDisjunction, FLogicalDisjunction)
 PAT(SLogicalNegation, FLogicalNegation)
 PAT(SLogicalImplication, FLogicalImplication)
-PAT(SProjection, FProjection)
+PAT(SObjectProjection, FObjectProjection)
 PAT(SListLength, FListLength)
 PAT(SContains, FContains)
 PAT(SDrop, FDrop)

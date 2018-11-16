@@ -35,7 +35,8 @@ module Pact.Analyze.Parse.Prop
 
 
 import           Control.Applicative
-import           Control.Lens                 (at, ix, view, (%~), (&), (.~),
+import qualified Control.Lens                 as Lens
+import           Control.Lens                 (at, view, (%~), (&), (.~),
                                                (?~), (^?), toListOf)
 import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
@@ -124,8 +125,10 @@ expToPreProp = \case
       body'
       bindings'
 
-  ParenList [EAtom' SProjection, ELiteral' (LString objIx), obj]
-    -> PreAt objIx <$> expToPreProp obj
+  -- Note: this handles both object and list projection:
+  ParenList [EAtom' SObjectProjection, ix, container]
+    -> PreAt <$> expToPreProp ix <*> expToPreProp container
+
   ParenList [EAtom' SPropRead, tn, rk, ba] -> PrePropRead
     <$> expToPreProp tn
     <*> expToPreProp rk
@@ -134,7 +137,7 @@ expToPreProp = \case
     SPropRead <> " must specify a time ('before or 'after). example: " <>
     "(= result (read accounts user 'before))"
 
-  exp@(ParenList [EAtom' SProjection, _, _]) -> throwErrorIn exp
+  exp@(ParenList [EAtom' SObjectProjection, _, _]) -> throwErrorIn exp
     "Property object access must use a static string or symbol"
   exp@(BraceList exps) ->
     let go (keyExp : Colon' : valExp : rest) = Map.insert
@@ -312,24 +315,31 @@ inferPreProp preProp = case preProp of
     ESimple SBool . PropSpecific . q vid name ty'
       <$> local modEnv (checkPreProp SBool p)
 
-  PreAt objIx obj -> do
-    obj' <- inferPreProp obj
-    case obj' of
-      ESimple ty _ -> throwErrorIn preProp $
-        "expected object (with key " <> tShow objIx <> ") but found type " <>
-        userShow ty
-      EList{} -> error "TODO"
-      EObject objSchema@(Schema tyMap) objProp -> case tyMap ^? ix objIx of
-        Nothing -> throwErrorIn preProp $ "could not find expected key " <> objIx
-        Just ety@(EType ty) -> singCase ty
-          (\Refl -> pure $ ESimple
-            ty
-            (PObjAt objSchema (TextLit objIx) objProp ety))
-          (\Refl -> error "TODO")
-          (\Refl -> error "TODO")
-        Just ety@(EObjectTy schemaTy) -> pure $ EObject
-          schemaTy
-          (PObjAt objSchema (TextLit objIx) objProp ety)
+  PreAt ix container -> do
+    ix'        <- inferPreProp ix
+    container' <- inferPreProp container
+    case (ix', container') of
+      (ESimple SInteger ix'', EList (SList ty) lst)
+        -> pure $ ESimple ty $ CoreProp $ ListAt ty ix'' lst
+      (ESimple SStr (TextLit ix''), EObject objSchema@(Schema tyMap) objProp)
+        -> case tyMap ^? Lens.ix ix'' of
+          Nothing -> throwErrorIn preProp $
+            "could not find expected key " <> ix''
+          Just ety@(EType ty) -> singCase ty
+            (\Refl -> pure $ ESimple
+              ty
+              (PObjAt objSchema (TextLit ix'') objProp ety))
+            (\Refl -> error "TODO")
+            (\Refl -> error "TODO")
+          Just ety@(EObjectTy schemaTy) -> pure $ EObject
+            schemaTy
+            (PObjAt objSchema (TextLit ix'') objProp ety)
+
+      (_, ESimple ty _) -> throwErrorIn preProp $
+        "expected object or list (with key " <> tShow ix' <>
+        ") but found type " <> userShow ty
+      _ -> throwErrorIn preProp
+        "expected a text literal key for object access or an integer index for list access"
 
   PrePropRead tn rk ba -> do
     tn' <- parseTableName tn
@@ -597,7 +607,10 @@ typeError preProp a b = throwErrorIn preProp $
 expectColumnType
   :: Prop TyTableName -> Prop TyColumnName -> SingTy k a -> PropCheck ()
 expectColumnType (TextLit tn) (TextLit cn) expectedTy = do
-  tys <- asks $ toListOf $ tableEnv . ix (TableName (T.unpack tn)) . ix (ColumnName (T.unpack cn))
+  tys <- asks $ toListOf $
+      tableEnv
+    . Lens.ix (TableName (T.unpack tn))
+    . Lens.ix (ColumnName (T.unpack cn))
   case tys of
     [EType foundTy] -> case singEq foundTy expectedTy of
       Nothing   -> throwErrorT $
