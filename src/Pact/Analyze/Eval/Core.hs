@@ -28,6 +28,8 @@ import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
 
 
+-- | Bound on the size of lists we check. This may be user-configurable in the
+-- future.
 listBound :: Int
 listBound = 10
 

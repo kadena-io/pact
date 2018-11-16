@@ -76,12 +76,6 @@ instance Analyzer Analyze where
   getVar vid = view (scope . at vid)
   markFailure b = succeeds %= (&&& sansProv (bnot b))
 
-traceTag :: String -> a -> a
-traceTag _msg a = a
-
--- traceTag :: Show a => String -> a -> a
--- traceTag msg a = trace (msg ++ ": " ++ show a) a
-
 evalTermLogicalOp
   :: LogicalOp
   -> [Term 'TyBool]
@@ -136,8 +130,8 @@ tagAccessKey lens' tid rowKey accessSucceeds = do
   case mAcc of
     Nothing -> pure ()
     Just (Access tagRowKey _object tagSuccess) -> do
-      addConstraint $ traceTag "1" $ sansProv $ rowKey               .== tagRowKey
-      addConstraint $ traceTag "2" $ sansProv $ _sSbv accessSucceeds .== tagSuccess
+      addConstraint $ sansProv $ rowKey               .== tagRowKey
+      addConstraint $ sansProv $ _sSbv accessSucceeds .== tagSuccess
 
 -- | "Tag" an uninterpreted read value with value from our Model that was
 -- allocated in Symbolic.
@@ -152,14 +146,14 @@ tagAccessCell lens' tid fieldName av = do
     aeModelTags.lens'.at tid._Just.located.accObject.objFields.at fieldName._Just._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ traceTag "3" $ sansProv $ av .== tagAv
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
 tagAssert :: TagId -> S Bool -> Analyze ()
 tagAssert tid sb = do
   mTag <- preview $ aeModelTags.mtAsserts.at tid._Just.located
   case mTag of
     Nothing  -> pure ()
-    Just sbv -> addConstraint $ traceTag "4" $ sansProv $ sbv .== _sSbv sb
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv sb
 
 -- | "Tag" an uninterpreted auth value with value from our Model that was
 -- allocated in Symbolic.
@@ -169,8 +163,8 @@ tagAuth tid sKs sb = do
   case mAuth of
     Nothing  -> pure ()
     Just (Authorization ksTag sbv) -> do
-      addConstraint $ traceTag "5" $ sansProv $ ksTag .== sKs
-      addConstraint $ traceTag "6" $ sansProv $ sbv .== _sSbv sb
+      addConstraint $ sansProv $ ksTag .== sKs
+      addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
 tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
@@ -184,7 +178,7 @@ tagFork pathL pathR reachable lPasses = do
       mTag <- preview $ aeModelTags.mtPaths.at p._Just
       case mTag of
         Nothing  -> pure ()
-        Just sbv -> addConstraint $ traceTag "7" $ sansProv $ sbv .== _sSbv active
+        Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv active
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do
@@ -198,14 +192,14 @@ tagReturn tid av = do
   mTag <- preview $ aeModelTags.mtReturns.at tid._Just._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ traceTag "10" $ sansProv $ tagAv .== av
+    Just tagAv -> addConstraint $ sansProv $ tagAv .== av
 
 tagVarBinding :: VarId -> AVal -> Analyze ()
 tagVarBinding vid av = do
   mTag <- preview $ aeModelTags.mtVars.at vid._Just.located._2._2
   case mTag of
     Nothing    -> pure ()
-    Just tagAv -> addConstraint $ traceTag "11" $ sansProv $ av .== tagAv
+    Just tagAv -> addConstraint $ sansProv $ av .== tagAv
 
 symKsName :: S Str -> S KeySetName
 symKsName = unsafeCoerceS
@@ -295,7 +289,7 @@ evalTermO = \case
 
       pure (fieldType, av)
 
-    applyInvariants tn (snd <$> aValFields) (mapM_ (addConstraint . traceTag "12"))
+    applyInvariants tn (snd <$> aValFields) (mapM_ addConstraint)
 
     pure $ Object aValFields
 
