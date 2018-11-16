@@ -44,9 +44,9 @@ import Control.Lens hiding (prism)
 import Data.Maybe
 import Data.Default
 import Data.Text (Text,pack,unpack)
-import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.HashSet as HS
+import qualified Data.HashMap.Strict as HM
 
 import Pact.Types.ExpParser
 import Pact.Types.Exp
@@ -58,9 +58,22 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Runtime (PactError)
 
+
+data ModuleState = ModuleState
+  { _msName :: ModuleName
+  , _msHash :: Hash
+  , _msBlessed :: [Hash]
+  , _msImplements :: [ModuleName]
+  , _msImports :: [Use]
+  }
+makeLenses ''ModuleState
+
+initModuleState :: ModuleName -> Hash -> ModuleState
+initModuleState n h = ModuleState n h def def def
+
 data CompileState = CompileState
   { _csFresh :: Int
-  , _csModule :: Maybe (ModuleName,Hash)
+  , _csModule :: Maybe ModuleState
   }
 makeLenses ''CompileState
 
@@ -69,24 +82,85 @@ type Compile a = ExpParse CompileState a
 initParseState :: Exp Info -> ParseState CompileState
 initParseState e = ParseState e $ CompileState 0 Nothing
 
+data Reserved =
+    RBless
+  | RDefconst
+  | RDefpact
+  | RDefschema
+  | RDeftable
+  | RDefun
+  | RFalse
+  | RImplements
+  | RInterface
+  | RLet
+  | RLetStar
+  | RModule
+  | RStep
+  | RStepWithRollback
+  | RTrue
+  | RUse
+  deriving (Eq,Enum,Bounded)
+
+instance AsString Reserved where
+  asString a = case a of
+    RBless -> "bless"
+    RDefconst -> "defconst"
+    RDefpact -> "defpact"
+    RDefschema -> "defschema"
+    RDeftable -> "deftable"
+    RDefun -> "defun"
+    RFalse -> "false"
+    RImplements -> "implements"
+    RInterface -> "interface"
+    RLet -> "let"
+    RLetStar -> "let*"
+    RModule -> "module"
+    RStep -> "step"
+    RStepWithRollback -> "step-with-rollback"
+    RTrue -> "true"
+    RUse -> "use"
+
+instance Show Reserved where show = unpack . asString
+
+reserveds :: HM.HashMap Text Reserved
+reserveds = (`foldMap` [minBound .. maxBound]) $ \r -> HM.singleton (asString r) r
 
 reserved :: [Text]
-reserved =
-  T.words "use module defun defpact step step-with-rollback true false let let* defconst interface implements"
+reserved = HM.keys reserveds
+
+reservedAtom :: Compile Reserved
+reservedAtom = bareAtom >>= \AtomExp{..} -> case HM.lookup _atomAtom reserveds of
+  Nothing -> expected "reserved word"
+  Just r -> return r
 
 compile :: MkInfo -> Exp Parsed -> Either PactError (Term Name)
-compile mi e = let ei = mi <$> e in runCompile term (initParseState ei) ei
+compile mi e = let ei = mi <$> e in runCompile topLevel (initParseState ei) ei
 
 compileExps :: Traversable t => MkInfo -> t (Exp Parsed) -> Either PactError (t (Term Name))
 compileExps mi exps = sequence $ compile mi <$> exps
 
-currentModule :: Compile (ModuleName,Hash)
-currentModule = use (psUser . csModule) >>= \m -> case m of
-  Just cm -> return cm
+moduleState :: Compile ModuleState
+moduleState = use (psUser . csModule) >>= \m -> case m of
+  Just m' -> return m'
   Nothing -> context >>= tokenErr' "Must be declared within module"
 
-currentModule' :: Compile ModuleName
-currentModule' = fst <$> currentModule
+overModuleState :: Lens' ModuleState a -> (a -> a) -> Compile ()
+overModuleState l f = do
+  m <- moduleState
+  psUser . csModule .= Just (over l f m)
+
+withModuleState :: ModuleState -> Compile a -> Compile (a,ModuleState)
+withModuleState ms0 act = do
+  psUser . csModule .= Just ms0
+  a <- act
+  ms1 <- state $ \s -> (view (psUser . csModule) s,set (psUser .csModule) Nothing s)
+  case ms1 of
+    Nothing -> syntaxError "Invalid internal state, module data not found"
+    Just ms -> return (a,ms)
+
+
+currentModuleName :: Compile ModuleName
+currentModuleName = _msName <$> moduleState
 
 freshTyVar :: Compile (Type (Term Name))
 freshTyVar = do
@@ -100,14 +174,55 @@ cToTV n | n < 26 = fromString [toC n]
   where toC i = toEnum (fromEnum 'a' + i)
 
 
-term :: Compile (Term Name)
-term =
+sexp :: (Compile a) -> Compile a
+sexp body = withList' Parens (body <* eof)
+
+specialFormOrApp :: (Reserved -> Compile (Compile (Term Name))) -> Compile (Term Name)
+specialFormOrApp forms = sexp (sf <|> app) where
+  sf = reservedAtom >>= forms >>= \a -> commit >> a
+
+specialForm :: (Reserved -> Compile (Compile a)) -> Compile a
+specialForm forms = sexp $ reservedAtom >>= forms >>= \a -> commit >> a
+
+
+topLevel :: Compile (Term Name)
+topLevel = specialFormOrApp topLevelForm <|> literals <|> varAtom  where
+  topLevelForm r = case r of
+    RUse -> return useForm
+    RLet -> return letForm
+    RLetStar -> return letsForm
+    RModule -> return moduleForm
+    RInterface -> return interface
+    _ -> expected "top-level form (use, let[*], module, interface)"
+
+
+valueLevel :: Compile (Term Name)
+valueLevel = literals <|> varAtom <|> specialFormOrApp valueLevelForm where
+  valueLevelForm r = case r of
+    RLet -> return letForm
+    RLetStar -> return letsForm
+    _ -> expected "value level form (let, let*)"
+
+moduleLevel :: Compile [Term Name]
+moduleLevel = specialForm $ \r -> case r of
+    RUse -> returnl useForm
+    RDefconst -> returnl defconst
+    RBless -> return (bless >> return [])
+    RDeftable -> returnl deftable
+    RDefschema -> returnl defschema
+    RDefun -> returnl defun
+    RDefpact -> returnl defpact
+    RImplements -> return (implements >> return [])
+    _ -> expected "module level form (use, def..., special form)"
+    where returnl a = return (pure <$> a)
+
+
+literals :: Compile (Term Name)
+literals =
   literal
-  <|> varAtom
-  <|> withList' Parens
-    ((specialForm <|> app) <* eof)
   <|> listLiteral
   <|> objectLiteral
+
 
 -- | User-available atoms (excluding reserved words).
 userAtom :: Compile (AtomExp Info)
@@ -116,29 +231,12 @@ userAtom = do
   when (_atomAtom `elem` reserved) $ unexpected' "reserved word"
   pure a
 
-specialForm :: Compile (Term Name)
-specialForm = bareAtom >>= \AtomExp{..} -> case _atomAtom of
-    "use" -> commit >> useForm
-    "let" -> commit >> letForm
-    "let*" -> commit >> letsForm
-    "defconst" -> commit >> defconst
-    "step" -> commit >> step
-    "step-with-rollback" -> commit >> stepWithRollback
-    "bless" -> commit >> bless
-    "deftable" -> commit >> deftable
-    "defschema" -> commit >> defschema
-    "defun" -> commit >> defun
-    "defpact" -> commit >> defpact
-    "module" -> commit >> moduleForm
-    "interface" -> commit >> interface
-    "implements" -> commit >> implements
-    _ -> expected "special form"
 
 
 app :: Compile (Term Name)
 app = do
   v <- varAtom
-  body <- many (term <|> bindingForm)
+  body <- many (valueLevel <|> bindingForm)
   TApp v body <$> contextInfo
 
 -- | Bindings (`{ "column" := binding }`) do not syntactically scope the
@@ -149,12 +247,12 @@ app = do
 bindingForm :: Compile (Term Name)
 bindingForm = do
   let pair = do
-        col <- term
+        col <- valueLevel
         a <- sep ColonEquals *> arg
         return (a,col)
   (bindings,bi) <- withList' Braces $
     (,) <$> pair `sepBy1` sep Comma <*> contextInfo
-  TBinding bindings <$> abstractBody (map fst bindings) <*>
+  TBinding bindings <$> abstractBody valueLevel (map fst bindings) <*>
     pure (BindSchema TyAny) <*> pure bi
 
 varAtom :: Compile (Term Name)
@@ -173,8 +271,8 @@ varAtom = do
 listLiteral :: Compile (Term Name)
 listLiteral = withList Brackets $ \ListExp{..} -> do
   ls <- case _listList of
-    _ : CommaExp : _ -> term `sepBy` sep Comma
-    _                -> many term
+    _ : CommaExp : _ -> valueLevel `sepBy` sep Comma
+    _                -> many valueLevel
   let lty = case nub (map typeof ls) of
               [Right ty] -> ty
               _ -> TyAny
@@ -183,8 +281,8 @@ listLiteral = withList Brackets $ \ListExp{..} -> do
 objectLiteral :: Compile (Term Name)
 objectLiteral = withList Braces $ \ListExp{..} -> do
   let pair = do
-        key <- term
-        val <- sep Colon *> term
+        key <- valueLevel
+        val <- sep Colon *> valueLevel
         return (key,val)
   ps <- pair `sepBy` sep Comma
   return $ TObject ps TyAny _listInfo
@@ -196,24 +294,27 @@ literal = lit >>= \LiteralExp{..} ->
 
 deftable :: Compile (Term Name)
 deftable = do
-  (mn,mh) <- currentModule
+  ModuleState{..} <- moduleState
   AtomExp{..} <- userAtom
   ty <- optional (typed >>= \t -> case t of
                      TyUser {} -> return t
                      _ -> expected "user type")
   m <- meta ModelNotAllowed
-  TTable (TableName _atomAtom) mn mh
+  TTable (TableName _atomAtom) _msName _msHash
     (fromMaybe TyAny ty) m <$> contextInfo
 
 
-bless :: Compile (Term Name)
-bless = TBless <$> hash' <*> contextInfo
+bless :: Compile ()
+bless = do
+  h <- hash'
+  overModuleState msBlessed (h:)
+
 
 defconst :: Compile (Term Name)
 defconst = do
-  modName <- currentModule'
+  modName <- currentModuleName
   a <- arg
-  v <- term
+  v <- valueLevel
 
   m <- meta ModelNotAllowed
   TConst a modName (CVRaw v) m <$> contextInfo
@@ -222,28 +323,33 @@ data ModelAllowed
   = ModelAllowed
   | ModelNotAllowed
 
+data AtPair = DocPair Text | ModelPair [Exp Info] deriving (Eq,Ord)
+
 meta :: ModelAllowed -> Compile Meta
 meta modelAllowed = atPairs <|> try docStr <|> return def
   where
     docStr = Meta <$> (Just <$> str) <*> pure []
-    docPair = symbol "@doc" >> str
+    docPair = symbol "@doc" >> (DocPair <$> str)
     modelPair = do
       symbol "@model"
       (ListExp exps _ _i, _) <- list' Brackets
-      pure exps
+      pure (ModelPair exps)
+    whenModelAllowed a = case modelAllowed of
+      ModelAllowed -> a
+      ModelNotAllowed -> unexpected' "@model not allowed in this declaration"
     atPairs = do
-      doc <- optional (try docPair)
-      model <- optional (try modelPair)
-      case (doc, model, modelAllowed) of
-        (Nothing, Nothing    , ModelAllowed   ) -> expected "@doc or @model declarations"
-        (Nothing, Nothing    , ModelNotAllowed) -> expected "@doc declaration"
-        (_      , Just model', ModelAllowed   ) -> return (Meta doc model')
-        (_      , Just _     , ModelNotAllowed) -> syntaxError "@model not allowed in this declaration"
-        (_      , Nothing    , _              ) -> return (Meta doc [])
+      ps <- sort <$> (some (docPair <|> modelPair))
+      case ps of
+        [DocPair doc] -> return (Meta (Just doc) [])
+        [ModelPair es] -> whenModelAllowed $ return (Meta Nothing es)
+        [DocPair doc, ModelPair es] -> whenModelAllowed $ return (Meta (Just doc) es)
+        _ -> expected $ case modelAllowed of
+          ModelNotAllowed -> "@doc declaration"
+          ModelAllowed -> "@doc and/or @model declarations"
 
 defschema :: Compile (Term Name)
 defschema = do
-  modName <- currentModule'
+  modName <- currentModuleName
   tn <- _atomAtom <$> userAtom
   m <- meta ModelAllowed
   fields <- many arg
@@ -251,22 +357,22 @@ defschema = do
 
 defun :: Compile (Term Name)
 defun = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
   TDef defname modName Defun (FunType args returnTy)
-    <$> abstractBody args <*> pure m <*> contextInfo
+    <$> abstractBody valueLevel args <*> pure m <*> contextInfo
 
 defpact :: Compile (Term Name)
 defpact = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
-  (body,bi) <- bodyForm'
-  forM_ body $ \t -> case t of
-    TStep {} -> return ()
+  (body,bi) <- bodyForm' $ specialForm $ \r -> case r of
+    RStep -> return step
+    RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
   TDef defname modName Defpact (FunType args returnTy)
     (abstractBody' args (TList body TyAny bi)) m <$> contextInfo
@@ -285,31 +391,16 @@ moduleForm = do
         Info (Just (c,_)) -> c
       modName = ModuleName modName'
       modHash = hash $ encodeUtf8 $ _unCode code
-  (psUser . csModule) .= Just (modName,modHash)
-  (bd,bi) <- bodyForm'
-  blessed <- fmap (HS.fromList . concat) $ forM bd $ \d -> case d of
-    TDef {} -> return []
-    TNative {} -> return []
-    TConst {} -> return []
-    TSchema {} -> return []
-    TTable {} -> return []
-    TUse {} -> return []
-    TBless {..} -> return [_tBlessed]
-    TImplements{} -> return []
-    t -> syntaxError $ "Invalid declaration in module scope: " ++ abbrev t
-  let interfaces = bd >>= \d -> case d of
-        TImplements{..} -> [_tInterfaceName]
-        _ -> []
+  ((bd,bi),ModuleState{..}) <- withModuleState (initModuleState modName modHash) $ bodyForm' moduleLevel
   return $ TModule
-    (Module modName (KeySetName keyset) m code modHash blessed interfaces)
-    (abstract (const Nothing) (TList bd TyAny bi)) i
+    (Module modName (KeySetName keyset) m code modHash (HS.fromList _msBlessed) _msImplements _msImports)
+    (abstract (const Nothing) (TList (concat bd) TyAny bi)) i
 
-implements :: Compile (Term Name)
+implements :: Compile ()
 implements = do
-  modName <- currentModule'
   ifName <- (ModuleName . _atomAtom) <$> bareAtom
-  info <- contextInfo
-  return $ TImplements ifName modName info
+  overModuleState msImplements (ifName:)
+
 
 interface :: Compile (Term Name)
 interface = do
@@ -324,26 +415,19 @@ interface = do
         Info (Just (c,_)) -> c
       iname = ModuleName iname'
       ihash = hash $ encodeUtf8 (_unCode code)
-  (psUser . csModule) .= Just (iname, ihash)
-  (defs, defInfo) <- interfaceForm
+  (bd,ModuleState{..}) <- withModuleState (initModuleState iname ihash) $
+            bodyForm $ specialForm $ \r -> case r of
+              RDefun -> return emptyDef
+              RDefconst -> return defconst
+              RUse -> return useForm
+              t -> syntaxError $ "Invalid interface declaration: " ++ show (asString t)
   return $ TModule
-    (Interface iname code m)
-    (abstract (const Nothing) (TList defs TyAny defInfo)) info
-
-interfaceForm :: Compile ([Term Name], Info)
-interfaceForm = (,) <$> some interfaceForms <*> contextInfo
-  where
-    interfaceForms = withList' Parens $ do
-      AtomExp{..} <- bareAtom
-      case _atomAtom of
-        "defun" -> commit >> emptyDef
-        "defconst" -> commit >> defconst
-        "use" -> commit >> useForm
-        t -> syntaxError $ "Invalid interface declaration: " ++ unpack t
+    (Interface iname code m _msImports)
+    (abstract (const Nothing) bd) info
 
 emptyDef :: Compile (Term Name)
 emptyDef = do
-  modName <- currentModule'
+  modName <- currentModuleName
   (defName, returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
@@ -355,24 +439,25 @@ emptyDef = do
 
 step :: Compile (Term Name)
 step = do
-  cont <- try (TStep <$> (Just <$> term) <*> term) <|>
-          (TStep Nothing <$> term)
+  cont <- try (TStep <$> (Just <$> valueLevel) <*> valueLevel) <|>
+          (TStep Nothing <$> valueLevel)
   cont <$> pure Nothing <*> contextInfo
 
 stepWithRollback :: Compile (Term Name)
 stepWithRollback = do
-  try (TStep <$> (Just <$> term) <*> term <*> (Just <$> term) <*> contextInfo) <|>
-      (TStep Nothing <$> term <*> (Just <$> term) <*> contextInfo)
+  try (TStep <$> (Just <$> valueLevel) <*> valueLevel <*>
+         (Just <$> valueLevel) <*> contextInfo)
+  <|> (TStep Nothing <$> valueLevel <*> (Just <$> valueLevel) <*> contextInfo)
 
 
 
 letBindings :: Compile [(Arg (Term Name),Term Name)]
 letBindings = withList' Parens $
               some $ withList' Parens $
-              (,) <$> arg <*> term
+              (,) <$> arg <*> valueLevel
 
-abstractBody :: [Arg (Term Name)] -> Compile (Scope Int Term Name)
-abstractBody args = abstractBody' args <$> bodyForm
+abstractBody :: Compile (Term Name) -> [Arg (Term Name)] -> Compile (Scope Int Term Name)
+abstractBody term args = abstractBody' args <$> bodyForm term
 
 abstractBody' :: [Arg (Term Name)] -> Term Name -> Scope Int Term Name
 abstractBody' args = abstract (`elemIndex` bNames)
@@ -382,7 +467,7 @@ abstractBody' args = abstract (`elemIndex` bNames)
 letForm :: Compile (Term Name)
 letForm = do
   bindings <- letBindings
-  TBinding bindings <$> abstractBody (map fst bindings) <*>
+  TBinding bindings <$> abstractBody valueLevel (map fst bindings) <*>
     pure BindLet <*> contextInfo
 
 -- | let* is a macro to nest lets for referencing previous
@@ -393,7 +478,7 @@ letsForm = do
   let nest (binding:rest) = do
         let bName = [arg2Name (fst binding)]
         scope <- abstract (`elemIndex` bName) <$> case rest of
-          [] -> bodyForm
+          [] -> bodyForm valueLevel
           _ -> do
             rest' <- nest rest
             pure $ TList [rest'] TyAny def
@@ -404,7 +489,12 @@ letsForm = do
 useForm :: Compile (Term Name)
 useForm = do
   modName <- (_atomAtom <$> userAtom) <|> str <|> expected "bare atom, string, symbol"
-  TUse (ModuleName modName) <$> optional hash' <*> contextInfo
+  i <- contextInfo
+  u <- Use (ModuleName modName) <$> optional hash' <*> pure i
+  -- this is the one place module may not be present, use traversal
+  psUser . csModule . _Just . msImports %= (u:)
+  return $ TUse u i
+
 
 hash' :: Compile Hash
 hash' = str >>= \s -> case fromText' s of
@@ -454,27 +544,30 @@ parseUserSchemaType = withList Braces $ \ListExp{..} -> do
   AtomExp{..} <- userAtom
   return $ TyUser (return $ Name _atomAtom _listInfo)
 
-bodyForm :: Compile (Term Name)
-bodyForm = do
-  (bs,i) <- bodyForm'
+bodyForm :: Compile (Term Name) -> Compile (Term Name)
+bodyForm term = do
+  (bs,i) <- bodyForm' term
   return $ TList bs TyAny i
 
-bodyForm' :: Compile ([Term Name],Info)
-bodyForm' = (,) <$> some term <*> contextInfo
+bodyForm' :: Compile a -> Compile ([a],Info)
+bodyForm' term = (,) <$> some term <*> contextInfo
 
 _compileAccounts :: IO (Either PactError [Term Name])
-_compileAccounts = _parseF "examples/accounts/accounts.pact" >>= _compile id
+_compileAccounts = _compileF "examples/accounts/accounts.pact"
+
+_compileF :: FilePath -> IO (Either PactError [Term Name])
+_compileF f = _parseF f >>= _compile id
 
 _compile :: (ParseState CompileState -> ParseState CompileState) ->
             TF.Result ([Exp Parsed],String) -> IO (Either PactError [Term Name])
 _compile _ (TF.Failure f) = putDoc (TF._errDoc f) >> error "Parse failed"
 _compile sfun (TF.Success (a,s)) = return $ forM a $ \e ->
   let ei = mkStringInfo s <$> e
-  in runCompile term (sfun (initParseState ei)) ei
+  in runCompile topLevel (sfun (initParseState ei)) ei
 
 -- | run a string as though you were in a module (test deftable, etc)
 _compileStrInModule :: String -> IO [Term Name]
-_compileStrInModule = _compileStr' (set (psUser . csModule) (Just ("mymodule",hash mempty)))
+_compileStrInModule = _compileStr' (set (psUser . csModule) (Just (initModuleState "mymodule" (hash mempty))))
 
 _compileStr :: String -> IO [Term Name]
 _compileStr = _compileStr' id
@@ -513,3 +606,6 @@ _atto fp = do
 
 _testCToTV :: Bool
 _testCToTV = nub vs == vs where vs = take (26*26*26) $ map cToTV [0..]
+
+_unusedLenses :: Compile ()
+_unusedLenses = void $ return (set msName,set msHash)

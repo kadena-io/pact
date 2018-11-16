@@ -35,17 +35,18 @@ module Pact.Types.Term
    NativeDFun(..),
    BindType(..),
    TableName(..),
-   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,
-   interfaceCode, interfaceMeta, interfaceName,
+   Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
+   interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleName(..),
    Name(..),
    ConstVal(..),
+   Use(..),
    Term(..),
-   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tBlessed,tConstArg,tConstVal,
+   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
-   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModuleName,tModuleHash,tModule,
+   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
-   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,tInterfaceName,
+   tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
    typeof,typeof',
@@ -155,7 +156,7 @@ data FunApp = FunApp {
     , _faTypes :: !(FunTypes (Term Name))
     , _faDocs :: !(Maybe Text)
     }
-            
+
 
 instance Show FunApp where
   show FunApp {..} =
@@ -254,7 +255,17 @@ instance Ord Name where
   (Name a _) `compare` (Name b _) = a `compare` b
   Name {} `compare` QName {} = LT
   QName {} `compare` Name {} = GT
-  
+
+
+data Use = Use
+  { _uModuleName :: !ModuleName
+  , _uModuleHash :: !(Maybe Hash)
+  , _uInfo :: !Info
+  } deriving (Eq)
+instance Show Use where
+  show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
+
+
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -266,11 +277,13 @@ data Module
  , _mHash :: !Hash
  , _mBlessed :: !(HS.HashSet Hash)
  , _mInterfaces :: [ModuleName]
+ , _mImports :: [Use]
  }
  | Interface
  { _interfaceName :: !ModuleName
  , _interfaceCode :: !Code
  , _interfaceMeta :: !Meta
+ , _interfaceImports :: [Use]
  } deriving Eq
 
 instance Show Module where
@@ -278,7 +291,7 @@ instance Show Module where
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
-                     
+
 instance ToJSON Module where
   toJSON Module{..} = object
     [ "name" .= _mName
@@ -304,6 +317,7 @@ instance FromJSON Module where
     <*> o .: "hash"
     <*> (HS.fromList <$> o .: "blessed")
     <*> o .: "interfaces"
+    <*> pure []
 
 data ConstVal n =
   CVRaw { _cvRaw :: !n } |
@@ -392,13 +406,8 @@ data Term n =
     , _tInfo :: !Info
     } |
     TUse {
-      _tModuleName :: !ModuleName
-    , _tModuleHash :: !(Maybe Hash)
-    , _tInfo :: !Info
-    } |
-    TBless {
-      _tBlessed :: !Hash
-    , _tInfo :: !Info
+      _tUse :: Use
+    , _tInfo :: Info
     } |
     TValue {
       _tValue :: !Value
@@ -416,11 +425,6 @@ data Term n =
     , _tHash :: !Hash
     , _tTableType :: !(Type (Term n))
     , _tMeta :: !Meta
-    , _tInfo :: !Info
-    } |
-    TImplements {
-      _tInterfaceName :: !ModuleName
-    , _tModuleName :: !ModuleName
     , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Eq)
@@ -443,8 +447,7 @@ instance Show n => Show (Term n) where
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
-    show (TUse m h _) = "(TUse " ++ show m ++ maybeDelim " " h ++ ")"
-    show (TBless hs _) = "(TBless " ++ show hs ++ ")"
+    show (TUse u _) = show u
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
@@ -454,8 +457,6 @@ instance Show n => Show (Term n) where
     show TTable {..} =
       "(TTable " ++ asString' _tModule ++ "." ++ asString' _tTableName ++ ":" ++ show _tTableType
       ++ " " ++ show _tMeta ++ ")"
-    show TImplements{..} =
-      "(TImplements " ++ show _tInterfaceName ++ ")"
 
 showParamType :: Show n => Type n -> String
 showParamType TyAny = ""
@@ -485,9 +486,7 @@ instance Eq1 Term where
     a == m && b == n
   liftEq _ (TKeySet a b) (TKeySet m n) =
     a == m && b == n
-  liftEq _ (TUse a b c) (TUse m n o) =
-    a == m && b == n && c == o
-  liftEq _ (TBless a b) (TBless m n) =
+  liftEq _ (TUse a b) (TUse m n) =
     a == m && b == n
   liftEq _ (TValue a b) (TValue m n) =
     a == m && b == n
@@ -497,7 +496,6 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq (liftEq eq)) d p && e == q
   liftEq eq (TTable a b c d e f) (TTable m n o p q r) =
     a == m && b == n && c == o && liftEq (liftEq eq) d p && e == q && f == r
-  liftEq _ (TImplements ifs mn i) (TImplements ifs' mn' i') = ifs == ifs' && mn == mn' && i == i'
   liftEq _ _ _ = False
 
 
@@ -518,13 +516,11 @@ instance Monad Term where
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
-    TUse m h i >>= _ = TUse m h i
-    TBless hs i >>= _ = TBless hs i
+    TUse u i >>= _ = TUse u i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
     TTable {..} >>= f = TTable _tTableName _tModule _tHash (fmap (>>= f) _tTableType) _tMeta _tInfo
-    TImplements ifs mn i >>= _ = TImplements ifs mn i 
 
 
 instance FromJSON (Term n) where
@@ -589,12 +585,10 @@ typeof t = case t of
       TObject {..} -> Right $ TySchema TyObject _tObjectType
       TKeySet {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"
-      TBless {} -> Left "bless"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
       TTable {..} -> Right $ TySchema TyTable _tTableType
-      TImplements{} -> Left "implements"
 {-# INLINE typeof #-}
 
 -- | Return string type description.
@@ -648,14 +642,12 @@ abbrev TBinding {} = "<binding>"
 abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
-abbrev (TUse m h _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
-abbrev TBless {} = "<bless ...>"
+abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"
 abbrev TSchema {..} = "<defschema " ++ asString' _tSchemaName ++ ">"
 abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
-abbrev TImplements{..} = "<implements " ++ show _tInterfaceName ++ ">"
 
 
 
