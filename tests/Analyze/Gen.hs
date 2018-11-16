@@ -437,8 +437,12 @@ genTermSpecific' boundedTy = scale 8 $ Gen.choice
 
 genType :: MonadGen m => m EType
 genType = Gen.element
-  [ EType SInteger, EType SDecimal, EType SBool, EType SStr, EType STime
-  , EType SKeySet
+  [ EType SInteger, EType (SList SInteger)
+  , EType SDecimal, EType (SList SDecimal)
+  , EType SBool   , EType (SList SBool)
+  , EType SStr    , EType (SList SStr)
+  , EType STime   , EType (SList STime)
+  , EType SKeySet , EType (SList SKeySet)
   ]
 
 describeAnalyzeFailure :: AnalyzeFailure -> String

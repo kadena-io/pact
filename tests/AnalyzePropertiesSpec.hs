@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,7 +27,17 @@ import           Analyze.Translate
 -- evaluations give the same result (including the same exception, if the
 -- program throws).
 testDualEvaluation :: ETerm -> GenState -> PropertyT IO ()
-testDualEvaluation etm@(ESimple ty _tm) gState = do
+testDualEvaluation etm@(ESimple ty _tm) gState
+  = testDualEvaluation' etm ty gState
+testDualEvaluation etm@(EList (SList ty) _tm) gState
+  = testDualEvaluation' etm ty gState
+testDualEvaluation EObject{} _ = do
+  footnote "can't property test evaluation of objects"
+  failure
+
+testDualEvaluation'
+  :: ETerm -> SingTy 'SimpleK a -> GenState -> PropertyT IO ()
+testDualEvaluation' etm ty gState = do
   -- evaluate via pact, convert to analyze term
   mPactVal <- liftIO $ pactEval etm gState
   ePactVal <- case mPactVal of
@@ -57,9 +68,6 @@ testDualEvaluation etm@(ESimple ty _tm) gState = do
       case singEq ty' ty'' of
         Just Refl -> withEq ty' $ withShow ty' $ sval' === pactSval
         Nothing   -> EType ty' === EType ty'' -- this'll fail
-testDualEvaluation EObject{} _ = do
-  footnote "can't property test evaluation of objects"
-  failure
 
 prop_evaluation :: Property
 prop_evaluation = property $ do

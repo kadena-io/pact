@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -85,7 +87,12 @@ pactEval etm gState = (do
 
 -- Evaluate a term symbolically
 analyzeEval :: ETerm -> GenState -> IO (Either String ETerm)
-analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
+analyzeEval etm@(ESimple ty _tm)       gs = analyzeEval' etm ty gs
+analyzeEval etm@(EList (SList ty) _tm) gs = analyzeEval' etm ty gs
+analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
+
+analyzeEval' :: ETerm -> SingTy 'SimpleK a -> GenState -> IO (Either String ETerm)
+analyzeEval' etm ty (GenState _ keysets decimals) = do
   -- analyze setup
   let tables = []
       args   = Map.empty
@@ -125,7 +132,6 @@ analyzeEval etm@(ESimple ty _tm) (GenState _ keysets decimals) = do
         Just sval' -> pure $ Right $ ESimple ty $ CoreTerm $ Lit sval'
         Nothing    -> pure $ Left $ "couldn't unliteral: " ++ show sval
       _ -> pure $ Left $ "not AVAl: " ++ show analyzeVal
-analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 
 -- Generate a pact evaluation environment given the keysets and decimals used
 -- in the generated term. This generates an environment with just keysets and

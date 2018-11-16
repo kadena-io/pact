@@ -255,6 +255,8 @@ reverseTranslateType = \case
   STime    -> Pact.TyPrim Pact.TyTime
   SKeySet  -> Pact.TyPrim Pact.TyKeySet
   SAny     -> Pact.TyAny
+  SList a  -> Pact.TyList $ reverseTranslateType a
+  SObject  -> error "TODO"
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)
 fromPactVal (EType ty)  = runMaybeT . toAnalyze (reverseTranslateType ty)
