@@ -12,6 +12,16 @@
     "docstrings work without @doc"
     2)
 
+  (defun docmodel ()
+    @doc "stuff"
+    @model [(property stuff)]
+    3)
+
+  (defun modeldoc ()
+    @model [(property stuff)]
+    @doc "stuff"
+    4)
+
   (defconst BAR 1 @doc "barring disbelief")
 
   (defconst BAZ 2 "docstrings work without @doc")
