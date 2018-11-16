@@ -219,8 +219,6 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- TODO: is this necessary? Just use Lit?
   LiteralList :: SingTy 'ListK ('TyList a) -> [t a] -> Core t ('TyList a)
 
-  -- ListInfo :: SingTy 'ListK ('TyList a) -> ListInfo t ('TyList a) -> Core t ('TyList a)
-
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
