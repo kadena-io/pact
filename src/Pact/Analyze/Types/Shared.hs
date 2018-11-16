@@ -576,9 +576,6 @@ isConcreteS = isConcrete . _sSbv
 
 data QKind = QType | QAny
 
--- Integer, Decimal, Bool, String, Time
-type SimpleType a = (Show a, SymWord a, SMTValue a, UserShow a, Typeable a)
-
 data Quantifiable :: QKind -> * where
   EType     :: SingTy k a  -> Quantifiable q
   -- EListType :: SingTy k a  -> Quantifiable q
