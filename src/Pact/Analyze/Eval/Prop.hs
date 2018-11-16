@@ -47,7 +47,6 @@ instance Analyzer Query where
   type TermOf Query = Prop
   eval           = evalProp
   evalO          = evalPropO
-  evalL          = evalPropL
   evalLogicalOp  = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
@@ -161,14 +160,6 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
     pure (fieldType, av)
 
   pure $ Object aValFields
-
-evalPropL
-  :: (a' ~ Concrete a, SymWord a', Show a')
-  => Prop ('TyList a) -> Query (S [a'])
-evalPropL (CoreProp tm) = evalCoreL tm
-evalPropL (PropSpecific Result) = do
-  result <- view qeAnalyzeResult
-  sansProv <$> expectList result
 
 evalPropSpecific :: PropSpecific a -> Query (S (Concrete a))
 evalPropSpecific Success = view $ qeAnalyzeState.succeeds

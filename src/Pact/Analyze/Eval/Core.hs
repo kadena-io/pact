@@ -177,12 +177,12 @@ evalCore (StringContains needle haystack) = do
     _sSbv (coerceS @Str @String haystack')
 evalCore (ListContains ty needle haystack) = withShow ty $ withSymWord ty $ do
   S _ needle'   <- eval needle
-  S _ haystack' <- evalL haystack
+  S _ haystack' <- eval haystack
   pure $ sansProv $
     bfoldr listBound (\cell rest -> cell .== needle' ||| rest) false haystack'
 evalCore (ListEqNeq ty op a b) = withEq ty $ withSymWord ty $ withShow ty $ do
-  S _ a' <- evalL a
-  S _ b' <- evalL b
+  S _ a' <- eval a
+  S _ b' <- eval b
 
   let wrongLength = case op of
         Eq'  -> false
@@ -196,7 +196,7 @@ evalCore (ListEqNeq ty op a b) = withEq ty $ withSymWord ty $ withShow ty $ do
     wrongLength
 evalCore (ListAt tyA i l) = do
   S _ i' <- eval i
-  S _ l' <- withShow tyA $ evalL l
+  S _ l' <- withShow tyA $ eval l
 
   -- valid range [0..length l - 1]
   markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
@@ -204,8 +204,39 @@ evalCore (ListAt tyA i l) = do
   -- statically build a list of index comparisons
   pure $ sansProv $ SBVL.elemAt l' i'
 evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
-  S prov l' <- withShow ty $ evalL l
+  S prov l' <- withShow ty $ eval l
   pure $ S prov $ SBVL.length l'
+
+evalCore (LiteralList (SList ty) xs) = withShow ty $ withSymWord ty $ do
+  vals <- traverse (fmap _sSbv . eval) xs
+  pure $ sansProv $ SBVL.implode vals
+
+evalCore (ListDrop ty n list) = withShow ty $ withSymWord ty $ do
+  S _ n'    <- eval n
+  S _ list' <- eval list
+
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.drop n' list')
+    (SBVL.take (SBVL.length list' + n') list')
+
+evalCore (ListTake ty n list) = withShow ty $ withSymWord ty $ do
+  S _ n'    <- eval n
+  S _ list' <- eval list
+
+  -- if the index is positive, count from the start of the list, otherwise
+  -- count from the end.
+  pure $ sansProv $ ite (n' .>= 0)
+    (SBVL.take n' list')
+    (SBVL.drop (SBVL.length list' + n') list')
+
+evalCore (ListConcat ty p1 p2) = withShow ty $ withSymWord ty $ do
+  S _ p1' <- eval p1
+  S _ p2' <- eval p2
+  pure $ sansProv $ SBVL.concat p1' p2'
+evalCore ListReverse{} = error "TODO"
+evalCore ListSort{} = error "TODO"
 
 evalCore (Var vid name) = do
   mVal <- getVar vid
@@ -214,56 +245,8 @@ evalCore (Var vid name) = do
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
+
 evalCore x = error $ "no case for: " ++ show x
-
-evalCoreL
-  :: ( Analyzer m
-     , a' ~ Concrete a
-     , SymWord a', Show a')
-  => Core (TermOf m) ('TyList a) -> m (S [a'])
-evalCoreL (LiteralList _ty xs) = do
-  vals <- traverse (fmap _sSbv . eval) xs
-  pure $ sansProv $ SBVL.implode vals
-evalCoreL (ListDrop _ty n list) = do
-  S _ n'    <- eval n
-  S _ list' <- evalL list
-
-  -- if the index is positive, count from the start of the list, otherwise
-  -- count from the end.
-  pure $ sansProv $ ite (n' .>= 0)
-    (SBVL.drop n' list')
-    (SBVL.take (SBVL.length list' + n') list')
-
-evalCoreL (ListTake _ty n list) = do
-  S _ n'    <- eval n
-  S _ list' <- evalL list
-
-  -- if the index is positive, count from the start of the list, otherwise
-  -- count from the end.
-  pure $ sansProv $ ite (n' .>= 0)
-    (SBVL.take n' list')
-    (SBVL.drop (SBVL.length list' + n') list')
-
-evalCoreL (ListConcat _ty p1 p2) = do
-  S _ p1' <- evalL p1
-  S _ p2' <- evalL p2
-  pure $ sansProv $ SBVL.concat p1' p2'
-
-evalCoreL Lit{} = error "TODO"
-evalCoreL (Sym s) = pure s
-evalCoreL (Var vid name) = do
-  mVal <- getVar vid
-  case mVal of
-    Nothing                -> throwErrorNoLoc $ VarNotInScope name vid
-    Just (AVal mProv sval) -> pure $ mkS mProv sval
-    Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
-    Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
-evalCoreL Numerical{} = vacuousMatch "an object cannot be a numerical value"
-evalCoreL ListReverse{} = error "TODO"
-evalCoreL ListSort{} = error "TODO"
-evalCoreL (ObjAt schema colNameT objT retType)
-  = evalObjAt schema colNameT objT retType
-evalCoreL ListAt{} = throwErrorNoLoc "nested list are not allowed"
 
 evalObjAt
   :: (Analyzer m, SymWord a)
@@ -355,7 +338,7 @@ evalCoreO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
 evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
 evalCoreO (ListAt _ _ _) = error "TODO"
 evalCoreO (ObjDrop (Schema schemaFields) keys _obj) = do
-  keys' <- evalL keys
+  keys' <- eval keys
   case unliteralS keys' of
     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
     Just literalKeys -> do
@@ -375,7 +358,7 @@ evalExistential = \case
     prop' <- eval prop
     pure (EType ty, mkAVal prop')
   EList (SList ty) prop -> withShow ty $ withSymWord ty $ do
-    vals  <- evalL prop
+    vals  <- eval prop
     pure (EType ty, mkAVal vals)
   EObject ty prop -> do
     prop' <- evalO prop

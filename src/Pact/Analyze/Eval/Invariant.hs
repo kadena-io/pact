@@ -26,7 +26,6 @@ newtype InvariantCheck a = InvariantCheck
 instance Analyzer InvariantCheck where
   type TermOf InvariantCheck = Invariant
   eval  (CoreInvariant tm)   = evalCore tm
-  evalL (CoreInvariant tm)   = evalCoreL tm
   evalO (CoreInvariant tm)   = evalCoreO tm
   evalLogicalOp              = evalLogicalOp'
   throwErrorNoLoc err = do
