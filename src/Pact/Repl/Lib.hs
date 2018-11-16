@@ -56,13 +56,13 @@ import Pact.Types.Logger
 import Pact.Repl.Types
 
 
-initLibState :: Loggers -> IO LibState
-initLibState loggers = do
+initLibState :: Loggers -> Maybe String -> Maybe Int -> IO LibState
+initLibState loggers verifyHostname verifyPort = do
   m <- newMVar (DbEnv def persister
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def)
+  return (LibState m Noop def def verifyHostname verifyPort)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -352,8 +352,10 @@ verify i as = case as of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
 #if defined(ghcjs_HOST_OS)
+        hostname <- fromMaybe "localhost" <$> viewLibState (view rlsHostname)
+        port <- fromMaybe 3000 <$> viewLibState (view rlsPort)
         renderedLines <- liftIO $
-          RemoteClient.verifyModule modules md "localhost" 3000
+          RemoteClient.verifyModule modules md hostname port
 #else
         modResult <- liftIO $ Check.verifyModule modules md
         let renderedLines = Check.renderVerifiedModule modResult
