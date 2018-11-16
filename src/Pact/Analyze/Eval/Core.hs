@@ -13,12 +13,12 @@ import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, true, false, uninterpret)
+                                              SymWord, ite, true, false)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified Data.SBV.List as SBVL
-import Data.SBV.List.Bounded (bfoldr, ibfoldr, band, bzipWith)
+import Data.SBV.List.Bounded (bfoldr, band, bzipWith)
 import Data.Traversable (for)
 
 import           Pact.Analyze.Errors
@@ -200,10 +200,7 @@ evalCore (ListAt tyA i l) = do
   markFailure $ i' .< 0 ||| i' .>= SBVL.length l'
 
   -- statically build a list of index comparisons
-  pure $ sansProv $ ibfoldr listBound
-    (\thisIx val rest -> ite (fromIntegral thisIx .== i') val rest)
-    (uninterpret "listOutOfBounds")
-    l'
+  pure $ sansProv $ SBVL.elemAt l' i'
 evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
   S prov l' <- withShow ty $ evalL l
   pure $ S prov $ SBVL.length l'
