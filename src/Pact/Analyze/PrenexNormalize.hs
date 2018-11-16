@@ -53,11 +53,11 @@ instance Float ('TyList 'TyInteger) where
     CoreProp Numerical{} -> vacuousMatch "numerical can't be a list"
     CoreProp ObjAt{} -> error "TODO"
     CoreProp ListAt{} -> error "TODO"
-    CoreProp ListReverse{} -> error "TODO"
-    CoreProp ListSort{} -> error "TODO"
+    CoreProp (ListReverse ty lst) -> CoreProp . ListReverse ty <$> float lst
+    CoreProp (ListSort ty lst) -> CoreProp . ListSort ty <$> float lst
     CoreProp ListTake{} -> error "TODO"
     CoreProp ListConcat{} -> error "TODO"
-    CoreProp LiteralList{} -> error "TODO"
+    CoreProp LiteralList{} -> ([], p)
 
 instance Float ('TyList 'TyDecimal) where
   float = error "TODO"

@@ -2583,3 +2583,23 @@ spec = describe "analyze" $ do
             (+ [a b] [c]))
           |]
     expectFalsified $ code9 "[(property (= result [a b]))]"
+    expectVerified  $ code9 "[(property (= result (+ [a] [b c]))]"
+
+  describe "list reverse" $ do
+    let code10 = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            @model [(property (= result (reverse [a b c])))]
+            [c b a])
+          |]
+    expectVerified code10
+
+  describe "list sort" $ do
+    let code11 = [text|
+          (defun min:integer (a:integer b:integer)
+            (if (< a b) a b))
+
+          (defun test:integer (a:integer b:integer c:integer)
+            @model [(property (= result (at 0 (sort [a b c]))))]
+            (min a (min b c)))
+          |]
+    expectVerified code11

@@ -535,6 +535,14 @@ inferPreProp preProp = case preProp of
     , ESimple SStr     <$> checkPreProp SStr     preProp -- (string concat)
     ]
 
+  PreApp s [lst] | s == SReverse -> do
+    EList (SList ty) lst' <- inferPreProp lst
+    pure $ EList (SList ty) $ CoreProp $ ListSort ty lst'
+
+  PreApp s [lst] | s == SSort -> do
+    EList (SList ty) lst' <- inferPreProp lst
+    pure $ EList (SList ty) $ CoreProp $ ListReverse ty lst'
+
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do
     defn <- view $ definedProps . at fName
