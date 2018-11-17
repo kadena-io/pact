@@ -1775,51 +1775,51 @@ spec = describe "analyze" $ do
   describe "prenex conversion" $ do
     -- These test a somewhat irrelevant implementation detail -- the specific
     -- unique id, which is not ideal, but will do for now.
-    let a0       = PVar 1 "a"
-        a1       = PVar 2 "a"
+    let a1       = PVar 1 "a"
+        a2       = PVar 2 "a"
         -- b        = PVar 1 "b"
         ty       = EType SStr
         intTy    = EType SInteger
-        allA0    = Inj ... Forall 1 "a"
-        allA1    = Inj ... Forall 2 "a"
-        existsA0 = Inj ... Exists 1 "a"
-        existsA1 = Inj ... Exists 2 "a"
+        allA1    = Inj ... Forall 1 "a"
+        allA2    = Inj ... Forall 2 "a"
+        existsA1 = Inj ... Exists 1 "a"
+        existsA2 = Inj ... Exists 2 "a"
 
     it "lifts all over not (becomes exists)" $
-      prenexConvert (PNot (allA0 ty a0))
+      prenexConvert (PNot (allA1 ty a1))
       `shouldBe`
-      existsA0 ty (PNot a0)
+      existsA1 ty (PNot a1)
 
     it "lifts exists over not (becomes all)" $
-      prenexConvert (PNot (existsA0 ty a0))
+      prenexConvert (PNot (existsA1 ty a1))
       `shouldBe`
-      allA0 ty (PNot a0)
+      allA1 ty (PNot a1)
 
     it "lifts all over or" $
-      prenexConvert (POr (allA0 ty a0) (allA1 ty a1))
+      prenexConvert (POr (allA1 ty a1) (allA2 ty a2))
       `shouldBe`
-      allA0 ty (allA1 ty (POr a0 a1))
+      allA1 ty (allA2 ty (POr a1 a2))
 
     it "lifts all over and" $
-      prenexConvert (PAnd (allA0 ty a0) (allA1 ty a1))
+      prenexConvert (PAnd (allA1 ty a1) (allA2 ty a2))
       `shouldBe`
-      allA0 ty (allA1 ty (PAnd a0 a1))
+      allA1 ty (allA2 ty (PAnd a1 a2))
 
     it "lifts exists over or" $
-      prenexConvert (POr (existsA0 ty a0) (existsA1 ty a1))
+      prenexConvert (POr (existsA1 ty a1) (existsA2 ty a2))
       `shouldBe`
-      existsA0 ty (existsA1 ty (POr a0 a1))
+      existsA1 ty (existsA2 ty (POr a1 a2))
 
     it "lifts exists over and" $
-      prenexConvert (PAnd (existsA0 ty a0) (existsA1 ty a1))
+      prenexConvert (PAnd (existsA1 ty a1) (existsA2 ty a2))
       `shouldBe`
-      existsA0 ty (existsA1 ty (PAnd a0 a1))
+      existsA1 ty (existsA2 ty (PAnd a1 a2))
 
     it "lifts forall string" $
       prenexConvert (PAnd (Lit' True)
-        (allA0 intTy (CoreProp $ StringComparison Gte a0 a0)))
+        (allA1 intTy (CoreProp $ StringComparison Gte a1 a1)))
       `shouldBe`
-      allA0 intTy (PAnd (Lit' True) (CoreProp $ StringComparison Gte a0 a0))
+      allA1 intTy (PAnd (Lit' True) (CoreProp $ StringComparison Gte a1 a1))
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]
