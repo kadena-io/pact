@@ -27,13 +27,13 @@ import           Pact.Analyze.Util
 -- Also, in several places we need to mark a `Numerical` pattern as vacuous,
 -- for reasons that elude me.
 
-#define STANDARD_INSTANCES                                            \
-  PropSpecific Result -> ([], p);                                     \
-  CoreProp Var{}      -> ([], p);                                     \
-  CoreProp Lit{}      -> ([], p);                                     \
-  CoreProp Sym{}      -> ([], p);                                     \
-  CoreProp (ListAt ty a b) -> CoreProp <$> \
-    (ListAt ty <$> float a <*> float b) ; \
+#define STANDARD_INSTANCES                                                    \
+  PropSpecific Result -> ([], p);                                             \
+  CoreProp Var{}      -> ([], p);                                             \
+  CoreProp Lit{}      -> ([], p);                                             \
+  CoreProp Sym{}      -> ([], p);                                             \
+  CoreProp (ListAt ty a b) -> CoreProp <$>                                    \
+    (ListAt ty <$> float a <*> float b) ;                                     \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
 
 #define STANDARD_LIST_INSTANCES                                               \
@@ -130,26 +130,13 @@ flipQuantifier = \case
   Forall' uid name ty -> Exists' uid name ty
   Exists' uid name ty -> Forall' uid name ty
 
--- TODO: use has
-floatList
-  :: SingTy 'SimpleK a
-  -> Prop ('TyList a)
-  -> ([Quantifier], Prop ('TyList a))
-floatList = \case
-  SInteger -> float
-  SBool    -> float
-  SStr     -> float
-  STime    -> float
-  SDecimal -> float
-  SKeySet  -> float
-  SAny     -> float
-
 floatIntegerQuantifiers :: Prop 'TyInteger -> ([Quantifier], Prop 'TyInteger)
 floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
   CoreProp (StrLength pStr) -> PStrLength <$> float pStr
-  CoreProp (ListLength ty pLst) -> CoreProp . ListLength ty <$> floatList ty pLst
+  CoreProp (ListLength ty pLst) -> withFloat ty $
+    CoreProp . ListLength ty <$> float pLst
 
   CoreProp (Numerical (IntArithOp op a b))
     -> PNumerical ... IntArithOp      op <$> float a <*> float b
