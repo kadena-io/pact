@@ -1821,6 +1821,12 @@ spec = describe "analyze" $ do
       `shouldBe`
       allA1 intTy (PAnd (Lit' True) (CoreProp $ StringComparison Gte a1 a1))
 
+    it "lifts over a list" $
+      prenexConvert (CoreProp (ListAt SBool 0
+        (CoreProp (LiteralList (SList SBool) [ allA1 ty a1 ]))))
+      `shouldBe`
+      allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList (SList SBool) [ a1 ]))))
+
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]
         parseExprs' t = parseExprs t & traverse . traverse . traverse .~ dummyInfo
