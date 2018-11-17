@@ -1,9 +1,11 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE Rank2Types            #-}
 {-# options_ghc -fno-warn-orphans #-}
 
 module Pact.Analyze.PrenexNormalize (prenexConvert) where
@@ -34,42 +36,55 @@ import           Pact.Analyze.Util
     (ListAt ty <$> float a <*> float b) ; \
   CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;
 
+#define STANDARD_LIST_INSTANCES                                               \
+  PropSpecific Result            -> ([], p);                                  \
+  CoreProp Lit{}                 -> ([], p);                                  \
+  CoreProp Sym{}                 -> ([], p);                                  \
+  CoreProp Var{}                 -> ([], p);                                  \
+  CoreProp ListAt{}              -> vacuousMatch "nested lists not allowed";  \
+  CoreProp Numerical{}           -> vacuousMatch "numerical can't be a list"; \
+  CoreProp (ObjAt schema a b ty) -> PObjAt schema a <$> float b <*> pure ty;  \
+  CoreProp (ListReverse ty lst)  -> CoreProp . ListReverse ty <$> float lst;  \
+  CoreProp (ListSort ty lst)     -> CoreProp . ListSort ty <$> float lst;     \
+  CoreProp (ListDrop ty a b)                                                  \
+    -> CoreProp <$> (ListDrop ty <$> float a <*> float b);                    \
+  CoreProp (ListTake ty a b)                                                  \
+    -> CoreProp <$> (ListTake ty <$> float a <*> float b);                    \
+  CoreProp (ListConcat ty l1 l2)                                              \
+  -> CoreProp <$> (ListConcat ty <$> float l1 <*> float l2);                  \
+  CoreProp LiteralList{}         -> ([], p);
+
 instance Float ('TyList 'TyObject) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyKeySet) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyAny) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyInteger) where
   float p = case p of
-    PropSpecific Result -> ([], p)
-    CoreProp Lit{} -> ([], p)
-    CoreProp Sym{} -> ([], p)
-    CoreProp Var{} -> ([], p)
-    CoreProp ListDrop{} -> error "TODO"
-    CoreProp Numerical{} -> vacuousMatch "numerical can't be a list"
-    CoreProp ObjAt{} -> error "TODO"
-    CoreProp ListAt{} -> error "TODO"
-    CoreProp (ListReverse ty lst) -> CoreProp . ListReverse ty <$> float lst
-    CoreProp (ListSort ty lst) -> CoreProp . ListSort ty <$> float lst
-    CoreProp ListTake{} -> error "TODO"
-    CoreProp ListConcat{} -> error "TODO"
-    CoreProp LiteralList{} -> ([], p)
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyDecimal) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyTime) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyStr) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 instance Float ('TyList 'TyBool) where
-  float = error "TODO"
+  float p = case p of
+    STANDARD_LIST_INSTANCES
 
 
 instance Float 'TyInteger where
@@ -216,23 +231,15 @@ floatBoolQuantifiers p = case p of
     -> CoreProp ... BoolComparison op <$> float a <*> float b
   CoreProp (ObjectEqNeq op a b) -> PObjectEqNeq op <$> float a <*> float b
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
-  CoreProp (ListEqNeq ty op a b) ->
-    let -- HACK!
-        qa = []
-        qb = []
-        a' = a
-        b' = b
-    -- let (qa, a') = float a
-    --     (qb, b') = float b
-    in (qa ++ qb, CoreProp (ListEqNeq ty op a' b'))
+  CoreProp (ListEqNeq ty op a b) -> withFloat ty $
+    CoreProp <$> (ListEqNeq ty op <$> float a <*> float b)
   CoreProp (ObjContains schema (EObject ty obj)) -> CoreProp <$>
     (ObjContains schema . EObject ty <$> float obj)
   CoreProp (ObjContains _ _) -> error ("ill-formed contains: " ++ show p)
   CoreProp (StringContains needle haystack) -> CoreProp <$>
     (StringContains <$> float needle <*> float haystack)
-  -- CoreProp (ListContains ty needle haystack) -> CoreProp <$>
-  --   (ListContains ty <$> float needle <*> float haystack)
-  CoreProp ListContains{} -> error "TODO"
+  CoreProp (ListContains ty needle haystack) -> withFloat ty $
+    CoreProp <$> (ListContains ty <$> float needle <*> float haystack)
 
   PAnd a b     -> PAnd <$> float a <*> float b
   POr a b      -> POr  <$> float a <*> float b
@@ -243,6 +250,16 @@ floatBoolQuantifiers p = case p of
   PropSpecific (RowWrite tn pRk)  -> PropSpecific . RowWrite  tn <$> float pRk
   PropSpecific (RowExists tn pRk beforeAfter)
     -> PropSpecific ... RowExists tn <$> float pRk <*> pure beforeAfter
+
+withFloat :: SingTy 'SimpleK a -> ((Float a, Float ('TyList a)) => b) -> b
+withFloat ty f = case ty of
+  SBool    -> f
+  SInteger -> f
+  SStr     -> f
+  STime    -> f
+  SDecimal -> f
+  SKeySet  -> f
+  SAny     -> f
 
 reassembleFloated :: [Quantifier] -> Prop 'TyBool -> Prop 'TyBool
 reassembleFloated qs prop =
