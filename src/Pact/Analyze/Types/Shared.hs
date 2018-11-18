@@ -23,7 +23,7 @@ module Pact.Analyze.Types.Shared where
 
 import Data.Constraint.Extras
 import Data.Constraint (Dict(Dict))
-import           Control.Lens                 (At (at), Index, Iso, Iso',
+import           Control.Lens                 (At (at), Index, Iso,
                                                IxValue, Ixed (ix), Lens',
                                                Prism', both, from, iso, lens,
                                                makeLenses, makePrisms, over,
@@ -32,7 +32,6 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
 import           Data.Data                    (Data, Typeable)
-import qualified Data.Decimal                 as Decimal
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
 import           Data.Map.Strict              (Map)
@@ -48,7 +47,7 @@ import           Data.SBV                     (Boolean (bnot, false, true, (&&&)
                                                forSome, forSome_, fromBool,
                                                isConcrete, ite, kindOf, literal,
                                                oneIf, sFromIntegral, unliteral,
-                                               (%), (.<), (.==))
+                                               (.<), (.==))
 import           Data.SBV.Control             (SMTValue (..))
 import qualified Data.SBV.Internals           as SBVI
 import qualified Data.SBV.String              as SBV
@@ -66,6 +65,7 @@ import           Pact.Types.Util              (AsString, tShow)
 import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time, str)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
+import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 
 
@@ -134,26 +134,6 @@ mkConcreteInteger = SBVI.SBV
                   . Left
                   . SBVI.CW KUnbounded
                   . SBVI.CWInteger
-
-newtype PactIso a b = PactIso {unPactIso :: Iso' a b}
-
-decimalIso :: PactIso Decimal.Decimal Decimal
-decimalIso = PactIso $ iso mkDecimal unMkDecimal
-  where
-    unMkDecimal :: Decimal -> Decimal.Decimal
-    unMkDecimal (Decimal dec) = case Decimal.eitherFromRational (dec % 10 ^ decimalPrecision) of
-      Left err -> error err
-      Right d  -> d
-
-    mkDecimal :: Decimal.Decimal -> Decimal
-    mkDecimal (Decimal.Decimal places mantissa)
-      = lShiftD (decimalPrecision - fromIntegral places) (Decimal mantissa)
-
-fromPact :: PactIso a b -> a -> b
-fromPact = view . unPactIso
-
-toPact :: PactIso a b -> b -> a
-toPact = view . from . unPactIso
 
 newtype KeySetName
   = KeySetName Text
@@ -667,26 +647,6 @@ type family Concrete (a :: Ty) where
   Concrete 'TyAny      = Any
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
-
-type family ListElem (a :: Ty) where
-  ListElem ('TyList a) = a
-
-singCase
-  :: SingTy k a
-  -> (k :~: 'SimpleK -> b)
-  -> (k :~: 'ListK   -> b)
-  -> (k :~: 'ObjectK -> b)
-  -> b
-singCase sing kSimple kList kObject = case sing of
-  SInteger -> kSimple Refl
-  SBool    -> kSimple Refl
-  SStr     -> kSimple Refl
-  STime    -> kSimple Refl
-  SDecimal -> kSimple Refl
-  SKeySet  -> kSimple Refl
-  SAny     -> kSimple Refl
-  SList _  -> kList   Refl
-  SObject  -> kObject Refl
 
 liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
 liftC Dict b = b

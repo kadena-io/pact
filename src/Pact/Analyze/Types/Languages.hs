@@ -76,6 +76,7 @@ import           Pact.Analyze.Feature         hiding (Sym, Var, col, str, obj, d
 import           Pact.Analyze.Types.Model
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Shared
+import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 import           Pact.Analyze.Util
 
