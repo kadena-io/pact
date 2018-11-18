@@ -151,12 +151,16 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   -- string ops
   -- | The concatenation of two 'String' expressions
-  StrConcat :: t 'TyStr -> t 'TyStr -> Core t 'TyStr
+  StrConcat    :: t 'TyStr  -> t 'TyStr  -> Core t 'TyStr
   -- | The length of a 'String' expression
-  StrLength :: t 'TyStr                     -> Core t 'TyInteger
+  StrLength    :: t 'TyStr  ->              Core t 'TyInteger
+  -- | Conversion of a base-10 string to an integer
+  StrToInt     :: t 'TyStr  ->              Core t 'TyInteger
+  -- | Conversion of a base-1-16 string to an integer
+  StrToIntBase :: t 'TyInteger -> t 'TyStr  -> Core t 'TyInteger
 
   -- numeric ops
-  Numerical :: Numerical t a -> Core t a
+  Numerical    :: Numerical t a -> Core t a
 
   -- Time
   -- | Adds an 'Integer' expression to a 'Time' expression
@@ -358,14 +362,16 @@ instance
   , OfPactTypes Show tm
   ) => Show (Core tm a) where
   showsPrec p core = showParen (p > 10) $ case core of
-    Lit a          -> showString "Lit "        . showsPrec 11 a
-    Sym a          -> showString "Sym "        . showsPrec 11 a
-    Var a b        -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
-    StrConcat a b  -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
-    StrLength a    -> showString "StrLength "  . showsPrec 11 a
-    Numerical a    -> showString "Numerical "  . showsPrec 11 a
-    IntAddTime a b -> showString "IntAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
-    DecAddTime a b -> showString "DecAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
+    Lit a            -> showString "Lit "        . showsPrec 11 a
+    Sym a            -> showString "Sym "        . showsPrec 11 a
+    Var a b          -> showString "Var "        . showsPrec 11 a . showString " " . showsPrec 11 b
+    StrConcat a b    -> showString "StrConcat "  . showsPrec 11 a . showString " " . showsPrec 11 b
+    StrLength a      -> showString "StrLength "  . showsPrec 11 a
+    StrToInt a       -> showString "StrToInt "   . showsPrec 11 a
+    StrToIntBase a b -> showString "StrToIntBase " . showsPrec 11 a . showString " " . showsPrec 11 b
+    Numerical a      -> showString "Numerical "  . showsPrec 11 a
+    IntAddTime a b   -> showString "IntAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
+    DecAddTime a b   -> showString "DecAddTime " . showsPrec 11 a . showString " " . showsPrec 11 b
     IntegerComparison op a b ->
         showString "IntegerComparison "
       . showsPrec 11 op
@@ -555,6 +561,8 @@ instance
     Sym s                    -> tShow s
     StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
+    StrToInt s               -> parenList ["str-to-int", userShow s]
+    StrToIntBase b s         -> parenList ["str-to-int", userShow b, userShow s]
     Numerical tm             -> userShowPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]

@@ -25,9 +25,11 @@ module Pact.Native
     ,enforceOneDef
     ,pactVersionDef
     ,formatDef
+    ,strToIntDef
     ,hashDef
     ,ifDef
     ,readDecimalDef
+    ,baseStrToInt
     ) where
 
 import Control.Lens hiding (parts,Fold,contains)
@@ -160,6 +162,14 @@ formatDef =
                   (head parts)
                   (zip es (tail parts))
     format i as = argsError i as
+
+strToIntDef :: NativeDef
+strToIntDef = defRNative "str-to-int" strToInt
+  (funType tTyInteger [("str-val", tTyString)] <>
+   funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
+  "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
+  \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
+  \the base. `(str-to-int 16 \"abcdef123456\")` `(str-to-int \"123456\")`"
 
 hashDef :: NativeDef
 hashDef = defRNative "hash" hash' (funType tTyString [("value",a)])
@@ -322,12 +332,7 @@ langDefs =
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
 
-     ,defRNative "str-to-int" strToInt
-     (funType tTyInteger [("str-val", tTyString)] <>
-      funType tTyInteger [("base", tTyInteger), ("str-val", tTyString)])
-     "Compute the integer value of STR-VAL in base 10, or in BASE if specified. STR-VAL must be <= 128 \
-     \chars in length and BASE must be between 2 and 16. Each digit must be in the correct range for \
-     \the base. `(str-to-int 16 \"abcdef123456\")` `(str-to-int \"123456\")`"
+    ,strToIntDef
     ,hashDef
     ])
     where b = mkTyVar "b" []

@@ -95,11 +95,13 @@ data Feature
   -- String operators
   | FStringLength
   | FStringConcatenation
+  | FStringToInteger
   -- Temporal operators
   | FTemporalAddition
   -- Quantification forms
   | FUniversalQuantification
   | FExistentialQuantification
+  | FColumnOf
   -- Transactional operators
   | FTransactionAborts
   | FTransactionSucceeds
@@ -200,17 +202,18 @@ data Bindings
   | BindObject
   deriving (Eq, Ord, Show)
 
-int, dec, str, time, bool, obj, ks, tbl, col, list :: ConcreteType
-int  = "integer"
-dec  = "decimal"
-str  = "string"
-time = "time"
-bool = "bool"
-obj  = "object"
-ks   = "keyset"
-tbl  = "table"
-col  = "column"
-list = "list"
+int, dec, str, time, bool, obj, ks, tbl, col, type', list :: ConcreteType
+int   = "integer"
+dec   = "decimal"
+str   = "string"
+time  = "time"
+bool  = "bool"
+obj   = "object"
+ks    = "keyset"
+tbl   = "table"
+col   = "column"
+type' = "type"
+list  = "list"
 
 doc :: Feature -> Doc
 
@@ -833,6 +836,29 @@ doc FStringConcatenation = Doc
         ]
         (TyCon str)
   ]
+doc FStringToInteger = Doc
+  "str-to-int"
+  CString
+  InvAndProp
+  "String to integer conversion"
+  [ Usage
+      "(str-to-int s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyCon str)
+        ]
+        (TyCon int)
+  , Usage
+      "(str-to-int b s)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("b", TyCon int)
+        , ("s", TyCon str)
+        ]
+        (TyCon int)
+  ]
 
 -- Temporal features
 
@@ -890,6 +916,21 @@ doc FExistentialQuantification = Doc
         [ ("y", r)
         ]
         r
+  ]
+
+doc FColumnOf = Doc
+  "column-of"
+  CQuantification
+  PropOnly
+  "The *type* of `column`s for a given `table`. Commonly used in conjunction with quantification; e.g.: `(exists (col:(column-of accounts)) (column-written accounts col))`."
+  [ Usage
+      "(column-of t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("t", TyCon tbl)
+        ]
+        (TyCon type')
   ]
 
 -- Transactional features
@@ -1248,9 +1289,11 @@ PAT(STake, FTake)
 PAT(SObjectMerge, FObjectMerge)
 PAT(SStringLength, FStringLength)
 PAT(SStringConcatenation, FStringConcatenation)
+PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)
 PAT(SExistentialQuantification, FExistentialQuantification)
+PAT(SColumnOf, FColumnOf)
 PAT(STransactionAborts, FTransactionAborts)
 PAT(STransactionSucceeds, FTransactionSucceeds)
 PAT(SFunctionResult, FFunctionResult)

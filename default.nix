@@ -24,6 +24,21 @@ in
             pact = pkgs.haskell.lib.addBuildDepend super.pact pkgs.z3;
             haskeline = guardGhcjs super.haskeline;
 
+            # tests for extra were failing due to an import clash (`isWindows`)
+            extra = pkgs.haskell.lib.dontCheck super.extra;
+            # tests try to use ghc-pkg and cabal (https://github.com/sol/doctest/issues/213)
+            doctest = guardGhcjs (pkgs.haskell.lib.dontCheck (self.callHackage "doctest" "0.16.0" {}));
+            # these want to use doctest, which doesn't work on ghcjs
+            bytes = pkgs.haskell.lib.dontCheck super.bytes;
+            intervals = pkgs.haskell.lib.dontCheck super.intervals;
+            bound = pkgs.haskell.lib.dontCheck super.bound;
+            trifecta = pkgs.haskell.lib.dontCheck super.trifecta;
+            lens-aeson = pkgs.haskell.lib.dontCheck super.lens-aeson;
+            # test suite for this is failing on ghcjs:
+            hw-hspec-hedgehog = pkgs.haskell.lib.dontCheck super.hw-hspec-hedgehog;
+
+            algebraic-graphs = pkgs.haskell.lib.dontCheck super.algebraic-graphs;
+
             # Needed to get around a requirement on `hspec-discover`.
             megaparsec = pkgs.haskell.lib.dontCheck super.megaparsec;
 
@@ -72,7 +87,7 @@ in
     };
     shells = {
       ghc = ["pact"];
-      # ghcjs = ["pact"];
+      ghcjs = ["pact"];
     };
 
   })

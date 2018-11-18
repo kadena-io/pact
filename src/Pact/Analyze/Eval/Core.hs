@@ -10,10 +10,11 @@ module Pact.Analyze.Eval.Core where
 import           Control.Lens                (over, (^?!), ix)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
-import           Data.SBV                    (Boolean (bnot, (&&&), (|||)),
+import           Data.Monoid                 ((<>))
+import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, true, false)
+                                              SymWord, ite, true, false, (|||))
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
@@ -26,6 +27,7 @@ import           Pact.Analyze.Eval.Numerical
 import           Pact.Analyze.Types
 import           Pact.Analyze.Types.Eval
 import           Pact.Analyze.Util
+import qualified Pact.Native                 as Pact
 
 
 -- | Bound on the size of lists we check. This may be user-configurable in the
@@ -98,21 +100,6 @@ evalComparisonOp op xT yT = do
     Eq  -> x .== y
     Neq -> x ./= y
 
-evalLogicalOp'
-  :: ( Analyzer m
-     , a' ~ Concrete a
-     , Boolean (S a'), Show a', SymWord a')
-  => LogicalOp
-  -> [TermOf m a]
-  -> m (S a')
-evalLogicalOp' op terms = do
-  symBools <- traverse eval terms
-  case (op, symBools) of
-    (AndOp, [a, b]) -> pure $ a &&& b
-    (OrOp,  [a, b]) -> pure $ a ||| b
-    (NotOp, [a])    -> pure $ bnot a
-    _               -> throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
-
 evalEqNeq
   :: ( Analyzer m
      , a' ~ Concrete a
@@ -141,6 +128,20 @@ evalObjectEqNeq op xT yT = do
     Eq'  -> x .== y
     Neq' -> x ./= y
 
+evalLogicalOp
+  :: Analyzer m
+  => LogicalOp
+  -> [TermOf m 'TyBool]
+  -> m (S Bool)
+evalLogicalOp AndOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (eval b) (pure false)
+evalLogicalOp OrOp [a, b] = do
+  a' <- eval a
+  ite (_sSbv a') (pure true) (eval b)
+evalLogicalOp NotOp [a] = bnot <$> eval a
+evalLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
+
 evalCore
   :: ( Analyzer m
      , a' ~ Concrete a
@@ -151,6 +152,8 @@ evalCore (Sym s)                           = pure s
 evalCore (StrConcat p1 p2)                 = (.++) <$> eval p1 <*> eval p2
 evalCore (StrLength p)
   = over s2Sbv SBVS.length . coerceS @Str @String <$> eval p
+evalCore (StrToInt s)                      = evalStrToInt s
+evalCore (StrToIntBase b s)                = evalStrToIntBase b s
 evalCore (Numerical a)                     = evalNumerical a
 evalCore (IntAddTime time secs)            = evalIntAddTime time secs
 evalCore (DecAddTime time secs)            = evalDecAddTime time secs
@@ -249,8 +252,65 @@ evalCore (Var vid name) = do
     Just (AVal mProv sval) -> pure $ mkS mProv sval
     Just (AnObj obj)       -> throwErrorNoLoc $ AValUnexpectedlyObj obj
     Just OpaqueVal         -> throwErrorNoLoc OpaqueValEncountered
-
 evalCore x = error $ "no case for: " ++ show x
+
+evalStrToInt :: Analyzer m => TermOf m 'TyStr -> m (S Integer)
+evalStrToInt sT = do
+  s' <- _sSbv <$> eval sT
+  let s = coerceSBV @Str @String s'
+  markFailure $ SBVS.null s
+  markFailure $ SBVS.length s .> 128
+  let nat = SBVS.strToNat s
+  markFailure $ nat .< 0 -- will happen if empty or contains a non-digit
+  pure $ sansProv nat
+
+evalStrToIntBase
+  :: (Analyzer m) => TermOf m 'TyInteger -> TermOf m 'TyStr -> m (S Integer)
+evalStrToIntBase bT sT = do
+  b <- eval bT
+  s' <- eval sT
+  let s = coerceS @Str @String s'
+
+  markFailure $ SBVS.null $ _sSbv s
+  markFailure $ SBVS.length (_sSbv s) .> 128
+
+  case (unliteralS b, unliteralS s) of
+    -- Symbolic base and string: give up; too many possible solutions.
+    (Nothing, Nothing) ->
+      throwErrorNoLoc "Unable to convert string to integer for symbolic base and string"
+
+    -- Symbolic base and concrete string: pre-compute all 17 possible outcomes
+    (Nothing, Just conStr) ->
+      let conText = T.pack conStr
+      in foldr
+           (\conBase rest ->
+             iteS (sansProv $ b .== literalS conBase)
+               (precompute conBase conText)
+               rest)
+           symbolicFailure
+           [2..16]
+
+    -- Concrete base and symbolic string: only support base 10
+    (Just conBase, Nothing)
+      | conBase == 10 -> evalStrToInt $ inject' $ coerceS @String @Str s
+      | otherwise     -> throwErrorNoLoc $ FailureMessage $ T.pack $ "Unable to statically determine the string for conversion to integer from base " ++ show conBase
+
+    -- Concrete base and string: use pact native impl
+    (Just conBase, Just conStr) ->
+      case Pact.baseStrToInt conBase (T.pack conStr) of
+        Left err -> throwErrorNoLoc $
+          FailureMessage $ "Failed to convert string to integer: " <> err
+        Right res -> pure $ literalS res
+
+  where
+    symbolicFailure = do
+      markFailure true
+      pure (literalS 0)
+
+    precompute base conText =
+      case Pact.baseStrToInt base conText of
+        Left _err -> symbolicFailure
+        Right res -> pure (literalS res)
 
 evalObjAt
   :: (Analyzer m, SymWord a)

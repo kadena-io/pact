@@ -292,7 +292,18 @@ genTerm size = scale 2 $ Gen.choice [genCore size, genTermSpecific size]
 genTermSpecific
   :: (MonadGen m, MonadReader GenEnv m, MonadState GenState m, HasCallStack)
   => BoundedType -> m ETerm
-genTermSpecific size@BoundedInt{} = genTermSpecific' size
+genTermSpecific size@BoundedInt{} = Gen.choice
+  [ do
+      base      <- Gen.int    (Range.linear 2 16)
+      formatted <- Gen.string (Range.exponential 1 128) (genBaseChar base)
+      pure $ ESimple SInteger $ CoreTerm $ StrToIntBase
+        (Lit' (fromIntegral base :: Integer))
+        (Lit' (Str formatted))
+  , do
+      formatted <- Gen.string (Range.exponential 1 128) (genBaseChar 10)
+      pure $ ESimple SInteger $ CoreTerm $ StrToInt $ Lit' $ Str formatted
+  , genTermSpecific' size
+  ]
 genTermSpecific BoundedBool       = Gen.choice
   [
   -- TODO: temporarily disabled pending
@@ -380,6 +391,10 @@ genTermSpecific BoundedTime = scale 8 $ Gen.choice
        timeStr <- genTimeOfFormat standardTimeFormat
        pure $ ESimple STime $ ParseTime Nothing $ StrLit timeStr
   ]
+
+genBaseChar :: MonadGen m => Int -> m Char
+genBaseChar base = Gen.element $
+  take (2 * base) "00112233445566778899aAbBcCdDeEfF"
 
 genWriteType :: MonadGen m => m WriteType
 genWriteType = Gen.enumBounded

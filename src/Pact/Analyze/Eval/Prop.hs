@@ -13,18 +13,17 @@ import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
                                              (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Control.Monad.State.Strict (MonadState, StateT)
-import           Control.Monad.Trans.Class  (lift)
+import           Control.Monad.State.Strict (MonadState, StateT(..))
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
-                                             EqSymbolic ((.==)), SBV,
-                                             SymWord (exists_, forall_),
-                                             Symbolic)
+                                             EqSymbolic ((.==)),
+                                             Mergeable(symbolicMerge), SymWord, SBV)
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
 
+import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, forAll, exists)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Orphans       ()
@@ -39,25 +38,30 @@ import           Pact.Analyze.Util
 --
 newtype Query a
   = Query
-    { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Symbolic)) a }
+    { queryAction :: StateT SymbolicSuccess (ReaderT QueryEnv (ExceptT AnalyzeFailure Alloc)) a }
   deriving (Functor, Applicative, Monad, MonadReader QueryEnv,
-            MonadError AnalyzeFailure, MonadState SymbolicSuccess)
+            MonadError AnalyzeFailure, MonadState SymbolicSuccess, MonadAlloc)
+
+instance (Mergeable a) => Mergeable (Query a) where
+  -- We merge the result and state, performing any 'Alloc' actions that occur
+  -- in-order.
+  symbolicMerge force test left right = Query $ StateT $ \s0 -> do
+    (resL, sL) <- runStateT (queryAction left) s0
+    (resR, sR) <- runStateT (queryAction right) s0
+    pure ( symbolicMerge force test resL resR
+         , symbolicMerge force test sL   sR
+         )
 
 instance Analyzer Query where
   type TermOf Query = Prop
   eval           = evalProp
   evalO          = evalPropO
-  evalLogicalOp  = evalLogicalOp'
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
   markFailure b = id %= (&&& SymbolicSuccess (bnot b))
 
-liftSymbolic :: Symbolic a -> Query a
-liftSymbolic = Query . lift . lift . lift
-
--- TODO: this eliminator pattern is tired
 aval
   :: Analyzer m
   => (Maybe Provenance -> SBVI.SVal -> m a)
@@ -168,8 +172,8 @@ evalPropSpecific Result  = expectVal =<< view qeAnalyzeResult
 evalPropSpecific (Forall vid _name (EType (ty :: Types.SingTy k ty)) p)
   = singCase ty
   (\Refl -> withSymWord ty $ do
-    sbv <- liftSymbolic (forall_ :: Symbolic (SBV (Concrete ty)))
-    local (scope.at vid ?~ mkAVal' sbv) $ evalProp p)
+    var <- forAll :: Query (S (Concrete ty))
+    local (scope.at vid ?~ mkAVal var) $ evalProp p)
   (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
   (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
 evalPropSpecific (Forall _vid _name (EObjectTy _) _p) =
@@ -188,8 +192,8 @@ evalPropSpecific (Forall vid _name (QColumnOf tabName) prop) = do
 evalPropSpecific (Exists vid _name (EType (ty :: Types.SingTy k ty)) p)
   = singCase ty
   (\Refl -> withSymWord ty $ do
-    sbv <- liftSymbolic (exists_ :: Symbolic (SBV (Concrete ty)))
-    local (scope.at vid ?~ mkAVal' sbv) $ evalProp p)
+    var <- exists :: Query (S (Concrete ty))
+    local (scope.at vid ?~ mkAVal var) $ evalProp p)
   (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
   (\Refl -> throwErrorNoLoc "Only simple types can currently be quantified")
 evalPropSpecific (Exists _vid _name (EObjectTy _) _p) =

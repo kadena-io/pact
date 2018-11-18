@@ -449,7 +449,7 @@ instance (UserShow (t 'TyInteger), UserShow (t 'TyDecimal))
     IntUnaryArithOp op a   -> [userShow op, userShow a]
     DecIntArithOp op a b   -> [userShow op, userShow a, userShow b]
     IntDecArithOp op a b   -> [userShow op, userShow a, userShow b]
-    ModOp a b              -> ["mod", userShow a, userShow b]
+    ModOp a b              -> [SModulus, userShow a, userShow b]
     RoundingLikeOp1 op a   -> [userShow op, userShow a]
     RoundingLikeOp2 op a b -> [userShow op, userShow a, userShow b]
 

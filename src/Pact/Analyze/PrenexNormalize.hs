@@ -134,9 +134,14 @@ floatIntegerQuantifiers :: Prop 'TyInteger -> ([Quantifier], Prop 'TyInteger)
 floatIntegerQuantifiers p = case p of
   STANDARD_INSTANCES
 
-  CoreProp (StrLength pStr) -> PStrLength <$> float pStr
-  CoreProp (ListLength ty pLst) -> withFloat ty $
-    CoreProp . ListLength ty <$> float pLst
+  CoreProp (ListLength ty pLst)
+    -> withFloat ty $ CoreProp . ListLength ty <$> float pLst
+  CoreProp (StrLength pStr)
+    -> PStrLength <$> float pStr
+  CoreProp (StrToInt s)
+    -> CoreProp . StrToInt <$> float s
+  CoreProp (StrToIntBase b s)
+    -> CoreProp ... StrToIntBase <$> float b <*> float s
 
   CoreProp (Numerical (IntArithOp op a b))
     -> PNumerical ... IntArithOp      op <$> float a <*> float b

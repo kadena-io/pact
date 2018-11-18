@@ -45,17 +45,17 @@ field. The format of the JSON to be encoded is as follows.
 
 .. code:: javascript
 
-   {
-     "nonce": "[nonce value, needs to be unique for every call]",
-     "payload": {
-       "exec": {
-         "code": "[pact code to be executed]",
-         "data": {
-           /* arbitrary user data to accompany code */
-         }
-       }
-     }
-   }
+    {
+      "nonce": "[nonce value, needs to be unique for every call]",
+      "payload": {
+        "exec": {
+          "code": "[pact code to be executed]",
+          "data": {
+            /* arbitrary user data to accompany code */
+          }
+        }
+      }
+    }
 
 When assembling the message, this JSON should be “stringified” and
 provided for the ``cmd`` field. If you inspect the output of the
@@ -90,19 +90,19 @@ is as follows.
 
 .. code:: javascript
 
-   {
-     "nonce": "[nonce value, needs to be unique for every call]",
-     "payload": {
-       "cont": {
-         "txid": [transaction id where pact instantiated]
-         "rollback": [true or false],
-         "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
-         "data": {
-           /* arbitrary user data to accompany step code */
-         }
-       }
-     }
-   }
+    {
+      "nonce": "[nonce value, needs to be unique for every call]",
+      "payload": {
+        "cont": {
+          "txid": [transaction id where pact instantiated]
+          "rollback": [true or false],
+          "step": [step to be continued or rolled back, needs to be integer between 0 and (total number of steps - 1)]
+          "data": {
+            /* arbitrary user data to accompany step code */
+          }
+        }
+      }
+    }
 
 Endpoints
 ---------
@@ -122,35 +122,35 @@ Request JSON:
 
 .. code:: javascript
 
-   {
-     "cmds": [
-     {
-       "hash": "[blake2 hash in base16 of 'cmd' string value]",
-       "sigs": [
-         {
-           "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-         }
-       ]
-       "cmd": "[stringified transaction JSON]"
-     }
-     // ... more commands
-     ]
-   }
+    {
+      "cmds": [
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]",
+            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+          }
+        ]
+        "cmd": "[stringified transaction JSON]"
+      }
+      // ... more commands
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "requestKeys": [
-         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-       ]
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
 
 /private
 ~~~~~~~~
@@ -164,34 +164,34 @@ Request JSON:
 
 .. code:: javascript
 
-   {
-     "cmds": [
-     {
-       "hash": "[blake2 hash in base16 of 'cmd' string value]",
-       "sigs": [
-         {
-           "sig": "[crypto signature by secret key of 'hash' value]",
-           "pubKey": "[base16-format of public key of signing keypair]",
-           "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-         }
-       ]
-       "cmd": "[stringified transaction JSON]"
-     }
-     ]
-   }
+    {
+      "cmds": [
+      {
+        "hash": "[blake2 hash in base16 of 'cmd' string value]",
+        "sigs": [
+          {
+            "sig": "[crypto signature by secret key of 'hash' value]",
+            "pubKey": "[base16-format of public key of signing keypair]",
+            "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+          }
+        ]
+        "cmd": "[stringified transaction JSON]"
+      }
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "requestKeys": [
-         "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
-       ]
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "requestKeys": [
+          "[matches hash from each sent/processed command, use with /poll or /listen to get tx results]"
+        ]
+      }
+    }
 
 /poll
 ~~~~~
@@ -202,28 +202,28 @@ Request JSON:
 
 ::
 
-   {
-     "requestKeys": [
-       "[hash from desired commands to poll]"
-     ]
-   }
+    {
+      "requestKeys": [
+        "[hash from desired commands to poll]"
+      ]
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "[command hash]": {
-         "result": {
-           "status": "success|failure",
-           "data": /* data from Pact execution represented as JSON */
-         },
-         "txId": /* integer transaction id, for use in querying history etc */
-       }
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "[command hash]": {
+          "result": {
+            "status": "success|failure",
+            "data": /* data from Pact execution represented as JSON */
+          },
+          "txId": /* integer transaction id, for use in querying history etc */
+        }
+      }
+    }
 
 /listen
 ~~~~~~~
@@ -235,24 +235,24 @@ Request JSON:
 
 ::
 
-   {
-     "listen": "[command hash]"
-   }
+    {
+      "listen": "[command hash]"
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "result": {
-         "status": "success|failure",
-         "data": /* data from Pact execution represented as JSON */
-       },
-       "txId": /* integer transaction id, for use in querying history etc */
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "result": {
+          "status": "success|failure",
+          "data": /* data from Pact execution represented as JSON */
+        },
+        "txId": /* integer transaction id, for use in querying history etc */
+      }
+    }
 
 /local
 ~~~~~~
@@ -267,29 +267,29 @@ Request JSON:
 
 ::
 
-   {
-     "hash": "[blake2 hash in base16 of 'cmd' value]",
-     "sigs": [
-       {
-         "sig": "[crypto signature by secret key of 'hash' value]",
-         "pubKey": "[base16-format of public key of signing keypair]",
-         "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
-       }
-     ]
-     "cmd": "[stringified transaction JSON]"
-   }
+    {
+      "hash": "[blake2 hash in base16 of 'cmd' value]",
+      "sigs": [
+        {
+          "sig": "[crypto signature by secret key of 'hash' value]",
+          "pubKey": "[base16-format of public key of signing keypair]",
+          "scheme": "ED25519" /* optional field, defaults to ED25519, will support other curves as needed */
+        }
+      ]
+      "cmd": "[stringified transaction JSON]"
+    }
 
 Response JSON:
 
 ::
 
-   {
-     "status": "success|failure",
-     "response": {
-       "status": "success|failure",
-       "data": /* data from Pact execution represented as JSON */
-     }
-   }
+    {
+      "status": "success|failure",
+      "response": {
+        "status": "success|failure",
+        "data": /* data from Pact execution represented as JSON */
+      }
+    }
 
 API request formatter
 ---------------------
@@ -304,28 +304,28 @@ contents:
 
 ::
 
-   code: "(+ 1 2)"
-   data:
-     name: Stuart
-     language: Pact
-   keyPairs:
-     - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
-       secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
+    code: "(+ 1 2)"
+    data:
+      name: Stuart
+      language: Pact
+    keyPairs:
+      - public: ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d
+        secret: 8693e641ae2bbe9ea802c736f42027b03f86afe63cae315e7169c9c496c17332
 
 can be fed into ``pact`` to obtain a valid API request:
 
 ::
 
-   $ pact -a tests/apireq.yaml -l
-   {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
+    $ pact -a tests/apireq.yaml -l
+    {"hash":"444669038ea7811b90934f3d65574ef35c82d5c79cedd26d0931fddf837cccd2c9cf19392bf62c485f33535983f5e04c3e1a06b6b49e045c5160a637db8d7331","sigs":[{"sig":"9097304baed4c419002c6b9690972e1303ac86d14dc59919bf36c785d008f4ad7efa3352ac2b8a47d0b688fe2909dbf392dd162457c4837bc4dc92f2f61fd20d","scheme":"ED25519","pubKey":"ba54b224d1924dd98403f5c751abdd10de6cd81b0121800bf7bdbdcfaec7388d"}],"cmd":"{\"address\":null,\"payload\":{\"exec\":{\"data\":{\"name\":\"Stuart\",\"language\":\"Pact\"},\"code\":\"(+ 1 2)\"}},\"nonce\":\"\\\"2017-09-27 19:42:06.696533 UTC\\\"\"}"}
 
 Here’s an example of piping into curl, hitting a pact server running on
 port 8080:
 
 ::
 
-   $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
-   {"status":"success","response":{"status":"success","data":3}}
+    $ pact -a tests/apireq.yaml -l | curl -d @- http://localhost:8080/api/v1/local
+    {"status":"success","response":{"status":"success","data":3}}
 
 .. _request-yaml:
 
@@ -341,35 +341,35 @@ The execution Request yaml takes the following keys:
 
 .. code:: yaml
 
-     code: Transaction code
-     codeFile: Transaction code file
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+      code: Transaction code
+      codeFile: Transaction code file
+      data: JSON transaction data
+      dataFile: JSON transaction data file
+      keyPairs: list of key pairs for signing (use pact -g to generate): [
+        public: base 16 public key
+        secret: base 16 secret key
+        ]
+      nonce: optional request nonce, will use current time if not provided
+      from: entity name for addressing private messages
+      to: entity names for addressing private messages
 
 The continuation Request yaml takes the following keys:
 
 .. code:: yaml
 
-     type: "cont"
-     txId: Integer transaction id of pact
-     step: Integer next step of a pact
-     rollback: Boolean for rollingback a pact
-     data: JSON transaction data
-     dataFile: JSON transaction data file
-     keyPairs: list of key pairs for signing (use pact -g to generate): [
-       public: base 16 public key
-       secret: base 16 secret key
-       ]
-     nonce: optional request nonce, will use current time if not provided
-     from: entity name for addressing private messages
-     to: entity names for addressing private messages
+      type: "cont"
+      txId: Integer transaction id of pact
+      step: Integer next step of a pact
+      rollback: Boolean for rollingback a pact
+      data: JSON transaction data
+      dataFile: JSON transaction data file
+      keyPairs: list of key pairs for signing (use pact -g to generate): [
+        public: base 16 public key
+        secret: base 16 secret key
+        ]
+      nonce: optional request nonce, will use current time if not provided
+      from: entity name for addressing private messages
+      to: entity names for addressing private messages
 
 Concepts
 ========
@@ -407,10 +407,10 @@ contract as a unit.
 Keyset definition
 ^^^^^^^^^^^^^^^^^
 
-`Keysets <#keysets>`__ are customarily defined first, as they are used
-to specify admin authorization schemes for modules and tables.
-Definition creates the keysets in the runtime environment and stores
-their definition in the global keyset database.
+`Keysets <#confidential-keysets>`__ are customarily defined first, as
+they are used to specify admin authorization schemes for modules and
+tables. Definition creates the keysets in the runtime environment and
+stores their definition in the global keyset database.
 
 .. _moduledeclaration:
 
@@ -451,10 +451,10 @@ Module names must be globally unique.
 Table Creation
 ^^^^^^^^^^^^^^
 
-Tables are `created <#create-table>`__ at the same time as modules.
-While tables are *defined* in modules, they are *created* “after”
-modules, so that the module may be redefined later without having to
-necessarily re-create the table.
+Tables are `created <pact-functions.html#create-table>`__ at the same
+time as modules. While tables are *defined* in modules, they are
+*created* “after” modules, so that the module may be redefined later
+without having to necessarily re-create the table.
 
 The relationship of modules to tables is important, as described in
 `Table Guards <#module-table-guards>`__.
@@ -535,27 +535,28 @@ Queries and Performance
 
 As of Pact 2.3, Pact offers a powerful query mechanism for selecting
 multiple rows from a table. While visually similar to SQL, the
-`select <#select>`__ and `where <#where>`__ operations offer a
-*streaming interface* to a table, where the user provides filter
-functions, and then operates on the rowset as a list data structure
-using `sort <#sort>`__ and other functions.
+`select <pact-functions.html#select>`__ and
+`where <pact-functions.html#where>`__ operations offer a *streaming
+interface* to a table, where the user provides filter functions, and
+then operates on the rowset as a list data structure using
+`sort <pact-functions.html#sort>`__ and other functions.
 
 .. code:: lisp
 
 
-   ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
+    ;; the following selects Programmers with salaries >= 90000 and sorts by age descending
 
-   (reverse (sort ['age]
-     (select 'employees ['first-name,'last-name,'age]
-       (and? (where 'title (= "Programmer"))
-             (where 'salary (< 90000))))))
+    (reverse (sort ['age]
+      (select 'employees ['first-name,'last-name,'age]
+        (and? (where 'title (= "Programmer"))
+              (where 'salary (< 90000))))))
 
-   ;; the same query could be performed on a list with 'filter':
+    ;; the same query could be performed on a list with 'filter':
 
-   (reverse (sort ['age]
-     (filter (and? (where 'title (= "Programmer"))
-                   (where 'salary (< 90000)))
-             employees)))
+    (reverse (sort ['age]
+      (filter (and? (where 'title (= "Programmer"))
+                    (where 'salary (< 90000)))
+              employees)))
 
 In a transactional setting, Pact database interactions are optimized for
 single-row reads and writes, meaning such queries can be slow and
@@ -574,11 +575,11 @@ No Nulls
 ~~~~~~~~
 
 Pact has no concept of a NULL value in its database metaphor. The main
-function for computing on database results, `with-read <#with-read>`__,
-will error if any column value is not found. Authors must ensure that
-values are present for any transactional read. This is a safety feature
-to ensure *totality* and avoid needless, unsafe control-flow surrounding
-null values.
+function for computing on database results,
+`with-read <pact-functions.html#with-read>`__, will error if any column
+value is not found. Authors must ensure that values are present for any
+transactional read. This is a safety feature to ensure *totality* and
+avoid needless, unsafe control-flow surrounding null values.
 
 .. _dbversions:
 
@@ -629,13 +630,14 @@ the type when the expression is evaluated.
 Static Type Inference on Modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-With the `typecheck <#typecheck>`__ repl command, the Pact interpreter
-will analyze a module and attempt to infer types on every variable,
-function application or const definition. Using this in project repl
-scripts is helpful to aid the developer in adding “just enough types” to
-make the typecheck succeed. Successful typechecking is usually a matter
-of providing schemas for all tables, and argument types for ancillary
-functions that call ambiguous or overloaded native functions.
+With the `typecheck <pact-functions.html#typecheck>`__ repl command, the
+Pact interpreter will analyze a module and attempt to infer types on
+every variable, function application or const definition. Using this in
+project repl scripts is helpful to aid the developer in adding “just
+enough types” to make the typecheck succeed. Successful typechecking is
+usually a matter of providing schemas for all tables, and argument types
+for ancillary functions that call ambiguous or overloaded native
+functions.
 
 Formal Verification
 ~~~~~~~~~~~~~~~~~~~
@@ -651,7 +653,7 @@ formal proofs.
 Note that as of Pact 2.0 the formal verification function is still under
 development.
 
-.. _keysets:
+.. _confidential-keysets:
 
 Keysets and Authorization
 -------------------------
@@ -662,27 +664,28 @@ authorization directly into smart contract execution and administration.
 Keyset definition
 ~~~~~~~~~~~~~~~~~
 
-Keysets are `defined <#define-keyset>`__ by `reading <#read-keyset>`__
-definitions from the message payload. Keysets consist of a list of
-public keys and a *keyset predicate*.
+Keysets are `defined <pact-functions.html#define-keyset>`__ by
+`reading <pact-functions.html#read-keyset>`__ definitions from the
+message payload. Keysets consist of a list of public keys and a *keyset
+predicate*.
 
 Examples of valid keyset JSON productions:
 
 .. code:: javascript
 
-   /* examples of valid keysets */
-   {
-     "fully-specified-with-native-pred":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
+    /* examples of valid keysets */
+    {
+      "fully-specified-with-native-pred":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "keys-2" },
 
-     "fully-specified-with-qual-custom":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
+      "fully-specified-with-qual-custom":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"], "pred": "my-module.custom-pred" },
 
-     "keysonly":
-       { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
+      "keysonly":
+        { "keys": ["abc6bab9b88e08d","fe04ddd404feac2"] }, /* defaults to "keys-all" pred */
 
-     "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
-   }
+      "keylist": ["abc6bab9b88e08d","fe04ddd404feac2"] /* makes a "keys-all" pred keyset */
+    }
 
 Keyset Predicates
 ~~~~~~~~~~~~~~~~~
@@ -698,12 +701,14 @@ Support for multiple signatures is the responsibility of the blockchain
 layer, and is a powerful feature for Bitcoin-style “multisig” contracts
 (i.e. requiring at least two signatures to release funds).
 
-Pact comes with built-in keyset predicates: `keys-all <#keys-all>`__,
-`keys-any <#keys-any>`__, `keys-2 <#keys-2>`__. Module authors are free
-to define additional predicates.
+Pact comes with built-in keyset predicates:
+`keys-all <pact-functions.html#keys-all>`__,
+`keys-any <pact-functions.html#keys-any>`__,
+`keys-2 <pact-functions.html#keys-2>`__. Module authors are free to
+define additional predicates.
 
-If a keyset predicate is not specified, `keys-all <#keys-all>`__ is used
-by default.
+If a keyset predicate is not specified,
+`keys-all <pact-functions.html#keys-all>`__ is used by default.
 
 .. _keyrotation:
 
@@ -719,14 +724,14 @@ be easily `redefined <#define-keyset>`__.
 Module Table Guards
 ~~~~~~~~~~~~~~~~~~~
 
-When `creating <#create-table>`__ a table, a module name must also be
-specified. By this mechanism, tables are “guarded” or “encapsulated” by
-the module, such that direct access to the table via `data-access
-functions <#Database>`__ is authorized only by the module’s admin
-keyset. However, *within module functions*, table access is
-unconstrained. This gives contract authors great flexibility in
-designing data access, and is intended to enshrine the module as the
-main “user” data access API.
+When `creating <pact-functions.html#create-table>`__ a table, a module
+name must also be specified. By this mechanism, tables are “guarded” or
+“encapsulated” by the module, such that direct access to the table via
+`data-access functions <pact-functions.html#database>`__ is authorized
+only by the module’s admin keyset. However, *within module functions*,
+table access is unconstrained. This gives contract authors great
+flexibility in designing data access, and is intended to enshrine the
+module as the main “user” data access API.
 
 .. _rowlevelkeysets:
 
@@ -739,19 +744,19 @@ be achieved:
 
 .. code:: lisp
 
-   (defun create-account (id)
-     (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
+    (defun create-account (id)
+      (insert accounts id { "balance": 0.0, "keyset": (read-keyset "owner-keyset") }))
 
-   (defun read-balance (id)
-     (with-read accounts id { "balance":= bal, "keyset":= ks }
-       (enforce-keyset ks)
-       (format "Your balance is {}" [bal])))
+    (defun read-balance (id)
+      (with-read accounts id { "balance":= bal, "keyset":= ks }
+        (enforce-keyset ks)
+        (format "Your balance is {}" [bal])))
 
 In the example, ``create-account`` reads a keyset definition from the
-message payload using `read-keyset <#read-keyset>`__ to store as
-“keyset” in the table. ``read-balance`` only allows that owner’s keyset
-to read the balance, by first enforcing the keyset using
-`enforce-keyset <#enforce-keyset>`__.
+message payload using `read-keyset <pact-functions.html#read-keyset>`__
+to store as “keyset” in the table. ``read-balance`` only allows that
+owner’s keyset to read the balance, by first enforcing the keyset using
+`enforce-keyset <pact-functions.html#enforce-keyset>`__.
 
 .. _computation:
 
@@ -768,9 +773,9 @@ Turing-Incomplete
 Pact is turing-incomplete, in that there is no recursion (recursion is
 detected before execution and results in an error) and no ability to
 loop indefinitely. Pact does support operation on list structures via
-`map <#map>`__, `fold <#fold>`__ and `filter <#filter>`__, but since
-there is no ability to define infinite lists, these are necessarily
-bounded.
+`map <pact-functions.html#map>`__, `fold <pact-functions.html#fold>`__
+and `filter <pact-functions.html#filter>`__, but since there is no
+ability to define infinite lists, these are necessarily bounded.
 
 Turing-incompleteness allows Pact module loading to resolve all
 references in advance, meaning that instead of addressing functions in a
@@ -787,9 +792,11 @@ Pact allows variable declarations in `let expressions <#let>`__ and
 `bindings <#bindings>`__. Variables are immutable: they cannot be
 re-assigned, or modified in-place.
 
-A common variable declaration occurs in the `with-read <#with-read>`__
-function, assigning variables to column values by name. The
-`bind <#bind>`__ function offers this same functionality for objects.
+A common variable declaration occurs in the
+`with-read <pact-functions.html#with-read>`__ function, assigning
+variables to column values by name. The
+`bind <pact-functions.html#bind>`__ function offers this same
+functionality for objects.
 
 Module-global constant values can be declared with
 `defconst <#defconst>`__.
@@ -809,7 +816,7 @@ Pact’s supported types are:
 -  `Integers <#integers>`__
 -  `Decimals <#decimals>`__
 -  `Booleans <#booleans>`__
--  `Key sets <#keysets>`__
+-  `Key sets <#confidential-keysets>`__
 -  `Lists <#lists>`__
 -  `Objects <#objects>`__
 -  `Function <#defun>`__ and `pact <#defpact>`__ definitions
@@ -852,17 +859,17 @@ A transaction can encode values directly into the transactional code:
 
 ::
 
-   (accounts.transfer "Acct1" "Acct2" 100.00)
+    (accounts.transfer "Acct1" "Acct2" 100.00)
 
 or it can read values from the message JSON payload:
 
 ::
 
-   (defun transfer-msg ()
-     (transfer (read-msg "from") (read-msg "to")
-               (read-decimal "amount")))
-   ...
-   (accounts.transfer-msg)
+    (defun transfer-msg ()
+      (transfer (read-msg "from") (read-msg "to")
+                (read-decimal "amount")))
+    ...
+    (accounts.transfer-msg)
 
 The latter will execute slightly faster, as there is less code to
 interpret at transaction time.
@@ -882,8 +889,8 @@ so this is a judgement call.
 Control Flow
 ~~~~~~~~~~~~
 
-Pact supports conditionals via `if <#if>`__, bounded looping, and of
-course function application.
+Pact supports conditionals via `if <pact-functions.html#if>`__, bounded
+looping, and of course function application.
 
 .. _evilif:
 
@@ -905,25 +912,27 @@ Use enforce
 ^^^^^^^^^^^
 
 “If” should never be used to enforce business logic invariants: instead,
-`enforce <#enforce>`__ is the right choice, which will fail the
-transaction.
+`enforce <pact-functions.html#enforce>`__ is the right choice, which
+will fail the transaction.
 
 Indeed, failure is the only *non-local exit* allowed by Pact. This
 reflects Pact’s emphasis on *totality*.
 
-Note that `enforce-one <#enforce-one>`__ (added in Pact 2.3) allows for
-testing a list of enforcements such that if any pass, the whole
-expression passes. This is the sole example in Pact of “exception
-catching” in that a failed enforcement simply results in the next test
-being executed, short-circuiting on success.
+Note that `enforce-one <pact-functions.html#enforce-one>`__ (added in
+Pact 2.3) allows for testing a list of enforcements such that if any
+pass, the whole expression passes. This is the sole example in Pact of
+“exception catching” in that a failed enforcement simply results in the
+next test being executed, short-circuiting on success.
 
 Use built-in keysets
 ^^^^^^^^^^^^^^^^^^^^
 
-The built-in keyset functions `keys-all <#keys-all>`__,
-`keys-any <#keys-any>`__, `keys-2 <#keys-2>`__ are hardcoded in the
-interpreter to execute quickly. Custom keysets require runtime
-resolution which is slower.
+The built-in keyset functions
+`keys-all <pact-functions.html#keys-all>`__,
+`keys-any <pact-functions.html#keys-any>`__,
+`keys-2 <pact-functions.html#keys-2>`__ are hardcoded in the interpreter
+to execute quickly. Custom keysets require runtime resolution which is
+slower.
 
 .. _fp:
 
@@ -931,18 +940,19 @@ Functional Concepts
 ~~~~~~~~~~~~~~~~~~~
 
 Pact includes the functional-programming “greatest hits”:
-`map <#map>`__, `fold <#fold>`__ and `filter <#filter>`__. These all
-employ `partial application <#partial-application>`__, where the list
-item is appended onto the application arguments in order to serially
-execute the function.
+`map <pact-functions.html#map>`__, `fold <pact-functions.html#fold>`__
+and `filter <pact-functions.html#filter>`__. These all employ `partial
+application <#partial-application>`__, where the list item is appended
+onto the application arguments in order to serially execute the
+function.
 
 .. code:: lisp
 
-   (map (+ 2) [1 2 3])
-   (fold (+) "" ["Concatenate" " " "me"])
+    (map (+ 2) [1 2 3])
+    (fold (+) "" ["Concatenate" " " "me"])
 
-Pact also has `compose <#compose>`__, which allows “chaining”
-applications in a functional style.
+Pact also has `compose <pact-functions.html#compose>`__, which allows
+“chaining” applications in a functional style.
 
 .. _pure:
 
@@ -971,10 +981,10 @@ Message Data
 ~~~~~~~~~~~~
 
 Pact expects code to arrive in a message with a JSON payload and
-signatures. Message data is read using `read-msg <#read-msg>`__ and
-related functions. While signatures are not directly readable or
-writable, they are evaluated as part of `keyset
-predicate <#keysetpredicates>`__ enforcement.
+signatures. Message data is read using
+`read-msg <pact-functions.html#read-msg>`__ and related functions. While
+signatures are not directly readable or writable, they are evaluated as
+part of `keyset predicate <#keysetpredicates>`__ enforcement.
 
 .. _json:
 
@@ -984,8 +994,9 @@ JSON support
 Values returned from Pact transactions are expected to be directly
 represented as JSON values.
 
-When reading values from a message via `read-msg <#read-msg>`__, Pact
-coerces JSON types as follows:
+When reading values from a message via
+`read-msg <pact-functions.html#read-msg>`__, Pact coerces JSON types as
+follows:
 
 -  String -> String
 -  Number -> Integer (rounded)
@@ -995,7 +1006,7 @@ coerces JSON types as follows:
 -  Null -> JSON Value
 
 Decimal values are represented as Strings and read using
-`read-decimal <#read-decimal>`__.
+`read-decimal <pact-functions.html#read-decimal>`__.
 
 Confidentiality
 ---------------
@@ -1055,8 +1066,9 @@ A pact is defined with arguments, similarly to function definition.
 However, arguments values are only evaluated in the execution of the
 initial step, after which those values are available unchanged to
 subsequent steps. To share new values with subsequent steps, a step can
-`yield <#yield>`__ values which the subsequent step can recover using
-the special `resume <#resume>`__ binding form.
+`yield <pact-functions.html#yield>`__ values which the subsequent step
+can recover using the special `resume <pact-functions.html#resume>`__
+binding form.
 
 Pacts are designed to run in one of two different contexts, private and
 public. A private pact is indicated by each step identifying a single
@@ -1109,29 +1121,33 @@ rolled back.
 Yield and Resume
 ~~~~~~~~~~~~~~~~
 
-A step can yield values to the following step using `yield <#yield>`__
-and `resume <#resume>`__. In public, this is an unforgeable value, as it
-is maintained within the blockchain pact scope. In private, this is
-simply a value sent with a RESUME message from the executed entity.
+A step can yield values to the following step using
+`yield <pact-functions.html#yield>`__ and
+`resume <pact-functions.html#resume>`__. In public, this is an
+unforgeable value, as it is maintained within the blockchain pact scope.
+In private, this is simply a value sent with a RESUME message from the
+executed entity.
 
 Pact execution scope and ``pact-id``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Every time a pact is initiated, it is given a unique ID which is
-retrievable using the `pact-id <#pact-id>`__ function, which will return
-the ID of the currently executing pact, or fail if not running within a
-pact scope. This mechanism can thus be used to guard access to
-resources, analogous to the use of keysets and signatures. One typical
-use of this is to create escrow accounts that can only be used within
-the context of a given pact, eliminating the need for a trusted third
-party for many use-cases.
+retrievable using the `pact-id <pact-functions.html#pact-id>`__
+function, which will return the ID of the currently executing pact, or
+fail if not running within a pact scope. This mechanism can thus be used
+to guard access to resources, analogous to the use of keysets and
+signatures. One typical use of this is to create escrow accounts that
+can only be used within the context of a given pact, eliminating the
+need for a trusted third party for many use-cases.
 
 Testing pacts
 ~~~~~~~~~~~~~
 
 Pacts can be tested in repl scripts using the
-`env-entity <#env-entity>`__, `env-step <#env-step>`__ and
-`pact-state <#pact-state>`__ repl functions to simulate pact executions.
+`env-entity <pact-functions.html#env-entity>`__,
+`env-step <pact-functions.html#env-step>`__ and
+`pact-state <pact-functions.html#pact-state>`__ repl functions to
+simulate pact executions.
 
 It is also possible to simulate pact execution in the pact server API by
 formatting `continuation Request <#request-yaml>`__ yaml files into API
@@ -1149,12 +1165,12 @@ Module Hashes
 Once loaded, a Pact module is associated with a hash computed from the
 module’s source code text. This module hash uniquely identifies the
 version of the module. Module hashes can be examined with
-`describe-module <#describe-module>`__:
+`describe-module <pact-functions.html#describe-module>`__:
 
 ::
 
-   pact> (at "hash" (describe-module 'accounts))
-   "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
+    pact> (at "hash" (describe-module 'accounts))
+    "9d6f4d3acb2fd528206330d09a8926da6abdd9ac5e8c4b24cc35955203f234688c25f9545ead56f783c5269fe4be6a62aa89162caf811142572ac172dc2adb91"
 
 Pinning module versions with ``use``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1191,11 +1207,11 @@ declaration:
 
 .. code:: lisp
 
-   (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-     ...
-   )
+    (module provider 'keyset
+      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+      ...
+    )
 
 Dependencies with these hashes will continue to function after the
 module is loaded. Unrecognized hashes will cause the transaction to
@@ -1229,18 +1245,18 @@ String literals are created with double-ticks:
 
 ::
 
-   pact> "a string"
-   "a string"
+    pact> "a string"
+    "a string"
 
 Strings also support multiline by putting a backslash before and after
 whitespace (not interactively).
 
 .. code:: lisp
 
-   (defun id (a)
-     "Identity function. \
-     \Argument is returned."
-     a)
+    (defun id (a)
+      "Identity function. \
+      \Argument is returned."
+      a)
 
 Symbols
 ~~~~~~~
@@ -1254,8 +1270,8 @@ whitespace nor multiline syntax.
 
 ::
 
-   pact> 'a-symbol
-   "a-symbol"
+    pact> 'a-symbol
+    "a-symbol"
 
 Integers
 ~~~~~~~~
@@ -1264,10 +1280,10 @@ Integer literals are unbounded, and can be positive or negative.
 
 ::
 
-   pact> 12345
-   12345
-   pact> -922337203685477580712387461234
-   -922337203685477580712387461234
+    pact> 12345
+    12345
+    pact> -922337203685477580712387461234
+    -922337203685477580712387461234
 
 Decimals
 ~~~~~~~~
@@ -1276,10 +1292,10 @@ Decimal literals have potentially unlimited precision.
 
 ::
 
-   pact> 100.25
-   100.25
-   pact> -356452.234518728287461023856582382983746
-   -356452.234518728287461023856582382983746
+    pact> 100.25
+    100.25
+    pact> -356452.234518728287461023856582382983746
+    -356452.234518728287461023856582382983746
 
 Booleans
 ~~~~~~~~
@@ -1288,8 +1304,8 @@ Booleans are represented by ``true`` and ``false`` literals.
 
 ::
 
-   pact> (and true false)
-   false
+    pact> (and true false)
+    false
 
 Lists
 ~~~~~
@@ -1299,14 +1315,14 @@ commas. Uniform literal lists are given a type in parsing.
 
 ::
 
-   pact> [1 2 3]
-   [1 2 3]
-   pact> [1,2,3]
-   [1 2 3]
-   pact> (typeof [1 2 3])
-   "[integer]"
-   pact> (typeof [1 2 true])
-   "list"
+    pact> [1 2 3]
+    [1 2 3]
+    pact> [1,2,3]
+    [1 2 3]
+    pact> (typeof [1 2 3])
+    "[integer]"
+    pact> (typeof [1 2 true])
+    "list"
 
 Objects
 ~~~~~~~
@@ -1317,24 +1333,25 @@ keys must be strings.
 
 ::
 
-   pact> { "foo": (+ 1 2), "bar": "baz" }
-   (TObject [("foo",3),("bar","baz")])
+    pact> { "foo": (+ 1 2), "bar": "baz" }
+    (TObject [("foo",3),("bar","baz")])
 
 Bindings
 ~~~~~~~~
 
 Bindings are dictionary-like forms, also created with curly braces, to
 bind database results to variables using the ``:=`` operator. They are
-used in `with-read <#with-read>`__,
-`with-default-read <#with-default-read>`__, `bind <#bind>`__ and
-`resume <#resume>`__ to assign variables to named columns in a row, or
-values in an object.
+used in `with-read <pact-functions.html#with-read>`__,
+`with-default-read <pact-functions.html#with-default-read>`__,
+`bind <pact-functions.html#bind>`__ and
+`resume <pact-functions.html#resume>`__ to assign variables to named
+columns in a row, or values in an object.
 
 .. code:: lisp
 
-   (defun check-balance (id)
-     (with-read accounts id { "balance" := bal }
-       (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
+    (defun check-balance (id)
+      (with-read accounts id { "balance" := bal }
+        (enforce (> bal 0) (format "Account in overdraft: {}" [bal]))))
 
 Type specifiers
 ---------------
@@ -1364,8 +1381,8 @@ enclosed in curly braces.
 
 .. code:: lisp
 
-   table:{accounts}
-   object:{person}
+    table:{accounts}
+    object:{person}
 
 What can be typed
 ~~~~~~~~~~~~~~~~~
@@ -1375,14 +1392,14 @@ Function arguments and return types
 
 .. code:: lisp
 
-   (defun prefix:string (pfx:string str:string) (+ pfx str))
+    (defun prefix:string (pfx:string str:string) (+ pfx str))
 
 Let variables
 ^^^^^^^^^^^^^
 
 .. code:: lisp
 
-   (let ((a:integer 1) (b:integer 2)) (+ a b))
+    (let ((a:integer 1) (b:integer 2)) (+ a b))
 
 Tables and objects
 ^^^^^^^^^^^^^^^^^^
@@ -1391,16 +1408,16 @@ Tables and objects can only take a schema type literal.
 
 .. code:: lisp
 
-   (deftable accounts:{account})
+    (deftable accounts:{account})
 
-   (defun get-order:{order} (id) (read orders id))
+    (defun get-order:{order} (id) (read orders id))
 
 Consts
 ^^^^^^
 
 .. code:: lisp
 
-   (defconst PENNY:decimal 0.1)
+    (defconst PENNY:decimal 0.1)
 
 Special forms
 -------------
@@ -1413,9 +1430,9 @@ strings, in the following form:
 
 .. code:: lisp
 
-   (defun average (a b)
-     "take the average of a and b"
-     (/ (+ a b) 2))
+    (defun average (a b)
+      "take the average of a and b"
+      (/ (+ a b) 2))
 
 Alternately, users can specify metadata using a special ``@``-prefix
 syntax. Supported metadata fields are ``@doc`` to provide a
@@ -1424,10 +1441,10 @@ verify the correctness of the implementation:
 
 .. code:: lisp
 
-   (defun average (a b)
-     @doc   "take the average of a and b"
-     @model (property (= (+ a b) (* 2 result)))
-     (/ (+ a b) 2))
+    (defun average (a b)
+      @doc   "take the average of a and b"
+      @model (property (= (+ a b) (* 2 result)))
+      (/ (+ a b) 2))
 
 Indeed, a bare docstring like ``"foo"`` is actually just a short form
 for ``@doc "foo"``.
@@ -1440,7 +1457,7 @@ bless
 
 ::
 
-   (bless HASH)
+    (bless HASH)
 
 Within a module declaration, bless a previous version of that module as
 identified by HASH. See `Dependency
@@ -1449,52 +1466,52 @@ mechanism.
 
 .. code:: lisp
 
-   (module provider 'keyset
-     (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
-     (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
-     ...
-   )
+    (module provider 'keyset
+      (bless "e4cfa39a3d37be31c59609e807970799caa68a19bfaa15135f165085e01d41a65ba1e1b146aeb6bd0092b49eac214c103ccfa3a365954bbbe52f74a2b3620c94")
+      (bless "ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d")
+      ...
+    )
 
 defun
 ~~~~~
 
 .. code:: lisp
 
-   (defun NAME ARGLIST [DOC-OR-META] BODY...)
+    (defun NAME ARGLIST [DOC-OR-META] BODY...)
 
 Define NAME as a function, accepting ARGLIST arguments, with optional
 DOC-OR-META. Arguments are in scope for BODY, one or more expressions.
 
 .. code:: lisp
 
-   (defun add3 (a b c) (+ a (+ b c)))
+    (defun add3 (a b c) (+ a (+ b c)))
 
-   (defun scale3 (a b c s)
-     "multiply sum of A B C times s"
-     (* s (add3 a b c)))
+    (defun scale3 (a b c s)
+      "multiply sum of A B C times s"
+      (* s (add3 a b c)))
 
 defconst
 ~~~~~~~~
 
 .. code:: lisp
 
-   (defconst NAME VALUE [DOC-OR-META])
+    (defconst NAME VALUE [DOC-OR-META])
 
 Define NAME as VALUE, with option DOC-OR-META. Value is evaluated upon
 module load and “memoized”.
 
 .. code:: lisp
 
-   (defconst COLOR_RED="#FF0000" "Red in hex")
-   (defconst COLOR_GRN="#00FF00" "Green in hex")
-   (defconst PI 3.14159265 "Pi to 8 decimals")
+    (defconst COLOR_RED="#FF0000" "Red in hex")
+    (defconst COLOR_GRN="#00FF00" "Green in hex")
+    (defconst PI 3.14159265 "Pi to 8 decimals")
 
 defpact
 ~~~~~~~
 
 ::
 
-   (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
+    (defpact NAME ARGLIST [DOC-OR-META] STEPS...)
 
 Define NAME as a *pact*, a computation comprised of multiple steps that
 occur in distinct transactions. Identical to `defun <#defun>`__ except
@@ -1505,49 +1522,50 @@ result in a reverse-sequence “rollback cascade”.
 
 .. code:: lisp
 
-   (defpact payment (payer payer-entity payee
-                     payee-entity amount)
-     (step-with-rollback payer-entity
-       (debit payer amount)
-       (credit payer amount))
-     (step payee-entity
-       (credit payee amount)))
+    (defpact payment (payer payer-entity payee
+                      payee-entity amount)
+      (step-with-rollback payer-entity
+        (debit payer amount)
+        (credit payer amount))
+      (step payee-entity
+        (credit payee amount)))
 
 defschema
 ~~~~~~~~~
 
 ::
 
-   (defschema NAME [DOC-OR-META] FIELDS...)
+    (defschema NAME [DOC-OR-META] FIELDS...)
 
 Define NAME as a *schema*, which specifies a list of FIELDS. Each field
 is in the form ``FIELDNAME[:FIELDTYPE]``.
 
 .. code:: lisp
 
-   (defschema accounts
-     "Schema for accounts table".
-     balance:decimal
-     amount:decimal
-     ccy:string
-     data)
+    (defschema accounts
+      "Schema for accounts table".
+      balance:decimal
+      amount:decimal
+      ccy:string
+      data)
 
 deftable
 ~~~~~~~~
 
 ::
 
-   (deftable NAME[:SCHEMA] [DOC-OR-META])
+    (deftable NAME[:SCHEMA] [DOC-OR-META])
 
 Define NAME as a *table*, used in database functions. Note the table
-must still be created with `create-table <#create-table>`__.
+must still be created with
+`create-table <pact-functions.html#create-table>`__.
 
 let
 ~~~
 
 ::
 
-   (let (BINDPAIR [BINDPAIR [...]]) BODY)
+    (let (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables within
 BINDPAIRs cannot refer to previously-declared variables in the same let
@@ -1555,10 +1573,10 @@ binding; for this use `let\* <#letstar>`__.
 
 .. code:: lisp
 
-   (let ((x 2)
-         (y 5))
-     (* x y))
-   > 10
+    (let ((x 2)
+          (y 5))
+      (* x y))
+    > 10
 
 .. _letstar:
 
@@ -1567,7 +1585,7 @@ let\*
 
 ::
 
-   (let* (BINDPAIR [BINDPAIR [...]]) BODY)
+    (let* (BINDPAIR [BINDPAIR [...]]) BODY)
 
 Bind variables in BINDPAIRs to be in scope over BODY. Variables can
 reference previously declared BINDPAIRS in the same let. ``let*`` is
@@ -1576,18 +1594,18 @@ expanded at compile-time to nested ``let`` calls for each BINDPAIR; thus
 
 .. code:: lisp
 
-   (let* ((x 2)
-          (y (* x 10)))
-     (+ x y))
-   > 22
+    (let* ((x 2)
+           (y (* x 10)))
+      (+ x y))
+    > 22
 
 step
 ~~~~
 
 ::
 
-   (step EXPR)
-   (step ENTITY EXPR)
+    (step EXPR)
+    (step ENTITY EXPR)
 
 Define a step within a `defpact <#defpact>`__, such that any prior steps
 will be executed in prior transactions, and later steps in later
@@ -1600,8 +1618,8 @@ step-with-rollback
 
 ::
 
-   (step-with-rollback EXPR ROLLBACK-EXPR)
-   (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+    (step-with-rollback EXPR ROLLBACK-EXPR)
+    (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
 
 Define a step within a `defpact <#defpact>`__ similarly to
 `step <#step>`__ but specifying ROLLBACK-EXPR. With ENTITY,
@@ -1616,27 +1634,28 @@ use
 
 ::
 
-   (use MODULE)
-   (use MODULE HASH)
+    (use MODULE)
+    (use MODULE HASH)
 
 Import an existing MODULE into a namespace. Can only be issued at the
 top-level, or within a module declaration. MODULE can be a string,
 symbol or bare atom. With HASH, validate that the imported module’s hash
-matches HASH, failing if not. Use `describe-module <#describe-module>`__
-to query for the hash of a loaded module on the chain.
+matches HASH, failing if not. Use
+`describe-module <pact-functions.html#describe-module>`__ to query for
+the hash of a loaded module on the chain.
 
 .. code:: lisp
 
-   (use accounts)
-   (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
-   "Write succeeded"
+    (use accounts)
+    (transfer "123" "456" 5 (time "2016-07-22T11:26:35Z"))
+    "Write succeeded"
 
 module
 ~~~~~~
 
 ::
 
-   (module NAME KEYSET [DOC-OR-META] DEFS...)
+    (module NAME KEYSET [DOC-OR-META] DEFS...)
 
 Define and install module NAME, guarded by keyset KEYSET, with optional
 DOC-OR-META. DEFS must be `defun <#defun>`__ or `defpact <#defpact>`__
@@ -1644,21 +1663,21 @@ expressions only.
 
 .. code:: lisp
 
-   (module accounts 'accounts-admin
-     "Module for interacting with accounts"
+    (module accounts 'accounts-admin
+      "Module for interacting with accounts"
 
-     (defun create-account (id bal)
-      "Create account ID with initial balance BAL"
-      (insert accounts id { "balance": bal }))
+      (defun create-account (id bal)
+       "Create account ID with initial balance BAL"
+       (insert accounts id { "balance": bal }))
 
-     (defun transfer (from to amount)
-      "Transfer AMOUNT from FROM to TO"
-      (with-read accounts from { "balance": fbal }
-       (enforce (<= amount fbal) "Insufficient funds")
-        (with-read accounts to { "balance": tbal }
-         (update accounts from { "balance": (- fbal amount) })
-         (update accounts to { "balance": (+ tbal amount) }))))
-   )
+      (defun transfer (from to amount)
+       "Transfer AMOUNT from FROM to TO"
+       (with-read accounts from { "balance": fbal }
+        (enforce (<= amount fbal) "Insufficient funds")
+         (with-read accounts to { "balance": tbal }
+          (update accounts from { "balance": (- fbal amount) })
+          (update accounts to { "balance": (+ tbal amount) }))))
+    )
 
 .. _expression:
 
@@ -1708,17 +1727,17 @@ resolve to definitions found in other modules.
 
 ::
 
-   pact> accounts.transfer
-   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-   SRC to DEST\")"
-   pact> transfer
-   Eval failure:
-   transfer<EOF>: Cannot resolve transfer
-   pact> (use 'accounts)
-   "Using \"accounts\""
-   pact> transfer
-   "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
-   SRC to DEST\")"
+    pact> accounts.transfer
+    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+    SRC to DEST\")"
+    pact> transfer
+    Eval failure:
+    transfer<EOF>: Cannot resolve transfer
+    pact> (use 'accounts)
+    "Using \"accounts\""
+    pact> transfer
+    "(defun accounts.transfer (src,dest,amount,date) \"transfer AMOUNT from
+    SRC to DEST\")"
 
 References are preferred over ``use`` for transactions, as references
 resolve faster. However, when defining a module, ``use`` is preferred
@@ -1729,9 +1748,11 @@ Time formats
 
 Pact leverages the Haskell `thyme
 library <http://hackage.haskell.org/package/thyme>`__ for fast
-computation of time values. The `parse-time <#parse-time>`__ and
-`format-time <#format-time>`__ functions accept format codes that derive
-from GNU ``strftime`` with some extensions, as follows:
+computation of time values. The
+`parse-time <pact-functions.html#parse-time>`__ and
+`format-time <pact-functions.html#format-time>`__ functions accept
+format codes that derive from GNU ``strftime`` with some extensions, as
+follows:
 
 ``%%`` - literal ``"%"``
 
@@ -1864,24 +1885,24 @@ ISO8601
 
 ::
 
-   pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
-   "2016-07-23T13:30:45+00:00"
+    pact> (format-time "%Y-%m-%dT%H:%M:%S%N" (time "2016-07-23T13:30:45Z"))
+    "2016-07-23T13:30:45+00:00"
 
 RFC822
 ~~~~~~
 
 ::
 
-   pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
-   "Sat, 23 Jul 2016 13:30:45 UTC"
+    pact> (format-time "%a, %_d %b %Y %H:%M:%S %Z" (time "2016-07-23T13:30:45Z"))
+    "Sat, 23 Jul 2016 13:30:45 UTC"
 
 YYYY-MM-DD hh:mm:ss.000000
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-   pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
-   "2016-07-23 13:30:45.001002"
+    pact> (format-time "%Y-%m-%d %H:%M:%S.%v" (add-time (time "2016-07-23T13:30:45Z") 0.001002))
+    "2016-07-23 13:30:45.001002"
 
 Database Serialization Format
 =============================
@@ -1939,11 +1960,11 @@ stringified integer value:
 
 .. code:: javascript
 
-   /* small integers are just a number */
-   1
-   /* large integers are objects */
-   { "_P_int": "123..." /* integer string representation */
-   }
+    /* small integers are just a number */
+    1
+    /* large integers are objects */
+    { "_P_int": "123..." /* integer string representation */
+    }
 
 Decimal
 ~~~~~~~
@@ -1954,16 +1975,16 @@ format <https://hackage.haskell.org/package/Decimal-0.5.1/docs/Data-Decimal.html
 
 .. code:: javascript
 
-   { "_P_decp": 4     /* decimal places */
-   , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
-   }
+    { "_P_decp": 4     /* decimal places */
+    , "_P_decm": 15246 /* decimal mantissa, encoded using INTEGER format */
+    }
 
 Note that the mantissa value uses the integer format described above. As
 described in the Decimal docs, the value can be computed as follows:
 
 ::
 
-   MANTISSA / (10 ^ PLACES)
+    MANTISSA / (10 ^ PLACES)
 
 Boolean
 ~~~~~~~
@@ -1983,9 +2004,9 @@ and a day-local microsecond value.
 
 .. code:: javascript
 
-   { "_P_timed": 234 /* "modified julian day value */
-   , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
-   }
+    { "_P_timed": 234 /* "modified julian day value */
+    , "_P_timems": 32495874 /* microseconds, encoded using INTEGER format */
+    }
 
 Suggestions for converting MJDs can be found
 `here <https://stackoverflow.com/questions/11889553/convert-modified-julian-date-to-utc>`__.
@@ -1997,8 +2018,8 @@ Raw JSON blobs are encoded unmodified in a container object.
 
 .. code:: javascript
 
-   { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
-   }
+    { "_P_val": { "foo": "bar" } /* unmodified user JSON object */
+    }
 
 Keyset
 ~~~~~~
@@ -2007,9 +2028,9 @@ Keysets store the key list and predicate name in a JSON object.
 
 .. code:: javascript
 
-   { "_P_keys": ["key1","key2"] /* public key string representations */
-   , "_P_pred": "keys-all"      /* predicate function name */
-   }
+    { "_P_keys": ["key1","key2"] /* public key string representations */
+    , "_P_pred": "keys-all"      /* predicate function name */
+    }
 
 Module (User) Tables
 --------------------
@@ -2047,9 +2068,9 @@ The update format is a JSON object:
 
 .. code:: javascript
 
-   { "table": "name"  /* user-visible table name (not backend table name) */
-   , "key": "123"     /* update string key */
-   , "value": { ... } /* The new JSON row value. Entire row is captured. */
+    { "table": "name"  /* user-visible table name (not backend table name) */
+    , "key": "123"     /* update string key */
+    , "value": { ... } /* The new JSON row value. Entire row is captured. */
 
 Note that the JSON row value uses the same encoding as found in the user
 data table.

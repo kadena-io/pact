@@ -23,11 +23,12 @@ import GHC.Stack
 
 import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
-                                       traversed, (<&>), (?~), (^.), _1, _2, _3)
-import           Control.Monad        (when, (>=>))
+                                       traversed, (<&>), (?~), (^.), _1, _2,
+                                       _3)
+import           Control.Monad        ((>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
-import           Data.SBV             (SBV, SymWord, Symbolic)
+import           Data.SBV             (SBV, SymWord)
 import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
@@ -35,31 +36,34 @@ import           Data.Traversable     (for)
 
 import qualified Pact.Types.Typecheck as TC
 
+import           Pact.Analyze.Alloc   (Alloc, free)
 import           Pact.Analyze.Types
 
-alloc :: SymWord a => Symbolic (SBV a)
-alloc = SBV.free_
+allocS :: SymWord a => Alloc (S a)
+allocS = free
 
-allocSchema :: HasCallStack => Schema -> Symbolic Object
+allocSbv :: SymWord a => Alloc (SBV a)
+allocSbv = _sSbv <$> allocS
+
+allocSchema :: HasCallStack => Schema -> Alloc Object
 allocSchema (Schema fieldTys) = Object <$>
   for fieldTys (\ety -> (ety,) <$> allocAVal ety)
 
-allocAVal :: HasCallStack => EType -> Symbolic AVal
+allocAVal :: HasCallStack => EType -> Alloc AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
-
-  EType (SList ty :: SingTy k ty) -> mkAVal . sansProv <$>
-    (withSymWord ty alloc :: Symbolic (SBV [Concrete (ListElem ty)]))
+  EType (SList ty :: SingTy k ty) -> mkAVal <$>
+    (withSymWord ty allocS :: Alloc (S [Concrete (ListElem ty)]))
   EType (ty :: SingTy k ty) -> singCase ty
-    (\Refl -> mkAVal . sansProv <$>
-      (withSymWord ty alloc :: Symbolic (SBV (Concrete ty))))
+    (\Refl -> mkAVal <$>
+      (withSymWord ty allocS :: Alloc (S (Concrete ty))))
     (\Refl -> error "this branch is impossible in the current formulation")
     (\Refl -> error "this branch is impossible in the current formulation")
 
-allocTVal :: HasCallStack => EType -> Symbolic TVal
+allocTVal :: HasCallStack => EType -> Alloc TVal
 allocTVal ety = (ety,) <$> allocAVal ety
 
-allocForETerm :: HasCallStack => ETerm -> Symbolic TVal
+allocForETerm :: HasCallStack => ETerm -> Alloc TVal
 -- allocForETerm
 --   (EList (SList ty :: SingTy 'ListK ty)
 --   (CoreTerm (LiteralList _ cells))) = do
@@ -75,7 +79,7 @@ allocForETerm :: HasCallStack => ETerm -> Symbolic TVal
 -- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
 allocForETerm (existentialType -> ety) = allocTVal ety
 
-allocArgs :: HasCallStack => [Arg] -> Symbolic (Map VarId (Located (Unmunged, TVal)))
+allocArgs :: HasCallStack => [Arg] -> Alloc (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
@@ -83,8 +87,11 @@ allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
 
 allocModelTags
   :: HasCallStack
-  => Located ETerm -> ExecutionGraph -> Symbolic (ModelTags 'Symbolic)
-allocModelTags locatedTm graph = ModelTags
+  => Map VarId (Located (Unmunged, TVal))
+  -> Located ETerm
+  -> ExecutionGraph
+  -> Alloc (ModelTags 'Symbolic)
+allocModelTags argsMap locatedTm graph = ModelTags
     <$> allocVars
     <*> allocReads
     <*> allocWrites
@@ -100,47 +107,52 @@ allocModelTags locatedTm graph = ModelTags
     events :: [TraceEvent]
     events = toListOf (egEdgeEvents.traverse.traverse) graph
 
-    allocVars :: Symbolic (Map VarId (Located (Unmunged, TVal)))
+    -- We only allocate variables here for non-arguments; that is, variables
+    -- which are intermediate bindings. Arguments have already been allocated
+    -- at this point (by 'allocArgs', with 'FromInput' provenance attached),
+    -- and we just reuse those allocations as we come across them in
+    -- 'TracePushScope' events.
+    allocVars :: Alloc (Map VarId (Located (Unmunged, TVal)))
     allocVars = fmap Map.fromList $
       for (toListOf (traverse._TracePushScope._3.traverse) events) $
         \(Located info (Binding vid nm _ ety)) ->
-          allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
-
-    allocS :: SymWord a => Symbolic (S a)
-    allocS = sansProv <$> alloc
+          case Map.lookup vid argsMap of
+            Nothing -> allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
+            Just arg -> pure (vid, arg)
 
     allocAccesses
       :: Traversal' TraceEvent (Schema, Located TagId)
-      -> Symbolic (Map TagId (Located Access))
+      -> Alloc (Map TagId (Located Access))
     allocAccesses p = fmap Map.fromList $
       for (toListOf (traverse.p) events) $ \(schema, Located info tid) -> do
         srk <- allocS
         obj <- allocSchema schema
-        suc <- alloc
+        suc <- allocSbv
         pure (tid, Located info (Access srk obj suc))
 
-    allocReads :: Symbolic (Map TagId (Located Access))
+    allocReads :: Alloc (Map TagId (Located Access))
     allocReads = allocAccesses _TraceRead
 
-    traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
-    traceWriteT f event = case event of
-      TraceWrite _writeType schema tagid -> const event <$> f (schema, tagid)
-      _                                  -> pure event
-
-    allocWrites :: Symbolic (Map TagId (Located Access))
+    allocWrites :: Alloc (Map TagId (Located Access))
     allocWrites = allocAccesses traceWriteT
 
-    allocAsserts :: Symbolic (Map TagId (Located (SBV Bool)))
+      where
+        traceWriteT :: Traversal' TraceEvent (Schema, Located TagId)
+        traceWriteT f event = case event of
+          TraceWrite _writeType schema tid -> const event <$> f (schema, tid)
+          _                                -> pure event
+
+    allocAsserts :: Alloc (Map TagId (Located (SBV Bool)))
     allocAsserts = fmap Map.fromList $
       for (toListOf (traverse._TraceAssert._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> alloc
+        (tid,) . Located info <$> allocSbv
 
-    allocAuths :: Symbolic (Map TagId (Located Authorization))
+    allocAuths :: Alloc (Map TagId (Located Authorization))
     allocAuths = fmap Map.fromList $
       for (toListOf (traverse._TraceAuth._2) events) $ \(Located info tid) ->
-        (tid,) . Located info <$> (Authorization <$> allocS <*> alloc)
+        (tid,) . Located info <$> (Authorization <$> allocS <*> allocSbv)
 
-    allocResult :: Symbolic (TagId, Located TVal)
+    allocResult :: Alloc (TagId, Located TVal)
     allocResult = do
       let tid :: TagId = last $ toListOf (traverse._TracePopScope._3) events
       fmap (tid,) $ sequence $ allocForETerm <$> locatedTm
@@ -149,17 +161,13 @@ allocModelTags locatedTm graph = ModelTags
     -- start of "subpaths" on either side of a conditional. the root path is
     -- always trivially reachable, because it corresponds to the start of a
     -- program.
-    allocPaths :: Symbolic (Map Path (SBV Bool))
+    allocPaths :: Alloc (Map Path (SBV Bool))
     allocPaths = do
       let rootPath = _egRootPath graph
           paths    = rootPath : toListOf (traverse._TraceSubpathStart) events
-      fmap Map.fromList $
-        for paths $ \p -> do
-          sbool <- alloc
-          when (p == rootPath) $ SBV.constrain sbool
-          pure (p, sbool)
+      Map.fromList <$> for paths (\p -> (p,) <$> allocSbv)
 
-    allocReturns :: Symbolic (Map TagId TVal)
+    allocReturns :: Alloc (Map TagId TVal)
     allocReturns = fmap Map.fromList $
       for (toListOf (traverse._TracePopScope) events) $ \(_, _, tid, ety) ->
         (tid,) <$> allocTVal ety

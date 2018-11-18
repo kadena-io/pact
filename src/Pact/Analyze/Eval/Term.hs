@@ -17,23 +17,20 @@ import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               (&), (+=), (.=), (.~), (<&>),
                                               (?~), (^.), (^?), _1, _2, _Just)
 import           Control.Monad               (void, when)
-import           Control.Monad.Except        (Except, ExceptT (ExceptT),
-                                              MonadError (throwError),
-                                              runExcept)
+import           Control.Monad.Except        (Except, MonadError (throwError))
 import           Control.Monad.Reader        (MonadReader (local), runReaderT)
 import           Control.Monad.RWS.Strict    (RWST (RWST, runRWST))
 import           Control.Monad.State.Strict  (MonadState, modify', runStateT)
 import qualified Data.Aeson                  as Aeson
 import           Data.ByteString.Lazy        (toStrict)
 import           Data.Foldable               (foldl', foldlM)
-import           Data.Functor.Identity       (Identity (Identity))
 import           Data.Map.Strict             (Map)
 import qualified Data.Map.Strict             as Map
 import           Data.SBV                    (Boolean (bnot, true, (&&&), (|||)),
                                               EqSymbolic ((.==)),
                                               Mergeable (symbolicMerge), SBV,
                                               SymArray (readArray), SymWord,
-                                              constrain, false, ite, (.<))
+                                              false, ite, (.<))
 import qualified Data.SBV.String             as SBV
 import           Data.String                 (fromString)
 import           Data.Text                   (Text, pack)
@@ -68,33 +65,17 @@ instance Analyzer Analyze where
   type TermOf Analyze = Term
   eval             = evalTerm
   evalO            = evalTermO
-  evalLogicalOp    = evalTermLogicalOp
   throwErrorNoLoc err = do
     info <- view (analyzeEnv . aeInfo)
     throwError $ AnalyzeFailure info err
   getVar vid = view (scope . at vid)
   markFailure b = succeeds %= (&&& sansProv (bnot b))
 
-evalTermLogicalOp
-  :: LogicalOp
-  -> [Term 'TyBool]
-  -> Analyze (S Bool)
-evalTermLogicalOp AndOp [a, b] = do
-  a' <- eval a
-  ite (_sSbv a') (eval b) (pure false)
-evalTermLogicalOp OrOp [a, b] = do
-  a' <- eval a
-  ite (_sSbv a') (pure true) (eval b)
-evalTermLogicalOp NotOp [a] = bnot <$> eval a
-evalTermLogicalOp op terms = throwErrorNoLoc $ MalformedLogicalOpExec op $ length terms
-
 addConstraint :: S Bool -> Analyze ()
-addConstraint s = modify' $ globalState.gasConstraints %~ (<> c)
-  where
-    c = Constraints $ constrain $ _sSbv s
+addConstraint b = modify' $ latticeState.lasConstraints %~ (&&& b)
 
 instance (Mergeable a) => Mergeable (Analyze a) where
-  symbolicMerge force test left right = Analyze $ RWST $ \r s -> ExceptT $ Identity $
+  symbolicMerge force test left right = Analyze $ RWST $ \r s ->
     --
     -- We explicitly propagate only the "global" portion of the state from the
     -- left to the right computation. And then the only lattice state, and not
@@ -102,7 +83,7 @@ instance (Mergeable a) => Mergeable (Analyze a) where
     --
     -- If either side fails, the entire merged computation fails.
     --
-    let run act = runExcept . runRWST (runAnalyze act) r
+    let run act = runRWST (runAnalyze act) r
     in do
       (lRes, AnalyzeState lls lgs, ()) <- run left s
       (rRes, AnalyzeState rls rgs, ()) <- run right $ s & globalState .~ lgs
@@ -166,18 +147,17 @@ tagAuth tid sKs sb = do
       addConstraint $ sansProv $ sbv .== _sSbv sb
       globalState.gasKsProvenances.at tid .= (sKs ^. sProv)
 
+tagSubpathStart :: Path -> S Bool -> Analyze ()
+tagSubpathStart p active = do
+  mTag <- preview $ aeModelTags.mtPaths.at p._Just
+  case mTag of
+    Nothing  -> pure ()
+    Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv active
+
 tagFork :: Path -> Path -> S Bool -> S Bool -> Analyze ()
 tagFork pathL pathR reachable lPasses = do
-    tagSubpathStart pathL $ reachable &&& lPasses
-    tagSubpathStart pathR $ reachable &&& bnot lPasses
-
-  where
-    tagSubpathStart :: Path -> S Bool -> Analyze ()
-    tagSubpathStart p active = do
-      mTag <- preview $ aeModelTags.mtPaths.at p._Just
-      case mTag of
-        Nothing  -> pure ()
-        Just sbv -> addConstraint $ sansProv $ sbv .== _sSbv active
+  tagSubpathStart pathL $ reachable &&& lPasses
+  tagSubpathStart pathR $ reachable &&& bnot lPasses
 
 tagResult :: AVal -> Analyze ()
 tagResult av = do

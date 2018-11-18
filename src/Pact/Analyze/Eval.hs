@@ -28,10 +28,12 @@ import           Data.Functor.Identity       (Identity (Identity, runIdentity))
 import           Data.Map.Strict             (Map)
 import           Data.SBV                    (Boolean ((==>)), SBV, Symbolic,
                                               true)
+import qualified Data.SBV                    as SBV
 import           Data.String                 (fromString)
 
 import           Pact.Types.Lang             (Info)
 
+import           Pact.Analyze.Alloc          (runAlloc)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Eval.Invariant
@@ -85,22 +87,28 @@ runAnalysis'
   -> [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (f AnalysisResult)
-runAnalysis' query tables args tm tags info = do
-  let act    = evalETerm tm >>= \res -> tagResult res >> pure res
-      state0 = mkInitialAnalyzeState tables
-
+runAnalysis' query tables args tm rootPath tags info = do
   aEnv <- case mkAnalyzeEnv tables args tags info of
     Just env -> pure env
     Nothing  -> throwError $ AnalyzeFailure info $ fromString
       "Unable to make analyze env (couldn't translate schema)"
 
-  (funResult, state1, ()) <- hoist generalize $
-    runRWST (runAnalyze act) aEnv state0
+  let state0 = mkInitialAnalyzeState tables
 
-  lift $ runConstraints $ state1 ^. globalState.gasConstraints
+      analysis = do
+        tagSubpathStart rootPath true
+        res <- evalETerm tm
+        tagResult res
+        pure res
+
+  (funResult, state1, ()) <- hoist generalize $
+    runRWST (runAnalyze analysis) aEnv state0
+
+  lift $ SBV.constrain $ _sSbv $ state1 ^. latticeState.lasConstraints
 
   let cv0     = state0 ^. latticeState . lasExtra
       cv1     = state1 ^. latticeState . lasExtra
@@ -109,7 +117,7 @@ runAnalysis' query tables args tm tags info = do
       ksProvs = state1 ^. globalState.gasKsProvenances
 
   (results, querySucceeds)
-    <- runReaderT (runStateT (queryAction query) true) qEnv
+    <- hoist runAlloc $ runReaderT (runStateT (queryAction query) true) qEnv
   pure $ results <&> \prop -> AnalysisResult querySucceeds (_sSbv prop) ksProvs
 
 runPropertyAnalysis
@@ -117,19 +125,21 @@ runPropertyAnalysis
   -> [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic AnalysisResult
-runPropertyAnalysis check tables args tm tags info =
+runPropertyAnalysis check tables args tm rootPath tags info =
   runIdentity <$>
-    runAnalysis' (Identity <$> analyzeCheck check) tables args tm tags info
+    runAnalysis' (Identity <$> analyzeCheck check) tables args tm rootPath tags info
 
 runInvariantAnalysis
   :: [Table]
   -> Map VarId AVal
   -> ETerm
+  -> Path
   -> ModelTags 'Symbolic
   -> Info
   -> ExceptT AnalyzeFailure Symbolic (TableMap [Located AnalysisResult])
-runInvariantAnalysis tables args tm tags info =
-  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm tags info
+runInvariantAnalysis tables args tm rootPath tags info =
+  unInvariantsF <$> runAnalysis' analyzeInvariants tables args tm rootPath tags info
