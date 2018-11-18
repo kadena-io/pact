@@ -74,14 +74,10 @@ aval elimVal elimObj = \case
   OpaqueVal       -> throwErrorNoLoc OpaqueValEncountered
 
 expectVal :: Analyzer m => AVal -> m (S a)
-expectVal = aval
-  (pure ... mkS)
-  (throwErrorNoLoc . AValUnexpectedlyObj)
+expectVal = aval (pure ... mkS) (throwErrorNoLoc . AValUnexpectedlyObj)
 
 expectObj :: Analyzer m => AVal -> m Object
-expectObj = aval
-  ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal)
-  pure
+expectObj = aval ((throwErrorNoLoc . AValUnexpectedlySVal) ... getSVal) pure
   where
     getSVal :: Maybe Provenance -> SBVI.SVal -> SBVI.SVal
     getSVal = flip const
