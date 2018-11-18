@@ -19,8 +19,6 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
-import GHC.Stack
-
 import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
                                        traversed, (<&>), (?~), (^.), _1, _2,
@@ -45,11 +43,11 @@ allocS = free
 allocSbv :: SymWord a => Alloc (SBV a)
 allocSbv = _sSbv <$> allocS
 
-allocSchema :: HasCallStack => Schema -> Alloc Object
+allocSchema :: Schema -> Alloc Object
 allocSchema (Schema fieldTys) = Object <$>
   for fieldTys (\ety -> (ety,) <$> allocAVal ety)
 
-allocAVal :: HasCallStack => EType -> Alloc AVal
+allocAVal :: EType -> Alloc AVal
 allocAVal = \case
   EObjectTy schema -> AnObj <$> allocSchema schema
   EType (SList ty :: SingTy k ty) -> mkAVal <$>
@@ -60,34 +58,20 @@ allocAVal = \case
     (\Refl -> error "this branch is impossible in the current formulation")
     (\Refl -> error "this branch is impossible in the current formulation")
 
-allocTVal :: HasCallStack => EType -> Alloc TVal
+allocTVal :: EType -> Alloc TVal
 allocTVal ety = (ety,) <$> allocAVal ety
 
-allocForETerm :: HasCallStack => ETerm -> Alloc TVal
--- allocForETerm
---   (EList (SList ty :: SingTy 'ListK ty)
---   (CoreTerm (LiteralList _ cells))) = do
---     cells' <- traverse
---       (\_ -> mkAVal . sansProv <$>
---         (withSymWord ty alloc :: Symbolic (SBV (Concrete (ListElem ty)))))
---       cells
---     let aval :: AVal
---         aval = AList $ cells' <&> \case
---           AVal _ sval -> sval
---           _ -> error "TODO"
---     pure (EType (SList ty), aval)
--- allocForETerm (EList (SList ty :: SingTy 'ListK ty) b) = withShow ty $ error $ show b
+allocForETerm :: ETerm -> Alloc TVal
 allocForETerm (existentialType -> ety) = allocTVal ety
 
-allocArgs :: HasCallStack => [Arg] -> Alloc (Map VarId (Located (Unmunged, TVal)))
+allocArgs :: [Arg] -> Alloc (Map VarId (Located (Unmunged, TVal)))
 allocArgs args = fmap Map.fromList $ for args $ \(Arg nm vid node ety) -> do
   let info = node ^. TC.aId . TC.tiInfo
   av <- allocAVal ety <&> _AVal._1 ?~ FromInput nm
   pure (vid, Located info (nm, (ety, av)))
 
 allocModelTags
-  :: HasCallStack
-  => Map VarId (Located (Unmunged, TVal))
+  :: Map VarId (Located (Unmunged, TVal))
   -> Located ETerm
   -> ExecutionGraph
   -> Alloc (ModelTags 'Symbolic)
@@ -202,14 +186,6 @@ saturateModel =
                 <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
 
           (\Refl -> error "TODO")
-
---         go (EType (SList ty :: SingTy k t)) (AVal _mProv sval) =
---           withSMTValue ty $ withSymWord ty $ withSymWord ty $
---             AList . fmap ((\(SBVI.SBV sval') -> sval') . SBV.literal)
---               <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete ('TyList t)))
-
-          -- mkAVal' . SBV.literal
-          --   <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t))
         go (EType SList{}) OpaqueVal = pure OpaqueVal
 
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj

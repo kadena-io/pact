@@ -9,8 +9,6 @@
 
 module Pact.Analyze.Eval.Term where
 
--- import Debug.Trace
-
 import           Control.Applicative         (ZipList (..))
 import           Control.Lens                (At (at), Lens', iforM, iforM_,
                                               preview, use, view, (%=), (%~),
