@@ -2682,7 +2682,7 @@ spec = describe "analyze" $ do
             (+ [a b] [c]))
           |]
     expectFalsified $ code9 "[(property (= result [a b]))]"
-    expectVerified  $ code9 "[(property (= result (+ [a] [b c]))]"
+    expectVerified  $ code9 "[(property (= result (+ [a] [b c])))]"
 
   describe "list reverse" $ do
     let code10 = [text|
@@ -2694,8 +2694,8 @@ spec = describe "analyze" $ do
 
   describe "list sort" $ do
     let code11 = [text|
-          (defun min:integer (a:integer b:integer)
-            (if (< a b) a b))
+          (defun min:integer (x:integer y:integer)
+            (if (< x y) x y))
 
           (defun test:integer (a:integer b:integer c:integer)
             @model [(property (= result (at 0 (sort [a b c]))))]

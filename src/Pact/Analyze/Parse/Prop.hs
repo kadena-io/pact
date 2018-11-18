@@ -529,19 +529,31 @@ inferPreProp preProp = case preProp of
     _   <- expectColumnType tn' cn' SKeySet
     ESimple SBool . PropSpecific . RowEnforced tn' cn' <$> checkPreProp SStr rk
 
-  PreApp (toOp arithOpP -> Just _) _ -> asum
+  PreApp (toOp arithOpP -> Just _) args -> asum
     [ ESimple SInteger <$> checkPreProp SInteger preProp
     , ESimple SDecimal <$> checkPreProp SDecimal preProp
     , ESimple SStr     <$> checkPreProp SStr     preProp -- (string concat)
-    ]
+    ] <|> case args of
+      [a, b] -> do
+        a' <- inferPreProp a
+        b' <- inferPreProp b
+        case (a', b') of
+          (EList aTy@(SList aTy') aProp, EList bTy bProp) ->
+            case singEq aTy bTy of
+              Nothing ->
+                throwErrorIn preProp "can only concat lists of the same type"
+              Just Refl -> pure $
+                EList aTy $ CoreProp $ ListConcat aTy' aProp bProp
+          _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
+      _ -> throwErrorIn preProp "can't infer the types of the arguments to +"
 
   PreApp s [lst] | s == SReverse -> do
     EList (SList ty) lst' <- inferPreProp lst
-    pure $ EList (SList ty) $ CoreProp $ ListSort ty lst'
+    pure $ EList (SList ty) $ CoreProp $ ListReverse ty lst'
 
   PreApp s [lst] | s == SSort -> do
     EList (SList ty) lst' <- inferPreProp lst
-    pure $ EList (SList ty) $ CoreProp $ ListReverse ty lst'
+    pure $ EList (SList ty) $ CoreProp $ ListSort ty lst'
 
   -- inline property definitions. see note [Inlining].
   PreApp fName args -> do

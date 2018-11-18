@@ -52,7 +52,8 @@ import           Pact.Analyze.Util
     -> CoreProp <$> (ListTake ty <$> float a <*> float b);                    \
   CoreProp (ListConcat ty l1 l2)                                              \
   -> CoreProp <$> (ListConcat ty <$> float l1 <*> float l2);                  \
-  CoreProp LiteralList{}         -> ([], p);
+  CoreProp (LiteralList ty as)                                                \
+    -> CoreProp <$> (LiteralList ty <$> traverse float as)
 
 instance Float ('TyList 'TyObject) where
   float p = case p of
