@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications #-}
 module Pact.Analyze.Eval.Core where
 
-import           Control.Lens                (over, (^?!), ix)
+import           Control.Lens                (over)
 import           Data.Foldable               (foldrM)
 import qualified Data.Map.Strict             as Map
 import           Data.Monoid                 ((<>))
@@ -20,7 +20,6 @@ import           Data.Text                   (Text)
 import qualified Data.Text                   as T
 import qualified Data.SBV.List as SBVL
 import Data.SBV.List.Bounded (bfoldr, band, bzipWith, breverse, bsort)
-import Data.Traversable (for)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical
@@ -400,20 +399,21 @@ evalCoreO (Var vid name) = do
 evalCoreO (Lit obj)     = pure obj
 evalCoreO (Sym _)       = vacuousMatch "an object cannot be a symbolic value"
 evalCoreO (Numerical _) = vacuousMatch "an object cannot be a numerical value"
-evalCoreO (ListAt _ _ _) = error "TODO"
-evalCoreO (ObjDrop (Schema schemaFields) keys _obj) = do
-  keys' <- eval keys
-  case unliteralS keys' of
-    Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
-    Just literalKeys -> do
-      fields <- for literalKeys $ \(Str key) -> do
-        let retType = schemaFields ^?! ix (T.pack key)
-        -- val <- withSymWord singTy $
-        --   evalObjAt schema (Lit' (Str key)) obj retType
-        let val = undefined
-        pure (T.pack key, (retType, mkAVal val))
-      pure $ Object $ Map.fromList fields
-evalCoreO (ObjTake _ _ _) = error "TODO"
+evalCoreO ListAt{} = throwErrorNoLoc "not yet implemented"
+evalCoreO ObjTake{} = throwErrorNoLoc "not yet implemented"
+evalCoreO ObjDrop{} = throwErrorNoLoc "not yet implemented"
+
+-- evalCoreO (ObjDrop schema@(Schema schemaFields) keys _obj) = do
+--   keys' <- eval keys
+--   case unliteralS keys' of
+--     Nothing -> throwErrorNoLoc "Unable to statically determine keys to drop"
+--     Just literalKeys -> do
+--       fields <- for literalKeys $ \(Str key) -> do
+--         let retType = schemaFields ^?! ix (T.pack key)
+--         val <- withSymWord singTy $
+--           evalObjAt schema (Lit' (Str key)) obj retType
+--         pure (T.pack key, (retType, mkAVal val))
+--       pure $ Object $ Map.fromList fields
 
 
 evalExistential :: Analyzer m => Existential (TermOf m) -> m (EType, AVal)
