@@ -334,6 +334,12 @@ langDefs =
 
     ,strToIntDef
     ,hashDef
+
+    ,defRNative "use" use'
+     (funType tTyString [("module",tTyString)] <>
+      funType tTyString [("module",tTyString),("hash",tTyString)])
+     "Top-level special form to import MODULE into current namespace. \
+     \With HASH, ensure match with latest installed version of MODULE."
     ])
     where b = mkTyVar "b" []
           c = mkTyVar "c" []
@@ -355,6 +361,18 @@ map' i as@[app@TApp {},l] = gasUnreduced i as $ reduce l >>= \l' -> case l' of
            TList ls _ _ -> (\b -> TList b TyAny def) <$> forM ls (apply' app . pure)
            t -> evalError' i $ "map: expecting list: " ++ abbrev t
 map' i as = argsError' i as
+
+use' :: RNativeFun e
+use' i as = case as of
+  [TLitString m] -> doUse m Nothing
+  [TLitString m,TLitString h] -> doUse m (Just h)
+  _ -> argsError i as
+  where
+    doUse m h = case traverse fromText' h of
+      Right h' -> do
+        evalUse (Use (ModuleName m) h' (_faInfo i))
+        return $ tStr $ "Using " <> m
+      Left e -> evalError' i $ "bad hash: " ++ e
 
 list :: RNativeFun e
 list i as = return $ TList as TyAny (_faInfo i) -- TODO, could set type here

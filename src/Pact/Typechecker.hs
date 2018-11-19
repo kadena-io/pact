@@ -769,7 +769,6 @@ toAST TTable {..} = do
     <$> (trackNode ty =<< freshId _tInfo (asString _tModule <> "." <> asString _tTableName))
     <*> pure _tTableName
 toAST TModule {..} = die _tInfo "Modules not supported"
-toAST TUse {..} = die _tInfo "Use not supported"
 toAST TStep {..} = do
   ent <- forM _tStepEntity $ \e -> do
     e' <- toAST e

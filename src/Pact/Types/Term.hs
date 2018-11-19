@@ -44,7 +44,7 @@ module Pact.Types.Term
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
-   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
+   tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
@@ -405,10 +405,6 @@ data Term n =
       _tKeySet :: !KeySet
     , _tInfo :: !Info
     } |
-    TUse {
-      _tUse :: Use
-    , _tInfo :: Info
-    } |
     TValue {
       _tValue :: !Value
     , _tInfo :: !Info
@@ -447,7 +443,6 @@ instance Show n => Show (Term n) where
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
     show (TKeySet k _) = show k
-    show (TUse u _) = show u
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
       "(TStep " ++ show ent ++ " " ++ show e ++ maybeDelim " " r ++ ")"
@@ -486,8 +481,6 @@ instance Eq1 Term where
     a == m && b == n
   liftEq _ (TKeySet a b) (TKeySet m n) =
     a == m && b == n
-  liftEq _ (TUse a b) (TUse m n) =
-    a == m && b == n
   liftEq _ (TValue a b) (TValue m n) =
     a == m && b == n
   liftEq eq (TStep a b c d) (TStep m n o p) =
@@ -516,7 +509,6 @@ instance Monad Term where
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
     TKeySet k i >>= _ = TKeySet k i
-    TUse u i >>= _ = TUse u i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
     TSchema {..} >>= f = TSchema _tSchemaName _tModule _tMeta (fmap (fmap (>>= f)) _tFields) _tInfo
@@ -584,7 +576,6 @@ typeof t = case t of
         BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tObjectType
       TKeySet {} -> Right $ TyPrim TyKeySet
-      TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
       TSchema {..} -> Left $ "defobject:" <> asString _tSchemaName
@@ -642,7 +633,6 @@ abbrev TBinding {} = "<binding>"
 abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
 abbrev TKeySet {} = "<keyset>"
-abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v
 abbrev TStep {} = "<step>"

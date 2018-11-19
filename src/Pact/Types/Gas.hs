@@ -42,7 +42,6 @@ data GasArgs
   | GSelect (Maybe [(Info,ColumnId)]) (Term Ref) (Term Name)
   | GUnreduced [Term Ref]
   | GReduced [Term Name]
-  | GUse ModuleName (Maybe Hash)
   | GModule Module
   | GInterface Module
   | GModuleMember Module

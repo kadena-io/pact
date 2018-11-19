@@ -28,6 +28,7 @@
 module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
+    ,evalUse
     ,reduce,reduceBody
     ,resolveFreeVars,resolveArg
     ,enforceKeySet,enforceKeySetName
@@ -139,8 +140,6 @@ topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
 
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
-eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
-  evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TModule m@Module{..} bod i) =
   topLevelCall i "module" (GModule m) $ \g0 -> do
     -- enforce old module keysets
@@ -205,7 +204,6 @@ loadModule m@Module{..} bod1 mi g0 = do
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
-                TUse (Use {..}) _ -> return Nothing
                 _ -> evalError (_tInfo t) "Invalid module member"
               case dnm of
                 Nothing -> return (g, rs)
@@ -229,7 +227,6 @@ loadModule i@Interface{..} body info gas0 = do
               TDef {..} -> return $ Just _tDefName
               TConst {..} -> return $ Just $ _aName _tConstArg
               TSchema {..} -> return $ Just $ asString _tSchemaName
-              TUse (Use {..}) _ -> return Nothing
               _ -> evalError (_tInfo t) "Invalid interface member"
             case dnm of
               Nothing -> return (g, rs)
@@ -380,7 +377,6 @@ reduce (TBinding ps bod c i) = case c of
   BindLet -> reduceLet ps bod i
   BindSchema _ -> evalError i "Unexpected schema binding"
 reduce t@TModule{} = evalError (_tInfo t) "Modules and Interfaces only allowed at top level"
-reduce t@TUse {} = evalError (_tInfo t) "Use only allowed at top level"
 reduce t@TStep {} = evalError (_tInfo t) "Step at invalid location"
 reduce TSchema {..} = TSchema _tSchemaName _tModule _tMeta <$> traverse (traverse reduce) _tFields <*> pure _tInfo
 reduce TTable {..} = TTable _tTableName _tModule _tHash <$> mapM reduce _tTableType <*> pure _tMeta <*> pure _tInfo
