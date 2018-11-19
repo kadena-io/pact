@@ -51,6 +51,7 @@
 )
 
 (commit-tx)
+(begin-tx)
 
 (define-keyset 'test-keyset (sig-keyset))
 (module mod-test1 'test-keyset
@@ -108,3 +109,121 @@
   (defun use-consts:integer ()
     (+ sig-test1.TEST1-C1 sig-test3.TEST3-C2))
 )
+
+(commit-tx)
+;; Define a module schema, and use in an abstract interface
+(begin-tx)
+(define-keyset 'test-keyset (sig-keyset))
+(module test-module 'test-keyset
+  @doc "schema test module"
+
+  (defschema account
+    @doc "dummy account schema"
+    @model [(invariant (>= balance 0.0))]
+    balance:decimal
+    amount:decimal
+    ccy:string
+    auth:string
+    )
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Test that module-defined schema types are brought into scope
+;; via 'use' in interfaces
+(interface test-sig
+
+  (use test-module)
+
+  (defun test-1:object{account} (x:object{account}))
+)
+(commit-tx)
+
+;; Test to see that implementations of interfaces inherit schema types brought into
+;; scope from other modules
+(module test-impl 'test-keyset
+  @doc "test if implementing test-sig resolves schema type"
+
+  (use test-module)
+  (implements test-sig)
+
+  (deftable accounts:{account}
+    "test reference")
+
+  (defun test-1:object{account} (x:object{account})
+    x)
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Test to see if properties defined in interface
+;; are inherited properly by modules that implement the
+;; interface at different levels of definition (defun-level,
+;; module-level etc)
+
+;; Note: to see this verified, see 'SignatureSpec.hs'
+(interface model-test1
+  @doc "Test to make sure interface global models and function \
+      \ models are concatenated properly in implementing modules"
+  @model
+    [ (defproperty conserves-mass-test
+       (= (column-delta 'accounts 'balance) 0.0))
+      (defproperty auth-required-test
+       (authorized-by 'accounts-admin-keyset))
+    ]
+
+  (defun always-false:bool (x:bool)
+    @doc   "this function always flips false!"
+    @model [(property (= result false))])
+
+  (defun always-nonnegative:integer (x:integer)
+    @doc   "only allow non-negative results"
+    @model [(property (>= result 0))])
+
+  (defun always-admin (action:string)
+    @doc   "Only admins or super-admins can call this function successfully."
+    @model [(property auth-required-test)])
+
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-keyset 'accounts-admin-keyset (sig-keyset))
+(module model-test1-impl 'accounts-admin-keyset
+
+  (implements model-test1)
+
+  (defschema test-account
+    @doc   "user accounts with balances"
+    @model [(invariant (>= balance 0))]
+
+    balance:integer
+    ks:keyset)
+
+  (deftable test-accounts:{test-account})
+
+
+  (defun always-false:bool (x:bool)
+    x)
+
+  (defun always-nonnegative:integer (x:integer)
+    (if (< x 0)
+        (* x x)
+        (* x (* x x)))
+    )
+
+  (defun always-admin (action:string)
+    @model
+      [ (property
+         (or (authorized-by 'admins)
+             (authorized-by 'super-admins)))
+      ]
+    (+ action " thing")
+    )
+
+)
+
+(commit-tx)
