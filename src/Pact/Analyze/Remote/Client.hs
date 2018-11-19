@@ -30,7 +30,7 @@ verifyModule
   -> Int
   -> IO [Text]
 verifyModule namedMods mod' host port = do
-  let requestURI = "http://" ++ host ++ ":" ++ show port ++ "/verify"
+  let requestURI = "https://" ++ host ++ ":" ++ show port ++ "/verify"
       body       = Remote.Request (Foldable.toList $ fmap _mdModule namedMods) (_mName $ _mdModule mod')
       jsonBody   = JS.lazyTextToJSString $ LTE.decodeUtf8 $ A.encode body
   eResponse <- liftIO (C.try $ post requestURI jsonBody :: IO (Either XHR.XHRError (XHR.Response Text)))
