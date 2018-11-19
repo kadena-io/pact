@@ -109,7 +109,6 @@ instance Semigroup Meta where
 
 instance Monoid Meta where
   mempty = Meta Nothing []
-  mappend = (<>)
 
 newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 instance Serialize PublicKey

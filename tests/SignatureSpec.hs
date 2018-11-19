@@ -6,6 +6,11 @@ module SignatureSpec (spec) where
 
 import Test.Hspec
 
+import Control.Lens (preview, at, _Just)
+import Control.Monad (forM)
+import Data.Default (def)
+import Data.Foldable (traverse_)
+
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Typechecker (die)
@@ -15,13 +20,6 @@ import Pact.Types.Runtime (RefStore(..), eeRefStore,
                            rsModules, mdModule, asString')
 import Pact.Types.Term (Module(..), ModuleName(..),
                         Meta(..))
-
-import Control.Lens (preview, at, _Just)
-import Control.Monad (forM)
-
-import Data.Default (def)
-import Data.Foldable (traverse_)
-
 
 spec :: Spec
 spec = compareModelSpec
