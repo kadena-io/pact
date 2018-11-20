@@ -57,6 +57,7 @@ library
                      , Pact.Typechecker
 
   if impl(ghcjs)
+    build-depends: ghcjs-dom
     exposed-modules:
       JavaScript.Web.XMLHttpRequest
       Pact.Analyze.Remote.Client
