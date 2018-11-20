@@ -1,28 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE LambdaCase #-}
 module SignatureSpec (spec) where
 
 import Test.Hspec
 
-import Control.Lens (preview, at, _Just)
-import Control.Monad (forM)
+import Control.Lens (preview, ix)
 import Data.Default (def)
-import Data.Foldable (traverse_)
+import qualified Data.HashMap.Lazy as HM
 
 import Pact.Repl
 import Pact.Repl.Types
 import Pact.Typechecker (die)
 import Pact.Types.Exp
 import Pact.Types.Info (Info(..))
-import Pact.Types.Runtime (RefStore(..), eeRefStore,
-                           rsModules, mdModule, asString')
+import Pact.Types.Runtime (RefStore(..), ModuleData(..), eeRefStore,
+                           rsModules, asString')
 import Pact.Types.Term (Module(..), ModuleName(..),
-                        Meta(..))
+                        Meta(..), Term(..), Ref(..))
+
 
 spec :: Spec
 spec = compareModelSpec
+
 
 loadRefStore :: FilePath -> IO RefStore
 loadRefStore fp = do
@@ -32,30 +30,52 @@ loadRefStore fp = do
     Just md -> return md
     Nothing -> die def $ "Could not load module data from " ++ show fp
 
-loadModules :: RefStore -> [ModuleName] -> IO [Module]
-loadModules rs mns = forM mns $ \mn -> case preview (rsModules . at mn . _Just . mdModule) rs of
-  Just m -> return m
-  Nothing -> die def $ "Module not found: " ++ show mn
+loadModuleData :: RefStore -> ModuleName -> IO ModuleData
+loadModuleData rs mn = case preview (rsModules . ix mn) rs of
+  Just md -> pure md
+  Nothing -> die def $ "Could not load module data: " ++ show mn
 
 compareModelSpec :: Spec
-compareModelSpec = describe "pact modules should inherit models from interfaces" $ do
-  rs <- runIO $ loadRefStore "tests/pact/signatures.repl"
-  ms <- runIO $ loadModules rs ["model-test1-impl"]
-  traverse_ (compareModels rs) ms
+compareModelSpec = describe "Module models" $ do
+  rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
+  md  <- moduleDataOf rs "model-test1"
+  ifd <- moduleDataOf rs "model-test1-impl"
+
+  let mModels = modelsOf md
+      iModels = modelsOf ifd
+      mName   = nameOf md
+
+  it "should contain all toplevel models defined in their implemented interfaces" $
+    expectSuccess mName (compareToplevel mModels iModels)
+
+  it "should reflect all models defined for functions defined in interfaces" $
+    expectSuccess mName (compareFunRefs md ifd)
+
   where
-    compareModels rs' Module{..} = do
-      ifs <- runIO $ loadModules rs' _mInterfaces
-      let mModels  = _mModel _mMeta
-          ifModels = ifs >>= (_mModel . _interfaceMeta)
-          ms' = traverse (\e -> if any (expEquality e) mModels then (Just e) else Nothing) ifModels
-      it (asString' _mName ++ " should inherit all of its models") $ expectJust _mName ms'
-    compareModels _ _ = pure ()
+    moduleDataOf r = runIO . loadModuleData r . ModuleName
+    modelsOf = _mModel . _mMeta . _mdModule
+    nameOf = _mName . _mdModule
+    compareToplevel mexps = all $ \e -> any (expEquality e) mexps
 
-expectJust :: ModuleName -> Maybe [a] -> Expectation
-expectJust mn = \case
-  Nothing -> expectationFailure $ "Model mismatch in " ++ show mn
-  Just _  -> pure ()
 
+compareFunRefs :: ModuleData -> ModuleData -> Bool
+compareFunRefs md ifd =
+  HM.foldrWithKey (compareRefs (_mdRefMap md)) True (_mdRefMap ifd)
+  where
+    compareRefs _ _ (Direct _) _ = False
+    compareRefs mm refName (Ref t) acc =
+      case HM.lookup refName mm of
+        -- Module does not implement an interface function. Error.
+        Nothing -> False
+        -- Direct refs are not supported
+        Just (Direct _) -> False
+        Just (Ref s) -> defunEquality t s && acc
+
+
+expectSuccess :: ModuleName -> Bool -> Expectation
+expectSuccess mn b = if b
+  then expectationFailure $ "Model consistency failed: " ++ asString' mn
+  else pure ()
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets
 -- 'Info', and only compares relevant terms.
@@ -67,4 +87,14 @@ expEquality e1 e2 =
     (EList (ListExp l d _), EList (ListExp l' d' _)) ->
       length l == length l' && all (uncurry expEquality) (l `zip` l') && d == d'
     (ESeparator (SeparatorExp s _), ESeparator (SeparatorExp s' _)) -> s == s'
+    _ -> False
+
+-- Show that all models for a given interface function reference
+-- appear as a subset of the models of the corresponding module function
+defunEquality :: Term Ref -> Term Ref -> Bool
+defunEquality t s =
+  case (t, s) of
+    (TDef _ _ _ _ _ Meta{_mModel=mModel} _,
+     TDef _ _ _ _ _ Meta{_mModel=iModel} _) ->
+      all (\e -> any (expEquality e) mModel) iModel
     _ -> False
