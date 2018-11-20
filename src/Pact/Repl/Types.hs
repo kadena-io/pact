@@ -6,7 +6,7 @@ module Pact.Repl.Types
   , TestResult(..)
   , Repl
   , LibOp(..)
-  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsHostname,rlsPort
+  , LibState(..),rlsPure,rlsOp,rlsTxName,rlsTests,rlsVerifyUri
   , Tx(..)
   ) where
 
@@ -64,8 +64,7 @@ data LibState = LibState {
     , _rlsOp :: LibOp
     , _rlsTxName :: Maybe Text
     , _rlsTests :: [TestResult]
-    , _rlsHostname :: Maybe String
-    , _rlsPort :: Maybe Int
+    , _rlsVerifyUri :: Maybe String
 }
 
 

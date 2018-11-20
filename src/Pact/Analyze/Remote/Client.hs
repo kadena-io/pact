@@ -31,10 +31,9 @@ verifyModule
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
   -> ModuleData                       -- ^ the module we're verifying
   -> String
-  -> Int
   -> IO [Text]
-verifyModule namedMods mod' host port = do
-  let requestURI = "https://" ++ host ++ ":" ++ show port ++ "/verify"
+verifyModule namedMods mod' uri = do
+  let requestURI = uri ++ "/verify"
       body       = Remote.Request (Foldable.toList $ fmap _mdModule namedMods) (_mName $ _mdModule mod')
       jsonBody   = T.decodeUtf8 . BSL.toStrict $ A.encode body
   req <- XHR.newXMLHttpRequest

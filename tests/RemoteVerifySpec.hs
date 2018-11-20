@@ -33,7 +33,7 @@ data TestFailure
 
 loadCode :: Text -> IO (Either TestFailure ReplState)
 loadCode code = do
-  replState0 <- initReplState StringEval (Just "localhost") (Just 3000)
+  replState0 <- initReplState StringEval (Just "http://localhost:3000")
   (eTerm, replState) <- runStateT (evalRepl' $ T.unpack code) replState0
   pure $ case eTerm of
     Left err -> Left $ ReplError err

@@ -97,7 +97,7 @@ validateRequest = do
 
 initializeRepl :: IO ReplState
 initializeRepl = do
-  rs <- initReplState StringEval Nothing Nothing
+  rs <- initReplState StringEval Nothing
   let dbImpl = rs ^. rEnv . eePactDb
       dummyKeySet = KeySet [] (Name "keys-all" def)
 
