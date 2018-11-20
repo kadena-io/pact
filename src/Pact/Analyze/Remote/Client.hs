@@ -1,27 +1,31 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Analyze.Remote.Client
   ( verifyModule
   ) where
 
-import qualified Control.Exception             as C
-import           Control.Monad.IO.Class        (liftIO)
-import qualified Data.Aeson                    as A
-import qualified Data.Foldable                 as Foldable
-import qualified Data.HashMap.Strict           as HM
-import qualified Data.JSString                 as JS
-import qualified Data.JSString.Text            as JS
-import           Data.Monoid                   ((<>))
-import           Data.Text                     (Text)
-import qualified Data.Text.Lazy                as LT
-import qualified Data.Text.Lazy.Encoding       as LTE
+import           Control.Concurrent.MVar    (MVar, newEmptyMVar, putMVar,
+                                             takeMVar)
+import           Control.Monad
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Trans.Except
+import qualified Data.Aeson                 as A
+import qualified Data.ByteString.Lazy       as BSL
+import qualified Data.Foldable              as Foldable
+import qualified Data.HashMap.Strict        as HM
+import           Data.IORef                 (atomicModifyIORef', newIORef)
+import           Data.Monoid                ((<>))
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as T
+import           GHCJS.DOM.EventM           (onAsync)
 
-import qualified JavaScript.Web.XMLHttpRequest as XHR
+import qualified GHCJS.DOM.XMLHttpRequest   as XHR
 
-import qualified Pact.Analyze.Remote.Types as Remote
-import           Pact.Types.Runtime        (ModuleData(..))
-import           Pact.Types.Term           (Module(_mName), ModuleName)
-import           Pact.Types.Util           (tShow)
+import qualified Pact.Analyze.Remote.Types  as Remote
+import           Pact.Types.Runtime         (ModuleData (..))
+import           Pact.Types.Term            (Module (_mName), ModuleName)
 
 verifyModule
   :: HM.HashMap ModuleName ModuleData -- ^ all loaded modules
@@ -32,22 +36,33 @@ verifyModule
 verifyModule namedMods mod' host port = do
   let requestURI = "https://" ++ host ++ ":" ++ show port ++ "/verify"
       body       = Remote.Request (Foldable.toList $ fmap _mdModule namedMods) (_mName $ _mdModule mod')
-      jsonBody   = JS.lazyTextToJSString $ LTE.decodeUtf8 $ A.encode body
-  eResponse <- liftIO (C.try $ post requestURI jsonBody :: IO (Either XHR.XHRError (XHR.Response Text)))
-  return $ case eResponse of
-    Left s       -> ["error communicating with verification server: " <> tShow s]
-    Right result -> case XHR.contents result of
-      Nothing  -> ["no response from verification server"]
-      Just txt -> case A.decode $ LTE.encodeUtf8 $ LT.fromStrict txt of
-        Nothing -> ["error parsing result from verification server: " <> txt]
-        Just (Remote.Response outputLines) -> outputLines
+      jsonBody   = T.decodeUtf8 . BSL.toStrict $ A.encode body
+  req <- XHR.newXMLHttpRequest
+  let nothingText :: Maybe Text
+      nothingText = Nothing
+  XHR.open req ("POST" :: Text) requestURI True nothingText nothingText
+  XHR.setTimeout req 5000 -- Terminate at some point (5 seconds).
+  alreadyHandled <- liftIO $ newIORef False
+  respVar :: MVar [Text] <- newEmptyMVar
+  void $ req `onAsync` XHR.readyStateChange $ do
+    readyState <- XHR.getReadyState req
+    status <- XHR.getStatus req
+    statusText :: Text <- XHR.getStatusText req
+    handled <- liftIO $ atomicModifyIORef' alreadyHandled $ \handled ->
+      if readyState == 4 then (True, handled) else (handled, handled)
 
-  where
-    post requestURI body = XHR.xhrText $ XHR.Request
-      { XHR.reqMethod          = XHR.POST
-      , XHR.reqURI             = JS.pack requestURI
-      , XHR.reqLogin           = Nothing
-      , XHR.reqHeaders         = []
-      , XHR.reqWithCredentials = False
-      , XHR.reqData            = XHR.StringData body
-      }
+    when (readyState == 4 && not handled) $ do
+      er :: Either Text [Text] <- runExceptT $ do
+        when (status /= 200 && status /= 201) $
+          throwE $ "Request failed with status: " <> (T.pack . show) status <> "(" <> statusText <> ")."
+
+        raw :: Text <- do
+          mRaw <- XHR.getResponseText req
+          maybe (throwE "Got no response body from verification server!") pure mRaw
+        case A.decodeStrict $ T.encodeUtf8 raw of
+          Nothing -> throwE $ "Parsing result from verification server: " <> raw
+          Just (Remote.Response outputLines) -> pure outputLines
+      let r = either (pure . ("ERROR:" <>)) id er
+      liftIO $ putMVar respVar r
+  XHR.sendString req jsonBody
+  liftIO $ takeMVar respVar
