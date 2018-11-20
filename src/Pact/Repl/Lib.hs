@@ -360,8 +360,8 @@ verify i as = case as of
         modResult <- liftIO $ Check.verifyModule modules md
         let renderedLines = Check.renderVerifiedModule modResult
 #endif
-        setop $ TcErrors $ Text.unpack <$> renderedLines
-        return (tStr "")
+        -- setop $ TcErrors $ Text.unpack <$> renderedLines
+        return (tStr $ Text.unlines renderedLines)
 
   _ -> argsError i as
 
