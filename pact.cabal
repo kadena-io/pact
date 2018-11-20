@@ -253,7 +253,6 @@ test-suite hspec
   other-modules:
                 Blake2Spec
                 KeysetSpec
-                RemoteVerifySpec
                 TypesSpec
   if !impl(ghcjs)
     build-depends:
@@ -270,6 +269,7 @@ test-suite hspec
       , PactTestsSpec
       , ParserSpec
       , PersistSpec
+      , RemoteVerifySpec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner
