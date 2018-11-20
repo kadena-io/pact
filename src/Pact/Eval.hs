@@ -314,7 +314,11 @@ solveConstraint info refName (Direct t) _ =
 solveConstraint info refName (Ref t) evalMap = do
   em <- evalMap
   case HM.lookup refName em of
-    Nothing -> evalMap
+    Nothing ->
+      case t of
+        TDef{..} ->
+          evalError info $ "found unimplemented member while resolving model constraints: " ++ show refName
+        _ -> evalMap
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
