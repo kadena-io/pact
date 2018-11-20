@@ -76,6 +76,7 @@ expectSuccess :: ModuleName -> Bool -> Expectation
 expectSuccess mn b = if b
   then expectationFailure $ "Model consistency failed: " ++ asString' mn
   else pure ()
+
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets
 -- 'Info', and only compares relevant terms.

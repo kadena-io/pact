@@ -458,7 +458,7 @@ applyPact (TList steps _ i) = do
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
     Nothing -> view eeTxId >>= \tid ->
-      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack .show) tid) Nothing
+      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack . show) tid) Nothing
     Just v -> return v
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " ++ show _psStep) return $ steps `atMay` _psStep
