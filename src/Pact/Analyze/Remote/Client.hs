@@ -61,7 +61,7 @@ verifyModule namedMods mod' uri = do
         case A.decodeStrict $ T.encodeUtf8 raw of
           Nothing -> throwE $ "Parsing result from verification server: " <> raw
           Just (Remote.Response outputLines) -> pure outputLines
-      let r = either (pure . ("ERROR:" <>)) id er
+      let r = either (pure . ("Error: " <>)) id er
       liftIO $ putMVar respVar r
   XHR.sendString req jsonBody
   liftIO $ takeMVar respVar
