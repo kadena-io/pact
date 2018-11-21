@@ -59,7 +59,6 @@ library
   if impl(ghcjs)
     build-depends: ghcjs-dom
     exposed-modules:
-      JavaScript.Web.XMLHttpRequest
       Pact.Analyze.Remote.Client
 
   if !impl(ghcjs)
