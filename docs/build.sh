@@ -26,3 +26,13 @@ rm -rf _build
 pandoc -s -t rst pact-reference.md -o pact-reference.rst
 perl -p0777i -e 's/^(\+|\-)\n~/\\\1\n~~/gm' pact-reference.rst
 sphinx-build -b html -d _build/doctrees . _build/html
+
+
+# --- Korean Docs --- #
+cd ..
+cd kr/
+rm -rf _build
+
+pandoc -s -t rst pact-reference.md -o pact-reference.rst
+perl -p0777i -e 's/^(\+|\-)\n~/\\\1\n~~/gm' pact-reference.rst
+sphinx-build -b html -d _build/doctrees . _build/html
