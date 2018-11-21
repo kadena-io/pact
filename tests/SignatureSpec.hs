@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module SignatureSpec (spec) where
 
 import Test.Hspec
 
+import Control.Monad (forM_)
 import Control.Lens (preview, ix)
 import Data.Default (def)
 import qualified Data.HashMap.Lazy as HM
@@ -38,50 +40,33 @@ loadModuleData rs mn = case preview (rsModules . ix mn) rs of
 compareModelSpec :: Spec
 compareModelSpec = describe "Module models" $ do
   rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
-  md  <- moduleDataOf rs "model-test1-impl"
-  ifd <- moduleDataOf rs "model-test1"
+  md  <- runIO $ loadModuleData rs (ModuleName "model-test1-impl")
+  ifd <- runIO $ loadModuleData rs (ModuleName "model-test1")
 
-  let mModels = _mModel . _mMeta . _mdModule $ md
-      iModels = _mModel . _interfaceMeta . _mdModule $ ifd
+  let mModels    = _mModel . _mMeta . _mdModule $ md
+      iModels    = _mModel . _interfaceMeta . _mdModule $ ifd
+      mfunModels = aggregateFunctionModels md
+      ifunModels = aggregateFunctionModels ifd
 
-  it "should contain all toplevel models defined in their implemented interfaces" $
-    (compareToplevelModels mModels iModels) `shouldBe` True
+  -- test toplevel models
+  hasAllExps mModels iModels
+  -- test function models
+  hasAllExps mfunModels ifunModels
 
-  it "should reflect all models defined for functions defined in interfaces" $
-    (compareFunctionModels md ifd) `shouldBe` True
+hasAllExps :: [Exp Info] -> [Exp Info] -> Spec
+hasAllExps mexps iexps = forM_ iexps $ \e ->
+  it "should find all exps defined in interface in corresponding module" $
+    (e,mexps) `shouldSatisfy` (\_ -> any (expEquality e) mexps)
 
+aggregateFunctionModels :: ModuleData -> [Exp Info]
+aggregateFunctionModels ModuleData{..} =
+  foldMap (extractExp . snd) $ HM.toList _mdRefMap
   where
-    moduleDataOf r = runIO . loadModuleData r . ModuleName
-
-compareToplevelModels :: [Exp Info] -> [Exp Info] -> Bool
-compareToplevelModels mexps iexps =
-  all (\e -> any (expEquality e) mexps) iexps
-
-compareFunctionModels :: ModuleData -> ModuleData -> Bool
-compareFunctionModels md ifd =
-  HM.foldrWithKey (compareRefs (_mdRefMap md)) True (_mdRefMap ifd)
-  where
-    compareRefs _ _ (Direct _) _ = False
-    compareRefs mm refName (Ref t) acc =
-      case HM.lookup refName mm of
-        -- Module does not implement an interface function. Error.
-        Nothing -> False
-        -- Direct refs are not supported
-        Just (Direct _) -> False
-        Just (Ref s) -> defunEquality t s && acc
+    extractExp (Ref (TDef _ _ _ _ _ Meta{_mModel=mModel} _)) = mModel
+    extractExp _ = []
 
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets
 -- 'Info', and only compares relevant terms.
 expEquality :: Exp Info -> Exp Info -> Bool
 expEquality e1 e2 = ((def :: Info) <$ e1) == ((def :: Info) <$ e2)
-
--- Show that all models for a given interface function reference
--- appear as a subset of the models of the corresponding module function
-defunEquality :: Term Ref -> Term Ref -> Bool
-defunEquality t s =
-  case (t, s) of
-    (TDef _ _ _ _ _ Meta{_mModel=mModel} _,
-     TDef _ _ _ _ _ Meta{_mModel=iModel} _) ->
-      all (\e -> any (expEquality e) mModel) iModel
-    _ -> False
