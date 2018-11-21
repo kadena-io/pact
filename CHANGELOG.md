@@ -1,3 +1,8 @@
+2.6.1
+---
+* Fix bug preventing correct reporting of argument values in falsifying models
+  from the property checker
+
 2.6.0
 ---
 * Pact Interfaces

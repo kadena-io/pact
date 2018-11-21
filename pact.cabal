@@ -269,6 +269,7 @@ test-suite hspec
       , ParserSpec
       , PersistSpec
       , RemoteVerifySpec
+      , SignatureSpec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner

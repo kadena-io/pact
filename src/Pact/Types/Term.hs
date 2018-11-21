@@ -104,14 +104,19 @@ instance ToJSON Meta where
     [ "docs" .= _mDocs, "model" .= toJSON (show <$> _mModel) ]
 instance Default Meta where def = Meta def def
 
-newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
+instance Semigroup Meta where
+  (Meta d m) <> (Meta d' m') = Meta (d <> d') (m <> m')
 
+instance Monoid Meta where
+  mempty = Meta Nothing []
+
+newtype PublicKey = PublicKey { _pubKey :: BS.ByteString } deriving (Eq,Ord,Generic,IsString,AsString)
 instance Serialize PublicKey
 instance NFData PublicKey
 instance FromJSON PublicKey where
-    parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
+  parseJSON = withText "PublicKey" (return . PublicKey . encodeUtf8)
 instance ToJSON PublicKey where
-    toJSON = toJSON . decodeUtf8 . _pubKey
+  toJSON = toJSON . decodeUtf8 . _pubKey
 instance Show PublicKey where show (PublicKey s) = show (BS.toString s)
 
 -- | KeySet pairs keys with a predicate function name.
@@ -157,13 +162,10 @@ data FunApp = FunApp {
     , _faDocs :: !(Maybe Text)
     }
 
-
 instance Show FunApp where
   show FunApp {..} =
     "(" ++ defTypeRep _faDefType ++ " " ++ maybeDelim "." _faModule ++
     unpack _faName ++ " " ++ showFunTypes _faTypes ++ ")"
-
-
 
 -- | Variable type for an evaluable 'Term'.
 data Ref =
@@ -227,9 +229,10 @@ data Name =
     QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
     Name { _nName :: Text, _nInfo :: Info }
          deriving (Generic)
+
 instance Show Name where
-    show (QName q n _) = asString' q ++ "." ++ unpack n
-    show (Name n _) = unpack n
+  show (QName q n _) = asString' q ++ "." ++ unpack n
+  show (Name n _) = unpack n
 instance ToJSON Name where toJSON = toJSON . show
 instance FromJSON Name where
   parseJSON = withText "Name" $ \t -> case AP.parseOnly (parseName def) t of
@@ -241,7 +244,6 @@ parseName i = do
   a <- ident style
   try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
     return (Name a i)
-
 
 instance Hashable Name where
   hashWithSalt s (Name t _) = s `hashWithSalt` (0::Int) `hashWithSalt` t
@@ -264,7 +266,6 @@ data Use = Use
   } deriving (Eq)
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
-
 
 
 -- TODO: We need a more expressive, safer ADT for this.
