@@ -39,7 +39,6 @@ module Pact.Types.Runtime
    module Pact.Types.Gas
    ) where
 
-import Control.Applicative (liftA2)
 import Control.Arrow ((&&&))
 import Control.Lens hiding ((.=))
 import Control.DeepSeq
@@ -241,12 +240,6 @@ newtype Eval e a =
     Eval { unEval :: ReaderT (EvalEnv e) (StateT EvalState IO) a }
     deriving (Functor,Applicative,Monad,MonadState EvalState,
                      MonadReader (EvalEnv e),MonadThrow,MonadCatch,MonadIO)
-
-instance Semigroup a => Semigroup (Eval e a) where
-  (<>) = liftA2 (<>)
-
-instance Monoid a => Monoid (Eval e a) where
-  mempty = pure mempty
 
 -- | "Production" runEval throws exceptions, meaning the state can be lost,
 -- which is useful for reporting stack traces in the REPL.

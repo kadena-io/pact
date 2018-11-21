@@ -254,6 +254,7 @@ test-suite hspec
       , PactTestsSpec
       , ParserSpec
       , PersistSpec
+      , SignatureSpec
       , TypecheckSpec
       , PactContinuationSpec
       , Utils.TestRunner

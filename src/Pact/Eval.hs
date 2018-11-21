@@ -216,8 +216,8 @@ loadModule m@Module{..} bod1 mi g0 = do
       t -> evalError (_tInfo t) "Malformed module"
   mapM_ evalUse _mImports
   evaluatedDefs <- evaluateDefs mi modDefs1
-  evaluateConstraints mi m evaluatedDefs
-  let md = ModuleData m evaluatedDefs
+  (m', solvedDefs) <- evaluateConstraints mi m evaluatedDefs
+  let md = ModuleData m' solvedDefs
   installModule md
   (evalRefs . rsNewModules) %= HM.insert _mName md
   return (g1, modDefs1)
@@ -282,44 +282,56 @@ evaluateConstraints
   :: Info
   -> Module
   -> HM.HashMap Text Ref
-  -> Eval e ()
+  -> Eval e (Module, HM.HashMap Text Ref)
 evaluateConstraints info Interface{} _ =
   evalError info "Unexpected: interface found in module position while solving constraints"
-evaluateConstraints info Module{..} evalMap = foldMap evaluateConstraint _mInterfaces
+evaluateConstraints info m evalMap =
+  -- we would like the lazy semantics of foldr to shortcircuit the solver
+  foldr evaluateConstraint (pure (m, evalMap)) (_mInterfaces m)
   where
-    evaluateConstraint ifn = do
-      irefs <- preview $ eeRefStore . rsModules . ix ifn . mdRefMap
-      case irefs of
+    evaluateConstraint ifn em = do
+      (m',refMap) <- em
+      refData <- preview $ eeRefStore . rsModules . ix ifn
+      case refData of
         Nothing -> evalError info $
-          "Interface implemented in module, but not defined: <" ++ asString' ifn ++ ">"
-        Just irefs' -> HM.foldrWithKey (solveConstraint info evalMap) (pure ()) irefs'
+          "Interface implemented in module, but not defined: " ++ asString' ifn
+        Just (ModuleData Interface{..} irefs) -> do
+          em' <- HM.foldrWithKey (solveConstraint info) (pure refMap) irefs
+          let um = over mMeta (<> _interfaceMeta) m'
+          pure (um, em')
+        Just _ -> evalError info "Unexpected: module found in interface position while solving constraints"
 
 -- | Compare implemented member signatures with their definitions.
 -- At this stage, we have not merged consts, so we still check for overlap
 solveConstraint
   :: Info
-  -> HM.HashMap Text Ref
   -> Text
   -> Ref
-  -> Eval e ()
-  -> Eval e ()
-solveConstraint info _ refName (Direct t) _ =
+  -> Eval e (HM.HashMap Text Ref)
+  -> Eval e (HM.HashMap Text Ref)
+solveConstraint info refName (Direct t) _ =
   evalError info $ "found native reference " ++ show t ++ " while resolving module contraints: " ++ show refName
-solveConstraint info em refName (Ref t) _ =
+solveConstraint info refName (Ref t) evalMap = do
+  em <- evalMap
   case HM.lookup refName em of
-    Nothing -> pure ()
+    Nothing ->
+      case t of
+        TConst{..} -> evalMap
+        _ -> evalError info $ "found unimplemented member while resolving model constraints: " ++ show refName
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
       case (t, s) of
-        (TDef _n _mn dt (FunType args rty) _ _ _,
-          TDef _n' _mn' dt' (FunType args' rty') _ _ _) -> do
+        (TDef _n _mn dt (FunType args rty) _ m _,
+          TDef _n' _mn' dt' (FunType args' rty') b m' i) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
           forM_ (args `zip` args') $ \((Arg n ty _), (Arg n' ty' _)) -> do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
+          -- the model concatenation step: we must reinsert the ref back into the map with new models
+          pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -449,7 +461,7 @@ applyPact (TList steps _ i) = do
   -- get step from environment or create a new one
   PactStep{..} <- view eePactStep >>= \ps -> case ps of
     Nothing -> view eeTxId >>= \tid ->
-      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack .show) tid) Nothing
+      return $ PactStep 0 False (PactId $ maybe "[localPactId]" (pack . show) tid) Nothing
     Just v -> return v
   -- retrieve indicated step from code
   s <- maybe (evalError i $ "applyPact: step not found: " ++ show _psStep) return $ steps `atMay` _psStep
