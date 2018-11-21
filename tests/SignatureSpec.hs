@@ -38,11 +38,11 @@ loadModuleData rs mn = case preview (rsModules . ix mn) rs of
 compareModelSpec :: Spec
 compareModelSpec = describe "Module models" $ do
   rs  <- runIO $ loadRefStore "tests/pact/signatures.repl"
-  md  <- moduleDataOf rs "model-test1"
-  ifd <- moduleDataOf rs "model-test1-impl"
+  md  <- moduleDataOf rs "model-test1-impl"
+  ifd <- moduleDataOf rs "model-test1"
 
-  let mModels = modelsOf md
-      iModels = modelsOf ifd
+  let mModels = _mModel . _mMeta . _mdModule $ md
+      iModels = _mModel . _interfaceMeta . _mdModule $ ifd
       mName   = nameOf md
 
   it "should contain all toplevel models defined in their implemented interfaces" $
@@ -53,9 +53,8 @@ compareModelSpec = describe "Module models" $ do
 
   where
     moduleDataOf r = runIO . loadModuleData r . ModuleName
-    modelsOf = _mModel . _mMeta . _mdModule
     nameOf = _mName . _mdModule
-    compareToplevel mexps = all $ \e -> any (expEquality e) mexps
+    compareToplevel mexps iexps = all (\e -> any (expEquality e) mexps) iexps
 
 
 compareFunRefs :: ModuleData -> ModuleData -> Bool
@@ -74,21 +73,14 @@ compareFunRefs md ifd =
 
 expectSuccess :: ModuleName -> Bool -> Expectation
 expectSuccess mn b = if b
-  then expectationFailure $ "Model consistency failed: " ++ asString' mn
-  else pure ()
+  then pure ()
+  else expectationFailure $ "Model consistency failed: " ++ asString' mn
 
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets
 -- 'Info', and only compares relevant terms.
 expEquality :: Exp Info -> Exp Info -> Bool
-expEquality e1 e2 =
-  case (e1, e2) of
-    (ELiteral (LiteralExp l _), ELiteral (LiteralExp l' _)) -> l == l'
-    (EAtom (AtomExp a qs _), EAtom (AtomExp a' qs' _)) -> a == a' && qs == qs'
-    (EList (ListExp l d _), EList (ListExp l' d' _)) ->
-      length l == length l' && all (uncurry expEquality) (l `zip` l') && d == d'
-    (ESeparator (SeparatorExp s _), ESeparator (SeparatorExp s' _)) -> s == s'
-    _ -> False
+expEquality e1 e2 = ((def :: Info) <$ e1) == ((def :: Info) <$ e2)
 
 -- Show that all models for a given interface function reference
 -- appear as a subset of the models of the corresponding module function

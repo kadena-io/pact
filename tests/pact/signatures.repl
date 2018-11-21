@@ -130,34 +130,6 @@
 (commit-tx)
 (begin-tx)
 
-;; Test that module-defined schema types are brought into scope
-;; via 'use' in interfaces
-(interface test-sig
-
-  (use test-module)
-
-  (defun test-1:object{account} (x:object{account}))
-)
-(commit-tx)
-
-;; Test to see that implementations of interfaces inherit schema types brought into
-;; scope from other modules
-(module test-impl 'test-keyset
-  @doc "test if implementing test-sig resolves schema type"
-
-  (use test-module)
-  (implements test-sig)
-
-  (deftable accounts:{account}
-    "test reference")
-
-  (defun test-1:object{account} (x:object{account})
-    x)
-)
-
-(commit-tx)
-(begin-tx)
-
 ;; Test to see if properties defined in interface
 ;; are inherited properly by modules that implement the
 ;; interface at different levels of definition (defun-level,
@@ -167,12 +139,7 @@
 (interface model-test1
   @doc "Test to make sure interface global models and function \
       \ models are concatenated properly in implementing modules"
-  @model
-    [ (defproperty conserves-mass-test
-       (= (column-delta 'accounts 'balance) 0.0))
-      (defproperty auth-required-test
-       (authorized-by 'accounts-admin-keyset))
-    ]
+  @model [ (defproperty implies (a:bool b:bool) (when a b)) ]
 
   (defun always-false:bool (x:bool)
     @doc   "this function always flips false!"
@@ -182,17 +149,13 @@
     @doc   "only allow non-negative results"
     @model [(property (>= result 0))])
 
-  (defun always-admin (action:string)
-    @doc   "Only admins or super-admins can call this function successfully."
-    @model [(property auth-required-test)])
-
 )
 
 (commit-tx)
 (begin-tx)
 
-(define-keyset 'accounts-admin-keyset (sig-keyset))
-(module model-test1-impl 'accounts-admin-keyset
+(define-keyset 'model-keyset (sig-keyset))
+(module model-test1-impl 'model-keyset
 
   (implements model-test1)
 
@@ -214,16 +177,33 @@
         (* x x)
         (* x (* x x)))
     )
-
-  (defun always-admin (action:string)
-    @model
-      [ (property
-         (or (authorized-by 'admins)
-             (authorized-by 'super-admins)))
-      ]
-    (+ action " thing")
-    )
-
 )
 
 (commit-tx)
+(begin-tx)
+
+;; Test that module-defined schema types are brought into scope
+;; via 'use' in interfaces
+(interface test-sig
+
+  (use test-module)
+
+  (defun test-1:object{account} (x:object{account}))
+)
+
+(commit-tx)
+
+;; Test to see that implementations of interfaces inherit schema types brought into
+;; scope from other modules
+(module test-impl 'test-keyset
+  @doc "test if implementing test-sig resolves schema type"
+
+  (use test-module)
+  (implements test-sig)
+
+  (deftable accounts:{account}
+    "test reference")
+
+  (defun test-1:object{account} (x:object{account})
+    x)
+)
