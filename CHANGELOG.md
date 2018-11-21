@@ -1,5 +1,8 @@
 2.6.1
 ---
+* Korean readthedocs
+* Interfaces copy models onto implementing modules
+* Better/tighter compile phase, remove TBless, TImplements
 * Fix bug preventing correct reporting of argument values in falsifying models
   from the property checker
 
