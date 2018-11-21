@@ -11,6 +11,7 @@ dist-newstyle
 docs/_build
 docs/en/_build
 docs/jp/_build
+docs/kr/_build
 /web/pact.js
 /web/pact.min.js
 /web/npm-debug.log
