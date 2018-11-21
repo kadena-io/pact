@@ -209,6 +209,16 @@ readDecimalDef = defRNative "read-decimal" readDecimal
       return $ toTerm a'
     readDecimal i as = argsError i as
 
+defineNamespaceDef :: NativeDef
+defineNamespaceDef = defNative "define-namespace" defineNamespace
+  (funType tTyString [("namespace", tTyString), ("keyset", tTyKeySet)])
+   "Create a namespace called NAMESPACE for a given KEYSET. All expressions that occur \
+   \ in a given transaction will be tied to NAMESPACE, and may be accessed using the toplevel \
+   \ call (namespace NAMESPACE) when KEYSET is in scope. `(namespace my-namespace)`"
+  where
+    defineNamespace :: NativeFun e
+    defineNamespace = undefined
+
 
 langDefs :: NativeModule
 langDefs =
@@ -331,7 +341,6 @@ langDefs =
      "Lazily ignore arguments IGNORE* and return VALUE. `(filter (constantly true) [1 2 3])`"
     ,defRNative "identity" identity (funType a [("value",a)])
      "Return provided value. `(map (identity) [1 2 3])`"
-
     ,strToIntDef
     ,hashDef
     ])

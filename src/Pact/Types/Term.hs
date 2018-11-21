@@ -23,6 +23,7 @@
 
 module Pact.Types.Term
  (
+   Namespace(..), nsName, nsKeySet,
    Meta(..),mDocs,mModel,
    PublicKey(..),
    KeySet(..),
@@ -94,6 +95,25 @@ import Pact.Types.Info
 import Pact.Types.Type
 import Pact.Types.Exp
 
+
+data Namespace = Namespace
+  { _nsName    :: Text
+  , _nsKeySet  :: KeySet
+  } deriving (Eq, Generic)
+
+instance Show Namespace where
+  show Namespace{..} = "(namespace " ++ unpack _nsName ++ ")"
+
+instance FromJSON Namespace where
+  parseJSON = withObject "Namespace" $ \o -> Namespace
+    <$> o .: "name"
+    <*> o .: "keyset"
+
+instance ToJSON Namespace where
+  toJSON Namespace{..} = object
+    [ "name"   .= _nsName
+    , "keyset" .= _nsKeySet
+    ]
 
 data Meta = Meta
   { _mDocs  :: !(Maybe Text) -- ^ docs
@@ -269,22 +289,22 @@ instance Show Use where
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
- = Module
- { _mName :: !ModuleName
- , _mKeySet :: !KeySetName
- , _mMeta :: !Meta
- , _mCode :: !Code
- , _mHash :: !Hash
- , _mBlessed :: !(HS.HashSet Hash)
- , _mInterfaces :: [ModuleName]
- , _mImports :: [Use]
- }
- | Interface
- { _interfaceName :: !ModuleName
- , _interfaceCode :: !Code
- , _interfaceMeta :: !Meta
- , _interfaceImports :: [Use]
- } deriving Eq
+  = Module
+  { _mName :: !ModuleName
+  , _mKeySet :: !KeySetName
+  , _mMeta :: !Meta
+  , _mCode :: !Code
+  , _mHash :: !Hash
+  , _mBlessed :: !(HS.HashSet Hash)
+  , _mInterfaces :: [ModuleName]
+  , _mImports :: [Use]
+  }
+  | Interface
+  { _interfaceName :: !ModuleName
+  , _interfaceCode :: !Code
+  , _interfaceMeta :: !Meta
+  , _interfaceImports :: [Use]
+  } deriving Eq
 
 instance Show Module where
   show m = case m of
@@ -652,6 +672,7 @@ abbrev TTable {..} = "<deftable " ++ asString' _tTableName ++ ">"
 
 
 makeLenses ''Term
+makeLenses ''Namespace
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
