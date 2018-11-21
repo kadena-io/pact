@@ -316,9 +316,8 @@ solveConstraint info refName (Ref t) evalMap = do
   case HM.lookup refName em of
     Nothing ->
       case t of
-        TDef{..} ->
-          evalError info $ "found unimplemented member while resolving model constraints: " ++ show refName
-        _ -> evalMap
+        TConst{..} -> evalMap
+        _ -> evalError info $ "found unimplemented member while resolving model constraints: " ++ show refName
     Just (Direct s) ->
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->

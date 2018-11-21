@@ -12,8 +12,8 @@ import Pact.Repl.Types
 import Pact.Typechecker (die)
 import Pact.Types.Exp
 import Pact.Types.Info (Info(..))
-import Pact.Types.Runtime (RefStore(..), ModuleData(..), eeRefStore,
-                           rsModules, asString')
+import Pact.Types.Runtime (RefStore(..), ModuleData(..),
+                           eeRefStore, rsModules)
 import Pact.Types.Term (Module(..), ModuleName(..),
                         Meta(..), Term(..), Ref(..))
 
@@ -43,22 +43,22 @@ compareModelSpec = describe "Module models" $ do
 
   let mModels = _mModel . _mMeta . _mdModule $ md
       iModels = _mModel . _interfaceMeta . _mdModule $ ifd
-      mName   = nameOf md
 
   it "should contain all toplevel models defined in their implemented interfaces" $
-    expectSuccess mName (compareToplevel mModels iModels)
+    (compareToplevelModels mModels iModels) `shouldBe` True
 
   it "should reflect all models defined for functions defined in interfaces" $
-    expectSuccess mName (compareFunRefs md ifd)
+    (compareFunctionModels md ifd) `shouldBe` True
 
   where
     moduleDataOf r = runIO . loadModuleData r . ModuleName
-    nameOf = _mName . _mdModule
-    compareToplevel mexps iexps = all (\e -> any (expEquality e) mexps) iexps
 
+compareToplevelModels :: [Exp Info] -> [Exp Info] -> Bool
+compareToplevelModels mexps iexps =
+  all (\e -> any (expEquality e) mexps) iexps
 
-compareFunRefs :: ModuleData -> ModuleData -> Bool
-compareFunRefs md ifd =
+compareFunctionModels :: ModuleData -> ModuleData -> Bool
+compareFunctionModels md ifd =
   HM.foldrWithKey (compareRefs (_mdRefMap md)) True (_mdRefMap ifd)
   where
     compareRefs _ _ (Direct _) _ = False
@@ -69,12 +69,6 @@ compareFunRefs md ifd =
         -- Direct refs are not supported
         Just (Direct _) -> False
         Just (Ref s) -> defunEquality t s && acc
-
-
-expectSuccess :: ModuleName -> Bool -> Expectation
-expectSuccess mn b = if b
-  then pure ()
-  else expectationFailure $ "Model consistency failed: " ++ asString' mn
 
 -- Because models will necessarily have conflicting Info values
 -- we need to define a new form of equality which forgets
