@@ -131,7 +131,7 @@ analyzeEval EObject{} _ = pure (Left "TODO: analyzeEval EObject")
 -- decimals.
 mkEvalEnv :: GenState -> IO (EvalEnv LibState)
 mkEvalEnv (GenState _ keysets decimals) = do
-  evalEnv <- liftIO initPureEvalEnv
+  evalEnv <- liftIO $ initPureEvalEnv Nothing
   let keysets' = HM.fromList
         $ fmap (\(k, (pks, _ks)) -> (T.pack k, toJSON pks))
         $ Map.toList keysets

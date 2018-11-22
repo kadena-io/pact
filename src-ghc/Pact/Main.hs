@@ -138,7 +138,7 @@ compileOnly :: String -> IO (Either String [Term Name])
 compileOnly fp = do
   !pr <- TF.parseFromFileEx exprsOnly fp
   src <- readFile fp
-  s <- initReplState (Script False fp)
+  s <- initReplState (Script False fp) Nothing
   (`evalStateT` s) $ handleParse pr $ \es -> (sequence <$> forM es (\e -> handleCompile src e (return . Right)))
 
 die :: String -> IO b
@@ -147,7 +147,7 @@ die msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure
 
 echoBuiltins :: IO ()
 echoBuiltins = do
-  defs <- view (eeRefStore.rsNatives) <$> initPureEvalEnv
+  defs <- view (eeRefStore.rsNatives) <$> (initPureEvalEnv Nothing)
   forM_ (sort $ HM.keys defs) print
 
 

@@ -32,13 +32,14 @@ import Control.Concurrent.MVar
 import Data.Aeson (eitherDecode,toJSON)
 import Data.Text.Encoding
 import Data.Maybe
-#if !defined(ghcjs_HOST_OS)
+#if defined(ghcjs_HOST_OS)
+import qualified Pact.Analyze.Remote.Client as RemoteClient
+#else
 import Control.Monad.State.Strict (get)
 import Criterion
 import Criterion.Types
 import qualified Data.Map as M
-import qualified Data.Text as Text
-import Pact.Analyze.Check
+import qualified Pact.Analyze.Check as Check
 import Statistics.Types (Estimate(..))
 #endif
 import Pact.Typechecker
@@ -54,13 +55,13 @@ import Pact.Types.Logger
 import Pact.Repl.Types
 
 
-initLibState :: Loggers -> IO LibState
-initLibState loggers = do
+initLibState :: Loggers -> Maybe String -> IO LibState
+initLibState loggers verifyUri = do
   m <- newMVar (DbEnv def persister
                 (newLogger loggers "Repl")
                 def def)
   createSchema m
-  return (LibState m Noop def def)
+  return (LibState m Noop def def verifyUri)
 
 -- | Native function with no gas consumption.
 type ZNativeFun e = FunApp -> [Term Ref] -> Eval e (Term Name)
@@ -126,9 +127,7 @@ replDefs = ("Repl",
        "Set environment gas price to PRICE."
      ,defZRNative "env-gasrate" setGasRate (funType tTyString [("rate",tTyInteger)])
        "Update gas model to charge constant RATE."
-#if !defined(ghcjs_HOST_OS)
      ,defZRNative "verify" verify (funType tTyString [("module",tTyString)]) "Verify MODULE, checking that all properties hold."
-#endif
 
      ,defZRNative "json" json' (funType tTyValue [("exp",a)]) $
       "Encode pact expression EXP as a JSON value. " <>
@@ -343,7 +342,6 @@ tc i as = case as of
                 setop $ TcErrors $ map (\(Failure ti s) -> renderInfo (_tiInfo ti) ++ ":Warning: " ++ s) fails
                 return $ tStr $ "Typecheck " <> modname <> ": Unable to resolve all types"
 
-#if !defined(ghcjs_HOST_OS)
 verify :: RNativeFun LibState
 verify i as = case as of
   [TLitString modName] -> do
@@ -352,30 +350,18 @@ verify i as = case as of
     case mdm of
       Nothing -> evalError' i $ "No such module: " ++ show modName
       Just md -> do
-        modResult <- liftIO $ verifyModule modules md
-        -- TODO: build describeModuleResult
-        case modResult of
-          Left (ModuleParseFailure failure)  -> setop $ TcErrors
-            [Text.unpack $ describeParseFailure failure]
-          Left (ModuleCheckFailure checkFailure) -> setop $ TcErrors
-            [Text.unpack $ describeCheckFailure checkFailure]
-          Left (TypeTranslationFailure msg ty) -> setop $ TcErrors
-            [Text.unpack $ msg <> ": " <> tShow ty]
-          Left (InvalidRefType) -> setop $ TcErrors
-            ["Invalid reference type given to typechecker."]
-          Left (FailedConstTranslation msg) -> setop $ TcErrors
-            [msg]
-          Right (ModuleChecks propResults invariantResults warnings) -> setop $ TcErrors $
-            let propResults'      = propResults      ^.. traverse . each
-                invariantResults' = invariantResults ^.. traverse . traverse . each
-            in fmap Text.unpack $
-                 (describeCheckResult <$> propResults' <> invariantResults') <>
-                 [describeVerificationWarnings warnings]
-
-        return (tStr "")
+#if defined(ghcjs_HOST_OS)
+        uri <- fromMaybe "localhost" <$> viewLibState (view rlsVerifyUri)
+        renderedLines <- liftIO $
+          RemoteClient.verifyModule modules md uri
+#else
+        modResult <- liftIO $ Check.verifyModule modules md
+        let renderedLines = Check.renderVerifiedModule modResult
+#endif
+        -- setop $ TcErrors $ Text.unpack <$> renderedLines
+        return (tStr $ mconcat renderedLines)
 
   _ -> argsError i as
-#endif
 
 json' :: RNativeFun LibState
 json' _ [a] = return $ TValue (toJSON a) def
