@@ -112,11 +112,6 @@ instance AsString KeyPredBuiltins where
 keyPredBuiltins :: M.Map Name KeyPredBuiltins
 keyPredBuiltins = M.fromList $ map ((`Name` def) . asString &&& id) [minBound .. maxBound]
 
-
-newtype PactId = PactId Text
-    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
-instance Show PactId where show (PactId s) = show s
-
 -- | Environment setup for pact execution.
 data PactStep = PactStep {
       _psStep :: !Int

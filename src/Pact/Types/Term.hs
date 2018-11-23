@@ -27,6 +27,11 @@ module Pact.Types.Term
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
+   KeySetGuard(..),
+   PactGuard(..),
+   PactId(..),
+   UserGuard(..),
+   Guard(..),
    DefType(..),
    defTypeRep,
    NativeDefName(..),
@@ -43,7 +48,7 @@ module Pact.Types.Term
    Use(..),
    Term(..),
    tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
-   tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tKeySet,
+   tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
@@ -124,7 +129,9 @@ data KeySet = KeySet {
       _ksKeys :: ![PublicKey]
     , _ksPredFun :: !Name
     } deriving (Eq,Generic)
-instance Show KeySet where show (KeySet ks f) = "KeySet " ++ show ks ++ " " ++ show f
+instance Show KeySet where
+  show (KeySet ks f) =
+    "KeySet { keys: " ++ show ks ++ ", pred: " ++ show f ++ " }"
 
 -- | allow `{ "keys": [...], "pred": "..." }`, `{ "keys": [...] }`, and just `[...]`,
 -- | the latter cases defaulting to "keys-all"
@@ -143,10 +150,81 @@ newtype KeySetName = KeySetName Text
 instance Show KeySetName where show (KeySetName s) = show s
 
 
-data DefType = Defun | Defpact deriving (Eq,Show)
+
+newtype PactId = PactId Text
+    deriving (Eq,Ord,IsString,ToTerm,AsString,ToJSON,FromJSON,Default)
+instance Show PactId where show (PactId s) = show s
+
+data PactGuard = PactGuard
+  { _pgPactId :: !PactId
+  , _pgName :: !Text
+  } deriving (Eq,Generic)
+
+instance Show PactGuard where
+  show PactGuard{..} =
+    "PactGuard { pactId: " ++ show _pgPactId ++ ", name: " ++ show _pgName ++ "}"
+
+instance ToJSON PactGuard where toJSON = lensyToJSON 3
+instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
+
+
+data KeySetGuard
+  = KGKeySet KeySet
+  | KGName Name
+  deriving (Eq)
+
+instance Show KeySetGuard where
+  show (KGKeySet k) = show k
+  show (KGName n) = "KeySet { name: " ++ show n ++ "}"
+
+instance ToJSON KeySetGuard where
+  toJSON (KGKeySet k) = toJSON k
+  toJSON (KGName n) = toJSON n
+
+instance FromJSON KeySetGuard where
+  parseJSON v = case v of
+    String _ -> KGName <$> parseJSON v
+    _ -> KGKeySet <$> parseJSON v
+
+data UserGuard = UserGuard
+  { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
+  , _ugPredFun :: !Name
+  } deriving (Eq,Generic)
+
+instance Show UserGuard where
+  show UserGuard{..} =
+    "UserGuard { data: " ++ show _ugData ++ ", pred: " ++ show _ugPredFun ++ "}"
+
+instance ToJSON UserGuard where toJSON = lensyToJSON 3
+instance FromJSON UserGuard where parseJSON = lensyParseJSON 3
+
+data Guard
+  = GPact PactGuard
+  | GKeySet KeySetGuard
+  | GUser UserGuard
+  deriving (Eq)
+
+instance Show Guard where
+  show (GPact g) = show g
+  show (GKeySet g) = show g
+  show (GUser g) = show g
+
+instance ToJSON Guard where
+  toJSON (GPact g) = toJSON g
+  toJSON (GKeySet g) = toJSON g
+  toJSON (GUser g) = toJSON g
+
+instance FromJSON Guard where
+  parseJSON v =
+    (GPact <$> parseJSON v) <|>
+    (GKeySet <$> parseJSON v) <|>
+    (GUser <$> parseJSON v)
+
+data DefType = Defun | Defpact | Defcap deriving (Eq,Show)
 defTypeRep :: DefType -> String
 defTypeRep Defun = "defun"
 defTypeRep Defpact = "defpact"
+defTypeRep Defcap = "defcap"
 
 newtype NativeDefName = NativeDefName Text
     deriving (Eq,Ord,IsString,ToJSON,AsString)
@@ -402,8 +480,8 @@ data Term n =
       _tLiteral :: !Literal
     , _tInfo :: !Info
     } |
-    TKeySet {
-      _tKeySet :: !KeySet
+    TGuard {
+      _tGuard :: !Guard
     , _tInfo :: !Info
     } |
     TUse {
@@ -447,7 +525,7 @@ instance Show n => Show (Term n) where
     show (TObject bs _ _) =
       "{" ++ intercalate ", " (map (\(a,b) -> show a ++ ": " ++ show b) bs) ++ "}"
     show (TLiteral l _) = show l
-    show (TKeySet k _) = show k
+    show (TGuard k _) = show k
     show (TUse u _) = show u
     show (TValue v _) = BSL.toString $ encode v
     show (TStep ent e r _) =
@@ -485,7 +563,7 @@ instance Eq1 Term where
     liftEq (\(w,x) (y,z) -> liftEq eq w y && liftEq eq x z) a m && liftEq (liftEq eq) b n && c == o
   liftEq _ (TLiteral a b) (TLiteral m n) =
     a == m && b == n
-  liftEq _ (TKeySet a b) (TKeySet m n) =
+  liftEq _ (TGuard a b) (TGuard m n) =
     a == m && b == n
   liftEq _ (TUse a b) (TUse m n) =
     a == m && b == n
@@ -516,7 +594,7 @@ instance Monad Term where
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
     TLiteral l i >>= _ = TLiteral l i
-    TKeySet k i >>= _ = TKeySet k i
+    TGuard k i >>= _ = TGuard k i
     TUse u i >>= _ = TUse u i
     TValue v i >>= _ = TValue v i
     TStep ent e r i >>= f = TStep (fmap (>>= f) ent) (e >>= f) (fmap (>>= f) r) i
@@ -536,7 +614,7 @@ instance FromJSON (Term n) where
 instance Show n => ToJSON (Term n) where
     toJSON (TLiteral l _) = toJSON l
     toJSON (TValue v _) = v
-    toJSON (TKeySet k _) = toJSON k
+    toJSON (TGuard k _) = toJSON k
     toJSON (TObject kvs _ _) =
         object $ map (kToJSON *** toJSON) kvs
             where kToJSON (TLitString s) = s
@@ -552,7 +630,8 @@ instance ToTerm Integer where toTerm = tLit . LInteger
 instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Decimal where toTerm = tLit . LDecimal
 instance ToTerm Text where toTerm = tLit . LString
-instance ToTerm KeySet where toTerm = (`TKeySet` def)
+instance ToTerm KeySet where toTerm k = TGuard (GKeySet (KGKeySet k)) def
+instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
 instance ToTerm UTCTime where toTerm = tLit . LTime
@@ -584,7 +663,7 @@ typeof t = case t of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tObjectType
-      TKeySet {} -> Right $ TyPrim TyKeySet
+      TGuard {} -> Right $ TyPrim TyKeySet
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"
@@ -620,7 +699,7 @@ termEq (TObject a _ _) (TObject b _ _) = length a == length b && all (lkpEq b) a
           lkpEq ((k',v'):ts) p@(k,v) | termEq k k' && termEq v v' = True
                                      | otherwise = lkpEq ts p
 termEq (TLiteral a _) (TLiteral b _) = a == b
-termEq (TKeySet a _) (TKeySet b _) = a == b
+termEq (TGuard a _) (TGuard b _) = a == b
 termEq (TValue a _) (TValue b _) = a == b
 termEq (TTable a b c d x _) (TTable e f g h y _) = a == e && b == f && c == g && d == h && x == y
 termEq (TSchema a b c d _) (TSchema e f g h _) = a == e && b == f && c == g && d == h
@@ -642,7 +721,7 @@ abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
 abbrev TBinding {} = "<binding>"
 abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
-abbrev TKeySet {} = "<keyset>"
+abbrev TGuard {} = "<guard>"
 abbrev (TUse (Use m h _) _) = "<use '" ++ show m ++ maybeDelim " " h ++ ">"
 abbrev (TVar s _) = show s
 abbrev (TValue v _) = show v

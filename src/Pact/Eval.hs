@@ -423,7 +423,7 @@ reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
 reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
 reduceApp TDef {..} as ai = do
-  g <- computeGas (Left (_tInfo, asString _tDefName)) GUser
+  g <- computeGas (Left (_tInfo, asString _tDefName)) GUserApp
   as' <- mapM reduce as
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
