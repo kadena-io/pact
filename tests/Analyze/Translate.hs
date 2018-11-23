@@ -4,33 +4,33 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Analyze.Translate where
 
-import           Control.Lens               hiding (op, (...))
-import           Control.Monad.Morph        (generalize, hoist)
-import           Control.Monad.Reader       (ReaderT (runReaderT))
-import           Control.Monad.Trans.Class  (MonadTrans (lift))
-import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT, runMaybeT),
-                                             exceptToMaybeT)
+import           Control.Lens              hiding (op, (...))
+import           Control.Monad.Morph       (generalize, hoist)
+import           Control.Monad.Reader      (ReaderT (runReaderT))
+import           Control.Monad.Trans.Class (MonadTrans (lift))
+import           Control.Monad.Trans.Maybe (MaybeT (MaybeT, runMaybeT),
+                                            exceptToMaybeT)
 
-import           Pact.Analyze.Translate     (translateNodeNoGraph)
-import           Pact.Analyze.Types         hiding (Object, Term)
-import           Pact.Analyze.Util          (dummyInfo)
+import           Pact.Analyze.Translate    (translateNodeNoGraph)
+import           Pact.Analyze.Types        hiding (Object, Term)
+import           Pact.Analyze.Util         (dummyInfo)
 
-import           Pact.Eval                  (liftTerm)
-import           Pact.Native                (enforceDef, enforceOneDef,
-                                             formatDef, hashDef, ifDef,
-                                             lengthDef, pactVersionDef,
-                                             readDecimalDef, strToIntDef)
+import           Pact.Eval                 (liftTerm)
+import           Pact.Native               (enforceDef, enforceOneDef,
+                                            formatDef, hashDef, ifDef,
+                                            lengthDef, pactVersionDef,
+                                            readDecimalDef, strToIntDef)
 import           Pact.Native.Keysets
 import           Pact.Native.Ops
 import           Pact.Native.Time
-import           Pact.Typechecker           (typecheckTopLevel)
-import           Pact.Types.Exp             (Literal (..))
-import           Pact.Types.Native          (NativeDef)
-import           Pact.Types.Term            (Meta (Meta),
-                                             Term (TApp, TConst, TLiteral))
-import qualified Pact.Types.Term            as Pact
-import qualified Pact.Types.Type            as Pact
-import qualified Pact.Types.Typecheck       as Pact
+import           Pact.Typechecker          (typecheckTopLevel)
+import           Pact.Types.Exp            (Literal (..))
+import           Pact.Types.Native         (NativeDef)
+import           Pact.Types.Term           (Meta (Meta),
+                                            Term (TApp, TConst, TLiteral))
+import qualified Pact.Types.Term           as Pact
+import qualified Pact.Types.Type           as Pact
+import qualified Pact.Types.Typecheck      as Pact
 
 import           Analyze.Gen
 

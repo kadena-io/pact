@@ -11,9 +11,9 @@
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ViewPatterns               #-}
 
 module Pact.Analyze.Translate where
 
@@ -28,8 +28,8 @@ import           Control.Monad.Except       (Except, MonadError, throwError)
 import           Control.Monad.Fail         (MonadFail (fail))
 import           Control.Monad.Reader       (MonadReader (local),
                                              ReaderT (runReaderT))
-import           Control.Monad.State.Strict (MonadState, StateT, modify',
-                                             runStateT, evalStateT)
+import           Control.Monad.State.Strict (MonadState, StateT, evalStateT,
+                                             modify', runStateT)
 import           Data.Foldable              (foldl', for_)
 import qualified Data.Map                   as Map
 import           Data.Map.Strict            (Map)
@@ -43,17 +43,16 @@ import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 import           System.Locale              (defaultTimeLocale)
 
-import           Pact.Types.Persistence     (WriteType)
-import           Pact.Types.Lang            (Info, Literal (..), PrimType (..),
-                                             Type (TyUser, TySchema, TyPrim, TyVar, TyFun))
+import           Pact.Types.Lang            (Info, Literal (..), PrimType (..), Type (TyFun, TyPrim, TySchema, TyUser, TyVar))
 import qualified Pact.Types.Lang            as Pact
+import           Pact.Types.Persistence     (WriteType)
 import           Pact.Types.Typecheck       (AST, Named (Named), Node, aId,
                                              aNode, aTy, tiName, _aTy)
 import qualified Pact.Types.Typecheck       as Pact
 import           Pact.Types.Util            (tShow)
 
-import           Pact.Analyze.Feature       hiding (TyVar, Var, col, obj, str,
-                                             time, list)
+import           Pact.Analyze.Feature       hiding (TyVar, Var, col, list, obj,
+                                             str, time)
 import           Pact.Analyze.Patterns
 import           Pact.Analyze.Types
 import           Pact.Analyze.Util
@@ -850,7 +849,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
   AST_NFun_Basic fn@(toOp unaryArithOpP -> Just op) args@[a] -> do
       ESimple ty a' <- translateNode a
       case ty of
-        SInteger     -> pure $ ESimple SInteger $ inject $ IntUnaryArithOp op a'
+        SInteger -> pure $ ESimple SInteger $ inject $ IntUnaryArithOp op a'
         SDecimal -> pure $ ESimple SDecimal $ inject $ DecUnaryArithOp op a'
         _        -> throwError' $ MalformedArithOp fn args
 

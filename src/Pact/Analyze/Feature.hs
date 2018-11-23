@@ -3,17 +3,18 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE ViewPatterns               #-}
 
 -- | Features, availability, and documentation
 module Pact.Analyze.Feature where
 
-import           Control.Lens           (Prism', prism', preview, review)
+import           Control.Lens           (Prism', preview, prism', review)
 import           Data.Foldable          (foldl')
 import qualified Data.Map               as Map
 import           Data.Map.Strict        (Map)
-import qualified Data.Set               as Set
 import           Data.Set               (Set)
+import qualified Data.Set               as Set
 import           Data.String            (IsString)
 import           Data.Text              (Text)
 import           Data.Tuple             (swap)
@@ -42,16 +43,16 @@ data FeatureClass
   deriving (Eq, Ord, Show)
 
 classTitle :: FeatureClass -> Text
-classTitle CNumerical = "Numerical"
-classTitle CLogical = "Logical"
-classTitle CObject = "Object"
-classTitle CString = "String"
-classTitle CTemporal = "Temporal"
+classTitle CNumerical      = "Numerical"
+classTitle CLogical        = "Logical"
+classTitle CObject         = "Object"
+classTitle CString         = "String"
+classTitle CTemporal       = "Temporal"
 classTitle CQuantification = "Quantification"
-classTitle CTransactional = "Transactional"
-classTitle CDatabase = "Database"
-classTitle CAuthorization = "Authorization"
-classTitle CList = "List"
+classTitle CTransactional  = "Transactional"
+classTitle CDatabase       = "Database"
+classTitle CAuthorization  = "Authorization"
+classTitle CList           = "List"
 
 data Feature
   -- Numerical operators

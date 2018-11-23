@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -6,7 +7,6 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE DataKinds             #-}
 module Analyze.Gen where
 
 import           Control.DeepSeq
@@ -33,8 +33,8 @@ import qualified Pact.Analyze.Types         as Analyze
 import           Pact.Analyze.Util          (dummyInfo)
 
 import           Pact.Types.Persistence     (WriteType)
+import           Pact.Types.Term            (Name (Name))
 import qualified Pact.Types.Term            as Pact
-import           Pact.Types.Term            (Name(Name))
 
 import           Analyze.TimeGen
 

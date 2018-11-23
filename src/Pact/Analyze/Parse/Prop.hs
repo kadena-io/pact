@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -7,7 +8,6 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE ViewPatterns          #-}
-{-# LANGUAGE DataKinds             #-}
 
 module Pact.Analyze.Parse.Prop
   ( PreProp(..)
@@ -35,9 +35,9 @@ module Pact.Analyze.Parse.Prop
 
 
 import           Control.Applicative
+import           Control.Lens                 (at, toListOf, view, (%~), (&),
+                                               (.~), (?~), (^?))
 import qualified Control.Lens                 as Lens
-import           Control.Lens                 (at, view, (%~), (&), (.~),
-                                               (?~), (^?), toListOf)
 import           Control.Monad                (unless, when)
 import           Control.Monad.Except         (MonadError (throwError))
 import           Control.Monad.Reader         (asks, local, runReaderT)
@@ -55,9 +55,9 @@ import           Data.Traversable             (for)
 import           Data.Type.Equality           ((:~:) (Refl))
 import           Prelude                      hiding (exp)
 
-import           Pact.Types.Lang              hiding (KeySet, KeySetName,
-                                               SchemaVar, TableName,
-                                               Type, TList, EList, PrimType(..))
+import           Pact.Types.Lang              hiding (EList, KeySet, KeySetName,
+                                               PrimType (..), SchemaVar, TList,
+                                               TableName, Type)
 import           Pact.Types.Util              (tShow)
 
 import           Pact.Analyze.Feature         hiding (Type, Var, ks, obj, str)

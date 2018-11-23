@@ -17,7 +17,8 @@ import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Prelude                    hiding (exp)
 
-import           Pact.Types.Lang            (AtomExp (..), Exp (EAtom, ELiteral, ESeparator),
+import           Pact.Types.Lang            (AtomExp (..),
+                                             Exp (EAtom, ELiteral, ESeparator),
                                              ListDelimiter (..), ListExp (..),
                                              Literal (LString), LiteralExp (..),
                                              Separator (..), SeparatorExp (..))

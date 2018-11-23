@@ -1,9 +1,9 @@
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE DataKinds       #-}
 
 module Pact.Analyze.Types
   ( module Pact.Analyze.Types.Languages

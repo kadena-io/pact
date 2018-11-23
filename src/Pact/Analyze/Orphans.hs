@@ -1,7 +1,7 @@
 {-# options_ghc -fno-warn-orphans #-}
 module Pact.Analyze.Orphans where
 
-import           Data.SBV            (Mergeable (symbolicMerge))
+import           Data.SBV        (Mergeable (symbolicMerge))
 import           Pact.Types.Info
 
 instance Mergeable Info where

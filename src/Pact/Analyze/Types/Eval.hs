@@ -35,8 +35,7 @@ import           Data.Traversable             (for)
 import           GHC.Generics                 (Generic)
 
 import           Pact.Types.Lang              (Info)
-import           Pact.Types.Runtime           -- (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
-                                              (Type (TyPrim))
+import           Pact.Types.Runtime           (Type (TyPrim))
 import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
 
@@ -343,7 +342,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.
              --
-             _                -> id
+             _                     -> id
       )
       (SymbolicCells mempty mempty mempty mempty mempty mempty)
       fields

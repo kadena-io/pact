@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
@@ -6,9 +7,8 @@
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 -- | 'Symbolic' allocation of quantified variables for arguments and tags,
 -- for use prior to evaluation; and functions to saturate and show models from
@@ -19,10 +19,8 @@ module Pact.Analyze.Model.Tags
   , saturateModel
   ) where
 
-import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens         (Traversal', toListOf, traverseOf,
-                                       traversed, (<&>), (?~), (^.), _1, _2,
-                                       _3)
+                                       traversed, (<&>), (?~), (^.), _1, _2, _3)
 import           Control.Monad        ((>=>))
 import           Data.Map.Strict      (Map)
 import qualified Data.Map.Strict      as Map
@@ -31,6 +29,7 @@ import qualified Data.SBV             as SBV
 import qualified Data.SBV.Control     as SBV
 import qualified Data.SBV.Internals   as SBVI
 import           Data.Traversable     (for)
+import           Data.Type.Equality   ((:~:) (Refl))
 
 import qualified Pact.Types.Typecheck as TC
 
@@ -101,7 +100,7 @@ allocModelTags argsMap locatedTm graph = ModelTags
       for (toListOf (traverse._TracePushScope._3.traverse) events) $
         \(Located info (Binding vid nm _ ety)) ->
           case Map.lookup vid argsMap of
-            Nothing -> allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
+            Nothing  -> allocTVal ety <&> \tv -> (vid, Located info (nm, tv))
             Just arg -> pure (vid, arg)
 
     allocAccesses

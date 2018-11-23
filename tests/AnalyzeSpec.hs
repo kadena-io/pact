@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
@@ -7,7 +8,6 @@
 {-# LANGUAGE Rank2Types        #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE ViewPatterns      #-}
-{-# LANGUAGE DataKinds         #-}
 
 module AnalyzeSpec (spec) where
 

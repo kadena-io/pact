@@ -1,10 +1,10 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeApplications    #-}
 module Pact.Analyze.Eval.Core where
 
 import           Control.Lens                (over)
@@ -14,12 +14,13 @@ import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, ite, true, false, (|||))
+                                              SymWord, false, ite, true, (|||))
+import qualified Data.SBV.List               as SBVL
+import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
+                                              bzipWith)
 import qualified Data.SBV.String             as SBVS
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
-import qualified Data.SBV.List as SBVL
-import Data.SBV.List.Bounded (bfoldr, band, bzipWith, breverse, bsort)
 
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Numerical

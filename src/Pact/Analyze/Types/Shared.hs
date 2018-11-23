@@ -10,27 +10,27 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
 
 {-# LANGUAGE UndecidableInstances       #-}
 
 module Pact.Analyze.Types.Shared where
 
-import Data.Constraint.Extras
-import Data.Constraint (Dict(Dict))
-import           Control.Lens                 (At (at), Index, Iso,
-                                               IxValue, Ixed (ix), Lens',
-                                               Prism', both, from, iso, lens,
-                                               makeLenses, makePrisms, over,
-                                               view, (%~), (&))
+import           Control.Lens                 (At (at), Index, Iso, IxValue,
+                                               Ixed (ix), Lens', Prism', both,
+                                               from, iso, lens, makeLenses,
+                                               makePrisms, over, view, (%~),
+                                               (&))
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
+import           Data.Constraint              (Dict (Dict))
+import           Data.Constraint.Extras
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
@@ -62,7 +62,8 @@ import           Prelude                      hiding (Float)
 import qualified Pact.Types.Lang              as Pact
 import           Pact.Types.Util              (AsString, tShow)
 
-import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, time, str)
+import           Pact.Analyze.Feature         hiding (Type, dec, ks, obj, str,
+                                               time)
 import           Pact.Analyze.Orphans         ()
 import           Pact.Analyze.Types.Numerical
 import           Pact.Analyze.Types.Types

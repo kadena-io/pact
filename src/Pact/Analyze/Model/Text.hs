@@ -3,15 +3,14 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 module Pact.Analyze.Model.Text
   ( showModel
   ) where
 
-import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens               (Lens', at, ifoldr, view, (^.))
 import           Control.Monad.State.Strict (State, evalState, get, modify)
 import           Data.Map.Strict            (Map)
@@ -21,6 +20,7 @@ import qualified Data.SBV                   as SBV
 import qualified Data.SBV.Internals         as SBVI
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
+import           Data.Type.Equality         ((:~:) (Refl))
 import           GHC.Natural                (Natural)
 
 import qualified Pact.Types.Info            as Pact

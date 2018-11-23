@@ -1,25 +1,25 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE InstanceSigs               #-}
-{-# LANGUAGE PolyKinds                  #-}
 
 module Pact.Analyze.Types.Types where
 
-import           Data.Constraint (Dict(Dict))
+import           Data.Constraint             (Dict (Dict))
 import           Data.Constraint.Extras
-import           Data.Semigroup ((<>))
-import           Data.Type.Equality           ((:~:) (Refl), apply)
+import           Data.Semigroup              ((<>))
+import           Data.Type.Equality          ((:~:) (Refl), apply)
 
 import           Pact.Analyze.Types.UserShow
 

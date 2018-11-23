@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
@@ -5,24 +6,22 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE Rank2Types                 #-}
 
 {-# OPTIONS_GHC -Wno-redundant-constraints #-} -- coerceSBV requires Coercible
 {-# OPTIONS_GHC -fno-warn-orphans #-} -- Num, etc instances for Decimal
 module Pact.Analyze.Types.Numerical where
 
-import           Control.Lens                (Prism', Iso', iso, view, from)
+import           Control.Lens                (Iso', Prism', from, iso, view)
 import           Data.Coerce                 (Coercible)
 import qualified Data.Decimal                as Decimal
-import           Data.SBV                    (HasKind (kindOf),
-                                              SDivisible (..), SymWord (..),
-                                              bnot, oneIf, (&&&), (.==), (.>),
-                                              (.^), (|||))
+import           Data.SBV                    (HasKind (kindOf), SDivisible (..),
+                                              SymWord (..), bnot, oneIf, (&&&),
+                                              (.==), (.>), (.^), (|||))
 import           Data.SBV.Control            (SMTValue (sexprToVal))
 import           Data.SBV.Dynamic            (svAbs, svPlus, svTimes, svUNeg)
 import           Data.SBV.Internals          (CW (..), CWVal (CWInteger),
@@ -34,7 +33,7 @@ import           GHC.Real                    ((%))
 
 import           Pact.Types.Util             (tShow)
 
-import           Pact.Analyze.Feature        hiding (dec, Constraint)
+import           Pact.Analyze.Feature        hiding (Constraint, dec)
 import           Pact.Analyze.Types.Types
 import           Pact.Analyze.Types.UserShow
 

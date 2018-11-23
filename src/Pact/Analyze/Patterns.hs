@@ -10,10 +10,10 @@ import           Data.Text            (Text)
 
 import qualified Pact.Types.Lang      as Lang
 import           Pact.Types.Runtime   (Literal (LString))
-import           Pact.Types.Typecheck (AstBindType (..),
-                                       AST (App, Binding, List, Object, Prim, Step, Table),
-                                       Fun (FDefun, FNative), Named, Node,
-                                       PrimValue (PrimLit), Special (SBinding))
+import           Pact.Types.Typecheck (AST (App, Binding, List, Object, Prim, Step, Table),
+                                       AstBindType (..), Fun (FDefun, FNative),
+                                       Named, Node, PrimValue (PrimLit),
+                                       Special (SBinding))
 import qualified Pact.Types.Typecheck as TC
 
 import           Pact.Analyze.Feature

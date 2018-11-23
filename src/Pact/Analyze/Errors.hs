@@ -7,8 +7,8 @@ import           Data.String            (IsString (fromString))
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 
-import qualified Pact.Types.Persistence as Pact
 import           Pact.Types.Lang        (Info, tShow)
+import qualified Pact.Types.Persistence as Pact
 
 import           Pact.Analyze.Types
 

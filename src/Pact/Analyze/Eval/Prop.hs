@@ -1,29 +1,30 @@
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
 module Pact.Analyze.Eval.Prop where
 
-import Data.Type.Equality ((:~:)(Refl))
 import           Control.Lens               (Lens', at, iforM, ix, view, (%=),
                                              (?~))
 import           Control.Monad.Except       (ExceptT, MonadError (throwError))
 import           Control.Monad.Reader       (MonadReader (local), ReaderT)
-import           Control.Monad.State.Strict (MonadState, StateT(..))
+import           Control.Monad.State.Strict (MonadState, StateT (..))
 import qualified Data.Map.Strict            as Map
 import           Data.SBV                   (Boolean (bnot, false, true, (&&&), (|||)),
                                              EqSymbolic ((.==)),
-                                             Mergeable(symbolicMerge), SymWord, SBV)
+                                             Mergeable (symbolicMerge), SBV,
+                                             SymWord)
 import qualified Data.SBV.Internals         as SBVI
 import           Data.String                (IsString (fromString))
 import qualified Data.Text                  as T
 import           Data.Traversable           (for)
+import           Data.Type.Equality         ((:~:) (Refl))
 
-import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, forAll, exists)
+import           Pact.Analyze.Alloc         (Alloc, MonadAlloc, exists, forAll)
 import           Pact.Analyze.Errors
 import           Pact.Analyze.Eval.Core
 import           Pact.Analyze.Orphans       ()
