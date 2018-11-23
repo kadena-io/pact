@@ -32,7 +32,6 @@ module Pact.Analyze.Types.Languages
   , Term(..)
   , BeforeOrAfter(..)
 
-  -- , lit
   , toPact
   , fromPact
   , valueToProp
@@ -46,7 +45,6 @@ module Pact.Analyze.Types.Languages
   , pattern PIntAddTime
   , pattern PKeySetEqNeq
   , pattern Lit'
-  -- , pattern PLit
   , pattern StrLit
   , pattern TextLit
   , pattern PLogical
