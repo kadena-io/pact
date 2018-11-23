@@ -22,6 +22,7 @@ module Pact.Types.Type
    FunType(..),ftArgs,ftReturn,
    FunTypes,funTypes,showFunTypes,
    PrimType(..),
+   GuardType(..),
    tyInteger,tyDecimal,tyTime,tyBool,tyString,
    tyList,tyObject,tyValue,tyKeySet,tyTable,
    SchemaType(..),
@@ -98,6 +99,15 @@ showFunTypes :: Show o => FunTypes o -> String
 showFunTypes (t :| []) = show t
 showFunTypes ts = show (toList ts)
 
+data GuardType
+  = GTyKeySet
+  | GTyKeySetName
+  | GTyPact
+  | GTyUser
+  deriving (Eq,Ord,Generic)
+
+instance NFData GuardType
+
 data PrimType =
   TyInteger |
   TyDecimal |
@@ -105,13 +115,14 @@ data PrimType =
   TyBool |
   TyString |
   TyValue |
-  TyKeySet
+  TyGuard GuardType
   deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
 
 
-tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,tyKeySet,tyTable :: Text
+tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
+  tyKeySet,tyTable,tyKeySetNameGuard,tyPactGuard,tyUserGuard :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
 tyTime = "time"
@@ -121,16 +132,24 @@ tyList = "list"
 tyObject = "object"
 tyValue = "value"
 tyKeySet = "keyset"
+tyKeySetNameGuard = "keysetnameguard"
+tyPactGuard = "pactguard"
+tyUserGuard = "userguard"
 tyTable = "table"
 
 instance Show PrimType where
-  show TyInteger = unpack tyInteger
-  show TyDecimal = unpack tyDecimal
-  show TyTime = unpack tyTime
-  show TyBool = unpack tyBool
-  show TyString = unpack tyString
-  show TyValue = unpack tyValue
-  show TyKeySet = unpack tyKeySet
+  show t = unpack $ case t of
+    TyInteger -> tyInteger
+    TyDecimal -> tyDecimal
+    TyTime -> tyTime
+    TyBool -> tyBool
+    TyString -> tyString
+    TyValue -> tyValue
+    TyGuard tg -> case tg of
+      GTyKeySet -> tyKeySet
+      GTyKeySetName -> tyKeySetNameGuard
+      GTyPact -> tyPactGuard
+      GTyUser -> tyUserGuard
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =

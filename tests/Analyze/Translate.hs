@@ -117,7 +117,7 @@ toPactTm = \case
   ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
-      Just (ks, _) -> pure $ Pact.TKeySet ks dummyInfo
+      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet (Pact.KGKeySet ks)) dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
@@ -260,7 +260,7 @@ reverseTranslateType = \case
   TInt     -> Pact.TyPrim Pact.TyInteger
   TStr     -> Pact.TyPrim Pact.TyString
   TTime    -> Pact.TyPrim Pact.TyTime
-  TKeySet  -> Pact.TyPrim Pact.TyKeySet
+  TKeySet  -> Pact.TyPrim (Pact.TyGuard Pact.GTyKeySet)
   TAny     -> Pact.TyAny
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)

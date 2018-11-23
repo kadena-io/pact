@@ -378,7 +378,7 @@ reduce :: Term Ref ->  Eval e (Term Name)
 reduce (TApp f as ai) = reduceApp f as ai
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
-reduce t@TKeySet {} = unsafeReduce t
+reduce t@TGuard {} = unsafeReduce t
 reduce t@TValue {} = unsafeReduce t
 reduce TList {..} = TList <$> mapM reduce _tList <*> traverse reduce _tListType <*> pure _tInfo
 reduce t@TDef {} = return $ toTerm $ pack $ show t
@@ -433,6 +433,7 @@ reduceApp TDef {..} as ai = do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
+      _ -> undefined --TODOOOOOOOOO
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 

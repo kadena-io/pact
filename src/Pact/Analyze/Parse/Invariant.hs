@@ -12,7 +12,7 @@ import qualified Data.Text                as T
 import           Prelude                  hiding (exp)
 
 import           Pact.Types.Lang          hiding (KeySet, KeySetName, SchemaVar,
-                                           TKeySet, TableName, Type)
+                                           TableName, Type)
 import qualified Pact.Types.Lang          as Pact
 import           Pact.Types.Util          (tShow)
 
@@ -32,7 +32,7 @@ expToInvariant ty exp = case (ty, exp) of
         (TTime,    TyTime)    -> pure (CoreInvariant (Var vid varName))
         (TStr,     TyString)  -> pure (CoreInvariant (Var vid varName))
         (TBool,    TyBool)    -> pure (CoreInvariant (Var vid varName))
-        (TKeySet,  TyKeySet)  -> pure (CoreInvariant (Var vid varName))
+        (TKeySet,  (TyGuard GTyKeySet))  -> pure (CoreInvariant (Var vid varName))
         (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $

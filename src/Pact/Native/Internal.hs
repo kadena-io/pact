@@ -128,5 +128,5 @@ tTyTime :: Type n; tTyTime = TyPrim TyTime
 tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
 tTyValue :: Type n; tTyValue = TyPrim TyValue
-tTyKeySet :: Type n; tTyKeySet = TyPrim TyKeySet
+tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard GTyKeySet)
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o

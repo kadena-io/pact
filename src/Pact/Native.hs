@@ -536,7 +536,7 @@ sort' _ [TList{..}] = case nub (map typeof _tList) of
   [ty] -> case ty of
     Right rty@(TyPrim pty) -> case pty of
       TyValue -> badTy (show ty)
-      TyKeySet -> badTy (show ty)
+      TyGuard{} -> badTy (show ty)
       _ -> do
         sl <- forM _tList $ \e -> case firstOf tLiteral e of
           Nothing -> evalError _tInfo $ "Unexpected type error, expected literal: " ++ show e

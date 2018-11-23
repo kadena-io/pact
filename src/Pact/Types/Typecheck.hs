@@ -154,12 +154,12 @@ newtype TC a = TC { unTC :: StateT TcState IO a }
 -- | Storage for literal values.
 data PrimValue =
   PrimLit Literal |
-  PrimKeySet KeySet |
+  PrimGuard Guard |
   PrimValue Value
   deriving (Eq,Show)
 instance Pretty PrimValue where
   pretty (PrimLit l) = text (show l)
-  pretty (PrimKeySet k) = text (show k)
+  pretty (PrimGuard k) = text (show k)
   pretty (PrimValue v) = text (show v)
 
 

@@ -35,7 +35,8 @@ import           Data.Traversable             (for)
 import           GHC.Generics                 (Generic)
 
 import           Pact.Types.Lang              (Info)
-import           Pact.Types.Runtime           (PrimType (TyBool, TyDecimal, TyInteger, TyKeySet, TyString, TyTime),
+import           Pact.Types.Runtime           (PrimType (TyBool, TyDecimal, TyInteger, TyGuard, TyString, TyTime),
+                                               GuardType (GTyKeySet),
                                                Type (TyPrim))
 import qualified Pact.Types.Runtime           as Pact
 import qualified Pact.Types.Typecheck         as Pact
@@ -285,7 +286,7 @@ mkInitialAnalyzeState tables = AnalyzeState
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim TyKeySet) (mkSFunArray (const false))
+      = mkTableColumnMap (== TyPrim (TyGuard GTyKeySet)) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
@@ -337,7 +338,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              TyPrim TyDecimal -> scDecimalValues.at col ?~ mkArray
              TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
              TyPrim TyString  -> scStringValues.at col  ?~ mkArray
-             TyPrim TyKeySet  -> scKsValues.at col      ?~ mkArray
+             TyPrim (TyGuard GTyKeySet)  -> scKsValues.at col      ?~ mkArray
              --
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.

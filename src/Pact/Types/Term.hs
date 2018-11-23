@@ -54,7 +54,7 @@ module Pact.Types.Term
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
    ToTerm(..),
    toTermList,toTObject,toTList,
-   typeof,typeof',
+   typeof,typeof',guardTypeOf,
    pattern TLitString,pattern TLitInteger,pattern TLitBool,
    tLit,tStr,termEq,abbrev,
    Gas(..)
@@ -646,7 +646,12 @@ toTList ty i vs = TList vs ty i
 toTermList :: (ToTerm a,Foldable f) => Type (Term b) -> f a -> Term b
 toTermList ty l = TList (map toTerm (toList l)) ty def
 
-
+guardTypeOf :: Guard -> GuardType
+guardTypeOf g = case g of
+  GKeySet KGKeySet{} -> GTyKeySet
+  GKeySet KGName{} -> GTyKeySetName
+  GPact {} -> GTyPact
+  GUser {} -> GTyUser
 
 -- | Return a Pact type, or a String description of non-value Terms.
 typeof :: Term a -> Either Text (Type (Term a))
@@ -663,7 +668,7 @@ typeof t = case t of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tObjectType
-      TGuard {} -> Right $ TyPrim TyKeySet
+      TGuard {..} -> Right $ TyPrim $ TyGuard $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"

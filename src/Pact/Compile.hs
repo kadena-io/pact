@@ -528,7 +528,7 @@ parseType = msum
   , TyPrim TyString  <$ symbol tyString
   , TyList TyAny     <$ symbol tyList
   , TyPrim TyValue   <$ symbol tyValue
-  , TyPrim TyKeySet  <$ symbol tyKeySet
+  , TyPrim (TyGuard GTyKeySet)  <$ symbol tyKeySet
   ]
 
 parseListType :: Compile (Type (Term Name))
