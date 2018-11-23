@@ -87,6 +87,7 @@ library
       Pact.Analyze.Types.Model
       Pact.Analyze.Types.Numerical
       Pact.Analyze.Types.Shared
+      Pact.Analyze.Types.Types
       Pact.Analyze.Types.UserShow
       Pact.Analyze.Util
       Pact.ApiReq
