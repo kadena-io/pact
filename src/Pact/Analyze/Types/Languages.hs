@@ -313,6 +313,25 @@ uniformlyUserShow' ty tm = case ty of
   SList SKeySet  -> userShow tm
   SList SAny     -> userShow tm
 
+uniformlyUserShow''
+  :: ( UserShow (tm 'TyStr)
+     , UserShow (tm 'TyInteger)
+     , UserShow (tm 'TyTime)
+     , UserShow (tm 'TyDecimal)
+     , UserShow (tm 'TyBool)
+     , UserShow (tm 'TyKeySet)
+     , UserShow (tm 'TyAny)
+     )
+  => SingTy 'SimpleK a -> tm a -> Text
+uniformlyUserShow'' ty tm = case ty of
+  SStr     -> userShow tm
+  SInteger -> userShow tm
+  STime    -> userShow tm
+  SDecimal -> userShow tm
+  SBool    -> userShow tm
+  SKeySet  -> userShow tm
+  SAny     -> userShow tm
+
 uniformlyShows
   :: OfPactTypes Show tm
   => SingTy 'SimpleK a -> Int -> tm ('TyList a) -> ShowS
@@ -625,16 +644,8 @@ instance
     ObjContains _schema v    -> parenList [SContains, userShow v]
     StringContains needle haystack
       -> parenList [SContains, userShow needle, userShow haystack]
-    ListContains ty needle haystack ->
-      let needle' = case ty of
-            SStr     -> userShow needle
-            SInteger -> userShow needle
-            STime    -> userShow needle
-            SDecimal -> userShow needle
-            SBool    -> userShow needle
-            SKeySet  -> userShow needle
-            SAny     -> userShow needle
-      in parenList [SContains, needle', uniformlyUserShow ty haystack]
+    ListContains ty needle haystack
+      -> parenList [SContains, uniformlyUserShow'' ty needle, uniformlyUserShow ty haystack]
     ListLength ty x          -> parenList ["length", uniformlyUserShow ty x]
     ListReverse ty lst       -> parenList [SReverse, uniformlyUserShow ty lst]
     ListSort ty lst          -> parenList [SSort, uniformlyUserShow ty lst]
