@@ -24,7 +24,6 @@ import           Data.Type.Equality          ((:~:) (Refl), apply)
 import           Pact.Analyze.Types.UserShow
 
 
--- TODO: merge with PrimType?
 data Ty
   = TyInteger
   | TyBool
