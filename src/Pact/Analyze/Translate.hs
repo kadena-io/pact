@@ -587,7 +587,7 @@ translateObjBinding pairs schema bodyA rhsT = do
         translateBody bodyA
 
 pattern EmptyList :: SingTy 'SimpleK a -> Term ('TyList a)
-pattern EmptyList ty = CoreTerm (LiteralList (SList ty) [])
+pattern EmptyList ty = CoreTerm (LiteralList ty [])
 
 translateNode :: AST Node -> TranslateM ETerm
 translateNode astNode = withAstContext astNode $ case astNode of

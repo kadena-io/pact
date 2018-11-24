@@ -210,7 +210,7 @@ evalCore (ListLength ty l) = withShow ty $ withSymWord ty $ do
   S prov l' <- withShow ty $ eval l
   pure $ S prov $ SBVL.length l'
 
-evalCore (LiteralList (SList ty) xs) = withShow ty $ withSymWord ty $ do
+evalCore (LiteralList ty xs) = withShow ty $ withSymWord ty $ do
   vals <- traverse (fmap _sSbv . eval) xs
   pure $ sansProv $ SBVL.implode vals
 

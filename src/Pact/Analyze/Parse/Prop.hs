@@ -417,12 +417,12 @@ inferPreProp preProp = case preProp of
       (EList (SList SAny) (CoreProp (LiteralList _ [])), EList (SList ty) prop)
         | Just eqNeq <- toOp eqNeqP op'
         -> pure $ ESimple SBool $ CoreProp $
-          ListEqNeq ty eqNeq (CoreProp (LiteralList (SList ty) [])) prop
+          ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
 
       (EList (SList ty) prop, EList (SList SAny) (CoreProp (LiteralList _ [])))
         | Just eqNeq <- toOp eqNeqP op'
         -> pure $ ESimple SBool $ CoreProp $
-          ListEqNeq ty eqNeq (CoreProp (LiteralList (SList ty) [])) prop
+          ListEqNeq ty eqNeq (CoreProp (LiteralList ty [])) prop
 
       (EList (SList aTy) aProp, EList (SList bTy) bProp)
         | Just eqNeq <- toOp eqNeqP op' -> case singEq aTy bTy of

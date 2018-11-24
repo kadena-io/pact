@@ -139,6 +139,7 @@ class (sub :: * -> *) :*<: (sup :: Ty -> *) where
 -- * string length and concatenation
 -- * 'add-time'
 -- * 'at'
+-- * lit operations
 data Core (t :: Ty -> *) (a :: Ty) where
   Lit :: Concrete a -> Core t a
   -- | Injects a symbolic value into the language
@@ -219,8 +220,7 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
 
-  -- TODO: is this necessary? Just use Lit?
-  LiteralList :: SingTy 'ListK ('TyList a) -> [t a] -> Core t ('TyList a)
+  LiteralList :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
 
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
@@ -265,15 +265,15 @@ uniformlyEq ty t1 t2 = case ty of
 
 uniformlyEq'
   :: OfPactTypes Eq tm
-  => SingTy 'ListK ('TyList a) -> [tm a] -> [tm a] -> Bool
+  => SingTy 'SimpleK a -> [tm a] -> [tm a] -> Bool
 uniformlyEq' ty t1 t2 = case ty of
-  SList SStr     -> t1 == t2
-  SList SInteger -> t1 == t2
-  SList STime    -> t1 == t2
-  SList SDecimal -> t1 == t2
-  SList SBool    -> t1 == t2
-  SList SKeySet  -> t1 == t2
-  SList SAny     -> t1 == t2
+  SStr     -> t1 == t2
+  SInteger -> t1 == t2
+  STime    -> t1 == t2
+  SDecimal -> t1 == t2
+  SBool    -> t1 == t2
+  SKeySet  -> t1 == t2
+  SAny     -> t1 == t2
 
 uniformlyUserShow
   :: ( UserShow (tm ('TyList 'TyStr))
@@ -303,15 +303,15 @@ uniformlyUserShow'
      , UserShow (tm 'TyKeySet)
      , UserShow (tm 'TyAny)
      )
-  => SingTy 'ListK ('TyList a) -> [tm a] -> Text
+  => SingTy 'SimpleK a -> [tm a] -> Text
 uniformlyUserShow' ty tm = case ty of
-  SList SStr     -> userShow tm
-  SList SInteger -> userShow tm
-  SList STime    -> userShow tm
-  SList SDecimal -> userShow tm
-  SList SBool    -> userShow tm
-  SList SKeySet  -> userShow tm
-  SList SAny     -> userShow tm
+  SStr     -> userShow tm
+  SInteger -> userShow tm
+  STime    -> userShow tm
+  SDecimal -> userShow tm
+  SBool    -> userShow tm
+  SKeySet  -> userShow tm
+  SAny     -> userShow tm
 
 uniformlyUserShow''
   :: ( UserShow (tm 'TyStr)
@@ -346,15 +346,15 @@ uniformlyShows ty p t = case ty of
 
 uniformlyShows'
   :: OfPactTypes Show tm
-  => SingTy 'ListK ('TyList a) -> Int -> [tm a] -> ShowS
+  => SingTy 'SimpleK a -> Int -> [tm a] -> ShowS
 uniformlyShows' ty p t = case ty of
-  SList SStr     -> showsPrec p t
-  SList SInteger -> showsPrec p t
-  SList STime    -> showsPrec p t
-  SList SDecimal -> showsPrec p t
-  SList SBool    -> showsPrec p t
-  SList SKeySet  -> showsPrec p t
-  SList SAny     -> showsPrec p t
+  SStr     -> showsPrec p t
+  SInteger -> showsPrec p t
+  STime    -> showsPrec p t
+  SDecimal -> showsPrec p t
+  SBool    -> showsPrec p t
+  SKeySet  -> showsPrec p t
+  SAny     -> showsPrec p t
 
 
 -- TODO: generalize the uniformly family?
@@ -843,7 +843,7 @@ EQ_EXISTENTIAL(Prop)
 SHOW_EXISTENTIAL(Prop)
 
 mkLiteralList :: [Existential tm] -> Maybe (Existential (Core tm))
-mkLiteralList [] = Just $ EList (SList SAny) (LiteralList (SList SAny) [])
+mkLiteralList [] = Just $ EList (SList SAny) (LiteralList SAny [])
 mkLiteralList xs@(ESimple ty0 _ : _) = foldr
   (\case
     EObject{}    -> \_ -> Nothing
@@ -851,11 +851,11 @@ mkLiteralList xs@(ESimple ty0 _ : _) = foldr
     ESimple ty y -> \case
       Nothing -> Nothing
       Just EObject{} -> error "impossible"
-      Just (EList ty' (LiteralList _ty ys)) -> case singEq (SList ty) ty' of
+      Just (EList (SList ty') (LiteralList _ty ys)) -> case singEq ty ty' of
         Nothing   -> Nothing
-        Just Refl -> Just (EList ty' (LiteralList ty' (y:ys)))
+        Just Refl -> Just (EList (SList ty') (LiteralList ty' (y:ys)))
       _ -> error "impossible")
-  (Just (EList (SList ty0) (LiteralList (SList ty0) [])))
+  (Just (EList (SList ty0) (LiteralList ty0 [])))
   xs
 mkLiteralList _ = Nothing
 
