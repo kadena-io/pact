@@ -122,7 +122,7 @@ instance NFData PrimType
 
 
 tyInteger,tyDecimal,tyTime,tyBool,tyString,tyList,tyObject,tyValue,
-  tyKeySet,tyTable,tyKeySetNameGuard,tyPactGuard,tyUserGuard :: Text
+  tyKeySet,tyTable,tyGuard :: Text
 tyInteger = "integer"
 tyDecimal = "decimal"
 tyTime = "time"
@@ -132,9 +132,7 @@ tyList = "list"
 tyObject = "object"
 tyValue = "value"
 tyKeySet = "keyset"
-tyKeySetNameGuard = "keysetnameguard"
-tyPactGuard = "pactguard"
-tyUserGuard = "userguard"
+tyGuard = "guard"
 tyTable = "table"
 
 instance Show PrimType where
@@ -147,9 +145,7 @@ instance Show PrimType where
     TyValue -> tyValue
     TyGuard tg -> case tg of
       GTyKeySet -> tyKeySet
-      GTyKeySetName -> tyKeySetNameGuard
-      GTyPact -> tyPactGuard
-      GTyUser -> tyUserGuard
+      _ -> tyGuard
 instance Pretty PrimType where pretty = text . show
 
 data SchemaType =

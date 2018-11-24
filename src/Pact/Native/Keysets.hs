@@ -29,7 +29,7 @@ readKeysetDef =
 
     readKeySet :: RNativeFun e
     readKeySet i [TLitString key]
-      = ((`TGuard` def) . GKeySet . KGKeySet) <$> parseMsgKey i "read-keyset" key
+      = ((`TGuard` def) . GKeySet) <$> parseMsgKey i "read-keyset" key
     readKeySet i as = argsError i as
 
 keyDefs :: NativeModule
@@ -61,7 +61,7 @@ keyDefs =
 
 
 defineKeyset :: RNativeFun e
-defineKeyset fi [TLitString name,TGuard (GKeySet (KGKeySet ks)) _] = do
+defineKeyset fi [TLitString name,TGuard (GKeySet ks) _] = do
   let ksn = KeySetName name
       i = _faInfo fi
   old <- readRow i KeySets ksn
@@ -82,7 +82,7 @@ enforceKeyset' i [t] = do
       case ksm of
         Nothing -> evalError' i $ "Keyset not found: " ++ show name
         Just ks -> return (Just ksn,ks)
-    TGuard (GKeySet (KGKeySet ks)) _ -> return (Nothing,ks)
+    TGuard (GKeySet ks) _ -> return (Nothing,ks)
     _ -> argsError i [t,toTerm ("[body...]" :: Text)]
   runPure $ enforceKeySet (_faInfo i) ksn ks
   return $ toTerm True

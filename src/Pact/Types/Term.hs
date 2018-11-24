@@ -27,7 +27,6 @@ module Pact.Types.Term
    PublicKey(..),
    KeySet(..),
    KeySetName(..),
-   KeySetGuard(..),
    PactGuard(..),
    PactId(..),
    UserGuard(..),
@@ -167,25 +166,6 @@ instance Show PactGuard where
 instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
-
-data KeySetGuard
-  = KGKeySet KeySet
-  | KGName Name
-  deriving (Eq)
-
-instance Show KeySetGuard where
-  show (KGKeySet k) = show k
-  show (KGName n) = "KeySet { name: " ++ show n ++ "}"
-
-instance ToJSON KeySetGuard where
-  toJSON (KGKeySet k) = toJSON k
-  toJSON (KGName n) = toJSON n
-
-instance FromJSON KeySetGuard where
-  parseJSON v = case v of
-    String _ -> KGName <$> parseJSON v
-    _ -> KGKeySet <$> parseJSON v
-
 data UserGuard = UserGuard
   { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
@@ -200,18 +180,21 @@ instance FromJSON UserGuard where parseJSON = lensyParseJSON 3
 
 data Guard
   = GPact PactGuard
-  | GKeySet KeySetGuard
+  | GKeySet KeySet
+  | GKeySetRef KeySetName
   | GUser UserGuard
   deriving (Eq)
 
 instance Show Guard where
   show (GPact g) = show g
   show (GKeySet g) = show g
+  show (GKeySetRef g) = show g
   show (GUser g) = show g
 
 instance ToJSON Guard where
   toJSON (GPact g) = toJSON g
   toJSON (GKeySet g) = toJSON g
+  toJSON (GKeySetRef g) = toJSON g
   toJSON (GUser g) = toJSON g
 
 instance FromJSON Guard where
@@ -634,7 +617,7 @@ instance ToTerm Integer where toTerm = tLit . LInteger
 instance ToTerm Int where toTerm = tLit . LInteger . fromIntegral
 instance ToTerm Decimal where toTerm = tLit . LDecimal
 instance ToTerm Text where toTerm = tLit . LString
-instance ToTerm KeySet where toTerm k = TGuard (GKeySet (KGKeySet k)) def
+instance ToTerm KeySet where toTerm k = TGuard (GKeySet k) def
 instance ToTerm Guard where toTerm = (`TGuard` def)
 instance ToTerm Literal where toTerm = tLit
 instance ToTerm Value where toTerm = (`TValue` def)
@@ -652,8 +635,8 @@ toTermList ty l = TList (map toTerm (toList l)) ty def
 
 guardTypeOf :: Guard -> GuardType
 guardTypeOf g = case g of
-  GKeySet KGKeySet{} -> GTyKeySet
-  GKeySet KGName{} -> GTyKeySetName
+  GKeySet{} -> GTyKeySet
+  GKeySetRef{} -> GTyKeySetName
   GPact {} -> GTyPact
   GUser {} -> GTyUser
 

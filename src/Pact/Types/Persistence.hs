@@ -126,9 +126,8 @@ valueCodec = Codec enc dec
 guardCodec :: Codec Guard
 guardCodec = Codec enc dec
   where
-    enc (GKeySet k) = case k of
-      KGKeySet (KeySet ks p) -> object [ keyf .= ks, predf .= p ]
-      KGName n -> object [ keyNamef .= n ]
+    enc (GKeySet (KeySet ks p)) = object [ keyf .= ks, predf .= p ]
+    enc (GKeySetRef n) = object [ keyNamef .= n ]
     enc (GPact (PactGuard{..})) =
       object [ pactNamef .= _pgName, pactIdf .= _pgPactId ]
     enc (GUser (UserGuard{..})) =
@@ -136,8 +135,8 @@ guardCodec = Codec enc dec
       -- TODO ^^^ is too loose, needs better object type of only persistables
     {-# INLINE enc #-}
     dec = withObject "Guard" $ \o ->
-      (GKeySet . KGKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
-      (GKeySet . KGName <$> o .: keyNamef) <|>
+      (GKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
+      (GKeySetRef <$> o .: keyNamef) <|>
       (GPact <$> (PactGuard <$> o .: pactIdf <*> o .: pactNamef)) <|>
       (GUser <$> (UserGuard <$> o .: userDataf <*> o .: userPredf))
     {-# INLINE dec #-}

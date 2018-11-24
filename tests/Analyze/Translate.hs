@@ -117,7 +117,7 @@ toPactTm = \case
   ESimple TKeySet  (CoreTerm (Lit (KeySet x))) -> do
     keysets <- view (_1 . envKeysets)
     case keysets ^? ix (fromIntegral x) of
-      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet (Pact.KGKeySet ks)) dummyInfo
+      Just (ks, _) -> pure $ Pact.TGuard (Pact.GKeySet ks) dummyInfo
       Nothing      -> error $ "no keysets found at index " ++ show x
 
   -- term-specific terms:
