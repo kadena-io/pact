@@ -722,7 +722,7 @@ doc FListLength = Doc
 
 doc FContains = Doc
   "contains"
-  CList
+  CList -- TODO: other category?
   InvAndProp
   "List contains"
   [ let a = TyVar $ TypeVar "a"
@@ -735,6 +735,24 @@ doc FContains = Doc
         , ("xs", TyList' a)
         ]
         (TyCon bool)
+  , Usage
+      "(contains k o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("k", TyCon str)
+        , ("o", TyCon obj)
+        ]
+      (TyCon bool)
+  , Usage
+      "(contains value string)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("value", TyCon str)
+        , ("string", TyCon str)
+        ]
+      (TyCon bool)
   ]
 
 
@@ -753,6 +771,15 @@ doc FDrop = Doc
         , ("xs", TyList' a)
         ]
       (TyList' a)
+  , Usage
+      "(drop keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
   ]
 
 doc FReverse = Doc
@@ -802,6 +829,15 @@ doc FTake = Doc
         , ("xs", TyList' a)
         ]
       (TyList' a)
+  , Usage
+      "(take keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
   ]
 
 
@@ -837,6 +873,7 @@ doc FStringConcatenation = Doc
         ]
         (TyCon str)
   ]
+
 doc FStringToInteger = Doc
   "str-to-int"
   CString

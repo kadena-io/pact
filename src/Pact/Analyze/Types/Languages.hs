@@ -275,6 +275,44 @@ uniformlyEq' ty t1 t2 = case ty of
   SList SKeySet  -> t1 == t2
   SList SAny     -> t1 == t2
 
+uniformlyUserShow
+  :: ( UserShow (tm ('TyList 'TyStr))
+     , UserShow (tm ('TyList 'TyInteger))
+     , UserShow (tm ('TyList 'TyTime))
+     , UserShow (tm ('TyList 'TyDecimal))
+     , UserShow (tm ('TyList 'TyBool))
+     , UserShow (tm ('TyList 'TyKeySet))
+     , UserShow (tm ('TyList 'TyAny))
+     )
+  => SingTy 'SimpleK a -> tm ('TyList a) -> Text
+uniformlyUserShow ty tm = case ty of
+  SStr     -> userShow tm
+  SInteger -> userShow tm
+  STime    -> userShow tm
+  SDecimal -> userShow tm
+  SBool    -> userShow tm
+  SKeySet  -> userShow tm
+  SAny     -> userShow tm
+
+uniformlyUserShow'
+  :: ( UserShow (tm 'TyStr)
+     , UserShow (tm 'TyInteger)
+     , UserShow (tm 'TyTime)
+     , UserShow (tm 'TyDecimal)
+     , UserShow (tm 'TyBool)
+     , UserShow (tm 'TyKeySet)
+     , UserShow (tm 'TyAny)
+     )
+  => SingTy 'ListK ('TyList a) -> [tm a] -> Text
+uniformlyUserShow' ty tm = case ty of
+  SList SStr     -> userShow tm
+  SList SInteger -> userShow tm
+  SList STime    -> userShow tm
+  SList SDecimal -> userShow tm
+  SList SBool    -> userShow tm
+  SList SKeySet  -> userShow tm
+  SList SAny     -> userShow tm
+
 uniformlyShows
   :: OfPactTypes Show tm
   => SingTy 'SimpleK a -> Int -> tm ('TyList a) -> ShowS
@@ -551,8 +589,15 @@ instance
   , UserShow (tm 'TyDecimal)
   , UserShow (tm 'TyBool)
   , UserShow (tm 'TyKeySet)
+  , UserShow (tm 'TyAny)
   , UserShow (tm 'TyObject)
   , UserShow (tm ('TyList 'TyStr))
+  , UserShow (tm ('TyList 'TyInteger))
+  , UserShow (tm ('TyList 'TyTime))
+  , UserShow (tm ('TyList 'TyDecimal))
+  , UserShow (tm ('TyList 'TyBool))
+  , UserShow (tm ('TyList 'TyKeySet))
+  , UserShow (tm ('TyList 'TyAny))
   , UserShow (Existential tm)
   ) => UserShow (Core tm a) where
   userShowPrec d = \case
@@ -560,8 +605,8 @@ instance
     Sym s                    -> tShow s
     StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
-    StrToInt s               -> parenList ["str-to-int", userShow s]
-    StrToIntBase b s         -> parenList ["str-to-int", userShow b, userShow s]
+    StrToInt s               -> parenList [SStringToInteger, userShow s]
+    StrToIntBase b s         -> parenList [SStringToInteger, userShow b, userShow s]
     Numerical tm             -> userShowPrec d tm
     IntAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
     DecAddTime x y           -> parenList [STemporalAddition, userShow x, userShow y]
@@ -574,30 +619,33 @@ instance
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ListEqNeq{} -> "TODO" -- parenList [userShow op, userShow x, userShow y]
+    ListEqNeq ty op x y      -> parenList [userShow op, uniformlyUserShow ty x, uniformlyUserShow ty y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
-    ListAt{} -> "TODO"
-    -- ListAt ty k lst          -> withUserShow (SList ty) $ parenList [userShow k, userShow lst]
-    ObjContains _schema v    -> parenList ["contains", userShow v]
-    StringContains needle haystack -> parenList ["contains", userShow needle, userShow haystack]
-    ListContains{} -> "TODO"
-    -- ListContains ty needle haystack -> parenList ["contains", userShow needle, userShow haystack]
-    ListLength{} -> "TODO"
-    -- ListLength ty x          -> parenList ["list-length"]
-    ListReverse{}       -> "TODO"
-    -- ListReverse ty lst       -> parenList ["reverse", userShow lst]
-    ListSort{}       -> "TODO"
-    -- ListSort ty lst       -> parenList ["reverse", userShow lst]
-    ListDrop{} -> "TODO"
-    -- ListDrop ty n lst        -> parenList ["drop", userShow n, userShow lst]
-    ObjDrop _schema k obj    -> parenList ["drop", userShow k, userShow obj]
-    ListTake{} -> "TODO"
-    -- ListTake ty n lst        -> parenList ["take", userShow n, userShow lst]
-    ObjTake _schema k obj    -> parenList ["take", userShow k, userShow obj]
-    ListConcat{} -> "TODO"
+    ListAt ty k lst          -> parenList [userShow k, uniformlyUserShow ty lst]
+    ObjContains _schema v    -> parenList [SContains, userShow v]
+    StringContains needle haystack
+      -> parenList [SContains, userShow needle, userShow haystack]
+    ListContains ty needle haystack ->
+      let needle' = case ty of
+            SStr     -> userShow needle
+            SInteger -> userShow needle
+            STime    -> userShow needle
+            SDecimal -> userShow needle
+            SBool    -> userShow needle
+            SKeySet  -> userShow needle
+            SAny     -> userShow needle
+      in parenList [SContains, needle', uniformlyUserShow ty haystack]
+    ListLength ty x          -> parenList ["length", uniformlyUserShow ty x]
+    ListReverse ty lst       -> parenList [SReverse, uniformlyUserShow ty lst]
+    ListSort ty lst          -> parenList [SSort, uniformlyUserShow ty lst]
+    ListDrop ty n lst        -> parenList [SDrop, userShow n, uniformlyUserShow ty lst]
+    ObjDrop _schema k obj    -> parenList [SDrop, userShow k, userShow obj]
+    ListTake ty n lst        -> parenList [STake, userShow n, uniformlyUserShow ty lst]
+    ObjTake _schema k obj    -> parenList [STake, userShow k, userShow obj]
+    ListConcat ty x y        -> parenList ["concat", uniformlyUserShow ty x, uniformlyUserShow ty y]
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
-    LiteralList{} -> "TODO"
+    LiteralList ty lst       -> uniformlyUserShow' ty lst
 
 
 data BeforeOrAfter = Before | After
