@@ -226,9 +226,8 @@ floatBoolQuantifiers p = case p of
   CoreProp (KeySetEqNeq op a b) -> PKeySetEqNeq op <$> float a <*> float b
   CoreProp (ListEqNeq ty op a b) -> withFloat ty $
     CoreProp <$> (ListEqNeq ty op <$> float a <*> float b)
-  CoreProp (ObjContains schema (EObject ty obj)) -> CoreProp <$>
-    (ObjContains schema . EObject ty <$> float obj)
-  CoreProp (ObjContains _ _) -> error ("ill-formed contains: " ++ show p)
+  CoreProp (ObjContains schema a b) -> CoreProp <$>
+    (ObjContains schema <$> float a <*> float b)
   CoreProp (StringContains needle haystack) -> CoreProp <$>
     (StringContains <$> float needle <*> float haystack)
   CoreProp (ListContains ty needle haystack) -> withFloat ty $

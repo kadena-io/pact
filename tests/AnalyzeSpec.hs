@@ -1916,9 +1916,9 @@ spec = describe "analyze" $ do
 
     it "lifts over a list" $
       prenexConvert (CoreProp (ListAt SBool 0
-        (CoreProp (LiteralList (SList SBool) [ allA1 ty a1 ]))))
+        (CoreProp (LiteralList SBool [ allA1 ty a1 ]))))
       `shouldBe`
-      allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList (SList SBool) [ a1 ]))))
+      allA1 ty (CoreProp (ListAt SBool 0 (CoreProp (LiteralList SBool [ a1 ]))))
 
   describe "prop parse / typecheck" $ do
     let parseExprs' :: Text -> Either String [Exp Info]

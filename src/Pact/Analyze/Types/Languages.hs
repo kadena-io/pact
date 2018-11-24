@@ -193,9 +193,9 @@ data Core (t :: Ty -> *) (a :: Ty) where
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
   ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
 
-  ObjContains    :: Schema -> Existential t -> Core t 'TyBool
-  StringContains :: t 'TyStr -> t 'TyStr -> Core t 'TyBool
-  ListContains   :: SingTy 'SimpleK a -> t a -> t ('TyList a) -> Core t 'TyBool
+  ObjContains    :: Schema ->            t 'TyStr -> t 'TyObject   -> Core t 'TyBool
+  StringContains ::                      t 'TyStr -> t 'TyStr      -> Core t 'TyBool
+  ListContains   :: SingTy 'SimpleK a -> t a      -> t ('TyList a) -> Core t 'TyBool
 
   ListLength  :: SingTy 'SimpleK a -> t ('TyList a) -> Core t 'TyInteger
 
@@ -379,7 +379,7 @@ instance
     Just Refl -> op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
   ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
   ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
-  ObjContains s1 e1           == ObjContains s2 e2           = s1 == s2 && e1 == e2
+  ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
   StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
   ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
     Just Refl -> uniformlyEq ty1 b1 b2 && (case ty1 of
@@ -497,11 +497,13 @@ instance
       . showsPrec 11 a
       . showString " "
       . uniformlyShows ty 11 b
-    ObjContains s e ->
-        showString "StringContains "
+    ObjContains s a b ->
+        showString "ObjContains "
       . showsPrec 11 s
       . showString " "
-      . showsPrec 11 e
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
     StringContains a b ->
         showString "StringContains "
       . showsPrec 11 a
@@ -609,7 +611,7 @@ instance
     ListEqNeq ty op x y      -> parenList [userShow op, uniformlyUserShow ty x, uniformlyUserShow ty y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
     ListAt ty k lst          -> parenList [userShow k, uniformlyUserShow ty lst]
-    ObjContains _schema v    -> parenList [SContains, userShow v]
+    ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
     StringContains needle haystack
       -> parenList [SContains, userShow needle, userShow haystack]
     ListContains ty needle haystack

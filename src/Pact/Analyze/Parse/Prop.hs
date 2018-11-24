@@ -277,8 +277,11 @@ inferPreProp preProp = case preProp of
 
   PreListLit as   -> do
     as' <- traverse inferPreProp as
-    EList listTy litList
-      <- maybe (throwErrorT "TODO: bad list") pure $ mkLiteralList as'
+    EList listTy litList <- maybe
+      (throwErrorT
+        ("unable to make list of a single type from " <> userShow as'))
+      pure
+      $ mkLiteralList as'
 
     pure $ EList listTy $ CoreProp litList
 

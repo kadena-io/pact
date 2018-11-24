@@ -14,7 +14,7 @@ import           Data.Monoid                 ((<>))
 import           Data.SBV                    (Boolean (bnot, false, true),
                                               EqSymbolic ((./=), (.==)),
                                               OrdSymbolic ((.<), (.<=), (.>), (.>=)),
-                                              SymWord, false, ite, true, (|||))
+                                              SymWord, false, ite, true, (|||), bAny)
 import qualified Data.SBV.List               as SBVL
 import           Data.SBV.List.Bounded       (band, bfoldr, breverse, bsort,
                                               bzipWith)
@@ -171,6 +171,11 @@ evalCore (ObjectMerge _ _)                 =
   error "object merge can not produce a simple value"
 evalCore LiteralObject {}                  =
   error "literal object can't be an argument to evalCore"
+evalCore (ObjContains (Schema schema) key _obj) = do
+  key' <- eval key
+  pure $ sansProv $ bAny
+    (\testKey -> literalS (Str (T.unpack testKey)) .== key')
+    $ Map.keys schema
 evalCore (StringContains needle haystack) = do
   needle'   <- eval needle
   haystack' <- eval haystack

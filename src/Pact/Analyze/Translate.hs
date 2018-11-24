@@ -88,9 +88,7 @@ data TranslateFailureNoLoc
   | NoReadMsg (AST Node)
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
-
-  | BadList
-  | TODO
+  | TypeError Node
   deriving (Eq, Show)
 
 describeTranslateFailureNoLoc :: TranslateFailureNoLoc -> Text
@@ -118,8 +116,7 @@ describeTranslateFailureNoLoc = \case
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
-  BadList -> "TODO"
-  TODO -> "TODO"
+  TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
 
 data TranslateEnv
   = TranslateEnv
@@ -1001,7 +998,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       EList (SList listOfTy) list -> do
         ESimple SInteger index' <- translateNode index
         pure $ ESimple listOfTy $ CoreTerm $ ListAt listOfTy index' list
-      _ -> throwError' TODO
+      _ -> throwError' $ TypeError node
 
   AST_Obj node kvs -> do
     kvs' <- for kvs $ \(k, v) -> do
@@ -1014,26 +1011,28 @@ translateNode astNode = withAstContext astNode $ case astNode of
     schema <- translateSchema node
     pure $ EObject schema $ CoreTerm $ LiteralObject $ Map.fromList kvs'
 
-  AST_List _node elems -> do
+  AST_List node elems -> do
     elems' <- traverse translateNode elems
     EList listOfTy litList
-      <- maybe (throwError' BadList) pure $ mkLiteralList elems'
+      <- maybe (throwError' (TypeError node)) pure $ mkLiteralList elems'
     pure $ EList listOfTy $ CoreTerm litList
 
-  AST_Contains _node val collection -> do
+  AST_Contains node val collection -> do
     ESimple needleTy needle <- translateNode val
     collection'             <- translateNode collection
     case collection' of
       -- ESimple SStr needle -> case collection' of
       ESimple SStr haystack -> case needleTy of
         SStr -> pure $ ESimple SBool $ CoreTerm $ StringContains needle haystack
-        _    -> throwError' TODO
-      ESimple _ _ -> throwError' TODO
-      EObject _ _ -> throwError' TODO
+        _    -> throwError' $ TypeError node
+      ESimple _ _ -> throwError' $ TypeError node
+      EObject schema obj -> case needleTy of
+        SStr -> pure $ ESimple SBool $ CoreTerm $ ObjContains schema needle obj
+        _    -> throwError' $ TypeError node
       EList (SList ty) haystack -> case singEq needleTy ty of
         Just Refl
           -> pure $ ESimple SBool $ CoreTerm $ ListContains ty needle haystack
-        Nothing -> throwError' TODO
+        Nothing -> throwError' $ TypeError node
 
   -- TODO: object drop
   AST_Drop _node num list -> do

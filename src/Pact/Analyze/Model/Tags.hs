@@ -184,8 +184,7 @@ saturateModel =
               mkAVal' . SBV.literal
                 <$> SBV.getValue (SBVI.SBV sval :: SBV (Concrete t)))
 
-          (\Refl -> error "TODO")
-        go (EType SList{}) OpaqueVal = pure OpaqueVal
+          (\Refl -> error "impossible in current formulation: should be EObjectTy")
 
         go (EObjectTy _) (AnObj obj) = AnObj <$> fetchObject obj
         go a b = error $ "fetchTVal: impossible: " ++ show (a, b)
