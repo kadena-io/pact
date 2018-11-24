@@ -109,7 +109,7 @@ mapExistential = transformExistential
 
 existentialType :: Existential tm -> EType
 existentialType (ESimple ety _) = EType ety
-existentialType (EList   ety _) = EType ety -- EListType ety
+existentialType (EList   ety _) = EType ety
 existentialType (EObject sch _) = EObjectTy sch
 
 -- TODO: could implement this stuff generically or add newtype-awareness
@@ -534,7 +534,6 @@ data QKind = QType | QAny
 
 data Quantifiable :: QKind -> * where
   EType     :: SingTy k a  -> Quantifiable q
-  -- EListType :: SingTy k a  -> Quantifiable q
   EObjectTy :: Schema      -> Quantifiable q
   QTable    ::                Quantifiable 'QAny
   QColumnOf :: TableName   -> Quantifiable 'QAny
@@ -559,13 +558,11 @@ type QType = Quantifiable 'QAny
 coerceQType :: EType -> QType
 coerceQType = \case
   EType ty         -> EType ty
-  -- EListType ty     -> EListType ty
   EObjectTy schema -> EObjectTy schema
 
 downcastQType :: QType -> Maybe EType
 downcastQType = \case
   EType ty         -> Just $ EType ty
-  -- EListType ty     -> Just $ EListType ty
   EObjectTy schema -> Just $ EObjectTy schema
   _                -> Nothing
 

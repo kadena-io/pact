@@ -248,7 +248,6 @@ inferVar vid name prop = do
       (\Refl -> pure (ESimple varTy' prop))
       (\Refl -> pure (EList varTy' prop))
       (\Refl -> throwErrorT "TODO")
-    -- Just (EListType varTy') -> pure (EList varTy' prop)
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
