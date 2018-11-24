@@ -250,6 +250,9 @@ instance OfPactTypes Eq Term      where
 instance OfPactTypes Show Prop      where
 instance OfPactTypes Show Invariant where
 instance OfPactTypes Show Term      where
+instance OfPactTypes UserShow Prop      where
+instance OfPactTypes UserShow Invariant where
+instance OfPactTypes UserShow Term      where
 
 uniformlyEq
   :: OfPactTypes Eq tm
@@ -276,14 +279,7 @@ uniformlyEq' ty t1 t2 = case ty of
   SAny     -> t1 == t2
 
 uniformlyUserShow
-  :: ( UserShow (tm ('TyList 'TyStr))
-     , UserShow (tm ('TyList 'TyInteger))
-     , UserShow (tm ('TyList 'TyTime))
-     , UserShow (tm ('TyList 'TyDecimal))
-     , UserShow (tm ('TyList 'TyBool))
-     , UserShow (tm ('TyList 'TyKeySet))
-     , UserShow (tm ('TyList 'TyAny))
-     )
+  :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> tm ('TyList a) -> Text
 uniformlyUserShow ty tm = case ty of
   SStr     -> userShow tm
@@ -295,14 +291,7 @@ uniformlyUserShow ty tm = case ty of
   SAny     -> userShow tm
 
 uniformlyUserShow'
-  :: ( UserShow (tm 'TyStr)
-     , UserShow (tm 'TyInteger)
-     , UserShow (tm 'TyTime)
-     , UserShow (tm 'TyDecimal)
-     , UserShow (tm 'TyBool)
-     , UserShow (tm 'TyKeySet)
-     , UserShow (tm 'TyAny)
-     )
+  :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> [tm a] -> Text
 uniformlyUserShow' ty tm = case ty of
   SStr     -> userShow tm
@@ -314,14 +303,7 @@ uniformlyUserShow' ty tm = case ty of
   SAny     -> userShow tm
 
 uniformlyUserShow''
-  :: ( UserShow (tm 'TyStr)
-     , UserShow (tm 'TyInteger)
-     , UserShow (tm 'TyTime)
-     , UserShow (tm 'TyDecimal)
-     , UserShow (tm 'TyBool)
-     , UserShow (tm 'TyKeySet)
-     , UserShow (tm 'TyAny)
-     )
+  :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> tm a -> Text
 uniformlyUserShow'' ty tm = case ty of
   SStr     -> userShow tm
@@ -348,6 +330,18 @@ uniformlyShows'
   :: OfPactTypes Show tm
   => SingTy 'SimpleK a -> Int -> [tm a] -> ShowS
 uniformlyShows' ty p t = case ty of
+  SStr     -> showsPrec p t
+  SInteger -> showsPrec p t
+  STime    -> showsPrec p t
+  SDecimal -> showsPrec p t
+  SBool    -> showsPrec p t
+  SKeySet  -> showsPrec p t
+  SAny     -> showsPrec p t
+
+uniformlyShows''
+  :: OfPactTypes Show tm
+  => SingTy 'SimpleK a -> Int -> tm a -> ShowS
+uniformlyShows'' ty p t = case ty of
   SStr     -> showsPrec p t
   SInteger -> showsPrec p t
   STime    -> showsPrec p t
@@ -517,15 +511,7 @@ instance
         showString "ListContains "
       . showsPrec 11 ty
       . showString " "
-      -- TODO
-      . (case ty of
-        SStr     -> showsPrec 11 a
-        SInteger -> showsPrec 11 a
-        STime    -> showsPrec 11 a
-        SDecimal -> showsPrec 11 a
-        SBool    -> showsPrec 11 a
-        SKeySet  -> showsPrec 11 a
-        SAny     -> showsPrec 11 a)
+      . uniformlyShows'' ty 11 a
       . showString " "
       . uniformlyShows ty 11 b
     ListLength ty a ->
@@ -596,27 +582,9 @@ instance
       . showString " "
       . showsPrec 11 args
 
--- deriving instance (Eq (Prop a), Eq (Concrete a)) => Eq   (Core Prop a)
--- deriving instance Eq   (Concrete a) => Eq   (Core Prop a)
--- deriving instance Show (Concrete a) => Show (Core Prop a)
-
 instance
-  ( UserShow (Concrete a)
-  , UserShow (tm 'TyStr)
-  , UserShow (tm 'TyInteger)
-  , UserShow (tm 'TyTime)
-  , UserShow (tm 'TyDecimal)
-  , UserShow (tm 'TyBool)
-  , UserShow (tm 'TyKeySet)
-  , UserShow (tm 'TyAny)
-  , UserShow (tm 'TyObject)
-  , UserShow (tm ('TyList 'TyStr))
-  , UserShow (tm ('TyList 'TyInteger))
-  , UserShow (tm ('TyList 'TyTime))
-  , UserShow (tm ('TyList 'TyDecimal))
-  , UserShow (tm ('TyList 'TyBool))
-  , UserShow (tm ('TyList 'TyKeySet))
-  , UserShow (tm ('TyList 'TyAny))
+  ( OfPactTypes UserShow tm
+  , UserShow (Concrete a)
   , UserShow (Existential tm)
   ) => UserShow (Core tm a) where
   userShowPrec d = \case
