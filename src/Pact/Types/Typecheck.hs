@@ -50,7 +50,7 @@ import Data.Foldable
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$$>),(<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import Pact.Types.Lang
+import Pact.Types.Lang hiding (App)
 import Pact.Types.Native
 
 

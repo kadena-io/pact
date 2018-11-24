@@ -54,7 +54,8 @@ import Control.Compactable (traverseMaybe)
 
 
 import Pact.Types.Typecheck
-import Pact.Types.Runtime
+import Pact.Types.Runtime hiding (App,appInfo)
+import qualified Pact.Types.Runtime as Term
 import Pact.Types.Native
 
 die :: MonadThrow m => Info -> String -> m a
@@ -681,11 +682,11 @@ toAST (TVar v i) = case v of -- value position only, TApp has its own resolver
   (Left Direct {}) -> die i "Native in value context"
   (Right t) -> return t
 
-toAST TApp {..} = do
-  fun <- toFun _tAppFun
-  i <- freshId _tInfo $ _fName fun
+toAST (TApp Term.App{..} _) = do
+  fun <- toFun _appFun
+  i <- freshId _appInfo $ _fName fun
   n <- trackIdNode i
-  args <- mapM toAST _tAppArgs
+  args <- mapM toAST _appArgs
   let mkApp fun' args' = return $ App n fun' args'
   case fun of
     FDefun {..} -> do
@@ -698,7 +699,7 @@ toAST TApp {..} = do
       fun' <- case special of
         Just Select -> case NE.filter ((== argCount) . length . _ftArgs) (_fTypes fun) of
           ft@[_] -> return $ set fTypes (NE.fromList ft) fun
-          _ -> die _tInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
+          _ -> die _appInfo $ "arg count mismatch, expected: " ++ show (_fTypes fun)
         _ -> return fun
       args' <- if NE.length (_fTypes fun') > 1 then return args else do
         let funType = NE.head (_fTypes fun')
@@ -717,7 +718,7 @@ toAST TApp {..} = do
         Nothing -> mkApp fun' args'
         Just sf -> do
           let specialBind = do
-                args'' <- notEmpty _tInfo "Expected >1 arg" (init args')
+                args'' <- notEmpty _appInfo "Expected >1 arg" (init args')
                 mkApp (set fSpecial (Just (sf,SBinding (last args'))) fun') args''
           case sf of
             Bind -> specialBind

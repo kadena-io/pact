@@ -35,7 +35,7 @@ module Pact.Eval
     ,deref
     ,installModule
     ,runPure,runPureSys,Purity
-    ,liftTerm,apply,apply'
+    ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin
     ,revokeCapability,revokeAllCapabilities
@@ -107,8 +107,8 @@ enforceKeySet i ksn KeySet{..} = do
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
     Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
     Nothing -> do
-      let app = TApp (TVar _ksPredFun def)
-                [toTerm count,toTerm matched] i
+      let app = TApp (App (TVar _ksPredFun def)
+                [toTerm count,toTerm matched] i) i
       app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
       r <- reduce app'
       case r of
@@ -121,14 +121,9 @@ enforceKeySet i ksn KeySet{..} = do
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
 
--- | Re-application of 'f as' with additional args.
-apply :: Term Ref -> [Term Ref] -> Info -> [Term Name] ->  Eval e (Term Name)
-apply f as i as' = reduce (TApp f (as ++ map liftTerm as') i)
-
--- | Unsafe version of 'apply' where first arg is assumed to be a 'TApp',
--- to which additional args are applied.
-apply' :: Term Ref -> [Term Name] -> Eval e (Term Name)
-apply' app as' = apply (_tAppFun app) (_tAppArgs app) (_tInfo app) as'
+-- | Application with additional args.
+apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
+apply app as = reduceApp $ over appArgs (++ map liftTerm as) app
 
 -- | Precompute gas on unreduced args returning reduced values.
 preGas :: FunApp -> [Term Ref] -> Eval e (Gas,[Term Name])
@@ -140,14 +135,15 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
-acquireCapability :: Capability -> Eval e Capability -> Eval e ()
+acquireCapability :: Capability -> Eval e Capability -> Eval e CapAcquireResult
 acquireCapability cap test = do
   granted <- (cap `elem`) <$> use evalCapabilities
-  unless granted $ do
+  if granted then return AlreadyAcquired else do
     c <- test
     evalCapabilities %= (c:)
+    return NewlyAcquired
 
-acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e ()
+acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modKeySetName =
   acquireCapability moduleAdminCapability $ do
     enforceKeySetName i modKeySetName
@@ -174,7 +170,7 @@ eval (TModule m@Module{} bod i) =
       Nothing -> return ()
       Just om ->
         case om of
-          Module{} -> acquireModuleAdmin i (_mName om) (_mKeySet om)
+          Module{} -> void $ acquireModuleAdmin i (_mName om) (_mKeySet om)
           Interface{..} -> evalError i $
             "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
@@ -400,7 +396,7 @@ unsafeReduce t = return (t >>= const (tStr "Error: unsafeReduce on non-static te
 
 -- | Main function for reduction/evaluation.
 reduce :: Term Ref ->  Eval e (Term Name)
-reduce (TApp f as ai) = reduceApp f as ai
+reduce (TApp a _) = reduceApp a
 reduce (TVar t _) = deref t
 reduce t@TLiteral {} = unsafeReduce t
 reduce t@TGuard {} = unsafeReduce t
@@ -444,10 +440,10 @@ resolveArg ai as i = fromMaybe (appError ai $ pack $ "Missing argument value at 
 appCall :: Show t => FunApp -> Info -> [Term t] -> Eval e (Gas,a) -> Eval e a
 appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) as)))
 
-reduceApp :: Term Ref -> [Term Ref] -> Info ->  Eval e (Term Name)
-reduceApp (TVar (Direct t) _) as ai = reduceDirect t as ai
-reduceApp (TVar (Ref r) _) as ai = reduceApp r as ai
-reduceApp TDef {..} as ai = do
+reduceApp :: App (Term Ref) -> Eval e (Term Name)
+reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
+reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
+reduceApp (App TDef {..} as ai) = do
   g <- computeGas (Left (_tInfo, asString _tDefName)) GUserApp
   as' <- mapM reduce as
   ft' <- traverse reduce _tFunType
@@ -459,8 +455,8 @@ reduceApp TDef {..} as ai = do
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
       Defcap -> evalError ai "Cannot directly evaluate defcap"
-reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
-reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
+reduceApp (App (TLitString errMsg) _ i) = evalError i $ unpack errMsg
+reduceApp (App r _ ai) = evalError ai $ "Expected def: " ++ show r
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
@@ -515,7 +511,7 @@ applyPact t = evalError (_tInfo t) "applyPact: expected list of steps"
 
 -- | Create special error form handled in 'reduceApp'
 appError :: Info -> Text -> Term n
-appError i errMsg = TApp (toTerm errMsg) [] i
+appError i errMsg = TApp (App (toTerm errMsg) [] i) i
 
 resolveFreeVars ::  Info -> Scope d Term Name ->  Eval e (Scope d Term Ref)
 resolveFreeVars i b = traverse r b where

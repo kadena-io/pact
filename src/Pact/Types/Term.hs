@@ -45,8 +45,9 @@ module Pact.Types.Term
    Name(..),
    ConstVal(..),
    Use(..),
+   App(..),appFun,appArgs,appInfo,
    Term(..),
-   tAppArgs,tAppFun,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
+   tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
    tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
@@ -332,6 +333,13 @@ data Use = Use
 instance Show Use where
   show Use {..} = "(use " ++ show _uModuleName ++ maybeDelim " " _uModuleHash ++ ")"
 
+data App t = App
+  { _appFun :: !t
+  , _appArgs :: ![t]
+  , _appInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Eq)
+instance Show n => Show (App n) where
+  show App{..} = "(" ++ unwords (show _appFun:map show _appArgs) ++ ")"
 
 -- TODO: We need a more expressive, safer ADT for this.
 data Module
@@ -437,8 +445,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TApp {
-      _tAppFun :: !(Term n)
-    , _tAppArgs :: ![Term n]
+      _tApp :: !(App (Term n))
     , _tInfo :: !Info
     } |
     TVar {
@@ -506,7 +513,7 @@ instance Show n => Show (Term n) where
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
       "(TConst " ++ asString' _tModule ++ "." ++ show _tConstArg ++ " " ++ show _tMeta ++ ")"
-    show (TApp f as _) = "(TApp " ++ show f ++ " " ++ show as ++ ")"
+    show (TApp a _) = show a
     show (TVar n _) = "(TVar " ++ show n ++ ")"
     show (TBinding bs b c _) = "(TBinding " ++ show bs ++ " " ++ show (unscope b) ++ " " ++ show c ++ ")"
     show (TObject bs _ _) =
@@ -539,8 +546,8 @@ instance Eq1 Term where
     a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
   liftEq eq (TConst a b c d e) (TConst m n o q r) =
     liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
-  liftEq eq (TApp a b c) (TApp m n o) =
-    liftEq eq a m && liftEq (liftEq eq) b n && c == o
+  liftEq eq (TApp (App a b c) d) (TApp (App m n o) p) =
+    liftEq eq a m && liftEq (liftEq eq) b n && c == o && d == p
   liftEq eq (TVar a b) (TVar m n) =
     eq a m && b == n
   liftEq eq (TBinding a b c d) (TBinding m n o p) =
@@ -576,7 +583,7 @@ instance Monad Term where
     TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
     TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
-    TApp af as i >>= f = TApp (af >>= f) (map (>>= f) as) i
+    TApp a i >>= f = TApp (fmap (>>= f) a) i
     TVar n i >>= f = (f n) { _tInfo = i }
     TBinding bs b c i >>= f = TBinding (map (fmap (>>= f) *** (>>= f)) bs) (b >>>= f) (fmap (fmap (>>= f)) c) i
     TObject bs t i >>= f = TObject (map ((>>= f) *** (>>= f)) bs) (fmap (>>= f) t) i
@@ -709,7 +716,7 @@ abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl
 abbrev TDef {..} = "<defun " ++ asString' _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
-abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"
+abbrev TApp {..} = "<app " ++ abbrev (_appFun _tApp) ++ ">"
 abbrev TBinding {} = "<binding>"
 abbrev TObject {..} = "<object" ++ showParamType _tObjectType ++ ">"
 abbrev (TLiteral l _) = show l
@@ -727,3 +734,4 @@ makeLenses ''Term
 makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
+makeLenses ''App

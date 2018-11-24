@@ -244,7 +244,7 @@ select' i _ cols' app@TApp{} tbl@TTable{} = do
         Just row -> do
           g <- gasPostRead i gPrev row
           let obj = columnsToObject tblTy row
-          result <- apply' app [obj]
+          result <- apply (_tApp app) [obj]
           fmap (g,) $ case result of
             (TLiteral (LBool include) _)
               | include -> case cols' of
@@ -358,7 +358,7 @@ guardTable i TTable {..} = do
     (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
     _ -> do
       m <- getModule (_faInfo i) _tModule
-      acquireModuleAdmin (_faInfo i) (_mName m) (_mKeySet m)
+      void $ acquireModuleAdmin (_faInfo i) (_mName m) (_mKeySet m)
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()

@@ -33,7 +33,7 @@ module Pact.Types.Runtime
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
-   Capability(..),
+   Capability(..),CapAcquireResult(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -68,6 +68,9 @@ import Pact.Types.Util
 data Capability
   = ModuleAdminCapability ModuleName
   | UserCapability DefName [Term Name]
+  deriving (Eq,Show)
+
+data CapAcquireResult = NewlyAcquired|AlreadyAcquired
   deriving (Eq,Show)
 
 data StackFrame = StackFrame {

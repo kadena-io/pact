@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -42,6 +43,7 @@ keyDefs =
     in
     ("Keysets",[
      readKeysetDef
+    ,withCapabilityDef
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)])
      "Define keyset as NAME with KEYSET. \
@@ -58,6 +60,35 @@ keyDefs =
     ,defKeyPred Keys2 (keysN 2)
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
     ])
+
+tvA :: Type n
+tvA = mkTyVar "a" []
+
+
+withCapabilityDef :: NativeDef
+withCapabilityDef =
+  defNative "with-capability" withCapability
+  (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
+  "Specifies and requests grant of CAPABILITY which is an application of a `defcap` \
+   \production; given the unique token specified by this application, ensure \
+   \that the token is granted in the environment during execution of BODY. If token is not \
+   \present, the CAPABILITY is applied, with \
+   \successful completion resulting in the installation/granting of the token, which \
+   \will then be revoked upon completion of BODY. \
+   \Nested `with-capability` calls for the same token will detect the presence of \
+   \the token, and will not re-apply CAPABILITY, but simply execute BODY. \
+   \`$(with capability (update-users id) (update users id { salary: new-salary }))`"
+  where
+    withCapability :: NativeFun e
+    withCapability i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
+      grantedCap <- evalCap (_tApp c)
+      r <- reduceBody body
+      mapM_ revokeCapability grantedCap
+      return r
+    withCapability i as = argsError' i as
+
+evalCap :: App (Term Ref) -> Eval e (Maybe Capability)
+evalCap = undefined
 
 
 defineKeyset :: RNativeFun e

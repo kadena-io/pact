@@ -34,14 +34,13 @@ isSpecialForm :: NativeDefName -> Maybe SpecialForm
 isSpecialForm = (`M.lookup` sfLookup)
 
 
--- | Native function with un-reduced arguments that computes gas. Must fire call stack.
+-- | Native function with un-reduced arguments that computes gas.
 type NativeFun e = FunApp -> [Term Ref] -> Eval e (Gas,Term Name)
 
 -- | Native function with reduced arguments, initial gas pre-compute that computes final gas.
--- Call stack fired.
 type GasRNativeFun e = Gas -> FunApp -> [Term Name] -> Eval e (Gas,Term Name)
 
--- | Native function with reduced arguments, final gas pre-compute, call stack fired.
+-- | Native function with reduced arguments, final gas pre-compute.
 type RNativeFun e = FunApp -> [Term Name] -> Eval e (Term Name)
 
 type NativeDef = (NativeDefName,Term Name)
