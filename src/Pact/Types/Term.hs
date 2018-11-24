@@ -34,7 +34,7 @@ module Pact.Types.Term
    Guard(..),
    DefType(..),
    defTypeRep,
-   NativeDefName(..),
+   NativeDefName(..),DefName(..),
    FunApp(..),faDefType,faDocs,faInfo,faModule,faName,faTypes,
    Ref(..),
    NativeDFun(..),
@@ -302,6 +302,10 @@ newtype ModuleName = ModuleName Text
     deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
 instance Show ModuleName where show (ModuleName s) = show s
 
+newtype DefName = DefName Text
+    deriving (Eq,Ord,IsString,ToJSON,FromJSON,AsString,Hashable,Pretty)
+instance Show DefName where show (DefName s) = show s
+
 -- | A named reference from source.
 data Name =
     QName { _nQual :: ModuleName, _nName :: Text, _nInfo :: Info } |
@@ -426,7 +430,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDefName :: !Text
+      _tDefName :: !DefName
     , _tModule :: !ModuleName
     , _tDefType :: !DefType
     , _tFunType :: !(FunType (Term n))
@@ -513,7 +517,7 @@ instance Show n => Show (Term n) where
       "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
     show TDef {..} =
-      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ unpack _tDefName ++ " " ++
+      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ asString' _tDefName ++ " " ++
       show _tFunType ++ " " ++ show _tMeta ++ ")"
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
@@ -719,7 +723,7 @@ abbrev (TModule m _ _) =
     Module{..} -> "<module " ++ asString' _mName ++ ">"
     Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
-abbrev TDef {..} = "<defun " ++ unpack _tDefName ++ ">"
+abbrev TDef {..} = "<defun " ++ asString' _tDefName ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev t@TApp {} = "<app " ++ abbrev (_tAppFun t) ++ ">"

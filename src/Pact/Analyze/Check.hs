@@ -67,7 +67,7 @@ import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Term (TConst, TDef, TSchema, TTable),
                                        asString, getInfo, tShow)
 import qualified Pact.Types.Runtime   as Pact
-import           Pact.Types.Term      (Module(..))
+import           Pact.Types.Term      (Module(..),DefName(..))
 import           Pact.Types.Typecheck (AST,
                                        Fun (FDefun, _fArgs, _fBody, _fInfo),
                                        Named, Node, TcId (_tiInfo),
@@ -435,8 +435,8 @@ data ModuleProperty = ModuleProperty
   }
 
 -- Does this (module-scoped) property apply to this function?
-applicableCheck :: Text -> ModuleProperty -> Bool
-applicableCheck funName (ModuleProperty _ propScope) = case propScope of
+applicableCheck :: DefName -> ModuleProperty -> Bool
+applicableCheck (DefName funName) (ModuleProperty _ propScope) = case propScope of
   Everywhere      -> True
   Excluding names -> funName `Set.notMember` names
   Including names -> funName `Set.member`    names

@@ -28,11 +28,12 @@ module Pact.Types.Runtime
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
    RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
-   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,
+   EvalState(..),evalRefs,evalCallStack,evalPactExec,evalGas,evalCapabilities,
    Eval(..),runEval,runEval',
    call,method,
    readRow,writeRow,keys,txids,createUserTable,getUserTableInfo,beginTx,commitTx,rollbackTx,getTxLog,
    KeyPredBuiltins(..),keyPredBuiltins,
+   Capability(..),
    module Pact.Types.Lang,
    module Pact.Types.Util,
    module Pact.Types.Persistence,
@@ -40,7 +41,7 @@ module Pact.Types.Runtime
    ) where
 
 import Control.Arrow ((&&&))
-import Control.Lens hiding ((.=))
+import Control.Lens hiding ((.=),DefName)
 import Control.DeepSeq
 import Data.List
 import Control.Monad.Except
@@ -63,6 +64,11 @@ import Pact.Types.Orphans ()
 import Pact.Types.Persistence
 import Pact.Types.Util
 
+
+data Capability
+  = ModuleAdminCapability ModuleName
+  | UserCapability DefName [Term Name]
+  deriving (Eq,Show)
 
 data StackFrame = StackFrame {
       _sfName :: !Text
@@ -226,9 +232,11 @@ data EvalState = EvalState {
     , _evalPactExec :: !(Maybe PactExec)
       -- | Gas tally
     , _evalGas :: Gas
+      -- | Capability list
+    , _evalCapabilities :: [Capability]
     } deriving (Show)
 makeLenses ''EvalState
-instance Default EvalState where def = EvalState def def def 0
+instance Default EvalState where def = EvalState def def def 0 def
 
 -- | Interpreter monad, parameterized over back-end MVar state type.
 newtype Eval e a =

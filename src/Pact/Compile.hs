@@ -361,7 +361,7 @@ defun = do
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
   m <- meta ModelAllowed
-  TDef defname modName Defun (FunType args returnTy)
+  TDef (DefName defname) modName Defun (FunType args returnTy)
     <$> abstractBody valueLevel args <*> pure m <*> contextInfo
 
 defpact :: Compile (Term Name)
@@ -374,7 +374,7 @@ defpact = do
     RStep -> return step
     RStepWithRollback -> return stepWithRollback
     _ -> expected "step or step-with-rollback"
-  TDef defname modName Defpact (FunType args returnTy)
+  TDef (DefName defname) modName Defpact (FunType args returnTy)
     (abstractBody' args (TList body TyAny bi)) m <$> contextInfo
 
 moduleForm :: Compile (Term Name)
@@ -433,7 +433,7 @@ emptyDef = do
   m <- meta ModelAllowed
   info <- contextInfo
   return $
-    TDef defName modName Defun
+    TDef (DefName defName) modName Defun
     (FunType args returnTy) (abstract (const Nothing) (TList [] TyAny info)) m info
 
 

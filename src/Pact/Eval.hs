@@ -37,6 +37,8 @@ module Pact.Eval
     ,runPure,runPureSys,Purity
     ,liftTerm,apply,apply'
     ,preGas
+    ,acquireCapability,acquireModuleAdmin
+    ,revokeCapability,revokeAllCapabilities
     ) where
 
 import Control.Lens
@@ -66,15 +68,16 @@ import Pact.Gas
 
 
 evalBeginTx :: Info -> Eval e ()
-evalBeginTx i = beginTx i =<< view eeTxId
+evalBeginTx i = revokeAllCapabilities >> view eeTxId >>= beginTx i
 {-# INLINE evalBeginTx #-}
 
 evalRollbackTx :: Info -> Eval e ()
-evalRollbackTx = void . rollbackTx
+evalRollbackTx i = revokeAllCapabilities >> void (rollbackTx i)
 {-# INLINE evalRollbackTx #-}
 
 evalCommitTx :: Info -> Eval e [TxLog Value]
 evalCommitTx i = do
+  revokeAllCapabilities
   tid <- view eeTxId
   case tid of
     Nothing -> evalRollbackTx i >> return []
@@ -137,27 +140,49 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
+acquireCapability :: Capability -> Eval e Capability -> Eval e ()
+acquireCapability cap test = do
+  granted <- (cap `elem`) <$> use evalCapabilities
+  unless granted $ do
+    c <- test
+    evalCapabilities %= (c:)
+
+acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e ()
+acquireModuleAdmin i modName modKeySetName =
+  acquireCapability moduleAdminCapability $ do
+    enforceKeySetName i modKeySetName
+    return moduleAdminCapability
+  where moduleAdminCapability = ModuleAdminCapability modName
+
+
+revokeAllCapabilities :: Eval e ()
+revokeAllCapabilities = evalCapabilities .= []
+
+revokeCapability :: Capability -> Eval e ()
+revokeCapability c = evalCapabilities %= filter (/= c)
+
+
 -- | Evaluate top-level term.
 eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
-eval (TModule m@Module{..} bod i) =
+eval (TModule m@Module{} bod i) =
   topLevelCall i "module" (GModule m) $ \g0 -> do
     -- enforce old module keysets
-    oldM <- readRow i Modules _mName
+    oldM <- readRow i Modules (_mName m)
     case oldM of
       Nothing -> return ()
       Just om ->
         case om of
-          Module{..} -> enforceKeySetName i _mKeySet
+          Module{} -> acquireModuleAdmin i (_mName om) (_mKeySet om)
           Interface{..} -> evalError i $
-            "Name overlap: module " ++ show _mName ++ " overlaps with interface  " ++ show _interfaceName
+            "Name overlap: module " ++ show (_mName om) ++ " overlaps with interface  " ++ show _interfaceName
     -- enforce new module keyset
-    enforceKeySetName i _mKeySet
+    enforceKeySetName i (_mKeySet m)
     -- build/install module from defs
     (g,_defs) <- loadModule m bod i g0
-    writeRow i Write Modules _mName m
-    return (g, msg $ pack $ "Loaded module " ++ show _mName ++ ", hash " ++ show _mHash)
+    writeRow i Write Modules (_mName m) m
+    return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
 eval (TModule m@Interface{..} bod i) =
   topLevelCall i "interface" (GInterface m) $ \gas -> do
     oldI <- readRow i Modules _interfaceName
@@ -201,7 +226,7 @@ loadModule m@Module{..} bod1 mi g0 = do
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
               dnm <- case t of
-                TDef {..} -> return $ Just _tDefName
+                TDef {..} -> return $ Just $ asString _tDefName
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
@@ -226,7 +251,7 @@ loadModule i@Interface{..} body info gas0 = do
     (TList bd _ _bi) -> do
       let doDef (g,rs) t = do
             dnm <- case t of
-              TDef {..} -> return $ Just _tDefName
+              TDef {..} -> return $ Just $ asString _tDefName
               TConst {..} -> return $ Just $ _aName _tConstArg
               TSchema {..} -> return $ Just $ asString _tSchemaName
               TUse (Use {..}) _ -> return Nothing
@@ -428,12 +453,12 @@ reduceApp TDef {..} as ai = do
   ft' <- traverse reduce _tFunType
   typecheck (zip (_ftArgs ft') as')
   let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo _tDefName (Just _tModule) _tDefType (funTypes ft') (_mDocs _tMeta)
+      fa = FunApp _tInfo (asString _tDefName) (Just _tModule) _tDefType (funTypes ft') (_mDocs _tMeta)
   appCall fa ai as $ fmap (g,) $ do
     case _tDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
-      _ -> undefined --TODOOOOOOOOO
+      Defcap -> evalError ai "Cannot directly evaluate defcap"
 reduceApp (TLitString errMsg) _ i = evalError i $ unpack errMsg
 reduceApp r _ ai = evalError ai $ "Expected def: " ++ show r
 
