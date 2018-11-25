@@ -46,9 +46,10 @@ module Pact.Types.Term
    ConstVal(..),
    Use(..),
    App(..),appFun,appArgs,appInfo,
+   Def(..),dDefBody,dDefName,dDefType,dMeta,dFunType,dInfo,dModule,
    Term(..),
    tApp,tBindBody,tBindPairs,tBindType,tConstArg,tConstVal,
-   tDefBody,tDefName,tDefType,tMeta,tFields,tFunTypes,tFunType,tHash,tInfo,tGuard,
+   tDef,tMeta,tFields,tFunTypes,tHash,tInfo,tGuard,
    tListType,tList,tLiteral,tModuleBody,tModuleDef,tModule,tUse,
    tNativeDocs,tNativeFun,tNativeName,tNativeTopLevelOnly,tObjectType,tObject,tSchemaName,
    tStepEntity,tStepExec,tStepRollback,tTableName,tTableType,tValue,tVar,
@@ -365,6 +366,23 @@ instance Show Module where
     Module{..} -> "(Module " ++ asString' _mName ++ " '" ++ asString' _mKeySet ++ " " ++ show _mHash ++ ")"
     Interface{..} -> "(Interface " ++ asString' _interfaceName ++ ")"
 
+data Def t n = Def
+  { _dDefName :: !DefName
+  , _dModule :: !ModuleName
+  , _dDefType :: !DefType
+  , _dFunType :: !(FunType (t n))
+  , _dDefBody :: !(Scope Int t n)
+  , _dMeta :: !Meta
+  , _dInfo :: !Info
+  } deriving (Functor,Foldable,Traversable,Eq)
+instance (Show (t n)) => Show (Def t n) where
+  show Def{..} = "(" ++ unwords
+    [ defTypeRep _dDefType
+    , asString' _dModule ++ "." ++ asString' _dDefName ++ ":" ++ show (_ftReturn _dFunType)
+    , "(" ++ unwords (map show (_ftArgs _dFunType)) ++ ")"] ++
+    maybeDelim " " (_mDocs _dMeta) ++ ")"
+
+
 
 instance ToJSON Module where
   toJSON Module{..} = object
@@ -421,12 +439,7 @@ data Term n =
     , _tInfo :: !Info
     } |
     TDef {
-      _tDefName :: !DefName
-    , _tModule :: !ModuleName
-    , _tDefType :: !DefType
-    , _tFunType :: !(FunType (Term n))
-    , _tDefBody :: !(Scope Int Term n)
-    , _tMeta :: !Meta
+      _tDef :: Def Term n
     , _tInfo :: !Info
     } |
     TNative {
@@ -506,9 +519,7 @@ instance Show n => Show (Term n) where
     show TModule {..} =
       "(TModule " ++ show _tModuleDef ++ " " ++ show (unscope _tModuleBody) ++ ")"
     show (TList bs _ _) = "[" ++ unwords (map show bs) ++ "]"
-    show TDef {..} =
-      "(TDef " ++ defTypeRep _tDefType ++ " " ++ asString' _tModule ++ "." ++ asString' _tDefName ++ " " ++
-      show _tFunType ++ " " ++ show _tMeta ++ ")"
+    show TDef {..} = show _tDef
     show TNative {..} =
       "(TNative " ++ asString' _tNativeName ++ " " ++ showFunTypes _tFunTypes ++ " " ++ unpack _tNativeDocs ++ ")"
     show TConst {..} =
@@ -542,8 +553,8 @@ instance Eq1 Term where
     a == m && liftEq eq b n && c == o
   liftEq eq (TList a b c) (TList m n o) =
     liftEq (liftEq eq) a m && liftEq (liftEq eq) b n && c == o
-  liftEq eq (TDef a b c d e f g) (TDef m n o p q r s) =
-    a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s
+  liftEq eq (TDef (Def a b c d e f g) i) (TDef (Def m n o p q r s) t) =
+    a == m && b == n && c == o && liftEq (liftEq eq) d p && liftEq eq e q && f == r && g == s && i == t
   liftEq eq (TConst a b c d e) (TConst m n o q r) =
     liftEq (liftEq eq) a m && b == n && liftEq (liftEq eq) c o && d == q && e == r
   liftEq eq (TApp (App a b c) d) (TApp (App m n o) p) =
@@ -580,7 +591,7 @@ instance Monad Term where
     return a = TVar a def
     TModule m b i >>= f = TModule m (b >>>= f) i
     TList bs t i >>= f = TList (map (>>= f) bs) (fmap (>>= f) t) i
-    TDef n m dt ft b d i >>= f = TDef n m dt (fmap (>>= f) ft) (b >>>= f) d i
+    TDef (Def n m dt ft b d i) i' >>= f = TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) d i) i'
     TNative n fn t d tl i >>= f = TNative n fn (fmap (fmap (>>= f)) t) d tl i
     TConst d m c t i >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c) t i
     TApp a i >>= f = TApp (fmap (>>= f) a) i
@@ -653,7 +664,7 @@ typeof t = case t of
       TLiteral l _ -> Right $ TyPrim $ litToPrim l
       TModule {} -> Left "module"
       TList {..} -> Right $ TyList _tListType
-      TDef {..} -> Left $ pack $ defTypeRep _tDefType
+      TDef {..} -> Left $ pack $ defTypeRep (_dDefType _tDef)
       TNative {..} -> Left "defun"
       TConst {..} -> Left $ "const:" <> _aName _tConstArg
       TApp {..} -> Left "app"
@@ -713,7 +724,7 @@ abbrev (TModule m _ _) =
     Module{..} -> "<module " ++ asString' _mName ++ ">"
     Interface{..} -> "<interface " ++ asString' _interfaceName ++ ">"
 abbrev (TList bs tl _) = "<list(" ++ show (length bs) ++ ")" ++ showParamType tl ++ ">"
-abbrev TDef {..} = "<defun " ++ asString' _tDefName ++ ">"
+abbrev TDef {..} = "<defun " ++ asString' (_dDefName _tDef) ++ ">"
 abbrev TNative {..} = "<native " ++ asString' _tNativeName ++ ">"
 abbrev TConst {..} = "<defconst " ++ show _tConstArg ++ ">"
 abbrev TApp {..} = "<app " ++ abbrev (_appFun _tApp) ++ ">"
@@ -735,3 +746,4 @@ makeLenses ''FunApp
 makeLenses ''Meta
 makeLenses ''Module
 makeLenses ''App
+makeLenses ''Def

@@ -222,7 +222,7 @@ loadModule m@Module{..} bod1 mi g0 = do
       (TList bd _ _bi) -> do
         let doDef (g,rs) t = do
               dnm <- case t of
-                TDef {..} -> return $ Just $ asString _tDefName
+                TDef {..} -> return $ Just $ asString (_dDefName _tDef)
                 TConst {..} -> return $ Just $ _aName _tConstArg
                 TSchema {..} -> return $ Just $ asString _tSchemaName
                 TTable {..} -> return $ Just $ asString _tTableName
@@ -247,7 +247,7 @@ loadModule i@Interface{..} body info gas0 = do
     (TList bd _ _bi) -> do
       let doDef (g,rs) t = do
             dnm <- case t of
-              TDef {..} -> return $ Just $ asString _tDefName
+              TDef {..} -> return $ Just $ asString (_dDefName _tDef)
               TConst {..} -> return $ Just $ _aName _tConstArg
               TSchema {..} -> return $ Just $ asString _tSchemaName
               TUse (Use {..}) _ -> return Nothing
@@ -343,8 +343,8 @@ solveConstraint info refName (Ref t) evalMap = do
       evalError info $ "found native reference " ++ show s ++ " while resolving module contraints: " ++ show t
     Just (Ref s) ->
       case (t, s) of
-        (TDef _n _mn dt (FunType args rty) _ m _,
-          TDef _n' _mn' dt' (FunType args' rty') b m' i) -> do
+        (TDef (Def _n _mn dt (FunType args rty) _ m _) _,
+          TDef (Def _n' _mn' dt' (FunType args' rty') b m' i) _) -> do
           when (dt /= dt') $ evalError info $ "deftypes mismatching: " ++ show dt ++ "\n" ++ show dt'
           when (rty /= rty') $ evalError info $ "return types mismatching: " ++ show rty ++ "\n" ++ show rty'
           when (length args /= length args') $ evalError info $ "mismatching argument lists: " ++ show args ++ "\n" ++ show args'
@@ -352,7 +352,8 @@ solveConstraint info refName (Ref t) evalMap = do
             when (n /= n') $ evalError info $ "mismatching argument names: " ++ show n ++ " and " ++ show n'
             when (ty /= ty') $ evalError info $ "mismatching types: " ++ show ty ++ " and " ++ show ty'
           -- the model concatenation step: we must reinsert the ref back into the map with new models
-          pure $ HM.insert refName (Ref $ TDef _n' _mn' dt' (FunType args' rty') b (m <> m') i) em
+          -- TODO yuck, should be lensing here
+          pure $ HM.insert refName (Ref $ TDef (Def _n' _mn' dt' (FunType args' rty') b (m <> m') i) i) em
         _ -> evalError info $ "found overlapping const refs - please resolve: " ++ show t
 
 resolveRef :: Name -> Eval e (Maybe Ref)
@@ -443,15 +444,15 @@ appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App TDef {..} as ai) = do
-  g <- computeGas (Left (_tInfo, asString _tDefName)) GUserApp
+reduceApp (App (TDef Def{..} _) as ai) = do
+  g <- computeGas (Left (ai, asString _dDefName)) GUserApp
   as' <- mapM reduce as
-  ft' <- traverse reduce _tFunType
+  ft' <- traverse reduce _dFunType
   typecheck (zip (_ftArgs ft') as')
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _tDefBody
-      fa = FunApp _tInfo (asString _tDefName) (Just _tModule) _tDefType (funTypes ft') (_mDocs _tMeta)
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
   appCall fa ai as $ fmap (g,) $ do
-    case _tDefType of
+    case _dDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
       Defcap -> evalError ai "Cannot directly evaluate defcap"

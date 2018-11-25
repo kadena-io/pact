@@ -61,7 +61,7 @@ import           Prelude                   hiding (exp)
 import           Pact.Typechecker     (typecheckTopLevel)
 import           Pact.Types.Lang      (pattern ColonExp, pattern CommaExp,
                                        Info, mModel, renderInfo, renderParsed,
-                                       tMeta, _tDefName)
+                                       tMeta, _tDef, tDef, _dDefName, dMeta)
 import           Pact.Types.Runtime   (Exp, ModuleData(..), ModuleName,
                                        Ref (Ref), mdRefMap, mdModule,
                                        Term (TConst, TDef, TSchema, TTable),
@@ -589,12 +589,16 @@ moduleFunChecks tables modCheckExps funTypes consts propDefs = for funTypes $ \c
                   \(Pact.Arg argName ty _) ->
                     (ColumnName (T.unpack argName),) <$> maybeTranslateType ty
             in (TableName (T.unpack _tableName), colMap)
-
-    checks <- case defn ^? tMeta . mModel of
+    -- TODO: this was very hard code to debug as the unsafe lenses just result
+    -- in properties not showing up, instead of a compile error when I changed 'TDef'
+    -- to a safe constructor. Please consider
+    -- moving this code to use pattern matches to ensure the proper constructor
+    -- is found; and/or change 'funTypes' to hold 'Def' objects
+    checks <- case defn ^? tDef . dMeta . mModel of
       Nothing -> pure []
       Just model -> withExcept ModuleParseFailure $ liftEither $ do
         exps <- collectExps "property" model
-        let funName = _tDefName defn
+        let funName = _dDefName (_tDef defn)
             applicableModuleChecks = map _moduleProperty $
               filter (applicableCheck funName) modCheckExps
         runExpParserOver (applicableModuleChecks <> exps) $

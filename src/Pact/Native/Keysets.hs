@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -69,13 +68,13 @@ withCapabilityDef :: NativeDef
 withCapabilityDef =
   defNative "with-capability" withCapability
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
-  "Specifies and requests grant of CAPABILITY which is an application of a `defcap` \
+  "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
    \production; given the unique token specified by this application, ensure \
    \that the token is granted in the environment during execution of BODY. If token is not \
    \present, the CAPABILITY is applied, with \
    \successful completion resulting in the installation/granting of the token, which \
    \will then be revoked upon completion of BODY. \
-   \Nested `with-capability` calls for the same token will detect the presence of \
+   \Nested 'with-capability' calls for the same token will detect the presence of \
    \the token, and will not re-apply CAPABILITY, but simply execute BODY. \
    \`$(with capability (update-users id) (update users id { salary: new-salary }))`"
   where

@@ -652,13 +652,13 @@ toFun (TVar (Left (Direct TNative {..})) _) = do
 toFun (TVar (Left (Ref r)) _) = toFun (fmap Left r)
 toFun (TVar Right {} i) = die i "Value in fun position"
 toFun TDef {..} = do -- TODO currently creating new vars every time, is this ideal?
-  let fn = asString _tModule <> "." <> asString _tDefName
-  args <- forM (_ftArgs _tFunType) $ \(Arg n t ai) -> do
+  let fn = asString (_dModule _tDef) <> "." <> asString (_dDefName _tDef)
+  args <- forM (_ftArgs (_dFunType _tDef)) $ \(Arg n t ai) -> do
     an <- freshId ai $ pfx fn n
     t' <- mangleType an <$> traverse toUserType t
     Named n <$> trackNode t' an <*> pure an
-  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) _tDefBody
-  funType <- traverse toUserType _tFunType
+  tcs <- scopeToBody _tInfo (map (Var . _nnNamed) args) (_dDefBody _tDef)
+  funType <- traverse toUserType (_dFunType _tDef)
   funId <- freshId _tInfo fn
   void $ trackNode (_ftReturn funType) funId
   assocAST funId (last tcs)
@@ -814,7 +814,7 @@ bindArgs i args b =
 mkTop :: Term (Either Ref (AST Node)) -> TC (TopLevel Node)
 mkTop t@TDef {..} = do
   debug $ "===== Fun: " ++ abbrev t
-  TopFun <$> toFun t <*> pure _tMeta
+  TopFun <$> toFun t <*> pure (_dMeta _tDef)
 mkTop t@TConst {..} = do
   debug $ "===== Const: " ++ abbrev t
   TopConst _tInfo (asString _tModule <> "." <> _aName _tConstArg) <$>
