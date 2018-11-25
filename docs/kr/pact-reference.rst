@@ -3333,8 +3333,8 @@ BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 
 
 .. code:: lisp
 
-   (with-keyset 'admin-keyset ...)
-   (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset 'admin-keyset)
+   (enforce-keyset (read-keyset "admin-keyset"))
 
 keys-2
 ~~~~~~

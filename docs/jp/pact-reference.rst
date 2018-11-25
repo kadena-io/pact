@@ -3411,9 +3411,9 @@ BODY の実行前に、メッセージ キーに対して KEYSET-OR-NAME
 
 .. code:: lisp
 
-   (with-keyset 'admin-keyset ...)
+   (enforce-keyset 'admin-keyset)
 
-   (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset (read-keyset "admin-keyset"))
 
 keys-2
 ~~~~~~

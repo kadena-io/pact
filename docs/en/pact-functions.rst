@@ -1266,8 +1266,8 @@ keyset object.
 
 .. code:: lisp
 
-   (with-keyset 'admin-keyset ...)
-   (with-keyset (read-keyset "keyset") ...)
+   (enforce-keyset 'admin-keyset)
+   (enforce-keyset (read-keyset "admin-keyset"))
 
 keys-2
 ~~~~~~

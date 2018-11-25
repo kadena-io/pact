@@ -2427,8 +2427,8 @@ _keyset-or-name_&nbsp;`<k[string,keyset]>` _&rarr;_&nbsp;`bool`
 BODY 를 실행하기 전에 메시지 키에 대해 KEYSET-OR-NAME 을 enforce 하기 위한 특수 형식입니다. KEYSET-OR-NAME 는 키셋 이름 또는 키셋 객체의 기호가 될 수 있습니다.
 
 ```lisp
-(with-keyset 'admin-keyset ...)
-(with-keyset (read-keyset "keyset") ...)
+(enforce-keyset 'admin-keyset)
+(enforce-keyset (read-keyset "admin-keyset"))
 ```
 
 ### keys-2 {#keys-2}
