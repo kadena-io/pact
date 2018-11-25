@@ -516,7 +516,7 @@ Top level only: this function will fail if used in module code.
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data already exists for KEY.
 ```lisp
-(insert accounts { "balance": 0.0, "note": "Created account." })
+(insert accounts id { "balance": 0.0, "note": "Created account." })
 ```
 
 
@@ -598,7 +598,7 @@ Return all updates to TABLE performed in transaction TXID.
 
 Write entry in TABLE for KEY of OBJECT column data, failing if data does not exist for KEY.
 ```lisp
-(update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+(update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 
 
@@ -633,7 +633,7 @@ Special form to read row from TABLE for KEY and bind columns per BINDINGS over s
 
 Write entry in TABLE for KEY of OBJECT column data.
 ```lisp
-(write accounts { "balance": 100.0 })
+(write accounts id { "balance": 100.0 })
 ```
 
 ## Time {#Time}

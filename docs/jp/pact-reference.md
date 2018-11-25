@@ -2073,7 +2073,7 @@ TABLE の KEY に OBJECT 列データのエントリを書き込みます。
 KEY に既にデータが存在する場合は失敗します。
 
 ```lisp
-(insert 'accounts { "balance": 0.0, "note": "Created account."})
+(insert accounts id { "balance": 0.0, "note": "Created account."})
 ```
 
 ### keylog {#keylog}
@@ -2084,7 +2084,7 @@ TXID 以降のトランザクションで TABLE の KEY に対して行われた
 結果はオブジェクトのリストで、それぞれのキーが各トランザクションの ID です。
 
 ```lisp
-(keylog 'accounts "Alice" 123485945)
+(keylog accounts "Alice" 123485945)
 ```
 
 ### keys {#keys}
@@ -2094,7 +2094,7 @@ TXID 以降のトランザクションで TABLE の KEY に対して行われた
 TABLE のすべてのキーを返します。
 
 ```lisp
-(keys 'accounts)
+(keys accounts)
 ```
 
 ### read {#read}
@@ -2106,7 +2106,7 @@ TABLE のすべてのキーを返します。
 TABLE から の KEY に一致する行を読み取り、オブジェクトを返すか、単純に COLUMNS (指定されている場合) を返します。
 
 ```lisp
-(read 'accounts id ['balance 'ccy])
+(read accounts id ['balance 'ccy])
 ```
 
 ### select {#select}
@@ -2140,7 +2140,7 @@ TABLE の TXID 以上のすべての txid 値を返します。
 トランザクション TXID で実行された TABLE へのすべての更新を返します。
 
 ```lisp
-(txlog 'accounts 123485945)
+(txlog accounts 123485945)
 ```
 
 ### update {#update}
@@ -2151,7 +2151,7 @@ TABLE の KEY に OBJECT 列データを書き込みます。
  KEY にデータが存在しない場合は失敗します。
 
 ```lisp
-(update 'accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+(update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 
 ### with-default-read {#with-default-read}
@@ -2162,7 +2162,7 @@ TABLE から KEY の行を読み取り、列を BINDING によって後続の本
 行が見つからない場合、DEFAULTS (一致するキー名を持つオブジェクト) から列を読み取ります。
 
 ```lisp
-(with-default-read 'accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
+(with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -2173,7 +2173,7 @@ TABLE から KEY の行を読み取り、列を BINDING によって後続の本
 TABLE から KEY の行を読み取り、列を BINDING によって後続の本体ステートメントにバインドする特殊形式です。
 
 ```lisp
-(with-read 'accounts id { "balance":= bal, "ccy":= ccy }
+(with-read accounts id { "balance":= bal, "ccy":= ccy }
   (format "Balance for {} is {} {}" [id bal ccy]))
 ```
 
@@ -2184,7 +2184,7 @@ TABLE から KEY の行を読み取り、列を BINDING によって後続の本
 TABLE の KEY に OBJECT 列データを書き込みます。
 
 ```lisp
-(write 'accounts { "balance": 100.0 })
+(write accounts id { "balance": 100.0 })
 ```
 
 ## 時刻 {#Time}
@@ -2999,7 +2999,7 @@ Pact の不変条件は、形式検証の世界の詳細型（refinement types�
   @model (properties [(authorized-by 'admins)])
 
   (enforce-admin)
-  (read 'accounts id ['balance 'ccy 'amount]))
+  (read accounts id ['balance 'ccy 'amount]))
 ```
 
 ここでプロパティが、角かっこで囲って指定されていますが、これは、Pact で複数のプロパティを同時に定義できるためです。

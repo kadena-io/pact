@@ -2625,7 +2625,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 
 .. code:: lisp
 
-   (insert accounts "Alice" { "balance": 0.0, "note": "Created account." })
+   (insert accounts id { "balance": 0.0, "note": "Created account." })
 
 keylog
 ~~~~~~
@@ -2716,7 +2716,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 �
 
 .. code:: lisp
 
-   (update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+   (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 
 with-default-read
 ~~~~~~~~~~~~~~~~~
@@ -2757,7 +2757,7 @@ TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다.
 
 .. code:: lisp
 
-   (write accounts { "balance": 100.0 })
+   (write accounts id { "balance": 100.0 })
 
 .. _Time:
 

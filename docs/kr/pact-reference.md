@@ -1846,7 +1846,7 @@ _table_&nbsp;`table:<{row}>` _key_&nbsp;`string` _object_&nbsp;`object:<{row}>` 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 이미 데이터가 존재하는 경우에는 실패합니다.
 
 ```lisp
-(insert accounts "Alice" { "balance": 0.0, "note": "Created account." })
+(insert accounts id { "balance": 0.0, "note": "Created account." })
 ```
 
 ### keylog {#keylog}
@@ -1921,7 +1921,7 @@ _table_&nbsp;`table:<{row}>` _key_&nbsp;`string` _object_&nbsp;`object:<{row}>` 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다. 해당 KEY 에 이미 데이터가 존재하는 경우에는 실패합니다.
 
 ```lisp
-(update accounts { "balance": (+ bal amount), "change": amount, "note": "credit" })
+(update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 
 ### with-default-read {#with-default-read}
@@ -1953,7 +1953,7 @@ _table_&nbsp;`table:<{row}>` _key_&nbsp;`string` _object_&nbsp;`object:<{row}>` 
 TABLE 에 OBJECT 의 KEY 에 대한 항목을 기록합니다.
 
 ```lisp
-(write accounts { "balance": 100.0 })
+(write accounts id { "balance": 100.0 })
 ```
 
 ## Time {#Time}
