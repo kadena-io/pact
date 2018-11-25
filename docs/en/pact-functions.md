@@ -1211,12 +1211,23 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 ```
 
 
+### require-capability {#require-capability}
+
+*capability*&nbsp;`( -> bool)` *&rarr;*&nbsp;`bool`
+
+
+Specifies and tests for existing grant of CAPABILITY, failing if not found in environment. 
+```lisp
+(require-capability (TRANSFER src dest))
+```
+
+
 ### with-capability {#with-capability}
 
 *capability*&nbsp;`( -> bool)` *body*&nbsp;`list` *&rarr;*&nbsp;`<a>`
 
 
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production; given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
+Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production. Given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. 'with-capability' can only be called in the same module that declares the corresponding 'defcap', otherwise module-admin rights are required. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
 ```lisp
 (with capability (update-users id) (update users id { salary: new-salary }))
 ```

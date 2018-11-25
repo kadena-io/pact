@@ -29,7 +29,7 @@ module Pact.Native.Internal
   ,colsToList
   ,module Pact.Gas
   ,(<>)
-  ,getPactId,enforceGuardDef
+  ,getPactId,enforceGuardDef,guardForModuleCall
   ) where
 
 import Control.Monad
@@ -169,3 +169,16 @@ enforceGuardDef dn =
               Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
           GUser UserGuard{..} -> do
             void $ enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
+
+-- | Test that first module app found in call stack is specified module,
+-- running 'onFound' if true, otherwise requesting module admin.
+guardForModuleCall :: Info -> ModuleName -> Eval e () -> Eval e ()
+guardForModuleCall i modName onFound = do
+  let findMod _ r@Just {} = r
+      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
+  r <- foldr findMod Nothing . reverse <$> use evalCallStack
+  case r of
+    (Just mn) | mn == modName -> onFound
+    _ -> do
+      m <- getModule i modName
+      void $ acquireModuleAdmin i (_mName m) (_mKeySet m)

@@ -1,10 +1,13 @@
 
-(define-keyset "k" (sig-keyset))
+(begin-tx)
 
-(env-data { "kall": ["a" "b" "c"] })
-(define-keyset 'kall (read-keyset "kall"))
+(env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
+(define-keyset 'kall)
+(define-keyset 'kadmin)
 
-(module caps "k"
+(env-keys ["admin"])
+
+(module caps 'kadmin
 
   (defcap KALL-CAP () (enforce-keyset 'kall))
 
@@ -15,8 +18,15 @@
     (enforce-keyset id))
 
   (defun test-id-cap (id)
-    (with-capability (KEYSET-ID-CAP id) 1))
-)
+    (with-capability (KEYSET-ID-CAP id) (test-require id)))
+
+  (defun test-require (id)
+    (require-capability (KEYSET-ID-CAP id)) 1)
+  )
+
+(commit-tx)
+
+(use caps)
 
 (expect-failure "with-kall should fail w/o kall ks" (with-kall))
 
@@ -24,17 +34,26 @@
 
 (expect "with-kall succeeds with kall ks" 1 (with-kall))
 
-(env-data { "k1": ["d"], "k2": ["e"] })
+(env-data { "k1": ["k1"], "k2": ["k2"] })
 (define-keyset "k1")
 (define-keyset "k2")
 
 (expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
 (expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
 
-(env-keys ["d"])
+(env-keys ["k1"])
 (expect "cap k1 succeeds" 1 (test-id-cap "k1"))
+(expect-failure "direct call to test-require fails for k1" (require-capability "k1"))
 (expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
 
-(env-keys ["e"])
+(env-keys ["k2"])
 (expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
+(expect-failure "direct call to test-require fails for k2" (require-capability "k2"))
 (expect "cap k2 succeeds" 1 (test-id-cap "k2"))
+
+(expect-failure "top-level with-capability fails"
+                (with-capability (KEYSET-ID-CAP "k2") 1))
+
+(env-keys ["admin","k2"])
+(expect "top-level with-capability succeeds with module admin"
+        1 (with-capability (KEYSET-ID-CAP "k2") 1))

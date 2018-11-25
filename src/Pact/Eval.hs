@@ -38,6 +38,7 @@ module Pact.Eval
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin
+    ,capabilityGranted
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ,enscopeApply
@@ -141,9 +142,12 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
+capabilityGranted :: Capability -> Eval e Bool
+capabilityGranted cap = (cap `elem`) <$> use evalCapabilities
+
 acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
 acquireCapability cap test = do
-  granted <- (cap `elem`) <$> use evalCapabilities
+  granted <- capabilityGranted cap
   if granted then return AlreadyAcquired else do
     test
     evalCapabilities %= (cap:)

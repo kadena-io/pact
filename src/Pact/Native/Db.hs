@@ -350,15 +350,8 @@ createTable' i [t@TTable {..}] = do
 createTable' i as = argsError i as
 
 guardTable :: Show n => FunApp -> Term n -> Eval e ()
-guardTable i TTable {..} = do
-  let findMod _ r@Just {} = r
-      findMod sf _ = firstOf (sfApp . _Just . _1 . faModule . _Just) sf
-  r <- foldr findMod Nothing . reverse <$> use evalCallStack
-  case r of
-    (Just mn) | mn == _tModule -> enforceBlessedHashes i _tModule _tHash
-    _ -> do
-      m <- getModule (_faInfo i) _tModule
-      void $ acquireModuleAdmin (_faInfo i) (_mName m) (_mKeySet m)
+guardTable i TTable {..} = guardForModuleCall (_faInfo i) _tModule $
+  enforceBlessedHashes i _tModule _tHash
 guardTable i t = evalError' i $ "Internal error: guardTable called with non-table term: " ++ show t
 
 enforceBlessedHashes :: FunApp -> ModuleName -> Hash -> Eval e ()
