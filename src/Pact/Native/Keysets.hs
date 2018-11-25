@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -13,7 +14,6 @@
 module Pact.Native.Keysets where
 
 import Control.Lens
-import Control.Monad
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -40,7 +40,6 @@ keyDefs =
     in
     ("Keysets",[
      readKeysetDef
-    ,withCapabilityDef
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
      (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
       funType tTyString [("name",tTyString)])
@@ -60,46 +59,6 @@ keyDefs =
      "Keyset predicate function to match at least 2 keys in keyset. `(keys-2 3 1)`"
     ])
 
-tvA :: Type n
-tvA = mkTyVar "a" []
-
-
-withCapabilityDef :: NativeDef
-withCapabilityDef =
-  defNative "with-capability" withCapability
-  (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
-  "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
-   \production; given the unique token specified by this application, ensure \
-   \that the token is granted in the environment during execution of BODY. If token is not \
-   \present, the CAPABILITY is applied, with \
-   \successful completion resulting in the installation/granting of the token, which \
-   \will then be revoked upon completion of BODY. \
-   \Nested 'with-capability' calls for the same token will detect the presence of \
-   \the token, and will not re-apply CAPABILITY, but simply execute BODY. \
-   \`$(with capability (update-users id) (update users id { salary: new-salary }))`"
-  where
-    withCapability :: NativeFun e
-    withCapability i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
-      grantedCap <- evalCap (_tApp c)
-      r <- reduceBody body
-      mapM_ revokeCapability grantedCap
-      return r
-    withCapability i as = argsError' i as
-
-evalCap :: App (Term Ref) -> Eval e (Maybe Capability)
-evalCap App{..} = case _appFun of
-  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
-    Defcap -> do
-      prep@(args,_) <- prepareUserAppArgs d _appArgs
-      let cap = UserCapability _dDefName args
-      acquired <- acquireCapability cap $ do
-        g <- computeUserAppGas d _appInfo
-        void $ evalUserAppBody d prep _appInfo g reduceBody
-      return $ case acquired of
-        NewlyAcquired -> Just cap
-        AlreadyAcquired -> Nothing
-    _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
-  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
 
 readKeySet' :: FunApp -> Text -> Eval e KeySet
 readKeySet' i key = parseMsgKey i "read-keyset" key
@@ -123,19 +82,14 @@ defineKeyset fi as = case as of
 
 
 enforceKeyset' :: RNativeFun e
-enforceKeyset' i [t] = do
-  (ksn,ks) <- case t of
-    TLitString name -> do
-      let ksn = KeySetName name
-      ksm <- readRow (_faInfo i) KeySets ksn
-      case ksm of
-        Nothing -> evalError' i $ "Keyset not found: " ++ show name
-        Just ks -> return (Just ksn,ks)
-    TGuard (GKeySet ks) _ -> return (Nothing,ks)
-    _ -> argsError i [t,toTerm ("[body...]" :: Text)]
-  runPure $ enforceKeySet (_faInfo i) ksn ks
+enforceKeyset' i as = do
+  case as of
+    [TLitString name] ->
+      enforceKeySetName (_faInfo i) (KeySetName name)
+    [TGuard (GKeySet ks) _] ->
+      runPure $ enforceKeySet (_faInfo i) Nothing ks
+    _ -> argsError i as
   return $ toTerm True
-enforceKeyset' i _as = argsError i []
 
 
 keyPred :: (Integer -> Integer -> Bool) -> RNativeFun e

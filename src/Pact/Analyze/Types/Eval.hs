@@ -286,7 +286,7 @@ mkInitialAnalyzeState tables = AnalyzeState
     intColumnDeltas = mkTableColumnMap (== TyPrim TyInteger) 0
     decColumnDeltas = mkTableColumnMap (== TyPrim TyDecimal) (fromInteger 0)
     cellsEnforced
-      = mkTableColumnMap (== TyPrim (TyGuard GTyKeySet)) (mkSFunArray (const false))
+      = mkTableColumnMap (== TyPrim (TyGuard $ Just GTyKeySet)) (mkSFunArray (const false))
     cellsWritten = mkTableColumnMap (const True) (mkSFunArray (const false))
 
     mkTableColumnMap
@@ -338,7 +338,7 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
              TyPrim TyDecimal -> scDecimalValues.at col ?~ mkArray
              TyPrim TyTime    -> scTimeValues.at col    ?~ mkArray
              TyPrim TyString  -> scStringValues.at col  ?~ mkArray
-             TyPrim (TyGuard GTyKeySet)  -> scKsValues.at col      ?~ mkArray
+             TyPrim (TyGuard (Just GTyKeySet))  -> scKsValues.at col      ?~ mkArray
              --
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.

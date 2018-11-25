@@ -40,6 +40,7 @@ module Pact.Eval
     ,acquireCapability,acquireModuleAdmin
     ,revokeCapability,revokeAllCapabilities
     ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
+    ,enscopeApply
     ) where
 
 import Control.Lens
@@ -108,19 +109,23 @@ enforceKeySet i ksn KeySet{..} = do
     Just KeysAny -> runBuiltIn (\_ m -> atLeast 1 m)
     Just Keys2 -> runBuiltIn (\_ m -> atLeast 2 m)
     Nothing -> do
-      let app = TApp (App (TVar _ksPredFun def)
-                [toTerm count,toTerm matched] i) i
-      app' <- instantiate' <$> resolveFreeVars i (abstract (const Nothing) app)
-      r <- reduce app'
+      r <- enscopeApply $
+        App (TVar _ksPredFun def) [toTerm count,toTerm matched] i
       case r of
         (TLiteral (LBool b) _) | b -> return ()
                                | otherwise -> failTx i $ "Keyset failure: " ++ maybe "[dynamic]" show ksn
         _ -> evalError i $ "Invalid response from keyset predicate: " ++ show r
 {-# INLINE enforceKeySet #-}
 
+
 -- Hoist Name back to ref
 liftTerm :: Term Name -> Term Ref
 liftTerm a = TVar (Direct a) def
+
+enscopeApply :: App (Term Name) -> Eval e (Term Name)
+enscopeApply a = do
+  a' <- enscope $ TApp a (_appInfo a)
+  reduce a'
 
 -- | Application with additional args.
 apply :: App (Term Ref) -> [Term Name] -> Eval e (Term Name)
@@ -162,7 +167,7 @@ eval ::  Term Name ->  Eval e (Term Name)
 eval (TUse u@Use{..} i) = topLevelCall i "use" (GUse _uModuleName _uModuleHash) $ \g ->
   evalUse u >> return (g,tStr $ pack $ "Using " ++ show _uModuleName)
 eval (TModule m@Module{} bod i) =
-  topLevelCall i "module" (GModule m) $ \g0 -> do
+  topLevelCall i "module" (GModuleDecl m) $ \g0 -> do
     -- enforce old module keysets
     oldM <- readRow i Modules (_mName m)
     case oldM of
@@ -179,7 +184,7 @@ eval (TModule m@Module{} bod i) =
     writeRow i Write Modules (_mName m) m
     return (g, msg $ pack $ "Loaded module " ++ show (_mName m) ++ ", hash " ++ show (_mHash m))
 eval (TModule m@Interface{..} bod i) =
-  topLevelCall i "interface" (GInterface m) $ \gas -> do
+  topLevelCall i "interface" (GInterfaceDecl m) $ \gas -> do
     oldI <- readRow i Modules _interfaceName
     case oldI of
       Nothing -> return ()

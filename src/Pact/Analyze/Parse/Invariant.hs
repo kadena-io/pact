@@ -32,7 +32,7 @@ expToInvariant ty exp = case (ty, exp) of
         (TTime,    TyTime)    -> pure (CoreInvariant (Var vid varName))
         (TStr,     TyString)  -> pure (CoreInvariant (Var vid varName))
         (TBool,    TyBool)    -> pure (CoreInvariant (Var vid varName))
-        (TKeySet,  (TyGuard GTyKeySet))  -> pure (CoreInvariant (Var vid varName))
+        (TKeySet,  (TyGuard (Just GTyKeySet)))  -> pure (CoreInvariant (Var vid varName))
         (_,        TyValue)   -> throwErrorIn exp
           "Invariants can't constrain opaque values"
         (_,        _)         -> throwErrorIn exp $

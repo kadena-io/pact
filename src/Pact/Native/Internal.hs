@@ -24,10 +24,12 @@ module Pact.Native.Internal
   ,funType,funType'
   ,getModule
   ,module Pact.Types.Native
-  ,tTyInteger,tTyDecimal,tTyTime,tTyBool,tTyString,tTyValue,tTyKeySet,tTyObject
+  ,tTyInteger,tTyDecimal,tTyTime,tTyBool
+  ,tTyString,tTyValue,tTyKeySet,tTyObject,tTyGuard
   ,colsToList
   ,module Pact.Gas
   ,(<>)
+  ,getPactId
   ) where
 
 import Control.Monad
@@ -128,5 +130,11 @@ tTyTime :: Type n; tTyTime = TyPrim TyTime
 tTyBool :: Type n; tTyBool = TyPrim TyBool
 tTyString :: Type n; tTyString = TyPrim TyString
 tTyValue :: Type n; tTyValue = TyPrim TyValue
-tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard GTyKeySet)
+tTyKeySet :: Type n; tTyKeySet = TyPrim (TyGuard $ Just GTyKeySet)
 tTyObject :: Type n -> Type n; tTyObject o = TySchema TyObject o
+tTyGuard :: Maybe GuardType -> Type n; tTyGuard gt = TyPrim (TyGuard gt)
+
+getPactId :: FunApp -> Eval e PactId
+getPactId i = use evalPactExec >>= \pe -> case pe of
+  Nothing -> evalError' i "pact-id: not in pact execution"
+  Just PactExec{..} -> return _pePactId

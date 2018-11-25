@@ -30,6 +30,7 @@ module Pact.Types.Term
    PactGuard(..),
    PactId(..),
    UserGuard(..),
+   ModuleGuard(..),
    Guard(..),
    DefType(..),
    defTypeRep,
@@ -168,6 +169,18 @@ instance Show PactGuard where
 instance ToJSON PactGuard where toJSON = lensyToJSON 3
 instance FromJSON PactGuard where parseJSON = lensyParseJSON 3
 
+data ModuleGuard = ModuleGuard
+  { _mgModuleName :: !ModuleName
+  , _mgName :: !Text
+  } deriving (Eq,Generic)
+
+instance Show ModuleGuard where
+  show ModuleGuard{..} =
+    "ModuleGuard { module: " ++ show _mgModuleName ++ ", name: " ++ show _mgName ++ "}"
+
+instance ToJSON ModuleGuard where toJSON = lensyToJSON 3
+instance FromJSON ModuleGuard where parseJSON = lensyParseJSON 3
+
 data UserGuard = UserGuard
   { _ugData :: !(Term Name) -- TODO when Term is safe, use "object" type
   , _ugPredFun :: !Name
@@ -184,6 +197,7 @@ data Guard
   = GPact PactGuard
   | GKeySet KeySet
   | GKeySetRef KeySetName
+  | GModule ModuleGuard
   | GUser UserGuard
   deriving (Eq)
 
@@ -192,18 +206,22 @@ instance Show Guard where
   show (GKeySet g) = show g
   show (GKeySetRef g) = show g
   show (GUser g) = show g
+  show (GModule g) = show g
 
 instance ToJSON Guard where
   toJSON (GPact g) = toJSON g
   toJSON (GKeySet g) = toJSON g
   toJSON (GKeySetRef g) = toJSON g
   toJSON (GUser g) = toJSON g
+  toJSON (GModule m) = toJSON m
 
 instance FromJSON Guard where
   parseJSON v =
     (GPact <$> parseJSON v) <|>
     (GKeySet <$> parseJSON v) <|>
-    (GUser <$> parseJSON v)
+    (GUser <$> parseJSON v) <|>
+    (GKeySetRef <$> parseJSON v) <|>
+    (GModule <$> parseJSON v)
 
 data DefType = Defun | Defpact | Defcap deriving (Eq,Show)
 defTypeRep :: DefType -> String
@@ -657,6 +675,7 @@ guardTypeOf g = case g of
   GKeySetRef{} -> GTyKeySetName
   GPact {} -> GTyPact
   GUser {} -> GTyUser
+  GModule {} -> GTyModule
 
 -- | Return a Pact type, or a String description of non-value Terms.
 typeof :: Term a -> Either Text (Type (Term a))
@@ -673,7 +692,7 @@ typeof t = case t of
         BindLet -> Left "let"
         BindSchema bt -> Right $ TySchema TyBinding bt
       TObject {..} -> Right $ TySchema TyObject _tObjectType
-      TGuard {..} -> Right $ TyPrim $ TyGuard $ guardTypeOf _tGuard
+      TGuard {..} -> Right $ TyPrim $ TyGuard $ Just $ guardTypeOf _tGuard
       TUse {} -> Left "use"
       TValue {} -> Right $ TyPrim TyValue
       TStep {} -> Left "step"

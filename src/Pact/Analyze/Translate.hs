@@ -362,7 +362,7 @@ maybeTranslateType' f = \case
   TyPrim TyInteger -> pure $ EType TInt
   TyPrim TyString  -> pure $ EType TStr
   TyPrim TyTime    -> pure $ EType TTime
-  TyPrim (TyGuard GTyKeySet)  -> pure $ EType TKeySet
+  TyPrim (TyGuard (Just GTyKeySet))  -> pure $ EType TKeySet
 
   -- Pretend any and an unknown var are the same -- we can't analyze either of
   -- them.
@@ -657,7 +657,7 @@ translateNode astNode = withAstContext astNode $ case astNode of
       return $ ESimple TBool $ Enforce Nothing $ NameAuthorized tid ksnT
 
   AST_EnforceKeyset ksA
-    | ksA ^? aNode.aTy == Just (TyPrim (TyGuard GTyKeySet))
+    | ksA ^? aNode.aTy == Just (TyPrim (TyGuard $ Just GTyKeySet))
     -> do
       ESimple TKeySet ksT <- translateNode ksA
       tid <- tagAuth $ ksA ^. aNode

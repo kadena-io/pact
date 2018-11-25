@@ -130,6 +130,8 @@ guardCodec = Codec enc dec
     enc (GKeySetRef n) = object [ keyNamef .= n ]
     enc (GPact (PactGuard{..})) =
       object [ pactNamef .= _pgName, pactIdf .= _pgPactId ]
+    enc (GModule (ModuleGuard{..})) =
+      object [ modModNamef .= _mgModuleName, modNamef .= _mgName ]
     enc (GUser (UserGuard{..})) =
       object [ userDataf .= _ugData, userPredf .= _ugPredFun ]
       -- TODO ^^^ is too loose, needs better object type of only persistables
@@ -138,6 +140,7 @@ guardCodec = Codec enc dec
       (GKeySet <$> (KeySet <$> o .: keyf <*> o .: predf)) <|>
       (GKeySetRef <$> o .: keyNamef) <|>
       (GPact <$> (PactGuard <$> o .: pactIdf <*> o .: pactNamef)) <|>
+      (GModule <$> (ModuleGuard <$> o .: modModNamef <*> o .: modNamef)) <|>
       (GUser <$> (UserGuard <$> o .: userDataf <*> o .: userPredf))
     {-# INLINE dec #-}
     keyf = "_P_keys"
@@ -145,6 +148,8 @@ guardCodec = Codec enc dec
     keyNamef = "_P_ksn"
     pactNamef = "_P_gpn"
     pactIdf = "_P_gpi"
+    modModNamef = "_P_mmn"
+    modNamef = "_P_mn"
     userDataf = "_P_gud"
     userPredf = "_P_gup"
 

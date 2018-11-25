@@ -477,9 +477,7 @@ readInteger i as = argsError i as
 
 
 pactId :: RNativeFun e
-pactId i [] = use evalPactExec >>= \pe -> case pe of
-  Nothing -> evalError' i "pact-id: not in pact execution"
-  Just PactExec{..} -> return $ toTerm _pePactId
+pactId i [] = toTerm <$> getPactId i
 pactId i as = argsError i as
 
 bind :: NativeFun e

@@ -12,26 +12,28 @@
 
 module Pact.Native.Capabilities (capDefs) where
 
-import Control.Monad (void)
+import Control.Monad (void,unless)
 
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime
+import Data.Default
 
 
 capDefs :: NativeModule
 capDefs =
-  ("Capabilities",[
-     withCapabilityDef
-    ])
+  ("Capabilities",
+   [ withCapability
+   , enforceGuard
+   ])
 
 tvA :: Type n
 tvA = mkTyVar "a" []
 
 
-withCapabilityDef :: NativeDef
-withCapabilityDef =
-  defNative "with-capability" withCapability
+withCapability :: NativeDef
+withCapability =
+  defNative "with-capability" withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
    \production; given the unique token specified by this application, ensure \
@@ -43,13 +45,13 @@ withCapabilityDef =
    \the token, and will not re-apply CAPABILITY, but simply execute BODY. \
    \`$(with capability (update-users id) (update users id { salary: new-salary }))`"
   where
-    withCapability :: NativeFun e
-    withCapability i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
+    withCapability' :: NativeFun e
+    withCapability' i [c@TApp{},body@TList{}] = gasUnreduced i [] $ do
       grantedCap <- evalCap (_tApp c)
       r <- reduceBody body
       mapM_ revokeCapability grantedCap
       return r
-    withCapability i as = argsError' i as
+    withCapability' i as = argsError' i as
 
 evalCap :: App (Term Ref) -> Eval e (Maybe Capability)
 evalCap App{..} = case _appFun of
@@ -65,3 +67,31 @@ evalCap App{..} = case _appFun of
         AlreadyAcquired -> Nothing
     _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
   t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
+
+
+enforceGuard :: NativeDef
+enforceGuard =
+  defRNative "enforce-guard" enforceGuard'
+  (funType tTyBool [("guard",tTyGuard Nothing)])
+  "Execute GUARD to enforce whatever predicate is modeled. Failure will \
+  \fail the transaction."
+  where
+    enforceGuard' :: RNativeFun e
+    enforceGuard' i [TGuard g _] = do
+      case g of
+        GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
+        GKeySetRef n -> enforceKeySetName (_faInfo i) n
+        GPact PactGuard{..} -> do
+          pid <- getPactId i
+          unless (pid == _pgPactId) $
+            evalError' i $
+              "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
+        GModule mg@ModuleGuard{..} -> do
+          m <- getModule (_faInfo i) _mgModuleName
+          case m of
+            Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
+            Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
+        GUser UserGuard{..} -> do
+          void $ enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
+      return $ toTerm True
+    enforceGuard' i as = argsError i as

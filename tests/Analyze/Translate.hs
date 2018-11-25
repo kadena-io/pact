@@ -260,7 +260,7 @@ reverseTranslateType = \case
   TInt     -> Pact.TyPrim Pact.TyInteger
   TStr     -> Pact.TyPrim Pact.TyString
   TTime    -> Pact.TyPrim Pact.TyTime
-  TKeySet  -> Pact.TyPrim (Pact.TyGuard Pact.GTyKeySet)
+  TKeySet  -> Pact.TyPrim (Pact.TyGuard $ Just Pact.GTyKeySet)
   TAny     -> Pact.TyAny
 
 fromPactVal :: EType -> Pact.Term Pact.Ref -> IO (Maybe ETerm)

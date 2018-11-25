@@ -28,7 +28,7 @@ module Pact.Types.Type
    SchemaType(..),
    TypeVarName(..),typeVarName,
    TypeVar(..),tvName,tvConstraint,
-   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,
+   Type(..),tyFunType,tyListType,tySchema,tySchemaType,tyUser,tyVar,tyGuard,
    mkTyVar,mkTyVar',mkSchemaVar,
    isAnyTy,isVarTy,isUnconstrainedTy,canUnifyWith,
 
@@ -104,10 +104,13 @@ data GuardType
   | GTyKeySetName
   | GTyPact
   | GTyUser
+  | GTyModule
   deriving (Eq,Ord,Generic)
 
 instance NFData GuardType
 
+-- | Primitive/unvarying types.
+-- Guard is lame Maybe to allow "wildcards".
 data PrimType =
   TyInteger |
   TyDecimal |
@@ -115,7 +118,7 @@ data PrimType =
   TyBool |
   TyString |
   TyValue |
-  TyGuard GuardType
+  TyGuard (Maybe GuardType)
   deriving (Eq,Ord,Generic)
 
 instance NFData PrimType
@@ -144,7 +147,7 @@ instance Show PrimType where
     TyString -> tyString
     TyValue -> tyValue
     TyGuard tg -> case tg of
-      GTyKeySet -> tyKeySet
+      Just GTyKeySet -> tyKeySet
       _ -> tyGuard
 instance Pretty PrimType where pretty = text . show
 

@@ -1193,18 +1193,15 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 (read-keyset "admin-keyset")
 ```
 
-
-### with-capability {#with-capability}
-
-*capability*&nbsp;`( -> bool)` *body*&nbsp;`list` *&rarr;*&nbsp;`<a>`
-
-
-Specifies and requests grant of CAPABILITY which is an application of a 'defcap' production; given the unique token specified by this application, ensure that the token is granted in the environment during execution of BODY. If token is not present, the CAPABILITY is applied, with successful completion resulting in the installation/granting of the token, which will then be revoked upon completion of BODY. Nested 'with-capability' calls for the same token will detect the presence of the token, and will not re-apply CAPABILITY, but simply execute BODY. 
-```lisp
-(with capability (update-users id) (update users id { salary: new-salary }))
-```
-
 ## Capabilities {#Capabilities}
+
+### enforce-guard {#enforce-guard}
+
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+
+Execute GUARD to enforce whatever predicate is modeled. Failure will fail the transaction.
+
 
 ### with-capability {#with-capability}
 
