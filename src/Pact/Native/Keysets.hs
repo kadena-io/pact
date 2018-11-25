@@ -14,8 +14,6 @@ module Pact.Native.Keysets where
 
 import Control.Lens
 import Control.Monad
-import Data.Default
-import Prelude
 
 import Pact.Eval
 import Pact.Native.Internal
@@ -27,11 +25,10 @@ readKeysetDef =
     "Read KEY from message data body as keyset ({ \"keys\": KEYLIST, \"pred\": PREDFUN }). " <>
     "PREDFUN should resolve to a keys predicate. `$(read-keyset \"admin-keyset\")`"
   where
-
     readKeySet :: RNativeFun e
-    readKeySet i [TLitString key]
-      = ((`TGuard` def) . GKeySet) <$> parseMsgKey i "read-keyset" key
+    readKeySet i [TLiteral (LString key) ki] = ((`TGuard` ki) . GKeySet) <$> readKeySet' i key
     readKeySet i as = argsError i as
+
 
 keyDefs :: NativeModule
 keyDefs =
@@ -45,8 +42,10 @@ keyDefs =
      readKeysetDef
     ,withCapabilityDef
     ,setTopLevelOnly $ defRNative "define-keyset" defineKeyset
-     (funType tTyString [("name",tTyString),("keyset",tTyString)])
-     "Define keyset as NAME with KEYSET. \
+     (funType tTyString [("name",tTyString),("keyset",tTyString)] <>
+      funType tTyString [("name",tTyString)])
+     "Define keyset as NAME with KEYSET, or if unspecified, read NAME from message payload as keyset, \
+     \similarly to 'read-keyset'. \
      \If keyset NAME already exists, keyset will be enforced before updating to new value.\
      \`$(define-keyset 'admin-keyset (read-keyset \"keyset\"))`"
     ,defRNative "enforce-keyset" enforceKeyset' (funType tTyBool [("keyset-or-name",mkTyVar "k" [tTyString,tTyKeySet])])
@@ -102,18 +101,25 @@ evalCap App{..} = case _appFun of
     _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
   t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
 
+readKeySet' :: FunApp -> Text -> Eval e KeySet
+readKeySet' i key = parseMsgKey i "read-keyset" key
 
 defineKeyset :: RNativeFun e
-defineKeyset fi [TLitString name,TGuard (GKeySet ks) _] = do
-  let ksn = KeySetName name
-      i = _faInfo fi
-  old <- readRow i KeySets ksn
-  case old of
-    Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"
-    Just oldKs -> do
-      runPure $ enforceKeySet i (Just ksn) oldKs
-      writeRow i Write KeySets ksn ks & success "Keyset defined"
-defineKeyset i as = argsError i as
+defineKeyset fi as = case as of
+  [TLitString name,TGuard (GKeySet ks) _] -> go name ks
+  [TLitString name] -> readKeySet' fi name >>= go name
+  _ -> argsError fi as
+  where
+    go name ks = do
+      let ksn = KeySetName name
+          i = _faInfo fi
+      old <- readRow i KeySets ksn
+      case old of
+        Nothing -> writeRow i Write KeySets ksn ks & success "Keyset defined"
+        Just oldKs -> do
+          runPure $ enforceKeySet i (Just ksn) oldKs
+          writeRow i Write KeySets ksn ks & success "Keyset defined"
+
 
 
 enforceKeyset' :: RNativeFun e

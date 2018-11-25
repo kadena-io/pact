@@ -24,6 +24,7 @@ library
                      , Pact.Eval
                      , Pact.Gas
                      , Pact.Native
+                     , Pact.Native.Capabilities
                      , Pact.Native.Db
                      , Pact.Native.Internal
                      , Pact.Native.Time

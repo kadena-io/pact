@@ -1,14 +1,40 @@
 
-(env-data { "kall": ["a" "b" "c"] })
 (define-keyset "k" (sig-keyset))
+
+(env-data { "kall": ["a" "b" "c"] })
 (define-keyset 'kall (read-keyset "kall"))
+
 (module caps "k"
-  (defcap kall-cap () (enforce-keyset 'kall))
+
+  (defcap KALL-CAP () (enforce-keyset 'kall))
+
   (defun with-kall ()
-    (with-capability (kall-cap) 1)))
+    (with-capability (KALL-CAP) 1))
+
+  (defcap KEYSET-ID-CAP (id:string)
+    (enforce-keyset id))
+
+  (defun test-id-cap (id)
+    (with-capability (KEYSET-ID-CAP id) 1))
+)
 
 (expect-failure "with-kall should fail w/o kall ks" (with-kall))
 
 (env-keys ["a" "b" "c"])
 
 (expect "with-kall succeeds with kall ks" 1 (with-kall))
+
+(env-data { "k1": ["d"], "k2": ["e"] })
+(define-keyset "k1")
+(define-keyset "k2")
+
+(expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
+(expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
+
+(env-keys ["d"])
+(expect "cap k1 succeeds" 1 (test-id-cap "k1"))
+(expect-failure "cap k2 fails w/o key" (test-id-cap "k2"))
+
+(env-keys ["e"])
+(expect-failure "cap k1 fails w/o key" (test-id-cap "k1"))
+(expect "cap k2 succeeds" 1 (test-id-cap "k2"))
