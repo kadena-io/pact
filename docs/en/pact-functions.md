@@ -1137,13 +1137,15 @@ Top level only: this function will fail if used in module code.
 
 ### enforce-keyset {#enforce-keyset}
 
-*keyset-or-name*&nbsp;`<k[string,keyset]>` *&rarr;*&nbsp;`bool`
+*guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
+
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
 
-Special form to enforce KEYSET-OR-NAME against message keys before running BODY. KEYSET-OR-NAME can be a symbol of a keyset name or a keyset object. 
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
 ```lisp
-(with-keyset 'admin-keyset ...)
-(with-keyset (read-keyset "keyset") ...)
+(enforce-keyset 'admin-keyset)
+(enforce-keyset row-guard)
 ```
 
 
@@ -1199,8 +1201,14 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
 
+*keysetname*&nbsp;`string` *&rarr;*&nbsp;`bool`
 
-Execute GUARD to enforce whatever predicate is modeled. Failure will fail the transaction.
+
+Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. 
+```lisp
+(enforce-guard 'admin-keyset)
+(enforce-guard row-guard)
+```
 
 
 ### with-capability {#with-capability}

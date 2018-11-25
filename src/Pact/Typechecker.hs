@@ -145,10 +145,13 @@ solveOverloads = do
 
   overs <- use tcOverloads >>=
            traverse (traverse (\i -> (i,) . fst <$> lookupAst "solveOverloads" (_aId (_aNode i))))
+  oids <- use tcOverloadOrder
 
-  let runSolve os = forM os $ \o@Overload {..} -> case _oSolved of
-        Just {} -> return o
-        Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
+  let runSolve os = fmap M.fromList $ forM oids $ \oid -> case M.lookup oid os of
+        Nothing -> die def $ "Internal error, unknown overload id: " ++ show oid
+        Just o@Overload {..} -> fmap (oid,) $ case _oSolved of
+          Just {} -> return o
+          Nothing -> (\s -> set oSolved s o) <$> foldM (tryFunType o) Nothing _oTypes
 
       rptSolve os = runSolve os >>= \os' -> if os' == os then return os' else rptSolve os'
 
@@ -359,6 +362,7 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
                 | otherwise = Nothing
           oload = Overload _fName (argOvers <> M.singleton RetVar a) fts' Nothing ospec
       tcOverloads %= M.insert (_aId i) oload
+      tcOverloadOrder %= (_aId i:)
   return a
 processNatives _ a = return a
 
@@ -569,6 +573,10 @@ unifyTypes l r = case (l,r) of
   _ | l == r -> Just (Right r)
   (TyAny,_) -> Just (Right r)
   (_,TyAny) -> Just (Left l)
+  (TyPrim (TyGuard gl), TyPrim (TyGuard gr)) -> case (gl,gr) of
+    (Just _, Nothing) -> Just (Left l)
+    (Nothing, Just _) -> Just (Right r)
+    _ -> Just (Right r) -- equality already covered above, and Nothing/Nothing ok
   (TyVar v,s) -> unifyVar Left Right v s
   (s,TyVar v) -> unifyVar Right Left v s
   (TyList a,TyList b) -> unifyParam a b

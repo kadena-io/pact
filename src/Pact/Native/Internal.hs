@@ -29,7 +29,7 @@ module Pact.Native.Internal
   ,colsToList
   ,module Pact.Gas
   ,(<>)
-  ,getPactId
+  ,getPactId,enforceGuardDef
   ) where
 
 import Control.Monad
@@ -138,3 +138,34 @@ getPactId :: FunApp -> Eval e PactId
 getPactId i = use evalPactExec >>= \pe -> case pe of
   Nothing -> evalError' i "pact-id: not in pact execution"
   Just PactExec{..} -> return _pePactId
+
+enforceGuardDef :: NativeDefName -> NativeDef
+enforceGuardDef dn =
+  defRNative dn enforceGuard'
+  (funType tTyBool [("guard",tTyGuard Nothing)] <>
+   funType tTyBool [("keysetname",tTyString)])
+  ("Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic. " <>
+   "`$(" <> asString dn <> " 'admin-keyset)` `$(" <> asString dn <> " row-guard)`")
+  where
+    enforceGuard' :: RNativeFun e
+    enforceGuard' i as = case as of
+      [TGuard g _] -> go g
+      [TLitString k] -> go (GKeySetRef (KeySetName k))
+      _ -> argsError i as
+      where
+        go g = runGuard g >> return (toTerm True)
+        runGuard g = case g of
+          GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
+          GKeySetRef n -> enforceKeySetName (_faInfo i) n
+          GPact PactGuard{..} -> do
+            pid <- getPactId i
+            unless (pid == _pgPactId) $
+              evalError' i $
+                "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
+          GModule mg@ModuleGuard{..} -> do
+            m <- getModule (_faInfo i) _mgModuleName
+            case m of
+              Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
+              Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
+          GUser UserGuard{..} -> do
+            void $ enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)

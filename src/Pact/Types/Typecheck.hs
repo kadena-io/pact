@@ -26,7 +26,7 @@ module Pact.Types.Typecheck
     OverloadSpecial (..),
     Overload (..),oRoles,oTypes,oSolved,oSpecial,oFunName,
     Failure (..),prettyFails,
-    TcState (..),tcDebug,tcSupply,tcOverloads,tcFailures,tcAstToVar,tcVarToTypes,
+    TcState (..),tcDebug,tcSupply,tcOverloads,tcOverloadOrder,tcFailures,tcAstToVar,tcVarToTypes,
     TC (..), runTC,
     PrimValue (..),
     TopLevel (..),tlFun,tlInfo,tlName,tlType,tlConstVal,tlUserType,tlMeta,tlDoc,
@@ -118,6 +118,7 @@ data TcState = TcState {
   _tcSupply :: Int,
   -- | Maps native app AST to an overloaded function type, and stores result of solver.
   _tcOverloads :: M.Map TcId (Overload (AST Node)),
+  _tcOverloadOrder :: [TcId],
   _tcFailures :: S.Set Failure,
   -- | Maps ASTs to a type var.
   _tcAstToVar :: M.Map TcId (TypeVar UserType),
@@ -126,7 +127,7 @@ data TcState = TcState {
   } deriving (Eq,Show)
 
 mkTcState :: Int -> Bool -> TcState
-mkTcState sup dbg = TcState dbg sup def def def def
+mkTcState sup dbg = TcState dbg sup def def def def def
 
 instance Pretty TcState where
   pretty TcState {..} =

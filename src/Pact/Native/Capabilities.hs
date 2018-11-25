@@ -12,19 +12,17 @@
 
 module Pact.Native.Capabilities (capDefs) where
 
-import Control.Monad (void,unless)
-
+import Control.Monad
 import Pact.Eval
 import Pact.Native.Internal
 import Pact.Types.Runtime
-import Data.Default
 
 
 capDefs :: NativeModule
 capDefs =
   ("Capabilities",
    [ withCapability
-   , enforceGuard
+   , enforceGuardDef "enforce-guard"
    ])
 
 tvA :: Type n
@@ -67,31 +65,3 @@ evalCap App{..} = case _appFun of
         AlreadyAcquired -> Nothing
     _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
   t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
-
-
-enforceGuard :: NativeDef
-enforceGuard =
-  defRNative "enforce-guard" enforceGuard'
-  (funType tTyBool [("guard",tTyGuard Nothing)])
-  "Execute GUARD to enforce whatever predicate is modeled. Failure will \
-  \fail the transaction."
-  where
-    enforceGuard' :: RNativeFun e
-    enforceGuard' i [TGuard g _] = do
-      case g of
-        GKeySet k -> runPure $ enforceKeySet (_faInfo i) Nothing k
-        GKeySetRef n -> enforceKeySetName (_faInfo i) n
-        GPact PactGuard{..} -> do
-          pid <- getPactId i
-          unless (pid == _pgPactId) $
-            evalError' i $
-              "Pact guard failed, intended: " ++ show _pgPactId ++ ", active: " ++ show pid
-        GModule mg@ModuleGuard{..} -> do
-          m <- getModule (_faInfo i) _mgModuleName
-          case m of
-            Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
-            Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
-        GUser UserGuard{..} -> do
-          void $ enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
-      return $ toTerm True
-    enforceGuard' i as = argsError i as
