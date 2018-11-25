@@ -1,0 +1,14 @@
+
+(env-data { "kall": ["a" "b" "c"] })
+(define-keyset "k" (sig-keyset))
+(define-keyset 'kall (read-keyset "kall"))
+(module caps "k"
+  (defcap kall-cap () (enforce-keyset 'kall))
+  (defun with-kall ()
+    (with-capability (kall-cap) 1)))
+
+(expect-failure "with-kall should fail w/o kall ks" (with-kall))
+
+(env-keys ["a" "b" "c"])
+
+(expect "with-kall succeeds with kall ks" 1 (with-kall))

@@ -89,6 +89,7 @@ data Reserved =
   | RDefschema
   | RDeftable
   | RDefun
+  | RDefcap
   | RFalse
   | RImplements
   | RInterface
@@ -110,6 +111,7 @@ instance AsString Reserved where
     RDefschema -> "defschema"
     RDeftable -> "deftable"
     RDefun -> "defun"
+    RDefcap -> "defcap"
     RFalse -> "false"
     RImplements -> "implements"
     RInterface -> "interface"
@@ -213,7 +215,8 @@ moduleLevel = specialForm $ \r -> case r of
     RBless -> return (bless >> return [])
     RDeftable -> returnl deftable
     RDefschema -> returnl defschema
-    RDefun -> returnl defun
+    RDefun -> returnl $ defunOrCap Defun
+    RDefcap -> returnl $ defunOrCap Defcap
     RDefpact -> returnl defpact
     RImplements -> return (implements >> return [])
     _ -> expected "module level form (use, def..., special form)"
@@ -371,8 +374,8 @@ defschema = do
   fields <- many arg
   TSchema (TypeName tn) modName m fields <$> contextInfo
 
-defun :: Compile (Term Name)
-defun = do
+defunOrCap :: DefType -> Compile (Term Name)
+defunOrCap dt = do
   modName <- currentModuleName
   (defname,returnTy) <- first _atomAtom <$> typedAtom
   args <- withList' Parens $ many arg
@@ -380,7 +383,7 @@ defun = do
   b <- abstractBody valueLevel args
   i <- contextInfo
   return $ (`TDef` i) $
-    Def (DefName defname) modName Defun (FunType args returnTy)
+    Def (DefName defname) modName dt (FunType args returnTy)
       b m i
 
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -87,7 +88,19 @@ withCapabilityDef =
     withCapability i as = argsError' i as
 
 evalCap :: App (Term Ref) -> Eval e (Maybe Capability)
-evalCap = undefined
+evalCap App{..} = case _appFun of
+  (TVar (Ref (TDef d@Def{..} _)) _) -> case _dDefType of
+    Defcap -> do
+      prep@(args,_) <- prepareUserAppArgs d _appArgs
+      let cap = UserCapability _dDefName args
+      acquired <- acquireCapability cap $ do
+        g <- computeUserAppGas d _appInfo
+        void $ evalUserAppBody d prep _appInfo g reduceBody
+      return $ case acquired of
+        NewlyAcquired -> Just cap
+        AlreadyAcquired -> Nothing
+    _ -> evalError _appInfo $ "Can only apply defcap here, found: " ++ show _dDefType
+  t -> evalError (_tInfo t) $ "Attempting to apply non-def: " ++ show _appFun
 
 
 defineKeyset :: RNativeFun e

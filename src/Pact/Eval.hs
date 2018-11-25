@@ -39,6 +39,7 @@ module Pact.Eval
     ,preGas
     ,acquireCapability,acquireModuleAdmin
     ,revokeCapability,revokeAllCapabilities
+    ,computeUserAppGas,prepareUserAppArgs,evalUserAppBody
     ) where
 
 import Control.Lens
@@ -135,19 +136,17 @@ topLevelCall
 topLevelCall i name gasArgs action = call (StackFrame name i Nothing) $
   computeGas (Left (i,name)) gasArgs >>= action
 
-acquireCapability :: Capability -> Eval e Capability -> Eval e CapAcquireResult
+acquireCapability :: Capability -> Eval e () -> Eval e CapAcquireResult
 acquireCapability cap test = do
   granted <- (cap `elem`) <$> use evalCapabilities
   if granted then return AlreadyAcquired else do
-    c <- test
-    evalCapabilities %= (c:)
+    test
+    evalCapabilities %= (cap:)
     return NewlyAcquired
 
 acquireModuleAdmin :: Info -> ModuleName -> KeySetName -> Eval e CapAcquireResult
 acquireModuleAdmin i modName modKeySetName =
-  acquireCapability moduleAdminCapability $ do
-    enforceKeySetName i modKeySetName
-    return moduleAdminCapability
+  acquireCapability moduleAdminCapability $ enforceKeySetName i modKeySetName
   where moduleAdminCapability = ModuleAdminCapability modName
 
 
@@ -444,20 +443,43 @@ appCall fa ai as = call (StackFrame (_faName fa) ai (Just (fa,map (pack.abbrev) 
 reduceApp :: App (Term Ref) -> Eval e (Term Name)
 reduceApp (App (TVar (Direct t) _) as ai) = reduceDirect t as ai
 reduceApp (App (TVar (Ref r) _) as ai) = reduceApp (App r as ai)
-reduceApp (App (TDef Def{..} _) as ai) = do
-  g <- computeGas (Left (ai, asString _dDefName)) GUserApp
-  as' <- mapM reduce as
-  ft' <- traverse reduce _dFunType
-  typecheck (zip (_ftArgs ft') as')
-  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
-      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
-  appCall fa ai as $ fmap (g,) $ do
+reduceApp (App (TDef d@Def{..} _) as ai) = do
+  g <- computeUserAppGas d ai
+  af <- prepareUserAppArgs d as
+  evalUserAppBody d af ai g $ \bod' ->
     case _dDefType of
       Defun -> reduceBody bod'
       Defpact -> applyPact bod'
       Defcap -> evalError ai "Cannot directly evaluate defcap"
 reduceApp (App (TLitString errMsg) _ i) = evalError i $ unpack errMsg
 reduceApp (App r _ ai) = evalError ai $ "Expected def: " ++ show r
+
+-- | precompute "UserApp" cost
+computeUserAppGas :: Def Term Ref -> Info -> Eval e Gas
+computeUserAppGas Def{..} ai = computeGas (Left (ai, asString _dDefName)) GUserApp
+
+-- | prepare reduced args and funtype, and typecheck
+prepareUserAppArgs :: Def Term Ref -> [Term Ref] -> Eval e ([Term Name], FunType (Term Name))
+prepareUserAppArgs Def{..} as = do
+  as' <- mapM reduce as
+  ft' <- traverse reduce _dFunType
+  typecheck (zip (_ftArgs ft') as')
+  return (as',ft')
+
+-- | Instantiate args in body and evaluate using supplied action.
+evalUserAppBody
+  :: Def Term Ref
+     -> ([Term Name], FunType (Term Name))
+     -> Info
+     -> Gas
+     -> (Term Ref -> Eval e a)
+     -> Eval e a
+evalUserAppBody Def{..} (as',ft') ai g run =
+  let bod' = instantiate (resolveArg ai (map mkDirect as')) _dDefBody
+      fa = FunApp _dInfo (asString _dDefName) (Just _dModule) _dDefType (funTypes ft') (_mDocs _dMeta)
+  in appCall fa ai as' $ fmap (g,) $ run bod'
+
+
 
 reduceDirect :: Term Name -> [Term Ref] -> Info ->  Eval e (Term Name)
 reduceDirect TNative {..} as ai =
