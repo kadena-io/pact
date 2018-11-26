@@ -252,6 +252,14 @@ evalTermO = \case
         EType SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
         EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
         EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
+
+        EType (SList SInteger) -> mkAVal <$> use (typedCell scIntLists     id tn cn sRk sDirty)
+        EType (SList SBool   ) -> mkAVal <$> use (typedCell scBoolLists    id tn cn sRk sDirty)
+        EType (SList SStr    ) -> mkAVal <$> use (typedCell scStringLists  id tn cn sRk sDirty)
+        EType (SList SDecimal) -> mkAVal <$> use (typedCell scDecimalLists id tn cn sRk sDirty)
+        EType (SList STime   ) -> mkAVal <$> use (typedCell scTimeLists    id tn cn sRk sDirty)
+        EType (SList SKeySet ) -> mkAVal <$> use (typedCell scKsLists      id tn cn sRk sDirty)
+
         EType SAny     -> pure OpaqueVal
         EType SList{}  -> error "TODO"
         EType SObject  -> error "TODO"
@@ -414,6 +422,14 @@ evalTerm = \case
             EType STime    -> timeCell   id tn cn sRk true .= mkS mProv sVal
             EType SStr     -> stringCell id tn cn sRk true .= mkS mProv sVal
             EType SKeySet  -> ksCell     id tn cn sRk true .= mkS mProv sVal
+
+            EType (SList SInteger) -> typedCell scIntLists     id tn cn sRk true .= mkS mProv sVal
+            EType (SList SBool   ) -> typedCell scBoolLists    id tn cn sRk true .= mkS mProv sVal
+            EType (SList SDecimal) -> typedCell scDecimalLists id tn cn sRk true .= mkS mProv sVal
+            EType (SList STime   ) -> typedCell scTimeLists    id tn cn sRk true .= mkS mProv sVal
+            EType (SList SStr    ) -> typedCell scStringLists  id tn cn sRk true .= mkS mProv sVal
+            EType (SList SKeySet ) -> typedCell scKsLists      id tn cn sRk true .= mkS mProv sVal
+
             EType SAny     -> void $ throwErrorNoLoc OpaqueValEncountered
             EType SList{} -> error "TODO"
             EType SObject -> error "TODO"

@@ -51,12 +51,20 @@ in
             hlint = self.callHackage "hlint" "2.0.14" {};
             # hoogle = self.callHackage "hoogle" "5.0.15" {};
 
-            # sbv >= 7.9
+            # sbv with two (temporary) patches
             sbv = pkgs.haskell.lib.dontCheck (self.callCabal2nix "sbv" (pkgs.fetchFromGitHub {
               owner = "joelburget";
               repo = "sbv";
-              rev = "351cd68990b8e9e1e0e0b7b6ae22751f1b543c3e";
-              sha256 = "19rc7zfsmj9mbq1fm64h49d3mxw6jh31n3c3076mw8i83s7hbhg0";
+              rev = "957ae143c13d1fa40a54308754499bf78dcefeb8";
+              sha256 = "0vb8mfplxpc70q5rfv1d3082lhfxd2qjcssv8q7h5pzddqffxrh5";
+            }) {});
+
+            # need crackNum 2.3
+            crackNum = pkgs.haskell.lib.dontCheck (self.callCabal2nix "crackNum" (pkgs.fetchFromGitHub {
+              owner = "LeventErkok";
+              repo = "crackNum";
+              rev = "54cf70861a921062db762b3c50e933e73446c3b2";
+              sha256 = "02cg64rq8xk7x53ziidljyv3gsshdpgbzy7h03r869gj02l7bxwa";
             }) {});
 
             # Our own custom fork

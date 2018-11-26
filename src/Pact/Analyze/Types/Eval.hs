@@ -142,6 +142,14 @@ data SymbolicCells
     , _scDecimalValues :: ColumnMap (SFunArray RowKey Decimal)
     , _scTimeValues    :: ColumnMap (SFunArray RowKey Time)
     , _scKsValues      :: ColumnMap (SFunArray RowKey KeySet)
+
+    , _scIntLists      :: ColumnMap (SFunArray RowKey [Integer])
+    , _scBoolLists     :: ColumnMap (SFunArray RowKey [Bool])
+    , _scStringLists   :: ColumnMap (SFunArray RowKey [Str])
+    , _scDecimalLists  :: ColumnMap (SFunArray RowKey [Decimal])
+    , _scTimeLists     :: ColumnMap (SFunArray RowKey [Time])
+    , _scKsLists       :: ColumnMap (SFunArray RowKey [KeySet])
+
     -- TODO: opaque blobs
     }
   deriving (Generic, Show)
@@ -332,19 +340,28 @@ mkSymbolicCells tables = TableMap $ Map.fromList cellsList
             mkArray  = mkFreeArray $ "cells__" <> tableName <> "__" <> colName
 
         in cells & case ty of
-             TyPrim Pact.TyInteger -> scIntValues.at col     ?~ mkArray
-             TyPrim Pact.TyBool    -> scBoolValues.at col    ?~ mkArray
+             TyPrim Pact.TyInteger -> scIntValues    .at col ?~ mkArray
+             TyPrim Pact.TyBool    -> scBoolValues   .at col ?~ mkArray
              TyPrim Pact.TyDecimal -> scDecimalValues.at col ?~ mkArray
-             TyPrim Pact.TyTime    -> scTimeValues.at col    ?~ mkArray
-             TyPrim Pact.TyString  -> scStringValues.at col  ?~ mkArray
-             TyPrim Pact.TyKeySet  -> scKsValues.at col      ?~ mkArray
+             TyPrim Pact.TyTime    -> scTimeValues   .at col ?~ mkArray
+             TyPrim Pact.TyString  -> scStringValues .at col ?~ mkArray
+             TyPrim Pact.TyKeySet  -> scKsValues     .at col ?~ mkArray
+
+             Pact.TyList (TyPrim Pact.TyInteger) -> scIntLists    .at col ?~ mkArray
+             Pact.TyList (TyPrim Pact.TyBool   ) -> scBoolLists   .at col ?~ mkArray
+             Pact.TyList (TyPrim Pact.TyDecimal) -> scDecimalLists.at col ?~ mkArray
+             Pact.TyList (TyPrim Pact.TyTime   ) -> scTimeLists   .at col ?~ mkArray
+             Pact.TyList (TyPrim Pact.TyString ) -> scStringLists .at col ?~ mkArray
+             Pact.TyList (TyPrim Pact.TyKeySet ) -> scKsLists     .at col ?~ mkArray
+
              --
              -- TODO: we should Left here. this means that mkSymbolicCells and
              --       mkInitialAnalyzeState should both return Either.
              --
-             _                     -> id
+             _ -> id
       )
-      (SymbolicCells mempty mempty mempty mempty mempty mempty)
+      (SymbolicCells mempty mempty mempty mempty mempty mempty
+                     mempty mempty mempty mempty mempty mempty)
       fields
 
 mkSVal :: SBV a -> SBVI.SVal
@@ -482,6 +499,19 @@ cellWritten
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
+typedCell
+  :: SymWord b
+  => Lens' SymbolicCells (ColumnMap (SFunArray RowKey b))
+  -> Lens' a CellValues
+  -> TableName
+  -> ColumnName
+  -> S RowKey
+  -> S Bool
+  -> Lens' (AnalyzeState a) (S b)
+typedCell colMap cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
+  cvTableCells.singular (ix tn).colMap.singular (ix cn).
+  symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+
 intCell
   :: Lens' a CellValues
   -> TableName
@@ -489,9 +519,7 @@ intCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S Integer)
-intCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scIntValues.singular (ix cn).
-  symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+intCell = typedCell scIntValues
 
 boolCell
   :: Lens' a CellValues
@@ -500,9 +528,7 @@ boolCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S Bool)
-boolCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scBoolValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+boolCell = typedCell scBoolValues
 
 stringCell
   :: Lens' a CellValues
@@ -511,9 +537,7 @@ stringCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S Str)
-stringCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scStringValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+stringCell = typedCell scStringValues
 
 decimalCell
   :: Lens' a CellValues
@@ -522,9 +546,7 @@ decimalCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S Decimal)
-decimalCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scDecimalValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+decimalCell = typedCell scDecimalValues
 
 timeCell
   :: Lens' a CellValues
@@ -533,9 +555,7 @@ timeCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S Time)
-timeCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scTimeValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+timeCell = typedCell scTimeValues
 
 ksCell
   :: Lens' a CellValues
@@ -544,9 +564,7 @@ ksCell
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S KeySet)
-ksCell cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
-  cvTableCells.singular (ix tn).scKsValues.
-  singular (ix cn).symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
+ksCell = typedCell scKsValues
 
 symArrayAt
   :: forall array k v

@@ -8,7 +8,7 @@ packages:
 extra-deps:
   - aeson-1.3.1.1
   - algebraic-graphs-0.2
-  - crackNum-2.2
+  - crackNum-2.3
   - FloatingHex-0.4
   - compactable-0.1.2.2
   - ed25519-donna-0.1.1
@@ -19,4 +19,4 @@ extra-deps:
     commit: 6ee9fcb026ebdb49b810802a981d166680d867c9
   - constraints-extras-0.2.0.0
   - git: https://github.com/joelburget/sbv.git
-    commit: 351cd68990b8e9e1e0e0b7b6ae22751f1b543c3e
+    commit: 957ae143c13d1fa40a54308754499bf78dcefeb8

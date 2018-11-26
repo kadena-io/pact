@@ -70,7 +70,7 @@ instance Show (SingTy k ty) where
 
 instance UserShow (SingTy k ty) where
   userShowPrec _ = \case
-    SInteger     -> "integer"
+    SInteger -> "integer"
     SBool    -> "bool"
     SStr     -> "string"
     STime    -> "time"

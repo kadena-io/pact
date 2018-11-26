@@ -652,10 +652,10 @@ liftC Dict b = b
 withEq :: forall a b k. SingTy k a -> (Eq (Concrete a) => b) -> b
 withEq = has @EqConcrete
 
-class    Eq   (Concrete a) => EqConcrete a where
-instance Eq   (Concrete a) => EqConcrete a where
-class    Show (Concrete a) => ShowConcrete a where
-instance Show (Concrete a) => ShowConcrete a where
+class    Eq       (Concrete a) => EqConcrete a where
+instance Eq       (Concrete a) => EqConcrete a where
+class    Show     (Concrete a) => ShowConcrete a where
+instance Show     (Concrete a) => ShowConcrete a where
 class    UserShow (Concrete a) => UserShowConcrete a where
 instance UserShow (Concrete a) => UserShowConcrete a where
 
