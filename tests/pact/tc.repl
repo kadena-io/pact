@@ -43,9 +43,6 @@
   (defun tc-at-typed-list (vals:[integer])
     (at 1 vals))
 
-  (defun tc-at-literal-typed-list:integer (a:integer)
-    (at 0 [a]))
-
   (defun age-gt (age person)
     (> age (tc-at-typed-object person)))
 
