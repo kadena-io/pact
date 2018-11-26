@@ -150,17 +150,17 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
         (qeAnalyzeState.ksCell      (beforeAfterLens ba) tn' cn sRk false)
 
       EType (SList SInteger) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scIntLists     (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.intListCell     (beforeAfterLens ba) tn' cn sRk false)
       EType (SList SBool   ) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scBoolLists    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.boolListCell    (beforeAfterLens ba) tn' cn sRk false)
       EType (SList SStr    ) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scStringLists  (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.stringListCell  (beforeAfterLens ba) tn' cn sRk false)
       EType (SList SDecimal) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scDecimalLists (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.decimalListCell (beforeAfterLens ba) tn' cn sRk false)
       EType (SList STime   ) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scTimeLists    (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.timeListCell    (beforeAfterLens ba) tn' cn sRk false)
       EType (SList SKeySet ) -> mkAVal <$> view
-        (qeAnalyzeState.typedCell scKsLists      (beforeAfterLens ba) tn' cn sRk false)
+        (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk false)
 
       EType SAny     -> pure OpaqueVal
       EType SList{} -> error "TODO"

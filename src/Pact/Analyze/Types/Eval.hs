@@ -499,72 +499,57 @@ cellWritten
 cellWritten tn cn sRk = latticeState.lasCellsWritten.singular (ix tn).
   singular (ix cn).symArrayAt sRk.sbv2S
 
-typedCell
-  :: SymWord b
-  => Lens' SymbolicCells (ColumnMap (SFunArray RowKey b))
-  -> Lens' a CellValues
+type CellLens a b
+  =  Lens' a CellValues
   -> TableName
   -> ColumnName
   -> S RowKey
   -> S Bool
   -> Lens' (AnalyzeState a) (S b)
+
+typedCell
+  :: SymWord b
+  => Lens' SymbolicCells (ColumnMap (SFunArray RowKey b))
+  -> CellLens a b
 typedCell colMap cellValues tn cn sRk sDirty = latticeState.lasExtra.cellValues.
   cvTableCells.singular (ix tn).colMap.singular (ix cn).
   symArrayAt sRk.sbv2SFrom (fromCell tn cn sRk sDirty)
 
-intCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S Integer)
+intCell :: CellLens a Integer
 intCell = typedCell scIntValues
 
-boolCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S Bool)
+boolCell :: CellLens a Bool
 boolCell = typedCell scBoolValues
 
-stringCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S Str)
+stringCell :: CellLens a Str
 stringCell = typedCell scStringValues
 
-decimalCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S Decimal)
+decimalCell :: CellLens a Decimal
 decimalCell = typedCell scDecimalValues
 
-timeCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S Time)
+timeCell :: CellLens a Time
 timeCell = typedCell scTimeValues
 
-ksCell
-  :: Lens' a CellValues
-  -> TableName
-  -> ColumnName
-  -> S RowKey
-  -> S Bool
-  -> Lens' (AnalyzeState a) (S KeySet)
+ksCell :: CellLens a KeySet
 ksCell = typedCell scKsValues
+
+intListCell :: CellLens a [Integer]
+intListCell = typedCell scIntLists
+
+boolListCell :: CellLens a [Bool]
+boolListCell = typedCell scBoolLists
+
+stringListCell :: CellLens a [Str]
+stringListCell = typedCell scStringLists
+
+decimalListCell :: CellLens a [Decimal]
+decimalListCell = typedCell scDecimalLists
+
+timeListCell :: CellLens a [Time]
+timeListCell = typedCell scTimeLists
+
+ksListCell :: CellLens a [KeySet]
+ksListCell = typedCell scKsLists
 
 symArrayAt
   :: forall array k v
