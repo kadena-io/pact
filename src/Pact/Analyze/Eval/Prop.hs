@@ -162,15 +162,15 @@ evalPropO (PropSpecific (PropRead ba (Schema fields) tn pRk)) = do
       EType (SList SKeySet ) -> mkAVal <$> view
         (qeAnalyzeState.ksListCell      (beforeAfterLens ba) tn' cn sRk false)
 
-      EType SAny     -> pure OpaqueVal
-      EType SList{} -> error "TODO"
-      EType SObject -> error "TODO"
+      EType SAny         -> pure OpaqueVal
+      EType (SList SAny) -> pure OpaqueVal
       --
       -- TODO: if we add nested object support here, we need to install
       --       the correct provenance into AVals all the way down into
       --       sub-objects.
       --
       EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
+      EType SObject  -> throwErrorNoLoc UnsupportedObjectInDbCell
 
     pure (fieldType, av)
 

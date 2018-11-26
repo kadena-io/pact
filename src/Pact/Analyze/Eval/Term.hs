@@ -252,6 +252,7 @@ evalTermO = \case
         EType SDecimal -> mkAVal <$> use (decimalCell id tn cn sRk sDirty)
         EType STime    -> mkAVal <$> use (timeCell    id tn cn sRk sDirty)
         EType SKeySet  -> mkAVal <$> use (ksCell      id tn cn sRk sDirty)
+        EType SAny     -> pure OpaqueVal
 
         EType (SList SInteger) -> mkAVal <$> use (intListCell     id tn cn sRk sDirty)
         EType (SList SBool   ) -> mkAVal <$> use (boolListCell    id tn cn sRk sDirty)
@@ -259,16 +260,15 @@ evalTermO = \case
         EType (SList SDecimal) -> mkAVal <$> use (decimalListCell id tn cn sRk sDirty)
         EType (SList STime   ) -> mkAVal <$> use (timeListCell    id tn cn sRk sDirty)
         EType (SList SKeySet ) -> mkAVal <$> use (ksListCell      id tn cn sRk sDirty)
+        EType (SList SAny    ) -> pure OpaqueVal
 
-        EType SAny     -> pure OpaqueVal
-        EType SList{}  -> error "TODO"
-        EType SObject  -> error "TODO"
         --
         -- TODO: if we add nested object support here, we need to install
         --       the correct provenance into AVals all the way down into
         --       sub-objects.
         --
         EObjectTy _    -> throwErrorNoLoc UnsupportedObjectInDbCell
+        EType SObject  -> throwErrorNoLoc UnsupportedObjectInDbCell
 
       tagAccessCell mtReads tid fieldName av
 
@@ -430,9 +430,9 @@ evalTerm = \case
             EType (SList SStr    ) -> stringListCell  id tn cn sRk true .= mkS mProv sVal
             EType (SList SKeySet ) -> ksListCell      id tn cn sRk true .= mkS mProv sVal
 
-            EType SAny     -> void $ throwErrorNoLoc OpaqueValEncountered
-            EType SList{} -> error "TODO"
-            EType SObject -> error "TODO"
+            EType SAny         -> void $ throwErrorNoLoc OpaqueValEncountered
+            EType (SList SAny) -> void $ throwErrorNoLoc OpaqueValEncountered
+            EType SObject  -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
             EObjectTy _    -> void $ throwErrorNoLoc UnsupportedObjectInDbCell
 
           pure aval'

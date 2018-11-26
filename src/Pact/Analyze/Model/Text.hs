@@ -54,7 +54,7 @@ showTVal (ety, av) = case av of
       (\Refl -> case ty of
         SList ty' -> withUserShow ty' $ withSymWord ty' $
           showSbv (SBVI.SBV sval :: SBV (Concrete t)))
-      (\Refl -> error "TODO")
+      (\Refl -> error "showModel: impossible object type for AVal")
 
 showObject :: Object -> Text
 showObject (Object m) = "{ "

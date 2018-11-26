@@ -247,7 +247,8 @@ inferVar vid name prop = do
     Just (EType varTy')     -> singCase varTy'
       (\Refl -> pure (ESimple varTy' prop))
       (\Refl -> pure (EList varTy' prop))
-      (\Refl -> throwErrorT "TODO")
+      (\Refl -> throwErrorT
+        "impossible: objects cannot occur here -- please report this as a bug")
     Just (EObjectTy schema) -> pure (EObject schema prop)
     Just QTable             -> error "Table names cannot be vars"
     Just QColumnOf{}        -> error "Column names cannot be vars"
@@ -331,8 +332,10 @@ inferPreProp preProp = case preProp of
             (\Refl -> pure $ ESimple
               ty
               (PObjAt objSchema (TextLit ix'') objProp ety))
-            (\Refl -> error "TODO")
-            (\Refl -> error "TODO")
+            (\Refl -> pure $ EList
+              ty
+              (PObjAt objSchema (TextLit ix'') objProp ety))
+            (\Refl -> error "this case is currently impossible")
           Just ety@(EObjectTy schemaTy) -> pure $ EObject
             schemaTy
             (PObjAt objSchema (TextLit ix'') objProp ety)
@@ -570,8 +573,9 @@ inferPreProp preProp = case preProp of
             prop <- checkPreProp ty arg
             singCase ty
               (\Refl -> pure (name, ESimple ty prop))
-              (\Refl -> error "TODO")
-              (\Refl -> error "TODO")
+              (\Refl -> pure (name, EList   ty prop))
+              (\Refl -> throwErrorIn arg
+                "objects are not currently supported here -- please report this as a bug")
           _ -> throwErrorIn preProp "Internal pattern match failure."
 
         -- inline the function, removing it from `definedProps` so it can't
