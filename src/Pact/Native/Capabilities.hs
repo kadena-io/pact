@@ -24,6 +24,10 @@ capDefs =
    [ withCapability
    , enforceGuardDef "enforce-guard"
    , requireCapability
+   , createUserGuard
+   , createPactGuard
+   , createModuleGuard
+   , keysetRefGuard
    ])
 
 tvA :: Type n
@@ -90,3 +94,71 @@ requireCapability =
       unless granted $ evalError' i $ "require-capability: not granted: " ++ show cap
       return $ toTerm True
     requireCapability' i as = argsError' i as
+
+
+createPactGuard :: NativeDef
+createPactGuard =
+  defRNative "create-pact-guard" createPactGuard'
+  (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
+  "Defines a guard predicate by NAME that captures the results of `pact-id`. \
+  \At enforcement time, the success condition is that at that time `pact-id` must \
+  \return the same value. In effect this ensures that the guard will only succeed \
+  \within the multi-transaction identified by the pact id."
+  where
+    createPactGuard' :: RNativeFun e
+    createPactGuard' i [TLitString name] = do
+      pid <- getPactId i
+      return $ (`TGuard` (_faInfo i)) $ GPact $ PactGuard pid name
+    createPactGuard' i as = argsError i as
+
+
+createModuleGuard :: NativeDef
+createModuleGuard =
+  defRNative "create-module-guard" createModuleGuard'
+  (funType (tTyGuard (Just GTyModule)) [("name",tTyString)])
+  "Defines a guard by NAME that enforces the current module admin predicate."
+  where
+    createModuleGuard' :: RNativeFun e
+    createModuleGuard' i [TLitString name] = findCallingModule >>= \m -> case m of
+      Just mn ->
+        return $ (`TGuard` (_faInfo i)) $ GModule $ ModuleGuard mn name
+      Nothing -> evalError' i "create-module-guard: must call within module"
+    createModuleGuard' i as = argsError i as
+
+keysetRefGuard :: NativeDef
+keysetRefGuard =
+  defRNative "keyset-ref-guard" keysetRefGuard'
+  (funType (tTyGuard (Just GTyKeySetName)) [("keyset-ref",tTyString)])
+  "Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. \
+  \Concrete keysets are themselves guard types; this function is specifically to \
+  \store references alongside other guards in the database, etc."
+  where
+    keysetRefGuard' :: RNativeFun e
+    keysetRefGuard' i [TLitString ks] =
+      return $ (`TGuard` (_faInfo i)) $ GKeySetRef (KeySetName ks)
+    keysetRefGuard' i as = argsError i as
+
+
+createUserGuard :: NativeDef
+createUserGuard =
+  defRNative "create-user-guard" createUserGuard'
+  (funType (tTyGuard (Just GTyUser)) [("data",tvA),("predfun",tTyString)])
+  "Defines a custom guard predicate, where DATA will be passed to PREDFUN at time \
+  \of enforcement. PREDFUN is a valid name in the declaring environment. \
+  \PREDFUN must refer to a pure function or enforcement will fail at runtime."
+  where
+    createUserGuard' :: RNativeFun e
+    createUserGuard' i [udata,TLitString predfun] = case typeof udata of
+      Right {} -> case parseName (_faInfo i) predfun of
+        Right n -> do
+          rn <- resolveRef n >>= \nm -> case nm of
+            Just (Direct {}) -> return n
+            Just (Ref (TDef Def{..} _)) ->
+              return $ QName _dModule (asString _dDefName) _dInfo
+            Just _ -> evalError' i $ "Invalid predfun, not a def: " ++ show n
+            _ -> evalError' i $ "Could not resolve predfun: " ++ show n
+          return $ (`TGuard` (_faInfo i)) $ GUser (UserGuard udata rn)
+        Left s -> evalError' i $
+          "Invalid name " ++ show predfun ++ ": " ++ s
+      Left {} -> evalError' i "Data must be value"
+    createUserGuard' i as = argsError i as

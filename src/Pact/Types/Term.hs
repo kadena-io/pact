@@ -43,7 +43,7 @@ module Pact.Types.Term
    Module(..),mName,mKeySet,mMeta,mCode,mHash,mBlessed,mInterfaces,mImports,
    interfaceCode, interfaceMeta, interfaceName, interfaceImports,
    ModuleName(..),
-   Name(..),
+   Name(..),parseName,
    ConstVal(..),
    Use(..),
    App(..),appFun,appArgs,appInfo,
@@ -320,12 +320,16 @@ instance Show Name where
   show (Name n _) = unpack n
 instance ToJSON Name where toJSON = toJSON . show
 instance FromJSON Name where
-  parseJSON = withText "Name" $ \t -> case AP.parseOnly (parseName def) t of
+  parseJSON = withText "Name" $ \t -> case parseName def t of
     Left s -> fail s
     Right n -> return n
 
-parseName :: (TokenParsing m, Monad m) => Info -> m Name
-parseName i = do
+parseName :: Info -> Text -> Either String Name
+parseName i = AP.parseOnly (nameParser i)
+
+
+nameParser :: (TokenParsing m, Monad m) => Info -> m Name
+nameParser i = do
   a <- ident style
   try (qualified >>= \qn -> return (QName (ModuleName a) qn i) <?> "qualified name") <|>
     return (Name a i)

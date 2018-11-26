@@ -29,7 +29,7 @@ module Pact.Eval
     (eval
     ,evalBeginTx,evalRollbackTx,evalCommitTx
     ,reduce,reduceBody
-    ,resolveFreeVars,resolveArg
+    ,resolveFreeVars,resolveArg,resolveRef
     ,enforceKeySet,enforceKeySetName
     ,checkUserType
     ,deref
@@ -642,6 +642,10 @@ typecheckTerm i spec t = do
     -- check object
     (TySchema TyObject ospec,TySchema TyObject oty,TObject {..}) ->
       paramCheck ospec oty (checkUserType True i _tObject)
+    (TyPrim (TyGuard a),TyPrim (TyGuard b),_) -> case (a,b) of
+      (Nothing,Just _) -> tcOK
+      (Just _,Nothing) -> tcOK
+      (c,d) -> if c == d then tcOK else tcFail ty
     _ -> tcFail ty
 
 -- | check object args. Used in 'typecheckTerm' above and also in DB writes.
