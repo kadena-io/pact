@@ -24,7 +24,7 @@ module Pact.Types.Runtime
    RefStore(..),rsNatives,rsModules,updateRefStore,
    EntityName(..),
    EvalEnv(..),eeRefStore,eeMsgSigs,eeMsgBody,eeTxId,eeEntity,eePactStep,eePactDbVar,eePactDb,eePurity,eeHash,eeGasEnv,
-   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvSysRead(..),mkNoDbEnv,mkSysReadEnv,
+   Purity(..),PureNoDb,PureSysRead,EnvNoDb(..),EnvReadOnly(..),mkNoDbEnv,mkReadOnlyEnv,
    StackFrame(..),sfName,sfLoc,sfApp,
    PactExec(..),peStepCount,peYield,peExecuted,pePactId,peStep,
    RefState(..),rsLoaded,rsLoadedModules,rsNewModules,
@@ -165,7 +165,7 @@ data Purity =
   -- | No database access at all.
   PNoDb |
   -- | Access to read of module, keyset systables.
-  PSysRead |
+  PReadOnly |
   -- | All database access allowed (normal).
   PImpure
   deriving (Eq,Show,Ord,Bounded,Enum)
@@ -173,7 +173,7 @@ instance Default Purity where def = PImpure
 
 -- | Marker class for 'PNoDb' environments.
 class PureNoDb e
--- | Marker class for 'PSysRead' environments.
+-- | Marker class for 'PReadOnly' environments.
 -- SysRead supports pure operations as well.
 class PureNoDb e => PureSysRead e
 
@@ -378,10 +378,10 @@ newtype EnvNoDb e = EnvNoDb (EvalEnv e)
 
 instance PureNoDb (EnvNoDb e)
 
-newtype EnvSysRead e = EnvSysRead (EvalEnv e)
+newtype EnvReadOnly e = EnvReadOnly (EvalEnv e)
 
-instance PureSysRead (EnvSysRead e)
-instance PureNoDb (EnvSysRead e)
+instance PureSysRead (EnvReadOnly e)
+instance PureNoDb (EnvReadOnly e)
 
 diePure :: Method e a
 diePure _ = throwM $ PactError EvalError def def "Illegal database access in pure context"
@@ -421,8 +421,6 @@ mkPureEnv holder purity readRowImpl env@EvalEnv{..} = do
 mkNoDbEnv :: EvalEnv e -> Eval e (EvalEnv (EnvNoDb e))
 mkNoDbEnv = mkPureEnv EnvNoDb PNoDb (\_ _ -> diePure)
 
-mkSysReadEnv :: EvalEnv e -> Eval e (EvalEnv (EnvSysRead e))
-mkSysReadEnv = mkPureEnv EnvSysRead PSysRead $ \d k e -> case d of
-  KeySets -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-  Modules -> withMVar e $ \(EnvSysRead EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar
-  _ -> diePure e
+mkReadOnlyEnv :: EvalEnv e -> Eval e (EvalEnv (EnvReadOnly e))
+mkReadOnlyEnv = mkPureEnv EnvReadOnly PReadOnly $ \d k e ->
+  withMVar e $ \(EnvReadOnly EvalEnv {..}) -> _readRow _eePactDb d k _eePactDbVar

@@ -169,7 +169,7 @@ enforceGuardDef dn =
               Module{..} -> enforceKeySetName (_faInfo i) _mKeySet
               Interface{} -> evalError' i $ "ModuleGuard not allowed on interface: " ++ show mg
           GUser UserGuard{..} -> do
-            void $ runPureSys (_faInfo i) $
+            void $ runReadOnly (_faInfo i) $
               enscopeApply $ App (TVar _ugPredFun def) [_ugData] (_faInfo i)
 
 findCallingModule :: Eval e (Maybe ModuleName)

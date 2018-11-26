@@ -118,7 +118,7 @@ enforceOneDef =
   where
 
     enforceOne :: NativeFun e
-    enforceOne i as@[msg,TList conds _ _] = runPureSys (_faInfo i) $
+    enforceOne i as@[msg,TList conds _ _] = runReadOnly (_faInfo i) $
       gasUnreduced i as $ do
         msg' <- reduce msg >>= \m -> case m of
           TLitString s -> return s

@@ -34,7 +34,7 @@ module Pact.Eval
     ,checkUserType
     ,deref
     ,installModule
-    ,runPure,runPureSys,Purity
+    ,runPure,runReadOnly,Purity
     ,liftTerm,apply
     ,preGas
     ,acquireCapability,acquireModuleAdmin
@@ -671,11 +671,11 @@ runPure action = ask >>= \env -> case _eePurity env of
   PNoDb -> unsafeCoerce action -- yuck. would love safer coercion here
   _ -> mkNoDbEnv env >>= runPure' action
 
-runPureSys :: Info -> Eval (EnvSysRead e) a -> Eval e a
-runPureSys i action = ask >>= \env -> case _eePurity env of
+runReadOnly :: Info -> Eval (EnvReadOnly e) a -> Eval e a
+runReadOnly i action = ask >>= \env -> case _eePurity env of
   PNoDb -> evalError i "internal error: attempting sysread in pure context"
-  PSysRead -> unsafeCoerce action -- yuck. would love safer coercion here
-  _ -> mkSysReadEnv env >>= runPure' action
+  PReadOnly -> unsafeCoerce action -- yuck. would love safer coercion here
+  _ -> mkReadOnlyEnv env >>= runPure' action
 
 runPure' :: Eval f b -> EvalEnv f -> Eval e b
 runPure' action pureEnv = do
