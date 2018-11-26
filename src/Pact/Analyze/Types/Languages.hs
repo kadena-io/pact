@@ -278,6 +278,18 @@ uniformlyEq' ty t1 t2 = case ty of
   SKeySet  -> t1 == t2
   SAny     -> t1 == t2
 
+uniformlyEq''
+  :: OfPactTypes Eq tm
+  => SingTy 'SimpleK a -> tm a -> tm a -> Bool
+uniformlyEq'' ty t1 t2 = case ty of
+  SStr     -> t1 == t2
+  SInteger -> t1 == t2
+  STime    -> t1 == t2
+  SDecimal -> t1 == t2
+  SBool    -> t1 == t2
+  SKeySet  -> t1 == t2
+  SAny     -> t1 == t2
+
 uniformlyUserShow
   :: OfPactTypes UserShow tm
   => SingTy 'SimpleK a -> tm ('TyList a) -> Text
@@ -384,16 +396,7 @@ instance
   ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
   StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
   ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
-    Just Refl -> uniformlyEq ty1 b1 b2 && (case ty1 of
-      -- TODO
-      SInteger -> a1 == a2
-      SBool    -> a1 == a2
-      SStr     -> a1 == a2
-      STime    -> a1 == a2
-      SDecimal -> a1 == a2
-      SKeySet  -> a1 == a2
-      SAny     -> a1 == a2
-      )
+    Just Refl -> uniformlyEq'' ty1 a1 a2 && uniformlyEq ty1 b1 b2
     Nothing   -> False
   ListLength ty1 a1           == ListLength ty2 a2           = case singEq ty1 ty2 of
     Nothing   -> False
