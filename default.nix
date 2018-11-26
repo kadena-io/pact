@@ -64,6 +64,16 @@ in
               rev = "56b46fe97782e86198f31c574ac73c8c966fee05";
               sha256 = "005ks2xjkbypq318jd0s4896b9wa5qg3jf8a1qgd4imb4fkm3yh7";
             }) {};
+
+            # aeson 1.4.2
+            aeson = (if self.ghc.isGhcjs or false
+              then (pkgs.lib.flip pkgs.haskell.lib.addBuildDepend self.hashable-time)
+              else pkgs.lib.id) (self.callCabal2nix "aeson" (pkgs.fetchFromGitHub {
+              owner = "bos";
+              repo = "aeson";
+              rev = "c3d04181eb64393d449a68084ffea3a94c3d8064";
+              sha256 = "1l8lks6plj0naj9ghasmkqglshxym3f29gyybvjvkrkm770p2gl4";
+            }) {});
           };
     packages = {
       pact = builtins.filterSource
