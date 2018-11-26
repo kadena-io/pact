@@ -364,6 +364,8 @@ instance
   Var a1 b1                   == Var a2 b2                   = a1 == a2 && b1 == b2
   StrConcat a1 b1             == StrConcat a2 b2             = a1 == a2 && b1 == b2
   StrLength a                 == StrLength b                 = a == b
+  StrToInt s1                 == StrToInt s2                 = s1 == s2
+  StrToIntBase b1 s1          == StrToIntBase b2 s2          = b1 == b2 && s1 == s2
   Numerical a                 == Numerical b                 = a == b
   IntAddTime a1 b1            == IntAddTime a2 b2            = a1 == a2 && b1 == b2
   DecAddTime a1 b1            == DecAddTime a2 b2            = a1 == a2 && b1 == b2
