@@ -36,7 +36,7 @@ tvA = mkTyVar "a" []
 
 withCapability :: NativeDef
 withCapability =
-  defNative "with-capability" withCapability'
+  defNative (specialForm WithCapability) withCapability'
   (funType tvA [("capability",TyFun $ funType' tTyBool []),("body",TyList TyAny)])
   "Specifies and requests grant of CAPABILITY which is an application of a 'defcap' \
   \production. Given the unique token specified by this application, ensure \
@@ -100,8 +100,8 @@ createPactGuard :: NativeDef
 createPactGuard =
   defRNative "create-pact-guard" createPactGuard'
   (funType (tTyGuard (Just GTyPact)) [("name",tTyString)])
-  "Defines a guard predicate by NAME that captures the results of `pact-id`. \
-  \At enforcement time, the success condition is that at that time `pact-id` must \
+  "Defines a guard predicate by NAME that captures the results of 'pact-id'. \
+  \At enforcement time, the success condition is that at that time 'pact-id' must \
   \return the same value. In effect this ensures that the guard will only succeed \
   \within the multi-transaction identified by the pact id."
   where

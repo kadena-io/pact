@@ -345,6 +345,9 @@ processNatives Pre a@(App i FNative {..} argASTs) = do
               assocAstTy bn $ _ftReturn mangledFunType
               -- assoc schema with last ft arg
               assocAstTy sn (_aType (last (toList $ _ftArgs mangledFunType)))
+            (List _ln ll) -> do -- TODO, for with-capability
+              -- assoc app return with last of body
+              assocAstTy (_aNode $ last ll) $ _ftReturn mangledFunType
             sb -> die _fInfo $ "Invalid special form, expected binding: " ++ show sb
           -- TODO the following is dodgy, schema may not be resolved.
           ((Where,_),[(field,_),(partialAst,_),(_,TySchema TyObject uty)]) -> asPrimString field >>= \fld -> case uty of
@@ -732,6 +735,7 @@ toAST (TApp Term.App{..} _) = do
             Bind -> specialBind
             WithRead -> specialBind
             WithDefaultRead -> specialBind
+            WithCapability -> specialBind
             _ -> mkApp fun' args'
 
 toAST TBinding {..} = do

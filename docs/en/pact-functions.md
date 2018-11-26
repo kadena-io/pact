@@ -1197,6 +1197,30 @@ Read KEY from message data body as keyset ({ "keys": KEYLIST, "pred": PREDFUN })
 
 ## Capabilities {#Capabilities}
 
+### create-module-guard {#create-module-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard by NAME that enforces the current module admin predicate.
+
+
+### create-pact-guard {#create-pact-guard}
+
+*name*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a guard predicate by NAME that captures the results of 'pact-id'. At enforcement time, the success condition is that at that time 'pact-id' must return the same value. In effect this ensures that the guard will only succeed within the multi-transaction identified by the pact id.
+
+
+### create-user-guard {#create-user-guard}
+
+*data*&nbsp;`<a>` *predfun*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Defines a custom guard predicate, where DATA will be passed to PREDFUN at time of enforcement. PREDFUN is a valid name in the declaring environment. PREDFUN must refer to a pure function or enforcement will fail at runtime.
+
+
 ### enforce-guard {#enforce-guard}
 
 *guard*&nbsp;`guard` *&rarr;*&nbsp;`bool`
@@ -1209,6 +1233,14 @@ Execute GUARD, or defined keyset KEYSETNAME, to enforce desired predicate logic.
 (enforce-guard 'admin-keyset)
 (enforce-guard row-guard)
 ```
+
+
+### keyset-ref-guard {#keyset-ref-guard}
+
+*keyset-ref*&nbsp;`string` *&rarr;*&nbsp;`guard`
+
+
+Creates a guard for the keyset registered as KEYSET-REF with 'define-keyset'. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
 
 
 ### require-capability {#require-capability}
@@ -1354,6 +1386,16 @@ Set transaction signature KEYS.
 pact> (env-keys ["my-key" "admin-key"])
 "Setting transaction keys"
 ```
+
+
+### env-pactid {#env-pactid}
+
+ *&rarr;*&nbsp;`string`
+
+*id*&nbsp;`string` *&rarr;*&nbsp;`string`
+
+
+Query, or set with ID, pact state pact id.
 
 
 ### env-step {#env-step}

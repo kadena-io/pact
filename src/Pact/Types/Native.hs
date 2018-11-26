@@ -4,6 +4,7 @@ module Pact.Types.Native where
 
 import Pact.Types.Util
 import Pact.Types.Runtime
+import Pact.Compile (Reserved(RWithCapability))
 import qualified Data.Map.Strict as M
 import Control.Arrow
 
@@ -12,7 +13,8 @@ data SpecialForm =
   WithDefaultRead |
   Bind |
   Select |
-  Where
+  Where |
+  WithCapability
   deriving (Eq,Enum,Ord,Bounded)
 
 instance AsString SpecialForm where
@@ -21,6 +23,7 @@ instance AsString SpecialForm where
   asString Bind = "bind"
   asString Select = "select"
   asString Where = "where"
+  asString WithCapability = asString RWithCapability
 
 instance Show SpecialForm where show = show . asString
 

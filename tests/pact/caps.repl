@@ -12,6 +12,8 @@
   (defschema guards g:guard)
   (deftable guard-table:{guards})
 
+  (defschema yieldschema result:integer)
+
   (defcap KALL-CAP () (enforce-keyset 'kall))
 
   (defun with-kall ()
@@ -42,7 +44,7 @@
   (defun step1 (id:string)
     (insert guard-table id { "g": (create-pact-guard "test")}))
 
-  (defun step2 (id:string)
+  (defun step2:object{yieldschema} (id:string)
     (enforce-guard (get-guard id))
     (yield { "result": 1 }))
 
@@ -53,6 +55,8 @@
 (create-table guard-table)
 
 (commit-tx)
+
+(typecheck 'caps)
 
 (begin-tx)
 (use caps)

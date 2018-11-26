@@ -24,6 +24,7 @@ module Pact.Compile
     (
      compile,compileExps
     ,MkInfo,mkEmptyInfo,mkStringInfo,mkTextInfo
+    ,Reserved(..)
     )
 
 where
