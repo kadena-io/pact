@@ -1,5 +1,5 @@
 name:                pact
-version:             2.6.1.1
+version:             2.6.1
 synopsis:            Smart contract language library and REPL
 description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
@@ -17,7 +17,6 @@ build-type:          Simple
 cabal-version:       >=1.22
 
 library
-
   exposed-modules:     Pact.Analyze.Remote.Types
                      , Pact.Compile
                      , Pact.Eval
