@@ -65,7 +65,7 @@
   (defun read-account-admin (id)
     "Read data for account ID, admin version"
     (with-capability (ADMIN)
-      (read accounts id ['balance 'ccy 'guard 'data 'date 'amount])))
+      (read accounts id ['balance 'ccy 'rowguard 'data 'date 'amount])))
 
 
   (defun account-keys ()
