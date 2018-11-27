@@ -227,6 +227,16 @@ data Core (t :: Ty -> *) (a :: Ty) where
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
 
+-- Note [Uniform Functions]:
+--
+-- The `uniformly*` family of 9 functions differs in two dimensions:
+-- * The class required is `Eq`, `UserShow`, or `Show`
+-- * It is applied at either `tm ('TyList a)`, `[tm a]`, or `tm a`
+--
+-- It looks like this should be generalizable using something like `withEq`,
+-- etc. I've attempted something like this a few times but have failed every
+-- time. For now I'm content to write this boilerplate by hand.
+
 class
   ( c (tm 'TyStr)
   , c (tm 'TyInteger)
@@ -362,8 +372,6 @@ uniformlyShows'' ty p t = case ty of
   SKeySet  -> showsPrec p t
   SAny     -> showsPrec p t
 
-
--- TODO: generalize the uniformly family?
 
 instance
   ( Eq (Concrete a)

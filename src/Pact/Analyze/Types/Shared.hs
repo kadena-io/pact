@@ -30,7 +30,7 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
 import           Data.Constraint              (Dict (Dict), withDict)
-import           Data.Constraint.Extras
+import           Data.Constraint.Extras       (has)
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
 import           Data.List                    (sortBy)
@@ -646,6 +646,18 @@ type family Concrete (a :: Ty) where
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
 
+-- Note [Supplying Dicts]:
+--
+-- withEq, withShow, and withUserShow are straightforward uses of has because
+-- they apply to all types.
+--
+-- However, withSMTValue and withSymWord only apply to simple types, the
+-- ArgDict instance doesn't apply, and we need to supply the dictionaries for
+-- only simple types.
+--
+-- `EqConcrete`, `ShowConcrete`, and `UserShowConcrete` are defined just to
+-- make it possible to use `has` here.
+
 class    Eq       (Concrete a) => EqConcrete a where
 instance Eq       (Concrete a) => EqConcrete a where
 class    Show     (Concrete a) => ShowConcrete a where
@@ -659,6 +671,9 @@ withEq = has @EqConcrete
 withShow :: SingTy k a -> (Show (Concrete a) => b) -> b
 withShow = has @ShowConcrete
 
+withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
+withUserShow = has @UserShowConcrete
+
 withSMTValue :: SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = withDict . singMkSMTValue where
 
@@ -671,9 +686,6 @@ withSMTValue = withDict . singMkSMTValue where
     SDecimal -> Dict
     SKeySet  -> Dict
     SAny     -> Dict
-
-withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
-withUserShow = has @UserShowConcrete
 
 withSymWord :: SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
 withSymWord = withDict . singMkSymWord where
