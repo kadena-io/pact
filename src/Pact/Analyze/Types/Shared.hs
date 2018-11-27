@@ -646,10 +646,10 @@ type family Concrete (a :: Ty) where
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
 
-liftC :: forall c a b. Dict (c a) -> (c a => b) -> b
+liftC :: Dict (c a) -> (c a => b) -> b
 liftC Dict b = b
 
-withEq :: forall a b k. SingTy k a -> (Eq (Concrete a) => b) -> b
+withEq :: SingTy k a -> (Eq (Concrete a) => b) -> b
 withEq = has @EqConcrete
 
 class    Eq       (Concrete a) => EqConcrete a where
@@ -659,12 +659,10 @@ instance Show     (Concrete a) => ShowConcrete a where
 class    UserShow (Concrete a) => UserShowConcrete a where
 instance UserShow (Concrete a) => UserShowConcrete a where
 
-withShow :: forall a b k. SingTy k a -> (Show (Concrete a) => b) -> b
+withShow :: SingTy k a -> (Show (Concrete a) => b) -> b
 withShow = has @ShowConcrete
 
-withSMTValue
-  :: forall a b.
-  SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
+withSMTValue :: SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
 withSMTValue = liftC . singMkSMTValue
 
 singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
@@ -677,12 +675,10 @@ singMkSMTValue = \case
   SKeySet  -> Dict
   SAny     -> Dict
 
-withUserShow :: forall a b k. SingTy k a -> (UserShow (Concrete a) => b) -> b
+withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
 withUserShow = has @UserShowConcrete
 
-withSymWord
-  :: forall a b.
-  SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
+withSymWord :: SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
 withSymWord = liftC . singMkSymWord
 
 singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
