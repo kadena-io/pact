@@ -147,7 +147,7 @@ runCompile act cs a =
             ss -> intercalate "," ss
           labelText [] = []
           labelText (Label s:r) = toList s:labelText r
-          labelText (EndOfInput:r) = "end of expression or input":labelText r
+          labelText (EndOfInput:r) = "Expected: end of expression or input":labelText r
           labelText (_:r) = labelText r
 
 
