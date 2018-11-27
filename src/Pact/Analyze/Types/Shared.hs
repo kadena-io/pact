@@ -646,12 +646,6 @@ type family Concrete (a :: Ty) where
   Concrete ('TyList a) = [Concrete a]
   Concrete 'TyObject   = Object
 
-liftC :: Dict (c a) -> (c a => b) -> b
-liftC Dict b = b
-
-withEq :: SingTy k a -> (Eq (Concrete a) => b) -> b
-withEq = has @EqConcrete
-
 class    Eq       (Concrete a) => EqConcrete a where
 instance Eq       (Concrete a) => EqConcrete a where
 class    Show     (Concrete a) => ShowConcrete a where
@@ -659,37 +653,43 @@ instance Show     (Concrete a) => ShowConcrete a where
 class    UserShow (Concrete a) => UserShowConcrete a where
 instance UserShow (Concrete a) => UserShowConcrete a where
 
+liftC :: Dict (c a) -> (c a => b) -> b
+liftC Dict b = b
+
+withEq :: SingTy k a -> (Eq (Concrete a) => b) -> b
+withEq = has @EqConcrete
+
 withShow :: SingTy k a -> (Show (Concrete a) => b) -> b
 withShow = has @ShowConcrete
 
 withSMTValue :: SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = liftC . singMkSMTValue
+withSMTValue = liftC . singMkSMTValue where
 
-singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
-singMkSMTValue = \case
-  SInteger -> Dict
-  SBool    -> Dict
-  SStr     -> Dict
-  STime    -> Dict
-  SDecimal -> Dict
-  SKeySet  -> Dict
-  SAny     -> Dict
+  singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
+  singMkSMTValue = \case
+    SInteger -> Dict
+    SBool    -> Dict
+    SStr     -> Dict
+    STime    -> Dict
+    SDecimal -> Dict
+    SKeySet  -> Dict
+    SAny     -> Dict
 
 withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
 withUserShow = has @UserShowConcrete
 
 withSymWord :: SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
-withSymWord = liftC . singMkSymWord
+withSymWord = liftC . singMkSymWord where
 
-singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
-singMkSymWord = \case
-  SInteger -> Dict
-  SBool    -> Dict
-  SStr     -> Dict
-  STime    -> Dict
-  SDecimal -> Dict
-  SKeySet  -> Dict
-  SAny     -> Dict
+  singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
+  singMkSymWord = \case
+    SInteger -> Dict
+    SBool    -> Dict
+    SStr     -> Dict
+    STime    -> Dict
+    SDecimal -> Dict
+    SKeySet  -> Dict
+    SAny     -> Dict
 
 columnMapToSchema :: ColumnMap EType -> Schema
 columnMapToSchema
