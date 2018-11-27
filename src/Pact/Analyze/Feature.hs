@@ -85,17 +85,19 @@ data Feature
   -- Object operators
   | FObjectProjection
   | FObjectMerge
+  | FObjectDrop
+  | FObjectTake
   -- List operators
   | FListProjection
   | FListLength
   | FContains
-  | FDrop
+  | FListDrop
   | FReverse
   | FSort
-  | FTake
+  | FListTake
   -- String operators
   | FStringLength
-  | FStringConcatenation
+  | FConcatenation
   | FStringToInteger
   -- Temporal operators
   | FTemporalAddition
@@ -676,6 +678,38 @@ doc FObjectMerge = Doc
         (TyCon obj)
   ]
 
+doc FObjectDrop = Doc
+  "drop"
+  CList
+  InvAndProp
+  "drop entries having the specified keys from an object"
+  [ Usage
+      "(drop keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
+  ]
+
+doc FObjectTake = Doc
+  "take"
+  CList
+  InvAndProp
+  "take entries having the specified keys from an object"
+  [ Usage
+      "(take keys o)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("keys", TyList' (TyCon str))
+        , ("o", TyCon obj)
+        ]
+      (TyCon obj)
+  ]
+
 -- List features
 
 doc FListProjection = Doc
@@ -724,7 +758,7 @@ doc FContains = Doc
   "contains"
   CList -- TODO: other category?
   InvAndProp
-  "List contains"
+  "List / string / object contains"
   [ let a = TyVar $ TypeVar "a"
     in Usage
       "(contains x xs)"
@@ -756,7 +790,7 @@ doc FContains = Doc
   ]
 
 
-doc FDrop = Doc
+doc FListDrop = Doc
   "drop"
   CList
   InvAndProp
@@ -771,15 +805,6 @@ doc FDrop = Doc
         , ("xs", TyList' a)
         ]
       (TyList' a)
-  , Usage
-      "(drop keys o)"
-      Map.empty
-      $ Fun
-        Nothing
-        [ ("keys", TyList' (TyCon str))
-        , ("o", TyCon obj)
-        ]
-      (TyCon obj)
   ]
 
 doc FReverse = Doc
@@ -814,7 +839,7 @@ doc FSort = Doc
       (TyList' a)
   ]
 
-doc FTake = Doc
+doc FListTake = Doc
   "take"
   CList
   InvAndProp
@@ -829,15 +854,6 @@ doc FTake = Doc
         , ("xs", TyList' a)
         ]
       (TyList' a)
-  , Usage
-      "(take keys o)"
-      Map.empty
-      $ Fun
-        Nothing
-        [ ("keys", TyList' (TyCon str))
-        , ("o", TyCon obj)
-        ]
-      (TyCon obj)
   ]
 
 
@@ -858,11 +874,11 @@ doc FStringLength = Doc
         (TyCon int)
   ]
 
-doc FStringConcatenation = Doc
+doc FConcatenation = Doc
   "+"
   CString
   InvAndProp
-  "String concatenation"
+  "String / list concatenation"
   [ Usage
       "(+ s t)"
       Map.empty
@@ -872,6 +888,16 @@ doc FStringConcatenation = Doc
         , ("t", TyCon str)
         ]
         (TyCon str)
+  , let a = TyVar $ TypeVar "a"
+    in Usage
+      "(+ s t)"
+      Map.empty
+      $ Fun
+        Nothing
+        [ ("s", TyList' a)
+        , ("t", TyList' a)
+        ]
+        (TyList' a)
   ]
 
 doc FStringToInteger = Doc
@@ -1320,13 +1346,15 @@ PAT(SLogicalImplication, FLogicalImplication)
 PAT(SObjectProjection, FObjectProjection)
 PAT(SListLength, FListLength)
 PAT(SContains, FContains)
-PAT(SDrop, FDrop)
+PAT(SListDrop, FListDrop)
 PAT(SReverse, FReverse)
 PAT(SSort, FSort)
-PAT(STake, FTake)
+PAT(SListTake, FListTake)
 PAT(SObjectMerge, FObjectMerge)
+PAT(SObjectDrop, FObjectDrop)
+PAT(SObjectTake, FObjectTake)
 PAT(SStringLength, FStringLength)
-PAT(SStringConcatenation, FStringConcatenation)
+PAT(SConcatenation, FConcatenation)
 PAT(SStringToInteger, FStringToInteger)
 PAT(STemporalAddition, FTemporalAddition)
 PAT(SUniversalQuantification, FUniversalQuantification)

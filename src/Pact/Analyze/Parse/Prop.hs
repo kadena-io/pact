@@ -601,7 +601,7 @@ checkPreProp ty preProp
       EObject ty' _prop -> typeError preProp ty ty'
   | otherwise = case (ty, preProp) of
 
-  (SStr, PreApp SStringConcatenation [a, b])
+  (SStr, PreApp SConcatenation [a, b])
     -> PStrConcat <$> checkPreProp SStr a <*> checkPreProp SStr b
   (SDecimal, PreApp opSym@(toOp arithOpP -> Just op) [a, b]) -> do
     a' <- inferPreProp a

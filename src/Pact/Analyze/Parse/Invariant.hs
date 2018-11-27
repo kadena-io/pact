@@ -50,7 +50,7 @@ expToInvariant ty exp = case (ty, exp) of
 
   (SInteger, ParenList [EAtom' SStringLength, str])
     -> CoreInvariant . StrLength <$> expToInvariant SStr str
-  (SStr, ParenList [EAtom' SStringConcatenation, a, b]) -> CoreInvariant ... StrConcat
+  (SStr, ParenList [EAtom' SConcatenation, a, b]) -> CoreInvariant ... StrConcat
     <$> expToInvariant SStr a <*> expToInvariant SStr b
 
   (SDecimal, ParenList [EAtom' (toOp arithOpP -> Just op), a, b]) -> asum

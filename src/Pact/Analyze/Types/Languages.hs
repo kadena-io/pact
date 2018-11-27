@@ -597,7 +597,7 @@ instance
   userShowPrec d = \case
     Lit a                    -> userShowPrec d a
     Sym s                    -> tShow s
-    StrConcat x y            -> parenList [SAddition, userShow x, userShow y]
+    StrConcat x y            -> parenList [SConcatenation, userShow x, userShow y]
     StrLength str            -> parenList [SStringLength, userShow str]
     StrToInt s               -> parenList [SStringToInteger, userShow s]
     StrToIntBase b s         -> parenList [SStringToInteger, userShow b, userShow s]
@@ -621,14 +621,14 @@ instance
       -> parenList [SContains, userShow needle, userShow haystack]
     ListContains ty needle haystack
       -> parenList [SContains, uniformlyUserShow'' ty needle, uniformlyUserShow ty haystack]
-    ListLength ty x          -> parenList ["length", uniformlyUserShow ty x]
+    ListLength ty x          -> parenList [SListLength, uniformlyUserShow ty x]
     ListReverse ty lst       -> parenList [SReverse, uniformlyUserShow ty lst]
     ListSort ty lst          -> parenList [SSort, uniformlyUserShow ty lst]
-    ListDrop ty n lst        -> parenList [SDrop, userShow n, uniformlyUserShow ty lst]
-    ObjDrop _schema k obj    -> parenList [SDrop, userShow k, userShow obj]
-    ListTake ty n lst        -> parenList [STake, userShow n, uniformlyUserShow ty lst]
-    ObjTake _schema k obj    -> parenList [STake, userShow k, userShow obj]
-    ListConcat ty x y        -> parenList ["concat", uniformlyUserShow ty x, uniformlyUserShow ty y]
+    ListDrop ty n lst        -> parenList [SListDrop, userShow n, uniformlyUserShow ty lst]
+    ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
+    ListTake ty n lst        -> parenList [SListTake, userShow n, uniformlyUserShow ty lst]
+    ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
+    ListConcat ty x y        -> parenList [SConcatenation, uniformlyUserShow ty x, uniformlyUserShow ty y]
     ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
     LiteralObject obj        -> userShow obj
     LiteralList ty lst       -> uniformlyUserShow' ty lst

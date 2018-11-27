@@ -178,7 +178,7 @@ pattern AST_Contains :: a -> AST a -> AST a -> AST a
 pattern AST_Contains node val collection <- App node (NativeFunc SContains) [val, collection]
 
 pattern AST_Drop :: a -> AST a -> AST a -> AST a
-pattern AST_Drop node num collection <- App node (NativeFunc SDrop) [num, collection]
+pattern AST_Drop node num collection <- App node (NativeFunc SListDrop) [num, collection]
 
 pattern AST_Reverse :: a -> AST a -> AST a
 pattern AST_Reverse node list <- App node (NativeFunc SReverse) [list]
@@ -187,7 +187,7 @@ pattern AST_Sort :: a -> AST a -> AST a
 pattern AST_Sort node list <- App node (NativeFunc SSort) [list]
 
 pattern AST_Take :: a -> AST a -> AST a -> AST a
-pattern AST_Take node num list <- App node (NativeFunc STake) [num, list]
+pattern AST_Take node num list <- App node (NativeFunc SListTake) [num, list]
 
 pattern AST_Obj :: forall a. a -> [(AST a, AST a)] -> AST a
 pattern AST_Obj objNode kvs <- Object objNode kvs
