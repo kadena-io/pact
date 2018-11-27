@@ -29,7 +29,7 @@ import           Control.Lens                 (At (at), Index, Iso, IxValue,
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           Data.AffineSpace             ((.+^), (.-.))
 import           Data.Coerce                  (Coercible)
-import           Data.Constraint              (Dict (Dict))
+import           Data.Constraint              (Dict (Dict), withDict)
 import           Data.Constraint.Extras
 import           Data.Data                    (Data, Typeable)
 import           Data.Function                (on)
@@ -653,9 +653,6 @@ instance Show     (Concrete a) => ShowConcrete a where
 class    UserShow (Concrete a) => UserShowConcrete a where
 instance UserShow (Concrete a) => UserShowConcrete a where
 
-liftC :: Dict (c a) -> (c a => b) -> b
-liftC Dict b = b
-
 withEq :: SingTy k a -> (Eq (Concrete a) => b) -> b
 withEq = has @EqConcrete
 
@@ -663,7 +660,7 @@ withShow :: SingTy k a -> (Show (Concrete a) => b) -> b
 withShow = has @ShowConcrete
 
 withSMTValue :: SingTy 'SimpleK a -> (SMTValue (Concrete a) => b) -> b
-withSMTValue = liftC . singMkSMTValue where
+withSMTValue = withDict . singMkSMTValue where
 
   singMkSMTValue :: SingTy 'SimpleK a -> Dict (SMTValue (Concrete a))
   singMkSMTValue = \case
@@ -679,7 +676,7 @@ withUserShow :: SingTy k a -> (UserShow (Concrete a) => b) -> b
 withUserShow = has @UserShowConcrete
 
 withSymWord :: SingTy 'SimpleK a -> (SymWord (Concrete a) => b) -> b
-withSymWord = liftC . singMkSymWord where
+withSymWord = withDict . singMkSymWord where
 
   singMkSymWord :: SingTy 'SimpleK a -> Dict (SymWord (Concrete a))
   singMkSymWord = \case
