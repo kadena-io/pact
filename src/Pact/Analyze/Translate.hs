@@ -86,6 +86,7 @@ data TranslateFailureNoLoc
   | NoLists (AST Node)
   | NoKeys (AST Node)
   | NoReadMsg (AST Node)
+  | DeprecatedList Node
   -- For cases we don't handle yet:
   | UnhandledType Node (Pact.Type Pact.UserType)
   | TypeError Node
@@ -115,6 +116,7 @@ describeTranslateFailureNoLoc = \case
   NoLists _node -> "Analysis of lists is not yet supported"
   NoKeys _node  -> "`keys` is not yet supported"
   NoReadMsg _ -> "`read-msg` is not yet supported"
+  DeprecatedList node -> "Analysis doesn't support the deprecated `list` function -- please update to literal list syntax: " <> tShow node
   UnhandledType node ty -> "Found a type we don't know how to translate yet: " <> tShow ty <> " at node: " <> tShow node
   TypeError node -> "\"impossible\" post-typechecker type error in node: " <> tShow node
 
@@ -1010,6 +1012,8 @@ translateNode astNode = withAstContext astNode $ case astNode of
       pure (k', v')
     schema <- translateSchema node
     pure $ EObject schema $ CoreTerm $ LiteralObject $ Map.fromList kvs'
+
+  AST_NFun node "list" _ -> throwError' $ DeprecatedList node
 
   AST_List node elems -> do
     elems' <- traverse translateNode elems

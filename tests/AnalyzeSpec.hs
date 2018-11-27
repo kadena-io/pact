@@ -2569,6 +2569,14 @@ spec = describe "analyze" $ do
     expectVerified  $ code0 "[(property (= result [a b c]))]"
     expectFalsified $ code0 "[(property (= result [a b]))]"
 
+  describe "deprecated list literals" $ do
+    let code0 = [text|
+          (defun test:[integer] (a:integer b:integer c:integer)
+            (list a b c))
+          |]
+    -- we expect this to give an error
+    expectFail code0 $ Satisfiable $ Inj Success
+
   describe "list drop" $ do
     let code1 model = [text|
           (defun test:[integer] (a:integer b:integer c:integer)
