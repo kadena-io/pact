@@ -188,43 +188,50 @@ data Core (t :: Ty -> *) (a :: Ty) where
 
   KeySetEqNeq :: EqNeq -> t 'TyKeySet   -> t 'TyKeySet   -> Core t 'TyBool
   ObjectEqNeq :: EqNeq -> t 'TyObject   -> t 'TyObject   -> Core t 'TyBool
-  ListEqNeq   :: SingTy 'SimpleK a  -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
 
   ObjAt :: Schema -> t 'TyStr -> t 'TyObject -> EType -> Core t a
-  ListAt :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
 
   ObjContains    :: Schema ->            t 'TyStr -> t 'TyObject   -> Core t 'TyBool
   StringContains ::                      t 'TyStr -> t 'TyStr      -> Core t 'TyBool
-  ListContains   :: SingTy 'SimpleK a -> t a      -> t ('TyList a) -> Core t 'TyBool
-
-  ListLength  :: SingTy 'SimpleK a -> t ('TyList a) -> Core t 'TyInteger
-
-  ListReverse :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
-  ListSort    :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
-
-  ListDrop :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjDrop :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
-  ListTake    :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
   ObjTake     :: Schema -> t ('TyList 'TyStr) -> t 'TyObject -> Core t 'TyObject
 
-  ListConcat  :: SingTy 'SimpleK a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
-
-  -- ListFilter ::
-  -- ListFold ::
-  -- ListMap ::
-  MakeList :: SingTy 'SimpleK a -> t 'TyInteger -> t a -> Core t ('TyList a)
 
   ObjectMerge :: t 'TyObject -> t 'TyObject -> Core t 'TyObject
 
   LiteralObject :: Map Text (Existential t) -> Core t 'TyObject
 
-  LiteralList :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
-
   -- boolean ops
   -- | A 'Logical' expression over one or two 'Bool' expressions; one operand
   -- for NOT, and two operands for AND or OR.
   Logical :: LogicalOp -> [t 'TyBool] -> Core t 'TyBool
+
+  -- list ops. Each of these operations contains a singleton of the type of
+  -- list elements (needed so we can implement `Eq`, `Show`, etc).
+
+  ListEqNeq    :: SingTy 'SimpleK a -> EqNeq -> t ('TyList a) -> t ('TyList a) -> Core t 'TyBool
+  ListAt       :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t a
+  ListContains :: SingTy 'SimpleK a -> t a      -> t ('TyList a) -> Core t 'TyBool
+
+  ListLength   :: SingTy 'SimpleK a -> t ('TyList a) -> Core t 'TyInteger
+
+  ListReverse  :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
+  ListSort     :: SingTy 'SimpleK a -> t ('TyList a) -> Core t ('TyList a)
+
+  ListConcat   :: SingTy 'SimpleK a -> t ('TyList a) -> t ('TyList a) -> Core t ('TyList a)
+
+  ListDrop     :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+  ListTake     :: SingTy 'SimpleK a -> t 'TyInteger -> t ('TyList a) -> Core t ('TyList a)
+
+  MakeList     :: SingTy 'SimpleK a -> t 'TyInteger -> t a -> Core t ('TyList a)
+
+  LiteralList  :: SingTy 'SimpleK a -> [t a] -> Core t ('TyList a)
+
+  -- TODO:
+  -- ListFilter ::
+  -- ListFold   ::
+  -- ListMap    ::
 
 -- Note [Uniform Functions]:
 --
@@ -395,13 +402,19 @@ instance
   BoolComparison op1 a1 b1    == BoolComparison op2 a2 b2    = op1 == op2 && a1 == a2 && b1 == b2
   KeySetEqNeq op1 a1 b1       == KeySetEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
   ObjectEqNeq op1 a1 b1       == ObjectEqNeq op2 a2 b2       = op1 == op2 && a1 == a2 && b1 == b2
+  ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
+  ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
+  StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
+  ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
+  ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
+  LiteralObject m1            == LiteralObject m2            = m1 == m2
+  Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
+
   ListEqNeq ty1 op1 a1 b1     == ListEqNeq ty2 op2 a2 b2     = case singEq ty1 ty2 of
     Nothing   -> False
     Just Refl -> op1 == op2 && uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
-  ObjAt s1 a1 b1 t1           == ObjAt s2 a2 b2 t2           = s1 == s2 && a1 == a2 && b1 == b2 && t1 == t2
   ListAt ty1 a1 b1            == ListAt _ty2 a2 b2           = a1 == a2 && uniformlyEq ty1 b1 b2
-  ObjContains s1 a1 b1        == ObjContains s2 a2 b2        = s1 == s2 && a1 == a2 && b1 == b2
-  StringContains a1 b1        == StringContains a2 b2        = a1 == a2 && b1 == b2
   ListContains ty1 a1 b1      == ListContains ty2 a2 b2      = case singEq ty1 ty2 of
     Just Refl -> uniformlyEq'' ty1 a1 a2 && uniformlyEq ty1 b1 b2
     Nothing   -> False
@@ -409,14 +422,10 @@ instance
     Nothing   -> False
     Just Refl -> uniformlyEq ty1 a1 a2
   ListDrop ty1 i1 l1          == ListDrop _ty2 i2 l2         = i1 == i2 && uniformlyEq ty1 l1 l2
-  ObjDrop a1 b1 c1            == ObjDrop a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
-  ObjTake a1 b1 c1            == ObjTake a2 b2 c2            = a1 == a2 && b1 == b2 && c1 == c2
   ListConcat ty1 a1 b1        == ListConcat _ty2 a2 b2       = uniformlyEq ty1 a1 a2 && uniformlyEq ty1 b1 b2
   MakeList ty1 a1 b1          == MakeList _ty2 a2 b2         = a1 == a2 && uniformlyEq'' ty1 b1 b2
-  ObjectMerge a1 b1           == ObjectMerge a2 b2           = a1 == a2 && b1 == b2
-  LiteralObject m1            == LiteralObject m2            = m1 == m2
   LiteralList ty1 l1          == LiteralList _ty2 l2         = uniformlyEq' ty1 l1 l2
-  Logical op1 args1           == Logical op2 args2           = op1 == op2 && args1 == args2
+
   _                           == _                           = False
 
 instance
@@ -484,18 +493,9 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
-    ListEqNeq ty op a b ->
-        showString "ListEqNeq "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 op
-      . showString " "
-      . uniformlyShows ty 11 a
-      . showString " "
-      . uniformlyShows ty 11 b
 
     ObjAt s a b t ->
-        showString "ListAt "
+        showString "ObjAt "
       . showsPrec 11 s
       . showString " "
       . showsPrec 11 a
@@ -503,13 +503,6 @@ instance
       . showsPrec 11 b
       . showString " "
       . showsPrec 11 t
-    ListAt ty a b ->
-        showString "ListAt "
-      . showsPrec 11 ty
-      . showString " "
-      . showsPrec 11 a
-      . showString " "
-      . uniformlyShows ty 11 b
     ObjContains s a b ->
         showString "ObjContains "
       . showsPrec 11 s
@@ -522,6 +515,49 @@ instance
       . showsPrec 11 a
       . showString " "
       . showsPrec 11 b
+    ObjDrop a b c ->
+        showString "ObjDrop "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+      . showString " "
+      . showsPrec 11 c
+    ObjTake a b c ->
+        showString "ObjTake "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+      . showString " "
+      . showsPrec 11 c
+    ObjectMerge a b ->
+        showString "ObjectMerge "
+      . showsPrec 11 a
+      . showString " "
+      . showsPrec 11 b
+    LiteralObject m -> showString "LiteralObject " . showsPrec 11 m
+
+    Logical op args ->
+        showString "Logical "
+      . showsPrec 11 op
+      . showString " "
+      . showsPrec 11 args
+
+    ListEqNeq ty op a b ->
+        showString "ListEqNeq "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 op
+      . showString " "
+      . uniformlyShows ty 11 a
+      . showString " "
+      . uniformlyShows ty 11 b
+    ListAt ty a b ->
+        showString "ListAt "
+      . showsPrec 11 ty
+      . showString " "
+      . showsPrec 11 a
+      . showString " "
+      . uniformlyShows ty 11 b
     ListContains ty a b ->
         showString "ListContains "
       . showsPrec 11 ty
@@ -545,19 +581,12 @@ instance
       . showString " "
       . uniformlyShows ty 11 a
     ListDrop ty i l ->
-        showString "ObjDrop "
+        showString "ListDrop "
       . showsPrec 11 ty
       . showString " "
       . showsPrec 11 i
       . showString " "
       . uniformlyShows ty 11 l
-    ObjDrop a b c ->
-        showString "ObjDrop "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-      . showString " "
-      . showsPrec 11 c
     ListTake ty a b ->
         showString "ListTake "
       . showsPrec 11 ty
@@ -565,13 +594,6 @@ instance
       . showsPrec 11 a
       . showString " "
       . uniformlyShows ty 11 b
-    ObjTake a b c ->
-        showString "ObjTake "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-      . showString " "
-      . showsPrec 11 c
     ListConcat ty a b ->
         showString "ListConcat "
       . showsPrec 11 ty
@@ -586,23 +608,11 @@ instance
       . showsPrec 11 a
       . showString " "
       . uniformlyShows'' ty 11 b
-    ObjectMerge a b ->
-        showString "ObjectMerge "
-      . showsPrec 11 a
-      . showString " "
-      . showsPrec 11 b
-    LiteralObject m -> showString "LiteralObject " . showsPrec 11 m
     LiteralList ty l ->
         showString "LiteralList "
       . showsPrec 11 ty
       . showString " "
       . uniformlyShows' ty 11 l
-
-    Logical op args ->
-        showString "Logical "
-      . showsPrec 11 op
-      . showString " "
-      . showsPrec 11 args
 
 instance
   ( OfPactTypes UserShow tm
@@ -624,29 +634,30 @@ instance
     TimeComparison op x y    -> parenList [userShow op, userShow x, userShow y]
     StringComparison op x y  -> parenList [userShow op, userShow x, userShow y]
     BoolComparison op x y    -> parenList [userShow op, userShow x, userShow y]
-    Logical op args          -> parenList $ userShow op : fmap userShow args
     Var _vid name            -> name
     KeySetEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
     ObjectEqNeq op x y       -> parenList [userShow op, userShow x, userShow y]
-    ListEqNeq ty op x y      -> parenList [userShow op, uniformlyUserShow ty x, uniformlyUserShow ty y]
     ObjAt _schema k obj _ty  -> parenList [userShow k, userShow obj]
-    ListAt ty k lst          -> parenList [userShow k, uniformlyUserShow ty lst]
     ObjContains _schema a b  -> parenList [SContains, userShow a, userShow b]
     StringContains needle haystack
       -> parenList [SContains, userShow needle, userShow haystack]
+    ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
+    ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
+    ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
+    LiteralObject obj        -> userShow obj
+    Logical op args          -> parenList $ userShow op : fmap userShow args
+
+    ListEqNeq ty op x y      -> parenList [userShow op, uniformlyUserShow ty x, uniformlyUserShow ty y]
+    ListAt ty k lst          -> parenList [userShow k, uniformlyUserShow ty lst]
     ListContains ty needle haystack
       -> parenList [SContains, uniformlyUserShow'' ty needle, uniformlyUserShow ty haystack]
     ListLength ty x          -> parenList [SListLength, uniformlyUserShow ty x]
     ListReverse ty lst       -> parenList [SReverse, uniformlyUserShow ty lst]
     ListSort ty lst          -> parenList [SSort, uniformlyUserShow ty lst]
     ListDrop ty n lst        -> parenList [SListDrop, userShow n, uniformlyUserShow ty lst]
-    ObjDrop _schema k obj    -> parenList [SObjectDrop, userShow k, userShow obj]
     ListTake ty n lst        -> parenList [SListTake, userShow n, uniformlyUserShow ty lst]
-    ObjTake _schema k obj    -> parenList [SObjectTake, userShow k, userShow obj]
     ListConcat ty x y        -> parenList [SConcatenation, uniformlyUserShow ty x, uniformlyUserShow ty y]
     MakeList ty x y          -> parenList [SMakeList, userShow x, uniformlyUserShow'' ty y]
-    ObjectMerge x y          -> parenList [SObjectMerge, userShow x, userShow y]
-    LiteralObject obj        -> userShow obj
     LiteralList ty lst       -> uniformlyUserShow' ty lst
 
 
